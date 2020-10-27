@@ -35,7 +35,7 @@ void main() async {
     print(publicResult);
     //2.2 get public image
     var decodedPublicImage = await atClient.get(publicAtKey);
-    saveToFile('image_retrieved_public.jpg', decodedImage.value);
+    saveToFile('image_retrieved_public.jpg', decodedPublicImage.value);
 
 //    //3.1 share image with another atSign
 //    result = await atClient.putBinary('image_shared', imageData,

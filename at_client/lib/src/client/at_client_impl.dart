@@ -47,6 +47,7 @@ class AtClientImpl implements AtClient {
     }
     AtSignLogger('AtClientImpl')
         .severe('Instance of atclientimpl for $currentAtSign is not created');
+    return null;
   }
 
   static void createClient(String currentAtSign, String namespace,
@@ -565,6 +566,7 @@ class AtClientImpl implements AtClient {
     if (value == null && isMetadataNotNull) {
       return UPDATE_META;
     }
+    return '';
   }
 
   String _formatResult(String commandResult) {

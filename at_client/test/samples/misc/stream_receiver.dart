@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 
 void main(List<String> arguments) async {
-  var terminatingChar = utf8.encode('\n')[0];
   var eofMessage = 'stream:done\n';
   var total = 0;
   for (var i = 0; i < 1; i++) {

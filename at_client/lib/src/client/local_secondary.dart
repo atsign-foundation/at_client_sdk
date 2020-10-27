@@ -7,7 +7,6 @@ import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_spec/at_persistence.dart';
-import 'dart:isolate';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -41,7 +40,6 @@ class LocalSecondary implements Secondary {
     try {
       sync ??= (_preference.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
-        SendPort syncSendPort;
         var syncManager = SyncManager.getInstance();
         //1. if local and server are out of sync, first sync before updating current key-value
         if (sync) {
