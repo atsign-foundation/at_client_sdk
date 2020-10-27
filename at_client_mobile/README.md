@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="../.github/Orangenobg.svg?sanitize=true" width="150px">
+  <img src="../.github/Orangelogo.png?sanitize=true" width="150px">
 </p>
 <h1 align="center">Now for some internet optimism.</h1>
 
 # at_client_mobile
-This SDK provides the essential nethods for building an app using the @protocol
+This SDK provides the essential methods for building an app using the @protocol
 
 ## Installation:
 To use this library in your app, first add it to your pubspec.yaml

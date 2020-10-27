@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./.github/Orangenobg.svg?sanitize=true" width="150px">
+  <img src="./.github/Orangelogo.png?sanitize=true" width="150px">
 </p>
 <h1 align="center">Now for some internet optimism.</h1>
 
