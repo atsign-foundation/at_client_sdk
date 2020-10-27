@@ -1,7 +1,9 @@
 name: at_client
 description: Client SDK for communicating with a secondary server
 version: 1.0.0
+repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
+documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
 
 environment:
   sdk: '>=2.7.0 <3.0.0'
