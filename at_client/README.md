@@ -1,7 +1,6 @@
 <a href="//atsign.dev">
-  <img src="../.github/@developer.png" alt="The @ Company" id="logo" style="width:35%;height:auto">
+<img src="../.github/@developer.png" alt="The @ Company" id="logo" style="width:100px;height:auto">
 </a>
-<h2 align="left" style="width:35%;height:auto">Now for some internet optimism.</h2>
 
 # at_client
 This SDK provides the essential methods for building an app using the @protocol
