@@ -5,6 +5,7 @@
 
 # at_client_mobile
 This SDK provides the essential methods for building an app using the @protocol
+with useful device specific features for iOS and Android applications.
 
 ## Installation:
 To use this library in your app, first add it to your pubspec.yaml
