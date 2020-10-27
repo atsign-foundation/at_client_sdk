@@ -19,3 +19,9 @@ doc/api/
 *.js_
 *.js.deps
 *.js.map
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+*.idea/
