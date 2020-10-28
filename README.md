@@ -1,7 +1,5 @@
-<p align="center">
-  <img src="./.github/Orangelogo.png?sanitize=true" width="150px">
-</p>
-<h2 align="center">Now for some internet optimism.</h2>
+![image alt <](./.github/@developer.png)
+### Now for a little internet optimism
 
 # at_client_sdk
 This repo contains two versions of the at_client_sdk that you can choose from 
