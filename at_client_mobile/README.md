@@ -1,7 +1,5 @@
-<p align="center">
-  <img src="../.github/Orangelogo.png?sanitize=true" width="150px">
-</p>
-<h1 align="center">Now for some internet optimism.</h1>
+![image alt <](../.github/@developersmall.png) 
+### Now for a little internet optimism
 
 # at_client_mobile
 This SDK provides the essential methods for building an app using the @protocol
