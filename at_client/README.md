@@ -1,6 +1,5 @@
 ![image alt <](../.github/@developersmall.png) 
-
-## Now for some internet optimism.
+### Now for some internet optimism.
 
 # at_client
 This SDK provides the essential methods for building an app using the @protocol
