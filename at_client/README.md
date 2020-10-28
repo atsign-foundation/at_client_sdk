@@ -1,4 +1,4 @@
-![image alt <](../.github/@developer.png) 
+![image alt <](../.github/@developersmall.png) 
 
 ## Now for some internet optimism.
 
