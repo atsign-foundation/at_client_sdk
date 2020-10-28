@@ -16,7 +16,14 @@ pub get
 ```
 ### Import in your application code
 ```
-import 'package:at_client_sdk/#at_client.dart';
+import 'package:at_client/at_client.dart';
 ```
 ## Usage
+```
+var preference = AtClientPreference();
+//creating client for alice
+// buzz is the namespace
+await AtClientImpl.createClient('@alice', 'buzz', preference);
+var atClient = await AtClientImpl.getClient('@alice');
+```
 

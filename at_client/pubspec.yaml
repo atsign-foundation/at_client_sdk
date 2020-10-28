@@ -18,16 +18,21 @@ dependencies:
   convert: ^2.1.1
   base2e15: ^0.3.0
   uuid: ^2.0.2
+
   at_persistence_secondary_server:
     git:
-      url: git@github.com:atsign-foundation/at_server.git
+      url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
       ref: master
+      version: ^1.0.0
+
   at_lookup:
     git:
-      url: git@github.com:atsign-foundation/at_libraries.git
+      url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
       ref: master
+      version: ^1.0.0
+
 
 #dependency_overrides:
 #  at_persistence_spec:

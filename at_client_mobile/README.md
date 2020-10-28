@@ -17,7 +17,23 @@ pub get
 ```
 ### Import in your application code
 ```
-import 'package:at_client_sdk/at_client_mobile.dart';
+import 'package:at_client_mobile/at_client_mobile.dart';
 ```
 ## Usage
-
+```
+var atClientServiceInstance = AtClientService();
+finavar appDocumentDirectory =
+        await path_provider.getApplicationSupportDirectory();
+String path = appDocumentDirectory.path;
+var atClientPreference = AtClientPreference()
+     ..isLocalStoreRequired = true
+     ..commitLogPath = path
+     ..syncStrategy = SyncStrategy.IMMEDIATE
+     ..rootDomain = AtText.ROOT_DOMAIN
+     ..hiveStoragePath = path;
+var result = await atClientServiceInstance.onboard(
+        atClientPreference: atClientPreference,
+        atsign: atsign,
+        namespace: AtText.APP_NAMESPACE);
+var atClientInstance = atClientServiceInstance.atClient;
+```
