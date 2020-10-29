@@ -12,6 +12,7 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:pedantic/pedantic.dart';
 
 class SyncManager {
   static final SyncManager _singleton = SyncManager._internal();
@@ -355,7 +356,7 @@ class SyncManager {
       var cron = Cron();
       cron.schedule(Schedule.parse('*/${_preference.syncIntervalMins} * * * *'),
           () async {
-        syncWithIsolate();
+        unawaited(syncWithIsolate());
       });
       _isScheduled = true;
     } on Exception catch (e) {
