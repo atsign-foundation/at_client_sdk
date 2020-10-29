@@ -83,7 +83,7 @@ class SyncManager {
           syncResponse = syncResponse.replaceFirst('data:', '');
           var syncResponseJson = jsonDecode(syncResponse);
           await Future.forEach(syncResponseJson,
-                  (serverCommitEntry) => _syncLocal(serverCommitEntry));
+              (serverCommitEntry) => _syncLocal(serverCommitEntry));
         }
         return;
       }
@@ -337,11 +337,11 @@ class SyncManager {
         var key = entry.atKey;
         var value = await _localSecondary.keyStore.get(key);
         var metaData = await _localSecondary.keyStore.getMeta(key);
-        if (metaData.ttl != null) key += '${key}:ttl:${metaData.ttl}';
-        if (metaData.ttb != null) key += '${key}:ttl:${metaData.ttb}';
-        if (metaData.ttr != null) key += '${key}:ttl:${metaData.ttr}';
+        if (metaData.ttl != null) key += ':ttl:${metaData.ttl}';
+        if (metaData.ttb != null) key += ':ttb:${metaData.ttb}';
+        if (metaData.ttr != null) key += ':ttr:${metaData.ttr}';
         if (metaData.isCascade != null) {
-          key += '${key}:ttl:${metaData.isCascade}';
+          key += ':ccd:${metaData.isCascade}';
         }
         value?.metaData = metaData;
         command = 'update:${key} ${value?.data}';
