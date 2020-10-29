@@ -1,4 +1,5 @@
-![image alt <](../.github/@developersmall.png) 
+<img src="https://atsign.dev/assets/img/@developersmall.png?sanitize=true">
+
 ### Now for some internet optimism.
 
 # at_client
