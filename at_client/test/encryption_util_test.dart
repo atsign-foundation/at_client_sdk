@@ -20,10 +20,11 @@ void main() {
     test('aes key encrypt/decrypt test', () {
       var aesKey = EncryptionUtil.generateAESKey();
       var rsaKeyPair = RSAKeypair.fromRandom();
-      var encryptedKey = EncryptionUtil.encryptKey(aesKey, rsaKeyPair.publicKey.toString());
-      var decryptedKey = EncryptionUtil.decryptKey(encryptedKey, rsaKeyPair.privateKey.toString());
+      var encryptedKey =
+          EncryptionUtil.encryptKey(aesKey, rsaKeyPair.publicKey.toString());
+      var decryptedKey = EncryptionUtil.decryptKey(
+          encryptedKey, rsaKeyPair.privateKey.toString());
       expect(decryptedKey, aesKey);
     });
-
   });
 }

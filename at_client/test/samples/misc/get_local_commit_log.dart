@@ -4,7 +4,8 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import '../test_util.dart';
 
 void main() async {
-  await AtClientImpl.createClient('@alice', 'me', TestUtil.getPreferenceLocal());
+  await AtClientImpl.createClient(
+      '@alice', 'me', TestUtil.getPreferenceLocal());
   var commitLog = AtCommitLog.getInstance();
   var entries = commitLog.getChanges(-1);
   print(entries);

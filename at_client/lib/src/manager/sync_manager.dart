@@ -83,7 +83,7 @@ class SyncManager {
           syncResponse = syncResponse.replaceFirst('data:', '');
           var syncResponseJson = jsonDecode(syncResponse);
           await Future.forEach(syncResponseJson,
-                  (serverCommitEntry) => _syncLocal(serverCommitEntry));
+              (serverCommitEntry) => _syncLocal(serverCommitEntry));
         }
         return;
       }

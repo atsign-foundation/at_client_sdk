@@ -4,7 +4,8 @@ import 'test_util.dart';
 
 void main() async {
   try {
-    await AtClientImpl.createClient('@alice🛠','me', TestUtil.getAlicePreference());
+    await AtClientImpl.createClient(
+        '@alice🛠', 'me', TestUtil.getAlicePreference());
     var atClient = await AtClientImpl.getClient('@alice🛠');
     var result = await atClient.getKeys();
     result.forEach((key) {
