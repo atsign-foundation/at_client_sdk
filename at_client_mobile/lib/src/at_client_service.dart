@@ -41,7 +41,6 @@ class AtClientService {
 
   Future<String> getPrivateKey(String atSign) async {
     var pkamPrivateKey = await _keyChainManager.getPrivateKey(atSign);
-    _logger.info('PKAM private key is $pkamPrivateKey');
     return pkamPrivateKey;
   }
 
@@ -58,7 +57,7 @@ class AtClientService {
   }
 
   Future<String> getAESKey(String atsign) async {
-    return await _keyChainManager.getValue(atsign, KEYCHAIN_AES_KEY );
+    return await _keyChainManager.getValue(atsign, KEYCHAIN_AES_KEY);
   }
 
   Future<String> getAtSign() async {
@@ -66,16 +65,16 @@ class AtClientService {
   }
 
   Future<Map<String, String>> getEncryptedKeys(String atsign) async {
-    var aesEncryptedKeys={};
+    var aesEncryptedKeys = {};
     aesEncryptedKeys['aesPkamPublicKey'] =
         await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PUBLIC_KEY);
     aesEncryptedKeys['aesPkamPrivateKey'] =
         await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PRIVATE_KEY);
-    aesEncryptedKeys['aesEncryptPublicKey'] =
-        await _keyChainManager.getValue(atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY);
-    aesEncryptedKeys['aesEncryptPrivateKey'] =
-        await _keyChainManager.getValue(atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY);
-    return Map<String,String>.from(aesEncryptedKeys);
+    aesEncryptedKeys['aesEncryptPublicKey'] = await _keyChainManager.getValue(
+        atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY);
+    aesEncryptedKeys['aesEncryptPrivateKey'] = await _keyChainManager.getValue(
+        atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY);
+    return Map<String, String>.from(aesEncryptedKeys);
   }
 
   Future<bool> cramAuth(String cramSecret) async {

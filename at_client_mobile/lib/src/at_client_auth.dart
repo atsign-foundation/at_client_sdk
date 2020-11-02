@@ -5,6 +5,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_client/src/util/encryption_util.dart';
+
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(String atSign,
       {String cramSecret, String pkamPrivateKey});
@@ -73,7 +74,6 @@ class AtClientAuthenticator implements AtClientAuth {
         return true; //Auth already performed
       }
     }
-    logger.finer('pkam private key: $privateKey');
     var pkam_auth_result = await atLookUp.authenticate(privateKey);
 
     if (pkam_auth_result) {
@@ -95,15 +95,30 @@ class AtClientAuthenticator implements AtClientAuth {
           await _keyChainManager.putValue(
               atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY, encryptionPubKey);
           var aesSharedKey = EncryptionUtil.generateAESKey();
-          await _keyChainManager.putValue(atSign, KEYCHAIN_AES_KEY, aesSharedKey);
-          var encryptedPkamPublicKey = await EncryptionUtil.encryptValue(publicKey, aesSharedKey);
-          await _keyChainManager.putValue(atSign, KEYCHAIN_AES_PKAM_PUBLIC_KEY, encryptedPkamPublicKey);
-          var encryptedPkamPrivateKey = await EncryptionUtil.encryptValue(privateKey, aesSharedKey);
-          await _keyChainManager.putValue(atSign, KEYCHAIN_AES_PKAM_PRIVATE_KEY, encryptedPkamPrivateKey);
-          var encryptedDataEncryptionPublicKey = await EncryptionUtil.encryptValue(encryptionKeyPair.publicKey.toString(), aesSharedKey);
-          await _keyChainManager.putValue(atSign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY, encryptedDataEncryptionPublicKey);
-          var encryptedDataEncryptionPrivateKey = await EncryptionUtil.encryptValue(encryptionKeyPair.privateKey.toString(), aesSharedKey);
-          await _keyChainManager.putValue(atSign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY, encryptedDataEncryptionPrivateKey);
+          await _keyChainManager.putValue(
+              atSign, KEYCHAIN_AES_KEY, aesSharedKey);
+          var encryptedPkamPublicKey =
+              await EncryptionUtil.encryptValue(publicKey, aesSharedKey);
+          await _keyChainManager.putValue(
+              atSign, KEYCHAIN_AES_PKAM_PUBLIC_KEY, encryptedPkamPublicKey);
+          var encryptedPkamPrivateKey =
+              await EncryptionUtil.encryptValue(privateKey, aesSharedKey);
+          await _keyChainManager.putValue(
+              atSign, KEYCHAIN_AES_PKAM_PRIVATE_KEY, encryptedPkamPrivateKey);
+          var encryptedDataEncryptionPublicKey =
+              await EncryptionUtil.encryptValue(
+                  encryptionKeyPair.publicKey.toString(), aesSharedKey);
+          await _keyChainManager.putValue(
+              atSign,
+              KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY,
+              encryptedDataEncryptionPublicKey);
+          var encryptedDataEncryptionPrivateKey =
+              await EncryptionUtil.encryptValue(
+                  encryptionKeyPair.privateKey.toString(), aesSharedKey);
+          await _keyChainManager.putValue(
+              atSign,
+              KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY,
+              encryptedDataEncryptionPrivateKey);
         }
 
         var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
