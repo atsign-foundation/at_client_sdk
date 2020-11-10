@@ -274,6 +274,7 @@ class AtClientImpl implements AtClient {
       }
       if (sharedWith != currentAtSign) {
         var encryptedResult = await getSecondary().executeVerb(builder);
+
         if (encryptedResult != null && encryptedResult == 'data:null') {
           return null;
         }
@@ -604,7 +605,7 @@ class AtClientImpl implements AtClient {
     if (value == null && isMetadataNotNull) {
       return UPDATE_META;
     }
-    return '';
+    return null;
   }
 
   String _formatResult(String commandResult) {

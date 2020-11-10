@@ -51,16 +51,15 @@ void main() {
       expect(isInSync, false);
     });
 
-
-    test('test in sync - uncommitted entries in local commit id > server commit id',
-            () {
-          var entries = <CommitEntry>[];
-          var entry =
+    test(
+        'test in sync - uncommitted entries in local commit id > server commit id',
+        () {
+      var entries = <CommitEntry>[];
+      var entry =
           CommitEntry('public:phone@alice', CommitOp.UPDATE, DateTime.now());
-          entries.add(entry);
-          var isInSync = SyncUtil.isInSync(entries, 5, 1);
-          expect(isInSync, false);
-        });
-
+      entries.add(entry);
+      var isInSync = SyncUtil.isInSync(entries, 5, 1);
+      expect(isInSync, false);
+    });
   });
 }

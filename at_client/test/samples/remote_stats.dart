@@ -4,7 +4,8 @@ import 'test_util.dart';
 
 void main() async {
   try {
-    await AtClientImpl.createClient('@alice',null, TestUtil.getPreferenceRemote());
+    await AtClientImpl.createClient(
+        '@alice', null, TestUtil.getPreferenceRemote());
     var atClient = await AtClientImpl.getClient('@alice');
     var stats_result = await atClient
         .getRemoteSecondary()

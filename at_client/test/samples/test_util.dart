@@ -27,7 +27,7 @@ class TestUtil {
     return preference;
   }
 
- static AtClientPreference getAlicePreference() {
+  static AtClientPreference getAlicePreference() {
     var preference = AtClientPreference();
     preference.hiveStoragePath = 'hive/client';
     preference.commitLogPath = 'hive/client/commit';

@@ -94,6 +94,12 @@ class EncryptionService {
         ..value = sharedWithPublicKey;
       await localSecondary.executeVerb(sharedWithPublicKeyBuilder, sync: true);
     }
+    //4.b store sharedWith public key for future retrieval
+    var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
+      ..atKey = 'publickey.${sharedWithUser}'
+      ..sharedBy = currentAtSign
+      ..value = sharedWithPublicKey;
+    await localSecondary.executeVerb(sharedWithPublicKeyBuilder, sync: true);
 
     //5. Encrypt value using sharedKey
     var encryptedValue = EncryptionUtil.encryptValue(value, sharedKey);
