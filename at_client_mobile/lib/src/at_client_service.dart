@@ -10,7 +10,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/util/encryption_util.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
@@ -21,7 +20,6 @@ class AtClientService {
   KeyRestoreStatus _status;
   String _namespace;
   static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
-  final SyncManager _syncManager = SyncManager.getInstance();
 
   // Will create at client instance for a given atSign and perform cram+pkam auth to the server.
   // if pkam is successful, encryption keys will be set for the user./// Will create at client instance for a given atSign.
@@ -39,12 +37,6 @@ class AtClientService {
     if (preference.privateKey != null) {
       _atClientAuthenticator.atLookUp.privateKey = preference.privateKey;
       atClient.getRemoteSecondary().atLookUp.privateKey = preference.privateKey;
-    }
-    if ((preference.privateKey != null || preference.cramSecret != null) &&
-        preference.syncStrategy != null) {
-      _syncManager.init(atSign, preference, atClient.getRemoteSecondary(),
-          atClient.getLocalSecondary());
-      await _syncManager.sync(appInit: true);
     }
     return true;
   }
