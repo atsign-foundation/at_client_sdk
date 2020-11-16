@@ -20,12 +20,19 @@ dependencies:
   uuid: ^2.0.2
   crypto: ^2.1.5
   collection: ^1.14.12
-  at_utils: ^1.0.1
-  at_commons: ^1.0.1
-  at_persistence_spec: ^1.0.1
-  at_persistence_secondary_server:  ^1.0.1
-  at_lookup: ^1.0.0
   pedantic: ^1.8.0
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_secondary/at_persistence_secondary_server
+      ref: dev_env
+      version: ^1.0.1
+  at_lookup:
+    git:
+      url: git@github.com:atsign-company/at_libraries.git
+      path: at_lookup
+      ref: dev_env
+      version: ^1.0.1
 
 dev_dependencies:
   test: ^1.6.0
