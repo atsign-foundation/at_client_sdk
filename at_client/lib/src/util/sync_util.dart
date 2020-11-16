@@ -33,9 +33,9 @@ class SyncUtil {
   //#TODO change return type to enum which says in sync, local ahead or server ahead
   static bool isInSync(List<CommitEntry> unCommittedEntries, int serverCommitId,
       int lastSyncedCommitId) {
-    logger.info('localCommitId:${lastSyncedCommitId}');
-    logger.info('serverCommitId:${serverCommitId}');
-    logger.info('changed entries: ${unCommittedEntries?.length}');
+    logger.finer('localCommitId:${lastSyncedCommitId}');
+    logger.finer('serverCommitId:${serverCommitId}');
+    logger.finer('changed entries: ${unCommittedEntries?.length}');
     return (unCommittedEntries == null || unCommittedEntries.isEmpty) &&
         _checkCommitIdsEqual(lastSyncedCommitId, serverCommitId);
   }
