@@ -281,12 +281,7 @@ class SyncManager {
   Future<void> _syncLocal(serverCommitEntry) async {
     switch (serverCommitEntry['operation']) {
       case '+':
-        var builder = UpdateVerbBuilder()
-          ..atKey = serverCommitEntry['atKey']
-          ..value = serverCommitEntry['value'];
-        builder.operation = VALUE;
-        await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE);
-        break;
+      case '#':
       case '*':
         var builder = UpdateVerbBuilder()
           ..atKey = serverCommitEntry['atKey']
@@ -294,14 +289,6 @@ class SyncManager {
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
-        break;
-      case '#':
-        var builder = UpdateVerbBuilder()
-          ..atKey = serverCommitEntry['atKey']
-          ..value = serverCommitEntry['value'];
-        builder.operation = UPDATE_META;
-        _setMetaData(builder, serverCommitEntry);
-        await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_META);
         break;
       case '-':
         var builder = DeleteVerbBuilder()..atKey = serverCommitEntry['atKey'];
