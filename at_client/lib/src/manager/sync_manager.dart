@@ -33,6 +33,10 @@ class SyncManager {
 
   String _atSign;
 
+  bool pendingSyncExists = false;
+
+  bool isSyncInProgress = false;
+
   var _isScheduled = false;
 
   void init(String atSign, AtClientPreference preference,
@@ -58,20 +62,48 @@ class SyncManager {
         unCommittedEntries, serverCommitId, lastSyncedCommitId);
   }
 
-  Future<void> sync() async {
+  Future<void> sync({bool appInit = false}) async {
+    //initially isSyncInProgress and pendingSyncExists are false.
+    //If a new sync triggered while previous sync isInprogress,then pendingSyncExists set to true and returns.
+    if (isSyncInProgress) {
+      pendingSyncExists = true;
+      return;
+    }
+    await _sync(appInit: appInit);
+    //once the sync done, we will check for any new sync requests(pendingSyncExists == true)
+    //If pendingSyncExists is true,then sync triggers again.
+    if (pendingSyncExists) {
+      pendingSyncExists = false;
+      return sync(appInit: appInit);
+    }
+    return;
+  }
+
+  Future<void> _sync({bool appInit = false}) async {
     try {
+      //isSyncProgress set to true during the sync is in progress.
+      //once sync process done, it will again set to false.
+      isSyncInProgress = true;
       var lastSyncedEntry = SyncUtil.getLastSyncedEntry();
       var lastSyncedCommitId = lastSyncedEntry?.commitId;
       var serverCommitId =
           await SyncUtil.getLatestServerCommitId(_remoteSecondary);
       var lastSyncedLocalSeq =
           lastSyncedEntry != null ? lastSyncedEntry.key : -1;
+      if (appInit && lastSyncedLocalSeq > 0) {
+        serverCommitId ??= -1;
+        if (lastSyncedLocalSeq > serverCommitId) {
+          lastSyncedLocalSeq = serverCommitId;
+        }
+        logger.finer('app init: lastSyncedLocalSeq: ${lastSyncedLocalSeq} ');
+      }
       var unCommittedEntries =
           SyncUtil.getChangesSinceLastCommit(lastSyncedLocalSeq);
       // cloud and local are in sync if there is no synced changes in local and commitIDs are equals
       if (SyncUtil.isInSync(
           unCommittedEntries, serverCommitId, lastSyncedCommitId)) {
         logger.info('server and local is in sync');
+        isSyncInProgress = false;
         return;
       }
       lastSyncedCommitId ??= -1;
@@ -86,6 +118,7 @@ class SyncManager {
           await Future.forEach(syncResponseJson,
               (serverCommitEntry) => _syncLocal(serverCommitEntry));
         }
+        isSyncInProgress = false;
         return;
       }
 
@@ -111,10 +144,13 @@ class SyncManager {
             break;
         }
       }
+      isSyncInProgress = false;
     } on AtLookUpException catch (e) {
       if (e.errorCode == 'AT0021') {
         logger.info('skipping sync since secondary is not reachable');
       }
+    } finally {
+      isSyncInProgress = false;
     }
   }
 
@@ -245,12 +281,7 @@ class SyncManager {
   Future<void> _syncLocal(serverCommitEntry) async {
     switch (serverCommitEntry['operation']) {
       case '+':
-        var builder = UpdateVerbBuilder()
-          ..atKey = serverCommitEntry['atKey']
-          ..value = serverCommitEntry['value'];
-        builder.operation = VALUE;
-        await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE);
-        break;
+      case '#':
       case '*':
         var builder = UpdateVerbBuilder()
           ..atKey = serverCommitEntry['atKey']
@@ -258,14 +289,6 @@ class SyncManager {
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
-        break;
-      case '#':
-        var builder = UpdateVerbBuilder()
-          ..atKey = serverCommitEntry['atKey']
-          ..value = serverCommitEntry['value'];
-        builder.operation = UPDATE_META;
-        _setMetaData(builder, serverCommitEntry);
-        await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_META);
         break;
       case '-':
         var builder = DeleteVerbBuilder()..atKey = serverCommitEntry['atKey'];
@@ -284,6 +307,16 @@ class SyncManager {
         (metaData[CCD].toLowerCase() == 'true')
             ? builder.ccd = true
             : builder.ccd = false;
+      }
+      if (metaData[IS_BINARY] != null) {
+        (metaData[IS_BINARY].toLowerCase() == 'true')
+            ? builder.isBinary = true
+            : builder.isBinary = false;
+      }
+      if (metaData[IS_ENCRYPTED] != null) {
+        (metaData[IS_ENCRYPTED].toLowerCase() == 'true')
+            ? builder.isEncrypted = true
+            : builder.isEncrypted = false;
       }
     }
   }
@@ -328,27 +361,42 @@ class SyncManager {
       case CommitOp.UPDATE_META:
         var key = entry.atKey;
         var metaData = await _localSecondary.keyStore.getMeta(key);
-        if (metaData.ttl != null) key += ':ttl:${metaData.ttl}';
-        if (metaData.ttb != null) key += ':ttb:${metaData.ttb}';
-        if (metaData.ttr != null) key += ':ttr:${metaData.ttr}';
-        if (metaData.isCascade != null) key += ':ccd:${metaData.isCascade}';
+        if (metaData != null) {
+          key += _metadataToString(metaData);
+        }
         command = 'update:meta:${key}';
         break;
       case CommitOp.UPDATE_ALL:
         var key = entry.atKey;
         var value = await _localSecondary.keyStore.get(key);
         var metaData = await _localSecondary.keyStore.getMeta(key);
-        if (metaData.ttl != null) key += '${key}:ttl:${metaData.ttl}';
-        if (metaData.ttb != null) key += '${key}:ttl:${metaData.ttb}';
-        if (metaData.ttr != null) key += '${key}:ttl:${metaData.ttr}';
-        if (metaData.isCascade != null) {
-          key += '${key}:ttl:${metaData.isCascade}';
+        var keyGen = '';
+        if (metaData != null) {
+          keyGen = _metadataToString(metaData);
         }
+        keyGen += ':${key}';
         value?.metaData = metaData;
-        command = 'update:${key} ${value?.data}';
+        command = 'update${keyGen} ${value?.data}';
         break;
     }
     return command;
+  }
+
+  String _metadataToString(dynamic metadata) {
+    var metadataStr = '';
+    if (metadata.ttl != null) metadataStr += ':ttl:${metadata.ttl}';
+    if (metadata.ttb != null) metadataStr += ':ttb:${metadata.ttb}';
+    if (metadata.ttr != null) metadataStr += ':ttr:${metadata.ttr}';
+    if (metadata.isCascade != null) {
+      metadataStr += ':ccd:${metadata.isCascade}';
+    }
+    if (metadata.isBinary != null) {
+      metadataStr += ':isBinary:${metadata.isBinary}';
+    }
+    if (metadata.isEncrypted != null) {
+      metadataStr += ':isEncrypted:${metadata.isEncrypted}';
+    }
+    return metadataStr;
   }
 
   void _scheduleSyncTask() {

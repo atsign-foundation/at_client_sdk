@@ -6,6 +6,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:at_lookup/src/connection/outbound_connection.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
@@ -75,9 +76,12 @@ class RemoteSecondary implements Secondary {
   }
 
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
-  void monitor(String command, Function monitorResponseCallback,
-      String privateKey, Function acceptStream) async {
-    await MonitorClient(privateKey).executeMonitorVerb(
+  Future<OutboundConnection> monitor(
+      String command,
+      Function monitorResponseCallback,
+      String privateKey,
+      Function acceptStream) {
+    return MonitorClient(privateKey).executeMonitorVerb(
         command, _atSign, _preference.rootDomain, _preference.rootPort,
         (value) {
       monitorResponseCallback(value, acceptStream);
