@@ -25,7 +25,7 @@ class AtClientPreference {
   /// Secret key to encrypt keystore data
   List<int> keyStoreSecret;
 
-  /// Domain of the root server. Defaults to root.atsign.wtf
+  /// Domain of the root server. Defaults to root.atsign.org
   String rootDomain = 'root.atsign.org';
 
   /// Port of the root server. Defaults to 64
