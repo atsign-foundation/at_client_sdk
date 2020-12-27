@@ -71,14 +71,16 @@ class AtClientService {
 
   Future<Map<String, String>> getEncryptedKeys(String atsign) async {
     var aesEncryptedKeys = {};
-    aesEncryptedKeys['aesPkamPublicKey'] =
+    aesEncryptedKeys[BackupKeyConstants.AES_PKAM_PUBLIC_KEY] =
         await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PUBLIC_KEY);
-    aesEncryptedKeys['aesPkamPrivateKey'] =
+    aesEncryptedKeys[BackupKeyConstants.AES_PKAM_PRIVATE_KEY] =
         await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PRIVATE_KEY);
-    aesEncryptedKeys['aesEncryptPublicKey'] = await _keyChainManager.getValue(
-        atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY);
-    aesEncryptedKeys['aesEncryptPrivateKey'] = await _keyChainManager.getValue(
-        atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY);
+    aesEncryptedKeys[BackupKeyConstants.AES_ENCRYPTION_PUBLIC_KEY] =
+        await _keyChainManager.getValue(
+            atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY);
+    aesEncryptedKeys[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY] =
+        await _keyChainManager.getValue(
+            atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY);
     return Map<String, String>.from(aesEncryptedKeys);
   }
 
@@ -152,18 +154,21 @@ class AtClientService {
   Future<void> _decodeAndStoreToKeychain(
       String atsign, String jsonData, String decryptKey) async {
     var extractedjsonData = jsonDecode(jsonData);
+    await _storeEncryptedKeysToKeychain(extractedjsonData, atsign);
     var publicKey = EncryptionUtil.decryptValue(
-        extractedjsonData['aesPkamPublicKey'], decryptKey);
+        extractedjsonData[BackupKeyConstants.AES_PKAM_PUBLIC_KEY], decryptKey);
     var privateKey = EncryptionUtil.decryptValue(
-        extractedjsonData['aesPkamPrivateKey'], decryptKey);
+        extractedjsonData[BackupKeyConstants.AES_PKAM_PRIVATE_KEY], decryptKey);
     await _keyChainManager.storeCredentialToKeychain(atsign,
         privateKey: privateKey, publicKey: publicKey);
     var aesEncryptPublicKey = EncryptionUtil.decryptValue(
-        extractedjsonData['aesEncryptPublicKey'], decryptKey);
+        extractedjsonData[BackupKeyConstants.AES_ENCRYPTION_PUBLIC_KEY],
+        decryptKey);
     await _keyChainManager.putValue(
         atsign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY, aesEncryptPublicKey);
     var aesEncryptPrivateKey = EncryptionUtil.decryptValue(
-        extractedjsonData['aesEncryptPrivateKey'], decryptKey);
+        extractedjsonData[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY],
+        decryptKey);
     await _keyChainManager.putValue(
         atsign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY, aesEncryptPrivateKey);
     await _keyChainManager.putValue(atsign, KEYCHAIN_AES_KEY, decryptKey);
@@ -274,4 +279,22 @@ class AtClientService {
   bool _isError(String key) {
     return key != null ? key.contains('error') : false;
   }
+
+  Future<void> _storeEncryptedKeysToKeychain(var data, String atsign) async {
+    await _keyChainManager.putValue(atsign, KEYCHAIN_AES_PKAM_PUBLIC_KEY,
+        data[BackupKeyConstants.AES_PKAM_PUBLIC_KEY]);
+    await _keyChainManager.putValue(atsign, KEYCHAIN_AES_PKAM_PRIVATE_KEY,
+        data[BackupKeyConstants.AES_PKAM_PRIVATE_KEY]);
+    await _keyChainManager.putValue(atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY,
+        data[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY]);
+    await _keyChainManager.putValue(atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY,
+        data[BackupKeyConstants.AES_ENCRYPTION_PUBLIC_KEY]);
+  }
+}
+
+class BackupKeyConstants {
+  static const String AES_PKAM_PUBLIC_KEY = 'aesPkamPublicKey';
+  static const String AES_PKAM_PRIVATE_KEY = 'aesPkamPrivateKey';
+  static const String AES_ENCRYPTION_PUBLIC_KEY = 'aesEncryptPublicKey';
+  static const String AES_ENCRYPTION_PRIVATE_KEY = 'aesEncryptPrivateKey';
 }
