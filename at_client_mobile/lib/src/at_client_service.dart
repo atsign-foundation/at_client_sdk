@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:core';
+import 'dart:html';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/at_client_auth.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
@@ -10,6 +11,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_client/src/manager/sync_manager.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
@@ -20,6 +22,7 @@ class AtClientService {
   KeyRestoreStatus _status;
   String _namespace;
   static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
+  final SyncManager _syncManager = SyncManager.getInstance();
 
   // Will create at client instance for a given atSign and perform cram+pkam auth to the server.
   // if pkam is successful, encryption keys will be set for the user./// Will create at client instance for a given atSign.
@@ -107,7 +110,7 @@ class AtClientService {
       ..isPublic = true
       ..sharedBy = atSign
       ..value = encryptPublicKey;
-    await atClient.getLocalSecondary().executeVerb(updateBuilder);
+    await atClient.getLocalSecondary().executeVerb(updateBuilder, sync: true);
     return result;
   }
 
@@ -128,6 +131,9 @@ class AtClientService {
     if (!result) {
       return result;
     }
+    if (_status != KeyRestoreStatus.ACTIVATE) {
+      await _sync(_atClientPreference, atsign);
+    }
     result = await _atClientAuthenticator.performInitialAuth(atsign,
         cramSecret: cramSecret,
         pkamPrivateKey: _atClientPreference.privateKey,
@@ -137,7 +143,7 @@ class AtClientService {
           await _keyChainManager.getPrivateKey(atsign);
       _atClientAuthenticator.atLookUp.privateKey = privateKey;
       atClient.getRemoteSecondary().atLookUp.privateKey = privateKey;
-
+      await _sync(_atClientPreference, atsign);
       await persistKeys(atsign);
     }
     return result;
@@ -194,17 +200,21 @@ class AtClientService {
     namespace != null
         ? await _init(atsign, atClientPreference, namespace: namespace)
         : await _init(atsign, atClientPreference);
-    return await pkamAuth(privateKey);
+    var keyRestorePolicyStatus = await getKeyRestorePolicy(atsign);
+    if (keyRestorePolicyStatus == KeyRestoreStatus.ACTIVATE ||
+        keyRestorePolicyStatus == KeyRestoreStatus.RESTORE) {
+      _status = keyRestorePolicyStatus;
+      throw ('${keyRestorePolicyStatus.toString().split('.')[1]}');
+    }
+    //no need of having pkam auth as unauth error can be thrown by keypolicy.
+    var result = await pkamAuth(privateKey);
+    if (result) await _sync(atClientPreference, atsign);
+    return result;
   }
 
   Future<KeyRestoreStatus> getKeyRestorePolicy(String atSign) async {
     // get encryption public key from server and local keychain
-    var serverEncryptionPublicKey =
-        await atLookUp.executeCommand('lookup:publickey${atSign}\n');
-    serverEncryptionPublicKey =
-        serverEncryptionPublicKey.replaceAll('data:', '');
-    serverEncryptionPublicKey =
-        serverEncryptionPublicKey == 'null' ? null : serverEncryptionPublicKey;
+    var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
         await _keyChainManager.getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
     _logger.finer('local encryption public key:${localEncryptionPublicKey}');
@@ -231,6 +241,25 @@ class AtClientService {
     }
   }
 
+  Future<void> _sync(AtClientPreference preference, String atSign) async {
+    if ((preference.privateKey != null || preference.cramSecret != null) &&
+        preference.syncStrategy != null) {
+      _syncManager.init(atSign, preference, atClient.getRemoteSecondary(),
+          atClient.getLocalSecondary());
+      await _syncManager.sync(appInit: true);
+    }
+  }
+
+  ///returns public key for [atsign] if found else returns null.
+  Future<String> _getServerEncryptionPublicKey(String atsign) async {
+    var command = 'lookup:publickey${atsign}\n';
+    var result = await atLookUp.executeCommand(command);
+    if (_isNullOrEmpty(result) || _isError(result)) {
+      return null;
+    }
+    return result.replaceFirst('data:', '');
+  }
+
   bool _isNullOrEmpty(String key) {
     if (key == null) {
       return true;
@@ -240,5 +269,9 @@ class AtClientService {
       return true;
     }
     return false;
+  }
+
+  bool _isError(String key) {
+    return key != null ? key.contains('error') : false;
   }
 }
