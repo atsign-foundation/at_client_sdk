@@ -125,6 +125,7 @@ class SyncManager {
       // local is ahead. push the changes to secondary server
       for (var entry in unCommittedEntries) {
         var command = await _getCommand(entry);
+        command = command.replaceAll('cached:', '');
         switch (entry.operation) {
           case CommitOp.UPDATE:
             var builder = UpdateVerbBuilder.getBuilder(command);
