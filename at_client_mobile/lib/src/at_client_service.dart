@@ -286,9 +286,9 @@ class AtClientService {
     await _keyChainManager.putValue(atsign, KEYCHAIN_AES_PKAM_PRIVATE_KEY,
         data[BackupKeyConstants.AES_PKAM_PRIVATE_KEY]);
     await _keyChainManager.putValue(atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY,
-        data[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY]);
-    await _keyChainManager.putValue(atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY,
         data[BackupKeyConstants.AES_ENCRYPTION_PUBLIC_KEY]);
+    await _keyChainManager.putValue(atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY,
+        data[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY]);
   }
 }
 
