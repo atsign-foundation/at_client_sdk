@@ -154,10 +154,8 @@ class AtClientService {
       String atsign, String jsonData, String decryptKey) async {
     var extractedjsonData = jsonDecode(jsonData);
     await _storeEncryptedKeysToKeychain(extractedjsonData, atsign);
-
     var publicKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_PKAM_PUBLIC_KEY], decryptKey);
-
     var privateKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_PKAM_PRIVATE_KEY], decryptKey);
     await _keyChainManager.storeCredentialToKeychain(atsign,
@@ -221,6 +219,7 @@ class AtClientService {
   }
 
   Future<KeyRestoreStatus> getKeyRestorePolicy(String atSign) async {
+    // get encryption public key from server and local keychain
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
         await _keyChainManager.getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
