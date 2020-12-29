@@ -160,11 +160,13 @@ class AtClientService {
         extractedjsonData[BackupKeyConstants.AES_PKAM_PRIVATE_KEY], decryptKey);
     await _keyChainManager.storeCredentialToKeychain(atsign,
         privateKey: privateKey, publicKey: publicKey);
+
     var aesEncryptPublicKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_ENCRYPTION_PUBLIC_KEY],
         decryptKey);
     await _keyChainManager.putValue(
         atsign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY, aesEncryptPublicKey);
+
     var aesEncryptPrivateKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY],
         decryptKey);
