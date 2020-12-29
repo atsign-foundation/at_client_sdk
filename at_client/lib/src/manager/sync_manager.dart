@@ -125,21 +125,34 @@ class SyncManager {
       // local is ahead. push the changes to secondary server
       for (var entry in unCommittedEntries) {
         var command = await _getCommand(entry);
+        command = command.replaceAll('cached:', '');
         switch (entry.operation) {
           case CommitOp.UPDATE:
             var builder = UpdateVerbBuilder.getBuilder(command);
+            if (builder == null) {
+              continue;
+            }
             await _pushToRemote(builder, entry);
             break;
           case CommitOp.DELETE:
             var builder = DeleteVerbBuilder.getBuilder(command);
+            if (builder == null) {
+              continue;
+            }
             await _pushToRemote(builder, entry);
             break;
           case CommitOp.UPDATE_META:
             var builder = UpdateVerbBuilder.getBuilder(command);
+            if (builder == null) {
+              continue;
+            }
             await _pushToRemote(builder, entry);
             break;
           case CommitOp.UPDATE_ALL:
             var builder = UpdateVerbBuilder.getBuilder(command);
+            if (builder == null) {
+              continue;
+            }
             await _pushToRemote(builder, entry);
             break;
         }
