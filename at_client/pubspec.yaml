@@ -22,7 +22,7 @@ dependencies:
   collection: ^1.14.12
   pedantic: ^1.8.0
   at_persistence_spec: ^1.0.1+1
-  at_persistence_secondary_server: ^1.0.1+1
+  at_persistence_secondary_server: ^1.0.1+2
   at_lookup: ^1.0.0+2
   at_commons: ^1.0.1+2
   at_utils: ^1.0.1+2
