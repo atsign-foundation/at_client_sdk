@@ -77,12 +77,6 @@ class AtClientImpl implements AtClient {
     }
     _remoteSecondary = RemoteSecondary(currentAtSign, _preference,
         privateKey: _preference.privateKey);
-    if (_preference.syncStrategy != null) {
-      var syncManager = SyncManager.getInstance();
-      syncManager.init(
-          currentAtSign, _preference, _remoteSecondary, _localSecondary);
-      await syncManager.sync(appInit: true);
-    }
     encryptionService = EncryptionService();
     encryptionService.remoteSecondary = _remoteSecondary;
     encryptionService.currentAtSign = currentAtSign;

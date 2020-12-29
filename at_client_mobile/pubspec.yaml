@@ -1,6 +1,6 @@
 name: at_client_mobile
 description: Library for mobile app onboarding.
-version: 1.0.0+1
+version: 1.0.0+2
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
@@ -15,10 +15,10 @@ dependencies:
   flutter_keychain: ^1.0.0
   hive: ^1.3.0
   crypton: ^1.1.0
-  at_client: ^1.0.1+1
-  at_lookup: ^1.0.0+1
-  at_commons: ^1.0.1+1
-  at_utils: ^1.0.1+1
+  at_client: ^1.0.1+2
+  at_lookup: ^1.0.0+2
+  at_commons: ^1.0.1+2
+  at_utils: ^1.0.1+2
 
 dev_dependencies:
   pedantic: ^1.8.0
