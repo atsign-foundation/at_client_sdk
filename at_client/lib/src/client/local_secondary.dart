@@ -7,6 +7,7 @@ import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_spec/at_persistence_spec.dart';
+import 'dart:isolate';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -40,10 +41,11 @@ class LocalSecondary implements Secondary {
     try {
       sync ??= (_preference.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
+        SendPort syncSendPort;
         var syncManager = SyncManager.getInstance();
         //1. if local and server are out of sync, first sync before updating current key-value
         if (sync) {
-          await syncManager.sync();
+          await syncManager.sync(regex: _preference.syncRegex);
         }
         //2 . update/delete to local store
         var operation;
@@ -105,6 +107,21 @@ class LocalSecondary implements Secondary {
         default:
           var atData = AtData();
           atData.data = builder.value;
+          if (builder.dataSignature != null) {
+            var metadata = Metadata();
+            metadata
+              ..ttl = builder.ttl
+              ..ttb = builder.ttb
+              ..ttr = builder.ttr
+              ..ccd = builder.ccd
+              ..isBinary = builder.isBinary
+              ..isEncrypted = builder.isEncrypted
+              ..dataSignature = builder.dataSignature;
+            var atMetadata = AtMetadataAdapter(metadata);
+            updateResult = await keyStore.putAll(updateKey, atData, atMetadata);
+            break;
+          }
+          // #TODO replace below call with putAll.
           updateResult = await keyStore.put(updateKey, atData,
               time_to_live: builder.ttl,
               time_to_born: builder.ttb,
@@ -126,13 +143,13 @@ class LocalSecondary implements Secondary {
       var llookupKey;
       if (builder.isCached) {
         llookupKey =
-            'cached:${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
+        'cached:${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
       } else if (builder.sharedWith != null) {
         llookupKey =
-            '${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
+        '${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
       } else if (builder.sharedBy != null) {
         llookupKey =
-            '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
+        '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
       } else {
         llookupKey = builder.atKey;
       }
@@ -162,7 +179,7 @@ class LocalSecondary implements Secondary {
       }
       if (builder.sharedBy != null && builder.sharedBy.isNotEmpty) {
         deleteKey +=
-            '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
+        '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
       } else {
         deleteKey += '${builder.atKey}';
       }
@@ -181,7 +198,7 @@ class LocalSecondary implements Secondary {
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
         return await RemoteSecondary(_atSign, _preference,
-                privateKey: _preference.privateKey)
+            privateKey: _preference.privateKey)
             .executeCommand(command, auth: true);
       }
       List<String> keys;
@@ -189,10 +206,10 @@ class LocalSecondary implements Secondary {
       // Gets keys shared to sharedWith atSign.
       if (builder.sharedWith != null) {
         keys.retainWhere(
-            (element) => element.startsWith('${builder.sharedWith}') == true);
+                (element) => element.startsWith('${builder.sharedWith}') == true);
       }
       keys.removeWhere((key) =>
-          key.toString().startsWith('privatekey:') ||
+      key.toString().startsWith('privatekey:') ||
           key.toString().startsWith('private:') ||
           key.toString().startsWith('public:_'));
       var keyString = keys.toString();
@@ -212,7 +229,7 @@ class LocalSecondary implements Secondary {
 
   Future<String> _notify(NotifyVerbBuilder builder) async {
     return await RemoteSecondary(_atSign, _preference,
-            privateKey: _preference.privateKey)
+        privateKey: _preference.privateKey)
         .executeVerb(builder);
   }
 
@@ -271,7 +288,7 @@ class LocalSecondary implements Secondary {
   Future<String> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.formatAtSign(atSign);
     var privateKeyData =
-        await keyStore.get('${AT_ENCRYPTION_PUBLIC_KEY}$atSign');
+    await keyStore.get('${AT_ENCRYPTION_PUBLIC_KEY}$atSign');
     return privateKeyData?.data;
   }
 

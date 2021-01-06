@@ -23,6 +23,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
+import 'package:crypton/crypton.dart';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart';
@@ -31,12 +32,14 @@ import 'package:at_lookup/src/connection/outbound_connection.dart';
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
   AtClientPreference _preference;
+
+  AtClientPreference get preference => _preference;
   String currentAtSign;
   String _namespace;
   LocalSecondary _localSecondary;
   RemoteSecondary _remoteSecondary;
 
-  var encryptionService;
+  EncryptionService encryptionService;
   var logger = AtSignLogger('AtClientImpl');
   static final Map _atClientInstanceMap = <String, AtClient>{};
 
@@ -48,7 +51,6 @@ class AtClientImpl implements AtClient {
     }
     AtSignLogger('AtClientImpl')
         .severe('Instance of atclientimpl for $currentAtSign is not created');
-    return null;
   }
 
   static void createClient(String currentAtSign, String namespace,
@@ -92,9 +94,9 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<OutboundConnection> startMonitor(
-      String privateKey, Function acceptStream) async {
-    return await _remoteSecondary.monitor(MonitorVerbBuilder().buildCommand(),
-        monitorCallBack, privateKey, acceptStream);
+      String privateKey, Function notificationCallback) async {
+    return await _remoteSecondary.monitor(
+        MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
   }
 
   @override
@@ -135,7 +137,7 @@ class AtClientImpl implements AtClient {
   Future<String> getPrivateKey(String atSign) async {
     assert(atSign != null && atSign.isNotEmpty);
     var privateKeyData =
-        await getLocalSecondary().keyStore.get(AT_PKAM_PRIVATE_KEY);
+    await getLocalSecondary().keyStore.get(AT_PKAM_PRIVATE_KEY);
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
@@ -144,7 +146,7 @@ class AtClientImpl implements AtClient {
   Future<bool> delete(AtKey atKey) {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var isNamespaceAware =
-        atKey.metadata != null ? atKey.metadata.namespaceAware : true;
+    atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     return _delete(atKey.key,
         sharedWith: atKey.sharedWith,
         isPublic: isPublic,
@@ -153,8 +155,8 @@ class AtClientImpl implements AtClient {
 
   Future<bool> _delete(String key,
       {String sharedWith,
-      bool isPublic = false,
-      bool namespaceAware = true}) async {
+        bool isPublic = false,
+        bool namespaceAware = true}) async {
     var keyWithNamespace;
     if (namespaceAware) {
       keyWithNamespace = _getKeyWithNamespace(key);
@@ -172,11 +174,11 @@ class AtClientImpl implements AtClient {
 
   Future<dynamic> _get(String key,
       {String sharedWith,
-      String sharedBy,
-      bool isPublic = false,
-      bool isCached = false,
-      bool namespaceAware = true,
-      String operation}) async {
+        String sharedBy,
+        bool isPublic = false,
+        bool isCached = false,
+        bool namespaceAware = true,
+        String operation}) async {
     var builder;
     var keyWithNamespace;
     if (namespaceAware) {
@@ -268,7 +270,6 @@ class AtClientImpl implements AtClient {
       }
       if (sharedWith != currentAtSign) {
         var encryptedResult = await getSecondary().executeVerb(builder);
-
         if (encryptedResult != null && encryptedResult == 'data:null') {
           return null;
         }
@@ -320,7 +321,7 @@ class AtClientImpl implements AtClient {
   Future<AtValue> get(AtKey atKey) async {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var namespaceAware =
-        atKey.metadata != null ? atKey.metadata.namespaceAware : true;
+    atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
     var getResult = await _get(atKey.key,
         sharedWith: AtUtils.formatAtSign(atKey.sharedWith),
@@ -338,6 +339,9 @@ class AtClientImpl implements AtClient {
       atValue.value = Base2e15.decode(getResult['data']);
     } else {
       atValue.value = getResult['data'];
+      if (atValue.value is String) {
+        atValue.value = VerbUtil.getFormattedValue(atValue.value);
+      }
     }
     atValue.metadata = _prepareMetadata(getResult['metaData'], isPublic);
     return atValue;
@@ -347,7 +351,7 @@ class AtClientImpl implements AtClient {
   Future<Metadata> getMeta(AtKey atKey) async {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var namespaceAware =
-        atKey.metadata != null ? atKey.metadata.namespaceAware : true;
+    atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
     var getResult = await _get(atKey.key,
         sharedWith: atKey.sharedWith,
@@ -382,7 +386,7 @@ class AtClientImpl implements AtClient {
   Future<List<AtKey>> getAtKeys(
       {String regex, String sharedBy, String sharedWith}) async {
     var getKeysResult =
-        await getKeys(regex: regex, sharedBy: sharedBy, sharedWith: sharedWith);
+    await getKeys(regex: regex, sharedBy: sharedBy, sharedWith: sharedWith);
     var result = <AtKey>[];
     if (getKeysResult != null && getKeysResult.isNotEmpty) {
       getKeysResult.forEach((key) {
@@ -414,7 +418,7 @@ class AtClientImpl implements AtClient {
 //        sharedWith: key.sharedWith, metadata: metadata);
 //  }
 
-  Future<bool> _put(String key, String value,
+  Future<bool> _put(String key, dynamic value,
       {String sharedWith, Metadata metadata}) async {
     var updateKey = key;
     if (metadata == null || (metadata != null && metadata.namespaceAware)) {
@@ -428,6 +432,7 @@ class AtClientImpl implements AtClient {
       ..sharedWith = sharedWith
       ..value = value
       ..operation = operation;
+
     if (metadata != null) {
       builder.ttl = metadata.ttl;
       builder.ttb = metadata.ttb;
@@ -444,7 +449,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-              await encryptionService.encrypt(key, value, sharedWith);
+          await encryptionService.encrypt(key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -464,10 +469,28 @@ class AtClientImpl implements AtClient {
     if (SyncUtil.shouldSkipSync(updateKey)) {
       isSyncRequired = false;
     }
+    //sign public data with private encryption key
+    if (metadata != null && metadata.isPublic) {
+      try {
+        var encryptionPrivateKey =
+        await _localSecondary.getEncryptionPrivateKey();
+        if (encryptionPrivateKey != null) {
+          logger.finer('signing public data for key:${key}');
+          builder.dataSignature =
+              encryptionService.signPublicData(encryptionPrivateKey, value);
+        }
+      } on Exception catch (e) {
+        logger.severe('Exception trying to sign public data:${e.toString()}');
+      }
+    }
+
     var putResult;
     try {
+      if (builder.dataSignature != null) {
+        builder.isJson = true;
+      }
       putResult =
-          await getSecondary().executeVerb(builder, sync: isSyncRequired);
+      await getSecondary().executeVerb(builder, sync: isSyncRequired);
     } on AtClientException catch (e) {
       logger.severe(
           'error code: ${e.errorCode} error message: ${e.errorMessage}');
@@ -509,7 +532,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-              await encryptionService.encrypt(atKey.key, value, sharedWith);
+          await encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -517,7 +540,7 @@ class AtClientImpl implements AtClient {
         }
       } else {
         builder.value =
-            await encryptionService.encryptForSelf(atKey.key, value);
+        await encryptionService.encryptForSelf(atKey.key, value);
       }
     }
     if (metadata != null) {
@@ -536,7 +559,7 @@ class AtClientImpl implements AtClient {
       isSyncRequired = false;
     }
     var notifyResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
+    await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return notifyResult != null;
   }
 
@@ -559,6 +582,7 @@ class AtClientImpl implements AtClient {
       ..ccd = metadata.ccd
       ..isBinary = metadata.isBinary
       ..isEncrypted = metadata.isEncrypted
+      ..dataSignature = metadata.dataSignature
       ..operation = UPDATE_META;
 
     var isSyncRequired = true;
@@ -567,7 +591,7 @@ class AtClientImpl implements AtClient {
     }
 
     var updateMetaResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
+    await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return updateMetaResult != null;
   }
 
@@ -599,7 +623,6 @@ class AtClientImpl implements AtClient {
     if (value == null && isMetadataNotNull) {
       return UPDATE_META;
     }
-    return null;
   }
 
   String _formatResult(String commandResult) {
@@ -610,29 +633,31 @@ class AtClientImpl implements AtClient {
     return result;
   }
 
+
   Metadata _prepareMetadata(Map<String, dynamic> metadataMap, bool isPublic) {
     if (metadataMap == null) {
       return null;
     }
     var metadata = Metadata();
     metadata.expiresAt =
-        (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
-            ? DateTime.parse(metadataMap['expiresAt'])
-            : null;
+    (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
+        ? DateTime.parse(metadataMap['expiresAt'])
+        : null;
     metadata.availableAt = (metadataMap['availableAt'] != null &&
-            metadataMap['availableAt'] != 'null')
+        metadataMap['availableAt'] != 'null')
         ? DateTime.parse(metadataMap['availableAt'])
         : null;
     metadata.refreshAt =
-        (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
-            ? DateTime.parse(metadataMap[REFRESH_AT])
-            : null;
+    (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
+        ? DateTime.parse(metadataMap[REFRESH_AT])
+        : null;
     metadata.ttr = metadataMap[AT_TTR];
     metadata.ttl = metadataMap[AT_TTL];
     metadata.ttb = metadataMap[AT_TTB];
     metadata.ccd = metadataMap[CCD];
     metadata.isBinary = metadataMap[IS_BINARY];
     metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
+    metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
     if (isPublic) {
       metadata.isPublic = isPublic;
     }
@@ -675,40 +700,29 @@ class AtClientImpl implements AtClient {
     return streamResponse;
   }
 
-  void monitorCallBack(var response, Function acceptStream) async {
-    logger.info(response);
-    response = response.replaceFirst('notification:', '');
-    var responseJson = jsonDecode(response);
-    var notificationKey = responseJson['key'];
-    var valueObject = responseJson['value'];
-    var streamId = valueObject.split(':')[0];
-    var fileName = valueObject.split(':')[1];
-    var fileLength = valueObject.split(':')[2];
-    var atKey = notificationKey.split(':')[1];
-    var fromAtSign = responseJson['from'];
-    fileName = utf8.decode(base64.decode(fileName));
-    atKey = atKey.replaceFirst(fromAtSign, '');
-    atKey = atKey.trim();
+  Future<void> sendStreamAck(
+      String streamId,
+      String fileName,
+      int fileLength,
+      String senderAtSign,
+      Function streamCompletionCallBack,
+      Function streamReceiveCallBack) async {
+    var handler = StreamNotificationHandler();
+    handler.remoteSecondary = getRemoteSecondary();
+    handler.localSecondary = getLocalSecondary();
+    handler.preference = _preference;
+    var notification = AtStreamNotification()
+      ..streamId = streamId
+      ..fileName = fileName
+      ..currentAtSign = currentAtSign
+      ..senderAtSign = senderAtSign
+      ..fileLength = fileLength;
+    logger.info('Sending ack for stream notification:${notification}');
+    await handler.streamAck(
+        notification, streamCompletionCallBack, streamReceiveCallBack);
+  }
 
-    if (atKey == 'stream_id') {
-      // send in-app notification to receiver
-      bool userResponse = await acceptStream(fromAtSign, fileName, fileLength);
-      if (userResponse == true) {
-        var handler = StreamNotificationHandler();
-        handler.remoteSecondary = getRemoteSecondary();
-        handler.localSecondary = getLocalSecondary();
-        handler.preference = _preference;
-        var notification = AtStreamNotification()
-          ..streamId = streamId
-          ..fileName = fileName
-          ..currentAtSign = currentAtSign
-          ..senderAtSign = fromAtSign
-          ..fileLength = int.parse(fileLength);
-        logger.info('Sending ack for stream notification:${notification}');
-        await handler.streamAck(notification);
-      }
-    } else {
-      logger.info('Non stream notification received. Ignoring');
-    }
+  Future<void> encryptUnEncryptedData() async {
+    await encryptionService.encryptUnencryptedData();
   }
 }
