@@ -43,6 +43,9 @@ class AtClientPreference {
 
   /// Default path to download stream files
   String downloadPath;
+
+  /// regex to perform sync
+  String syncRegex;
 }
 
 enum SyncStrategy {
