@@ -5,7 +5,7 @@
 ## 1.0.0+2
 - restore backup keys bug fix
 ## 1.0.0+3
-- Server activation and deactivation
+- onboarding changes for server activation and deactivation
   Backup keys implementation
   sync improvements
 
