@@ -20,17 +20,16 @@ dependencies:
       url: https://github.com/atsign-foundation/at_client_sdk.git
       path: at_client
       ref: dev_env
-      version: ^1.0.1
 
 #dependency_overrides:
 #  at_client:
-#    path: ../at_client
+#    path: ../../at_client_sdk/at_client
 #  at_commons:
-#    path: ../at_commons
+#    path: ../../at_tools/at_commons
 #  at_utils:
-#    path: ../at_utils
+#    path: ../../at_tools/at_utils
 #  at_lookup:
-#    path: ../at_lookup
+#    path: ../../at_libraries/at_lookup
 
 dev_dependencies:
   pedantic: ^1.8.0
