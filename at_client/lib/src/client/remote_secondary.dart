@@ -14,6 +14,8 @@ class RemoteSecondary implements Secondary {
 
   String _atSign;
 
+  String _privateKey;
+
   var _preference;
 
   AtLookupImpl atLookUp;
@@ -23,6 +25,7 @@ class RemoteSecondary implements Secondary {
     _atSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     privateKey ??= preference.privateKey;
+    _privateKey = privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey, cramSecret: preference.cramSecret);
   }
@@ -69,22 +72,27 @@ class RemoteSecondary implements Secondary {
   }
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
-  Future<String> sync(int lastSyncedId, {String privateKey}) async {
-    var atCommand = 'sync:${lastSyncedId}\n';
+  Future<String> sync(int lastSyncedId,
+      {String privateKey, String regex}) async {
+    var atCommand = 'sync:${lastSyncedId}';
+    var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
+        ? ':${regex}'
+        : ((_preference.syncRegex != null && _preference.syncRegex.isNotEmpty)
+        ? ':${_preference.syncRegex}'
+        : '');
+
+    atCommand += '${regexString}\n';
     var syncResult = await atLookUp.executeCommand(atCommand, auth: true);
     return syncResult;
   }
 
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
   Future<OutboundConnection> monitor(
-      String command,
-      Function monitorResponseCallback,
-      String privateKey,
-      Function acceptStream) {
+      String command, Function notificationCallBack, String privateKey) {
     return MonitorClient(privateKey).executeMonitorVerb(
         command, _atSign, _preference.rootDomain, _preference.rootPort,
-        (value) {
-      monitorResponseCallback(value, acceptStream);
-    });
+            (value) {
+          notificationCallBack(value);
+        });
   }
 }
