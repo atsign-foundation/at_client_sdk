@@ -123,6 +123,10 @@ class AtClientService {
       String jsonData,
       String decryptKey}) async {
     if (cramSecret == null) {
+      atsign = _formatAtSign(atsign);
+      if (atsign == null) {
+        return false;
+      }
       await _decodeAndStoreToKeychain(atsign, jsonData, decryptKey);
       _atClientPreference.privateKey = await getPrivateKey(atsign);
     }
@@ -154,17 +158,21 @@ class AtClientService {
       String atsign, String jsonData, String decryptKey) async {
     var extractedjsonData = jsonDecode(jsonData);
     await _storeEncryptedKeysToKeychain(extractedjsonData, atsign);
+
     var publicKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_PKAM_PUBLIC_KEY], decryptKey);
+
     var privateKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_PKAM_PRIVATE_KEY], decryptKey);
     await _keyChainManager.storeCredentialToKeychain(atsign,
         privateKey: privateKey, publicKey: publicKey);
+
     var aesEncryptPublicKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_ENCRYPTION_PUBLIC_KEY],
         decryptKey);
     await _keyChainManager.putValue(
         atsign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY, aesEncryptPublicKey);
+
     var aesEncryptPrivateKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY],
         decryptKey);
@@ -185,6 +193,8 @@ class AtClientService {
     _atClientAuthenticator = AtClientAuthenticator();
     if (atsign == null || atsign == '') {
       atsign = await _keyChainManager.getAtSign();
+    } else {
+      atsign = _formatAtSign(atsign);
     }
     if (atsign == null || atsign == '') {
       _logger.severe('Atsign not found');
@@ -217,7 +227,6 @@ class AtClientService {
   }
 
   Future<KeyRestoreStatus> getKeyRestorePolicy(String atSign) async {
-    // get encryption public key from server and local keychain
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
         await _keyChainManager.getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
@@ -250,7 +259,7 @@ class AtClientService {
         preference.syncStrategy != null) {
       _syncManager.init(atSign, preference, atClient.getRemoteSecondary(),
           atClient.getLocalSecondary());
-      await _syncManager.sync(appInit: true);
+      await _syncManager.sync(appInit: true, regex: preference.syncRegex);
     }
   }
 
@@ -277,6 +286,17 @@ class AtClientService {
 
   bool _isError(String key) {
     return key != null ? key.contains('error') : false;
+  }
+
+  ///Returns null if [atsign] is null else the formatted [atsign].
+  ///[atsign] must be non-null.
+  String _formatAtSign(String atsign) {
+    if (atsign == null || atsign == '') {
+      return null;
+    }
+    atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
+    atsign = !atsign.startsWith('@') ? '@' + atsign : atsign;
+    return atsign;
   }
 
   Future<void> _storeEncryptedKeysToKeychain(var data, String atsign) async {

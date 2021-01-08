@@ -16,8 +16,13 @@ class SyncUtil {
     await AtCommitLog.getInstance().update(commitEntry, commitId);
   }
 
-  static CommitEntry getLastSyncedEntry() {
-    var lastEntry = AtCommitLog.getInstance().lastSyncedEntry();
+  static CommitEntry getLastSyncedEntry(String regex) {
+    var lastEntry;
+    if (regex != null) {
+      lastEntry = AtCommitLog.getInstance().lastSyncedEntryWithRegex(regex);
+    } else {
+      lastEntry = AtCommitLog.getInstance().lastSyncedEntry();
+    }
     return lastEntry;
   }
 
@@ -26,8 +31,8 @@ class SyncUtil {
     return entry;
   }
 
-  static List<CommitEntry> getChangesSinceLastCommit(int seqNum) {
-    return AtCommitLog.getInstance().getChanges(seqNum);
+  static List<CommitEntry> getChangesSinceLastCommit(int seqNum, String regex) {
+    return AtCommitLog.getInstance().getChanges(seqNum, regex);
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
@@ -48,9 +53,12 @@ class SyncUtil {
   }
 
   static Future<int> getLatestServerCommitId(
-      RemoteSecondary remoteSecondary) async {
+      RemoteSecondary remoteSecondary, String regex) async {
     var commitId;
     var builder = StatsVerbBuilder()..statIds = '3';
+    if (regex != null && regex != 'null' && regex.isNotEmpty) {
+      builder.regex = regex;
+    }
     var result = await remoteSecondary.executeVerb(builder);
     if (result != null) {
       result = result.replaceAll('data: ', '');
