@@ -88,9 +88,9 @@ class SyncManager {
       var lastSyncedEntry = SyncUtil.getLastSyncedEntry(regex);
       var lastSyncedCommitId = lastSyncedEntry?.commitId;
       var serverCommitId =
-      await SyncUtil.getLatestServerCommitId(_remoteSecondary, regex);
+          await SyncUtil.getLatestServerCommitId(_remoteSecondary, regex);
       var lastSyncedLocalSeq =
-      lastSyncedEntry != null ? lastSyncedEntry.key : -1;
+          lastSyncedEntry != null ? lastSyncedEntry.key : -1;
       if (appInit && lastSyncedLocalSeq > 0) {
         serverCommitId ??= -1;
         if (lastSyncedLocalSeq > serverCommitId) {
@@ -99,7 +99,7 @@ class SyncManager {
         logger.finer('app init: lastSyncedLocalSeq: ${lastSyncedLocalSeq} ');
       }
       var unCommittedEntries =
-      SyncUtil.getChangesSinceLastCommit(lastSyncedLocalSeq, regex);
+          SyncUtil.getChangesSinceLastCommit(lastSyncedLocalSeq, regex);
       // cloud and local are in sync if there is no synced changes in local and commitIDs are equals
       if (SyncUtil.isInSync(
           unCommittedEntries, serverCommitId, lastSyncedCommitId)) {
@@ -112,12 +112,13 @@ class SyncManager {
       // cloud is ahead if server commit id is > last synced commit id in local
       if (serverCommitId > lastSyncedCommitId) {
         // send sync verb to server and sync the changes to local
-        var syncResponse = await _remoteSecondary.sync(lastSyncedCommitId, regex: regex);
+        var syncResponse =
+            await _remoteSecondary.sync(lastSyncedCommitId, regex: regex);
         if (syncResponse != null && syncResponse != 'data:null') {
           syncResponse = syncResponse.replaceFirst('data:', '');
           var syncResponseJson = jsonDecode(syncResponse);
           await Future.forEach(syncResponseJson,
-                  (serverCommitEntry) => _syncLocal(serverCommitEntry));
+              (serverCommitEntry) => _syncLocal(serverCommitEntry));
         }
         isSyncInProgress = false;
         return;
@@ -200,10 +201,10 @@ class SyncManager {
         var operation = message['operation'];
         switch (operation) {
           case 'get_commit_id_result':
-          // 1.1 commit id response from isolate
+            // 1.1 commit id response from isolate
             var serverCommitId = message['commit_id'];
             var lastSyncedLocalSeq =
-            lastSyncedEntry != null ? lastSyncedEntry.key : -1;
+                lastSyncedEntry != null ? lastSyncedEntry.key : -1;
             var unCommittedEntries = SyncUtil.getChangesSinceLastCommit(
                 lastSyncedLocalSeq, _preference.syncRegex);
             if (SyncUtil.isInSync(
@@ -250,20 +251,20 @@ class SyncManager {
                 syncSendPort.send(isolateInput);
                 sleep(Duration(
                     seconds:
-                    1)); // workaround for receiving out of order response from message listener
+                        1)); // workaround for receiving out of order response from message listener
               }
             }
             break;
           case 'get_server_commits_result':
-          //2.2 Sync verb response from isolate. For each entry sync to local storage and update commit id.
+            //2.2 Sync verb response from isolate. For each entry sync to local storage and update commit id.
             var syncResponse = message['sync_response'];
             var syncResponseJson = jsonDecode(syncResponse);
             await Future.forEach(syncResponseJson,
-                    (serverCommitEntry) => _syncLocal(serverCommitEntry));
+                (serverCommitEntry) => _syncLocal(serverCommitEntry));
             syncDone = true;
             break;
           case 'push_to_remote_result':
-          // 3.2 Update/delete verb commit id response from server. Update server commit id in local commit log.
+            // 3.2 Update/delete verb commit id response from server. Update server commit id in local commit log.
             var serverCommitId = message['operation_commit_id'];
             var entry_key = message['entry_key'];
             var entry = SyncUtil.getEntry(entry_key);
@@ -359,7 +360,7 @@ class SyncManager {
       var verbResult = await _remoteSecondary.executeVerb(builder);
       var serverCommitId = verbResult.split(':')[1];
       var localCommitEntry =
-      await SyncUtil.getCommitEntry(int.parse(localSequence));
+          await SyncUtil.getCommitEntry(int.parse(localSequence));
       localCommitEntry.operation = operation;
       await SyncUtil.updateCommitEntry(
           localCommitEntry, int.parse(serverCommitId));
@@ -428,9 +429,9 @@ class SyncManager {
     try {
       var cron = Cron();
       cron.schedule(Schedule.parse('*/${_preference.syncIntervalMins} * * * *'),
-              () async {
-            syncWithIsolate();
-          });
+          () async {
+        syncWithIsolate();
+      });
       _isScheduled = true;
     } on Exception catch (e) {
       print('Exception during scheduleSyncTask ${e.toString()}');

@@ -48,7 +48,6 @@ void _streamReceiveCallBack(var bytesReceived) {
   print('Receive callback bytes received: ${bytesReceived}');
 }
 
-
 void _streamCompletionCallBack(var streamId) {
   print('Transfer done for stream: ${streamId}');
 }

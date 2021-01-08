@@ -137,7 +137,7 @@ class AtClientImpl implements AtClient {
   Future<String> getPrivateKey(String atSign) async {
     assert(atSign != null && atSign.isNotEmpty);
     var privateKeyData =
-    await getLocalSecondary().keyStore.get(AT_PKAM_PRIVATE_KEY);
+        await getLocalSecondary().keyStore.get(AT_PKAM_PRIVATE_KEY);
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
@@ -146,7 +146,7 @@ class AtClientImpl implements AtClient {
   Future<bool> delete(AtKey atKey) {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var isNamespaceAware =
-    atKey.metadata != null ? atKey.metadata.namespaceAware : true;
+        atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     return _delete(atKey.key,
         sharedWith: atKey.sharedWith,
         isPublic: isPublic,
@@ -155,8 +155,8 @@ class AtClientImpl implements AtClient {
 
   Future<bool> _delete(String key,
       {String sharedWith,
-        bool isPublic = false,
-        bool namespaceAware = true}) async {
+      bool isPublic = false,
+      bool namespaceAware = true}) async {
     var keyWithNamespace;
     if (namespaceAware) {
       keyWithNamespace = _getKeyWithNamespace(key);
@@ -174,11 +174,11 @@ class AtClientImpl implements AtClient {
 
   Future<dynamic> _get(String key,
       {String sharedWith,
-        String sharedBy,
-        bool isPublic = false,
-        bool isCached = false,
-        bool namespaceAware = true,
-        String operation}) async {
+      String sharedBy,
+      bool isPublic = false,
+      bool isCached = false,
+      bool namespaceAware = true,
+      String operation}) async {
     var builder;
     var keyWithNamespace;
     if (namespaceAware) {
@@ -321,7 +321,7 @@ class AtClientImpl implements AtClient {
   Future<AtValue> get(AtKey atKey) async {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var namespaceAware =
-    atKey.metadata != null ? atKey.metadata.namespaceAware : true;
+        atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
     var getResult = await _get(atKey.key,
         sharedWith: AtUtils.formatAtSign(atKey.sharedWith),
@@ -351,7 +351,7 @@ class AtClientImpl implements AtClient {
   Future<Metadata> getMeta(AtKey atKey) async {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var namespaceAware =
-    atKey.metadata != null ? atKey.metadata.namespaceAware : true;
+        atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
     var getResult = await _get(atKey.key,
         sharedWith: atKey.sharedWith,
@@ -386,7 +386,7 @@ class AtClientImpl implements AtClient {
   Future<List<AtKey>> getAtKeys(
       {String regex, String sharedBy, String sharedWith}) async {
     var getKeysResult =
-    await getKeys(regex: regex, sharedBy: sharedBy, sharedWith: sharedWith);
+        await getKeys(regex: regex, sharedBy: sharedBy, sharedWith: sharedWith);
     var result = <AtKey>[];
     if (getKeysResult != null && getKeysResult.isNotEmpty) {
       getKeysResult.forEach((key) {
@@ -449,7 +449,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-          await encryptionService.encrypt(key, value, sharedWith);
+              await encryptionService.encrypt(key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -473,7 +473,7 @@ class AtClientImpl implements AtClient {
     if (metadata != null && metadata.isPublic) {
       try {
         var encryptionPrivateKey =
-        await _localSecondary.getEncryptionPrivateKey();
+            await _localSecondary.getEncryptionPrivateKey();
         if (encryptionPrivateKey != null) {
           logger.finer('signing public data for key:${key}');
           builder.dataSignature =
@@ -490,7 +490,7 @@ class AtClientImpl implements AtClient {
         builder.isJson = true;
       }
       putResult =
-      await getSecondary().executeVerb(builder, sync: isSyncRequired);
+          await getSecondary().executeVerb(builder, sync: isSyncRequired);
     } on AtClientException catch (e) {
       logger.severe(
           'error code: ${e.errorCode} error message: ${e.errorMessage}');
@@ -532,7 +532,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-          await encryptionService.encrypt(atKey.key, value, sharedWith);
+              await encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -540,7 +540,7 @@ class AtClientImpl implements AtClient {
         }
       } else {
         builder.value =
-        await encryptionService.encryptForSelf(atKey.key, value);
+            await encryptionService.encryptForSelf(atKey.key, value);
       }
     }
     if (metadata != null) {
@@ -559,7 +559,7 @@ class AtClientImpl implements AtClient {
       isSyncRequired = false;
     }
     var notifyResult =
-    await getSecondary().executeVerb(builder, sync: isSyncRequired);
+        await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return notifyResult != null;
   }
 
@@ -591,7 +591,7 @@ class AtClientImpl implements AtClient {
     }
 
     var updateMetaResult =
-    await getSecondary().executeVerb(builder, sync: isSyncRequired);
+        await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return updateMetaResult != null;
   }
 
@@ -633,24 +633,23 @@ class AtClientImpl implements AtClient {
     return result;
   }
 
-
   Metadata _prepareMetadata(Map<String, dynamic> metadataMap, bool isPublic) {
     if (metadataMap == null) {
       return null;
     }
     var metadata = Metadata();
     metadata.expiresAt =
-    (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
-        ? DateTime.parse(metadataMap['expiresAt'])
-        : null;
+        (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
+            ? DateTime.parse(metadataMap['expiresAt'])
+            : null;
     metadata.availableAt = (metadataMap['availableAt'] != null &&
-        metadataMap['availableAt'] != 'null')
+            metadataMap['availableAt'] != 'null')
         ? DateTime.parse(metadataMap['availableAt'])
         : null;
     metadata.refreshAt =
-    (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
-        ? DateTime.parse(metadataMap[REFRESH_AT])
-        : null;
+        (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
+            ? DateTime.parse(metadataMap[REFRESH_AT])
+            : null;
     metadata.ttr = metadataMap[AT_TTR];
     metadata.ttl = metadataMap[AT_TTL];
     metadata.ttb = metadataMap[AT_TTB];

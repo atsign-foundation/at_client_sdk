@@ -71,15 +71,15 @@ class AtClientService {
   Future<Map<String, String>> getEncryptedKeys(String atsign) async {
     var aesEncryptedKeys = {};
     aesEncryptedKeys[BackupKeyConstants.AES_PKAM_PUBLIC_KEY] =
-    await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PUBLIC_KEY);
+        await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PUBLIC_KEY);
     aesEncryptedKeys[BackupKeyConstants.AES_PKAM_PRIVATE_KEY] =
-    await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PRIVATE_KEY);
+        await _keyChainManager.getValue(atsign, KEYCHAIN_AES_PKAM_PRIVATE_KEY);
     aesEncryptedKeys[BackupKeyConstants.AES_ENCRYPTION_PUBLIC_KEY] =
-    await _keyChainManager.getValue(
-        atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY);
+        await _keyChainManager.getValue(
+            atsign, KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY);
     aesEncryptedKeys[BackupKeyConstants.AES_ENCRYPTION_PRIVATE_KEY] =
-    await _keyChainManager.getValue(
-        atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY);
+        await _keyChainManager.getValue(
+            atsign, KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY);
     return Map<String, String>.from(aesEncryptedKeys);
   }
 
@@ -119,9 +119,9 @@ class AtClientService {
   /// if pkam is successful, encryption keys will be set for the user.
   Future<bool> authenticate(String atsign,
       {String cramSecret,
-        KeyRestoreStatus status,
-        String jsonData,
-        String decryptKey}) async {
+      KeyRestoreStatus status,
+      String jsonData,
+      String decryptKey}) async {
     if (cramSecret == null) {
       atsign = _formatAtSign(atsign);
       if (atsign == null) {
@@ -132,7 +132,7 @@ class AtClientService {
     }
     _atClientPreference.cramSecret = cramSecret;
     var result =
-    await _init(atsign, _atClientPreference, namespace: _namespace);
+        await _init(atsign, _atClientPreference, namespace: _namespace);
     if (!result) {
       return result;
     }
@@ -145,7 +145,7 @@ class AtClientService {
         status: _status);
     if (result) {
       var privateKey = _atClientPreference.privateKey ??=
-      await _keyChainManager.getPrivateKey(atsign);
+          await _keyChainManager.getPrivateKey(atsign);
       _atClientAuthenticator.atLookUp.privateKey = privateKey;
       atClient.getRemoteSecondary().atLookUp.privateKey = privateKey;
       await _sync(_atClientPreference, atsign);
@@ -186,8 +186,8 @@ class AtClientService {
   /// Throws [PRIVATE_KEY_NOT_FOUND] exception if privatekey not found.
   Future<bool> onboard(
       {AtClientPreference atClientPreference,
-        String atsign,
-        String namespace}) async {
+      String atsign,
+      String namespace}) async {
     _atClientPreference = atClientPreference;
     _namespace = namespace;
     _atClientAuthenticator = AtClientAuthenticator();
@@ -229,12 +229,12 @@ class AtClientService {
   Future<KeyRestoreStatus> getKeyRestorePolicy(String atSign) async {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
-    await _keyChainManager.getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
+        await _keyChainManager.getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
     _logger.finer('local encryption public key:${localEncryptionPublicKey}');
     _logger.finer(
         'server encryption public key get result:${serverEncryptionPublicKey}');
     if (_isNullOrEmpty(localEncryptionPublicKey) &&
-        _isNullOrEmpty(serverEncryptionPublicKey) ||
+            _isNullOrEmpty(serverEncryptionPublicKey) ||
         (_isNullOrEmpty(serverEncryptionPublicKey) &&
             !(_isNullOrEmpty(localEncryptionPublicKey)))) {
       return KeyRestoreStatus.ACTIVATE;

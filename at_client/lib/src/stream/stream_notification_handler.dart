@@ -25,7 +25,7 @@ class StreamNotificationHandler {
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
     var f =
-    await File('${preference.downloadPath}/${streamNotification.fileName}');
+        await File('${preference.downloadPath}/${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive ${streamId}\n';
     socket.write(command);
