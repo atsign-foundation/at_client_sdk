@@ -20,6 +20,7 @@ dependencies:
       url: https://github.com/atsign-foundation/at_client_sdk.git
       path: at_client
       ref: dev_env
+      version: 1.0.1
 
 #dependency_overrides:
 #  at_client:

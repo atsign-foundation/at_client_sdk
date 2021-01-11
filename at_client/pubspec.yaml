@@ -26,12 +26,14 @@ dependencies:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
       ref: dev_env
+      version: 1.0.1+1
 
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
       ref: dev_env
+      version: 1.0.0
 
 #dependency_overrides:
 #  at_persistence_secondary_server:
