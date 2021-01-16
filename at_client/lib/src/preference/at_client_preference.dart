@@ -22,11 +22,14 @@ class AtClientPreference {
   /// Private key of the atSign
   String privateKey;
 
+  /// Specifies the namespace of an app.
+  String namespace;
+
   /// Secret key to encrypt keystore data
   List<int> keyStoreSecret;
 
-  /// Domain of the root server. Defaults to root.atsign.org
-  String rootDomain = 'root.atsign.org';
+  /// Domain of the root server. Defaults to root.atsign.wtf
+  String rootDomain = 'root.atsign.wtf';
 
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
@@ -46,6 +49,9 @@ class AtClientPreference {
 
   /// regex to perform sync
   String syncRegex;
+
+  /// Number of keys to batch for sync to secondary server
+  int syncBatchSize = 5;
 }
 
 enum SyncStrategy {

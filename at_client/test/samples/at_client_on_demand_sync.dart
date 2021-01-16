@@ -4,12 +4,15 @@ import 'test_util.dart';
 
 void main() async {
   try {
-    var preference = TestUtil.getPreferenceLocal();
-    await AtClientImpl.createClient('@alice', 'me', preference);
-    var atClient = await AtClientImpl.getClient('@alice');
-    await atClient.getSyncManager().sync();
+    var atSign = '@alice🛠';
+    var preference = TestUtil.getAlicePreference();
+    await AtClientImpl.createClient(
+        atSign, 'me', TestUtil.getAlicePreference());
+    var atClient = await AtClientImpl.getClient(atSign);
+    await atClient.getSyncManager().init(atSign, preference, atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var result = await atClient.getSyncManager().isInSync();
-    print(result);
+    print('is in sync:${result}');
+    await atClient.getSyncManager().sync();
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
