@@ -7,32 +7,48 @@ import 'package:at_commons/at_builders.dart';
 
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
-  static Future<CommitEntry> getCommitEntry(int sequenceNumber) async {
-    var commitEntry = await AtCommitLog.getInstance().getEntry(sequenceNumber);
+  static Future<CommitEntry> getCommitEntry(
+      int sequenceNumber, String atSign) async {
+    var commitLogInstance =
+    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    var commitEntry = await commitLogInstance.getEntry(sequenceNumber);
     return commitEntry;
   }
 
-  static Future<void> updateCommitEntry(var commitEntry, int commitId) async {
-    await AtCommitLog.getInstance().update(commitEntry, commitId);
+  static Future<void> updateCommitEntry(
+      var commitEntry, int commitId, String atSign) async {
+    var commitLogInstance =
+    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    await commitLogInstance.update(commitEntry, commitId);
   }
 
-  static CommitEntry getLastSyncedEntry(String regex) {
+  static Future<CommitEntry> getLastSyncedEntry(String regex,
+      {String atSign}) async {
+    var commitLogInstance =
+    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+
     var lastEntry;
     if (regex != null) {
-      lastEntry = AtCommitLog.getInstance().lastSyncedEntryWithRegex(regex);
+      lastEntry = commitLogInstance.lastSyncedEntryWithRegex(regex);
     } else {
-      lastEntry = AtCommitLog.getInstance().lastSyncedEntry();
+      lastEntry = commitLogInstance.lastSyncedEntry();
     }
     return lastEntry;
   }
 
-  static Future<CommitEntry> getEntry(int seqNumber) async {
-    var entry = await AtCommitLog.getInstance().getEntry(seqNumber);
+  static Future<CommitEntry> getEntry(int seqNumber, String atSign) async {
+    var commitLogInstance =
+    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    var entry = await commitLogInstance.getEntry(seqNumber);
     return entry;
   }
 
-  static List<CommitEntry> getChangesSinceLastCommit(int seqNum, String regex) {
-    return AtCommitLog.getInstance().getChanges(seqNum, regex);
+  static Future<List<CommitEntry>> getChangesSinceLastCommit(
+      int seqNum, String regex,
+      {String atSign}) async {
+    var commitLogInstance =
+    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    return commitLogInstance.getChanges(seqNum, regex);
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead

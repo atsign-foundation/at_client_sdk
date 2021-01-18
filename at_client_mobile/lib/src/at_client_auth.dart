@@ -21,7 +21,7 @@ class AtClientAuthenticator implements AtClientAuth {
   Future<bool> init(var preference, {String atSign}) async {
     _keyChainManager = KeyChainManager.getInstance();
     if (atSign == null || atSign.isEmpty) {
-      atSign = await _keyChainManager.getAtSignFromKeychain();
+      atSign = await _keyChainManager.getAtSign();
       if (atSign == null || atSign.isEmpty) {
         return null;
       }
@@ -49,10 +49,8 @@ class AtClientAuthenticator implements AtClientAuth {
         await _keyChainManager.getValue(atSign, KEYCHAIN_PKAM_PRIVATE_KEY);
     var encryptionPrivateKey = await _keyChainManager.getValue(
         atSign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
-    if ((privateKey == null ||
-            privateKey == '' ||
-            status == KeyRestoreStatus.ACTIVATE) &&
-        cramSecret != null) {
+
+    if (cramSecret != null) {
       logger.finer('private key is empty. Performing cram');
       var cram_result = await atLookUp.authenticate_cram(cramSecret);
       if (!cram_result) {

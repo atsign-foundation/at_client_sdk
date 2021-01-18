@@ -3,22 +3,17 @@ import 'test_util.dart';
 import 'package:at_commons/at_commons.dart';
 
 void main() async {
-  await AtClientImpl.createClient(
-      '@alice🛠', 'me', TestUtil.getAlicePreference());
-  var atClient = await AtClientImpl.getClient('@alice🛠');
+  var atsign = '@alice🛠';
+  var preference = TestUtil.getAlicePreference();
+  await AtClientImpl.createClient(atsign, 'me', TestUtil.getAlicePreference());
+  var atClient = await AtClientImpl.getClient(atsign);
+  await atClient.getSyncManager().init(atsign, preference,
+      atClient.getRemoteSecondary(), atClient.getLocalSecondary());
   // phone.me@alice🛠
   var phoneKey = AtKey()..key = 'phone';
   var value = '+1 100 200 300';
   var result = await atClient.put(phoneKey, value);
   print(result);
-  // @alice:phone.me@alice🛠
-  var privatePhoneKey = AtKey()
-    ..key = 'phone'
-    ..sharedWith = '@alice🛠';
-  var privatePhoneValue = '+1 100 200 301';
-  var updatePrivatePhoneResult =
-      await atClient.put(privatePhoneKey, privatePhoneValue);
-  print(updatePrivatePhoneResult);
 
   // public:phone.me@alice🛠
   var metadata = Metadata()..isPublic = true;
@@ -27,6 +22,6 @@ void main() async {
     ..metadata = metadata;
   var publicPhoneValue = '+1 100 200 302';
   var updatePublicPhoneResult =
-      await atClient.put(publicPhoneKey, publicPhoneValue);
+  await atClient.put(publicPhoneKey, publicPhoneValue);
   print(updatePublicPhoneResult);
 }

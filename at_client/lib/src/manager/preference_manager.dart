@@ -4,8 +4,9 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 /// Manager to init local preferences
 class PreferenceManager {
   AtClientPreference preferences;
+  String _atSign;
 
-  PreferenceManager(this.preferences);
+  PreferenceManager(this.preferences, this._atSign);
 
   void setPreferences() async {
     _persistSyncStrategy();
@@ -14,10 +15,12 @@ class PreferenceManager {
   void _persistSyncStrategy() async {
     var syncData = AtData();
     syncData.data = preferences.syncStrategy.toString();
-    var keyStoreManager = SecondaryKeyStoreManager.getInstance();
+    var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(this._atSign)
+        .getSecondaryKeyStoreManager();
     await keyStoreManager.getKeyStore().put('private:sync_strategy', syncData);
   }
-  // commented. is this required in client ?
+// commented. is this required in client ?
 //  void _persistCurrentAtSign() async {
 //    var syncData = AtData();
 //    syncData.data = currentAtSign;
