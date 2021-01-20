@@ -78,8 +78,8 @@ class RemoteSecondary implements Secondary {
     var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
         ? ':${regex}'
         : ((_preference.syncRegex != null && _preference.syncRegex.isNotEmpty)
-        ? ':${_preference.syncRegex}'
-        : '');
+            ? ':${_preference.syncRegex}'
+            : '');
 
     atCommand += '${regexString}\n';
     var syncResult = await atLookUp.executeCommand(atCommand, auth: true);
@@ -91,8 +91,8 @@ class RemoteSecondary implements Secondary {
       String command, Function notificationCallBack, String privateKey) {
     return MonitorClient(privateKey).executeMonitorVerb(
         command, _atSign, _preference.rootDomain, _preference.rootPort,
-            (value) {
-          notificationCallBack(value);
-        });
+        (value) {
+      notificationCallBack(value);
+    });
   }
 }

@@ -63,8 +63,8 @@ class SyncUtil {
 
   static bool _checkCommitIdsEqual(lastSyncedCommitId, serverCommitId) {
     return (lastSyncedCommitId != null &&
-        serverCommitId != null &&
-        lastSyncedCommitId == serverCommitId) ||
+            serverCommitId != null &&
+            lastSyncedCommitId == serverCommitId) ||
         (lastSyncedCommitId == null && serverCommitId == null);
   }
 
