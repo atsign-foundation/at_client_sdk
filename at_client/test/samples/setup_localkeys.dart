@@ -5,18 +5,19 @@ import 'test_util.dart';
 
 void main() async {
   try {
+    var preference = TestUtil.getAlicePreference();
+    var atsign = '@alice';
     //1.
-    await AtClientImpl.createClient(
-        '@alice🛠', 'me', TestUtil.getPreferenceLocal());
-    var atClient = await AtClientImpl.getClient('@alice🛠');
+    await AtClientImpl.createClient('@alice', 'me', preference);
+    var atClient = await AtClientImpl.getClient('@alice');
+    await atClient.getSyncManager().init(atsign, preference,
+        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var metadata = Metadata();
     metadata.namespaceAware = false;
     var result;
     // set pkam private key
-    result = await atClient
-        .getLocalSecondary()
-        .putValue(AT_PKAM_PRIVATE_KEY, '<your_pkam_private_key>');
-    // set pkam public key
+    result = await atClient.getLocalSecondary().putValue(
+        AT_PKAM_PRIVATE_KEY, '<your_pkam_private_key>'); // set pkam public key
     result = await atClient
         .getLocalSecondary()
         .putValue(AT_PKAM_PUBLIC_KEY, '<your_pkam_public_key>');

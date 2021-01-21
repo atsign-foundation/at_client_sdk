@@ -1,6 +1,5 @@
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:at_utils/at_utils.dart';
 
 /// Manager to create local storage
 class StorageManager {
@@ -32,18 +31,26 @@ class StorageManager {
     if (storagePath == null || commitLogPath == null) {
       throw Exception('Please set local storage paths');
     }
-    var commitLogKeyStore = CommitLogKeyStore.getInstance();
-    commitLogKeyStore.enableCommitId = false;
-    await commitLogKeyStore.init(
-        'commit_log_' + AtUtils.getShaForAtSign(currentAtSign), commitLogPath);
+    var atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
+        currentAtSign,
+        commitLogPath: commitLogPath,
+        enableCommitId: false);
     // Initialize Persistence
-    // var manager = client_storage.HivePersistenceManager.getInstance();
-    var manager = HivePersistenceManager.getInstance();
-
+    var manager = SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(currentAtSign)
+        .getHivePersistenceManager();
     await manager.init(currentAtSign, storagePath);
     await manager.openVault(currentAtSign, hiveSecret: keyStoreSecret);
-    var keyStoreManager = SecondaryKeyStoreManager.getInstance();
-    keyStoreManager.init();
+    //var hiveKeyStore = HiveKeystore(currentAtSign);
+    var hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(currentAtSign)
+        .getSecondaryKeyStore();
+    hiveKeyStore.commitLog = atCommitLog;
+    //var keyStoreManager = SecondaryKeyStoreManager.getInstance();
+    var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(currentAtSign)
+        .getSecondaryKeyStoreManager();
+    keyStoreManager.keyStore = hiveKeyStore;
     isStorageInitialized = true;
   }
 }

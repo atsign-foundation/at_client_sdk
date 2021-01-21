@@ -3,6 +3,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
+import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -29,7 +30,9 @@ class LocalSecondary implements Secondary {
   LocalSecondary(String atSign, AtClientPreference preference) {
     _atSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
-    keyStore = SecondaryKeyStoreManager.getInstance().getKeyStore();
+    keyStore = SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(atSign)
+        .getSecondaryKeyStore();
   }
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
@@ -42,7 +45,7 @@ class LocalSecondary implements Secondary {
       sync ??= (_preference.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         SendPort syncSendPort;
-        var syncManager = SyncManager.getInstance();
+        var syncManager = SyncManagerImpl.getInstance().getSyncManager(_atSign);
         //1. if local and server are out of sync, first sync before updating current key-value
         if (sync) {
           await syncManager.sync(regex: _preference.syncRegex);

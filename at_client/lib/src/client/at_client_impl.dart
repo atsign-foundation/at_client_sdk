@@ -7,6 +7,7 @@ import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
+import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -23,7 +24,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
-import 'package:crypton/crypton.dart';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart';
@@ -56,13 +56,17 @@ class AtClientImpl implements AtClient {
   static void createClient(String currentAtSign, String namespace,
       AtClientPreference preferences) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign);
+    if (_atClientInstanceMap.containsKey(currentAtSign)) {
+      return;
+    }
     if (preferences.isLocalStoreRequired) {
       var storageManager = StorageManager(preferences);
       await storageManager.init(currentAtSign, preferences.keyStoreSecret);
     }
     var atClientImpl = AtClientImpl(currentAtSign, namespace, preferences);
     await atClientImpl._init();
-    atClientImpl.logger.info('AtClient init  done');
+    atClientImpl.logger
+        .info('AtClient init  done for : ${atClientImpl.currentAtSign}');
     _atClientInstanceMap[currentAtSign] = atClientImpl;
   }
 
@@ -111,12 +115,12 @@ class AtClientImpl implements AtClient {
 
   @override
   SyncManager getSyncManager() {
-    return SyncManager.getInstance();
+    return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
   }
 
   @override
   void setPreferences(AtClientPreference preference) async {
-    var preferenceManager = PreferenceManager(preference);
+    var preferenceManager = PreferenceManager(preference, currentAtSign);
     await preferenceManager.setPreferences();
   }
 
@@ -649,6 +653,14 @@ class AtClientImpl implements AtClient {
     metadata.refreshAt =
         (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
             ? DateTime.parse(metadataMap[REFRESH_AT])
+            : null;
+    metadata.createdAt =
+        (metadataMap[CREATED_AT] != null && metadataMap[CREATED_AT] != 'null')
+            ? DateTime.parse(metadataMap[CREATED_AT])
+            : null;
+    metadata.updatedAt =
+        (metadataMap[UPDATED_AT] != null && metadataMap[UPDATED_AT] != 'null')
+            ? DateTime.parse(metadataMap[UPDATED_AT])
             : null;
     metadata.ttr = metadataMap[AT_TTR];
     metadata.ttl = metadataMap[AT_TTL];

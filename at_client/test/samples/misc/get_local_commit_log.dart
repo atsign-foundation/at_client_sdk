@@ -6,7 +6,9 @@ import '../test_util.dart';
 void main() async {
   await AtClientImpl.createClient(
       '@alice', 'me', TestUtil.getPreferenceLocal());
-  var commitLog = AtCommitLog.getInstance();
+  var commitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
+      '@alice',
+      commitLogPath: TestUtil.getPreferenceLocal().commitLogPath);
   var entries = commitLog.getChanges(-1, '');
   print(entries);
   var entry = commitLog.lastSyncedEntry();
