@@ -14,14 +14,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_logger.dart';
 
 class SyncManager {
-  static final SyncManager _singleton = SyncManager._internal();
-
-  SyncManager._internal();
-
-  factory SyncManager.getInstance() {
-    return _singleton;
-  }
-
   var logger = AtSignLogger('SyncManager');
 
   LocalSecondary _localSecondary;
@@ -32,11 +24,13 @@ class SyncManager {
 
   String _atSign;
 
-  bool pendingSyncExists = false;
-
   bool isSyncInProgress = false;
 
+  bool pendingSyncExists = false;
+
   var _isScheduled = false;
+
+  SyncManager(this._atSign);
 
   void init(String atSign, AtClientPreference preference,
       RemoteSecondary _remoteSecondary, LocalSecondary _localSecondary) {
@@ -52,11 +46,14 @@ class SyncManager {
   Future<bool> isInSync() async {
     var serverCommitId = await SyncUtil.getLatestServerCommitId(
         _remoteSecondary, _preference.syncRegex);
-    var lastSyncedEntry = SyncUtil.getLastSyncedEntry(_preference.syncRegex);
+    var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
+        _preference.syncRegex,
+        atSign: _atSign);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-    var unCommittedEntries = SyncUtil.getChangesSinceLastCommit(
-        lastSyncedLocalSeq, _preference.syncRegex);
+    var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
+        lastSyncedLocalSeq, _preference.syncRegex,
+        atSign: _atSign);
     return SyncUtil.isInSync(
         unCommittedEntries, serverCommitId, lastSyncedCommitId);
   }
@@ -85,7 +82,8 @@ class SyncManager {
       //isSyncProgress set to true during the sync is in progress.
       //once sync process done, it will again set to false.
       isSyncInProgress = true;
-      var lastSyncedEntry = SyncUtil.getLastSyncedEntry(regex);
+      var lastSyncedEntry =
+          await SyncUtil.getLastSyncedEntry(regex, atSign: _atSign);
       var lastSyncedCommitId = lastSyncedEntry?.commitId;
       var serverCommitId =
           await SyncUtil.getLatestServerCommitId(_remoteSecondary, regex);
@@ -98,13 +96,13 @@ class SyncManager {
         }
         logger.finer('app init: lastSyncedLocalSeq: ${lastSyncedLocalSeq} ');
       }
-      var unCommittedEntries =
-          SyncUtil.getChangesSinceLastCommit(lastSyncedLocalSeq, regex);
+      var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
+          lastSyncedLocalSeq, regex,
+          atSign: _atSign);
       // cloud and local are in sync if there is no synced changes in local and commitIDs are equals
       if (SyncUtil.isInSync(
           unCommittedEntries, serverCommitId, lastSyncedCommitId)) {
         logger.info('server and local is in sync');
-        isSyncInProgress = false;
         return;
       }
       lastSyncedCommitId ??= -1;
@@ -120,51 +118,42 @@ class SyncManager {
           await Future.forEach(syncResponseJson,
               (serverCommitEntry) => _syncLocal(serverCommitEntry));
         }
-        isSyncInProgress = false;
         return;
       }
 
       // local is ahead. push the changes to secondary server
-      for (var entry in unCommittedEntries) {
-        var command = await _getCommand(entry);
-        command = command.replaceAll('cached:', '');
-        command = VerbUtil.replaceNewline(command);
-        switch (entry.operation) {
-          case CommitOp.UPDATE:
-            var builder = UpdateVerbBuilder.getBuilder(command);
-            if (builder == null) {
-              logger.severe('update syntax issue for command: ${command}');
-              continue;
+      var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
+      for (var unCommittedEntryList in uncommittedEntryBatch) {
+        try {
+          var batchRequests = await _getBatchRequests(unCommittedEntryList);
+          var batchResponse = await _sendBatch(batchRequests);
+          for (var entry in batchResponse) {
+            try {
+              var batchId = entry['id'];
+              var serverResponse = entry['response'];
+              var responseObject = Response.fromJson(serverResponse);
+              var commitId = -1;
+              if (responseObject.data != null) {
+                commitId = int.parse(responseObject.data);
+              }
+              var commitEntry = unCommittedEntryList.elementAt(batchId - 1);
+              if (commitId == -1) {
+                logger.severe(
+                    'update/delete for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
+              }
+
+              logger.finer('***batchId:${batchId} key: ${commitEntry.atKey}');
+              await SyncUtil.updateCommitEntry(commitEntry, commitId, _atSign);
+            } on Exception catch (e) {
+              logger.severe(
+                  'exception while updating commit entry for entry:${entry} ${e.toString()}');
             }
-            await _pushToRemote(builder, entry);
-            break;
-          case CommitOp.DELETE:
-            var builder = DeleteVerbBuilder.getBuilder(command);
-            if (builder == null) {
-              logger.severe('delete syntax issue for command: ${command}');
-              continue;
-            }
-            await _pushToRemote(builder, entry);
-            break;
-          case CommitOp.UPDATE_META:
-            var builder = UpdateVerbBuilder.getBuilder(command);
-            if (builder == null) {
-              logger.severe('update meta syntax issue for command: ${command}');
-              continue;
-            }
-            await _pushToRemote(builder, entry);
-            break;
-          case CommitOp.UPDATE_ALL:
-            var builder = UpdateVerbBuilder.getBuilder(command);
-            if (builder == null) {
-              logger.severe('update all syntax issue for command: ${command}');
-              continue;
-            }
-            await _pushToRemote(builder, entry);
-            break;
+          }
+        } on Exception catch (e) {
+          logger.severe(
+              'exception while syncing batch: ${e.toString()} batch commit entries: ${unCommittedEntryList}');
         }
       }
-      isSyncInProgress = false;
     } on AtLookUpException catch (e) {
       if (e.errorCode == 'AT0021') {
         logger.info('skipping sync since secondary is not reachable');
@@ -175,7 +164,9 @@ class SyncManager {
   }
 
   Future<void> syncWithIsolate() async {
-    var lastSyncedEntry = SyncUtil.getLastSyncedEntry(_preference.syncRegex);
+    var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
+        _preference.syncRegex,
+        atSign: _atSign);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     var commitIdReceivePort = ReceivePort();
     var privateKey = await _localSecondary.keyStore.get(AT_PKAM_PRIVATE_KEY);
@@ -205,8 +196,9 @@ class SyncManager {
             var serverCommitId = message['commit_id'];
             var lastSyncedLocalSeq =
                 lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-            var unCommittedEntries = SyncUtil.getChangesSinceLastCommit(
-                lastSyncedLocalSeq, _preference.syncRegex);
+            var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
+                lastSyncedLocalSeq, _preference.syncRegex,
+                atSign: _atSign);
             if (SyncUtil.isInSync(
                 unCommittedEntries, serverCommitId, lastSyncedCommitId)) {
               logger.info('server and local is in sync');
@@ -267,10 +259,11 @@ class SyncManager {
             // 3.2 Update/delete verb commit id response from server. Update server commit id in local commit log.
             var serverCommitId = message['operation_commit_id'];
             var entry_key = message['entry_key'];
-            var entry = SyncUtil.getEntry(entry_key);
+            var entry = SyncUtil.getEntry(entry_key, _atSign);
             logger.info(
                 'received remote push result: ${entry_key} ${entry} ${entry_key}');
-            await SyncUtil.updateCommitEntry(entry, int.parse(serverCommitId));
+            await SyncUtil.updateCommitEntry(
+                entry, int.parse(serverCommitId), _atSign);
             pushedCount--;
             print('pushedCount:${pushedCount}');
             if (pushedCount == 0) syncDone = true;
@@ -289,13 +282,16 @@ class SyncManager {
     });
   }
 
-  void _pushToRemote(VerbBuilder builder, CommitEntry entry) async {
-    var verbResult = await _remoteSecondary.executeVerb(builder);
-    logger.info('verbResult:$verbResult');
-    if (verbResult != null && verbResult.isNotEmpty) {
-      var serverCommitId = verbResult.split(':')[1];
-      await SyncUtil.updateCommitEntry(entry, int.parse(serverCommitId));
+  dynamic _sendBatch(List<BatchRequest> requests) async {
+    var command = 'batch:';
+    command += jsonEncode(requests);
+    command += '\n';
+    var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
+    logger.finer('batch result:$verbResult');
+    if (verbResult != null) {
+      verbResult = verbResult.replaceFirst('data:', '');
     }
+    return jsonDecode(verbResult);
   }
 
   Future<void> _syncLocal(serverCommitEntry) async {
@@ -348,10 +344,10 @@ class SyncManager {
       VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
     var verbResult = await _localSecondary.executeVerb(builder, sync: false);
     var sequenceNumber = int.parse(verbResult.split(':')[1]);
-    var commitEntry = await SyncUtil.getCommitEntry(sequenceNumber);
+    var commitEntry = await SyncUtil.getCommitEntry(sequenceNumber, _atSign);
     commitEntry.operation = operation;
     await SyncUtil.updateCommitEntry(
-        commitEntry, serverCommitEntry['commitId']);
+        commitEntry, serverCommitEntry['commitId'], _atSign);
   }
 
   void syncImmediate(
@@ -360,10 +356,10 @@ class SyncManager {
       var verbResult = await _remoteSecondary.executeVerb(builder);
       var serverCommitId = verbResult.split(':')[1];
       var localCommitEntry =
-          await SyncUtil.getCommitEntry(int.parse(localSequence));
+          await SyncUtil.getCommitEntry(int.parse(localSequence), _atSign);
       localCommitEntry.operation = operation;
       await SyncUtil.updateCommitEntry(
-          localCommitEntry, int.parse(serverCommitId));
+          localCommitEntry, int.parse(serverCommitId), _atSign);
     } on SecondaryConnectException {
       logger.severe('Unable to connect to secondary');
     }
@@ -423,6 +419,43 @@ class SyncManager {
       metadataStr += ':isEncrypted:${metadata.isEncrypted}';
     }
     return metadataStr;
+  }
+
+  List<dynamic> _getUnCommittedEntryBatch(
+      List<CommitEntry> uncommittedEntries) {
+    var unCommittedEntryBatch = [];
+    var batchSize = _preference.syncBatchSize, i = 0;
+    var totalEntries = uncommittedEntries.length;
+    var totalBatch = (totalEntries % batchSize == 0)
+        ? totalEntries / batchSize
+        : (totalEntries / batchSize).floor() + 1;
+    var startIndex = i;
+    while (i < totalBatch) {
+      var endIndex = startIndex + batchSize < totalEntries
+          ? startIndex + batchSize
+          : totalEntries;
+      var currentBatch = uncommittedEntries.sublist(startIndex, endIndex);
+      unCommittedEntryBatch.add(currentBatch);
+      startIndex += batchSize;
+      i++;
+    }
+    return unCommittedEntryBatch;
+  }
+
+  Future<List<BatchRequest>> _getBatchRequests(
+      List<CommitEntry> uncommittedEntries) async {
+    var batchRequests = <BatchRequest>[];
+    var batchId = 1;
+    for (var entry in uncommittedEntries) {
+      var command = await _getCommand(entry);
+      command = command.replaceAll('cached:', '');
+      command = VerbUtil.replaceNewline(command);
+      var batchRequest = BatchRequest(batchId, command);
+      logger.finer('batchId:${batchId} key:${entry.atKey}');
+      batchRequests.add(batchRequest);
+      batchId++;
+    }
+    return batchRequests;
   }
 
   void _scheduleSyncTask() {
