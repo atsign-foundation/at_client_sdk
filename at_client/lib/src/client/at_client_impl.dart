@@ -27,8 +27,8 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:cron/cron.dart';
+import 'package:at_lookup/src/connection/outbound_connection.dart';
+//import 'package:cron/cron.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -99,19 +99,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  void startMonitor(String privateKey, Function notificationCallback) async {
-    _monitorConnection = await _remoteSecondary.monitor(
+  Future<OutboundConnection> startMonitor(
+      String privateKey, Function notificationCallback) async {
+    return await _remoteSecondary.monitor(
         MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
-    var cron = Cron();
-    cron.schedule(Schedule.parse('*/5 * * * *'), () async {
-      if (_monitorConnection == null || _monitorConnection.isInValid()) {
-        _monitorConnection = await _remoteSecondary.monitor(
-            MonitorVerbBuilder().buildCommand(),
-            notificationCallback,
-            privateKey);
-      }
-    });
   }
+
 
   @override
   LocalSecondary getLocalSecondary() {
