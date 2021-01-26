@@ -103,7 +103,7 @@ class AtClientImpl implements AtClient {
     _monitorConnection = await _remoteSecondary.monitor(
         MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
     var cron = Cron();
-    cron.schedule(Schedule.parse('*/10 * * * *'), () async {
+    cron.schedule(Schedule.parse('*/5 * * * *'), () async {
       if (_monitorConnection == null || _monitorConnection.isInValid()) {
         _monitorConnection = await _remoteSecondary.monitor(
             MonitorVerbBuilder().buildCommand(),
