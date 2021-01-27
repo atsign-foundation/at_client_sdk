@@ -369,7 +369,7 @@ class AtClientService {
   void _migrateOldSelfKeys() async {
     var currentAtSign = atClient.currentAtSign;
     var isMigrated =
-        await _keyChainManager.getValue(currentAtSign, 'newAesKeySynced');
+        await _keyChainManager.getValue(currentAtSign, 'selfKeysMigrated');
     if (isMigrated == 'true') {
       return;
     }
