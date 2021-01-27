@@ -3,6 +3,7 @@ import 'package:base2e15/base2e15.dart';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart';
+import 'package:cron/cron.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -99,12 +100,19 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<OutboundConnection> startMonitor(
-      String privateKey, Function notificationCallback) async {
-    return await _remoteSecondary.monitor(
+  void startMonitor(String privateKey, Function notificationCallback) async {
+    _monitorConnection = await _remoteSecondary.monitor(
         MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
+    var cron = Cron();
+    cron.schedule(Schedule.parse('*/5 * * * *'), () async {
+      if (_monitorConnection == null || _monitorConnection.isInValid()) {
+        _monitorConnection = await _remoteSecondary.monitor(
+            MonitorVerbBuilder().buildCommand(),
+            notificationCallback,
+            privateKey);
+      }
+    });
   }
-
 
   @override
   LocalSecondary getLocalSecondary() {
