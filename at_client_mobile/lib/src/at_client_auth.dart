@@ -96,9 +96,6 @@ class AtClientAuthenticator implements AtClientAuth {
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
           await _keyChainManager.putValue(
               atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY, encryptionPubKey);
-          var aesSharedKey = EncryptionUtil.generateAESKey();
-          await _keyChainManager.putValue(
-              atSign, KEYCHAIN_AES_KEY, aesSharedKey);
           var selfEncryptionKey = EncryptionUtil.generateAESKey();
           await _keyChainManager.putValue(
               atSign, KEYCHAIN_SELF_ENCRYPTION_KEY, selfEncryptionKey);

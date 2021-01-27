@@ -58,7 +58,8 @@ class AtClientService {
   }
 
   Future<String> getAESKey(String atsign) async {
-    return await _keyChainManager.getValue(atsign, KEYCHAIN_AES_KEY);
+    return await _keyChainManager.getValue(
+        atsign, KEYCHAIN_SELF_ENCRYPTION_KEY);
   }
 
   Future<String> getSelfEncryptionKey(String atSign) async {
@@ -234,6 +235,7 @@ class AtClientService {
       _atClientAuthenticator.atLookUp.privateKey = privateKey;
       atClient.getRemoteSecondary().atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
+      await _migrateOldSelfKeys();
       await persistKeys(atsign);
     }
     return result;
@@ -264,12 +266,8 @@ class AtClientService {
         decryptKey);
     await _keyChainManager.putValue(
         atsign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY, encryptionPrivateKey);
-
-    var selfEncryptionKey =
-        extractedjsonData[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE];
     await _keyChainManager.putValue(
-        atsign, KEYCHAIN_SELF_ENCRYPTION_KEY, selfEncryptionKey);
-    await _keyChainManager.putValue(atsign, KEYCHAIN_AES_KEY, decryptKey);
+        atsign, KEYCHAIN_SELF_ENCRYPTION_KEY, decryptKey);
   }
 
   ///Returns `true` on successfully completing onboarding.
@@ -366,6 +364,77 @@ class AtClientService {
     return result.replaceFirst('data:', '');
   }
 
+  // @alice:shared_key@alice - previously this key was generated inside encryption service
+  // and encrypted with public key. Now we use a single aes key to encrypt self keys as well as key pairs in key file
+  void _migrateOldSelfKeys() async {
+    var currentAtSign = atClient.currentAtSign;
+    var isMigrated =
+        await _keyChainManager.getValue(currentAtSign, 'newAesKeySynced');
+    if (isMigrated == 'true') {
+      return;
+    }
+
+    //1. local lookup up self encryption key
+    var atKey = AtKey()
+      ..sharedBy = currentAtSign
+      ..sharedWith = currentAtSign
+      ..key = AT_ENCRYPTION_SHARED_KEY;
+    var selfKeyValue = await atClient.get(atKey);
+    if (selfKeyValue.metadata != null && selfKeyValue.metadata.isEncrypted) {
+      //old key. migrate data
+      //decrypt the oldSelfKey with private key
+      var encryptionPrivateKey =
+          await atClient.getLocalSecondary().getEncryptionPrivateKey();
+      var decryptedSelfKey =
+          EncryptionUtil.decryptKey(selfKeyValue.value, encryptionPrivateKey);
+      _logger.finer('decryptedSelfKey:${decryptedSelfKey}');
+      var newAesKey =
+          await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
+      _logger.finer('newAesKey:${newAesKey}');
+      var selfKeys = await atClient.getAtKeys(
+          sharedWith: currentAtSign, sharedBy: currentAtSign);
+      await Future.forEach(
+          selfKeys,
+          (atKey) => _encryptOldSelfKey(
+              atKey, decryptedSelfKey, currentAtSign, newAesKey));
+
+      await _keyChainManager.putValue(
+          currentAtSign, 'selfKeysMigrated', 'true');
+    } else {
+      _logger.finer(
+          'self keys already migrated. New aes key:${await _keyChainManager.getSelfEncryptionAESKey(currentAtSign)}');
+    }
+  }
+
+  void _encryptOldSelfKey(
+      AtKey atKey, String oldSelfKey, String newAesKey, String atSign) async {
+    if (atKey.key.contains(AT_SIGNING_PRIVATE_KEY) ||
+        (atKey.sharedWith != null && atKey.sharedWith != atSign) ||
+        atKey.metadata.isPublic) {
+      //skip signing private key, keys shared with other users and public keys
+      return;
+    }
+    //#TODO remove the logger statements before pushing to prod
+    //1. get the existing value encrypted with previous key
+    var existingEncryptedAtValue = await atClient.get(atKey);
+    if (existingEncryptedAtValue == null) {
+      _logger.severe('_encryptOldSelfKey value not found for key ${atKey.key}');
+      return;
+    }
+    var existingEncryptedValue = existingEncryptedAtValue.value;
+    //2. decrypt the value
+    var decryptedValue =
+        EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
+    _logger.finer('decryptedValue:${decryptedValue}');
+    //3. get the new AES key
+
+    //4. encrypt the value with new AES key
+    var newEncryptedValue =
+        EncryptionUtil.encryptValue(decryptedValue, newAesKey);
+    //5. update the new value and sync to server
+    await atClient.put(atKey, newEncryptedValue);
+  }
+
   bool _isNullOrEmpty(String key) {
     if (key == null) {
       return true;
@@ -398,5 +467,5 @@ class BackupKeyConstants {
   static const String PKAM_PRIVATE_KEY_FROM_KEY_FILE = 'aesPkamPrivateKey';
   static const String ENCRYPTION_PUBLIC_KEY_FROM_FILE = 'aesEncryptPublicKey';
   static const String ENCRYPTION_PRIVATE_KEY_FROM_FILE = 'aesEncryptPrivateKey';
-  static const String SELF_ENCRYPTION_KEY_FROM_FILE = 'selfEncruption';
+  static const String SELF_ENCRYPTION_KEY_FROM_FILE = 'selfEncryptionKey';
 }
