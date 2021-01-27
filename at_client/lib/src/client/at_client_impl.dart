@@ -1,8 +1,7 @@
-import 'dart:io';
-import 'package:base2e15/base2e15.dart';
 import 'dart:convert';
-import 'package:uuid/uuid.dart';
-import 'package:path/path.dart';
+import 'dart:io';
+
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -14,20 +13,22 @@ import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
+import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/util/sync_util.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_commons/src/keystore/at_key.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_utils.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
-import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
+import 'package:at_commons/src/keystore/at_key.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
+import 'package:base2e15/base2e15.dart';
+import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 //import 'package:cron/cron.dart';
 
 /// Implementation of [AtClient] interface
@@ -568,6 +569,57 @@ class AtClientImpl implements AtClient {
     var notifyResult =
         await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return notifyResult != null;
+  }
+
+  @override
+  Future<String> notifyAll(
+      AtKey atKey, String value, OperationEnum operation) async {
+    var notifyKey = atKey.key;
+    var metadata = atKey.metadata;
+    var sharedWith = atKey.sharedWith;
+    if (metadata != null && metadata.namespaceAware) {
+      notifyKey = _getKeyWithNamespace(atKey.key);
+    }
+    sharedWith = AtUtils.formatAtSign(sharedWith);
+    var builder = NotifyAllVerbBuilder()
+      ..atKey = notifyKey
+      ..sharedBy = currentAtSign
+      ..sharedWithList = json.decode(sharedWith)
+      ..value = value
+      ..operation = operation;
+    if (value != null) {
+      if (sharedWith != null && sharedWith != currentAtSign) {
+        try {
+          builder.value =
+          await encryptionService.encrypt(atKey.key, value, sharedWith);
+        } on KeyNotFoundException catch (e) {
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(
+              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+        }
+      } else {
+        builder.value =
+        await encryptionService.encryptForSelf(atKey.key, value);
+      }
+    }
+    if (metadata != null) {
+      builder.ttl = metadata.ttl;
+      builder.ttb = metadata.ttb;
+      builder.ttr = metadata.ttr;
+      builder.ccd = metadata.ccd;
+      builder.isPublic = metadata.isPublic;
+    }
+    var isSyncRequired = true;
+    if (notifyKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
+      builder.sharedBy = null;
+    }
+    if (SyncUtil.shouldSkipSync(notifyKey)) {
+      isSyncRequired = false;
+    }
+    var notifyResult =
+    await getSecondary().executeVerb(builder, sync: isSyncRequired);
+    return notifyResult;
   }
 
   @override
