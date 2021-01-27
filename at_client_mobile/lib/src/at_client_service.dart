@@ -124,7 +124,7 @@ class AtClientService {
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
-    // store encryption self key as it is.Since it is already encrypted with encryption public key.
+    // store  self encryption key as it is.This will be same as AES key in key zip file
     var selfEncryptionKey = await getSelfEncryptionKey(atsign);
     aesEncryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
         selfEncryptionKey;
@@ -166,13 +166,11 @@ class AtClientService {
       ..value = encryptPublicKey;
     await atClient.getLocalSecondary().executeVerb(updateBuilder, sync: true);
     if (selfEncryptionKey != null) {
-      var encryptedSelfAESKey =
-          EncryptionUtil.encryptKey(selfEncryptionKey, encryptPublicKey);
       var updateAESKeyBuilder = UpdateVerbBuilder()
         ..sharedBy = atSign
         ..sharedWith = atSign
         ..atKey = '${AT_ENCRYPTION_SHARED_KEY}'
-        ..value = encryptedSelfAESKey;
+        ..value = selfEncryptionKey;
       await atClient
           .getLocalSecondary()
           .executeVerb(updateAESKeyBuilder, sync: true);

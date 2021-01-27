@@ -183,7 +183,7 @@ class KeyChainManager {
   }
 
   Future<String> getSelfEncryptionAESKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_SELF_ENCRYPTION_KEY);
+    return getValue(atSign, KEYCHAIN_AES_KEY);
   }
 
   Future<List<int>> getKeyStoreSecret(String atSign) async {
