@@ -236,6 +236,12 @@ class AtClientService {
       atClient.getRemoteSecondary().atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
       await persistKeys(atsign);
+      try {
+        await _migrateOldSelfKeys();
+      } on Exception catch (e) {
+        _logger
+            .severe('Exception while migrating old self keys: ${e.toString()}');
+      }
     }
     return result;
   }
@@ -385,7 +391,7 @@ class AtClientService {
       ..sharedWith = currentAtSign
       ..key = AT_ENCRYPTION_SHARED_KEY;
     var selfKeyValue = await atClient.get(atKey);
-    if (selfKeyValue == null) {
+    if (selfKeyValue == null || selfKeyValue.value == null) {
       _logger.severe('self encryption key is null. Skipping migration');
       return;
     }
