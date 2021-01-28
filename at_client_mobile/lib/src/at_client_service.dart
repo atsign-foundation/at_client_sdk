@@ -444,7 +444,7 @@ class AtClientService {
       var llookupVerbBuilder = LLookupVerbBuilder()
         ..sharedBy = atKey.sharedBy
         ..sharedWith = atKey.sharedWith
-        ..atKey = atKey.key
+        ..atKey = '${atKey.key}.${atClient.preference.namespace}'
         ..isPublic = atKey.metadata?.isPublic;
       var existingEncryptedAtValue =
           await atClient.getLocalSecondary().executeVerb(llookupVerbBuilder);
@@ -460,13 +460,9 @@ class AtClientService {
       var decryptedValue =
           EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
       _logger.finer('decryptedValue:${decryptedValue}');
-      //3. get the new AES key
 
-      //4. encrypt the value with new AES key
-      var newEncryptedValue =
-          EncryptionUtil.encryptValue(decryptedValue, newAesKey);
-      //5. update the new value and sync to server
-      await atClient.put(atKey, newEncryptedValue);
+      //3. update the new value and sync to server. value gets encrypted as a part of put.
+      await atClient.put(atKey, decryptedValue);
     } on Exception catch (e) {
       _logger.severe(
           'Exception migrating key : ${atKey.key} exception: ${e.toString()}');
