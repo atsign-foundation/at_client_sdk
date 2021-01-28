@@ -412,7 +412,11 @@ class AtClientService {
     await Future.forEach(
         selfKeys,
         (atKey) => _encryptOldSelfKey(
-            atKey, decryptedSelfKey, newAesKey, currentAtSign));
+              atKey,
+              decryptedSelfKey,
+              newAesKey,
+              currentAtSign,
+            ));
     // print('All keys are ')
 
     await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
@@ -429,7 +433,11 @@ class AtClientService {
   }
 
   void _encryptOldSelfKey(
-      AtKey atKey, String oldSelfKey, String newAesKey, String atSign) async {
+    AtKey atKey,
+    String oldSelfKey,
+    String newAesKey,
+    String atSign,
+  ) async {
     if (atKey.key.contains(AT_SIGNING_PRIVATE_KEY) ||
         (atKey.sharedWith != null && atKey.sharedWith != atSign) ||
         atKey.metadata.isPublic ||
@@ -445,7 +453,7 @@ class AtClientService {
       var llookupVerbBuilder = LLookupVerbBuilder()
         ..sharedBy = atKey.sharedBy
         ..sharedWith = atKey.sharedWith
-        ..atKey = atKey.key
+        ..atKey = atKey.key + '${atKey.namespace ?? ''}'
         ..isPublic = atKey.metadata?.isPublic;
       var existingEncryptedAtValue =
           await atClient.getLocalSecondary().executeVerb(llookupVerbBuilder);
