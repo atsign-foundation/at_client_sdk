@@ -431,20 +431,31 @@ class AtClientService {
       AtKey atKey, String oldSelfKey, String newAesKey, String atSign) async {
     if (atKey.key.contains(AT_SIGNING_PRIVATE_KEY) ||
         (atKey.sharedWith != null && atKey.sharedWith != atSign) ||
-        atKey.metadata.isPublic) {
+        atKey.metadata.isPublic ||
+        atKey.metadata.isCached ||
+        atKey.metadata.isHidden ||
+        atKey.key.startsWith('_')) {
       //skip signing private key, keys shared with other users and public keys
       return;
     }
     try {
       //#TODO remove the logger statements before pushing to prod
       //1. get the existing value encrypted with previous key
-      var existingEncryptedAtValue = await atClient.get(atKey);
-      if (existingEncryptedAtValue == null) {
+      var llookupVerbBuilder = LLookupVerbBuilder()
+        ..sharedBy = atKey.sharedBy
+        ..sharedWith = atKey.sharedWith
+        ..atKey = atKey.key
+        ..isPublic = atKey.metadata?.isPublic;
+      var existingEncryptedAtValue =
+          await atClient.getLocalSecondary().executeVerb(llookupVerbBuilder);
+      if (existingEncryptedAtValue == null ||
+          existingEncryptedAtValue == 'data:null') {
         _logger
             .severe('_encryptOldSelfKey value not found for key ${atKey.key}');
         return;
       }
-      var existingEncryptedValue = existingEncryptedAtValue.value;
+      var existingEncryptedValue =
+          existingEncryptedAtValue.replaceFirst('data:', '');
       //2. decrypt the value
       var decryptedValue =
           EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
