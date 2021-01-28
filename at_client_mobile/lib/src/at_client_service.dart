@@ -387,6 +387,7 @@ class AtClientService {
     var selfKeyValue = await atClient.get(atKey);
     if (selfKeyValue == null) {
       _logger.severe('self encryption key is null. Skipping migration');
+      return;
     }
     if (selfKeyValue.metadata != null && selfKeyValue.metadata.isEncrypted) {
       //old key. migrate data
