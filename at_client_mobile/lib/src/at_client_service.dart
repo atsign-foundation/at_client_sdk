@@ -151,13 +151,13 @@ class AtClientService {
     var encryptPublicKey = await getEncryptionPublicKey(atSign);
 
     var selfEncryptionKey = await getSelfEncryptionKey(atSign);
-    var result = await atClient
+    await atClient
         .getLocalSecondary()
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
-    result = await atClient
+    await atClient
         .getLocalSecondary()
         .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
-    result = await atClient
+    await atClient
         .getLocalSecondary()
         .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
     var updateBuilder = UpdateVerbBuilder()
@@ -166,17 +166,11 @@ class AtClientService {
       ..sharedBy = atSign
       ..value = encryptPublicKey;
     await atClient.getLocalSecondary().executeVerb(updateBuilder, sync: true);
-    if (selfEncryptionKey != null) {
-      var updateAESKeyBuilder = UpdateVerbBuilder()
-        ..sharedBy = atSign
-        ..sharedWith = atSign
-        ..atKey = '${AT_ENCRYPTION_SHARED_KEY}'
-        ..value = selfEncryptionKey;
-      await atClient
-          .getLocalSecondary()
-          .executeVerb(updateAESKeyBuilder, sync: true);
-    }
-    result = await _getKeysFromLocalSecondary(atSign);
+
+    await atClient
+        .getLocalSecondary()
+        .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
+    var result = await _getKeysFromLocalSecondary(atSign);
 
     return result;
   }
@@ -199,6 +193,12 @@ class AtClientService {
         await atClient.getLocalSecondary().getEncryptionPublicKey(atsign);
     if (encryptPublicKey == null) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
+    }
+
+    var encryptSelfKey =
+        await atClient.getLocalSecondary().getEncryptionSelfKey();
+    if (encryptSelfKey == null) {
+      throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND);
     }
     return false;
   }
@@ -235,7 +235,6 @@ class AtClientService {
       _atClientAuthenticator.atLookUp.privateKey = privateKey;
       atClient.getRemoteSecondary().atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
-      await _migrateOldSelfKeys();
       await persistKeys(atsign);
     }
     return result;
@@ -308,6 +307,12 @@ class AtClientService {
     //no need of having pkam auth as unauth error can be thrown by keypolicy.
     var result = await pkamAuth(privateKey);
     if (result) await _sync(atClientPreference, atsign);
+    try {
+      await _migrateOldSelfKeys();
+    } on Exception catch (e) {
+      _logger
+          .severe('Exception while migrating old self keys: ${e.toString()}');
+    }
     return result;
   }
 
@@ -380,6 +385,9 @@ class AtClientService {
       ..sharedWith = currentAtSign
       ..key = AT_ENCRYPTION_SHARED_KEY;
     var selfKeyValue = await atClient.get(atKey);
+    if (selfKeyValue == null) {
+      _logger.severe('self encryption key is null. Skipping migration');
+    }
     if (selfKeyValue.metadata != null && selfKeyValue.metadata.isEncrypted) {
       //old key. migrate data
       //decrypt the oldSelfKey with private key
@@ -400,6 +408,12 @@ class AtClientService {
 
       await _keyChainManager.putValue(
           currentAtSign, 'selfKeysMigrated', 'true');
+      //delete old self encryption key from server
+      var builder = DeleteVerbBuilder()
+        ..sharedBy = currentAtSign
+        ..sharedWith = currentAtSign
+        ..atKey = AT_ENCRYPTION_SHARED_KEY;
+      await atClient.getLocalSecondary().executeVerb(builder, sync: true);
     } else {
       _logger.finer(
           'self keys already migrated. New aes key:${await _keyChainManager.getSelfEncryptionAESKey(currentAtSign)}');
@@ -414,25 +428,31 @@ class AtClientService {
       //skip signing private key, keys shared with other users and public keys
       return;
     }
-    //#TODO remove the logger statements before pushing to prod
-    //1. get the existing value encrypted with previous key
-    var existingEncryptedAtValue = await atClient.get(atKey);
-    if (existingEncryptedAtValue == null) {
-      _logger.severe('_encryptOldSelfKey value not found for key ${atKey.key}');
-      return;
-    }
-    var existingEncryptedValue = existingEncryptedAtValue.value;
-    //2. decrypt the value
-    var decryptedValue =
-        EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
-    _logger.finer('decryptedValue:${decryptedValue}');
-    //3. get the new AES key
+    try {
+      //#TODO remove the logger statements before pushing to prod
+      //1. get the existing value encrypted with previous key
+      var existingEncryptedAtValue = await atClient.get(atKey);
+      if (existingEncryptedAtValue == null) {
+        _logger
+            .severe('_encryptOldSelfKey value not found for key ${atKey.key}');
+        return;
+      }
+      var existingEncryptedValue = existingEncryptedAtValue.value;
+      //2. decrypt the value
+      var decryptedValue =
+          EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
+      _logger.finer('decryptedValue:${decryptedValue}');
+      //3. get the new AES key
 
-    //4. encrypt the value with new AES key
-    var newEncryptedValue =
-        EncryptionUtil.encryptValue(decryptedValue, newAesKey);
-    //5. update the new value and sync to server
-    await atClient.put(atKey, newEncryptedValue);
+      //4. encrypt the value with new AES key
+      var newEncryptedValue =
+          EncryptionUtil.encryptValue(decryptedValue, newAesKey);
+      //5. update the new value and sync to server
+      await atClient.put(atKey, newEncryptedValue);
+    } on Exception catch (e) {
+      _logger.severe(
+          'Exception migrating key : ${atKey.key} exception: ${e.toString()}');
+    }
   }
 
   bool _isNullOrEmpty(String key) {

@@ -313,15 +313,9 @@ class EncryptionService {
   }
 
   Future<String> _getSelfEncryptionKey() async {
-    var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = '${AT_ENCRYPTION_SHARED_KEY}'
-      ..sharedWith = currentAtSign
-      ..sharedBy = currentAtSign;
-    var selfEncryptionKey =
-        await localSecondary.executeVerb(llookupVerbBuilder);
-    if (selfEncryptionKey == null || selfEncryptionKey == 'data:null') {
-      selfEncryptionKey = await remoteSecondary.executeVerb(llookupVerbBuilder);
-    }
+    var selfEncryptionKey = await localSecondary.getEncryptionSelfKey();
+    //#TODO remove before pushing to prod
+    logger.finer('self encryption key: ${selfEncryptionKey}');
     return selfEncryptionKey;
   }
 }
