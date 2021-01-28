@@ -16,11 +16,12 @@ dependencies:
   hive: ^1.3.0
   crypton: ^1.1.0
   at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: at_client
-      ref: dev_env
-      version: ^1.0.1+3
+    path: ../at_client
+    # git:
+    #   url: https://github.com/atsign-foundation/at_client_sdk.git
+    #   path: at_client
+    #   ref: onboard_self_key
+    #   version: ^1.0.1+3
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
