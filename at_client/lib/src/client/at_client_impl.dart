@@ -106,7 +106,6 @@ class AtClientImpl implements AtClient {
         MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
   }
 
-
   @override
   LocalSecondary getLocalSecondary() {
     return _localSecondary;
@@ -580,7 +579,6 @@ class AtClientImpl implements AtClient {
     if (metadata != null && metadata.namespaceAware) {
       notifyKey = _getKeyWithNamespace(atKey.key);
     }
-    sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = NotifyAllVerbBuilder()
       ..atKey = notifyKey
       ..sharedBy = currentAtSign
@@ -591,7 +589,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-          await encryptionService.encrypt(atKey.key, value, sharedWith);
+              await encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -599,7 +597,7 @@ class AtClientImpl implements AtClient {
         }
       } else {
         builder.value =
-        await encryptionService.encryptForSelf(atKey.key, value);
+            await encryptionService.encryptForSelf(atKey.key, value);
       }
     }
     if (metadata != null) {
@@ -618,8 +616,26 @@ class AtClientImpl implements AtClient {
       isSyncRequired = false;
     }
     var notifyResult =
-    await getSecondary().executeVerb(builder, sync: isSyncRequired);
+        await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return notifyResult;
+  }
+
+  @override
+  Future<String> notifyStatus(String notificationId) async {
+    var builder = NotifyStatusVerbBuilder()..notificationId = notificationId;
+    var notifyStatus = await getRemoteSecondary().executeVerb(builder);
+    return notifyStatus;
+  }
+
+  @override
+  Future<String> notifyList(
+      {String fromDate, String toDate, String regex}) async {
+    var builder = NotifyListVerbBuilder()
+      ..fromDate = fromDate
+      ..toDate = toDate
+      ..regex = regex;
+    var notifyList = await getRemoteSecondary().executeVerb(builder);
+    return notifyList;
   }
 
   @override

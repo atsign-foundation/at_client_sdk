@@ -233,6 +233,49 @@ abstract class AtClient {
   ///```
   Future<bool> notify(AtKey key, String value, OperationEnum operation);
 
+  /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
+  /// ```
+  /// e.g alice is the current atsign
+  /// notify:all:update:@bob,@colin:phone@alice:+1 999 9999
+  ///   var key = AtKey()..key='phone'
+  ///             ..sharedWith= json.encode(['@bob',@colin])
+  ///   var value='+1 999 9999'
+  ///   var operation=OperationEnum.update
+  ///   notify(key, value, operation);
+  /// notify:update:ttl:60000:ttb:30000:@bob,@colin:phone@alice:+1 999 9999
+  ///   var metaData = Metadata()..ttl='60000'
+  ///                  ..ttb='30000'
+  ///   var key = AtKey()..key='phone'
+  ///             ..sharedWith= json.encode(['@bob',@colin])
+  ///             ..metadata=metaData
+  ///   var value='+1 999 9999'
+  ///   var operation=OperationEnum.update
+  ///   notify(key, value, operation);
+  /// ```
+  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation);
+
+  ///Returns the status of the notification
+  ///```
+  ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366
+  ///
+  ///   notifyStatus('75037ac4-6a15-43cc-ba66-e621bb2a6366');
+  ///```
+  Future<String> notifyStatus(String notificationId);
+
+  ///Returns the list of received notifications of an atsign, Optionally, notifications can be filtered on from date, to date and regular expression
+  ///```
+  ///e.g alice is the current atsign
+  ///  notify:list
+  ///    notifyList();
+  ///  notify:list:2021-01-28:2021-01-29
+  ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29);
+  ///  notify:list:phone
+  ///     notifyList(regex: phone);
+  ///  notify:list:2021-01-28:2021-01-29:phone
+  ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
+  ///```
+  Future<String> notifyList({String fromDate, String toDate, String regex});
+
   /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
   /// the notification on the client.
   void startMonitor(String privateKey, Function acceptStream);
