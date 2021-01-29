@@ -384,7 +384,7 @@ class AtClientService {
     if (isMigrated == 'true') {
       return;
     }
-
+    //#TODO remove logger before pushing to prod
     //1. local lookup up self encryption key
     var atKey = AtKey()
       ..sharedBy = currentAtSign
@@ -398,6 +398,11 @@ class AtClientService {
     if (selfKeyValue.metadata != null && selfKeyValue.metadata.isEncrypted) {
       //old key. migrate data
       //decrypt the oldSelfKey with private key
+      var selfEncryptionKey = await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
+      _logger.finer('self encryption key:${selfEncryptionKey}');
+      await atClient
+          .getLocalSecondary()
+          .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
       var encryptionPrivateKey =
           await atClient.getLocalSecondary().getEncryptionPrivateKey();
       var decryptedSelfKey =
