@@ -21,6 +21,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
@@ -630,12 +631,16 @@ class AtClientImpl implements AtClient {
   @override
   Future<String> notifyList(
       {String fromDate, String toDate, String regex}) async {
-    var builder = NotifyListVerbBuilder()
-      ..fromDate = fromDate
-      ..toDate = toDate
-      ..regex = regex;
-    var notifyList = await getRemoteSecondary().executeVerb(builder);
-    return notifyList;
+    try {
+      var builder = NotifyListVerbBuilder()
+        ..fromDate = fromDate
+        ..toDate = toDate
+        ..regex = regex;
+      var notifyList = await getRemoteSecondary().executeVerb(builder);
+      return notifyList;
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    }
   }
 
   @override
