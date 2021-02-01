@@ -390,33 +390,34 @@ class AtClientService {
       ..sharedBy = currentAtSign
       ..sharedWith = currentAtSign
       ..key = AT_ENCRYPTION_SHARED_KEY;
-    var selfKeyValue = await atClient.get(atKey);
-    if (selfKeyValue == null || selfKeyValue.value == null) {
+    var oldSelfKeyValue = await atClient.get(atKey);
+    if (oldSelfKeyValue == null || oldSelfKeyValue.value == null) {
       _logger.severe('self encryption key is null. Skipping migration');
       return;
     }
-    if (selfKeyValue.metadata != null && selfKeyValue.metadata.isEncrypted) {
+    if (oldSelfKeyValue.metadata != null &&
+        oldSelfKeyValue.metadata.isEncrypted) {
       //old key. migrate data
       //decrypt the oldSelfKey with private key
-      var selfEncryptionKey = await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-      _logger.finer('self encryption key:${selfEncryptionKey}');
+      var newSelfEncryptionKey =
+          await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
+      _logger
+          .finer('old self encryption key(encrypted):${oldSelfKeyValue.value}');
+      _logger.finer('new self encryption key:${newSelfEncryptionKey}');
       await atClient
           .getLocalSecondary()
-          .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
+          .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
       var encryptionPrivateKey =
           await atClient.getLocalSecondary().getEncryptionPrivateKey();
-      var decryptedSelfKey =
-          EncryptionUtil.decryptKey(selfKeyValue.value, encryptionPrivateKey);
+      var decryptedSelfKey = EncryptionUtil.decryptKey(
+          oldSelfKeyValue.value, encryptionPrivateKey);
       _logger.finer('decryptedSelfKey:${decryptedSelfKey}');
-      var newAesKey =
-          await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-      _logger.finer('newAesKey:${newAesKey}');
       var selfKeys = await atClient.getAtKeys(
           sharedWith: currentAtSign, sharedBy: currentAtSign);
       await Future.forEach(
           selfKeys,
           (atKey) => _encryptOldSelfKey(
-              atKey, decryptedSelfKey, currentAtSign, newAesKey));
+              atKey, decryptedSelfKey, currentAtSign, newSelfEncryptionKey));
 
       await _keyChainManager.putValue(
           currentAtSign, 'selfKeysMigrated', 'true');
