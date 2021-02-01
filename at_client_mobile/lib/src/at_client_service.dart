@@ -383,7 +383,7 @@ class AtClientService {
     if (isMigrated == 'true') {
       return;
     }
-
+    //#TODO remove logger before pushing to prod
     //1. local lookup up self encryption key
     var metadata = Metadata()..namespaceAware = false;
     var atKey = AtKey()
@@ -396,9 +396,15 @@ class AtClientService {
       _logger.severe('self encryption key is null. Skipping migration');
       return;
     }
-    // if (selfKeyValue.metadata != null) {
+    // if (selfKeyValue.metadata != null && selfKeyValue.metadata.isEncrypted) {
     //old key. migrate data
     //decrypt the oldSelfKey with private key
+    var selfEncryptionKey =
+        await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
+    _logger.finer('self encryption key:${selfEncryptionKey}');
+    await atClient
+        .getLocalSecondary()
+        .putValue('privatekey:self_encryption_key', selfEncryptionKey);
     var encryptionPrivateKey =
         await atClient.getLocalSecondary().getEncryptionPrivateKey();
     var decryptedSelfKey =
@@ -412,12 +418,7 @@ class AtClientService {
     await Future.forEach(
         selfKeys,
         (atKey) => _encryptOldSelfKey(
-              atKey,
-              decryptedSelfKey,
-              newAesKey,
-              currentAtSign,
-            ));
-    // print('All keys are ')
+            atKey, decryptedSelfKey, newAesKey, currentAtSign));
 
     await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
     //delete old self encryption key from server
@@ -440,6 +441,8 @@ class AtClientService {
   ) async {
     if (atKey.key.contains(AT_SIGNING_PRIVATE_KEY) ||
         (atKey.sharedWith != null && atKey.sharedWith != atSign) ||
+        atKey.key.contains('shared_key') ||
+        atKey.key.contains('publickey') ||
         atKey.metadata.isPublic ||
         atKey.metadata.isCached ||
         atKey.metadata.isHidden ||
