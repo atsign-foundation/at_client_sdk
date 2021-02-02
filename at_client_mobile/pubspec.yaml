@@ -15,7 +15,7 @@ dependencies:
   flutter_keychain: ^1.0.0
   hive: ^1.3.0
   crypton: ^1.1.0
-  at_client: ^1.0.1+5
+  at_client: ^1.0.1+4
   at_lookup: ^1.0.0+4
   at_commons: ^1.0.1+4
   at_utils: ^1.0.1+4

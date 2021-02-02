@@ -10,3 +10,6 @@
 - onboarding changes for server activation and deactivation
   Backup keys implementation
   sync improvements
+## 1.0.1+4
+- Provided multiple atsign support in at client SDK.
+  Introduced batch verb to improve sync performance
