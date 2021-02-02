@@ -296,7 +296,7 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> getEncryptionSelfKey() async {
-    var selfKeyData = await keyStore.get('privatekey:self_encryption_key');
+    var selfKeyData = await keyStore.get(AT_ENCRYPTION_SELF_KEY);
     return selfKeyData?.data;
   }
 
