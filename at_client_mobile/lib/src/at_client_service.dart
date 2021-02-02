@@ -49,6 +49,14 @@ class AtClientService {
     return await _keyChainManager.getPkamPublicKey(atSign);
   }
 
+  Future<String> getPrivateKey(String atSign) async {
+    return await getPkamPrivateKey(atSign);
+  }
+
+  Future<String> getPublicKey(String atSign) async {
+    return await getPkamPublicKey(atSign);
+  }
+
   Future<String> getEncryptionPrivateKey(String atSign) async {
     return await _keyChainManager.getEncryptionPrivateKey(atSign);
   }
@@ -175,6 +183,9 @@ class AtClientService {
     return result;
   }
 
+  ///Throws [Error] of type [OnboardingStatus]
+  ///if the details for [atsign] is not found in localsecondary.
+  ///Returns `true` on successful fetching of all the details.
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
     var pkamPublicKey = await atClient.getLocalSecondary().getPublicKey();
     if (pkamPublicKey == null) {
@@ -207,7 +218,7 @@ class AtClientService {
   /// if pkam is successful, encryption keys will be set for the user.
   Future<bool> authenticate(
       String atsign, AtClientPreference atClientPreference,
-      {String status, String jsonData, String decryptKey}) async {
+      {OnboardingStatus status, String jsonData, String decryptKey}) async {
     if (atClientPreference.cramSecret == null) {
       atsign = _formatAtSign(atsign);
       if (atsign == null) {
@@ -221,7 +232,7 @@ class AtClientService {
       return result;
     }
     if (_status != OnboardingStatus.ACTIVATE &&
-        status != OnboardingStatus.ACTIVATE.toString().split('.')[1]) {
+        status != OnboardingStatus.ACTIVATE) {
       await _sync(atClientPreference, atsign);
     }
     result = await _atClientAuthenticator.performInitialAuth(
@@ -246,6 +257,7 @@ class AtClientService {
     return result;
   }
 
+  ///Decodes the [jsonData] with [decryptKey] for [atsign] and stores it in keychain.
   Future<void> _decodeAndStoreToKeychain(
       String atsign, String jsonData, String decryptKey) async {
     var extractedjsonData = jsonDecode(jsonData);
@@ -276,8 +288,8 @@ class AtClientService {
   }
 
   ///Returns `true` on successfully completing onboarding.
-  /// Throws [ATSIGN_NOT_FOUND] exception if atsign not found.
-  /// Throws [PRIVATE_KEY_NOT_FOUND] exception if privatekey not found.
+  /// Throws [OnboardingStatus.ATSIGN_NOT_FOUND] exception if atsign not found.
+  /// Throws [OnboardingStatus.PRIVATE_KEY_NOT_FOUND] exception if privatekey not found.
   Future<bool> onboard(
       {AtClientPreference atClientPreference, String atsign}) async {
     _atClientAuthenticator = AtClientAuthenticator();
@@ -288,8 +300,7 @@ class AtClientService {
     }
     if (atsign == null || atsign == '') {
       _logger.severe('Atsign not found');
-      throw ('ATSIGN_NOT_FOUND');
-      // return null;
+      throw OnboardingStatus.ATSIGN_NOT_FOUND;
     }
     var privateKey = atClientPreference.privateKey;
     if (privateKey == null || privateKey == '') {
@@ -297,18 +308,15 @@ class AtClientService {
     }
     if (privateKey == null || privateKey == '') {
       _logger.severe('PrivateKey not found');
-      throw ('PRIVATE_KEY_NOT_FOUND');
-      // return null;
+      throw OnboardingStatus.PRIVATE_KEY_NOT_FOUND;
     }
     atClientPreference.privateKey = privateKey;
-    // atClientPreference.namespace != null
-    // ? await _init(atsign, atClientPreference, namespace: namespace)
     await _init(atsign, atClientPreference);
     var keyRestorePolicyStatus = await getKeyRestorePolicy(atsign);
     if (keyRestorePolicyStatus == OnboardingStatus.ACTIVATE ||
         keyRestorePolicyStatus == OnboardingStatus.RESTORE) {
       _status = keyRestorePolicyStatus;
-      throw ('${keyRestorePolicyStatus.toString().split('.')[1]}');
+      throw (keyRestorePolicyStatus);
     }
     //no need of having pkam auth as unauth error can be thrown by keypolicy.
     var result = await pkamAuth(privateKey);
@@ -322,6 +330,7 @@ class AtClientService {
     return result;
   }
 
+  ///Returns [OnboardingStatus] of the atsign by checking it with remote server.
   Future<OnboardingStatus> getKeyRestorePolicy(String atSign) async {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
@@ -386,7 +395,9 @@ class AtClientService {
     }
     //#TODO remove logger before pushing to prod
     //1. local lookup up self encryption key
+    var metadata = Metadata()..namespaceAware = false;
     var atKey = AtKey()
+      ..metadata = metadata
       ..sharedBy = currentAtSign
       ..sharedWith = currentAtSign
       ..key = AT_ENCRYPTION_SHARED_KEY;
@@ -395,48 +406,49 @@ class AtClientService {
       _logger.severe('self encryption key is null. Skipping migration');
       return;
     }
-    if (oldSelfKeyValue.metadata != null &&
-        oldSelfKeyValue.metadata.isEncrypted) {
-      //old key. migrate data
-      //decrypt the oldSelfKey with private key
-      var newSelfEncryptionKey =
-          await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-      _logger
-          .finer('old self encryption key(encrypted):${oldSelfKeyValue.value}');
-      _logger.finer('new self encryption key:${newSelfEncryptionKey}');
-      await atClient
-          .getLocalSecondary()
-          .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
-      var encryptionPrivateKey =
-          await atClient.getLocalSecondary().getEncryptionPrivateKey();
-      var decryptedSelfKey = EncryptionUtil.decryptKey(
-          oldSelfKeyValue.value, encryptionPrivateKey);
-      _logger.finer('decryptedSelfKey:${decryptedSelfKey}');
-      var selfKeys = await atClient.getAtKeys(
-          sharedWith: currentAtSign, sharedBy: currentAtSign);
-      await Future.forEach(
-          selfKeys,
-          (atKey) => _encryptOldSelfKey(
-              atKey, decryptedSelfKey, currentAtSign, newSelfEncryptionKey));
+    //old key. migrate data
+    //decrypt the oldSelfKey with private key
+    var newSelfEncryptionKey =
+        await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
+    _logger
+        .finer('old self encryption key(encrypted):${oldSelfKeyValue.value}');
+    _logger.finer('new self encryption key:${newSelfEncryptionKey}');
+    await atClient
+        .getLocalSecondary()
+        .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
+    var encryptionPrivateKey =
+        await atClient.getLocalSecondary().getEncryptionPrivateKey();
+    var decryptedSelfKey =
+        EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey);
+    _logger.finer('decryptedSelfKey:${decryptedSelfKey}');
+    var selfKeys = await atClient.getAtKeys(
+        sharedWith: currentAtSign, sharedBy: currentAtSign);
+    await Future.forEach(
+        selfKeys,
+        (atKey) => _encryptOldSelfKey(
+            atKey, decryptedSelfKey, newSelfEncryptionKey, currentAtSign));
 
-      await _keyChainManager.putValue(
-          currentAtSign, 'selfKeysMigrated', 'true');
-      //delete old self encryption key from server
-      var builder = DeleteVerbBuilder()
-        ..sharedBy = currentAtSign
-        ..sharedWith = currentAtSign
-        ..atKey = AT_ENCRYPTION_SHARED_KEY;
-      await atClient.getLocalSecondary().executeVerb(builder, sync: true);
-    } else {
-      _logger.finer(
-          'self keys already migrated. New aes key:${await _keyChainManager.getSelfEncryptionAESKey(currentAtSign)}');
-    }
+    await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
+    //delete old self encryption key from server
+    var builder = DeleteVerbBuilder()
+      ..sharedBy = currentAtSign
+      ..sharedWith = currentAtSign
+      ..atKey = AT_ENCRYPTION_SHARED_KEY;
+    await atClient.getLocalSecondary().executeVerb(builder, sync: true);
+    _logger.finer(
+        'self keys got migrated. New aes key:${await _keyChainManager.getSelfEncryptionAESKey(currentAtSign)}');
   }
 
   void _encryptOldSelfKey(
-      AtKey atKey, String oldSelfKey, String newAesKey, String atSign) async {
+    AtKey atKey,
+    String oldSelfKey,
+    String newAesKey,
+    String atSign,
+  ) async {
     if (atKey.key.contains(AT_SIGNING_PRIVATE_KEY) ||
         (atKey.sharedWith != null && atKey.sharedWith != atSign) ||
+        atKey.key.contains('shared_key') ||
+        atKey.key.contains('publickey') ||
         atKey.metadata.isPublic ||
         atKey.metadata.isCached ||
         atKey.metadata.isHidden ||
@@ -450,7 +462,7 @@ class AtClientService {
       var llookupVerbBuilder = LLookupVerbBuilder()
         ..sharedBy = atKey.sharedBy
         ..sharedWith = atKey.sharedWith
-        ..atKey = '${atKey.key}.${atClient.preference.namespace}'
+        ..atKey = '${atKey.key}.${atKey.namespace}'
         ..isPublic = atKey.metadata?.isPublic;
       var existingEncryptedAtValue =
           await atClient.getLocalSecondary().executeVerb(llookupVerbBuilder);
@@ -466,6 +478,10 @@ class AtClientService {
       var decryptedValue =
           EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
       _logger.finer('decryptedValue:${decryptedValue}');
+      if (atKey.key.startsWith('atconnections')) {
+        atKey.metadata..namespaceAware = false;
+        atKey.key = '${atKey.key}.${atKey.namespace}';
+      }
 
       //3. update the new value and sync to server. value gets encrypted as a part of put.
       await atClient.put(atKey, decryptedValue);
