@@ -1,4 +1,9 @@
 import 'dart:io';
+import 'package:base2e15/base2e15.dart';
+import 'dart:convert';
+import 'package:uuid/uuid.dart';
+import 'package:path/path.dart';
+import 'package:cron/cron.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -16,7 +21,6 @@ import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
-import 'package:base2e15/base2e15.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
@@ -24,10 +28,8 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
-import 'dart:convert';
-import 'package:uuid/uuid.dart';
-import 'package:path/path.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
+//import 'package:cron/cron.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -38,6 +40,7 @@ class AtClientImpl implements AtClient {
   String _namespace;
   LocalSecondary _localSecondary;
   RemoteSecondary _remoteSecondary;
+  OutboundConnection _monitorConnection;
 
   EncryptionService encryptionService;
   var logger = AtSignLogger('AtClientImpl');
@@ -97,10 +100,18 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<OutboundConnection> startMonitor(
-      String privateKey, Function notificationCallback) async {
-    return await _remoteSecondary.monitor(
+  void startMonitor(String privateKey, Function notificationCallback) async {
+    _monitorConnection = await _remoteSecondary.monitor(
         MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
+    var cron = Cron();
+    cron.schedule(Schedule.parse('*/5 * * * *'), () async {
+      if (_monitorConnection == null || _monitorConnection.isInValid()) {
+        _monitorConnection = await _remoteSecondary.monitor(
+            MonitorVerbBuilder().buildCommand(),
+            notificationCallback,
+            privateKey);
+      }
+    });
   }
 
   @override
