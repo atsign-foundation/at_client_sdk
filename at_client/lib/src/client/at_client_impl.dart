@@ -56,8 +56,15 @@ class AtClientImpl implements AtClient {
         .severe('Instance of atclientimpl for $currentAtSign is not created');
   }
 
+  /// Throws [AtClientException] on invalid namespace.
   static void createClient(String currentAtSign, String namespace,
       AtClientPreference preferences) async {
+    try {
+      namespace = AtUtils.validateAtKey(namespace);
+    } on InvalidAtKeyException catch (e) {
+      throw AtClientException(error_codes[e.runtimeType.toString()],
+          'Invalid namespace : Cannot contain \!\*\'`\(\)\;\:\&\=\+\$\,\/\?\#\[\]\{\} characters');
+    }
     currentAtSign = AtUtils.formatAtSign(currentAtSign);
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return;
@@ -105,7 +112,6 @@ class AtClientImpl implements AtClient {
     return await _remoteSecondary.monitor(
         MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
   }
-
 
   @override
   LocalSecondary getLocalSecondary() {
@@ -155,10 +161,14 @@ class AtClientImpl implements AtClient {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
-    return _delete(atKey.key,
-        sharedWith: atKey.sharedWith,
-        isPublic: isPublic,
-        namespaceAware: isNamespaceAware);
+    try {
+      return _delete(atKey.key,
+          sharedWith: atKey.sharedWith,
+          isPublic: isPublic,
+          namespaceAware: isNamespaceAware);
+    } on AtClientException {
+      rethrow;
+    }
   }
 
   Future<bool> _delete(String key,
@@ -170,6 +180,12 @@ class AtClientImpl implements AtClient {
       keyWithNamespace = _getKeyWithNamespace(key);
     } else {
       keyWithNamespace = key;
+    }
+    //Verify the atKey has any on the preserved/reserved characters
+    try {
+      keyWithNamespace = AtUtils.validateAtKey(keyWithNamespace);
+    } on InvalidAtKeyException catch (e) {
+      throw AtClientException(error_codes[e.runtimeType.toString()], e.message);
     }
     var builder = DeleteVerbBuilder()
       ..isPublic = isPublic
@@ -193,6 +209,12 @@ class AtClientImpl implements AtClient {
       keyWithNamespace = _getKeyWithNamespace(key);
     } else {
       keyWithNamespace = key;
+    }
+    // Verify the atKey has any on the preserved/reserved characters
+    try {
+      keyWithNamespace = AtUtils.validateAtKey(keyWithNamespace);
+    } on InvalidAtKeyException catch (e) {
+      throw AtClientException(error_codes[e.runtimeType.toString()], e.message);
     }
     if (sharedBy != null && isCached) {
       builder = LLookupVerbBuilder()
@@ -331,14 +353,18 @@ class AtClientImpl implements AtClient {
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
-    var getResult = await _get(atKey.key,
-        sharedWith: AtUtils.formatAtSign(atKey.sharedWith),
-        sharedBy: AtUtils.formatAtSign(atKey.sharedBy),
-        isPublic: isPublic,
-        isCached: isCached,
-        namespaceAware: namespaceAware,
-        operation: UPDATE_ALL);
-
+    var getResult;
+    try {
+      getResult = await _get(atKey.key,
+          sharedWith: AtUtils.formatAtSign(atKey.sharedWith),
+          sharedBy: AtUtils.formatAtSign(atKey.sharedBy),
+          isPublic: isPublic,
+          isCached: isCached,
+          namespaceAware: namespaceAware,
+          operation: UPDATE_ALL);
+    } on AtClientException {
+      rethrow;
+    }
     var atValue = AtValue();
     if (getResult == null || getResult == 'null') {
       return atValue;
@@ -361,13 +387,18 @@ class AtClientImpl implements AtClient {
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
-    var getResult = await _get(atKey.key,
-        sharedWith: atKey.sharedWith,
-        sharedBy: atKey.sharedBy,
-        isPublic: isPublic,
-        isCached: isCached,
-        namespaceAware: namespaceAware,
-        operation: UPDATE_META);
+    var getResult;
+    try {
+      getResult = await _get(atKey.key,
+          sharedWith: atKey.sharedWith,
+          sharedBy: atKey.sharedBy,
+          isPublic: isPublic,
+          isCached: isCached,
+          namespaceAware: namespaceAware,
+          operation: UPDATE_META);
+    } on AtClientException {
+      rethrow;
+    }
     if (getResult == null || getResult == 'null') {
       return null;
     }
@@ -431,6 +462,11 @@ class AtClientImpl implements AtClient {
     var updateKey = key;
     if (metadata == null || (metadata != null && metadata.namespaceAware)) {
       updateKey = _getKeyWithNamespace(key);
+    }
+    try {
+      updateKey = AtUtils.validateAtKey(updateKey);
+    } on InvalidAtKeyException catch (e) {
+      throw AtClientException(error_codes[e.runtimeType.toString()], e.message);
     }
     var operation = getOperation(value, metadata);
     sharedWith = AtUtils.formatAtSign(sharedWith);
@@ -516,8 +552,14 @@ class AtClientImpl implements AtClient {
       }
       value = Base2e15.encode(value);
     }
-    return _put(atKey.key, value,
-        sharedWith: atKey.sharedWith, metadata: atKey.metadata);
+    var result;
+    try {
+      result = _put(atKey.key, value,
+          sharedWith: atKey.sharedWith, metadata: atKey.metadata);
+    } on AtClientException {
+      rethrow;
+    }
+    return result;
   }
 
   @override
@@ -528,6 +570,11 @@ class AtClientImpl implements AtClient {
     var sharedWith = atKey.sharedWith;
     if (metadata != null && metadata.namespaceAware) {
       notifyKey = _getKeyWithNamespace(atKey.key);
+    }
+    try {
+      notifyKey = AtUtils.validateAtKey(atKey.key);
+    } on InvalidAtKeyException catch (e) {
+      throw AtClientException(error_codes[e.runtimeType.toString()], e.message);
     }
     sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = NotifyVerbBuilder()
@@ -580,6 +627,12 @@ class AtClientImpl implements AtClient {
     if (metadata != null && metadata.namespaceAware) {
       notifyKey = _getKeyWithNamespace(atKey.key);
     }
+    //Verify the atKey has any on the preserved/reserved characters
+    try {
+      notifyKey = AtUtils.validateAtKey(notifyKey);
+    } on InvalidAtKeyException catch (e) {
+      throw AtClientException(error_codes[e.runtimeType.toString()], e.message);
+    }
     sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = NotifyAllVerbBuilder()
       ..atKey = notifyKey
@@ -591,7 +644,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-          await encryptionService.encrypt(atKey.key, value, sharedWith);
+              await encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -599,7 +652,7 @@ class AtClientImpl implements AtClient {
         }
       } else {
         builder.value =
-        await encryptionService.encryptForSelf(atKey.key, value);
+            await encryptionService.encryptForSelf(atKey.key, value);
       }
     }
     if (metadata != null) {
@@ -618,7 +671,7 @@ class AtClientImpl implements AtClient {
       isSyncRequired = false;
     }
     var notifyResult =
-    await getSecondary().executeVerb(builder, sync: isSyncRequired);
+        await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return notifyResult;
   }
 
@@ -628,6 +681,11 @@ class AtClientImpl implements AtClient {
     var metadata = atKey.metadata;
     if (metadata != null && metadata.namespaceAware) {
       updateKey = _getKeyWithNamespace(atKey.key);
+    }
+    try {
+      updateKey = AtUtils.validateAtKey(updateKey);
+    } on InvalidAtKeyException catch (e) {
+      throw AtClientException(error_codes[e.runtimeType.toString()], e.message);
     }
     var sharedWith = atKey.sharedWith;
     var builder = UpdateVerbBuilder();
