@@ -21,6 +21,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
@@ -105,7 +106,6 @@ class AtClientImpl implements AtClient {
     return await _remoteSecondary.monitor(
         MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
   }
-
 
   @override
   LocalSecondary getLocalSecondary() {
@@ -580,7 +580,6 @@ class AtClientImpl implements AtClient {
     if (metadata != null && metadata.namespaceAware) {
       notifyKey = _getKeyWithNamespace(atKey.key);
     }
-    sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = NotifyAllVerbBuilder()
       ..atKey = notifyKey
       ..sharedBy = currentAtSign
@@ -591,7 +590,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-          await encryptionService.encrypt(atKey.key, value, sharedWith);
+              await encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -599,7 +598,7 @@ class AtClientImpl implements AtClient {
         }
       } else {
         builder.value =
-        await encryptionService.encryptForSelf(atKey.key, value);
+            await encryptionService.encryptForSelf(atKey.key, value);
       }
     }
     if (metadata != null) {
@@ -618,8 +617,30 @@ class AtClientImpl implements AtClient {
       isSyncRequired = false;
     }
     var notifyResult =
-    await getSecondary().executeVerb(builder, sync: isSyncRequired);
+        await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return notifyResult;
+  }
+
+  @override
+  Future<String> notifyStatus(String notificationId) async {
+    var builder = NotifyStatusVerbBuilder()..notificationId = notificationId;
+    var notifyStatus = await getRemoteSecondary().executeVerb(builder);
+    return notifyStatus;
+  }
+
+  @override
+  Future<String> notifyList(
+      {String fromDate, String toDate, String regex}) async {
+    try {
+      var builder = NotifyListVerbBuilder()
+        ..fromDate = fromDate
+        ..toDate = toDate
+        ..regex = regex;
+      var notifyList = await getRemoteSecondary().executeVerb(builder);
+      return notifyList;
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    }
   }
 
   @override
