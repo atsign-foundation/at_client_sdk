@@ -521,8 +521,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> notify(
-      AtKey atKey, String value, OperationEnum operation) async {
+  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
+      {MessageTypeEnum messageType,
+      PriorityEnum priority,
+      StrategyEnum strategy,
+      int latestN,
+      String notifier}) async {
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
@@ -535,7 +539,12 @@ class AtClientImpl implements AtClient {
       ..sharedBy = currentAtSign
       ..sharedWith = sharedWith
       ..value = value
-      ..operation = operation;
+      ..operation = operation
+      ..messageType = messageType
+      ..priority = priority
+      ..strategy = strategy
+      ..latestN = latestN
+      ..notifier = notifier;
     if (value != null) {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
@@ -574,51 +583,18 @@ class AtClientImpl implements AtClient {
   @override
   Future<String> notifyAll(
       AtKey atKey, String value, OperationEnum operation) async {
-    var notifyKey = atKey.key;
     var metadata = atKey.metadata;
-    var sharedWith = atKey.sharedWith;
+    var returnMap = {};
     if (metadata != null && metadata.namespaceAware) {
-      notifyKey = _getKeyWithNamespace(atKey.key);
+      atKey.key = _getKeyWithNamespace(atKey.key);
     }
-    var builder = NotifyAllVerbBuilder()
-      ..atKey = notifyKey
-      ..sharedBy = currentAtSign
-      ..sharedWithList = json.decode(sharedWith)
-      ..value = value
-      ..operation = operation;
-    if (value != null) {
-      if (sharedWith != null && sharedWith != currentAtSign) {
-        try {
-          builder.value =
-              await encryptionService.encrypt(atKey.key, value, sharedWith);
-        } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
-        }
-      } else {
-        builder.value =
-            await encryptionService.encryptForSelf(atKey.key, value);
-      }
+    var sharedWithList = jsonDecode(atKey.sharedWith);
+    for (var sharedWith in sharedWithList) {
+      atKey.sharedWith = sharedWith;
+      var result = await notify(atKey, value, operation);
+      returnMap.putIfAbsent(sharedWith, () => result);
     }
-    if (metadata != null) {
-      builder.ttl = metadata.ttl;
-      builder.ttb = metadata.ttb;
-      builder.ttr = metadata.ttr;
-      builder.ccd = metadata.ccd;
-      builder.isPublic = metadata.isPublic;
-    }
-    var isSyncRequired = true;
-    if (notifyKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-    if (SyncUtil.shouldSkipSync(notifyKey)) {
-      isSyncRequired = false;
-    }
-    var notifyResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
-    return notifyResult;
+    return jsonEncode(returnMap);
   }
 
   @override
