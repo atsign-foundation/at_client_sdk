@@ -583,11 +583,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<String> notifyAll(
       AtKey atKey, String value, OperationEnum operation) async {
-    var metadata = atKey.metadata;
     var returnMap = {};
-    if (metadata != null && metadata.namespaceAware) {
-      atKey.key = _getKeyWithNamespace(atKey.key);
-    }
     var sharedWithList = jsonDecode(atKey.sharedWith);
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
