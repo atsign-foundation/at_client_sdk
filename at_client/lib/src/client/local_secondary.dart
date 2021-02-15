@@ -295,6 +295,11 @@ class LocalSecondary implements Secondary {
     return privateKeyData?.data;
   }
 
+  Future<String> getEncryptionSelfKey() async {
+    var selfKeyData = await keyStore.get(AT_ENCRYPTION_SELF_KEY);
+    return selfKeyData?.data;
+  }
+
   ///Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {
     assert(key != null && key != '');
