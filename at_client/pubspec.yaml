@@ -33,6 +33,7 @@ dependencies:
       path: at_secondary/at_persistence_secondary_server
       ref: dev_env
       version: ^1.0.1+4
+
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
