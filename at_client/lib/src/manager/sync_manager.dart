@@ -371,7 +371,11 @@ class SyncManager {
       case CommitOp.UPDATE:
         var key = entry.atKey;
         var value = await _localSecondary.keyStore.get(key);
-        command = 'update:${key} ${value?.data}';
+        var finalValue = value?.data;
+        if (finalValue != null && VerbUtil.containsNewLine(finalValue)) {
+          finalValue = VerbUtil.base2e15Encode(finalValue);
+        }
+        command = 'update:${key} ${finalValue}';
         break;
       case CommitOp.DELETE:
         var key = entry.atKey;
@@ -395,7 +399,11 @@ class SyncManager {
         }
         keyGen += ':${key}';
         value?.metaData = metaData;
-        command = 'update${keyGen} ${value?.data}';
+        var finalValue = value?.data;
+        if (finalValue != null && VerbUtil.containsNewLine(finalValue)) {
+          finalValue = VerbUtil.base2e15Encode(finalValue);
+        }
+        command = 'update${keyGen} ${finalValue}';
         break;
     }
     return command;
@@ -449,7 +457,6 @@ class SyncManager {
     for (var entry in uncommittedEntries) {
       var command = await _getCommand(entry);
       command = command.replaceAll('cached:', '');
-      command = VerbUtil.replaceNewline(command);
       var batchRequest = BatchRequest(batchId, command);
       logger.finer('batchId:${batchId} key:${entry.atKey}');
       batchRequests.add(batchRequest);

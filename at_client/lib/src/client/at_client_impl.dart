@@ -343,15 +343,17 @@ class AtClientImpl implements AtClient {
     if (getResult == null || getResult == 'null') {
       return atValue;
     }
+    atValue.metadata = _prepareMetadata(getResult['metaData'], isPublic);
     if (atKey.metadata != null && atKey.metadata.isBinary) {
       atValue.value = Base2e15.decode(getResult['data']);
     } else {
       atValue.value = getResult['data'];
-      if (atValue.value is String) {
-        atValue.value = VerbUtil.getFormattedValue(atValue.value);
+      if (atValue.metadata.isEncoded != null && atValue.metadata.isEncoded) {
+        atValue.value =
+            VerbUtil.decodeText(atValue.value, atKey.metadata.isEncoded);
       }
     }
-    atValue.metadata = _prepareMetadata(getResult['metaData'], isPublic);
+
     return atValue;
   }
 
@@ -449,6 +451,7 @@ class AtClientImpl implements AtClient {
       builder.isBinary = metadata.isBinary;
       builder.isEncrypted = metadata.isEncrypted;
       builder.isPublic = metadata.isPublic;
+      builder.isEncoded = metadata.isEncoded;
       if (metadata.isHidden) {
         builder.atKey = '_' + updateKey;
       }
@@ -515,6 +518,10 @@ class AtClientImpl implements AtClient {
         throw AtClientException('AT0005', 'BufferOverFlowException');
       }
       value = Base2e15.encode(value);
+    }
+    if (value is String && VerbUtil.containsNewLine(value)) {
+      value = VerbUtil.base2e15Encode(value);
+      atKey.metadata.isEncoded = true;
     }
     return _put(atKey.key, value,
         sharedWith: atKey.sharedWith, metadata: atKey.metadata);
@@ -717,6 +724,7 @@ class AtClientImpl implements AtClient {
     metadata.isBinary = metadataMap[IS_BINARY];
     metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
+    metadata.isEncoded = metadataMap[IS_ENCODED];
     if (isPublic) {
       metadata.isPublic = isPublic;
     }
