@@ -1,11 +1,11 @@
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
-import 'package:at_client_mobile/src/key_restore_status.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'keychain_manager.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_client/src/util/encryption_util.dart';
+
+import 'keychain_manager.dart';
 
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(String atSign,
@@ -39,9 +39,7 @@ class AtClientAuthenticator implements AtClientAuth {
 
   @override
   Future<bool> performInitialAuth(String atSign,
-      {String cramSecret,
-      KeyRestoreStatus status,
-      String pkamPrivateKey}) async {
+      {String cramSecret, String pkamPrivateKey}) async {
     // get existing keys from keychain
     var publicKey =
         await _keyChainManager.getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
@@ -71,7 +69,7 @@ class AtClientAuthenticator implements AtClientAuth {
         var updateCommand = 'update:${AT_PKAM_PUBLIC_KEY} $publicKey\n';
         // auth is false since already cram authenticated
         var pkamUpdateResult =
-            await atLookUp.executeCommand(updateCommand, auth: false);
+        await atLookUp.executeCommand(updateCommand, auth: false);
         logger.finer('pkam update result:${pkamUpdateResult}');
       } else {
         logger.finer('pkam auth already done');
@@ -89,7 +87,8 @@ class AtClientAuthenticator implements AtClientAuth {
             secret: cramSecret, privateKey: privateKey, publicKey: publicKey);
         // Generate key pair for encryption if not already present
         if (encryptionPrivateKey == null || encryptionPrivateKey == '') {
-          logger.finer('generating encryption key pair');
+          logger
+              .finer('generating encryption key pair and self encryption key');
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
           await _keyChainManager.putValue(
               atSign,
@@ -98,31 +97,9 @@ class AtClientAuthenticator implements AtClientAuth {
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
           await _keyChainManager.putValue(
               atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY, encryptionPubKey);
-          var aesSharedKey = EncryptionUtil.generateAESKey();
+          var selfEncryptionKey = EncryptionUtil.generateAESKey();
           await _keyChainManager.putValue(
-              atSign, KEYCHAIN_AES_KEY, aesSharedKey);
-          var encryptedPkamPublicKey =
-              await EncryptionUtil.encryptValue(publicKey, aesSharedKey);
-          await _keyChainManager.putValue(
-              atSign, KEYCHAIN_AES_PKAM_PUBLIC_KEY, encryptedPkamPublicKey);
-          var encryptedPkamPrivateKey =
-              await EncryptionUtil.encryptValue(privateKey, aesSharedKey);
-          await _keyChainManager.putValue(
-              atSign, KEYCHAIN_AES_PKAM_PRIVATE_KEY, encryptedPkamPrivateKey);
-          var encryptedDataEncryptionPublicKey =
-              await EncryptionUtil.encryptValue(
-                  encryptionKeyPair.publicKey.toString(), aesSharedKey);
-          await _keyChainManager.putValue(
-              atSign,
-              KEYCHAIN_AES_ENCRYPTION_PUBLIC_KEY,
-              encryptedDataEncryptionPublicKey);
-          var encryptedDataEncryptionPrivateKey =
-              await EncryptionUtil.encryptValue(
-                  encryptionKeyPair.privateKey.toString(), aesSharedKey);
-          await _keyChainManager.putValue(
-              atSign,
-              KEYCHAIN_AES_ENCRYPTION_PRIVATE_KEY,
-              encryptedDataEncryptionPrivateKey);
+              atSign, KEYCHAIN_SELF_ENCRYPTION_KEY, selfEncryptionKey);
         }
 
         var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;

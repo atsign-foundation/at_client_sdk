@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'package:at_utils/at_logger.dart';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 
 class EncryptionService {
@@ -142,6 +143,7 @@ class EncryptionService {
   }
 
   ///Returns `decrypted value` on successful decryption.
+  /// Used for local lookup @bob:phone@alice
   Future<String> decryptLocal(String encryptedValue, String currentAtSign,
       String sharedWithUser) async {
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
@@ -167,32 +169,18 @@ class EncryptionService {
   /// returns encrypted value
   Future<String> encryptForSelf(String key, String value) async {
     try {
-      var currentAtSignPublicKey =
-          await localSecondary.getEncryptionPublicKey(currentAtSign);
-      var currentAtSignPrivateKey =
-          await localSecondary.getEncryptionPrivateKey();
-      // //1. Get/Generate AES key for sharedWith atsign
-      var sharedKey = await _getEncryptedAESKey();
-      if (sharedKey == null || sharedKey == 'data:null') {
-        sharedKey = EncryptionUtil.generateAESKey();
-        // Encrypt shared key with public key of sharedWith atsign and store
-        var encryptedAESKey =
-            EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey);
-
-        var updateAESKeyBuilder = UpdateVerbBuilder()
-          ..sharedBy = currentAtSign
-          ..sharedWith = currentAtSign
-          ..atKey = '${AT_ENCRYPTION_SHARED_KEY}'
-          ..value = encryptedAESKey;
-        await localSecondary.executeVerb(updateAESKeyBuilder, sync: true);
+      // //1. Get AES key for current atsign
+      var selfEncryptionKey = await _getSelfEncryptionKey();
+      if (selfEncryptionKey == null || selfEncryptionKey == 'data:null') {
+        throw Exception(
+            'Self encryption key is not set for atsign ${currentAtSign}');
       } else {
-        sharedKey = sharedKey.replaceFirst('data:', '');
-        sharedKey =
-            EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey);
+        selfEncryptionKey = selfEncryptionKey.replaceFirst('data:', '');
       }
 
       // Encrypt value using sharedKey
-      var encryptedValue = EncryptionUtil.encryptValue(value, sharedKey);
+      var encryptedValue =
+          EncryptionUtil.encryptValue(value, selfEncryptionKey);
       return encryptedValue;
     } on Exception catch (e) {
       print('Exception while encrypting value for key ${key}: ${e.toString()}');
@@ -201,26 +189,20 @@ class EncryptionService {
   }
 
   /// returns decrypted value
+  /// Used for local lookup @alice:phone@alice
   Future<String> decryptForSelf(String encryptedValue, bool isEncrypted) async {
     if (!isEncrypted) {
       return encryptedValue;
     }
     try {
-      // local lookup the cached-shared key, if null lookup shared key
-      var encryptedAESKey = await _getEncryptedAESKey();
-      if (encryptedAESKey == null || encryptedAESKey == 'data:null') {
+      var selfEncryptionKey = await _getSelfEncryptionKey();
+      if (selfEncryptionKey == null || selfEncryptionKey == 'data:null') {
         return encryptedValue;
       }
-      encryptedAESKey = encryptedAESKey.toString().replaceAll('data:', '');
-      // decrypt shared key using private key
-      var currentAtSignPrivateKey =
-          await localSecondary.getEncryptionPrivateKey();
-      var sharedKey =
-          EncryptionUtil.decryptKey(encryptedAESKey, currentAtSignPrivateKey);
-
-      // decrypt value using shared key
+      selfEncryptionKey = selfEncryptionKey.toString().replaceAll('data:', '');
+      // decrypt value using self encryption key
       var decryptedValue =
-          EncryptionUtil.decryptValue(encryptedValue, sharedKey);
+          EncryptionUtil.decryptValue(encryptedValue, selfEncryptionKey);
       return decryptedValue;
     } on Exception catch (e) {
       print('Exception while decrypting value: ${e.toString()}');
@@ -331,15 +313,10 @@ class EncryptionService {
     await atClient.getSyncManager().sync();
   }
 
-  Future<String> _getEncryptedAESKey() async {
-    var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = '${AT_ENCRYPTION_SHARED_KEY}'
-      ..sharedWith = currentAtSign
-      ..sharedBy = currentAtSign;
-    var encryptedAESKey = await localSecondary.executeVerb(llookupVerbBuilder);
-    if (encryptedAESKey == null || encryptedAESKey == 'data:null') {
-      encryptedAESKey = await remoteSecondary.executeVerb(llookupVerbBuilder);
-    }
-    return encryptedAESKey;
+  Future<String> _getSelfEncryptionKey() async {
+    var selfEncryptionKey = await localSecondary.getEncryptionSelfKey();
+    //#TODO remove before pushing to prod
+    logger.finer('self encryption key: ${selfEncryptionKey}');
+    return selfEncryptionKey;
   }
 }

@@ -21,6 +21,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
@@ -563,8 +564,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> notify(
-      AtKey atKey, String value, OperationEnum operation) async {
+  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
+      {MessageTypeEnum messageType,
+      PriorityEnum priority,
+      StrategyEnum strategy,
+      int latestN,
+      String notifier}) async {
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
@@ -582,7 +587,12 @@ class AtClientImpl implements AtClient {
       ..sharedBy = currentAtSign
       ..sharedWith = sharedWith
       ..value = value
-      ..operation = operation;
+      ..operation = operation
+      ..messageType = messageType
+      ..priority = priority
+      ..strategy = strategy
+      ..latestN = latestN
+      ..notifier = notifier;
     if (value != null) {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
@@ -621,58 +631,36 @@ class AtClientImpl implements AtClient {
   @override
   Future<String> notifyAll(
       AtKey atKey, String value, OperationEnum operation) async {
-    var notifyKey = atKey.key;
-    var metadata = atKey.metadata;
-    var sharedWith = atKey.sharedWith;
-    if (metadata != null && metadata.namespaceAware) {
-      notifyKey = _getKeyWithNamespace(atKey.key);
+    var returnMap = {};
+    var sharedWithList = jsonDecode(atKey.sharedWith);
+    for (var sharedWith in sharedWithList) {
+      atKey.sharedWith = sharedWith;
+      var result = await notify(atKey, value, operation);
+      returnMap.putIfAbsent(sharedWith, () => result);
     }
-    //Verify the atKey has any on the preserved/reserved characters
+    return jsonEncode(returnMap);
+  }
+
+  @override
+  Future<String> notifyStatus(String notificationId) async {
+    var builder = NotifyStatusVerbBuilder()..notificationId = notificationId;
+    var notifyStatus = await getRemoteSecondary().executeVerb(builder);
+    return notifyStatus;
+  }
+
+  @override
+  Future<String> notifyList(
+      {String fromDate, String toDate, String regex}) async {
     try {
-      notifyKey = AtUtils.validateAtKey(notifyKey);
-    } on InvalidAtKeyException catch (e) {
-      throw AtClientException(error_codes[e.runtimeType.toString()], e.message);
+      var builder = NotifyListVerbBuilder()
+        ..fromDate = fromDate
+        ..toDate = toDate
+        ..regex = regex;
+      var notifyList = await getRemoteSecondary().executeVerb(builder);
+      return notifyList;
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
     }
-    sharedWith = AtUtils.formatAtSign(sharedWith);
-    var builder = NotifyAllVerbBuilder()
-      ..atKey = notifyKey
-      ..sharedBy = currentAtSign
-      ..sharedWithList = json.decode(sharedWith)
-      ..value = value
-      ..operation = operation;
-    if (value != null) {
-      if (sharedWith != null && sharedWith != currentAtSign) {
-        try {
-          builder.value =
-              await encryptionService.encrypt(atKey.key, value, sharedWith);
-        } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
-        }
-      } else {
-        builder.value =
-            await encryptionService.encryptForSelf(atKey.key, value);
-      }
-    }
-    if (metadata != null) {
-      builder.ttl = metadata.ttl;
-      builder.ttb = metadata.ttb;
-      builder.ttr = metadata.ttr;
-      builder.ccd = metadata.ccd;
-      builder.isPublic = metadata.isPublic;
-    }
-    var isSyncRequired = true;
-    if (notifyKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-    if (SyncUtil.shouldSkipSync(notifyKey)) {
-      isSyncRequired = false;
-    }
-    var notifyResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
-    return notifyResult;
   }
 
   @override

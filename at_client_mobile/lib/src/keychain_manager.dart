@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:crypton/crypton.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
-import 'package:crypton/crypton.dart';
-import 'package:at_client_mobile/src/auth_constants.dart';
 
 class KeyChainManager {
   static final KeyChainManager _singleton = KeyChainManager._internal();
@@ -166,11 +167,11 @@ class KeyChainManager {
     return getSecretFromKeychain(atSign);
   }
 
-  Future<String> getPrivateKey(String atSign) async {
+  Future<String> getPkamPrivateKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_PKAM_PRIVATE_KEY);
   }
 
-  Future<String> getPublicKey(String atSign) async {
+  Future<String> getPkamPublicKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
   }
 
@@ -180,6 +181,10 @@ class KeyChainManager {
 
   Future<String> getEncryptionPublicKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
+  }
+
+  Future<String> getSelfEncryptionAESKey(String atSign) async {
+    return getValue(atSign, KEYCHAIN_SELF_ENCRYPTION_KEY);
   }
 
   Future<List<int>> getKeyStoreSecret(String atSign) async {
