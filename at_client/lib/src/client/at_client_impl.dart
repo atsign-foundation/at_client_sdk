@@ -521,6 +521,13 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  Future<dynamic> runBatchCommand(List<VerbBuilder> atVerbBuilders) async {
+    var batchRequests = _getBatchRequests(atVerbBuilders);
+    var batchResponse = await _sendBatch(batchRequests);
+    return batchResponse;
+  }
+
+  @override
   Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
       {MessageTypeEnum messageType,
       PriorityEnum priority,
@@ -783,5 +790,31 @@ class AtClientImpl implements AtClient {
 
   Future<void> encryptUnEncryptedData() async {
     await encryptionService.encryptUnencryptedData();
+  }
+
+  List<BatchRequest> _getBatchRequests(List<VerbBuilder> atVerbBuilders) {
+    var batchRequests = <BatchRequest>[];
+    var batchId = 1;
+    for (var atVerbBuilder in atVerbBuilders) {
+      var command = atVerbBuilder.buildCommand();
+      command = command.replaceAll('cached:', '');
+      command = VerbUtil.replaceNewline(command);
+      var batchRequest = BatchRequest(batchId, command);
+      batchRequests.add(batchRequest);
+      batchId++;
+    }
+    return batchRequests;
+  }
+
+  dynamic _sendBatch(List<BatchRequest> requests) async {
+    var command = 'batch:';
+    command += jsonEncode(requests);
+    command += '\n';
+    var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
+    logger.finer('batch result:$verbResult');
+    if (verbResult != null) {
+      verbResult = verbResult.replaceFirst('data:', '');
+    }
+    return jsonDecode(verbResult);
   }
 }
