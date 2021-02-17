@@ -426,6 +426,10 @@ class SyncManager {
     if (metadata.isEncrypted != null) {
       metadataStr += ':isEncrypted:${metadata.isEncrypted}';
     }
+
+    if (metadata.isEncoded != null) {
+      metadataStr += ':isEncoded:${metadata.isEncoded}';
+    }
     return metadataStr;
   }
 
