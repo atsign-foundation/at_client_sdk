@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/BatchVerbBuilder.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -428,68 +429,12 @@ class AtClientImpl implements AtClient {
 
   Future<bool> _put(String key, dynamic value,
       {String sharedWith, Metadata metadata}) async {
-    var updateKey = key;
-    if (metadata == null || (metadata != null && metadata.namespaceAware)) {
-      updateKey = _getKeyWithNamespace(key);
-    }
-    var operation = getOperation(value, metadata);
-    sharedWith = AtUtils.formatAtSign(sharedWith);
-    var builder = UpdateVerbBuilder()
-      ..atKey = updateKey
-      ..sharedBy = currentAtSign
-      ..sharedWith = sharedWith
-      ..value = value
-      ..operation = operation;
+    UpdateVerbBuilder builder = await prepareUpdateBuilder(key, value,
+        sharedWith: sharedWith, metadata: metadata);
 
-    if (metadata != null) {
-      builder.ttl = metadata.ttl;
-      builder.ttb = metadata.ttb;
-      builder.ttr = metadata.ttr;
-      builder.ccd = metadata.ccd;
-      builder.isBinary = metadata.isBinary;
-      builder.isEncrypted = metadata.isEncrypted;
-      builder.isPublic = metadata.isPublic;
-      if (metadata.isHidden) {
-        builder.atKey = '_' + updateKey;
-      }
-    }
-    if (value != null) {
-      if (sharedWith != null && sharedWith != currentAtSign) {
-        try {
-          builder.value =
-              await encryptionService.encrypt(key, value, sharedWith);
-        } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
-        }
-      } else if (!builder.isPublic &&
-          !builder.atKey.toString().startsWith('_')) {
-        builder.value = await encryptionService.encryptForSelf(key, value);
-        builder.isEncrypted = true;
-      }
-    }
     var isSyncRequired;
-    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-    if (SyncUtil.shouldSkipSync(updateKey)) {
+    if (SyncUtil.shouldSkipSync(builder.atKey)) {
       isSyncRequired = false;
-    }
-    //sign public data with private encryption key
-    if (metadata != null && metadata.isPublic) {
-      try {
-        var encryptionPrivateKey =
-            await _localSecondary.getEncryptionPrivateKey();
-        if (encryptionPrivateKey != null) {
-          logger.finer('signing public data for key:${key}');
-          builder.dataSignature =
-              encryptionService.signPublicData(encryptionPrivateKey, value);
-        }
-      } on Exception catch (e) {
-        logger.severe('Exception trying to sign public data:${e.toString()}');
-      }
     }
 
     var putResult;
@@ -817,4 +762,83 @@ class AtClientImpl implements AtClient {
     }
     return jsonDecode(verbResult);
   }
+
+  dynamic buildBatchCommand() {
+    return BatchVerbBuilder(1);
+  }
+
+  dynamic runBatch(BatchVerbBuilder batchVerbBuilder) async {
+    var batchRequests = batchVerbBuilder.batch();
+    var batchResponse = await _sendBatch(batchRequests);
+    return batchResponse;
+  }
+
+  Future<VerbBuilder> prepareUpdateBuilder(String key, dynamic value,
+      {String sharedWith, Metadata metadata}) async {
+    var updateKey = key;
+    if (metadata == null || (metadata != null && metadata.namespaceAware)) {
+      updateKey = _getKeyWithNamespace(key);
+    }
+    var operation = getOperation(value, metadata);
+    sharedWith = AtUtils.formatAtSign(sharedWith);
+    var builder = UpdateVerbBuilder()
+      ..atKey = updateKey
+      ..sharedBy = currentAtSign
+      ..sharedWith = sharedWith
+      ..value = value
+      ..operation = operation;
+
+    if (metadata != null) {
+      builder.ttl = metadata.ttl;
+      builder.ttb = metadata.ttb;
+      builder.ttr = metadata.ttr;
+      builder.ccd = metadata.ccd;
+      builder.isBinary = metadata.isBinary;
+      builder.isEncrypted = metadata.isEncrypted;
+      builder.isPublic = metadata.isPublic;
+      if (metadata.isHidden) {
+        builder.atKey = '_' + updateKey;
+      }
+    }
+    if (value != null) {
+      if (sharedWith != null && sharedWith != currentAtSign) {
+        try {
+          builder.value =
+              await encryptionService.encrypt(key, value, sharedWith);
+        } on KeyNotFoundException catch (e) {
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(
+              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+        }
+      } else if (!builder.isPublic &&
+          !builder.atKey.toString().startsWith('_')) {
+        builder.value = await encryptionService.encryptForSelf(key, value);
+        builder.isEncrypted = true;
+      }
+    }
+    var isSyncRequired;
+    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
+      builder.sharedBy = null;
+    }
+    if (SyncUtil.shouldSkipSync(updateKey)) {
+      isSyncRequired = false;
+    }
+    //sign public data with private encryption key
+    if (metadata != null && metadata.isPublic) {
+      try {
+        var encryptionPrivateKey =
+            await _localSecondary.getEncryptionPrivateKey();
+        if (encryptionPrivateKey != null) {
+          logger.finer('signing public data for key:${key}');
+          builder.dataSignature =
+              encryptionService.signPublicData(encryptionPrivateKey, value);
+        }
+      } on Exception catch (e) {
+        logger.severe('Exception trying to sign public data:${e.toString()}');
+      }
+    }
+    return builder;
+  }
 }
+
