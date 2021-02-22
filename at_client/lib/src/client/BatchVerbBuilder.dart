@@ -8,20 +8,19 @@ import 'package:at_utils/at_utils.dart';
 class BatchVerbBuilder {
   List<BatchRequest> _batchRequests = [];
   var _batchId;
-  var currentAtSign;
-  EncryptionService encryptionService;
+  var _currentAtSign;
+  EncryptionService _encryptionService;
 
-  BatchVerbBuilder(double batchId) {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign);
+  BatchVerbBuilder(int batchId, String atSign) {
+    this._currentAtSign = atSign;
     this._batchId = batchId;
   }
 
-  @override
   Future<void> delete(AtKey atKey) async {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
-    AtClientImpl atClient = await AtClientImpl.getClient(currentAtSign);
+    AtClientImpl atClient = await AtClientImpl.getClient(_currentAtSign);
     var namespace = atClient.preference.namespace;
     var keyWithNamespace;
     if (isNamespaceAware) {
@@ -33,7 +32,7 @@ class BatchVerbBuilder {
       ..isPublic = isPublic
       ..sharedWith = atKey.sharedWith
       ..atKey = keyWithNamespace
-      ..sharedBy = currentAtSign;
+      ..sharedBy = _currentAtSign;
     _addToList(builder);
   }
 
@@ -52,7 +51,7 @@ class BatchVerbBuilder {
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
-    AtClientImpl atClient = await AtClientImpl.getClient(currentAtSign);
+    AtClientImpl atClient = await AtClientImpl.getClient(_currentAtSign);
     var namespace = atClient.preference.namespace;
     var key = atKey.key;
     var sharedBy = atKey.sharedBy;
@@ -67,9 +66,9 @@ class BatchVerbBuilder {
         ..atKey = keyWithNamespace
         ..sharedBy = sharedBy
         ..isCached = isCached
-        ..sharedWith = currentAtSign
+        ..sharedWith = _currentAtSign
         ..operation = UPDATE_ALL;
-    } else if (sharedBy != null && sharedBy != currentAtSign) {
+    } else if (sharedBy != null && sharedBy != _currentAtSign) {
       if (isPublic) {
         builder = PLookupVerbBuilder()
           ..atKey = keyWithNamespace
@@ -90,19 +89,19 @@ class BatchVerbBuilder {
         ..isPublic = isPublic
         ..sharedWith = sharedWith
         ..atKey = keyWithNamespace
-        ..sharedBy = currentAtSign
+        ..sharedBy = _currentAtSign
         ..operation = UPDATE_ALL;
     } else if (isPublic) {
       builder = LLookupVerbBuilder()
         ..atKey = 'public:' + keyWithNamespace
-        ..sharedBy = currentAtSign;
+        ..sharedBy = _currentAtSign;
     } else {
       builder = LLookupVerbBuilder()..atKey = keyWithNamespace;
       if (keyWithNamespace.startsWith(AT_PKAM_PRIVATE_KEY) ||
           keyWithNamespace.startsWith(AT_PKAM_PUBLIC_KEY)) {
         builder.sharedBy = null;
       } else {
-        builder.sharedBy = currentAtSign;
+        builder.sharedBy = _currentAtSign;
       }
     }
     _addToList(builder);
@@ -110,7 +109,7 @@ class BatchVerbBuilder {
 
   void put(AtKey atKey, dynamic value,
       {String sharedWith, Metadata metadata}) async {
-    AtClientImpl atClient = await AtClientImpl.getClient(currentAtSign);
+    AtClientImpl atClient = await AtClientImpl.getClient(_currentAtSign);
     var builder = await atClient.prepareUpdateBuilder(atKey.key, value,
         sharedWith: atKey.sharedWith, metadata: atKey.metadata);
     _addToList(builder);
@@ -119,11 +118,12 @@ class BatchVerbBuilder {
   void _addToList(VerbBuilder builder) {
     var command = builder.buildCommand();
     var batchRequest = BatchRequest(_batchId, command);
-    _batchRequests.add(batchRequest);
-    _batchId++;
+    this._batchRequests.add(batchRequest);
+    this._batchId++;
   }
 
   dynamic batch() {
+    print('In Batch : ${this._batchRequests}');
     return this._batchRequests;
   }
 }

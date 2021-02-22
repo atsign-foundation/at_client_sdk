@@ -51,6 +51,7 @@ class AtClientImpl implements AtClient {
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
   /// and the client preference.
   static Future<AtClient> getClient(String currentAtSign) async {
+    print('currentAtSign : $currentAtSign, keys: ${_atClientInstanceMap.keys}');
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
     }
@@ -763,8 +764,8 @@ class AtClientImpl implements AtClient {
     return jsonDecode(verbResult);
   }
 
-  dynamic buildBatchCommand() {
-    return BatchVerbBuilder(1);
+  BatchVerbBuilder buildBatchCommand() {
+    return BatchVerbBuilder(1, currentAtSign);
   }
 
   dynamic runBatch(BatchVerbBuilder batchVerbBuilder) async {
@@ -841,4 +842,3 @@ class AtClientImpl implements AtClient {
     return builder;
   }
 }
-
