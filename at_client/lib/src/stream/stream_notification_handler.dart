@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
@@ -10,6 +11,8 @@ class StreamNotificationHandler {
   LocalSecondary localSecondary;
 
   AtClientPreference preference;
+
+  EncryptionService encryptionService;
 
   var logger = AtSignLogger('StreamNotificationHandler');
 
@@ -36,7 +39,9 @@ class StreamNotificationHandler {
         return;
       }
       bytesReceived += onData.length;
-      f.writeAsBytesSync(onData, mode: FileMode.append);
+      var decryptedBytes = await encryptionService.decryptStream(
+          onData, streamNotification.senderAtSign);
+      f.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
       logger.finer('bytesReceived:${bytesReceived}');
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {

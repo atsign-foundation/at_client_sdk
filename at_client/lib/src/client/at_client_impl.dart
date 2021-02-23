@@ -43,7 +43,7 @@ class AtClientImpl implements AtClient {
   RemoteSecondary _remoteSecondary;
   OutboundConnection _monitorConnection;
 
-  EncryptionService encryptionService;
+  EncryptionService _encryptionService;
   var logger = AtSignLogger('AtClientImpl');
   static final Map _atClientInstanceMap = <String, AtClient>{};
 
@@ -87,10 +87,10 @@ class AtClientImpl implements AtClient {
     }
     _remoteSecondary = RemoteSecondary(currentAtSign, _preference,
         privateKey: _preference.privateKey);
-    encryptionService = EncryptionService();
-    encryptionService.remoteSecondary = _remoteSecondary;
-    encryptionService.currentAtSign = currentAtSign;
-    encryptionService.localSecondary = _localSecondary;
+    _encryptionService = EncryptionService();
+    _encryptionService.remoteSecondary = _remoteSecondary;
+    _encryptionService.currentAtSign = currentAtSign;
+    _encryptionService.localSecondary = _localSecondary;
   }
 
   Secondary getSecondary() {
@@ -212,14 +212,14 @@ class AtClientImpl implements AtClient {
       }
       if (sharedBy != currentAtSign && operation == UPDATE_ALL) {
         //resultant value is encrypted. Decrypting to original value.
-        var decryptedValue = await encryptionService.decrypt(
+        var decryptedValue = await _encryptionService.decrypt(
             encryptedResultMap['data'], sharedBy);
         encryptedResultMap['data'] = decryptedValue;
       } else {
         //resultant value is encrypted. Decrypting to original value.
         var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
         isEncrypted ??= false;
-        var decryptedValue = await encryptionService.decryptForSelf(
+        var decryptedValue = await _encryptionService.decryptForSelf(
             encryptedResultMap['data'], isEncrypted);
         encryptedResultMap['data'] = decryptedValue;
       }
@@ -253,7 +253,7 @@ class AtClientImpl implements AtClient {
         if (operation == UPDATE_ALL) {
           var decryptedValue;
           try {
-            decryptedValue = await encryptionService.decrypt(
+            decryptedValue = await _encryptionService.decrypt(
                 encryptedResultMap['data'], sharedBy);
           } on KeyNotFoundException catch (e) {
             var errorCode = AtClientExceptionUtil.getErrorCode(e);
@@ -285,7 +285,7 @@ class AtClientImpl implements AtClient {
         encryptedResult = _formatResult(encryptedResult);
         var encryptedResultMap = jsonDecode(encryptedResult);
         if (operation == UPDATE_ALL) {
-          var decryptedValue = await encryptionService.decryptLocal(
+          var decryptedValue = await _encryptionService.decryptLocal(
               encryptedResultMap['data'], currentAtSign, sharedWith);
           encryptedResultMap['data'] = decryptedValue;
         }
@@ -319,7 +319,7 @@ class AtClientImpl implements AtClient {
     }
     var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
     isEncrypted ??= false;
-    var decryptedValue = await encryptionService.decryptForSelf(
+    var decryptedValue = await _encryptionService.decryptForSelf(
         encryptedResultMap['data'], isEncrypted);
     encryptedResultMap['data'] = decryptedValue;
     return encryptedResultMap;
@@ -457,7 +457,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-              await encryptionService.encrypt(key, value, sharedWith);
+              await _encryptionService.encrypt(key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -465,7 +465,7 @@ class AtClientImpl implements AtClient {
         }
       } else if (!builder.isPublic &&
           !builder.atKey.toString().startsWith('_')) {
-        builder.value = await encryptionService.encryptForSelf(key, value);
+        builder.value = await _encryptionService.encryptForSelf(key, value);
         builder.isEncrypted = true;
       }
     }
@@ -485,7 +485,7 @@ class AtClientImpl implements AtClient {
         if (encryptionPrivateKey != null) {
           logger.finer('signing public data for key:${key}');
           builder.dataSignature =
-              encryptionService.signPublicData(encryptionPrivateKey, value);
+              _encryptionService.signPublicData(encryptionPrivateKey, value);
         }
       } on Exception catch (e) {
         logger.severe('Exception trying to sign public data:${e.toString()}');
@@ -540,7 +540,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-              await encryptionService.encrypt(atKey.key, value, sharedWith);
+              await _encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -548,7 +548,7 @@ class AtClientImpl implements AtClient {
         }
       } else {
         builder.value =
-            await encryptionService.encryptForSelf(atKey.key, value);
+            await _encryptionService.encryptForSelf(atKey.key, value);
       }
     }
     if (metadata != null) {
@@ -590,7 +590,7 @@ class AtClientImpl implements AtClient {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
           builder.value =
-              await encryptionService.encrypt(atKey.key, value, sharedWith);
+              await _encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
@@ -598,7 +598,7 @@ class AtClientImpl implements AtClient {
         }
       } else {
         builder.value =
-            await encryptionService.encryptForSelf(atKey.key, value);
+            await _encryptionService.encryptForSelf(atKey.key, value);
       }
     }
     if (metadata != null) {
@@ -758,8 +758,10 @@ class AtClientImpl implements AtClient {
     var data = file.readAsBytesSync();
     var fileName = basename(filePath);
     fileName = base64.encode(utf8.encode(fileName));
+    var encryptedData =
+    await _encryptionService.encryptStream(data, sharedWith);
     var command =
-        'stream:init${sharedWith} ${streamId} ${fileName} ${data.length}\n';
+        'stream:init${sharedWith} ${streamId} ${fileName} ${encryptedData.length}\n';
     logger.finer('sending stream init:${command}');
     var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);
@@ -769,7 +771,7 @@ class AtClientImpl implements AtClient {
       result = result.trim();
       logger.finer('ack received for streamId:${streamId}');
 
-      remoteSecondary.atLookUp.connection.getSocket().add(data);
+      remoteSecondary.atLookUp.connection.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
       if (streamResult != null && streamResult.startsWith('stream:done')) {
@@ -798,6 +800,7 @@ class AtClientImpl implements AtClient {
     handler.remoteSecondary = getRemoteSecondary();
     handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
+    handler.encryptionService = _encryptionService;
     var notification = AtStreamNotification()
       ..streamId = streamId
       ..fileName = fileName
@@ -810,6 +813,6 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> encryptUnEncryptedData() async {
-    await encryptionService.encryptUnencryptedData();
+    await _encryptionService.encryptUnencryptedData();
   }
 }
