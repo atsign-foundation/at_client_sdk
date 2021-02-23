@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'package:at_utils/at_logger.dart';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 
 class EncryptionService {
@@ -120,7 +121,8 @@ class EncryptionService {
     if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
         ..atKey = AT_ENCRYPTION_SHARED_KEY
-        ..sharedBy = sharedBy;
+        ..sharedBy = sharedBy
+        ..auth = true;
       encryptedSharedKey =
           await remoteSecondary.executeAndParse(sharedKeyLookUpBuilder);
     }
