@@ -6,14 +6,11 @@ import 'package:at_commons/src/keystore/at_key.dart';
 import 'package:at_utils/at_utils.dart';
 
 class BatchVerbBuilder {
-  List<BatchRequest> _batchRequests = [];
-  var _batchId;
+  List<VerbBuilder> _batchRequests = [];
   var _currentAtSign;
-  EncryptionService _encryptionService;
 
-  BatchVerbBuilder(int batchId, String atSign) {
+  BatchVerbBuilder(String atSign) {
     this._currentAtSign = atSign;
-    this._batchId = batchId;
   }
 
   Future<void> delete(AtKey atKey) async {
@@ -116,10 +113,7 @@ class BatchVerbBuilder {
   }
 
   void _addToList(VerbBuilder builder) {
-    var command = builder.buildCommand();
-    var batchRequest = BatchRequest(_batchId, command);
-    this._batchRequests.add(batchRequest);
-    this._batchId++;
+    this._batchRequests.add(builder);
   }
 
   dynamic batch() {

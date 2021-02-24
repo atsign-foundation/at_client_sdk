@@ -22,6 +22,6 @@ void main() async {
     ..metadata = metadata;
   var publicPhoneValue = '+1 100 200 302';
   var updatePublicPhoneResult =
-  await atClient.put(publicPhoneKey, publicPhoneValue);
+      await atClient.put(publicPhoneKey, publicPhoneValue);
   print(updatePublicPhoneResult);
 }

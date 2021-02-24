@@ -738,20 +738,6 @@ class AtClientImpl implements AtClient {
     await encryptionService.encryptUnencryptedData();
   }
 
-  List<BatchRequest> _getBatchRequests(List<VerbBuilder> atVerbBuilders) {
-    var batchRequests = <BatchRequest>[];
-    var batchId = 1;
-    for (var atVerbBuilder in atVerbBuilders) {
-      var command = atVerbBuilder.buildCommand();
-      command = command.replaceAll('cached:', '');
-      command = VerbUtil.replaceNewline(command);
-      var batchRequest = BatchRequest(batchId, command);
-      batchRequests.add(batchRequest);
-      batchId++;
-    }
-    return batchRequests;
-  }
-
   dynamic _sendBatch(List<BatchRequest> requests) async {
     var command = 'batch:';
     command += jsonEncode(requests);
@@ -764,13 +750,40 @@ class AtClientImpl implements AtClient {
     return jsonDecode(verbResult);
   }
 
+  dynamic _runBatch(List<VerbBuilder> requests) async {
+    var batchResponse = Map();
+    List<BatchRequest> batchRequests = [];
+    var id = 0;
+    for (var request in requests) {
+      var verbResult;
+      if ((request is UpdateVerbBuilder) || (request is DeleteVerbBuilder)) {
+        verbResult = await _localSecondary.executeVerb(request);
+      } else {
+        verbResult = await _localSecondary.executeVerb(request);
+        if ((verbResult == null) || (verbResult == 'data:null')) {
+          var batchRequest = BatchRequest(id, request.buildCommand());
+          batchRequests.add(batchRequest);
+        }
+      }
+      if (verbResult != null) {
+        verbResult = verbResult.replaceFirst('data:', '');
+        batchResponse[id] = verbResult;
+      }
+    }
+    if (batchRequests.isNotEmpty) {
+      var result = _sendBatch(batchRequests);
+      batchResponse = _prepareBatchResponse(batchResponse, result);
+    }
+    return jsonEncode(batchResponse);
+  }
+
   BatchVerbBuilder buildBatchCommand() {
-    return BatchVerbBuilder(1, currentAtSign);
+    return BatchVerbBuilder(currentAtSign);
   }
 
   dynamic runBatch(BatchVerbBuilder batchVerbBuilder) async {
     var batchRequests = batchVerbBuilder.batch();
-    var batchResponse = await _sendBatch(batchRequests);
+    var batchResponse = await _runBatch(batchRequests);
     return batchResponse;
   }
 
@@ -840,5 +853,13 @@ class AtClientImpl implements AtClient {
       }
     }
     return builder;
+  }
+
+  Map _prepareBatchResponse(Map batchResponse, result) {
+    for (var entry in result) {
+      var batchId = entry['id'];
+      var serverResponse = entry['response'];
+      batchResponse[batchId] = serverResponse;
+    }
   }
 }
