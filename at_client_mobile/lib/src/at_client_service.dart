@@ -403,6 +403,16 @@ class AtClientService {
       ..key = AT_ENCRYPTION_SHARED_KEY;
     var oldSelfKeyValue = await atClient.get(atKey);
     if (oldSelfKeyValue == null || oldSelfKeyValue.value == null) {
+      //check and store selfEncryption key
+      var newSelfEncryptionKey =
+          await atClient.getLocalSecondary().getEncryptionSelfKey();
+      if (newSelfEncryptionKey == null || newSelfEncryptionKey == '') {
+        newSelfEncryptionKey =
+            await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
+        await atClient
+            .getLocalSecondary()
+            .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
+      }
       _logger.severe('self encryption key is null. Skipping migration');
       return;
     }
