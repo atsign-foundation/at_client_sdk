@@ -19,14 +19,13 @@ class EncryptionService {
 
   Future<String> encrypt(String key, String value, String sharedWith) async {
     var isSharedKeyAvailable = false;
-    var isSharedWithPublicKeyAvailable = true;
-
     var currentAtSignPublicKey =
         await localSecondary.getEncryptionPublicKey(currentAtSign);
     var currentAtSignPrivateKey =
         await localSecondary.getEncryptionPrivateKey();
     var sharedWithUser = sharedWith.replaceFirst('@', '');
-    // //1. Get/Generate AES key for sharedWith atsign
+
+    //1. Get/Generate AES key for sharedWith atsign
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = '${AT_ENCRYPTION_SHARED_KEY}.${sharedWithUser}'
       ..sharedBy = currentAtSign;
@@ -39,40 +38,27 @@ class EncryptionService {
       sharedKey = EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey);
     }
 
-    //2.a local lookup the cached public key of sharedWith atsign.
-    var sharedWithPublicKey;
-    var cachedPublicKeyBuilder = LLookupVerbBuilder()
-      ..atKey = 'publickey.${sharedWithUser}'
-      ..sharedBy = currentAtSign;
-    sharedWithPublicKey =
-        await localSecondary.executeVerb(cachedPublicKeyBuilder);
-    //2.b If null, Lookup public key of sharedWith atsign
-    if (sharedWithPublicKey == null || sharedWithPublicKey == 'data:null') {
-      isSharedWithPublicKeyAvailable = false;
-      var plookupBuilder = PLookupVerbBuilder()
-        ..atKey = 'publickey'
-        ..sharedBy = sharedWith;
-      sharedWithPublicKey =
-          await remoteSecondary.executeAndParse(plookupBuilder);
-    }
-    if (sharedWithPublicKey == 'null' || sharedWithPublicKey.isEmpty) {
-      throw KeyNotFoundException(
-          'public key not found. data sharing is forbidden.');
-    }
-    sharedWithPublicKey =
-        sharedWithPublicKey.toString().replaceAll('data:', '');
-    //3. Encrypt shared key with public key of sharedWith atsign and store
-    var encryptedSharedKey =
-        EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
-
+    //2. Verify if encryptedSharedKey for sharedWith atSign is available.
     var lookupEncryptionSharedKey = LLookupVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = currentAtSign
       ..atKey = AT_ENCRYPTION_SHARED_KEY;
     var result = await localSecondary.executeVerb(lookupEncryptionSharedKey);
 
-    if (result == null || result == 'data:null') {
-      // Setting ttr to cache the key
+    //3. Create the encryptedSharedKey if
+    // a. encryptedSharedKey not available (or)
+    // b. If the sharedKey is changed.
+    if (result == null || result == 'data:null' || !isSharedKeyAvailable) {
+      var sharedWithPublicKey;
+      try {
+        sharedWithPublicKey = await _getSharedWithPublicKey(sharedWithUser);
+      } on Exception {
+        rethrow;
+      }
+      //Encrypt shared key with public key of sharedWith atsign.
+      var encryptedSharedKey =
+          EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
+      // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atsign to cache the encryptedSharedKey.
       var updateSharedKeyBuilder = UpdateVerbBuilder()
         ..sharedWith = sharedWith
         ..sharedBy = currentAtSign
@@ -81,8 +67,10 @@ class EncryptionService {
         ..ttr = 3888000;
       await localSecondary.executeVerb(updateSharedKeyBuilder, sync: true);
     }
-    //4.a Store the shared key for future retrieval
+
+    //4. Store the sharedKey for future retrival.
     if (!isSharedKeyAvailable) {
+      // Encrypt the sharedKey with currentAtSign Public key and store it.
       var encryptedSharedKeyForCurrentAtSign =
           EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey);
 
@@ -93,14 +81,7 @@ class EncryptionService {
       await localSecondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder,
           sync: true);
     }
-    if (!isSharedWithPublicKeyAvailable) {
-      //4.b store sharedWith public key for future retrieval
-      var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
-        ..atKey = 'publickey.${sharedWithUser}'
-        ..sharedBy = currentAtSign
-        ..value = sharedWithPublicKey;
-      await localSecondary.executeVerb(sharedWithPublicKeyBuilder, sync: true);
-    }
+
     //5. Encrypt value using sharedKey
     var encryptedValue = EncryptionUtil.encryptValue(value, sharedKey);
     return encryptedValue;
@@ -192,7 +173,7 @@ class EncryptionService {
   /// returns decrypted value
   /// Used for local lookup @alice:phone@alice
   Future<String> decryptForSelf(String encryptedValue, bool isEncrypted) async {
-    if (!isEncrypted) {
+    if (!isEncrypted || encryptedValue == null || encryptedValue == 'null') {
       return encryptedValue;
     }
     try {
@@ -319,5 +300,42 @@ class EncryptionService {
     //#TODO remove before pushing to prod
     logger.finer('self encryption key: ${selfEncryptionKey}');
     return selfEncryptionKey;
+  }
+
+  /// Returns sharedWith atSign publicKey.
+  /// Throws [KeyNotFoundException] if sharedWith atSign publicKey is not found.
+  Future<String> _getSharedWithPublicKey(String sharedWithUser) async {
+    //a local lookup the cached public key of sharedWith atsign.
+    var sharedWithPublicKey;
+    var cachedPublicKeyBuilder = LLookupVerbBuilder()
+      ..atKey = 'publickey.${sharedWithUser}'
+      ..sharedBy = currentAtSign;
+    sharedWithPublicKey =
+        await localSecondary.executeVerb(cachedPublicKeyBuilder);
+    if (sharedWithPublicKey != null && sharedWithPublicKey != 'data:null') {
+      sharedWithPublicKey =
+          sharedWithPublicKey.toString().replaceAll('data:', '');
+      return sharedWithPublicKey;
+    }
+
+    //b Lookup public key of sharedWith atsign
+    var plookupBuilder = PLookupVerbBuilder()
+      ..atKey = 'publickey'
+      ..sharedBy = sharedWithUser;
+    sharedWithPublicKey = await remoteSecondary.executeAndParse(plookupBuilder);
+
+    // If SharedWith PublicKey is not found throw KeyNotFoundException.
+    if (sharedWithPublicKey == 'null' || sharedWithPublicKey.isEmpty) {
+      throw KeyNotFoundException(
+          'public key not found. data sharing is forbidden.');
+    }
+    //Cache the sharedWithPublicKey
+    var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
+      ..atKey = 'publickey.${sharedWithUser}'
+      ..sharedBy = currentAtSign
+      ..value = sharedWithPublicKey;
+    await localSecondary.executeVerb(sharedWithPublicKeyBuilder, sync: true);
+
+    return sharedWithPublicKey;
   }
 }
