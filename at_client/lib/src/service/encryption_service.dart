@@ -190,7 +190,7 @@ class EncryptionService {
   /// returns decrypted value
   /// Used for local lookup @alice:phone@alice
   Future<String> decryptForSelf(String encryptedValue, bool isEncrypted) async {
-    if (!isEncrypted || encryptedValue == null) {
+    if (!isEncrypted || encryptedValue == null || encryptedValue == 'null') {
       return encryptedValue;
     }
     try {
