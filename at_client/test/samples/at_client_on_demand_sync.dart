@@ -9,7 +9,8 @@ void main() async {
     await AtClientImpl.createClient(
         atSign, 'me', TestUtil.getAlicePreference());
     var atClient = await AtClientImpl.getClient(atSign);
-    await atClient.getSyncManager().init(atSign, preference, atClient.getRemoteSecondary(), atClient.getLocalSecondary());
+    await atClient.getSyncManager().init(atSign, preference,
+        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var result = await atClient.getSyncManager().isInSync();
     print('is in sync:${result}');
     await atClient.getSyncManager().sync();

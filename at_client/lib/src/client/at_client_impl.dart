@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/BatchVerbBuilder.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -50,6 +51,7 @@ class AtClientImpl implements AtClient {
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
   /// and the client preference.
   static Future<AtClient> getClient(String currentAtSign) async {
+    print('currentAtSign : $currentAtSign, keys: ${_atClientInstanceMap.keys}');
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
     }
@@ -428,68 +430,12 @@ class AtClientImpl implements AtClient {
 
   Future<bool> _put(String key, dynamic value,
       {String sharedWith, Metadata metadata}) async {
-    var updateKey = key;
-    if (metadata == null || (metadata != null && metadata.namespaceAware)) {
-      updateKey = _getKeyWithNamespace(key);
-    }
-    var operation = getOperation(value, metadata);
-    sharedWith = AtUtils.formatAtSign(sharedWith);
-    var builder = UpdateVerbBuilder()
-      ..atKey = updateKey
-      ..sharedBy = currentAtSign
-      ..sharedWith = sharedWith
-      ..value = value
-      ..operation = operation;
+    UpdateVerbBuilder builder = await prepareUpdateBuilder(key, value,
+        sharedWith: sharedWith, metadata: metadata);
 
-    if (metadata != null) {
-      builder.ttl = metadata.ttl;
-      builder.ttb = metadata.ttb;
-      builder.ttr = metadata.ttr;
-      builder.ccd = metadata.ccd;
-      builder.isBinary = metadata.isBinary;
-      builder.isEncrypted = metadata.isEncrypted;
-      builder.isPublic = metadata.isPublic;
-      if (metadata.isHidden) {
-        builder.atKey = '_' + updateKey;
-      }
-    }
-    if (value != null) {
-      if (sharedWith != null && sharedWith != currentAtSign) {
-        try {
-          builder.value =
-              await encryptionService.encrypt(key, value, sharedWith);
-        } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
-        }
-      } else if (!builder.isPublic &&
-          !builder.atKey.toString().startsWith('_')) {
-        builder.value = await encryptionService.encryptForSelf(key, value);
-        builder.isEncrypted = true;
-      }
-    }
     var isSyncRequired;
-    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-    if (SyncUtil.shouldSkipSync(updateKey)) {
+    if (SyncUtil.shouldSkipSync(builder.atKey)) {
       isSyncRequired = false;
-    }
-    //sign public data with private encryption key
-    if (metadata != null && metadata.isPublic) {
-      try {
-        var encryptionPrivateKey =
-            await _localSecondary.getEncryptionPrivateKey();
-        if (encryptionPrivateKey != null) {
-          logger.finer('signing public data for key:${key}');
-          builder.dataSignature =
-              encryptionService.signPublicData(encryptionPrivateKey, value);
-        }
-      } on Exception catch (e) {
-        logger.severe('Exception trying to sign public data:${e.toString()}');
-      }
     }
 
     var putResult;
@@ -518,6 +464,13 @@ class AtClientImpl implements AtClient {
     }
     return _put(atKey.key, value,
         sharedWith: atKey.sharedWith, metadata: atKey.metadata);
+  }
+
+  @override
+  Future<dynamic> runBatchCommand(List<VerbBuilder> atVerbBuilders) async {
+    var batchRequests = _getBatchRequests(atVerbBuilders);
+    var batchResponse = await _sendBatch(batchRequests);
+    return batchResponse;
   }
 
   @override
@@ -783,5 +736,130 @@ class AtClientImpl implements AtClient {
 
   Future<void> encryptUnEncryptedData() async {
     await encryptionService.encryptUnencryptedData();
+  }
+
+  dynamic _sendBatch(List<BatchRequest> requests) async {
+    var command = 'batch:';
+    command += jsonEncode(requests);
+    command += '\n';
+    var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
+    logger.finer('batch result:$verbResult');
+    if (verbResult != null) {
+      verbResult = verbResult.replaceFirst('data:', '');
+    }
+    return jsonDecode(verbResult);
+  }
+
+  dynamic _runBatch(List<VerbBuilder> requests) async {
+    var batchResponse = Map();
+    List<BatchRequest> batchRequests = [];
+    var id = 0;
+    for (var request in requests) {
+      var verbResult;
+      if ((request is UpdateVerbBuilder) || (request is DeleteVerbBuilder)) {
+        verbResult = await _localSecondary.executeVerb(request);
+      } else {
+        verbResult = await _localSecondary.executeVerb(request);
+        if ((verbResult == null) || (verbResult == 'data:null')) {
+          var batchRequest = BatchRequest(id, request.buildCommand());
+          batchRequests.add(batchRequest);
+        }
+      }
+      if (verbResult != null) {
+        verbResult = verbResult.replaceFirst('data:', '');
+        batchResponse[id] = verbResult;
+      }
+    }
+    if (batchRequests.isNotEmpty) {
+      var result = _sendBatch(batchRequests);
+      batchResponse = _prepareBatchResponse(batchResponse, result);
+    }
+    return jsonEncode(batchResponse);
+  }
+
+  BatchVerbBuilder buildBatchCommand() {
+    return BatchVerbBuilder(currentAtSign);
+  }
+
+  dynamic runBatch(BatchVerbBuilder batchVerbBuilder) async {
+    var batchRequests = batchVerbBuilder.batch();
+    var batchResponse = await _runBatch(batchRequests);
+    return batchResponse;
+  }
+
+  Future<VerbBuilder> prepareUpdateBuilder(String key, dynamic value,
+      {String sharedWith, Metadata metadata}) async {
+    var updateKey = key;
+    if (metadata == null || (metadata != null && metadata.namespaceAware)) {
+      updateKey = _getKeyWithNamespace(key);
+    }
+    var operation = getOperation(value, metadata);
+    sharedWith = AtUtils.formatAtSign(sharedWith);
+    var builder = UpdateVerbBuilder()
+      ..atKey = updateKey
+      ..sharedBy = currentAtSign
+      ..sharedWith = sharedWith
+      ..value = value
+      ..operation = operation;
+
+    if (metadata != null) {
+      builder.ttl = metadata.ttl;
+      builder.ttb = metadata.ttb;
+      builder.ttr = metadata.ttr;
+      builder.ccd = metadata.ccd;
+      builder.isBinary = metadata.isBinary;
+      builder.isEncrypted = metadata.isEncrypted;
+      builder.isPublic = metadata.isPublic;
+      if (metadata.isHidden) {
+        builder.atKey = '_' + updateKey;
+      }
+    }
+    if (value != null) {
+      if (sharedWith != null && sharedWith != currentAtSign) {
+        try {
+          builder.value =
+              await encryptionService.encrypt(key, value, sharedWith);
+        } on KeyNotFoundException catch (e) {
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(
+              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+        }
+      } else if (!builder.isPublic &&
+          !builder.atKey.toString().startsWith('_')) {
+        builder.value = await encryptionService.encryptForSelf(key, value);
+        builder.isEncrypted = true;
+      }
+    }
+    var isSyncRequired;
+    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
+      builder.sharedBy = null;
+    }
+    if (SyncUtil.shouldSkipSync(updateKey)) {
+      isSyncRequired = false;
+    }
+    //sign public data with private encryption key
+    if (metadata != null && metadata.isPublic) {
+      try {
+        var encryptionPrivateKey =
+            await _localSecondary.getEncryptionPrivateKey();
+        if (encryptionPrivateKey != null) {
+          logger.finer('signing public data for key:${key}');
+          builder.dataSignature =
+              encryptionService.signPublicData(encryptionPrivateKey, value);
+        }
+      } on Exception catch (e) {
+        logger.severe('Exception trying to sign public data:${e.toString()}');
+      }
+    }
+    return builder;
+  }
+
+  Map _prepareBatchResponse(Map batchResponse, result) {
+    for (var entry in result) {
+      var batchId = entry['id'];
+      var serverResponse = entry['response'];
+      batchResponse[batchId] = serverResponse;
+    }
   }
 }
