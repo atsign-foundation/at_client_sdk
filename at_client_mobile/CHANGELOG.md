@@ -12,3 +12,5 @@
 - Added automatic refresh of monitor connection
 ## 1.0.0+6
 - Notification sub system changes
+## 1.0.0+7
+- Self Encryption changes
