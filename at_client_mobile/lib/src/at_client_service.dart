@@ -326,6 +326,8 @@ class AtClientService {
     } on Exception catch (e) {
       _logger
           .severe('Exception while migrating old self keys: ${e.toString()}');
+    } on Error catch (e) {
+      _logger.severe('Error migrating old self keys : ${e.toString()}');
     }
     return result;
   }
@@ -335,9 +337,6 @@ class AtClientService {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
         await _keyChainManager.getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
-    _logger.finer('local encryption public key:${localEncryptionPublicKey}');
-    _logger.finer(
-        'server encryption public key get result:${serverEncryptionPublicKey}');
     if (_isNullOrEmpty(localEncryptionPublicKey) &&
             _isNullOrEmpty(serverEncryptionPublicKey) ||
         (_isNullOrEmpty(serverEncryptionPublicKey) &&
@@ -420,9 +419,6 @@ class AtClientService {
     //decrypt the oldSelfKey with private key
     var newSelfEncryptionKey =
         await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-    _logger
-        .finer('old self encryption key(encrypted):${oldSelfKeyValue.value}');
-    _logger.finer('new self encryption key:${newSelfEncryptionKey}');
     await atClient
         .getLocalSecondary()
         .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
@@ -430,7 +426,6 @@ class AtClientService {
         await atClient.getLocalSecondary().getEncryptionPrivateKey();
     var decryptedSelfKey =
         EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey);
-    _logger.finer('decryptedSelfKey:${decryptedSelfKey}');
     var selfKeys = await atClient.getAtKeys(
         sharedWith: currentAtSign, sharedBy: currentAtSign);
     await Future.forEach(
@@ -487,7 +482,6 @@ class AtClientService {
       //2. decrypt the value
       var decryptedValue =
           EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
-      _logger.finer('decryptedValue:${decryptedValue}');
       if (atKey.key.startsWith('atconnections')) {
         atKey.metadata..namespaceAware = false;
         atKey.key = '${atKey.key}.${atKey.namespace}';
@@ -498,6 +492,9 @@ class AtClientService {
     } on Exception catch (e) {
       _logger.severe(
           'Exception migrating key : ${atKey.key} exception: ${e.toString()}');
+    } on Error catch (e) {
+      _logger
+          .severe('Error migrating key : ${atKey.key} error: ${e.toString()}');
     }
   }
 
