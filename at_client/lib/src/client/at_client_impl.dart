@@ -1,6 +1,6 @@
-import 'dart:io';
-import 'package:base2e15/base2e15.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'package:at_client/at_client.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart';
 import 'package:cron/cron.dart';
@@ -15,20 +15,23 @@ import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
+import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/util/sync_util.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_commons/src/keystore/at_key.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_utils.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
-import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
+import 'package:at_commons/src/keystore/at_key.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
+import 'package:base2e15/base2e15.dart';
+import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 //import 'package:cron/cron.dart';
 
 /// Implementation of [AtClient] interface
@@ -528,8 +531,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> notify(
-      AtKey atKey, String value, OperationEnum operation) async {
+  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
+      {MessageTypeEnum messageType,
+      PriorityEnum priority,
+      StrategyEnum strategy,
+      int latestN,
+      String notifier}) async {
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
@@ -542,7 +549,12 @@ class AtClientImpl implements AtClient {
       ..sharedBy = currentAtSign
       ..sharedWith = sharedWith
       ..value = value
-      ..operation = operation;
+      ..operation = operation
+      ..messageType = messageType
+      ..priority = priority
+      ..strategy = strategy
+      ..latestN = latestN
+      ..notifier = notifier;
     if (value != null) {
       if (sharedWith != null && sharedWith != currentAtSign) {
         try {
@@ -576,6 +588,41 @@ class AtClientImpl implements AtClient {
     var notifyResult =
         await getSecondary().executeVerb(builder, sync: isSyncRequired);
     return notifyResult != null;
+  }
+
+  @override
+  Future<String> notifyAll(
+      AtKey atKey, String value, OperationEnum operation) async {
+    var returnMap = {};
+    var sharedWithList = jsonDecode(atKey.sharedWith);
+    for (var sharedWith in sharedWithList) {
+      atKey.sharedWith = sharedWith;
+      var result = await notify(atKey, value, operation);
+      returnMap.putIfAbsent(sharedWith, () => result);
+    }
+    return jsonEncode(returnMap);
+  }
+
+  @override
+  Future<String> notifyStatus(String notificationId) async {
+    var builder = NotifyStatusVerbBuilder()..notificationId = notificationId;
+    var notifyStatus = await getRemoteSecondary().executeVerb(builder);
+    return notifyStatus;
+  }
+
+  @override
+  Future<String> notifyList(
+      {String fromDate, String toDate, String regex}) async {
+    try {
+      var builder = NotifyListVerbBuilder()
+        ..fromDate = fromDate
+        ..toDate = toDate
+        ..regex = regex;
+      var notifyList = await getRemoteSecondary().executeVerb(builder);
+      return notifyList;
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    }
   }
 
   @override
