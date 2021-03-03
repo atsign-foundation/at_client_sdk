@@ -14,3 +14,5 @@
 - Added automatic refresh of monitor connection
 ## 1.0.1+6
 - Notification sub system introduced
+## 1.0.1+7
+- Self keys migration issue fix

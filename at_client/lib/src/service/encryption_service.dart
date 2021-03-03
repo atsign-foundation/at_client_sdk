@@ -187,7 +187,10 @@ class EncryptionService {
           EncryptionUtil.decryptValue(encryptedValue, selfEncryptionKey);
       return decryptedValue;
     } on Exception catch (e) {
-      print('Exception while decrypting value: ${e.toString()}');
+      logger.severe('Exception while decrypting value: ${e.toString()}');
+      return null;
+    } on Error catch (e) {
+      logger.severe('Exception while decrypting value: ${e.toString()}');
       return null;
     }
   }
