@@ -189,7 +189,7 @@ class EncryptionService {
     } on Exception catch (e) {
       logger.severe('Exception while decrypting value: ${e.toString()}');
       return null;
-    } on Error catch(e) {
+    } on Error catch (e) {
       logger.severe('Exception while decrypting value: ${e.toString()}');
       return null;
     }
