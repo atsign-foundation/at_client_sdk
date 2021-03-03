@@ -102,9 +102,14 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<OutboundConnection> startMonitor(
-      String privateKey, Function notificationCallback) async {
+      String privateKey, Function notificationCallback,
+      {String regex}) async {
+    var monitorVerbBuilder = MonitorVerbBuilder();
+    if (regex != null) {
+      monitorVerbBuilder.regex = regex;
+    }
     return await _remoteSecondary.monitor(
-        MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
+        monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
   }
 
   @override
@@ -751,7 +756,8 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
-  Future<AtStreamResponse> stream(String sharedWith, String filePath) async {
+  Future<AtStreamResponse> stream(String sharedWith, String filePath,
+      {String namespace}) async {
     var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
     var file = File(filePath);
@@ -759,9 +765,9 @@ class AtClientImpl implements AtClient {
     var fileName = basename(filePath);
     fileName = base64.encode(utf8.encode(fileName));
     var encryptedData =
-    await _encryptionService.encryptStream(data, sharedWith);
+        await _encryptionService.encryptStream(data, sharedWith);
     var command =
-        'stream:init${sharedWith} ${streamId} ${fileName} ${encryptedData.length}\n';
+        'stream:init${sharedWith} namespace:$namespace ${streamId} ${fileName} ${encryptedData.length}\n';
     logger.finer('sending stream init:${command}');
     var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);

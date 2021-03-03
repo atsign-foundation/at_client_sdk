@@ -429,12 +429,13 @@ class AtClientService {
             atKey, decryptedSelfKey, newSelfEncryptionKey, currentAtSign));
 
     await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
-    //delete old self encryption key from server
-    var builder = DeleteVerbBuilder()
-      ..sharedBy = currentAtSign
-      ..sharedWith = currentAtSign
-      ..atKey = AT_ENCRYPTION_SHARED_KEY;
-    await atClient.getLocalSecondary().executeVerb(builder, sync: true);
+//    //delete old self encryption key from server
+    // commenting since we need old self encryption key
+//    var builder = DeleteVerbBuilder()
+//      ..sharedBy = currentAtSign
+//      ..sharedWith = currentAtSign
+//      ..atKey = AT_ENCRYPTION_SHARED_KEY;
+//    await atClient.getLocalSecondary().executeVerb(builder, sync: true);
     _logger.finer(
         'self keys got migrated. New aes key:${await _keyChainManager.getSelfEncryptionAESKey(currentAtSign)}');
   }
@@ -488,6 +489,8 @@ class AtClientService {
     } on Exception catch (e) {
       _logger.severe(
           'Exception migrating key : ${atKey.key} exception: ${e.toString()}');
+    } on Error catch(e) {
+      _logger.severe('Error migrating key : ${atKey.key} error: ${e.toString()}');
     }
   }
 
