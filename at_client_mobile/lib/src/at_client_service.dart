@@ -387,13 +387,13 @@ class AtClientService {
   // @alice:shared_key@alice - previously this key was generated inside encryption service
   // and encrypted with public key. Now we use a single aes key to encrypt self keys as well as key pairs in key file
   void _migrateOldSelfKeys() async {
+    _logger.finer('start migrate self keys');
     var currentAtSign = atClient.currentAtSign;
     var isMigrated =
         await _keyChainManager.getValue(currentAtSign, 'selfKeysMigrated');
     if (isMigrated == 'true') {
       return;
     }
-    //#TODO remove logger before pushing to prod
     //1. local lookup up self encryption key
     var metadata = Metadata()..namespaceAware = false;
     var atKey = AtKey()
@@ -410,9 +410,6 @@ class AtClientService {
     //decrypt the oldSelfKey with private key
     var newSelfEncryptionKey =
         await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-    _logger
-        .finer('old self encryption key(encrypted):${oldSelfKeyValue.value}');
-    _logger.finer('new self encryption key:${newSelfEncryptionKey}');
     await atClient
         .getLocalSecondary()
         .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
@@ -420,7 +417,6 @@ class AtClientService {
         await atClient.getLocalSecondary().getEncryptionPrivateKey();
     var decryptedSelfKey =
         EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey);
-    _logger.finer('decryptedSelfKey:${decryptedSelfKey}');
     var selfKeys = await atClient.getAtKeys(
         sharedWith: currentAtSign, sharedBy: currentAtSign);
     await Future.forEach(
@@ -429,14 +425,14 @@ class AtClientService {
             atKey, decryptedSelfKey, newSelfEncryptionKey, currentAtSign));
 
     await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
+    _logger.finer('end migrate self keys');
     //delete old self encryption key from server
-    var builder = DeleteVerbBuilder()
-      ..sharedBy = currentAtSign
-      ..sharedWith = currentAtSign
-      ..atKey = AT_ENCRYPTION_SHARED_KEY;
-    await atClient.getLocalSecondary().executeVerb(builder, sync: true);
-    _logger.finer(
-        'self keys got migrated. New aes key:${await _keyChainManager.getSelfEncryptionAESKey(currentAtSign)}');
+    /// commenting since we need old self key for migrating across apps
+//    var builder = DeleteVerbBuilder()
+//      ..sharedBy = currentAtSign
+//      ..sharedWith = currentAtSign
+//      ..atKey = AT_ENCRYPTION_SHARED_KEY;
+//    await atClient.getLocalSecondary().executeVerb(builder, sync: true);
   }
 
   void _encryptOldSelfKey(
@@ -457,7 +453,6 @@ class AtClientService {
       return;
     }
     try {
-      //#TODO remove the logger statements before pushing to prod
       //1. get the existing value encrypted with previous key
       var llookupVerbBuilder = LLookupVerbBuilder()
         ..sharedBy = atKey.sharedBy
