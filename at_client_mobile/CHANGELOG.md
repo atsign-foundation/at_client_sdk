@@ -14,3 +14,5 @@
 - Notification sub system changes
 ## 1.0.0+7
 - Self Encryption changes
+## 1.0.0+8  
+- Self keys migration issue fix
