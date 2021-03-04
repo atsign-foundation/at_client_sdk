@@ -102,9 +102,14 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<OutboundConnection> startMonitor(
-      String privateKey, Function notificationCallback) async {
+      String privateKey, Function notificationCallback,
+      {String regex}) async {
+    var monitorVerbBuilder = MonitorVerbBuilder();
+    if (regex != null) {
+      monitorVerbBuilder.regex = regex;
+    }
     return await _remoteSecondary.monitor(
-        MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
+        monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
   }
 
   @override
