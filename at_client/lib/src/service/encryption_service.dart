@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/exception/error_codes.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -184,14 +185,20 @@ class EncryptionService {
       selfEncryptionKey = selfEncryptionKey.toString().replaceAll('data:', '');
       // decrypt value using self encryption key
       var decryptedValue =
-          EncryptionUtil.decryptValue(encryptedValue, selfEncryptionKey);
+      EncryptionUtil.decryptValue(encryptedValue, selfEncryptionKey);
       return decryptedValue;
-    } on Exception catch (e) {
-      logger.severe('Exception while decrypting value: ${e.toString()}');
-      return null;
-    } on Error catch(e) {
-      logger.severe('Exception while decrypting value: ${e.toString()}');
-      return null;
+    } on Exception {
+      var error_code = client_error_codes['InvalidDecryptionKeyException'];
+      throw AtClientException(error_code, client_error_description[error_code]);
+    } on Error {
+      try {
+        var decryptedValue = _decryptWithSelfEncryptionKey(encryptedValue);
+        return decryptedValue;
+      } on Exception {
+        var error_code = client_error_codes['InvalidDecryptionKeyException'];
+        throw AtClientException(
+            error_code, client_error_description[error_code]);
+      }
     }
   }
 
@@ -340,5 +347,40 @@ class EncryptionService {
     await localSecondary.executeVerb(sharedWithPublicKeyBuilder, sync: true);
 
     return sharedWithPublicKey;
+  }
+
+  Future<String> _decryptWithSelfEncryptionKey(String encryptedValue) async {
+    try {
+      // local lookup the cached-shared key, if null lookup shared key
+      var encryptedAESKey = await _getEncryptedAESKey();
+      if (encryptedAESKey == null || encryptedAESKey == 'data:null') {
+        return encryptedValue;
+      }
+      encryptedAESKey = encryptedAESKey.toString().replaceAll('data:', '');
+      // decrypt shared key using private key
+      var currentAtSignPrivateKey =
+      await localSecondary.getEncryptionPrivateKey();
+      var sharedKey =
+      EncryptionUtil.decryptKey(encryptedAESKey, currentAtSignPrivateKey);
+
+      // decrypt value using shared key
+      var decryptedValue =
+      EncryptionUtil.decryptValue(encryptedValue, sharedKey);
+      return decryptedValue;
+    } on Exception {
+      throw InvalidDecryptionKeyException('Invalid decryption key');
+    }
+  }
+
+  Future<String> _getEncryptedAESKey() async {
+    var llookupVerbBuilder = LLookupVerbBuilder()
+      ..atKey = '${AT_ENCRYPTION_SHARED_KEY}'
+      ..sharedWith = currentAtSign
+      ..sharedBy = currentAtSign;
+    var encryptedAESKey = await localSecondary.executeVerb(llookupVerbBuilder);
+    if (encryptedAESKey == null || encryptedAESKey == 'data:null') {
+      encryptedAESKey = await remoteSecondary.executeVerb(llookupVerbBuilder);
+    }
+    return encryptedAESKey;
   }
 }
