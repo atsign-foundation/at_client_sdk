@@ -327,6 +327,9 @@ class SyncManager {
       if (metaData[PUBLIC_DATA_SIGNATURE] != null) {
         builder.dataSignature = metaData[PUBLIC_DATA_SIGNATURE];
       }
+      if (metaData[SHARED_KEY_STATUS] != null) {
+        builder.sharedKeyStatus = metaData[SHARED_KEY_STATUS];
+      }
       if (metaData[IS_BINARY] != null) {
         (metaData[IS_BINARY].toLowerCase() == 'true')
             ? builder.isBinary = true

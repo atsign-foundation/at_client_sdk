@@ -745,6 +745,7 @@ class AtClientImpl implements AtClient {
     metadata.isBinary = metadataMap[IS_BINARY];
     metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
+    metadata.sharedKeyStatus = metadataMap[SHARED_KEY_STATUS];
     if (isPublic) {
       metadata.isPublic = isPublic;
     }

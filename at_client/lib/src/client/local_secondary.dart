@@ -103,7 +103,9 @@ class LocalSecondary implements Secondary {
             ..ttr = builder.ttr
             ..ccd = builder.ccd
             ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted;
+            ..isEncrypted = builder.isEncrypted
+            ..dataSignature = builder.dataSignature
+            ..sharedKeyStatus = builder.sharedKeyStatus;
           var atMetadata = AtMetadataAdapter(metadata);
           updateResult = await keyStore.putMeta(updateKey, atMetadata);
           break;
@@ -118,7 +120,8 @@ class LocalSecondary implements Secondary {
             ..ccd = builder.ccd
             ..isBinary = builder.isBinary
             ..isEncrypted = builder.isEncrypted
-            ..dataSignature = builder.dataSignature;
+            ..dataSignature = builder.dataSignature
+            ..sharedKeyStatus = builder.sharedKeyStatus;
           var atMetadata = AtMetadataAdapter(metadata);
           updateResult = await keyStore.putAll(updateKey, atData, atMetadata);
           break;
