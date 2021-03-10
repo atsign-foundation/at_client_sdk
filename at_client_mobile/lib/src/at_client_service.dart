@@ -326,6 +326,8 @@ class AtClientService {
     } on Exception catch (e) {
       _logger
           .severe('Exception while migrating old self keys: ${e.toString()}');
+    } on Error catch (e) {
+      _logger.severe('Error migrating old self keys : ${e.toString()}');
     }
     return result;
   }
@@ -335,9 +337,6 @@ class AtClientService {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
         await _keyChainManager.getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
-    _logger.finer('local encryption public key:${localEncryptionPublicKey}');
-    _logger.finer(
-        'server encryption public key get result:${serverEncryptionPublicKey}');
     if (_isNullOrEmpty(localEncryptionPublicKey) &&
             _isNullOrEmpty(serverEncryptionPublicKey) ||
         (_isNullOrEmpty(serverEncryptionPublicKey) &&
@@ -387,13 +386,13 @@ class AtClientService {
   // @alice:shared_key@alice - previously this key was generated inside encryption service
   // and encrypted with public key. Now we use a single aes key to encrypt self keys as well as key pairs in key file
   void _migrateOldSelfKeys() async {
+    _logger.finer('start migrate self keys');
     var currentAtSign = atClient.currentAtSign;
     var isMigrated =
         await _keyChainManager.getValue(currentAtSign, 'selfKeysMigrated');
     if (isMigrated == 'true') {
       return;
     }
-    //#TODO remove logger before pushing to prod
     //1. local lookup up self encryption key
     var metadata = Metadata()..namespaceAware = false;
     var atKey = AtKey()
@@ -403,6 +402,16 @@ class AtClientService {
       ..key = AT_ENCRYPTION_SHARED_KEY;
     var oldSelfKeyValue = await atClient.get(atKey);
     if (oldSelfKeyValue == null || oldSelfKeyValue.value == null) {
+      //check and store selfEncryption key
+      var newSelfEncryptionKey =
+          await atClient.getLocalSecondary().getEncryptionSelfKey();
+      if (newSelfEncryptionKey == null || newSelfEncryptionKey == '') {
+        newSelfEncryptionKey =
+            await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
+        await atClient
+            .getLocalSecondary()
+            .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
+      }
       _logger.severe('self encryption key is null. Skipping migration');
       return;
     }
@@ -410,9 +419,6 @@ class AtClientService {
     //decrypt the oldSelfKey with private key
     var newSelfEncryptionKey =
         await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-    _logger
-        .finer('old self encryption key(encrypted):${oldSelfKeyValue.value}');
-    _logger.finer('new self encryption key:${newSelfEncryptionKey}');
     await atClient
         .getLocalSecondary()
         .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
@@ -420,24 +426,22 @@ class AtClientService {
         await atClient.getLocalSecondary().getEncryptionPrivateKey();
     var decryptedSelfKey =
         EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey);
-    _logger.finer('decryptedSelfKey:${decryptedSelfKey}');
     var selfKeys = await atClient.getAtKeys(
-        sharedWith: currentAtSign, sharedBy: currentAtSign);
+        sharedWith: currentAtSign, regex: atClient.preference.syncRegex);
     await Future.forEach(
         selfKeys,
         (atKey) => _encryptOldSelfKey(
             atKey, decryptedSelfKey, newSelfEncryptionKey, currentAtSign));
 
     await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
-//    //delete old self encryption key from server
-    // commenting since we need old self encryption key
+    _logger.finer('end migrate self keys');
+    //delete old self encryption key from server
+    /// commenting since we need old self key for migrating across apps
 //    var builder = DeleteVerbBuilder()
 //      ..sharedBy = currentAtSign
 //      ..sharedWith = currentAtSign
 //      ..atKey = AT_ENCRYPTION_SHARED_KEY;
 //    await atClient.getLocalSecondary().executeVerb(builder, sync: true);
-    _logger.finer(
-        'self keys got migrated. New aes key:${await _keyChainManager.getSelfEncryptionAESKey(currentAtSign)}');
   }
 
   void _encryptOldSelfKey(
@@ -458,7 +462,6 @@ class AtClientService {
       return;
     }
     try {
-      //#TODO remove the logger statements before pushing to prod
       //1. get the existing value encrypted with previous key
       var llookupVerbBuilder = LLookupVerbBuilder()
         ..sharedBy = atKey.sharedBy
@@ -478,7 +481,6 @@ class AtClientService {
       //2. decrypt the value
       var decryptedValue =
           EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
-      _logger.finer('decryptedValue:${decryptedValue}');
       if (atKey.key.startsWith('atconnections')) {
         atKey.metadata..namespaceAware = false;
         atKey.key = '${atKey.key}.${atKey.namespace}';
@@ -489,8 +491,9 @@ class AtClientService {
     } on Exception catch (e) {
       _logger.severe(
           'Exception migrating key : ${atKey.key} exception: ${e.toString()}');
-    } on Error catch(e) {
-      _logger.severe('Error migrating key : ${atKey.key} error: ${e.toString()}');
+    } on Error catch (e) {
+      _logger
+          .severe('Error migrating key : ${atKey.key} error: ${e.toString()}');
     }
   }
 

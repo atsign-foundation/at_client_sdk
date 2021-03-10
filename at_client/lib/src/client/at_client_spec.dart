@@ -231,7 +231,12 @@ abstract class AtClient {
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
   ///```
-  Future<bool> notify(AtKey key, String value, OperationEnum operation);
+  Future<bool> notify(AtKey key, String value, OperationEnum operation,
+      {MessageTypeEnum messageType,
+      PriorityEnum priority,
+      StrategyEnum strategy,
+      int latestN,
+      String notifier});
 
   /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
   /// ```
@@ -278,5 +283,6 @@ abstract class AtClient {
 
   /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
   /// the notification on the client.
+  /// Optionally a regular expression and be passed to filter the notifications
   void startMonitor(String privateKey, Function acceptStream, {String regex});
 }
