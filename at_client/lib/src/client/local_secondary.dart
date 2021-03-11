@@ -1,17 +1,18 @@
 import 'dart:convert';
+import 'dart:isolate';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_spec/at_persistence_spec.dart';
-import 'dart:isolate';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
@@ -173,10 +174,12 @@ class LocalSecondary implements Secondary {
   Future<String> _delete(DeleteVerbBuilder builder) async {
     try {
       var deleteKey = '';
+      if (builder.isCached) {
+        deleteKey += 'cached:';
+      }
       if (builder.isPublic) {
         deleteKey += 'public:';
       }
-
       if (builder.sharedWith != null && builder.sharedWith.isNotEmpty) {
         deleteKey += '${AtUtils.formatAtSign(builder.sharedWith)}:';
       }
