@@ -103,14 +103,19 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  void startMonitor(String privateKey, Function notificationCallback) async {
+  void startMonitor(String privateKey, Function notificationCallback,
+      {String regex}) async {
+    var monitorVerbBuilder = MonitorVerbBuilder();
+    if (regex != null) {
+      monitorVerbBuilder.regex = regex;
+    }
     _monitorConnection = await _remoteSecondary.monitor(
-        MonitorVerbBuilder().buildCommand(), notificationCallback, privateKey);
+        monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
     var cron = Cron();
     cron.schedule(Schedule.parse('*/5 * * * *'), () async {
       if (_monitorConnection == null || _monitorConnection.isInValid()) {
         _monitorConnection = await _remoteSecondary.monitor(
-            MonitorVerbBuilder().buildCommand(),
+            monitorVerbBuilder.buildCommand(),
             notificationCallback,
             privateKey);
       }
