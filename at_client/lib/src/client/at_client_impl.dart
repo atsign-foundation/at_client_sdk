@@ -46,6 +46,9 @@ class AtClientImpl implements AtClient {
   OutboundConnection _monitorConnection;
 
   EncryptionService _encryptionService;
+
+  EncryptionService get encryptionService => _encryptionService;
+
   var logger = AtSignLogger('AtClientImpl');
   static final Map _atClientInstanceMap = <String, AtClient>{};
 
