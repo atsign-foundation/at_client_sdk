@@ -293,6 +293,7 @@ class AtClientService {
   Future<bool> onboard(
       {AtClientPreference atClientPreference, String atsign}) async {
     _atClientAuthenticator = AtClientAuthenticator();
+    await _keyChainManager.migrateToFlutterKeyStorage();
     if (atsign == null || atsign == '') {
       atsign = await _keyChainManager.getAtSign();
     } else {

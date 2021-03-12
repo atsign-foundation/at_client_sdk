@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
 import 'package:crypton/crypton.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
@@ -17,16 +20,20 @@ class KeyChainManager {
     return _singleton;
   }
 
+  final _storage = FlutterSecureStorage();
   Future<List<int>> getHiveSecretFromKeychain(String atsign) async {
     assert(atsign != null && atsign.isNotEmpty);
     List<int> secretAsUint8List;
     try {
-      var hiveKey = atsign + '_hive_secret';
-      var hiveSecretString = await FlutterKeychain.get(key: hiveKey);
+      // var hiveKey = atsign + '_hive_secret';
+      // var hiveSecretString = await FlutterKeychain.get(key: hiveKey);
+      var hiveSecretString = await getValue(atsign, KEYCHAIN_HIVE_SECRET);
+
       if (hiveSecretString == null) {
         secretAsUint8List = _generatePersistenceSecret();
         hiveSecretString = String.fromCharCodes(secretAsUint8List);
-        await FlutterKeychain.put(key: hiveKey, value: hiveSecretString);
+        // await FlutterKeychain.put(key: hiveKey, value: hiveSecretString);
+        await putValue(atsign, KEYCHAIN_HIVE_SECRET, hiveSecretString);
       } else {
         secretAsUint8List = Uint8List.fromList(hiveSecretString.codeUnits);
       }
@@ -52,7 +59,9 @@ class KeyChainManager {
     var secret;
     try {
       assert(atsign != null && atsign != '');
-      var secretString = await FlutterKeychain.get(key: atsign + '_secret');
+      // var secretString = await FlutterKeychain.get(key: atsign + '_secret');
+      var secretString = await getValue(atsign, KEYCHAIN_SECRET);
+
       secret = secretString;
     } on Exception catch (e) {
       _logger.severe('Exception in getSecretFromKeychain :${e.toString()}');
@@ -91,8 +100,10 @@ class KeyChainManager {
   Future<String> getValue(String atsign, String key) async {
     var value;
     try {
-      assert(atsign != null && atsign != '');
-      value = await FlutterKeychain.get(key: atsign + ':' + key);
+      // assert(atsign != null && atsign != '');
+      key = _formKey(atsign: atsign, key: key);
+      // value = await FlutterKeychain.get(key: key);
+      value = await _storage.read(key: key);
     } on Exception catch (e) {
       _logger.severe(
           'flutter keychain - exception in get value for ${key} :${e.toString()}');
@@ -102,8 +113,10 @@ class KeyChainManager {
 
   Future<String> putValue(String atsign, String key, String value) async {
     try {
-      assert(atsign != null && atsign != '');
-      await FlutterKeychain.put(key: atsign + ':' + key, value: value);
+      // assert(atsign != null && atsign != '');
+      key = _formKey(atsign: atsign, key: key);
+      // await FlutterKeychain.put(key: atsign + ':' + key, value: value);
+      await _storage.write(key: key, value: value);
     } on Exception catch (e) {
       _logger.severe(
           'flutter keychain - exception in put value for ${key} :${e.toString()}');
@@ -119,8 +132,8 @@ class KeyChainManager {
       atSign = atSign.trim().toLowerCase().replaceAll(' ', '');
       if (secret != null) {
         secret = secret.trim().toLowerCase().replaceAll(' ', '');
-        await FlutterKeychain.put(
-            key: atSign + ':' + KEYCHAIN_SECRET, value: secret);
+        await putValue(atSign, KEYCHAIN_SECRET, secret);
+        // FlutterKeychain.put(key: atSign + ':' + KEYCHAIN_SECRET, value: secret);
       }
       await _saveAtSignToKeychain(atSign);
       await storePkamKeysToKeychain(atSign,
@@ -139,14 +152,17 @@ class KeyChainManager {
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
     try {
       if (privateKey != null) {
-        await FlutterKeychain.put(
-            key: atsign + ':' + KEYCHAIN_PKAM_PRIVATE_KEY,
-            value: privateKey.toString());
+        await putValue(
+            atsign, KEYCHAIN_PKAM_PRIVATE_KEY, privateKey.toString());
+        // await FlutterKeychain.put(
+        //     key: atsign + ':' + KEYCHAIN_PKAM_PRIVATE_KEY,
+        //     value: privateKey.toString());
       }
       if (publicKey != null) {
-        await FlutterKeychain.put(
-            key: atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY,
-            value: publicKey.toString());
+        await putValue(atsign, KEYCHAIN_PKAM_PUBLIC_KEY, publicKey.toString());
+        // await FlutterKeychain.put(
+        //     key: atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY,
+        //     value: publicKey.toString());
       }
     } on Exception catch (exception) {
       _logger.severe(
@@ -213,13 +229,16 @@ class KeyChainManager {
 
   Future<void> _storeAtsign(Map<String, bool> atsignMap) async {
     var value = jsonEncode(atsignMap);
-    await FlutterKeychain.put(key: '@atsign', value: value);
+    await putValue(null, KEYCHAIN_ATSIGN, value);
+    // await FlutterKeychain.put(key: KEYCHAIN_ATSIGN, value: value);
   }
 
   Future<Map<String, bool>> _getAtSigMap() async {
     var atsignMap = <String, bool>{};
     var atsignSecondMap = <String, bool>{};
-    var value = await FlutterKeychain.get(key: '@atsign');
+    // var value = await FlutterKeychain.get(key: '@atsign');
+    var value = await getValue(null, KEYCHAIN_ATSIGN);
+
     if (value != null && value.isNotEmpty) {
       if (!value.contains(':')) {
         atsignMap[value] = true;
@@ -257,8 +276,9 @@ class KeyChainManager {
       atsignMap[activeAtsign] = false;
     }
     atsignMap[atsign] = true;
-    var value = jsonEncode(atsignMap);
-    await FlutterKeychain.put(key: '@atsign', value: value);
+    // var value = jsonEncode(atsignMap);
+    await _storeAtsign(atsignMap);
+    // await FlutterKeychain.put(key: '@atsign', value: value);
     return true;
   }
 
@@ -276,8 +296,10 @@ class KeyChainManager {
     if (isDeletedActiveAtsign) {
       atsignMap[atsignMap.keys.first] = true;
     }
-    var value = jsonEncode(atsignMap);
-    await FlutterKeychain.put(key: '@atsign', value: value);
+    await _storeAtsign(atsignMap);
+
+    // var value = jsonEncode(atsignMap);
+    // await FlutterKeychain.put(key: '@atsign', value: value);
   }
 
   Future<void> resetAtSignFromKeychain(String atsign) async {
@@ -285,4 +307,59 @@ class KeyChainManager {
     await FlutterKeychain.remove(key: atsign + ':_pkam_private_key');
     await FlutterKeychain.remove(key: atsign + ':_pkam_public_key');
   }
+
+  Future<void> migrateToFlutterKeyStorage() async {
+    // var value = await FlutterKeychain.
+    // var flutterKeychianKeys = await FlutterKeychain.keys();
+    var atsign = await getAtSign();
+    var keys = await _storage.readAll();
+    var value;
+    var key;
+    if (atsign == null) {
+      return;
+    }
+    for (key in KEYCHAIN_KEYS_LIST) {
+      try {
+        value = key == KEYCHAIN_ATSIGN
+            ? await FlutterKeychain.get(key: key)
+            : await getValue(atsign, key);
+        await _storage.write(key: key, value: value);
+      } catch (err) {
+        _logger.severe('Migrating $key throws ${err.toString()}');
+      }
+    }
+    await FlutterKeychain.clear();
+
+    // switch (operation) {
+    //   case KeyChainOperation.read:
+    //     return await _storage.read(key: key);
+    //     break;
+    //   case KeyChainOperation.write:
+    //     await _storage.write(key: key, value: value);
+    //     break;
+    //   case KeyChainOperation.delete:
+    //     await _storage.delete(key: key);
+    //     break;
+    //   case KeyChainOperation.deleteAll:
+    //     await _storage.deleteAll();
+    //     break;
+    //   case KeyChainOperation.readAll:
+    //     await _storage.readAll();
+    //     break;
+    //   default:
+    // }
+  }
+
+  String _formKey({@required String key, String atsign}) {
+    if (key == KEYCHAIN_HIVE_SECRET) {
+      key = atsign + key;
+    } else if (key == KEYCHAIN_ATSIGN) {
+      key = key;
+    } else {
+      key = atsign + ':' + key;
+    }
+    return key;
+  }
 }
+
+enum KeyChainOperation { read, delete, write, deleteAll, readAll }
