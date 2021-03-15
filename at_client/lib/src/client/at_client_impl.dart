@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
-import 'package:uuid/uuid.dart';
-import 'package:path/path.dart';
-import 'package:cron/cron.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -30,6 +28,7 @@ import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:base2e15/base2e15.dart';
+import 'package:cron/cron.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 //import 'package:cron/cron.dart';
@@ -171,17 +170,22 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> delete(AtKey atKey) {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
+    var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
     return _delete(atKey.key,
         sharedWith: atKey.sharedWith,
+        sharedBy: atKey.sharedBy,
         isPublic: isPublic,
+        isCached: isCached,
         namespaceAware: isNamespaceAware);
   }
 
   Future<bool> _delete(String key,
       {String sharedWith,
+      String sharedBy,
       bool isPublic = false,
+      bool isCached = false,
       bool namespaceAware = true}) async {
     var keyWithNamespace;
     if (namespaceAware) {
@@ -189,11 +193,13 @@ class AtClientImpl implements AtClient {
     } else {
       keyWithNamespace = key;
     }
+    sharedBy ??= currentAtSign;
     var builder = DeleteVerbBuilder()
+      ..isCached = isCached
       ..isPublic = isPublic
       ..sharedWith = sharedWith
       ..atKey = keyWithNamespace
-      ..sharedBy = currentAtSign;
+      ..sharedBy = sharedBy;
     var deleteResult = await getSecondary().executeVerb(builder);
     return deleteResult != null;
   }
