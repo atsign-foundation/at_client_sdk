@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/util/encryption_util.dart';
@@ -165,7 +164,8 @@ class EncryptionService {
           EncryptionUtil.encryptValue(value, selfEncryptionKey);
       return encryptedValue;
     } on Exception catch (e) {
-      print('Exception while encrypting value for key ${key}: ${e.toString()}');
+      logger.severe(
+          'Exception while encrypting value for key ${key}: ${e.toString()}');
       return null;
     }
   }
@@ -193,6 +193,86 @@ class EncryptionService {
       logger.severe('Exception while decrypting value: ${e.toString()}');
       return null;
     }
+  }
+
+  //TODO remove code duplication - encrypt and encryptStream
+  Future<List<int>> encryptStream(List<int> value, String sharedWith) async {
+    var currentAtSignPublicKey =
+        await localSecondary.getEncryptionPublicKey(currentAtSign);
+    var currentAtSignPrivateKey =
+        await localSecondary.getEncryptionPrivateKey();
+    var sharedWithUser = sharedWith.replaceFirst('@', '');
+    // //1. Get/Generate AES key for sharedWith atsign
+    var llookupVerbBuilder = LLookupVerbBuilder()
+      ..atKey = '${AT_ENCRYPTION_SHARED_KEY}.${sharedWithUser}'
+      ..sharedBy = currentAtSign;
+    var sharedKey = await localSecondary.executeVerb(llookupVerbBuilder);
+    if (sharedKey == null || sharedKey == 'data:null') {
+      sharedKey = EncryptionUtil.generateAESKey();
+    } else {
+      sharedKey = sharedKey.replaceFirst('data:', '');
+      sharedKey = EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey);
+    }
+    //2. Lookup public key of sharedWith atsign
+    var plookupBuilder = PLookupVerbBuilder()
+      ..atKey = 'publickey'
+      ..sharedBy = sharedWith;
+    var sharedWithPublicKey =
+        await remoteSecondary.executeAndParse(plookupBuilder);
+    if (sharedWithPublicKey == 'null' || sharedWithPublicKey.isEmpty) {
+      throw KeyNotFoundException(
+          'shared key not found. data sharing is forbidden.');
+    }
+    //3. Encrypt shared key with public key of sharedWith atsign and store
+    var encryptedSharedKey =
+        EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
+
+    var updateSharedKeyBuilder = UpdateVerbBuilder()
+      ..sharedWith = sharedWith
+      ..sharedBy = currentAtSign
+      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..value = encryptedSharedKey;
+    await localSecondary.executeVerb(updateSharedKeyBuilder, sync: true);
+
+    //4. Store the shared key for future retrieval
+    var encryptedSharedKeyForCurrentAtSign =
+        EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey);
+
+    var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
+      ..sharedBy = currentAtSign
+      ..atKey = '${AT_ENCRYPTION_SHARED_KEY}.${sharedWithUser}'
+      ..value = encryptedSharedKeyForCurrentAtSign;
+    await localSecondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder,
+        sync: true);
+
+    //5. Encrypt value using sharedKey
+    var encryptedValue = EncryptionUtil.encryptBytes(value, sharedKey);
+    return encryptedValue;
+  }
+
+  Future<List<int>> decryptStream(
+      List<int> encryptedValue, String sharedBy) async {
+    sharedBy = sharedBy.replaceFirst('@', '');
+
+    //1.lookup shared key
+    var sharedKeyLookUpBuilder = LookupVerbBuilder()
+      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..sharedBy = sharedBy
+      ..auth = true;
+    var encryptedSharedKey =
+        await remoteSecondary.executeAndParse(sharedKeyLookUpBuilder);
+    if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
+      throw KeyNotFoundException('encrypted Shared key not found');
+    }
+    //2. decrypt shared key using private key
+    var currentAtSignPrivateKey =
+        await localSecondary.getEncryptionPrivateKey();
+    var sharedKey =
+        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
+
+    //3. decrypt stream using decrypted aes shared key
+    var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey);
+    return decryptedValue;
   }
 
   Future<bool> verifyPublicDataSignature(

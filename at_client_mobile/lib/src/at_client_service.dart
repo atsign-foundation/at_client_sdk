@@ -427,7 +427,7 @@ class AtClientService {
     var decryptedSelfKey =
         EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey);
     var selfKeys = await atClient.getAtKeys(
-        sharedWith: currentAtSign, sharedBy: currentAtSign);
+        sharedWith: currentAtSign, regex: atClient.preference.syncRegex);
     await Future.forEach(
         selfKeys,
         (atKey) => _encryptOldSelfKey(
