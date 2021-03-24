@@ -31,7 +31,8 @@ class KeyChainManager {
         secretAsUint8List = Uint8List.fromList(hiveSecretString.codeUnits);
       }
     } on Exception catch (exception) {
-      print('exception in getHiveSecretFromKeychain : ${exception.toString()}');
+      _logger.severe(
+          'exception in getHiveSecretFromKeychain : ${exception.toString()}');
     }
 
     return secretAsUint8List;
@@ -226,7 +227,6 @@ class KeyChainManager {
         return atsignMap;
       }
       var decodedJson = jsonDecode(value);
-      print('decodedJson is $decodedJson');
       decodedJson.forEach((key, value) {
         if (value) {
           atsignMap[key.toString()] = value as bool;
@@ -236,9 +236,8 @@ class KeyChainManager {
       });
       atsignMap.addAll(atsignSecondMap);
       atsignSecondMap.clear();
-      print('atsignMap is $atsignMap');
     }
-    print('atsignMap is $atsignMap');
+    _logger.info('atsignMap: $atsignMap');
     return atsignMap;
   }
 
