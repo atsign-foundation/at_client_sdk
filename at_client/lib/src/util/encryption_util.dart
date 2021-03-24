@@ -31,4 +31,20 @@ class EncryptionUtil {
     var rsaPrivateKey = RSAPrivateKey.fromString(privateKey);
     return rsaPrivateKey.decrypt(aesKey);
   }
+
+  static List<int> encryptBytes(List<int> value, String encryptionKey) {
+    var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
+    var initializationVector = IV.fromLength(16);
+    var encryptedValue =
+    aesEncrypter.encryptBytes(value, iv: initializationVector);
+    return encryptedValue?.bytes;
+  }
+
+  static List<int> decryptBytes(
+      List<int> encryptedValue, String decryptionKey) {
+    var aesKey = AES(Key.fromBase64(decryptionKey));
+    var decrypter = Encrypter(aesKey);
+    var iv2 = IV.fromLength(16);
+    return decrypter.decryptBytes(Encrypted(encryptedValue), iv: iv2);
+  }
 }
