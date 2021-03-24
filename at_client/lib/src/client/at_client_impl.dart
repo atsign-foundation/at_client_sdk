@@ -603,7 +603,7 @@ class AtClientImpl implements AtClient {
       PriorityEnum priority,
       StrategyEnum strategy,
       int latestN,
-      String notifier,
+      String notifier = SYSTEM,
       bool isDedicated = false}) async {
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
