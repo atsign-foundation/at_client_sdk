@@ -97,9 +97,14 @@ class AtClientImpl implements AtClient {
     _encryptionService.localSecondary = _localSecondary;
   }
 
-  Secondary getSecondary() {
+  Secondary getSecondary({bool isDedicated = false}) {
     if (_preference.isLocalStoreRequired) {
       return _localSecondary;
+    }
+    if (isDedicated) {
+      var remoteSecondary = RemoteSecondary(currentAtSign, _preference,
+          privateKey: _preference.privateKey);
+      return remoteSecondary;
     }
     return _remoteSecondary;
   }
@@ -130,7 +135,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  RemoteSecondary getRemoteSecondary() {
+  RemoteSecondary getRemoteSecondary({bool isDedicated = false}) {
+    if (isDedicated) {
+      var remoteSecondary = RemoteSecondary(currentAtSign, _preference,
+          privateKey: _preference.privateKey);
+      return remoteSecondary;
+    }
     return _remoteSecondary;
   }
 
@@ -168,7 +178,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> delete(AtKey atKey) {
+  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var isCached = atKey.metadata != null ? atKey.metadata.isCached : false;
     var isNamespaceAware =
@@ -178,7 +188,8 @@ class AtClientImpl implements AtClient {
         sharedBy: atKey.sharedBy,
         isPublic: isPublic,
         isCached: isCached,
-        namespaceAware: isNamespaceAware);
+        namespaceAware: isNamespaceAware,
+        isDedicated: isDedicated);
   }
 
   Future<bool> _delete(String key,
@@ -186,7 +197,8 @@ class AtClientImpl implements AtClient {
       String sharedBy,
       bool isPublic = false,
       bool isCached = false,
-      bool namespaceAware = true}) async {
+      bool namespaceAware = true,
+      bool isDedicated = false}) async {
     var keyWithNamespace;
     if (namespaceAware) {
       keyWithNamespace = _getKeyWithNamespace(key);
@@ -200,7 +212,9 @@ class AtClientImpl implements AtClient {
       ..sharedWith = sharedWith
       ..atKey = keyWithNamespace
       ..sharedBy = sharedBy;
-    var deleteResult = await getSecondary().executeVerb(builder);
+
+    var deleteResult =
+        await getSecondary(isDedicated: isDedicated).executeVerb(builder);
     return deleteResult != null;
   }
 
@@ -210,7 +224,8 @@ class AtClientImpl implements AtClient {
       bool isPublic = false,
       bool isCached = false,
       bool namespaceAware = true,
-      String operation}) async {
+      String operation,
+      bool isDedicated = false}) async {
     var builder;
     var keyWithNamespace;
     if (namespaceAware) {
@@ -225,7 +240,11 @@ class AtClientImpl implements AtClient {
         ..isCached = isCached
         ..sharedWith = currentAtSign
         ..operation = operation;
-      var encryptedResult = await getSecondary().executeVerb(builder);
+      var secondary = getSecondary(isDedicated: isDedicated);
+      var encryptedResult = await secondary.executeVerb(builder);
+      if (isDedicated && (secondary is RemoteSecondary)) {
+        secondary.atLookUp.connection.close();
+      }
       if (encryptedResult == 'data:null') {
         return null;
       }
@@ -256,7 +275,11 @@ class AtClientImpl implements AtClient {
         if (operation != null) {
           builder.operation = operation;
         }
-        var result = await getRemoteSecondary().executeVerb(builder);
+        var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
+        var result = await remoteSecondary.executeVerb(builder);
+        if (isDedicated && remoteSecondary != null) {
+          remoteSecondary.atLookUp.connection.close();
+        }
         result = _formatResult(result);
         return jsonDecode(result);
       } else {
@@ -267,7 +290,11 @@ class AtClientImpl implements AtClient {
         if (operation != null) {
           builder.operation = operation;
         }
-        var encryptedResult = await getRemoteSecondary().executeVerb(builder);
+        var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
+        var encryptedResult = await remoteSecondary.executeVerb(builder);
+        if (isDedicated && remoteSecondary != null) {
+          remoteSecondary.atLookUp.connection.close();
+        }
         // If lookup response from remote secondary is 'data:null'.
         if (encryptedResult != null && encryptedResult == 'data:null') {
           return null;
@@ -301,7 +328,11 @@ class AtClientImpl implements AtClient {
         builder.operation = operation;
       }
       if (sharedWith != currentAtSign) {
-        var encryptedResult = await getSecondary().executeVerb(builder);
+        var secondary = getSecondary(isDedicated: isDedicated);
+        var encryptedResult = await secondary.executeVerb(builder);
+        if (isDedicated && (secondary is RemoteSecondary)) {
+          secondary.atLookUp.connection.close();
+        }
         if (encryptedResult != null && encryptedResult == 'data:null') {
           return null;
         }
@@ -331,7 +362,11 @@ class AtClientImpl implements AtClient {
     if (operation != null) {
       builder.operation = operation;
     }
-    var result = await getSecondary().executeVerb(builder);
+    var secondary = getSecondary(isDedicated: isDedicated);
+    var result = await secondary.executeVerb(builder);
+    if (isDedicated && (secondary is RemoteSecondary)) {
+      secondary.atLookUp.connection.close();
+    }
     if (result == null || result == 'data:null') {
       return null;
     }
@@ -350,7 +385,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtValue> get(AtKey atKey) async {
+  Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
@@ -361,7 +396,8 @@ class AtClientImpl implements AtClient {
         isPublic: isPublic,
         isCached: isCached,
         namespaceAware: namespaceAware,
-        operation: UPDATE_ALL);
+        operation: UPDATE_ALL,
+        isDedicated: isDedicated);
 
     var atValue = AtValue();
     if (getResult == null || getResult == 'null') {
@@ -380,7 +416,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<Metadata> getMeta(AtKey atKey) async {
+  Future<Metadata> getMeta(AtKey atKey, {bool isDedicated = false}) async {
     var isPublic = atKey.metadata != null ? atKey.metadata.isPublic : false;
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata.namespaceAware : true;
@@ -391,7 +427,8 @@ class AtClientImpl implements AtClient {
         isPublic: isPublic,
         isCached: isCached,
         namespaceAware: namespaceAware,
-        operation: UPDATE_META);
+        operation: UPDATE_META,
+        isDedicated: isDedicated);
     if (getResult == null || getResult == 'null') {
       return null;
     }
@@ -399,13 +436,20 @@ class AtClientImpl implements AtClient {
   }
 
   Future<List<String>> getKeys(
-      {String regex, String sharedBy, String sharedWith}) async {
+      {String regex,
+      String sharedBy,
+      String sharedWith,
+      bool isDedicated}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
       ..regex = regex
       ..auth = true;
-    var scanResult = await getSecondary().executeVerb(builder);
+    var secondary = getSecondary(isDedicated: isDedicated);
+    var scanResult = await secondary.executeVerb(builder);
+    if (isDedicated && (secondary is RemoteSecondary)) {
+      secondary.atLookUp.connection.close();
+    }
     scanResult = _formatResult(scanResult);
     var result = [];
     if (scanResult != null && scanResult.isNotEmpty) {
@@ -416,7 +460,10 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<List<AtKey>> getAtKeys(
-      {String regex, String sharedBy, String sharedWith}) async {
+      {String regex,
+      String sharedBy,
+      String sharedWith,
+      bool isDedicated}) async {
     var getKeysResult =
         await getKeys(regex: regex, sharedBy: sharedBy, sharedWith: sharedWith);
     var result = <AtKey>[];
@@ -451,7 +498,7 @@ class AtClientImpl implements AtClient {
 //  }
 
   Future<bool> _put(String key, dynamic value,
-      {String sharedWith, Metadata metadata}) async {
+      {String sharedWith, Metadata metadata, bool isDedicated = false}) async {
     var updateKey = key;
     if (metadata == null || (metadata != null && metadata.namespaceAware)) {
       updateKey = _getKeyWithNamespace(key);
@@ -521,8 +568,11 @@ class AtClientImpl implements AtClient {
       if (builder.dataSignature != null) {
         builder.isJson = true;
       }
-      putResult =
-          await getSecondary().executeVerb(builder, sync: isSyncRequired);
+      var secondary = getSecondary(isDedicated: isDedicated);
+      putResult = await secondary.executeVerb(builder, sync: isSyncRequired);
+      if (isDedicated && (secondary is RemoteSecondary)) {
+        secondary.atLookUp.connection.close();
+      }
     } on AtClientException catch (e) {
       logger.severe(
           'error code: ${e.errorCode} error message: ${e.errorMessage}');
@@ -533,7 +583,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> put(AtKey atKey, dynamic value) async {
+  Future<bool> put(AtKey atKey, dynamic value,
+      {bool isDedicated = false}) async {
     if (atKey.metadata != null && atKey.metadata.isBinary) {
       if (value != null && value.length > _preference.maxDataSize) {
         throw AtClientException('AT0005', 'BufferOverFlowException');
@@ -541,7 +592,9 @@ class AtClientImpl implements AtClient {
       value = Base2e15.encode(value);
     }
     return _put(atKey.key, value,
-        sharedWith: atKey.sharedWith, metadata: atKey.metadata);
+        sharedWith: atKey.sharedWith,
+        metadata: atKey.metadata,
+        isDedicated: isDedicated);
   }
 
   @override
@@ -550,7 +603,8 @@ class AtClientImpl implements AtClient {
       PriorityEnum priority,
       StrategyEnum strategy,
       int latestN,
-      String notifier}) async {
+      String notifier,
+      bool isDedicated = false}) async {
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
@@ -599,19 +653,24 @@ class AtClientImpl implements AtClient {
     if (SyncUtil.shouldSkipSync(notifyKey)) {
       isSyncRequired = false;
     }
+    var secondary = getSecondary(isDedicated: isDedicated);
     var notifyResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
+        await secondary.executeVerb(builder, sync: isSyncRequired);
+    if (isDedicated && (secondary is RemoteSecondary)) {
+      secondary.atLookUp.connection.close();
+    }
     return notifyResult != null;
   }
 
   @override
-  Future<String> notifyAll(
-      AtKey atKey, String value, OperationEnum operation) async {
+  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation,
+      {bool isDedicated = false}) async {
     var returnMap = {};
     var sharedWithList = jsonDecode(atKey.sharedWith);
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
-      var result = await notify(atKey, value, operation);
+      var result =
+          await notify(atKey, value, operation, isDedicated: isDedicated);
       returnMap.putIfAbsent(sharedWith, () => result);
     }
     return jsonEncode(returnMap);
@@ -626,13 +685,20 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<String> notifyList(
-      {String fromDate, String toDate, String regex}) async {
+      {String fromDate,
+      String toDate,
+      String regex,
+      bool isDedicated = false}) async {
     try {
       var builder = NotifyListVerbBuilder()
         ..fromDate = fromDate
         ..toDate = toDate
         ..regex = regex;
-      var notifyList = await getRemoteSecondary().executeVerb(builder);
+      var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
+      var notifyList = await remoteSecondary.executeVerb(builder);
+      if (isDedicated && remoteSecondary != null) {
+        remoteSecondary.atLookUp.connection.close();
+      }
       return notifyList;
     } on AtLookUpException catch (e) {
       throw AtClientException(e.errorCode, e.errorMessage);
