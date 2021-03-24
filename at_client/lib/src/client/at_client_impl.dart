@@ -550,7 +550,7 @@ class AtClientImpl implements AtClient {
       PriorityEnum priority,
       StrategyEnum strategy,
       int latestN,
-      String notifier}) async {
+      String notifier = SYSTEM}) async {
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
