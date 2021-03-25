@@ -90,7 +90,7 @@ class EncryptionService {
     sharedBy = sharedBy.replaceFirst('@', '');
     var encryptedSharedKey;
     //1. Get encrypted shared key
-    encryptedSharedKey = _getEncryptedSharedKey(sharedBy);
+    encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
     if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
