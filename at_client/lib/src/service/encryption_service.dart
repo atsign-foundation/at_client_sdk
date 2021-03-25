@@ -419,7 +419,9 @@ class EncryptionService {
       encryptedSharedKey =
           await remoteSecondary.executeAndParse(sharedKeyLookUpBuilder);
     }
-    encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
+    if (encryptedSharedKey != null && encryptedSharedKey.isNotEmpty()) {
+      encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
+    }
     return encryptedSharedKey;
   }
 }
