@@ -88,28 +88,13 @@ class EncryptionService {
 
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
     sharedBy = sharedBy.replaceFirst('@', '');
-
-    //1.local lookup the cached-shared key, if null lookup shared key
     var encryptedSharedKey;
-    var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..isCached = true
-      ..sharedBy = sharedBy
-      ..sharedWith = currentAtSign
-      ..atKey = AT_ENCRYPTION_SHARED_KEY;
-    encryptedSharedKey =
-        await localSecondary.executeVerb(localLookupSharedKeyBuilder);
-    if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
-      var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = AT_ENCRYPTION_SHARED_KEY
-        ..sharedBy = sharedBy
-        ..auth = true;
-      encryptedSharedKey =
-          await remoteSecondary.executeAndParse(sharedKeyLookUpBuilder);
-    }
+    //1. Get encrypted shared key
+    encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
     if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
-    encryptedSharedKey = encryptedSharedKey.toString().replaceAll('data:', '');
+
     //2. decrypt shared key using private key
     var currentAtSignPrivateKey =
         await localSecondary.getEncryptionPrivateKey();
@@ -254,13 +239,8 @@ class EncryptionService {
       List<int> encryptedValue, String sharedBy) async {
     sharedBy = sharedBy.replaceFirst('@', '');
 
-    //1.lookup shared key
-    var sharedKeyLookUpBuilder = LookupVerbBuilder()
-      ..atKey = AT_ENCRYPTION_SHARED_KEY
-      ..sharedBy = sharedBy
-      ..auth = true;
-    var encryptedSharedKey =
-        await remoteSecondary.executeAndParse(sharedKeyLookUpBuilder);
+    var encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
+
     if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
@@ -420,5 +400,28 @@ class EncryptionService {
     await localSecondary.executeVerb(sharedWithPublicKeyBuilder, sync: true);
 
     return sharedWithPublicKey;
+  }
+
+  Future<String> _getEncryptedSharedKey(String sharedBy) async {
+    var encryptedSharedKey;
+    var localLookupSharedKeyBuilder = LLookupVerbBuilder()
+      ..isCached = true
+      ..sharedBy = sharedBy
+      ..sharedWith = currentAtSign
+      ..atKey = AT_ENCRYPTION_SHARED_KEY;
+    encryptedSharedKey =
+        await localSecondary.executeVerb(localLookupSharedKeyBuilder);
+    if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
+      var sharedKeyLookUpBuilder = LookupVerbBuilder()
+        ..atKey = AT_ENCRYPTION_SHARED_KEY
+        ..sharedBy = sharedBy
+        ..auth = true;
+      encryptedSharedKey =
+          await remoteSecondary.executeAndParse(sharedKeyLookUpBuilder);
+    }
+    if (encryptedSharedKey != null && encryptedSharedKey.isNotEmpty) {
+      encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
+    }
+    return encryptedSharedKey;
   }
 }
