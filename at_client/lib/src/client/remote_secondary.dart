@@ -1,12 +1,13 @@
 import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_utils.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
@@ -20,6 +21,8 @@ class RemoteSecondary implements Secondary {
 
   AtLookupImpl atLookUp;
 
+  AtLookupSync atLookupSync;
+
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String privateKey}) {
     _atSign = AtUtils.formatAtSign(atSign);
@@ -27,6 +30,9 @@ class RemoteSecondary implements Secondary {
     privateKey ??= preference.privateKey;
     _privateKey = privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
+        privateKey: privateKey, cramSecret: preference.cramSecret);
+    atLookupSync = AtLookupSync(
+        atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey, cramSecret: preference.cramSecret);
   }
 
@@ -73,7 +79,7 @@ class RemoteSecondary implements Secondary {
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
   Future<String> sync(int lastSyncedId,
-      {String privateKey, String regex}) async {
+      {String privateKey, String regex, Function syncCallback}) async {
     var atCommand = 'sync:${lastSyncedId}';
     var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
         ? ':${regex}'
@@ -82,7 +88,9 @@ class RemoteSecondary implements Secondary {
             : '');
 
     atCommand += '${regexString}\n';
-    var syncResult = await atLookUp.executeCommand(atCommand, auth: true);
+
+    atLookupSync.syncCallback = syncCallback;
+    var syncResult = await atLookupSync.executeCommand(atCommand, auth: true);
     return syncResult;
   }
 
