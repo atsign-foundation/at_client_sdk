@@ -311,8 +311,13 @@ class KeyChainManager {
   Future<void> migrateToFlutterKeyStorage() async {
     // var value = await FlutterKeychain.
     // var flutterKeychianKeys = await FlutterKeychain.keys();
+    //TODO: check whether all are migrated flag before migration.
     var atsign = await getAtSign();
     var keys = await _storage.readAll();
+    if (keys.length == KEYCHAIN_KEYS_LIST.length) {
+      _logger.info('All keys from flutterkeychain got migrated to keystorage');
+      return;
+    }
     var value;
     var key;
     if (atsign == null) {
@@ -322,32 +327,27 @@ class KeyChainManager {
       try {
         value = key == KEYCHAIN_ATSIGN
             ? await FlutterKeychain.get(key: key)
-            : await getValue(atsign, key);
+            : await getKeychainValue(atsign, key);
+        await FlutterKeychain.remove(key: key);
         await _storage.write(key: key, value: value);
       } catch (err) {
-        _logger.severe('Migrating $key throws ${err.toString()}');
+        _logger.severe(
+            'Migrating $key from keychain to keystorage throws ${err.toString()}');
       }
     }
-    await FlutterKeychain.clear();
+  }
 
-    // switch (operation) {
-    //   case KeyChainOperation.read:
-    //     return await _storage.read(key: key);
-    //     break;
-    //   case KeyChainOperation.write:
-    //     await _storage.write(key: key, value: value);
-    //     break;
-    //   case KeyChainOperation.delete:
-    //     await _storage.delete(key: key);
-    //     break;
-    //   case KeyChainOperation.deleteAll:
-    //     await _storage.deleteAll();
-    //     break;
-    //   case KeyChainOperation.readAll:
-    //     await _storage.readAll();
-    //     break;
-    //   default:
-    // }
+  ///Fetches value from flutterKeychain
+  Future<String> getKeychainValue(String atsign, String key) async {
+    var value;
+    try {
+      key = _formKey(atsign: atsign, key: key);
+      value = await FlutterKeychain.get(key: key);
+    } on Exception catch (e) {
+      _logger.severe(
+          'flutter keychain - exception in get value for ${key} :${e.toString()}');
+    }
+    return value;
   }
 
   String _formKey({@required String key, String atsign}) {
