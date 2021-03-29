@@ -218,7 +218,7 @@ class AtClientImpl implements AtClient {
     } else {
       keyWithNamespace = key;
     }
-    if (sharedBy != null && isCached) {
+    if (sharedBy != null && isCached && !isPublic) {
       builder = LLookupVerbBuilder()
         ..atKey = keyWithNamespace
         ..sharedBy = sharedBy
@@ -248,7 +248,7 @@ class AtClientImpl implements AtClient {
         encryptedResultMap['data'] = decryptedValue;
       }
       return encryptedResultMap;
-    } else if (sharedBy != null && sharedBy != currentAtSign) {
+    } else if (sharedBy != null && sharedBy != currentAtSign && !isCached) {
       if (isPublic) {
         builder = PLookupVerbBuilder()
           ..atKey = keyWithNamespace
@@ -317,8 +317,9 @@ class AtClientImpl implements AtClient {
       }
     } else if (isPublic) {
       builder = LLookupVerbBuilder()
-        ..atKey = 'public:' + keyWithNamespace
-        ..sharedBy = currentAtSign;
+        ..isCached = isCached
+        ..atKey = 'public:' + keyWithNamespace;
+      builder.sharedBy = sharedBy != null ? sharedBy : currentAtSign;
     } else {
       builder = LLookupVerbBuilder()..atKey = keyWithNamespace;
       if (keyWithNamespace.startsWith(AT_PKAM_PRIVATE_KEY) ||
@@ -550,7 +551,7 @@ class AtClientImpl implements AtClient {
       PriorityEnum priority,
       StrategyEnum strategy,
       int latestN,
-      String notifier}) async {
+      String notifier = SYSTEM}) async {
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;

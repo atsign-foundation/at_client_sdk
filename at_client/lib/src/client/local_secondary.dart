@@ -144,18 +144,18 @@ class LocalSecondary implements Secondary {
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {
     try {
-      var llookupKey;
+      var llookupKey = '';
       if (builder.isCached) {
-        llookupKey =
-            'cached:${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
-      } else if (builder.sharedWith != null) {
-        llookupKey =
-            '${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
-      } else if (builder.sharedBy != null) {
-        llookupKey =
-            '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
-      } else {
-        llookupKey = builder.atKey;
+        llookupKey += 'cached:';
+      }
+      if (builder.sharedWith != null) {
+        llookupKey += '${AtUtils.formatAtSign(builder.sharedWith)}:';
+      }
+      if (builder.atKey != null) {
+        llookupKey += builder.atKey;
+      }
+      if (builder.sharedBy != null) {
+        llookupKey += AtUtils.formatAtSign(builder.sharedBy);
       }
       var llookupMeta = await keyStore.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
