@@ -46,12 +46,13 @@ class StreamNotificationHandler {
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         var encryptedData = temp_file.readAsBytesSync();
-        logger.info(
-            'Decrypting stream data started at ${DateTime.now().toUtc()}');
+        var start = DateTime.now().millisecondsSinceEpoch;
         var decryptedBytes = await encryptionService.decryptStream(
             encryptedData, streamNotification.senderAtSign);
+        var end = DateTime.now().millisecondsSinceEpoch;
+        var time_taken = end - start;
         logger.info(
-            'Decrypting stream data completed at ${DateTime.now().toUtc()}');
+            'Decrypting stream data completed in ${time_taken} milliseconds');
         f.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
         await temp_file.delete();
         logger.info('Stream transfer complete:${streamId}');
