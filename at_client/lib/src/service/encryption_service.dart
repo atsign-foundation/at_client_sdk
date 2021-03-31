@@ -237,11 +237,13 @@ class EncryptionService {
 
   Future<List<int>> decryptStream(
       List<int> encryptedValue, String sharedBy) async {
-    sharedBy = sharedBy.replaceFirst('@', '');
+    if (sharedBy != null) {
+      sharedBy = sharedBy.replaceFirst('@', '');
+    }
 
     var encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
 
-    if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
+    if (encryptedSharedKey == null || encryptedSharedKey == 'null') {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
     //2. decrypt shared key using private key
@@ -360,8 +362,6 @@ class EncryptionService {
 
   Future<String> _getSelfEncryptionKey() async {
     var selfEncryptionKey = await localSecondary.getEncryptionSelfKey();
-    //#TODO remove before pushing to prod
-    logger.finer('self encryption key: ${selfEncryptionKey}');
     return selfEncryptionKey;
   }
 
@@ -419,7 +419,7 @@ class EncryptionService {
       encryptedSharedKey =
           await remoteSecondary.executeAndParse(sharedKeyLookUpBuilder);
     }
-    if (encryptedSharedKey != null && encryptedSharedKey.isNotEmpty) {
+    if ((encryptedSharedKey != null) && (encryptedSharedKey.isNotEmpty)) {
       encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
     }
     return encryptedSharedKey;
