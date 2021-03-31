@@ -33,7 +33,7 @@ class RemoteSecondary implements Secondary {
         privateKey: privateKey, cramSecret: preference.cramSecret);
     atLookupSync = AtLookupSync(
         atSign, preference.rootDomain, preference.rootPort,
-        privateKey: privateKey, cramSecret: preference.cramSecret);
+        privateKey: atLookUp.privateKey, cramSecret: preference.cramSecret);
   }
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.

@@ -312,4 +312,8 @@ class LocalSecondary implements Secondary {
     isStored = await keyStore.put(key, atData);
     return isStored != null ? true : false;
   }
+
+  Stream watch({String key}) {
+    return keyStore.watch(key: key);
+  }
 }
