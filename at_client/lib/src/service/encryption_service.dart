@@ -362,8 +362,6 @@ class EncryptionService {
 
   Future<String> _getSelfEncryptionKey() async {
     var selfEncryptionKey = await localSecondary.getEncryptionSelfKey();
-    //#TODO remove before pushing to prod
-    logger.finer('self encryption key: ${selfEncryptionKey}');
     return selfEncryptionKey;
   }
 
