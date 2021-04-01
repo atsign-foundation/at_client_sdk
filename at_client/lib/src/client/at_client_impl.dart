@@ -813,4 +813,42 @@ class AtClientImpl implements AtClient {
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService.encryptUnencryptedData();
   }
+
+  Future<String> uploadFile(File file, String sharedWithAtSign) async {
+    var fileEncryptionKey = await _encryptionService
+        .generateFileEncryptionSharedKey(currentAtSign, sharedWithAtSign);
+    var encryptedFileContent = await _encryptionService.encryptFile(
+        file.readAsBytesSync(), sharedWithAtSign, fileEncryptionKey);
+    var encryptedFile = File('my_local_path'); //can be s3,filebin, ipfs
+    encryptedFile.writeAsBytesSync(encryptedFileContent);
+    var atKey = AtKey()
+      ..key = 'my_file'
+      ..sharedWith = sharedWithAtSign;
+    await put(atKey, encryptedFile.path);
+    return encryptedFile.path; //can be file url instead of path
+  }
+
+  Future<String> uploadFileMultiple(
+      File file, List<String> sharedWithAtSigns) async {
+    var filePath;
+    var fileUploaded = false;
+    for (var sharedWithAtSign in sharedWithAtSigns) {
+      var fileEncryptionKey = await _encryptionService
+          .generateFileEncryptionSharedKey(currentAtSign, sharedWithAtSign);
+      if (!fileUploaded) {
+        //we have to encrypt and upload file only once since same AES key is used for encrypting file contents
+        var encryptedFileContent = await _encryptionService.encryptFile(
+            file.readAsBytesSync(), sharedWithAtSign, fileEncryptionKey);
+        var encryptedFile = File('my_local_path'); //can be s3,filebin, ipfs
+        encryptedFile.writeAsBytesSync(encryptedFileContent);
+        filePath = encryptedFile.path;
+        fileUploaded = true;
+      }
+      var atKey = AtKey()
+        ..key = 'my_file'
+        ..sharedWith = sharedWithAtSign;
+      await put(atKey, filePath);
+    }
+    return filePath; //can be file url instead of path
+  }
 }
