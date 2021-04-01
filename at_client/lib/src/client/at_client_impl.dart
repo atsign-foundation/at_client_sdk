@@ -16,6 +16,7 @@ import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -815,14 +816,18 @@ class AtClientImpl implements AtClient {
   }
 
   Future<String> uploadFile(File file, String sharedWithAtSign) async {
+    var fileName = file.path.substring(file.path.lastIndexOf('/') + 1);
+    print('uploading file ${fileName}');
     var fileEncryptionKey = await _encryptionService
         .generateFileEncryptionSharedKey(currentAtSign, sharedWithAtSign);
+    print('inside uploadfile. Encryption key:$fileEncryptionKey');
     var encryptedFileContent = await _encryptionService.encryptFile(
-        file.readAsBytesSync(), sharedWithAtSign, fileEncryptionKey);
-    var encryptedFile = File('my_local_path'); //can be s3,filebin, ipfs
+        file.readAsBytesSync(), fileEncryptionKey);
+    var encryptedFile = File(
+        '/home/murali/work/2021/@/file_upload/encrypted/$fileName'); //can be s3,filebin, ipfs etc.,
     encryptedFile.writeAsBytesSync(encryptedFileContent);
     var atKey = AtKey()
-      ..key = 'my_file'
+      ..key = fileName
       ..sharedWith = sharedWithAtSign;
     await put(atKey, encryptedFile.path);
     return encryptedFile.path; //can be file url instead of path
@@ -838,8 +843,8 @@ class AtClientImpl implements AtClient {
       if (!fileUploaded) {
         //we have to encrypt and upload file only once since same AES key is used for encrypting file contents
         var encryptedFileContent = await _encryptionService.encryptFile(
-            file.readAsBytesSync(), sharedWithAtSign, fileEncryptionKey);
-        var encryptedFile = File('my_local_path'); //can be s3,filebin, ipfs
+            file.readAsBytesSync(), fileEncryptionKey);
+        var encryptedFile = File('my_file.pdf'); //can be s3,filebin, ipfs
         encryptedFile.writeAsBytesSync(encryptedFileContent);
         filePath = encryptedFile.path;
         fileUploaded = true;
@@ -850,5 +855,34 @@ class AtClientImpl implements AtClient {
       await put(atKey, filePath);
     }
     return filePath; //can be file url instead of path
+  }
+
+  Future<void> downloadFile(String fileKey, String sharedByAtSign,
+      {String downloadPath}) async {
+    var atKey = AtKey()
+      ..key = fileKey
+      ..sharedBy = sharedByAtSign;
+    var result = await get(atKey);
+    print('encryptedFilePath: ${result.value}');
+    var encryptedFilePath = result.value;
+    var encryptedFile = File(encryptedFilePath);
+    var fileName =
+        encryptedFilePath.substring(encryptedFilePath.lastIndexOf('/') + 1);
+    print('decrypting file: $fileName');
+    var fileDecryptionKeyLookUpBuilder = LookupVerbBuilder()
+      ..atKey = AT_FILE_ENCRYPTION_SHARED_KEY
+      ..sharedBy = sharedByAtSign
+      ..auth = true;
+    var encryptedFileSharedKey =
+        await _remoteSecondary.executeAndParse(fileDecryptionKeyLookUpBuilder);
+    var currentAtSignPrivateKey =
+        await _localSecondary.getEncryptionPrivateKey();
+    var fileDecryptionKey = EncryptionUtil.decryptKey(
+        encryptedFileSharedKey, currentAtSignPrivateKey);
+    print(fileDecryptionKey);
+    var decryptedFile = await _encryptionService.decryptFile(
+        encryptedFile.readAsBytesSync(), fileDecryptionKey);
+    var downloadedFile = File(downloadPath + '/' + fileName);
+    downloadedFile.writeAsBytesSync(decryptedFile);
   }
 }

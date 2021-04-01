@@ -124,10 +124,17 @@ class EncryptionService {
     return encryptedValue;
   }
 
-  Future<List<int>> encryptFile(List<int> fileContent, String sharedWith,
-      String fileEncryptionKey) async {
+  Future<List<int>> encryptFile(
+      List<int> fileContent, String fileEncryptionKey) async {
     var encryptedValue =
         EncryptionUtil.encryptBytes(fileContent, fileEncryptionKey);
+    return encryptedValue;
+  }
+
+  Future<List<int>> decryptFile(
+      List<int> fileContent, String decryptionKey) async {
+    var encryptedValue =
+        EncryptionUtil.decryptBytes(fileContent, decryptionKey);
     return encryptedValue;
   }
 
@@ -386,6 +393,7 @@ class EncryptionService {
       await localSecondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder,
           sync: true);
     }
+    return sharedKey;
   }
 
   Future<String> generateFileEncryptionSharedKey(
@@ -402,9 +410,17 @@ class EncryptionService {
       logger.finer(
           'shared key for file encryption does not exist. Generating a new one');
       sharedKey = EncryptionUtil.generateAESKey();
+//      var encryptedSharedKey = await encryptForSelf(AT_FILE_ENCRYPTION_SHARED_KEY, sharedKey);
+      var updateSharedKeyBuilder = UpdateVerbBuilder()
+        ..sharedWith = currentAtSign
+        ..sharedBy = currentAtSign
+        ..atKey = AT_FILE_ENCRYPTION_SHARED_KEY
+        ..value =
+            sharedKey; // #TODO encrypt using self key. add self key to demo_data
+      await localSecondary.executeVerb(updateSharedKeyBuilder, sync: true);
     } else {
       sharedKey = sharedKey.replaceFirst('data:', '');
-      sharedKey = await decryptForSelf(sharedKey, true);
+//      sharedKey = await decryptForSelf(sharedKey, true);
     }
 
     //2. Verify if encryptedSharedKey for sharedWith atSign is available.
@@ -417,24 +433,25 @@ class EncryptionService {
     //3. Create the encryptedSharedKey if
     // a. encryptedSharedKey not available (or)
     // b. If the sharedKey is changed.
-    if (result == null || result == 'data:null') {
-      var sharedWithPublicKey;
-      try {
-        sharedWithPublicKey = await _getSharedWithPublicKey(sharedWithUser);
-      } on Exception {
-        rethrow;
-      }
-      //Encrypt shared key with public key of sharedWith atsign.
-      var encryptedSharedKey =
-          EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
-      // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atsign to cache the encryptedSharedKey.
-      var updateSharedKeyBuilder = UpdateVerbBuilder()
-        ..sharedWith = sharedWith
-        ..sharedBy = currentAtSign
-        ..atKey = AT_FILE_ENCRYPTION_SHARED_KEY
-        ..value = encryptedSharedKey
-        ..ttr = 3888000;
-      await localSecondary.executeVerb(updateSharedKeyBuilder, sync: true);
+//    if (result == null || result == 'data:null') {
+    var sharedWithPublicKey;
+    try {
+      sharedWithPublicKey = await _getSharedWithPublicKey(sharedWithUser);
+    } on Exception {
+      rethrow;
     }
+    //Encrypt shared key with public key of sharedWith atsign.
+    var encryptedSharedKey =
+        EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
+    // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atsign to cache the encryptedSharedKey.
+    var updateSharedKeyBuilder = UpdateVerbBuilder()
+      ..sharedWith = sharedWith
+      ..sharedBy = currentAtSign
+      ..atKey = AT_FILE_ENCRYPTION_SHARED_KEY
+      ..value = encryptedSharedKey
+      ..ttr = 3888000;
+    await localSecondary.executeVerb(updateSharedKeyBuilder, sync: true);
+//    }
+    return sharedKey;
   }
 }
