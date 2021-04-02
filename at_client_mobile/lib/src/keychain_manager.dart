@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
@@ -20,31 +19,33 @@ class KeyChainManager {
     return _singleton;
   }
 
+  ///detemines whether to check for data in Flutterkeychain or not.
+  bool _isKeychainCheck = false;
+
+  ///FlutterSecureStorage upon which all CRUD operations will be performed.
+  ///Throws [assertionError] if [atsign] is null or empty.
   final _storage = FlutterSecureStorage();
   Future<List<int>> getHiveSecretFromKeychain(String atsign) async {
     assert(atsign != null && atsign.isNotEmpty);
     List<int> secretAsUint8List;
     try {
-      // var hiveKey = atsign + '_hive_secret';
-      // var hiveSecretString = await FlutterKeychain.get(key: hiveKey);
       var hiveSecretString = await getValue(atsign, KEYCHAIN_HIVE_SECRET);
 
       if (hiveSecretString == null) {
         secretAsUint8List = _generatePersistenceSecret();
         hiveSecretString = String.fromCharCodes(secretAsUint8List);
-        // await FlutterKeychain.put(key: hiveKey, value: hiveSecretString);
         await putValue(atsign, KEYCHAIN_HIVE_SECRET, hiveSecretString);
       } else {
         secretAsUint8List = Uint8List.fromList(hiveSecretString.codeUnits);
       }
-    } on Exception catch (exception) {
+    } catch (exception) {
       _logger.severe(
           'exception in getHiveSecretFromKeychain : ${exception.toString()}');
     }
-
     return secretAsUint8List;
   }
 
+  ///Returns list of @signs stored in Flutterstorage.
   Future<List<String>> getAtSignListFromKeychain() async {
     var atsignMap = await _getAtSigMap();
     if (atsignMap.isEmpty) {
@@ -55,15 +56,14 @@ class KeyChainManager {
     return atsigns;
   }
 
+  ///Returns [KEYCHAIN_SECRET] for [atsign].
   Future<String> getSecretFromKeychain(String atsign) async {
     var secret;
     try {
       assert(atsign != null && atsign != '');
-      // var secretString = await FlutterKeychain.get(key: atsign + '_secret');
       var secretString = await getValue(atsign, KEYCHAIN_SECRET);
-
       secret = secretString;
-    } on Exception catch (e) {
+    } catch (e) {
       _logger.severe('Exception in getSecretFromKeychain :${e.toString()}');
     }
     return secret;
@@ -75,8 +75,7 @@ class KeyChainManager {
     var pkamPrivateKey;
     try {
       assert(atsign != null && atsign != '');
-      pkamPrivateKey =
-          await FlutterKeychain.get(key: atsign + '_pkam_private_key');
+      pkamPrivateKey = await _storage.read(key: atsign + '_pkam_private_key');
     } on Exception catch (e) {
       _logger.severe('exception in getPrivateKeyFromKeyChain :${e.toString()}');
     }
@@ -89,20 +88,18 @@ class KeyChainManager {
     var pkamPublicKey;
     try {
       assert(atsign != null && atsign != '');
-      pkamPublicKey =
-          await FlutterKeychain.get(key: atsign + '_pkam_public_key');
+      pkamPublicKey = await _storage.read(key: atsign + '_pkam_public_key');
     } on Exception catch (e) {
       _logger.severe('exception in getPublicKeyFromKeyChain :${e.toString()}');
     }
     return pkamPublicKey;
   }
 
+  ///Returns String value of [key] for [atsign] into FlutterSecureStorage.
   Future<String> getValue(String atsign, String key) async {
     var value;
     try {
-      // assert(atsign != null && atsign != '');
       key = _formKey(atsign: atsign, key: key);
-      // value = await FlutterKeychain.get(key: key);
       value = await _storage.read(key: key);
     } on Exception catch (e) {
       _logger.severe(
@@ -111,19 +108,20 @@ class KeyChainManager {
     return value;
   }
 
+  ///Stores [value] for [atsign] [key] into FlutterSecureStorage.
   Future<String> putValue(String atsign, String key, String value) async {
     try {
-      // assert(atsign != null && atsign != '');
       key = _formKey(atsign: atsign, key: key);
-      // await FlutterKeychain.put(key: atsign + ':' + key, value: value);
       await _storage.write(key: key, value: value);
-    } on Exception catch (e) {
+    } catch (e) {
       _logger.severe(
           'flutter keychain - exception in put value for ${key} :${e.toString()}');
     }
     return value;
   }
 
+  ///Returns `true` on successful storing of [secret]/[privateKey]/[publicKey] for [atSign].
+  ///Throws [assertionError] if [atSign] is null or empty.
   Future<bool> storeCredentialToKeychain(String atSign,
       {String secret, String privateKey, String publicKey}) async {
     var success = false;
@@ -133,19 +131,20 @@ class KeyChainManager {
       if (secret != null) {
         secret = secret.trim().toLowerCase().replaceAll(' ', '');
         await putValue(atSign, KEYCHAIN_SECRET, secret);
-        // FlutterKeychain.put(key: atSign + ':' + KEYCHAIN_SECRET, value: secret);
       }
       await _saveAtSignToKeychain(atSign);
       await storePkamKeysToKeychain(atSign,
           privateKey: privateKey, publicKey: publicKey);
       success = true;
-    } on Exception catch (exception) {
+    } catch (exception) {
       _logger.severe(
           'exception in storeCredentialToKeychain :${exception.toString()}');
     }
     return success;
   }
 
+  ///Stores [privateKey], [publicKey] for [atsign].
+  ///Throws [assertionError] if [atSign] is null or empty.
   Future<void> storePkamKeysToKeychain(String atsign,
       {String privateKey, String publicKey}) async {
     assert(atsign != null && atsign != '');
@@ -154,64 +153,69 @@ class KeyChainManager {
       if (privateKey != null) {
         await putValue(
             atsign, KEYCHAIN_PKAM_PRIVATE_KEY, privateKey.toString());
-        // await FlutterKeychain.put(
-        //     key: atsign + ':' + KEYCHAIN_PKAM_PRIVATE_KEY,
-        //     value: privateKey.toString());
       }
       if (publicKey != null) {
         await putValue(atsign, KEYCHAIN_PKAM_PUBLIC_KEY, publicKey.toString());
-        // await FlutterKeychain.put(
-        //     key: atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY,
-        //     value: publicKey.toString());
       }
-    } on Exception catch (exception) {
+    } catch (exception) {
       _logger.severe(
           'exception in storeCredentialToKeychain :${exception.toString()}');
     }
   }
 
+  ///Returns a generated secure encryption key.
   List<int> _generatePersistenceSecret() {
     return Hive.generateSecureKey();
   }
 
+  ///Returns a generated random [RSAKeypair].
   RSAKeypair generateKeyPair() {
     var rsaKeypair = RSAKeypair.fromRandom();
     return rsaKeypair;
   }
 
+  ///Returns a cramSecret for [atSign].
   Future<String> getCramSecret(String atSign) async {
     return getSecretFromKeychain(atSign);
   }
 
+  ///Returns a private key for [atSign].
   Future<String> getPkamPrivateKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_PKAM_PRIVATE_KEY);
   }
 
+  ///Returns a publicKey for [atSign].
   Future<String> getPkamPublicKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
   }
 
+  ///Returns an encryption Privatekey for [atSign].
   Future<String> getEncryptionPrivateKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
   }
 
+  ///Returns an encryption Publickey for [atSign].
   Future<String> getEncryptionPublicKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
   }
 
+  ///Returns a self encryption AES key for [atSign].
   Future<String> getSelfEncryptionAESKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_SELF_ENCRYPTION_KEY);
   }
 
+  ///Returns a hivesecret Privatekey for [atSign].
   Future<List<int>> getKeyStoreSecret(String atSign) async {
     return getHiveSecretFromKeychain(atSign);
   }
 
+  ///Returns an atsign.
   Future<String> getAtSign() async {
     var atSignList = await getAtSignListFromKeychain();
     return atSignList == null ? atSignList : atSignList[0];
   }
 
+  ///Stores [atsign] along with the primary status into FlutterSecureStorage.
   Future<void> _saveAtSignToKeychain(String atsign) async {
     var atsignMap = <String, bool>{};
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
@@ -227,17 +231,22 @@ class KeyChainManager {
     await _storeAtsign(atsignMap);
   }
 
+  ///Converts [atsignMap] to  `String` type and then stores for `KEYCHAIN_ATSIGN`.
   Future<void> _storeAtsign(Map<String, bool> atsignMap) async {
     var value = jsonEncode(atsignMap);
     await putValue(null, KEYCHAIN_ATSIGN, value);
-    // await FlutterKeychain.put(key: KEYCHAIN_ATSIGN, value: value);
   }
 
+  ///Returns a map of atsigns with their primary status.
   Future<Map<String, bool>> _getAtSigMap() async {
     var atsignMap = <String, bool>{};
     var atsignSecondMap = <String, bool>{};
-    // var value = await FlutterKeychain.get(key: '@atsign');
-    var value = await getValue(null, KEYCHAIN_ATSIGN);
+    var value;
+    if (_isKeychainCheck) {
+      value = await getKeychainValue(null, KEYCHAIN_ATSIGN);
+    } else {
+      value = await getValue(null, KEYCHAIN_ATSIGN);
+    }
 
     if (value != null && value.isNotEmpty) {
       if (!value.contains(':')) {
@@ -260,10 +269,12 @@ class KeyChainManager {
     return atsignMap;
   }
 
+  ///Returns @sign map with the primary status.
   Future<Map<String, bool>> getAtsignsWithStatus() async {
     return await _getAtSigMap();
   }
 
+  ///Returns `true` on making the status of [atsign] as primary.
   Future<bool> makeAtSignPrimary(String atsign) async {
     //check whether given atsign is an already active atsign
     var atsignMap = await _getAtSigMap();
@@ -276,12 +287,11 @@ class KeyChainManager {
       atsignMap[activeAtsign] = false;
     }
     atsignMap[atsign] = true;
-    // var value = jsonEncode(atsignMap);
     await _storeAtsign(atsignMap);
-    // await FlutterKeychain.put(key: '@atsign', value: value);
     return true;
   }
 
+  ///Deletes [atsign] from FlutterSecureStorage.
   Future<void> deleteAtSignFromKeychain(String atsign) async {
     var atsignMap = await _getAtSigMap();
     if (!atsignMap.containsKey(atsign)) {
@@ -290,58 +300,82 @@ class KeyChainManager {
     var isDeletedActiveAtsign = atsignMap[atsign];
     atsignMap.remove(atsign);
     if (atsignMap.isEmpty) {
-      await FlutterKeychain.remove(key: '@atsign');
+      await _storage.delete(key: KEYCHAIN_ATSIGN);
       return;
     }
     if (isDeletedActiveAtsign) {
       atsignMap[atsignMap.keys.first] = true;
     }
     await _storeAtsign(atsignMap);
-
-    // var value = jsonEncode(atsignMap);
-    // await FlutterKeychain.put(key: '@atsign', value: value);
   }
 
+  ///Deletes the [atsign] and it's public, private keys from FlutterSecureStorage.
   Future<void> resetAtSignFromKeychain(String atsign) async {
     await deleteAtSignFromKeychain(atsign);
-    await FlutterKeychain.remove(key: atsign + ':_pkam_private_key');
-    await FlutterKeychain.remove(key: atsign + ':_pkam_public_key');
+    await _storage.delete(key: atsign + ':_pkam_private_key');
+    await _storage.delete(key: atsign + ':_pkam_public_key');
   }
 
+  ///migrates all keys from flutterKeyChain to FlutterKeyStorage.
   Future<void> migrateToFlutterKeyStorage() async {
-    // var value = await FlutterKeychain.
-    // var flutterKeychianKeys = await FlutterKeychain.keys();
-    //TODO: check whether all are migrated flag before migration.
-    var atsign = await getAtSign();
-    var keys = await _storage.readAll();
-    if (keys.length == KEYCHAIN_KEYS_LIST.length) {
-      _logger.info('All keys from flutterkeychain got migrated to keystorage');
-      return;
-    }
-    var value;
     var key;
-    if (atsign == null) {
-      return;
-    }
-    for (key in KEYCHAIN_KEYS_LIST) {
-      try {
-        value = key == KEYCHAIN_ATSIGN
-            ? await FlutterKeychain.get(key: key)
-            : await getKeychainValue(atsign, key);
-        await FlutterKeychain.remove(key: key);
-        await _storage.write(key: key, value: value);
-      } catch (err) {
-        _logger.severe(
-            'Migrating $key from keychain to keystorage throws ${err.toString()}');
+    try {
+      var flutterKeyStorageMigrated = 'keystorageMigrated';
+      var isMigrated = await _storage.read(key: flutterKeyStorageMigrated);
+      if (isMigrated == 'true') {
+        _logger
+            .info('All keys from flutterkeychain got migrated to keystorage');
+        return;
       }
+      _isKeychainCheck = true;
+      var atsignList = await getAtSignListFromKeychain();
+
+      //when app is installed with no data in flutterkeychain.
+      if (atsignList == null) {
+        await _storage.write(key: flutterKeyStorageMigrated, value: 'true');
+        _isKeychainCheck = false;
+        return;
+      }
+      //storing in temp list so that two unique keys will be stored only once to keystorage.
+      var migratingKeysList = [...KEYCHAIN_KEYS_LIST];
+      migratingKeysList.retainWhere((key) =>
+          key != KEYCHAIN_ATSIGN && key != KEYCHAIN_SELF_KEYS_MIGRATED);
+      var value = await getKeychainValue(null, KEYCHAIN_ATSIGN, true);
+      await _storage.write(key: KEYCHAIN_ATSIGN, value: value);
+
+      value = await getKeychainValue(null, KEYCHAIN_SELF_KEYS_MIGRATED, true);
+      await _storage.write(key: KEYCHAIN_SELF_KEYS_MIGRATED, value: value);
+
+      for (var atsign in atsignList) {
+        for (var migratingKey in migratingKeysList) {
+          migratingKey = _formKey(key: migratingKey, atsign: atsign);
+          value = await getKeychainValue(atsign, migratingKey);
+          if (value == null) {
+            continue;
+          }
+          await _storage.write(key: migratingKey, value: value);
+          await FlutterKeychain.remove(key: migratingKey);
+        }
+      }
+      await _storage.write(key: flutterKeyStorageMigrated, value: 'true');
+
+      //after successful migration unique keys will be removed.
+      await FlutterKeychain.remove(key: KEYCHAIN_ATSIGN);
+      await FlutterKeychain.remove(key: KEYCHAIN_SELF_KEYS_MIGRATED);
+
+      _isKeychainCheck = false;
+    } catch (err) {
+      _logger.severe(
+          'Migrating $key from keychain to keystorage throws ${err.toString()}');
     }
   }
 
   ///Fetches value from flutterKeychain
-  Future<String> getKeychainValue(String atsign, String key) async {
+  Future<String> getKeychainValue(String atsign, String key,
+      [bool isFormKey = false]) async {
     var value;
     try {
-      key = _formKey(atsign: atsign, key: key);
+      if (isFormKey) key = _formKey(atsign: atsign, key: key);
       value = await FlutterKeychain.get(key: key);
     } on Exception catch (e) {
       _logger.severe(
@@ -350,10 +384,11 @@ class KeyChainManager {
     return value;
   }
 
+  ///Returns `key` String by parsing it into the suitablevformat/.
   String _formKey({@required String key, String atsign}) {
     if (key == KEYCHAIN_HIVE_SECRET) {
       key = atsign + key;
-    } else if (key == KEYCHAIN_ATSIGN) {
+    } else if (key == KEYCHAIN_ATSIGN || key == KEYCHAIN_SELF_KEYS_MIGRATED) {
       key = key;
     } else {
       key = atsign + ':' + key;
