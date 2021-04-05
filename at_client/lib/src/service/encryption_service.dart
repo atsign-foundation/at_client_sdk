@@ -410,17 +410,17 @@ class EncryptionService {
       logger.finer(
           'shared key for file encryption does not exist. Generating a new one');
       sharedKey = EncryptionUtil.generateAESKey();
-//      var encryptedSharedKey = await encryptForSelf(AT_FILE_ENCRYPTION_SHARED_KEY, sharedKey);
+      var encryptedSharedKey =
+          await encryptForSelf(AT_FILE_ENCRYPTION_SHARED_KEY, sharedKey);
       var updateSharedKeyBuilder = UpdateVerbBuilder()
         ..sharedWith = currentAtSign
         ..sharedBy = currentAtSign
         ..atKey = AT_FILE_ENCRYPTION_SHARED_KEY
-        ..value =
-            sharedKey; // #TODO encrypt using self key. add self key to demo_data
+        ..value = encryptedSharedKey;
       await localSecondary.executeVerb(updateSharedKeyBuilder, sync: true);
     } else {
       sharedKey = sharedKey.replaceFirst('data:', '');
-//      sharedKey = await decryptForSelf(sharedKey, true);
+      sharedKey = await decryptForSelf(sharedKey, true);
     }
 
     //2. Verify if encryptedSharedKey for sharedWith atSign is available.

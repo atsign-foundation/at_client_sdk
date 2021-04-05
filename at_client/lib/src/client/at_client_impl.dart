@@ -837,6 +837,7 @@ class AtClientImpl implements AtClient {
       File file, List<String> sharedWithAtSigns) async {
     var filePath;
     var fileUploaded = false;
+    var fileName = file.path.substring(file.path.lastIndexOf('/') + 1);
     for (var sharedWithAtSign in sharedWithAtSigns) {
       var fileEncryptionKey = await _encryptionService
           .generateFileEncryptionSharedKey(currentAtSign, sharedWithAtSign);
@@ -844,13 +845,14 @@ class AtClientImpl implements AtClient {
         //we have to encrypt and upload file only once since same AES key is used for encrypting file contents
         var encryptedFileContent = await _encryptionService.encryptFile(
             file.readAsBytesSync(), fileEncryptionKey);
-        var encryptedFile = File('my_file.pdf'); //can be s3,filebin, ipfs
+        var encryptedFile = File(
+            '/home/murali/work/2021/@/file_upload/encrypted/$fileName'); //can be s3,filebin, ipfs
         encryptedFile.writeAsBytesSync(encryptedFileContent);
         filePath = encryptedFile.path;
         fileUploaded = true;
       }
       var atKey = AtKey()
-        ..key = 'my_file'
+        ..key = fileName
         ..sharedWith = sharedWithAtSign;
       await put(atKey, filePath);
     }
