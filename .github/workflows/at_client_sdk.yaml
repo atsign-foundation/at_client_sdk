@@ -43,7 +43,12 @@ jobs:
         # flutter-version: '1.12.x' # you can also specify exact version of flutter
     
       # Get flutter dependencies.
-      - run: flutter pub get
+      - name: Run flutter pub get
+        working-directory: at_client_mobile
+        run: flutter pub get
       
-      - run: flutter analyze
+      # Run flutter analyze
+      - name: Run flutter analyze
+        working-directory: at_client_mobile
+        run: flutter analyze
       
