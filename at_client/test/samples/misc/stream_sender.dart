@@ -4,7 +4,7 @@ import 'dart:io';
 void main(List<String> arguments) async {
   for (var i = 0; i < 1; i++) {
     var socket = await SecureSocket.connect('test.do-sf2.atsign.zone', 7474);
-    socket.write('stream:send ${i} dummy\n');
+    socket.write('stream:send $i dummy\n');
     socket.listen((data) {
       var decoded = utf8.decode(data);
       decoded = decoded.trim();

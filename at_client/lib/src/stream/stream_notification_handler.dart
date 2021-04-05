@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
@@ -27,12 +28,11 @@ class StreamNotificationHandler {
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
-    var f =
-        await File('${preference.downloadPath}/${streamNotification.fileName}');
-    var temp_file = await File(
-        '${preference.downloadPath}/temp_${streamNotification.fileName}');
+    var f = File('${preference.downloadPath}/${streamNotification.fileName}');
+    var temp_file =
+        File('${preference.downloadPath}/temp_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
-    var command = 'stream:receive ${streamId}\n';
+    var command = 'stream:receive $streamId\n';
     socket.write(command);
     var bytesReceived = 0;
     socket.listen((onData) async {
@@ -42,7 +42,7 @@ class StreamNotificationHandler {
       }
       bytesReceived += onData.length;
       temp_file.writeAsBytesSync(onData, mode: FileMode.append);
-      logger.finer('bytesReceived:${bytesReceived}');
+      logger.finer('bytesReceived:$bytesReceived');
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         var encryptedData = temp_file.readAsBytesSync();
@@ -54,8 +54,8 @@ class StreamNotificationHandler {
             'Decrypting stream data completed in ${endTime.difference(startTime).inMilliseconds} milliseconds');
         f.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
         await temp_file.delete();
-        logger.info('Stream transfer complete:${streamId}');
-        socket.write('stream:done ${streamId}\n');
+        logger.info('Stream transfer complete:$streamId');
+        socket.write('stream:done $streamId\n');
         streamCompletionCallBack(streamId);
         return;
       }

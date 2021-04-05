@@ -31,7 +31,6 @@ import 'package:base2e15/base2e15.dart';
 import 'package:cron/cron.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-//import 'package:cron/cron.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -59,9 +58,10 @@ class AtClientImpl implements AtClient {
     }
     AtSignLogger('AtClientImpl')
         .severe('Instance of atclientimpl for $currentAtSign is not created');
+    return null;
   }
 
-  static void createClient(String currentAtSign, String namespace,
+  static Future<void> createClient(String currentAtSign, String namespace,
       AtClientPreference preferences) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign);
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
@@ -85,7 +85,7 @@ class AtClientImpl implements AtClient {
     _namespace = namespace;
   }
 
-  void _init() async {
+  Future<void> _init() async {
     if (_preference.isLocalStoreRequired) {
       _localSecondary = LocalSecondary(currentAtSign, _preference);
     }
@@ -105,7 +105,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  void startMonitor(String privateKey, Function notificationCallback,
+  Future<void> startMonitor(String privateKey, Function notificationCallback,
       {String regex}) async {
     var monitorVerbBuilder = MonitorVerbBuilder();
     if (regex != null) {
@@ -319,7 +319,7 @@ class AtClientImpl implements AtClient {
       builder = LLookupVerbBuilder()
         ..isCached = isCached
         ..atKey = 'public:' + keyWithNamespace;
-      builder.sharedBy = sharedBy != null ? sharedBy : currentAtSign;
+      builder.sharedBy = sharedBy ?? currentAtSign;
     } else {
       builder = LLookupVerbBuilder()..atKey = keyWithNamespace;
       if (keyWithNamespace.startsWith(AT_PKAM_PRIVATE_KEY) ||
@@ -399,8 +399,8 @@ class AtClientImpl implements AtClient {
     return _prepareMetadata(getResult, isPublic);
   }
 
-  Future<List<String>> getKeys(
-      {String regex, String sharedBy, String sharedWith}) async {
+  @override
+  Future<List<String>> getKeys({String regex, String sharedBy, String sharedWith}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
@@ -508,7 +508,7 @@ class AtClientImpl implements AtClient {
         var encryptionPrivateKey =
             await _localSecondary.getEncryptionPrivateKey();
         if (encryptionPrivateKey != null) {
-          logger.finer('signing public data for key:${key}');
+          logger.finer('signing public data for key:$key');
           builder.dataSignature =
               _encryptionService.signPublicData(encryptionPrivateKey, value);
         }
@@ -675,7 +675,7 @@ class AtClientImpl implements AtClient {
   String _getKeyWithNamespace(String key) {
     var keyWithNamespace = key;
     if (_namespace != null && _namespace.isNotEmpty) {
-      keyWithNamespace += '.${_namespace}';
+      keyWithNamespace += '.$_namespace';
     }
     return keyWithNamespace;
   }
@@ -700,6 +700,7 @@ class AtClientImpl implements AtClient {
     if (value == null && isMetadataNotNull) {
       return UPDATE_META;
     }
+    return null;
   }
 
   String _formatResult(String commandResult) {
@@ -759,15 +760,15 @@ class AtClientImpl implements AtClient {
     var encryptedData =
         await _encryptionService.encryptStream(data, sharedWith);
     var command =
-        'stream:init${sharedWith} namespace:$namespace ${streamId} ${fileName} ${encryptedData.length}\n';
-    logger.finer('sending stream init:${command}');
+        'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
+    logger.finer('sending stream init:$command');
     var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);
-    logger.finer('ack message:${result}');
+    logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
-      logger.finer('ack received for streamId:${streamId}');
+      logger.finer('ack received for streamId:$streamId');
 
       remoteSecondary.atLookUp.connection.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
@@ -805,7 +806,7 @@ class AtClientImpl implements AtClient {
       ..currentAtSign = currentAtSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
-    logger.info('Sending ack for stream notification:${notification}');
+    logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }
