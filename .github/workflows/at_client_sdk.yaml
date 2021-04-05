@@ -36,19 +36,3 @@ jobs:
         working-directory: at_client
         run: dart analyze
         
-      # Setup the flutter environment.
-      - uses: subosito/flutter-action@v1
-        with:
-         channel: 'beta' # 'dev', 'alpha', default to: 'stable'
-        # flutter-version: '1.12.x' # you can also specify exact version of flutter
-    
-      # Get flutter dependencies.
-      - name: Run flutter pub get
-        working-directory: at_client_mobile
-        run: flutter pub get
-      
-      # Run flutter analyze
-      - name: Run flutter analyze
-        working-directory: at_client_mobile
-        run: flutter analyze
-      
