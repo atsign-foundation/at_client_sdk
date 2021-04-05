@@ -37,9 +37,9 @@ jobs:
         run: dart analyze
 
       # Install dependencies in at_client_mobile library
-      - name: Install dependencies in at_client_mobile
-        working-directory: at_client_mobile
-        run: dart pub get
+      #- name: Install dependencies in at_client_mobile
+      #  working-directory: at_client_mobile
+      #  run: dart pub get
 
       # Run dart analyzer in at_client_mobile library
       - name: Analyze project source in at_client_mobile
