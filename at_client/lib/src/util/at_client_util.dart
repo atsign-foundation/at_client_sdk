@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:at_commons/at_commons.dart';
+
 import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 
@@ -27,7 +28,7 @@ class AtClientUtil {
         await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
     if (secondaryUrl == null) {
       throw SecondaryNotFoundException(
-          'No secondary url found for atsign: ${toAtSign}');
+          'No secondary url found for atsign: $toAtSign');
     }
     return secondaryUrl;
   }
