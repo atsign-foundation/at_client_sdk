@@ -24,15 +24,34 @@ jobs:
       # You can specify other versions if desired, see documentation here:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
       # - uses: dart-lang/setup-dart@v1
-      - uses: dart-lang/setup-dart@9a04e6d73cca37bd455e0608d7e5092f881fd603
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
 
-      # Install dependencies in at_contacts library
+      # Install dependencies in at_client library
       - name: Install dependencies in at_client
         working-directory: at_client
         run: dart pub get
 
-      # Run analyzer in at_contacts library
+      # Run analyzer in at_client library
       - name: Analyze project source in at_client
         working-directory: at_client
         run: dart analyze
-        
+
+      # Run unit tests
+      - name: Run unit tests
+        working-directory: at_client
+        run: dart test
+
+      - name: Installing Flutter
+        uses: britannio/action-install-flutter@v1.0
+        with:
+          version: stable
+
+      - name: Installing dependencies
+        working-directory: at_client_mobile
+        run: flutter pub get
+
+      - name: flutter analyze
+        working-directory: at_client_mobile
+        run: flutter analyze
