@@ -29,31 +29,29 @@ class StreamNotificationHandler {
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
     var f = File('${preference.downloadPath}/${streamNotification.fileName}');
-    var temp_file =
-        File('${preference.downloadPath}/temp_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive $streamId\n';
     socket.write(command);
     var bytesReceived = 0;
+    var encryptedData = [];
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
         return;
       }
       bytesReceived += onData.length;
-      temp_file.writeAsBytesSync(onData, mode: FileMode.append);
+      encryptedData.add(onData);
       logger.finer('bytesReceived:$bytesReceived');
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
-        var encryptedData = temp_file.readAsBytesSync();
         var startTime = DateTime.now();
         var decryptedBytes = await encryptionService.decryptStream(
             encryptedData, streamNotification.senderAtSign);
         var endTime = DateTime.now();
         logger.info(
             'Decrypting stream data completed in ${endTime.difference(startTime).inMilliseconds} milliseconds');
-        f.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
-        await temp_file.delete();
+        decryptedBytes.forEach(
+            (data) => {f.writeAsBytesSync(data, mode: FileMode.append)});
         logger.info('Stream transfer complete:$streamId');
         socket.write('stream:done $streamId\n');
         streamCompletionCallBack(streamId);

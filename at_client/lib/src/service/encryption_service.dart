@@ -236,8 +236,8 @@ class EncryptionService {
     return encryptedValue;
   }
 
-  Future<List<int>> decryptStream(
-      List<int> encryptedValue, String sharedBy) async {
+  Future<List<List<int>>> decryptStream(
+      List<List<int>> encryptedValue, String sharedBy) async {
     if (sharedBy != null) {
       sharedBy = sharedBy.replaceFirst('@', '');
     }
@@ -253,8 +253,12 @@ class EncryptionService {
     var sharedKey =
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
 
+    List<List<int>> decryptedValue;
     //3. decrypt stream using decrypted aes shared key
-    var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey);
+    encryptedValue.forEach((data) {
+      var decryptedBytes = EncryptionUtil.decryptBytes(data, sharedKey);
+      decryptedValue.add(decryptedBytes);
+    });
     return decryptedValue;
   }
 
