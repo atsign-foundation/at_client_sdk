@@ -47,7 +47,7 @@ class KeyChainManager {
 
   ///Returns list of @signs stored in Flutterstorage.
   Future<List<String>> getAtSignListFromKeychain() async {
-    var atsignMap = await _getAtSigMap();
+    var atsignMap = await _getAtSignMap();
     if (atsignMap.isEmpty) {
       return null;
     }
@@ -219,7 +219,7 @@ class KeyChainManager {
   Future<void> _saveAtSignToKeychain(String atsign) async {
     var atsignMap = <String, bool>{};
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
-    atsignMap = await _getAtSigMap();
+    atsignMap = await _getAtSignMap();
     if (atsignMap.isNotEmpty) {
       atsignMap[atsign] =
           atsignMap.containsKey(atsign) ? atsignMap[atsign] : false;
@@ -238,7 +238,7 @@ class KeyChainManager {
   }
 
   ///Returns a map of atsigns with their primary status.
-  Future<Map<String, bool>> _getAtSigMap() async {
+  Future<Map<String, bool>> _getAtSignMap() async {
     var atsignMap = <String, bool>{};
     var atsignSecondMap = <String, bool>{};
     var value;
@@ -271,13 +271,13 @@ class KeyChainManager {
 
   ///Returns @sign map with the primary status.
   Future<Map<String, bool>> getAtsignsWithStatus() async {
-    return await _getAtSigMap();
+    return await _getAtSignMap();
   }
 
   ///Returns `true` on making the status of [atsign] as primary.
   Future<bool> makeAtSignPrimary(String atsign) async {
     //check whether given atsign is an already active atsign
-    var atsignMap = await _getAtSigMap();
+    var atsignMap = await _getAtSignMap();
     if (atsignMap.isEmpty || !atsignMap.containsKey(atsign)) {
       return false;
     }
@@ -293,7 +293,7 @@ class KeyChainManager {
 
   ///Deletes [atsign] from FlutterSecureStorage.
   Future<void> deleteAtSignFromKeychain(String atsign) async {
-    var atsignMap = await _getAtSigMap();
+    var atsignMap = await _getAtSignMap();
     if (!atsignMap.containsKey(atsign)) {
       return;
     }
