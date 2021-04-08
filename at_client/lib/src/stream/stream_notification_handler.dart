@@ -33,25 +33,24 @@ class StreamNotificationHandler {
     var command = 'stream:receive $streamId\n';
     socket.write(command);
     var bytesReceived = 0;
-    var encryptedData = <List<int>>[[]];
+    var sharedKey =
+        await encryptionService.getSharedKey(streamNotification.senderAtSign);
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
         return;
       }
       bytesReceived += onData.length;
-      encryptedData.add(onData);
+      var decryptedBytes =
+          await encryptionService.decryptStream(onData, sharedKey);
+      f.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
       logger.finer('bytesReceived:$bytesReceived');
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         var startTime = DateTime.now();
-        var decryptedBytes = await encryptionService.decryptStream(
-            encryptedData, streamNotification.senderAtSign);
         var endTime = DateTime.now();
         logger.info(
             'Decrypting stream data completed in ${endTime.difference(startTime).inMilliseconds} milliseconds');
-        decryptedBytes.forEach(
-            (data) => {f.writeAsBytesSync(data, mode: FileMode.append)});
         logger.info('Stream transfer complete:$streamId');
         socket.write('stream:done $streamId\n');
         streamCompletionCallBack(streamId);
