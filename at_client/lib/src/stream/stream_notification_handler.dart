@@ -33,7 +33,7 @@ class StreamNotificationHandler {
     var command = 'stream:receive $streamId\n';
     socket.write(command);
     var bytesReceived = 0;
-    var encryptedData = [];
+    var encryptedData = <List<int>>[[]];
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
