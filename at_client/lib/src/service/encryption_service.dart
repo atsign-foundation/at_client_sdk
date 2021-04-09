@@ -236,8 +236,7 @@ class EncryptionService {
     return encryptedValue;
   }
 
-  Future<List<int>> decryptStream(
-      List<int> encryptedValue, String sharedKey) async {
+  List<int> decryptStream(List<int> encryptedValue, String sharedKey) {
     //decrypt stream using decrypted aes shared key
     var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey);
     return decryptedValue;

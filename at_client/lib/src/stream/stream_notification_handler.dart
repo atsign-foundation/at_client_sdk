@@ -41,8 +41,7 @@ class StreamNotificationHandler {
         return;
       }
       bytesReceived += onData.length;
-      var decryptedBytes =
-          await encryptionService.decryptStream(onData, sharedKey);
+      var decryptedBytes = encryptionService.decryptStream(onData, sharedKey);
       f.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
       logger.finer('bytesReceived:$bytesReceived');
       streamReceiveCallBack(bytesReceived);
