@@ -55,8 +55,8 @@ jobs:
         working-directory: at_client
         run: dart run test/functional_test/check_test_env.dart
 
-      # Run unit tests
-      - name: Run unit tests
+      # Run unit and functional tests
+      - name: Run unit and functional tests
         working-directory: at_client
         run: dart test
 
