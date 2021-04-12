@@ -113,15 +113,6 @@ class AtClientImpl implements AtClient {
     }
     _monitorConnection = await _remoteSecondary.monitor(
         monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
-//    var cron = Cron();
-//    cron.schedule(Schedule.parse('*/5 * * * *'), () async {
-//      if (_monitorConnection == null || _monitorConnection.isInValid()) {
-//        _monitorConnection = await _remoteSecondary.monitor(
-//            monitorVerbBuilder.buildCommand(),
-//            notificationCallback,
-//            privateKey);
-//      }
-//    });
   }
 
   @override
@@ -769,7 +760,6 @@ class AtClientImpl implements AtClient {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       logger.finer('ack received for streamId:$streamId');
-
       remoteSecondary.atLookUp.connection.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);

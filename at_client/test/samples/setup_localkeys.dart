@@ -3,12 +3,14 @@ import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_commons/at_commons.dart';
 
 import 'test_util.dart';
+import 'package:at_demo_data/at_demo_data.dart'as demo_data;
 
 void main() async {
   try {
-    var preference = TestUtil.getAlicePreference();
-    var atsign = '@alice🛠';
+    var preference = TestUtil.getBobPreference();
+    var atsign = '@bob🛠';
     //1.
+    await AtClientImpl.createClient('@bob🛠', 'me', preference);
     var atClient = await AtClientImpl.getClient(atsign);
     await atClient.getSyncManager().init(atsign, preference,
         atClient.getRemoteSecondary(), atClient.getLocalSecondary());
@@ -17,21 +19,23 @@ void main() async {
     var result;
     // set pkam private key
     result = await atClient.getLocalSecondary().putValue(
-        AT_PKAM_PRIVATE_KEY, 'MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCDVMetuYSlcwNdS1yLgYE1oBEXaCFZjPq0Lk9w7yjKOqKgPCWnuVVly5+GBkYPYN3mPXbi/LHy3SqVM/8s5srxa+C8s5jk2pQI6BgG/RW59XM6vrGuw0pUQoL0bMyQxtR8XAFVgd54iDcgp4ZPLEH6odAgBraAtkIEpfwSwtMaWJCaS/Yn3q6ZoVOxL+O7DHD2dJWmwwjAJyDqEDeeNVuNHWnmj2ZneVXDnsY4fOR3IZdcGArM28FFcFIM6Q0K6XGiLGvJ2pYPywtzwARFChYJTBJYhNNLRgT+MUvx8fbNa6mMnnXQmagh/YvYwmyIUVQK1EhFNZIgezX9xdmIgS+FAgMBAAECggEAEq0z2FjRrFW23MWi25QHNAEXbSS52WpbHNSZJ45bVqcQCYmEMV4B7wAOJ5kszXMRG3USOyWEiO066Q0D9Pa9VafpxewkiicrdjjLcfL76/4j7O7BhgDvyRvMU8ZFMTGVdjn/VpGpeaqlbFdmmkvI9kOcvXE28wb4TIDuYBykuNI6twRqiaVd1LkKg9yoF0DGfSp8OHGWm/wz5wwnNYT6ofTbgV3gSGKOrLf4rC1swHh1VoNXiaYKQQFo2j23vGznC+hVJy8kAkSTMvRy4+SrZ+0MtYrNt0CI9n4hw79BNzwAd0kfJ5WCsYL6MaF8Giyym3Wl77KoiriwRF7cGCEnAQKBgQDWD+l1b6D8QCmrzxI1iZRoehfdlIlNviTxNks4yaDQ/tu6TC/3ySsRhKvwj7BqFYj2A6ULafeh08MfxpG0MfmJ+aJypC+MJixu/z/OXhQsscnR6avQtVLi9BIZV3EweyaD/yN/PB7IVLuhz6E6BV8kfNDb7UFZzrSSlvm1YzIdvQKBgQCdD5KVbcA88xkv/SrBpJcUME31TIR4DZPg8fSB+IDCnogSwXLxofadezH47Igc1CifLSQp4Rb+8sjVOTIoAXZKvW557fSQk3boR3aZ4CkheDznzjq0vY0qot4llkzHdiogaIUdPDwvYBwERzc73CO3We1pHs36bIz70Z3DRF5BaQKBgQC295jUARs4IVu899yXmEYa2yklAz4tDjajWoYHPwhPO1fysAZcJD3E1oLkttzSgB+2MD1VOTkpwEhLE74cqI6jqZV5qe7eOw7FvTT7npxd64UXAEUUurfjNz11HbGo/8pXDrB3o5qoHwzV7RPg9RByrqETKoMuUSk1FwjPSr9efQKBgAdC7w4Fkvu+aY20cMOfLnT6fsA2l3FNf2bJCPrxWFKnLbdgRkYxrMs/JOJTXT+n93DUj3V4OK3036AsEsuStbti4ra0b7g3eSnoE+2tVXl8q6Qz/rbYhKxR919ZgZc/OVdiPbVKUaYHFYSFHmKgHO6fM8DGcdOALUx/NoIOqSTxAoGBALUdiw8iyI98TFgmbSYjUj5id4MrYKXaR7ndS/SQFOBfJWVH09t5bTxXjKxKsK914/bIqEI71aussf5daOHhC03LdZIQx0ZcCdb2gL8vHNTQoqX75bLRN7J+zBKlwWjjrbhZCMLE/GtAJQNbpJ7jOrVeDwMAF8pK+Put9don44Gx'); // set pkam public key
+        AT_PKAM_PRIVATE_KEY, demo_data.pkamPrivateKeyMap[atsign]); // set pkam public key
     result = await atClient
         .getLocalSecondary()
-        .putValue(AT_PKAM_PUBLIC_KEY, 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAg1THrbmEpXMDXUtci4GBNaARF2ghWYz6tC5PcO8oyjqioDwlp7lVZcufhgZGD2Dd5j124vyx8t0qlTP/LObK8WvgvLOY5NqUCOgYBv0VufVzOr6xrsNKVEKC9GzMkMbUfFwBVYHeeIg3IKeGTyxB+qHQIAa2gLZCBKX8EsLTGliQmkv2J96umaFTsS/juwxw9nSVpsMIwCcg6hA3njVbjR1p5o9mZ3lVw57GOHzkdyGXXBgKzNvBRXBSDOkNCulxoixrydqWD8sLc8AERQoWCUwSWITTS0YE/jFL8fH2zWupjJ510JmoIf2L2MJsiFFUCtRIRTWSIHs1/cXZiIEvhQIDAQAB');
+        .putValue(AT_PKAM_PUBLIC_KEY, demo_data.pkamPublicKeyMap[atsign]);
     // set encryption private key
     result = await atClient
         .getLocalSecondary()
-        .putValue(AT_ENCRYPTION_PRIVATE_KEY, 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDSxiNa3pNOKRqNjceO903eyfZV7c76Lzj+AGtY+qEY1J0ibPdbaX10xIebjDKLGzExJBov6sQKPCe+nexF1bcznWwMK9ZrTowum292u2cyPMOu8/jmFQlj+LpZ4Nbyp4Q5/3O6j4EtxDemRXUpnKEGPzQ6d0tL/LTRPx9gH0qdLln+I3spbsfG6/SKww9fEvWLwBmizubka5arsJ9EUokhnq+pgFQkJVJAJRWjWWXKMSWh1LLBx/UqMK8E4q4w+dRAKz6kom3dAwUjRTsP7KKeeUR2vpMF87Mww9LcO7UselMa3uurLFmtfyniSlVv8LIvrCR6Uy5qEcM540UE3IXTAgMBAAECggEAfImMLE3k1cLdqJQEPIoNHb1RatZXfGXYk+QliW6VLzm5GrUttnpvIUZaJeNBngXUHAgL3RInATEn/q4LA/xSAhJa3Bou2DqSA5vd0VbLk9hpev82qqP1Z3d4jFCYUMoAC9DPTYUrO6J7iyfxIUQltK41qvH/sIdBQ327iS0UBihhiKg16BOKG4SoFJHZfhhL6m86+jnsaBTaAWb8hpa/Mwqs5eDHF78DHK8o+4Q6DufDi34nCwdxEexL3MFa9L0qGbQAqJshgDcJ6yxUzb5+tw3XXpiE0yG9aZ5gPaS2UgOYY1m2mmF4RjFSiLmKyN99H99ycA59enVFyfYh4SnuMQKBgQDq9IwkVyDkNxkaW6hyYMzBwNqId74JUNjXCWyzDJ58JWaNvFYYY4ujSCLTdfdugmVTIUjqXMVsxzq/e9jNaOj7u27/3inqn1VC88GFJJiUiLQcTP1T5ySP4jy5GVrhQ1zP8PtiRqE34emYfVY8OLa7bwf5CufgbL5RzKPrfIafKQKBgQDlpx8DoETRPE7FyZJg9xiUTyZmI/P6RmhCO86knbQa4hEWiCuEIiOheJQxdcW6yCNImbJNSEFUnpweiHEw4xdMmlpR4JDkvsGOyjLI6Y36Yxbi+AipvTuYZ/La7fuOeEjwD7OlgJmva2jEQL6GlhmTibgt5dfwzOiAP0gC4tXomwKBgQDAnZDSLfeSADV9LU0vz3mtEYxWOkw52OSbjWdmdd7ricHESnUOc3VDe9zJHLmnCBFHEE91im5zWfUoi8BVzT7LOIKsEpaseMjuJWUt4K2Rf2ygkuFPSnvn1SHQ4R9m8tGAy19a1upOJM9bKs1qe1ga2tBfc3havOtdpfVwFVtL2QKBgDFsPehx3V2KNQmrz6y+gLOqNQFWS3NZI6bdaCNVLSV78WF//J17G1/sqzfZuKvx1mYRbaXkHusvFzoa8wEqXiFGNpnYUlZoFw+7xCIo4T05hftilbqx1tl9xW4IOVL33/qJ5od/nZN68hkKNfaQ5wAxa0m1ZTuVXZP8CmtUleRxAoGAQcz+GcrzLybY8EMOhYRbb79H8tQ+SoFkTOmJV4ZQDxzg18dPd8+U3YaMp3QngxncOSpjSwsuqpw/SqxHBQE/v91uEzLfPPS2QJ5COBvXM2Y7PsSmMnukIOM0NrtU8MIonv+l7UsHDeCllqe5+uRPpBUUk2mljPVprXo0SDjQr1U=');
-
+        .putValue(AT_ENCRYPTION_PRIVATE_KEY, demo_data.encryptionPrivateKeyMap[atsign]);
+    result = await atClient
+        .getLocalSecondary()
+        .putValue(AT_ENCRYPTION_SELF_KEY, demo_data.aesKeyMap[atsign]);
     // set encryption public key. should be synced
     metadata.isPublic = true;
     var atKey = AtKey()
       ..key = 'publickey'
       ..metadata = metadata;
-    result = await atClient.put(atKey, 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0sYjWt6TTikajY3HjvdN3sn2Ve3O+i84/gBrWPqhGNSdImz3W2l9dMSHm4wyixsxMSQaL+rECjwnvp3sRdW3M51sDCvWa06MLptvdrtnMjzDrvP45hUJY/i6WeDW8qeEOf9zuo+BLcQ3pkV1KZyhBj80OndLS/y00T8fYB9KnS5Z/iN7KW7Hxuv0isMPXxL1i8AZos7m5GuWq7CfRFKJIZ6vqYBUJCVSQCUVo1llyjElodSywcf1KjCvBOKuMPnUQCs+pKJt3QMFI0U7D+yinnlEdr6TBfOzMMPS3Du1LHpTGt7rqyxZrX8p4kpVb/CyL6wkelMuahHDOeNFBNyF0wIDAQAB');
+    result = await atClient.put(atKey, demo_data.encryptionPublicKeyMap[atsign]);
     print(result);
   } on Exception catch (e, trace) {
     print(e.toString());

@@ -1,5 +1,5 @@
 import 'dart:io';
-
+import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
@@ -17,6 +17,7 @@ class StreamNotificationHandler {
 
   var logger = AtSignLogger('StreamNotificationHandler');
 
+
   Future<void> streamAck(AtStreamNotification streamNotification,
       Function streamCompletionCallBack, streamReceiveCallBack) async {
     var streamId = streamNotification.streamId;
@@ -28,25 +29,35 @@ class StreamNotificationHandler {
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
-    var f = File('${preference.downloadPath}/${streamNotification.fileName}');
+    var f = File('${preference.downloadPath}/encrypted_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive $streamId\n';
     socket.write(command);
     var bytesReceived = 0;
+    var firstByteSkipped = false;
     var sharedKey =
         await encryptionService.getSharedKey(streamNotification.senderAtSign);
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
+        logger.finer('skipping prompt');
         return;
       }
+      if (onData.first == 64 && firstByteSkipped == false) {
+        onData = onData.sublist(1);
+        firstByteSkipped = true;
+        logger.finer('skipping @');
+      }
       bytesReceived += onData.length;
-      var decryptedBytes = encryptionService.decryptStream(onData, sharedKey);
-      f.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
-      logger.finer('bytesReceived:$bytesReceived');
+
+      f.writeAsBytesSync(onData, mode: FileMode.append);
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         var startTime = DateTime.now();
+        var decryptedBytes = encryptionService.decryptStream(f.readAsBytesSync(), sharedKey);
+        var decryptedFile = File('${preference.downloadPath}/${streamNotification.fileName}');
+        decryptedFile.writeAsBytesSync(decryptedBytes);
+        f.deleteSync(); // delete encrypted file
         var endTime = DateTime.now();
         logger.info(
             'Decrypting stream data completed in ${endTime.difference(startTime).inMilliseconds} milliseconds');

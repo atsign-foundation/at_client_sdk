@@ -29,7 +29,7 @@ class AtClientPreference {
   List<int> keyStoreSecret;
 
   /// Domain of the root server. Defaults to root.atsign.wtf
-  String rootDomain = 'root.atsign.wtf';
+  String rootDomain = 'localhost';
 
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
@@ -45,7 +45,7 @@ class AtClientPreference {
   int maxDataSize = 512000;
 
   /// Default path to download stream files
-  String downloadPath;
+  String downloadPath='/home/murali/work/2020/@/stream/output';
 
   /// regex to perform sync
   String syncRegex;
