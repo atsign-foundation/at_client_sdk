@@ -38,20 +38,42 @@ jobs:
         working-directory: at_client
         run: dart analyze
 
+      # Get docker-compose file
+      - name: Get docker compose file
+        working-directory: at_client/test
+        run: curl -L atsign.dev/curl/virtualenv-compose-vip.yaml -o docker-compose.yaml
+
+      # Start docker container to run functional tests and unit tests
+      - name: Start docker instance
+        working-directory: at_client/test
+        run: docker-compose up -d
+
+      - name: Check test environment readiness
+        working-directory: at_client
+        run: dart run test/functional_test/check_test_env.dart
+
       # Run unit tests
       - name: Run unit tests
         working-directory: at_client
         run: dart test
 
+      # Adding flutter to path
       - name: Installing Flutter
         uses: britannio/action-install-flutter@v1.0
         with:
           version: stable
 
+      # Install dependencies of at_client_mobile
       - name: Installing dependencies
         working-directory: at_client_mobile
         run: flutter pub get
 
+      # Analyze at_client_mobile package
       - name: flutter analyze
         working-directory: at_client_mobile
         run: flutter analyze
+
+      # stop docker containers
+      - name: stop docker containers
+        working-directory: at_client/test
+        run: docker-compose down
