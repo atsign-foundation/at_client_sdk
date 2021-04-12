@@ -38,6 +38,9 @@ jobs:
         working-directory: at_client
         run: dart analyze
 
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
       # Get docker-compose file
       - name: Get docker compose file
         working-directory: at_client/test
