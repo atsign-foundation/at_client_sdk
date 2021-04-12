@@ -1,20 +1,19 @@
 import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_utils.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
   var logger = AtSignLogger('RemoteSecondary');
 
   String _atSign;
-
-  String _privateKey;
 
   var _preference;
 
@@ -25,7 +24,6 @@ class RemoteSecondary implements Secondary {
     _atSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     privateKey ??= preference.privateKey;
-    _privateKey = privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey, cramSecret: preference.cramSecret);
   }
@@ -93,6 +91,12 @@ class RemoteSecondary implements Secondary {
         command, _atSign, _preference.rootDomain, _preference.rootPort,
         (value) {
       notificationCallBack(value);
-    });
+    }, restartCallBack: _restartCallBack);
+  }
+
+  Future<void> _restartCallBack(
+      String command, Function notificationCallBack, String privateKey) async {
+    logger.info('auto restarting monitor');
+    await monitor(command, notificationCallBack, privateKey);
   }
 }
