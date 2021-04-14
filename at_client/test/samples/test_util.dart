@@ -29,8 +29,8 @@ class TestUtil {
 
   static AtClientPreference getAlicePreference() {
     var preference = AtClientPreference();
-    preference.hiveStoragePath = '/home/murali/work/2020/hive/client';
-    preference.commitLogPath = '/home/murali/work/2020/hive/client/commit';
+    preference.hiveStoragePath = 'hive/client';
+    preference.commitLogPath = 'hive/client/commit';
     preference.isLocalStoreRequired = true;
     preference.syncStrategy = SyncStrategy.IMMEDIATE;
     preference.privateKey =
@@ -38,14 +38,14 @@ class TestUtil {
     preference.rootDomain = 'vip.ve.atsign.zone';
     var hashFile = _getShaForAtSign('@alice🛠');
     preference.keyStoreSecret =
-        _getKeyStoreSecret('/home/murali/work/2020/hive/client/' + hashFile + '.hash');
+        _getKeyStoreSecret('hive/client/' + hashFile + '.hash');
     return preference;
   }
 
   static AtClientPreference getBobPreference() {
     var preference = AtClientPreference();
-    preference.hiveStoragePath = '/home/murali/work/2020/hive/client';
-    preference.commitLogPath = '/home/murali/work/2020/hive/client/commit';
+    preference.hiveStoragePath = 'hive/client';
+    preference.commitLogPath = 'hive/client/commit';
     preference.isLocalStoreRequired = true;
     preference.syncStrategy = SyncStrategy.IMMEDIATE;
     preference.privateKey =
@@ -53,7 +53,7 @@ class TestUtil {
     preference.rootDomain = 'vip.ve.atsign.zone';
     var hashFile = _getShaForAtSign('@bob🛠');
     preference.keyStoreSecret =
-        _getKeyStoreSecret('/home/murali/work/2020/hive/client/' + hashFile + '.hash');
+        _getKeyStoreSecret('hive/client/' + hashFile + '.hash');
     return preference;
   }
 
