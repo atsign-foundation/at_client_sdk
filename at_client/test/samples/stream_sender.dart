@@ -17,8 +17,6 @@ void main() async {
         null);
     var streamResult =
         await atClient.stream('@bob🛠', 'cat.jpeg',namespace: 'atmosphere');
-    //
-    ////home/murali/Pictures/@/cat.jpeg
     print(streamResult);
   } on Exception catch (e, trace) {
     print(e.toString());
