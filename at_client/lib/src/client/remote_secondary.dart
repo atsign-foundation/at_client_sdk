@@ -72,14 +72,14 @@ class RemoteSecondary implements Secondary {
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
   Future<String> sync(int lastSyncedId,
       {String privateKey, String regex}) async {
-    var atCommand = 'sync:${lastSyncedId}';
+    var atCommand = 'sync:$lastSyncedId';
     var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
-        ? ':${regex}'
+        ? ':$regex'
         : ((_preference.syncRegex != null && _preference.syncRegex.isNotEmpty)
             ? ':${_preference.syncRegex}'
             : '');
 
-    atCommand += '${regexString}\n';
+    atCommand += '$regexString\n';
     var syncResult = await atLookUp.executeCommand(atCommand, auth: true);
     return syncResult;
   }
@@ -94,9 +94,8 @@ class RemoteSecondary implements Secondary {
     }, restartCallBack: _restartCallBack);
   }
 
-  Future<void> _restartCallBack(
-      String command, Function notificationCallBack, String privateKey) async {
-    logger.info('auto restarting monitor');
+  Future<void> _restartCallBack( String command, Function notificationCallBack, String privateKey) async {
+    logger.finer('auto restarting monitor');
     await monitor(command, notificationCallBack, privateKey);
   }
 }
