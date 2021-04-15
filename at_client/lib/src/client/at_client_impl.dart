@@ -22,13 +22,11 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/connection/outbound_connection.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:base2e15/base2e15.dart';
-import 'package:cron/cron.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
@@ -41,7 +39,6 @@ class AtClientImpl implements AtClient {
   String _namespace;
   LocalSecondary _localSecondary;
   RemoteSecondary _remoteSecondary;
-  OutboundConnection _monitorConnection;
 
   EncryptionService _encryptionService;
 
@@ -111,7 +108,7 @@ class AtClientImpl implements AtClient {
     if (regex != null) {
       monitorVerbBuilder.regex = regex;
     }
-    _monitorConnection = await _remoteSecondary.monitor(
+    await _remoteSecondary.monitor(
         monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
   }
 
