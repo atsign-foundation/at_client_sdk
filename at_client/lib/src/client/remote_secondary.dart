@@ -91,6 +91,11 @@ class RemoteSecondary implements Secondary {
         command, _atSign, _preference.rootDomain, _preference.rootPort,
         (value) {
       notificationCallBack(value);
-    });
+    }, restartCallBack: _restartCallBack);
+  }
+
+  Future<void> _restartCallBack( String command, Function notificationCallBack, String privateKey) async {
+    logger.finer('auto restarting monitor');
+    await monitor(command, notificationCallBack, privateKey);
   }
 }

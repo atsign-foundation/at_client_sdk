@@ -236,24 +236,8 @@ class EncryptionService {
     return encryptedValue;
   }
 
-  Future<List<int>> decryptStream(
-      List<int> encryptedValue, String sharedBy) async {
-    if (sharedBy != null) {
-      sharedBy = sharedBy.replaceFirst('@', '');
-    }
-
-    var encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
-
-    if (encryptedSharedKey == null || encryptedSharedKey == 'null') {
-      throw KeyNotFoundException('encrypted Shared key not found');
-    }
-    //2. decrypt shared key using private key
-    var currentAtSignPrivateKey =
-        await localSecondary.getEncryptionPrivateKey();
-    var sharedKey =
-        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
-
-    //3. decrypt stream using decrypted aes shared key
+  List<int> decryptStream(List<int> encryptedValue, String sharedKey) {
+    //decrypt stream using decrypted aes shared key
     var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey);
     return decryptedValue;
   }
@@ -422,5 +406,22 @@ class EncryptionService {
       encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
     }
     return encryptedSharedKey;
+  }
+
+  Future<String> getSharedKey(String sharedBy) async {
+    if (sharedBy != null) {
+      sharedBy = sharedBy.replaceFirst('@', '');
+    }
+
+    var encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
+    if (encryptedSharedKey == null || encryptedSharedKey == 'null') {
+      throw KeyNotFoundException('encrypted Shared key not found');
+    }
+    //2. decrypt shared key using private key
+    var currentAtSignPrivateKey =
+        await localSecondary.getEncryptionPrivateKey();
+    var sharedKey =
+        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
+    return sharedKey;
   }
 }
