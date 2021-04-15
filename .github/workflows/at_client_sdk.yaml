@@ -51,6 +51,9 @@ jobs:
         working-directory: at_client/test
         run: docker-compose up -d
 
+      - name: Run PKAM
+        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+
       - name: Check test environment readiness
         working-directory: at_client
         run: dart run test/functional_test/check_test_env.dart

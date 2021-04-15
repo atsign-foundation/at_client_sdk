@@ -9,8 +9,8 @@ var maxRetryCount = 10;
 var retryCount = 1;
 
 void main() {
-  var atsign = '@bob🛠';
-  var atsign_port = 25003;
+  var atsign = '@sitaram🛠';
+  var atsign_port = 25017;
   var root_server = 'vip.ve.atsign.zone';
 
   SecureSocket _secureSocket;
@@ -24,7 +24,7 @@ void main() {
     socket_listener(_secureSocket);
     var response;
     while (response == null || response == 'data:null\n') {
-      _secureSocket.write('lookup:signing_publickey$atsign\n');
+      _secureSocket.write('lookup:publickey$atsign\n');
       response = await read();
       print('waiting for signing public key response : $response');
       await Future.delayed(Duration(seconds: 5));
