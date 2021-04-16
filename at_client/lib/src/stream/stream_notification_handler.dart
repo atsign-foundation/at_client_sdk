@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
