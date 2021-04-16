@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -45,7 +44,6 @@ class LocalSecondary implements Secondary {
     try {
       sync ??= (_preference.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
-        SendPort syncSendPort;
         var syncManager = SyncManagerImpl.getInstance().getSyncManager(_atSign);
         //1. if local and server are out of sync, first sync before updating current key-value
         if (sync) {
@@ -311,9 +309,5 @@ class LocalSecondary implements Secondary {
     var atData = AtData()..data = value;
     isStored = await keyStore.put(key, atData);
     return isStored != null ? true : false;
-  }
-
-  Stream watch({String key}) {
-    return keyStore.watch(key: key);
   }
 }
