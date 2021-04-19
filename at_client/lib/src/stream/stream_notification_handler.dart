@@ -17,7 +17,6 @@ class StreamNotificationHandler {
 
   var logger = AtSignLogger('StreamNotificationHandler');
 
-
   Future<void> streamAck(AtStreamNotification streamNotification,
       Function streamCompletionCallBack, streamReceiveCallBack) async {
     var streamId = streamNotification.streamId;
@@ -29,7 +28,8 @@ class StreamNotificationHandler {
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
-    var f = File('${preference.downloadPath}/encrypted_${streamNotification.fileName}');
+    var f = File(
+        '${preference.downloadPath}/encrypted_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive $streamId\n';
     socket.write(command);
@@ -38,24 +38,20 @@ class StreamNotificationHandler {
     var sharedKey =
         await encryptionService.getSharedKey(streamNotification.senderAtSign);
     socket.listen((onData) async {
-      if (onData.length == 1 && onData.first == 64) {
-        //skip @ prompt
-        logger.finer('skipping prompt');
-        return;
-      }
       if (onData.first == 64 && firstByteSkipped == false) {
         onData = onData.sublist(1);
         firstByteSkipped = true;
         logger.finer('skipping @');
       }
       bytesReceived += onData.length;
-
       f.writeAsBytesSync(onData, mode: FileMode.append);
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         var startTime = DateTime.now();
-        var decryptedBytes = encryptionService.decryptStream(f.readAsBytesSync(), sharedKey);
-        var decryptedFile = File('${preference.downloadPath}/${streamNotification.fileName}');
+        var decryptedBytes =
+            encryptionService.decryptStream(f.readAsBytesSync(), sharedKey);
+        var decryptedFile =
+            File('${preference.downloadPath}/${streamNotification.fileName}');
         decryptedFile.writeAsBytesSync(decryptedBytes);
         f.deleteSync(); // delete encrypted file
         var endTime = DateTime.now();
