@@ -133,7 +133,7 @@ class LocalSecondary implements Secondary {
               isEncrypted: builder.isEncrypted);
           break;
       }
-      return 'data:${updateResult}';
+      return 'data:$updateResult';
     } on DataStoreException catch (e) {
       logger.severe('exception in local update:${e.toString()}');
       rethrow;
@@ -142,18 +142,18 @@ class LocalSecondary implements Secondary {
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {
     try {
-      var llookupKey;
+      var llookupKey = '';
       if (builder.isCached) {
-        llookupKey =
-            'cached:${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
-      } else if (builder.sharedWith != null) {
-        llookupKey =
-            '${AtUtils.formatAtSign(builder.sharedWith)}:${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
-      } else if (builder.sharedBy != null) {
-        llookupKey =
-            '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
-      } else {
-        llookupKey = builder.atKey;
+        llookupKey += 'cached:';
+      }
+      if (builder.sharedWith != null) {
+        llookupKey += '${AtUtils.formatAtSign(builder.sharedWith)}:';
+      }
+      if (builder.atKey != null) {
+        llookupKey += builder.atKey;
+      }
+      if (builder.sharedBy != null) {
+        llookupKey += AtUtils.formatAtSign(builder.sharedBy);
       }
       var llookupMeta = await keyStore.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
@@ -162,7 +162,7 @@ class LocalSecondary implements Secondary {
         var llookupResult = await keyStore.get(llookupKey);
         result = _prepareResponseData(builder.operation, llookupResult);
       }
-      return 'data:${result}';
+      return 'data:$result';
     } on DataStoreException catch (e) {
       logger.severe('exception in llookup:${e.toString()}');
       rethrow;
@@ -185,10 +185,10 @@ class LocalSecondary implements Secondary {
         deleteKey +=
             '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy)}';
       } else {
-        deleteKey += '${builder.atKey}';
+        deleteKey += builder.atKey;
       }
       var deleteResult = await keyStore.remove(deleteKey);
-      return 'data:${deleteResult}';
+      return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       logger.severe('exception in delete:${e.toString()}');
       rethrow;
@@ -210,7 +210,7 @@ class LocalSecondary implements Secondary {
       // Gets keys shared to sharedWith atSign.
       if (builder.sharedWith != null) {
         keys.retainWhere(
-            (element) => element.startsWith('${builder.sharedWith}') == true);
+            (element) => element.startsWith(builder.sharedWith) == true);
       }
       keys.removeWhere((key) =>
           key.toString().startsWith('privatekey:') ||
@@ -291,8 +291,7 @@ class LocalSecondary implements Secondary {
 
   Future<String> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.formatAtSign(atSign);
-    var privateKeyData =
-        await keyStore.get('${AT_ENCRYPTION_PUBLIC_KEY}$atSign');
+    var privateKeyData = await keyStore.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
     return privateKeyData?.data;
   }
 

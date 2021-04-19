@@ -97,7 +97,7 @@ class SyncManager {
         if (lastSyncedLocalSeq > serverCommitId) {
           lastSyncedLocalSeq = serverCommitId;
         }
-        logger.finer('app init: lastSyncedLocalSeq: ${lastSyncedLocalSeq} ');
+        logger.finer('app init: lastSyncedLocalSeq: $lastSyncedLocalSeq');
       }
       var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
           lastSyncedLocalSeq, regex,
@@ -145,16 +145,16 @@ class SyncManager {
                     'update/delete for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
               }
 
-              logger.finer('***batchId:${batchId} key: ${commitEntry.atKey}');
+              logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
               await SyncUtil.updateCommitEntry(commitEntry, commitId, _atSign);
             } on Exception catch (e) {
               logger.severe(
-                  'exception while updating commit entry for entry:${entry} ${e.toString()}');
+                  'exception while updating commit entry for entry:$entry ${e.toString()}');
             }
           }
         } on Exception catch (e) {
           logger.severe(
-              'exception while syncing batch: ${e.toString()} batch commit entries: ${unCommittedEntryList}');
+              'exception while syncing batch: ${e.toString()} batch commit entries: $unCommittedEntryList');
         }
       }
     } on AtLookUpException catch (e) {
@@ -191,7 +191,7 @@ class SyncManager {
         isolateInput['private_key'] = privateKey?.data;
         syncSendPort.send(isolateInput);
       } else {
-        logger.info('received server commit id from isolate: ${message}');
+        logger.info('received server commit id from isolate: $message');
         var operation = message['operation'];
         switch (operation) {
           case 'get_commit_id_result':
@@ -224,7 +224,7 @@ class SyncManager {
               pushedCount = unCommittedEntries.length;
               for (var entry in unCommittedEntries) {
                 var command = await _getCommand(entry);
-                logger.info('command:${command}');
+                logger.info('command:$command');
                 var builder;
                 switch (entry.operation) {
                   case CommitOp.UPDATE:
@@ -264,11 +264,11 @@ class SyncManager {
             var entry_key = message['entry_key'];
             var entry = SyncUtil.getEntry(entry_key, _atSign);
             logger.info(
-                'received remote push result: ${entry_key} ${entry} ${entry_key}');
+                'received remote push result: $entry_key $entry $entry_key');
             await SyncUtil.updateCommitEntry(
                 entry, int.parse(serverCommitId), _atSign);
             pushedCount--;
-            print('pushedCount:${pushedCount}');
+            print('pushedCount:$pushedCount');
             if (pushedCount == 0) syncDone = true;
             break;
         }
@@ -343,7 +343,7 @@ class SyncManager {
     }
   }
 
-  void _pullToLocal(
+  Future<void> _pullToLocal(
       VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
     var verbResult = await _localSecondary.executeVerb(builder, sync: false);
     var sequenceNumber = int.parse(verbResult.split(':')[1]);
@@ -353,7 +353,7 @@ class SyncManager {
         commitEntry, serverCommitEntry['commitId'], _atSign);
   }
 
-  void syncImmediate(
+  Future<void> syncImmediate(
       String localSequence, VerbBuilder builder, CommitOp operation) async {
     try {
       var verbResult = await _remoteSecondary.executeVerb(builder);
@@ -374,11 +374,11 @@ class SyncManager {
       case CommitOp.UPDATE:
         var key = entry.atKey;
         var value = await _localSecondary.keyStore.get(key);
-        command = 'update:${key} ${value?.data}';
+        command = 'update:$key ${value?.data}';
         break;
       case CommitOp.DELETE:
         var key = entry.atKey;
-        command = 'delete:${key}';
+        command = 'delete:$key';
         break;
       case CommitOp.UPDATE_META:
         var key = entry.atKey;
@@ -386,7 +386,7 @@ class SyncManager {
         if (metaData != null) {
           key += _metadataToString(metaData);
         }
-        command = 'update:meta:${key}';
+        command = 'update:meta:$key';
         break;
       case CommitOp.UPDATE_ALL:
         var key = entry.atKey;
@@ -396,9 +396,9 @@ class SyncManager {
         if (metaData != null) {
           keyGen = _metadataToString(metaData);
         }
-        keyGen += ':${key}';
+        keyGen += ':$key';
         value?.metaData = metaData;
-        command = 'update${keyGen} ${value?.data}';
+        command = 'update$keyGen ${value?.data}';
         break;
     }
     return command;
@@ -454,7 +454,7 @@ class SyncManager {
       command = command.replaceAll('cached:', '');
       command = VerbUtil.replaceNewline(command);
       var batchRequest = BatchRequest(batchId, command);
-      logger.finer('batchId:${batchId} key:${entry.atKey}');
+      logger.finer('batchId:$batchId key:${entry.atKey}');
       batchRequests.add(batchRequest);
       batchId++;
     }
@@ -466,7 +466,7 @@ class SyncManager {
       var cron = Cron();
       cron.schedule(Schedule.parse('*/${_preference.syncIntervalMins} * * * *'),
           () async {
-        syncWithIsolate();
+            await syncWithIsolate();
       });
       _isScheduled = true;
     } on Exception catch (e) {

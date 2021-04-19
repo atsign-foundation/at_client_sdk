@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -15,8 +14,6 @@ class RemoteSecondary implements Secondary {
 
   String _atSign;
 
-  String _privateKey;
-
   var _preference;
 
   AtLookupImpl atLookUp;
@@ -28,7 +25,6 @@ class RemoteSecondary implements Secondary {
     _atSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     privateKey ??= preference.privateKey;
-    _privateKey = privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey, cramSecret: preference.cramSecret);
     atLookupSync = AtLookupSync(
@@ -101,6 +97,11 @@ class RemoteSecondary implements Secondary {
         command, _atSign, _preference.rootDomain, _preference.rootPort,
         (value) {
       notificationCallBack(value);
-    });
+    }, restartCallBack: _restartCallBack);
+  }
+
+  Future<void> _restartCallBack( String command, Function notificationCallBack, String privateKey) async {
+    logger.finer('auto restarting monitor');
+    await monitor(command, notificationCallBack, privateKey);
   }
 }
