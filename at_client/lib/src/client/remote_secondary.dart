@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -76,15 +77,13 @@ class RemoteSecondary implements Secondary {
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
   Future<String> sync(int lastSyncedId,
       {String privateKey, String regex, Function syncCallback}) async {
-    var atCommand = 'sync:${lastSyncedId}';
+    var atCommand = 'sync:$lastSyncedId';
     var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
-        ? ':${regex}'
+        ? ':$regex'
         : ((_preference.syncRegex != null && _preference.syncRegex.isNotEmpty)
             ? ':${_preference.syncRegex}'
             : '');
-
-    atCommand += '${regexString}\n';
-
+    atCommand += '$regexString\n';
     atLookupSync.syncCallback = syncCallback;
     var syncResult = await atLookupSync.executeCommand(atCommand, auth: true);
     return syncResult;
@@ -100,7 +99,8 @@ class RemoteSecondary implements Secondary {
     }, restartCallBack: _restartCallBack);
   }
 
-  Future<void> _restartCallBack( String command, Function notificationCallBack, String privateKey) async {
+  Future<void> _restartCallBack(
+      String command, Function notificationCallBack, String privateKey) async {
     logger.finer('auto restarting monitor');
     await monitor(command, notificationCallBack, privateKey);
   }
