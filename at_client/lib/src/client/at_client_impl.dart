@@ -22,16 +22,13 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/exception/at_exceptions.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/connection/outbound_connection.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:base2e15/base2e15.dart';
-import 'package:cron/cron.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-//import 'package:cron/cron.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -42,7 +39,6 @@ class AtClientImpl implements AtClient {
   String _namespace;
   LocalSecondary _localSecondary;
   RemoteSecondary _remoteSecondary;
-  OutboundConnection _monitorConnection;
 
   EncryptionService _encryptionService;
 
@@ -59,9 +55,10 @@ class AtClientImpl implements AtClient {
     }
     AtSignLogger('AtClientImpl')
         .severe('Instance of atclientimpl for $currentAtSign is not created');
+    return null;
   }
 
-  static void createClient(String currentAtSign, String namespace,
+  static Future<void> createClient(String currentAtSign, String namespace,
       AtClientPreference preferences) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign);
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
@@ -85,7 +82,7 @@ class AtClientImpl implements AtClient {
     _namespace = namespace;
   }
 
-  void _init() async {
+  Future<void> _init() async {
     if (_preference.isLocalStoreRequired) {
       _localSecondary = LocalSecondary(currentAtSign, _preference);
     }
@@ -110,23 +107,14 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  void startMonitor(String privateKey, Function notificationCallback,
+  Future<void> startMonitor(String privateKey, Function notificationCallback,
       {String regex}) async {
     var monitorVerbBuilder = MonitorVerbBuilder();
     if (regex != null) {
       monitorVerbBuilder.regex = regex;
     }
-    _monitorConnection = await _remoteSecondary.monitor(
+    await _remoteSecondary.monitor(
         monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
-    var cron = Cron();
-    cron.schedule(Schedule.parse('*/5 * * * *'), () async {
-      if (_monitorConnection == null || _monitorConnection.isInValid()) {
-        _monitorConnection = await _remoteSecondary.monitor(
-            monitorVerbBuilder.buildCommand(),
-            notificationCallback,
-            privateKey);
-      }
-    });
   }
 
   @override
@@ -233,7 +221,7 @@ class AtClientImpl implements AtClient {
     } else {
       keyWithNamespace = key;
     }
-    if (sharedBy != null && isCached) {
+    if (sharedBy != null && isCached && !isPublic) {
       builder = LLookupVerbBuilder()
         ..atKey = keyWithNamespace
         ..sharedBy = sharedBy
@@ -243,7 +231,7 @@ class AtClientImpl implements AtClient {
       var secondary = getSecondary(isDedicated: isDedicated);
       var encryptedResult = await secondary.executeVerb(builder);
       if (isDedicated && (secondary is RemoteSecondary)) {
-        secondary.atLookUp.connection.close();
+        await secondary.atLookUp.connection.close();
       }
       if (encryptedResult == 'data:null') {
         return null;
@@ -267,7 +255,7 @@ class AtClientImpl implements AtClient {
         encryptedResultMap['data'] = decryptedValue;
       }
       return encryptedResultMap;
-    } else if (sharedBy != null && sharedBy != currentAtSign) {
+    } else if (sharedBy != null && sharedBy != currentAtSign && !isCached) {
       if (isPublic) {
         builder = PLookupVerbBuilder()
           ..atKey = keyWithNamespace
@@ -278,7 +266,7 @@ class AtClientImpl implements AtClient {
         var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
         var result = await remoteSecondary.executeVerb(builder);
         if (isDedicated && remoteSecondary != null) {
-          remoteSecondary.atLookUp.connection.close();
+          await remoteSecondary.atLookUp.connection.close();
         }
         result = _formatResult(result);
         return jsonDecode(result);
@@ -293,7 +281,7 @@ class AtClientImpl implements AtClient {
         var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
         var encryptedResult = await remoteSecondary.executeVerb(builder);
         if (isDedicated && remoteSecondary != null) {
-          remoteSecondary.atLookUp.connection.close();
+          await remoteSecondary.atLookUp.connection.close();
         }
         // If lookup response from remote secondary is 'data:null'.
         if (encryptedResult != null && encryptedResult == 'data:null') {
@@ -331,7 +319,7 @@ class AtClientImpl implements AtClient {
         var secondary = getSecondary(isDedicated: isDedicated);
         var encryptedResult = await secondary.executeVerb(builder);
         if (isDedicated && (secondary is RemoteSecondary)) {
-          secondary.atLookUp.connection.close();
+          await secondary.atLookUp.connection.close();
         }
         if (encryptedResult != null && encryptedResult == 'data:null') {
           return null;
@@ -348,8 +336,9 @@ class AtClientImpl implements AtClient {
       }
     } else if (isPublic) {
       builder = LLookupVerbBuilder()
-        ..atKey = 'public:' + keyWithNamespace
-        ..sharedBy = currentAtSign;
+        ..isCached = isCached
+        ..atKey = 'public:' + keyWithNamespace;
+      builder.sharedBy = sharedBy ?? currentAtSign;
     } else {
       builder = LLookupVerbBuilder()..atKey = keyWithNamespace;
       if (keyWithNamespace.startsWith(AT_PKAM_PRIVATE_KEY) ||
@@ -365,7 +354,7 @@ class AtClientImpl implements AtClient {
     var secondary = getSecondary(isDedicated: isDedicated);
     var result = await secondary.executeVerb(builder);
     if (isDedicated && (secondary is RemoteSecondary)) {
-      secondary.atLookUp.connection.close();
+      await secondary.atLookUp.connection.close();
     }
     if (result == null || result == 'data:null') {
       return null;
@@ -435,6 +424,7 @@ class AtClientImpl implements AtClient {
     return _prepareMetadata(getResult, isPublic);
   }
 
+  @override
   Future<List<String>> getKeys(
       {String regex,
       String sharedBy,
@@ -448,7 +438,7 @@ class AtClientImpl implements AtClient {
     var secondary = getSecondary(isDedicated: isDedicated);
     var scanResult = await secondary.executeVerb(builder);
     if (isDedicated && (secondary is RemoteSecondary)) {
-      secondary.atLookUp.connection.close();
+      await secondary.atLookUp.connection.close();
     }
     scanResult = _formatResult(scanResult);
     var result = [];
@@ -554,7 +544,7 @@ class AtClientImpl implements AtClient {
         var encryptionPrivateKey =
             await _localSecondary.getEncryptionPrivateKey();
         if (encryptionPrivateKey != null) {
-          logger.finer('signing public data for key:${key}');
+          logger.finer('signing public data for key:$key');
           builder.dataSignature =
               _encryptionService.signPublicData(encryptionPrivateKey, value);
         }
@@ -571,7 +561,7 @@ class AtClientImpl implements AtClient {
       var secondary = getSecondary(isDedicated: isDedicated);
       putResult = await secondary.executeVerb(builder, sync: isSyncRequired);
       if (isDedicated && (secondary is RemoteSecondary)) {
-        secondary.atLookUp.connection.close();
+        await secondary.atLookUp.connection.close();
       }
     } on AtClientException catch (e) {
       logger.severe(
@@ -657,7 +647,7 @@ class AtClientImpl implements AtClient {
     var notifyResult =
         await secondary.executeVerb(builder, sync: isSyncRequired);
     if (isDedicated && (secondary is RemoteSecondary)) {
-      secondary.atLookUp.connection.close();
+      await secondary.atLookUp.connection.close();
     }
     return notifyResult != null;
   }
@@ -697,7 +687,7 @@ class AtClientImpl implements AtClient {
       var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
       var notifyList = await remoteSecondary.executeVerb(builder);
       if (isDedicated && remoteSecondary != null) {
-        remoteSecondary.atLookUp.connection.close();
+        await remoteSecondary.atLookUp.connection.close();
       }
       return notifyList;
     } on AtLookUpException catch (e) {
@@ -740,7 +730,7 @@ class AtClientImpl implements AtClient {
   String _getKeyWithNamespace(String key) {
     var keyWithNamespace = key;
     if (_namespace != null && _namespace.isNotEmpty) {
-      keyWithNamespace += '.${_namespace}';
+      keyWithNamespace += '.$_namespace';
     }
     return keyWithNamespace;
   }
@@ -765,6 +755,7 @@ class AtClientImpl implements AtClient {
     if (value == null && isMetadataNotNull) {
       return UPDATE_META;
     }
+    return null;
   }
 
   String _formatResult(String commandResult) {
@@ -824,16 +815,15 @@ class AtClientImpl implements AtClient {
     var encryptedData =
         await _encryptionService.encryptStream(data, sharedWith);
     var command =
-        'stream:init${sharedWith} namespace:$namespace ${streamId} ${fileName} ${encryptedData.length}\n';
-    logger.finer('sending stream init:${command}');
+        'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
+    logger.finer('sending stream init:$command');
     var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);
-    logger.finer('ack message:${result}');
+    logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
-      logger.finer('ack received for streamId:${streamId}');
-
+      logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
@@ -870,7 +860,7 @@ class AtClientImpl implements AtClient {
       ..currentAtSign = currentAtSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
-    logger.info('Sending ack for stream notification:${notification}');
+    logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }

@@ -1,6 +1,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_commons/at_commons.dart';
+
 import 'test_util.dart';
 
 void main() async {
@@ -10,7 +11,7 @@ void main() async {
     //1.
     await AtClientImpl.createClient('@alice', 'me', preference);
     var atClient = await AtClientImpl.getClient('@alice');
-    await atClient.getSyncManager().init(atsign, preference,
+    atClient.getSyncManager().init(atsign, preference,
         atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var metadata = Metadata();
     metadata.namespaceAware = false;

@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:crypton/crypton.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
-import 'package:crypton/crypton.dart';
-import 'package:at_client_mobile/src/auth_constants.dart';
 
 class KeyChainManager {
   static final KeyChainManager _singleton = KeyChainManager._internal();
@@ -39,7 +40,7 @@ class KeyChainManager {
   }
 
   Future<List<String>> getAtSignListFromKeychain() async {
-    var atsignMap = await _getAtSigMap();
+    var atsignMap = await _getAtSignMap();
     if (atsignMap.isEmpty) {
       return null;
     }
@@ -95,7 +96,7 @@ class KeyChainManager {
       value = await FlutterKeychain.get(key: atsign + ':' + key);
     } on Exception catch (e) {
       _logger.severe(
-          'flutter keychain - exception in get value for ${key} :${e.toString()}');
+          'flutter keychain - exception in get value for $key :${e.toString()}');
     }
     return value;
   }
@@ -106,7 +107,7 @@ class KeyChainManager {
       await FlutterKeychain.put(key: atsign + ':' + key, value: value);
     } on Exception catch (e) {
       _logger.severe(
-          'flutter keychain - exception in put value for ${key} :${e.toString()}');
+          'flutter keychain - exception in put value for $key :${e.toString()}');
     }
     return value;
   }
@@ -199,7 +200,7 @@ class KeyChainManager {
   Future<void> _saveAtSignToKeychain(String atsign) async {
     var atsignMap = <String, bool>{};
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
-    atsignMap = await _getAtSigMap();
+    atsignMap = await _getAtSignMap();
     if (atsignMap.isNotEmpty) {
       atsignMap[atsign] =
           atsignMap.containsKey(atsign) ? atsignMap[atsign] : false;
@@ -216,7 +217,7 @@ class KeyChainManager {
     await FlutterKeychain.put(key: '@atsign', value: value);
   }
 
-  Future<Map<String, bool>> _getAtSigMap() async {
+  Future<Map<String, bool>> _getAtSignMap() async {
     var atsignMap = <String, bool>{};
     var atsignSecondMap = <String, bool>{};
     var value = await FlutterKeychain.get(key: '@atsign');
@@ -242,12 +243,12 @@ class KeyChainManager {
   }
 
   Future<Map<String, bool>> getAtsignsWithStatus() async {
-    return await _getAtSigMap();
+    return await _getAtSignMap();
   }
 
   Future<bool> makeAtSignPrimary(String atsign) async {
     //check whether given atsign is an already active atsign
-    var atsignMap = await _getAtSigMap();
+    var atsignMap = await _getAtSignMap();
     if (atsignMap.isEmpty || !atsignMap.containsKey(atsign)) {
       return false;
     }
@@ -263,7 +264,7 @@ class KeyChainManager {
   }
 
   Future<void> deleteAtSignFromKeychain(String atsign) async {
-    var atsignMap = await _getAtSigMap();
+    var atsignMap = await _getAtSignMap();
     if (!atsignMap.containsKey(atsign)) {
       return;
     }
