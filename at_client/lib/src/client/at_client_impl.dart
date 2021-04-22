@@ -99,9 +99,8 @@ class AtClientImpl implements AtClient {
       return _localSecondary;
     }
     if (isDedicated) {
-      var remoteSecondary = RemoteSecondary(currentAtSign, _preference,
+      return RemoteSecondary(currentAtSign, _preference,
           privateKey: _preference.privateKey);
-      return remoteSecondary;
     }
     return _remoteSecondary;
   }
@@ -201,8 +200,8 @@ class AtClientImpl implements AtClient {
       ..atKey = keyWithNamespace
       ..sharedBy = sharedBy;
 
-    var deleteResult =
-        await getSecondary(isDedicated: isDedicated).executeVerb(builder);
+    var deleteResult = await getSecondary(isDedicated: isDedicated)
+        .executeVerb(builder, sync: (isDedicated ? false : null));
     return deleteResult != null;
   }
 
@@ -229,7 +228,8 @@ class AtClientImpl implements AtClient {
         ..sharedWith = currentAtSign
         ..operation = operation;
       var secondary = getSecondary(isDedicated: isDedicated);
-      var encryptedResult = await secondary.executeVerb(builder);
+      var encryptedResult = await secondary.executeVerb(builder,
+          sync: (isDedicated ? false : null));
       if (isDedicated && (secondary is RemoteSecondary)) {
         await secondary.atLookUp.connection.close();
       }
@@ -264,7 +264,8 @@ class AtClientImpl implements AtClient {
           builder.operation = operation;
         }
         var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
-        var result = await remoteSecondary.executeVerb(builder);
+        var result = await remoteSecondary.executeVerb(builder,
+            sync: (isDedicated ? false : null));
         if (isDedicated && remoteSecondary != null) {
           await remoteSecondary.atLookUp.connection.close();
         }
@@ -279,7 +280,8 @@ class AtClientImpl implements AtClient {
           builder.operation = operation;
         }
         var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
-        var encryptedResult = await remoteSecondary.executeVerb(builder);
+        var encryptedResult = await remoteSecondary.executeVerb(builder,
+            sync: (isDedicated ? false : null));
         if (isDedicated && remoteSecondary != null) {
           await remoteSecondary.atLookUp.connection.close();
         }
@@ -317,7 +319,8 @@ class AtClientImpl implements AtClient {
       }
       if (sharedWith != currentAtSign) {
         var secondary = getSecondary(isDedicated: isDedicated);
-        var encryptedResult = await secondary.executeVerb(builder);
+        var encryptedResult = await secondary.executeVerb(builder,
+            sync: (isDedicated ? false : null));
         if (isDedicated && (secondary is RemoteSecondary)) {
           await secondary.atLookUp.connection.close();
         }
@@ -352,7 +355,8 @@ class AtClientImpl implements AtClient {
       builder.operation = operation;
     }
     var secondary = getSecondary(isDedicated: isDedicated);
-    var result = await secondary.executeVerb(builder);
+    var result = await secondary.executeVerb(builder,
+        sync: (isDedicated ? false : null));
     if (isDedicated && (secondary is RemoteSecondary)) {
       await secondary.atLookUp.connection.close();
     }
@@ -559,7 +563,8 @@ class AtClientImpl implements AtClient {
         builder.isJson = true;
       }
       var secondary = getSecondary(isDedicated: isDedicated);
-      putResult = await secondary.executeVerb(builder, sync: isSyncRequired);
+      putResult = await secondary.executeVerb(builder,
+          sync: (isDedicated ? false : isSyncRequired));
       if (isDedicated && (secondary is RemoteSecondary)) {
         await secondary.atLookUp.connection.close();
       }
@@ -644,8 +649,11 @@ class AtClientImpl implements AtClient {
       isSyncRequired = false;
     }
     var secondary = getSecondary(isDedicated: isDedicated);
-    var notifyResult =
-        await secondary.executeVerb(builder, sync: isSyncRequired);
+    if (isDedicated) {
+      isSyncRequired = false;
+    }
+    var notifyResult = await secondary.executeVerb(builder,
+        sync: (isDedicated ? false : isSyncRequired));
     if (isDedicated && (secondary is RemoteSecondary)) {
       await secondary.atLookUp.connection.close();
     }
