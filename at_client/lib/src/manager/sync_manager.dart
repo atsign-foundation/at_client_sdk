@@ -113,14 +113,8 @@ class SyncManager {
       // cloud is ahead if server commit id is > last synced commit id in local
       if (serverCommitId > lastSyncedCommitId) {
         // send sync verb to server and sync the changes to local
-        var syncResponse = await _remoteSecondary.sync(lastSyncedCommitId,
+        await _remoteSecondary.sync(lastSyncedCommitId,
             regex: regex, syncCallback: _syncLocal);
-        if (syncResponse != null && syncResponse != 'data:null') {
-          syncResponse = syncResponse.replaceFirst('data:', '');
-          var syncResponseJson = jsonDecode(syncResponse);
-          await Future.forEach(syncResponseJson,
-              (serverCommitEntry) => _syncLocal(serverCommitEntry));
-        }
         return;
       }
 

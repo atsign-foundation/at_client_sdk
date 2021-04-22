@@ -85,8 +85,7 @@ class RemoteSecondary implements Secondary {
             : '');
     atCommand += '$regexString\n';
     atLookupSync.syncCallback = syncCallback;
-    var syncResult = await atLookupSync.executeCommand(atCommand, auth: true);
-    return syncResult;
+    return await atLookupSync.executeCommand(atCommand, auth: true);
   }
 
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
