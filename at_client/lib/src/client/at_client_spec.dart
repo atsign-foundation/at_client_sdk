@@ -52,7 +52,7 @@ abstract class AtClient {
   ///             sharedWith='@bob'
   ///    put(key, '+1 999 9999');
   /// ```
-  Future<bool> put(AtKey key, dynamic value);
+  Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
 
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
@@ -114,7 +114,7 @@ abstract class AtClient {
   ///             ..metadata=metaData
   ///   get(key);
   /// ```
-  Future<AtValue> get(AtKey key);
+  Future<AtValue> get(AtKey key, {bool isDedicated = false});
 
   /// Gets the metadata of [AtKey.key]
   /// ```
@@ -180,7 +180,7 @@ abstract class AtClient {
   ///             ..metadata = metaData
   ///   delete(key);
   ///```
-  Future<bool> delete(AtKey key);
+  Future<bool> delete(AtKey key, {bool isDedicated = false});
 
   /// Get all the keys stored in user's secondary in [AtKey] format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
@@ -236,7 +236,8 @@ abstract class AtClient {
       PriorityEnum priority,
       StrategyEnum strategy,
       int latestN,
-      String notifier});
+      String notifier,
+      bool isDedicated = false});
 
   /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
   /// ```
