@@ -24,6 +24,7 @@ abstract class AtClient {
   /// phone.persona@alice where 'persona' is the namespace. If you want to save by ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
   /// Additional metadata can be set using [AtKey.metadata]
+  /// [isDedicated] need to be set to true to create a dedicated connection
   /// ```
   /// update:phone@alice +1 999 9999
   ///   var key = AtKey()..key='phone'
@@ -76,6 +77,7 @@ abstract class AtClient {
 
   /// Get the value of [AtKey.key] from user's cloud secondary if [AtKey.sharedBy] is set. Otherwise looks up the key from local secondary.
   /// If the key was stored with public access, set [AtKey.metadata.isPublic] to true. If the key was shared with another atSign set [AtKey.sharedWith]
+  /// [isDedicated] need to be set to true to create a dedicated connection
   /// ```
   /// e.g alice is current atsign
   /// llookup:phone@alice
@@ -140,6 +142,7 @@ abstract class AtClient {
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
+  /// [isDedicated] need to be set to true to create a dedicated connection
   /// ```
   /// e.g alice is current atsign
   /// delete:phone@alice
@@ -213,6 +216,7 @@ abstract class AtClient {
       {String regex, String sharedBy, String sharedWith});
 
   /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
+  /// [isDedicated] need to be set to true to create a dedicated connection
   ///```
   ///e.g alice is the current atsign
   /// notify:update:@bob:phone@alice:+1 999 9999
