@@ -9,9 +9,7 @@ on:
   pull_request:
     branches:
       - master
-      - prod_staging
       - dev_env
-      - dev_env_staging
 
 jobs:
   build:
