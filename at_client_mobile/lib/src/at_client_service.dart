@@ -385,7 +385,7 @@ class AtClientService {
 
   // @alice:shared_key@alice - previously this key was generated inside encryption service
   // and encrypted with public key. Now we use a single aes key to encrypt self keys as well as key pairs in key file
-  void _migrateOldSelfKeys() async {
+  Future<void> _migrateOldSelfKeys() async {
     _logger.finer('start migrate self keys');
     var currentAtSign = atClient.currentAtSign;
     var isMigrated =
