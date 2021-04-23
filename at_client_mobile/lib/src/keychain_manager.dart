@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:crypton/crypton.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
-import 'package:crypton/crypton.dart';
-import 'package:at_client_mobile/src/auth_constants.dart';
 
 class KeyChainManager {
   static final KeyChainManager _singleton = KeyChainManager._internal();
@@ -95,7 +96,7 @@ class KeyChainManager {
       value = await FlutterKeychain.get(key: atsign + ':' + key);
     } on Exception catch (e) {
       _logger.severe(
-          'flutter keychain - exception in get value for ${key} :${e.toString()}');
+          'flutter keychain - exception in get value for $key :${e.toString()}');
     }
     return value;
   }
@@ -106,7 +107,7 @@ class KeyChainManager {
       await FlutterKeychain.put(key: atsign + ':' + key, value: value);
     } on Exception catch (e) {
       _logger.severe(
-          'flutter keychain - exception in put value for ${key} :${e.toString()}');
+          'flutter keychain - exception in put value for $key :${e.toString()}');
     }
     return value;
   }

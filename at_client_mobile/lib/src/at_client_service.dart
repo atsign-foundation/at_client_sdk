@@ -1,16 +1,17 @@
 import 'dart:convert';
 import 'dart:core';
+
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/manager/sync_manager_impl.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/at_client_auth.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_client_mobile/src/onboarding_status.dart';
+import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_client/at_client.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_commons/at_builders.dart';
-import 'package:at_client/src/util/encryption_util.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
@@ -370,11 +371,11 @@ class AtClientService {
 
   ///returns public key for [atsign] if found else returns null.
   Future<String> _getServerEncryptionPublicKey(String atsign) async {
-    var command = 'lookup:publickey${atsign}\n';
+    var command = 'lookup:publickey$atsign\n';
     var result = await atLookUp.executeCommand(command);
     if (_isNullOrEmpty(result) || _isError(result)) {
       //checking for an authenticated connection
-      command = 'llookup:public:publickey${atsign}\n';
+      command = 'llookup:public:publickey$atsign\n';
       result = await atLookUp.executeCommand(command);
       if (_isNullOrEmpty(result) || _isError(result)) {
         return null;
@@ -482,7 +483,7 @@ class AtClientService {
       var decryptedValue =
           EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
       if (atKey.key.startsWith('atconnections')) {
-        atKey.metadata..namespaceAware = false;
+        atKey.metadata.namespaceAware = false;
         atKey.key = '${atKey.key}.${atKey.namespace}';
       }
 
