@@ -1,11 +1,10 @@
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
+import 'package:at_lookup/at_lookup.dart';
+import 'keychain_manager.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-
-import 'keychain_manager.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(String atSign,
@@ -66,11 +65,11 @@ class AtClientAuthenticator implements AtClientAuth {
         }
         // send public key to remote Secondary server
         logger.finer('updating pkam public key to server');
-        var updateCommand = 'update:$AT_PKAM_PUBLIC_KEY $publicKey\n';
+        var updateCommand = 'update:${AT_PKAM_PUBLIC_KEY} $publicKey\n';
         // auth is false since already cram authenticated
         var pkamUpdateResult =
             await atLookUp.executeCommand(updateCommand, auth: false);
-        logger.finer('pkam update result:$pkamUpdateResult');
+        logger.finer('pkam update result:${pkamUpdateResult}');
       } else {
         logger.finer('pkam auth already done');
         return true; //Auth already performed
