@@ -45,7 +45,7 @@ AtClientPreference getAlicePreference(String atsign) {
   var preference = AtClientPreference();
   preference.hiveStoragePath = 'test/hive/client';
   preference.commitLogPath = 'test/hive/client/commit';
-  preference.isLocalStoreRequired = false;
+  preference.isLocalStoreRequired = true;
   preference.syncStrategy = SyncStrategy.IMMEDIATE;
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
   preference.rootDomain = 'vip.ve.atsign.zone';
