@@ -9,7 +9,7 @@ class SyncManagerImpl {
     return _singleton;
   }
 
-  Map<String, SyncManager> _syncManagerMap = {};
+  final Map<String, SyncManager> _syncManagerMap = {};
 
   SyncManager getSyncManager(String atSign) {
     if (!_syncManagerMap.containsKey(atSign)) {

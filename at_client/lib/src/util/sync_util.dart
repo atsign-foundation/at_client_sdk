@@ -1,9 +1,10 @@
 import 'dart:convert';
+
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_commons/at_builders.dart';
 
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
@@ -54,8 +55,8 @@ class SyncUtil {
   //#TODO change return type to enum which says in sync, local ahead or server ahead
   static bool isInSync(List<CommitEntry> unCommittedEntries, int serverCommitId,
       int lastSyncedCommitId) {
-    logger.finer('localCommitId:${lastSyncedCommitId}');
-    logger.finer('serverCommitId:${serverCommitId}');
+    logger.finer('localCommitId:$lastSyncedCommitId');
+    logger.finer('serverCommitId:$serverCommitId');
     logger.finer('changed entries: ${unCommittedEntries?.length}');
     return (unCommittedEntries == null || unCommittedEntries.isEmpty) &&
         _checkCommitIdsEqual(lastSyncedCommitId, serverCommitId);
