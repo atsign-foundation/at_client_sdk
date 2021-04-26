@@ -463,7 +463,7 @@ class SyncManager {
       var cron = Cron();
       cron.schedule(Schedule.parse('*/${_preference.syncIntervalMins} * * * *'),
           () async {
-            await syncWithIsolate();
+        await syncWithIsolate();
       });
       _isScheduled = true;
     } on Exception catch (e) {

@@ -388,7 +388,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<List<String>> getKeys({String regex, String sharedBy, String sharedWith}) async {
+  Future<List<String>> getKeys(
+      {String regex, String sharedBy, String sharedWith}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
