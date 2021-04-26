@@ -1,9 +1,10 @@
 <img src="https://atsign.dev/assets/img/@developersmall.png?sanitize=true">
+
 ### Now for a little internet optimism
 
 # at_client_sdk
 This repo contains two versions of the at_client_sdk that you can choose from 
-depending on waht kind of device you are targeting for your application.
+depending on what kind of device you are targeting for your application.
 
 * [at_client](./at_client) a non platform specific SDK
 
