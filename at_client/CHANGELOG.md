@@ -21,3 +21,7 @@
 - Encrypt Stream data
 ## 1.0.1+9
 - Third party package dependency upgrade
+- gitflow changes
+- Auto restart monitor connection
+- Stream encryption
+- Bug fixes

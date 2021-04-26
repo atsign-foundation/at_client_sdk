@@ -20,3 +20,7 @@
 - at_client version change
 ## 1.0.0+10
 - Third party package dependency upgrade
+- gitflow changes
+- Auto restart monitor connection
+- Stream encryption
+- Bug fixes
