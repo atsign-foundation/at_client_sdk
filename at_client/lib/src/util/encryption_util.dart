@@ -36,7 +36,7 @@ class EncryptionUtil {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
     var initializationVector = IV.fromLength(16);
     var encryptedValue =
-    aesEncrypter.encryptBytes(value, iv: initializationVector);
+        aesEncrypter.encryptBytes(value, iv: initializationVector);
     return encryptedValue?.bytes;
   }
 

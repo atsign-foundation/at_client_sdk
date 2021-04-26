@@ -94,7 +94,8 @@ class RemoteSecondary implements Secondary {
     }, restartCallBack: _restartCallBack);
   }
 
-  Future<void> _restartCallBack( String command, Function notificationCallBack, String privateKey) async {
+  Future<void> _restartCallBack(
+      String command, Function notificationCallBack, String privateKey) async {
     logger.finer('auto restarting monitor');
     await monitor(command, notificationCallBack, privateKey);
   }
