@@ -1,7 +1,7 @@
 import 'package:at_lookup/at_lookup.dart';
 
 void main(List<String> arguments) async {
-  await lookItUp('@jagan');
+  lookItUp('@jagan');
   print('hello');
 }
 
