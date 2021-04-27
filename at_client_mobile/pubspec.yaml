@@ -20,25 +20,25 @@ dependencies:
     git:
       url: https://github.com/atsign-foundation/at_client_sdk.git
       path: at_client
-      ref: dev_env
+      ref: trunk
       version: ^1.0.1+9
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
-      ref: dev_env
+      ref: trunk
       version: ^1.0.0+7
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
-      ref: dev_env
+      ref: trunk
       version: ^1.0.1+7
   at_utils:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_utils
-      ref: dev_env
+      ref: trunk
       version: ^1.0.1+7
 
 dev_dependencies:
