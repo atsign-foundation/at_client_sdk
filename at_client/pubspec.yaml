@@ -27,6 +27,7 @@ dependencies:
       path: at_persistence/at_persistence_spec
       ref: dev_env
       version: ^1.0.1+3
+      
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
