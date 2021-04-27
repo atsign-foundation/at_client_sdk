@@ -22,21 +22,18 @@ dependencies:
       path: at_client
       ref: dev_env
       version: ^1.0.1+9
-
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
       ref: dev_env
       version: ^1.0.0+7
-
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
       ref: dev_env
       version: ^1.0.1+7
-
   at_utils:
     git:
       url: https://github.com/atsign-foundation/at_tools.git

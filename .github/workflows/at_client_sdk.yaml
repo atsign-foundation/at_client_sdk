@@ -24,15 +24,66 @@ jobs:
       # You can specify other versions if desired, see documentation here:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
       # - uses: dart-lang/setup-dart@v1
-      - uses: dart-lang/setup-dart@9a04e6d73cca37bd455e0608d7e5092f881fd603
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
 
-      # Install dependencies in at_contacts library
+      # Install dependencies in at_client library
       - name: Install dependencies in at_client
         working-directory: at_client
         run: dart pub get
 
-      # Run analyzer in at_contacts library
+      # Run analyzer in at_client library
       - name: Analyze project source in at_client
         working-directory: at_client
         run: dart analyze
-        
+
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      # Get docker-compose file
+      - name: Get docker compose file
+        working-directory: at_client/test
+        run: curl -L atsign.dev/curl/virtualenv-compose-vip.yaml -o docker-compose.yaml
+
+      # Start docker container to run functional tests and unit tests
+      - name: Start docker instance
+        working-directory: at_client/test
+        run: docker-compose up -d
+
+      - name: Check for docker container readiness
+        working-directory: at_client
+        run: dart run test/functional_test/check_docker_readiness.dart
+
+      - name: Run PKAM
+        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+
+      - name: Check test environment readiness
+        working-directory: at_client
+        run: dart run test/functional_test/check_test_env.dart
+
+      # Run unit and functional tests
+      - name: Run unit and functional tests
+        working-directory: at_client
+        run: dart test
+
+      # Adding flutter to path
+      - name: Installing Flutter
+        uses: britannio/action-install-flutter@v1.0
+        with:
+          version: stable
+
+      # Install dependencies of at_client_mobile
+      - name: Installing dependencies
+        working-directory: at_client_mobile
+        run: flutter pub get
+
+      # Analyze at_client_mobile package
+      - name: flutter analyze
+        working-directory: at_client_mobile
+        run: flutter analyze
+
+      # stop docker containers
+      - name: stop docker containers
+        working-directory: at_client/test
+        run: docker-compose down

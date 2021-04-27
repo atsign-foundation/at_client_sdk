@@ -11,7 +11,7 @@ void main() async {
     //1.
     await AtClientImpl.createClient('@alice', 'me', preference);
     var atClient = await AtClientImpl.getClient('@alice');
-    await atClient.getSyncManager().init(atsign, preference,
+    atClient.getSyncManager().init(atsign, preference,
         atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var metadata = Metadata();
     metadata.namespaceAware = false;
