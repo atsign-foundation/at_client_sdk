@@ -114,7 +114,7 @@ class SyncManager {
       if (serverCommitId > lastSyncedCommitId) {
         // send sync verb to server and sync the changes to local
         await _remoteSecondary.sync(lastSyncedCommitId,
-            regex: regex, syncCallback: _syncLocal);
+            regex: regex, syncCallback: syncLocal);
         return;
       }
 
@@ -249,7 +249,7 @@ class SyncManager {
             var syncResponse = message['sync_response'];
             var syncResponseJson = jsonDecode(syncResponse);
             await Future.forEach(syncResponseJson,
-                (serverCommitEntry) => _syncLocal(serverCommitEntry));
+                (serverCommitEntry) => syncLocal(serverCommitEntry));
             syncDone = true;
             break;
           case 'push_to_remote_result':
@@ -291,7 +291,7 @@ class SyncManager {
     return jsonDecode(verbResult);
   }
 
-  Future<void> _syncLocal(serverCommitEntry) async {
+  Future<void> syncLocal(serverCommitEntry) async {
     switch (serverCommitEntry['operation']) {
       case '+':
       case '#':
