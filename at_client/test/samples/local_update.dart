@@ -1,13 +1,14 @@
 import 'package:at_client/src/client/at_client_impl.dart';
-import 'test_util.dart';
 import 'package:at_commons/at_commons.dart';
+
+import 'test_util.dart';
 
 void main() async {
   var atsign = '@alice🛠';
   var preference = TestUtil.getAlicePreference();
   await AtClientImpl.createClient(atsign, 'me', TestUtil.getAlicePreference());
   var atClient = await AtClientImpl.getClient(atsign);
-  await atClient.getSyncManager().init(atsign, preference,
+  atClient.getSyncManager().init(atsign, preference,
       atClient.getRemoteSecondary(), atClient.getLocalSecondary());
   // phone.me@alice🛠
   var phoneKey = AtKey()..key = 'phone';
@@ -22,6 +23,6 @@ void main() async {
     ..metadata = metadata;
   var publicPhoneValue = '+1 100 200 302';
   var updatePublicPhoneResult =
-  await atClient.put(publicPhoneKey, publicPhoneValue);
+      await atClient.put(publicPhoneKey, publicPhoneValue);
   print(updatePublicPhoneResult);
 }

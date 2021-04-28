@@ -17,13 +17,14 @@ class StorageManager {
 
   StorageManager(this.preferences);
 
-  void init(String currentAtSign, List<int> keyStoreSecret) async {
+  Future<void> init(String currentAtSign, List<int> keyStoreSecret) async {
     if (!isStorageInitialized) {
       await _initStorage(currentAtSign, keyStoreSecret);
     }
   }
 
-  void _initStorage(String currentAtSign, List<int> keyStoreSecret) async {
+  Future<void> _initStorage(
+      String currentAtSign, List<int> keyStoreSecret) async {
     print('initializing storage');
     var storagePath = preferences.hiveStoragePath;
     var commitLogPath = preferences.commitLogPath;

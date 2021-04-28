@@ -1,16 +1,17 @@
 import 'dart:convert';
+
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_commons/at_builders.dart';
 
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
   static Future<CommitEntry> getCommitEntry(
       int sequenceNumber, String atSign) async {
     var commitLogInstance =
-    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
     var commitEntry = await commitLogInstance.getEntry(sequenceNumber);
     return commitEntry;
   }
@@ -18,14 +19,14 @@ class SyncUtil {
   static Future<void> updateCommitEntry(
       var commitEntry, int commitId, String atSign) async {
     var commitLogInstance =
-    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
     await commitLogInstance.update(commitEntry, commitId);
   }
 
   static Future<CommitEntry> getLastSyncedEntry(String regex,
       {String atSign}) async {
     var commitLogInstance =
-    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
 
     var lastEntry;
     if (regex != null) {
@@ -38,7 +39,7 @@ class SyncUtil {
 
   static Future<CommitEntry> getEntry(int seqNumber, String atSign) async {
     var commitLogInstance =
-    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
     var entry = await commitLogInstance.getEntry(seqNumber);
     return entry;
   }
@@ -47,15 +48,15 @@ class SyncUtil {
       int seqNum, String regex,
       {String atSign}) async {
     var commitLogInstance =
-    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
     return commitLogInstance.getChanges(seqNum, regex);
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
   static bool isInSync(List<CommitEntry> unCommittedEntries, int serverCommitId,
       int lastSyncedCommitId) {
-    logger.finer('localCommitId:${lastSyncedCommitId}');
-    logger.finer('serverCommitId:${serverCommitId}');
+    logger.finer('localCommitId:$lastSyncedCommitId');
+    logger.finer('serverCommitId:$serverCommitId');
     logger.finer('changed entries: ${unCommittedEntries?.length}');
     return (unCommittedEntries == null || unCommittedEntries.isEmpty) &&
         _checkCommitIdsEqual(lastSyncedCommitId, serverCommitId);
