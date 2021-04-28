@@ -1,6 +1,6 @@
 name: at_client
 description: at_client is the Client SDK which provides the essential methods for building an app using the @protocol.
-version: 1.0.1+9
+version: 1.0.1+10
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
@@ -39,7 +39,7 @@ dependencies:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
       ref: trunk
-      version: ^1.0.0+7
+      version: ^1.0.0+8
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git

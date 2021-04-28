@@ -1,6 +1,6 @@
 name: at_client_mobile
 description: Library for mobile app onboarding.
-version: 1.0.0+10
+version: 1.0.0+11
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
@@ -27,7 +27,7 @@ dependencies:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
       ref: trunk
-      version: ^1.0.0+7
+      version: ^1.0.0+8
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
