@@ -9,7 +9,7 @@ with useful device specific features for iOS and Android applications.
 To use this library in your app, first add it to your pubspec.yaml
 ```  
 dependencies:
-  at_client_mobile: ^1.0.0
+  at_client_mobile: ^1.0.0+7
 ```
 ### Add to your project 
 ```

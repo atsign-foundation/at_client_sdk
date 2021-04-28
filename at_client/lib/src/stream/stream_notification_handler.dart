@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
@@ -17,7 +16,6 @@ class StreamNotificationHandler {
 
   var logger = AtSignLogger('StreamNotificationHandler');
 
-
   Future<void> streamAck(AtStreamNotification streamNotification,
       Function streamCompletionCallBack, streamReceiveCallBack) async {
     var streamId = streamNotification.streamId;
@@ -29,7 +27,8 @@ class StreamNotificationHandler {
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
-    var f = File('${preference.downloadPath}/encrypted_${streamNotification.fileName}');
+    var f = File(
+        '${preference.downloadPath}/encrypted_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive $streamId\n';
     socket.write(command);
@@ -49,13 +48,14 @@ class StreamNotificationHandler {
         logger.finer('skipping @');
       }
       bytesReceived += onData.length;
-
       f.writeAsBytesSync(onData, mode: FileMode.append);
       streamReceiveCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         var startTime = DateTime.now();
-        var decryptedBytes = encryptionService.decryptStream(f.readAsBytesSync(), sharedKey);
-        var decryptedFile = File('${preference.downloadPath}/${streamNotification.fileName}');
+        var decryptedBytes =
+            encryptionService.decryptStream(f.readAsBytesSync(), sharedKey);
+        var decryptedFile =
+            File('${preference.downloadPath}/${streamNotification.fileName}');
         decryptedFile.writeAsBytesSync(decryptedBytes);
         f.deleteSync(); // delete encrypted file
         var endTime = DateTime.now();

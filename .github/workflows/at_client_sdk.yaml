@@ -9,9 +9,8 @@ on:
   pull_request:
     branches:
       - master
-      - prod_staging
+      - trunk
       - dev_env
-      - dev_env_staging
 
 jobs:
   build:
@@ -50,6 +49,10 @@ jobs:
       - name: Start docker instance
         working-directory: at_client/test
         run: docker-compose up -d
+
+      - name: Check for docker container readiness
+        working-directory: at_client
+        run: dart run test/functional_test/check_docker_readiness.dart
 
       - name: Run PKAM
         run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
