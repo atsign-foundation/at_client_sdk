@@ -433,7 +433,7 @@ class AtClientImpl implements AtClient {
       {String regex,
       String sharedBy,
       String sharedWith,
-      bool isDedicated}) async {
+      bool isDedicated = false}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
@@ -457,9 +457,12 @@ class AtClientImpl implements AtClient {
       {String regex,
       String sharedBy,
       String sharedWith,
-      bool isDedicated}) async {
-    var getKeysResult =
-        await getKeys(regex: regex, sharedBy: sharedBy, sharedWith: sharedWith);
+      bool isDedicated = false}) async {
+    var getKeysResult = await getKeys(
+        regex: regex,
+        sharedBy: sharedBy,
+        sharedWith: sharedWith,
+        isDedicated: isDedicated);
     var result = <AtKey>[];
     if (getKeysResult != null && getKeysResult.isNotEmpty) {
       getKeysResult.forEach((key) {
