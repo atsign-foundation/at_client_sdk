@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -13,11 +14,11 @@ class AtClientUtil {
       updateKey += 'public:';
     }
     if (builder.sharedWith != null) {
-      updateKey += '${AtUtils.formatAtSign(builder.sharedWith)}:';
+      updateKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
     }
-    updateKey += builder.atKey;
+    updateKey += builder.atKey!;
     if (builder.sharedBy != null) {
-      updateKey += AtUtils.formatAtSign(builder.sharedBy);
+      updateKey += AtUtils.formatAtSign(builder.sharedBy)!;
     }
     return updateKey;
   }
@@ -33,7 +34,7 @@ class AtClientUtil {
     return secondaryUrl;
   }
 
-  static List<String> getSecondaryInfo(String url) {
+  static List<String> getSecondaryInfo(String? url) {
     var result = <String>[];
     if (url != null && url.contains(':')) {
       var arr = url.split(':');
@@ -46,7 +47,7 @@ class AtClientUtil {
   static String signChallenge(String challenge, String privateKey) {
     var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
-    var signature = key.createSHA256Signature(utf8.encode(challenge));
+    var signature = key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
     return base64Encode(signature);
   }
 }

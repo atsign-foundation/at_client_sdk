@@ -9,9 +9,9 @@ class SyncManagerImpl {
     return _singleton;
   }
 
-  final Map<String, SyncManager> _syncManagerMap = {};
+  final Map<String?, SyncManager> _syncManagerMap = {};
 
-  SyncManager getSyncManager(String atSign) {
+  SyncManager? getSyncManager(String? atSign) {
     if (!_syncManagerMap.containsKey(atSign)) {
       var syncManager = SyncManager(atSign);
       _syncManagerMap[atSign] = syncManager;

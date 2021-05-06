@@ -16,12 +16,12 @@ abstract class AtConnection {
   bool isInvalid();
 
   /// Gets the connection metadata
-  AtConnectionMetaData getMetaData();
+  AtConnectionMetaData? getMetaData();
 }
 
 abstract class AtConnectionMetaData {
-  DateTime lastAccessed;
-  DateTime created;
+  DateTime? lastAccessed;
+  DateTime? created;
   bool isClosed = false;
   bool isStale = false;
 }

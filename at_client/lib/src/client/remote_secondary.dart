@@ -13,15 +13,15 @@ import 'package:at_utils/at_utils.dart';
 class RemoteSecondary implements Secondary {
   var logger = AtSignLogger('RemoteSecondary');
 
-  String _atSign;
+  late String _atSign;
 
-  var _preference;
+  late var _preference;
 
-  AtLookupImpl atLookUp;
+  late AtLookupImpl atLookUp;
 
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String privateKey}) {
-    _atSign = AtUtils.formatAtSign(atSign);
+      {String? privateKey}) {
+    _atSign = AtUtils.formatAtSign(atSign)!;
     _preference = preference;
     privateKey ??= preference.privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
@@ -45,14 +45,14 @@ class RemoteSecondary implements Secondary {
     return verbResult;
   }
 
-  Future<String> executeCommand(String atCommand, {bool auth = false}) async {
+  Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
     var verbResult;
     verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
     return verbResult;
   }
 
   void addStreamData(List<int> data) {
-    atLookUp.connection.getSocket().add(data);
+    atLookUp.connection!.getSocket().add(data);
   }
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
@@ -70,8 +70,8 @@ class RemoteSecondary implements Secondary {
   }
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
-  Future<String> sync(int lastSyncedId,
-      {String privateKey, String regex}) async {
+  Future<String?> sync(int? lastSyncedId,
+      {String? privateKey, String? regex}) async {
     var atCommand = 'sync:$lastSyncedId';
     var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
         ? ':$regex'
@@ -86,11 +86,11 @@ class RemoteSecondary implements Secondary {
 
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
   Future<OutboundConnection> monitor(
-      String command, Function notificationCallBack, String privateKey) {
+      String command, Function? notificationCallBack, String privateKey) {
     return MonitorClient(privateKey).executeMonitorVerb(
         command, _atSign, _preference.rootDomain, _preference.rootPort,
         (value) {
-      notificationCallBack(value);
+      notificationCallBack!(value);
     }, restartCallBack: _restartCallBack);
   }
 

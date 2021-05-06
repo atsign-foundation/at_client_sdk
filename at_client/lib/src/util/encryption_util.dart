@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart';
 
@@ -12,7 +14,7 @@ class EncryptionUtil {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
     var initializationVector = IV.fromLength(16);
     var encryptedValue = aesEncrypter.encrypt(value, iv: initializationVector);
-    return encryptedValue?.base64;
+    return encryptedValue.base64;
   }
 
   static String decryptValue(String encryptedValue, String decryptionKey) {
@@ -37,7 +39,7 @@ class EncryptionUtil {
     var initializationVector = IV.fromLength(16);
     var encryptedValue =
     aesEncrypter.encryptBytes(value, iv: initializationVector);
-    return encryptedValue?.bytes;
+    return encryptedValue.bytes;
   }
 
   static List<int> decryptBytes(
@@ -45,6 +47,6 @@ class EncryptionUtil {
     var aesKey = AES(Key.fromBase64(decryptionKey));
     var decrypter = Encrypter(aesKey);
     var iv2 = IV.fromLength(16);
-    return decrypter.decryptBytes(Encrypted(encryptedValue), iv: iv2);
+    return decrypter.decryptBytes(Encrypted(encryptedValue as Uint8List), iv: iv2);
   }
 }

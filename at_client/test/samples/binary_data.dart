@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:path/path.dart';
 import 'test_util.dart';
@@ -10,7 +12,11 @@ void main() async {
     //1.1 put image for self
     await AtClientImpl.createClient(
         '@alice🛠', 'me', TestUtil.getAlicePreference());
-    var atClient = await AtClientImpl.getClient('@alice🛠');
+    var atClient = await (AtClientImpl.getClient('@alice🛠'));
+    if(atClient == null) {
+      print('unable to create at client instance');
+      return;
+    }
     var imageLocation = 'image.jpg'; //path to your image file
     var imageData = getdata(imageLocation);
     var metadata = Metadata()..isBinary = true;
