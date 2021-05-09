@@ -291,4 +291,17 @@ abstract class AtClient {
   /// Optionally a regular expression and be passed to filter the notifications
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String regex});
+
+  /// Insert json data into index server
+  ///  e.g to insert {"name" : "alice", "location" : "usa"}
+  ///  index:{"name" : "alice", "location" : "usa"}
+  ///
+  Future<void> index(String data);
+
+  /// get data from index server based on keys
+  ///  e.g to get data matches with keys alice and usa
+  ///  search:alice usa
+  ///  or search:alice,usa
+  ///
+  Future<void> search(List<String> keys);
 }
