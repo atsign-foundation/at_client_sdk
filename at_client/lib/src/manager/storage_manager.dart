@@ -37,13 +37,13 @@ class StorageManager {
         commitLogPath: commitLogPath,
         enableCommitId: false);
     // Initialize Persistence
-    var manager = SecondaryPersistenceStoreFactory.getInstance()
+    HivePersistenceManager manager = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)
-        .getHivePersistenceManager();
+        .getPersistenceManager();
     await manager.init(currentAtSign, storagePath);
     await manager.openVault(currentAtSign, hiveSecret: keyStoreSecret);
     //var hiveKeyStore = HiveKeystore(currentAtSign);
-    var hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
+    HiveKeystore hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)
         .getSecondaryKeyStore();
     hiveKeyStore.commitLog = atCommitLog;
