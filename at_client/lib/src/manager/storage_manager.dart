@@ -32,7 +32,7 @@ class StorageManager {
     if (storagePath == null || commitLogPath == null) {
       throw Exception('Please set local storage paths');
     }
-    var atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
+    var atCommitLog = await AtCommitLogManagerImpl.getInstance().getHiveCommitLog(
         currentAtSign,
         commitLogPath: commitLogPath,
         enableCommitId: false);

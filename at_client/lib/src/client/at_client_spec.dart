@@ -296,12 +296,12 @@ abstract class AtClient {
   ///  e.g to insert {"name" : "alice", "location" : "usa"}
   ///  index:{"name" : "alice", "location" : "usa"}
   ///
-  Future<void> index(String data);
+  Future<String> index(String data);
 
   /// get data from index server based on keys
   ///  e.g to get data matches with keys alice and usa
   ///  search:alice usa
   ///  or search:alice,usa
   ///
-  Future<void> search(List<String> keys);
+  Future<String> search(List<String> keys);
 }

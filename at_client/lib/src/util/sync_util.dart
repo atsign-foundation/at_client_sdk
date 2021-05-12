@@ -11,7 +11,7 @@ class SyncUtil {
   static Future<CommitEntry> getCommitEntry(
       int sequenceNumber, String atSign) async {
     var commitLogInstance =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getHiveCommitLog(atSign);
     var commitEntry = await commitLogInstance.getEntry(sequenceNumber);
     return commitEntry;
   }
@@ -19,14 +19,14 @@ class SyncUtil {
   static Future<void> updateCommitEntry(
       var commitEntry, int commitId, String atSign) async {
     var commitLogInstance =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getHiveCommitLog(atSign);
     await commitLogInstance.update(commitEntry, commitId);
   }
 
   static Future<CommitEntry> getLastSyncedEntry(String regex,
       {String atSign}) async {
     var commitLogInstance =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getHiveCommitLog(atSign);
 
     var lastEntry;
     if (regex != null) {
@@ -39,7 +39,7 @@ class SyncUtil {
 
   static Future<CommitEntry> getEntry(int seqNumber, String atSign) async {
     var commitLogInstance =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getHiveCommitLog(atSign);
     var entry = await commitLogInstance.getEntry(seqNumber);
     return entry;
   }
@@ -48,7 +48,7 @@ class SyncUtil {
       int seqNum, String regex,
       {String atSign}) async {
     var commitLogInstance =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getHiveCommitLog(atSign);
     return commitLogInstance.getChanges(seqNum, regex);
   }
 
