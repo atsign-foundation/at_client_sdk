@@ -14,6 +14,11 @@ Future<void> setEncryptionKeys(
     metadata.namespaceAware = false;
     var result;
 
+    // set self encryption key
+    result = await atClient
+        .getLocalSecondary()
+        .putValue(AT_ENCRYPTION_SELF_KEY, demo_credentials.aesKeyMap[atsign]);
+
     //Set encryption private key
     result = await atClient.getLocalSecondary().putValue(
         AT_ENCRYPTION_PRIVATE_KEY,
