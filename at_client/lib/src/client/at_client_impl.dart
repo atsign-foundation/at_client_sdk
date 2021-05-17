@@ -517,6 +517,7 @@ class AtClientImpl implements AtClient {
       builder.isBinary = metadata.isBinary;
       builder.isEncrypted = metadata.isEncrypted;
       builder.isPublic = metadata.isPublic;
+      builder.sharedKeyStatus = metadata.sharedKeyStatus;
       if (metadata.isHidden) {
         builder.atKey = '_' + updateKey;
       }
@@ -564,6 +565,9 @@ class AtClientImpl implements AtClient {
     try {
       if (builder.dataSignature != null) {
         builder.isJson = true;
+      }
+      if(sharedWith != null) {
+        builder.sharedKeyStatus = getSharedKeyName(SharedKeyStatus.LOCAL_UPDATED);
       }
       var secondary = getSecondary(isDedicated: isDedicated);
       putResult = await secondary.executeVerb(builder,
@@ -809,6 +813,7 @@ class AtClientImpl implements AtClient {
     metadata.isBinary = metadataMap[IS_BINARY];
     metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
+    metadata.sharedKeyStatus = metadataMap[SHARED_KEY_STATUS];
     if (isPublic) {
       metadata.isPublic = isPublic;
     }
