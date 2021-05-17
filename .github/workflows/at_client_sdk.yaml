@@ -1,16 +1,15 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
+# This workflows runs when
+# 1. pull_request raised to trunk branch.
+# 2. tag created on at_tools repository
 name: at_client_sdk
 
 on:
+  push:
+    tags:
+      - v**
   pull_request:
     branches:
-      - master
       - trunk
-      - dev_env
 
 jobs:
   build:
@@ -19,10 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # Note: This workflow uses the latest stable version of the Dart SDK.
-      # You can specify other versions if desired, see documentation here:
-      # https://github.com/dart-lang/setup-dart/blob/main/README.md
-      # - uses: dart-lang/setup-dart@v1
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
