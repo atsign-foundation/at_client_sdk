@@ -25,6 +25,7 @@ abstract class AtClient {
   /// phone.persona@alice where 'persona' is the namespace. If you want to save by ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
   /// Additional metadata can be set using [AtKey.metadata]
+  /// [isDedicated] need to be set to true to create a dedicated connection
   /// ```
   /// update:phone@alice +1 999 9999
   ///   var key = AtKey()..key='phone'
@@ -53,7 +54,7 @@ abstract class AtClient {
   ///             sharedWith='@bob'
   ///    put(key, '+1 999 9999');
   /// ```
-  Future<bool> put(AtKey key, dynamic value);
+  Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
 
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
@@ -77,6 +78,7 @@ abstract class AtClient {
 
   /// Get the value of [AtKey.key] from user's cloud secondary if [AtKey.sharedBy] is set. Otherwise looks up the key from local secondary.
   /// If the key was stored with public access, set [AtKey.metadata.isPublic] to true. If the key was shared with another atSign set [AtKey.sharedWith]
+  /// [isDedicated] need to be set to true to create a dedicated connection
   /// ```
   /// e.g alice is current atsign
   /// llookup:phone@alice
@@ -115,7 +117,7 @@ abstract class AtClient {
   ///             ..metadata=metaData
   ///   get(key);
   /// ```
-  Future<AtValue> get(AtKey key);
+  Future<AtValue> get(AtKey key, {bool isDedicated = false});
 
   /// Gets the metadata of [AtKey.key]
   /// ```
@@ -141,6 +143,7 @@ abstract class AtClient {
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
+  /// [isDedicated] need to be set to true to create a dedicated connection
   /// ```
   /// e.g alice is current atsign
   /// delete:phone@alice
@@ -181,7 +184,7 @@ abstract class AtClient {
   ///             ..metadata = metaData
   ///   delete(key);
   ///```
-  Future<bool> delete(AtKey key);
+  Future<bool> delete(AtKey key, {bool isDedicated = false});
 
   /// Get all the keys stored in user's secondary in [AtKey] format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
@@ -214,6 +217,7 @@ abstract class AtClient {
       {String? regex, String? sharedBy, String? sharedWith});
 
   /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
+  /// [isDedicated] need to be set to true to create a dedicated connection
   ///```
   ///e.g alice is the current atsign
   /// notify:update:@bob:phone@alice:+1 999 9999
@@ -237,7 +241,8 @@ abstract class AtClient {
       PriorityEnum? priority,
       StrategyEnum? strategy,
       int? latestN,
-      String? notifier});
+      String? notifier,
+      bool isDedicated = false});
 
   /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
   /// ```

@@ -27,7 +27,7 @@ class SyncUtil {
   static Future<CommitEntry?> getLastSyncedEntry(String? regex,
       {required String atSign}) async {
     var commitLogInstance =
-    await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
 
     var lastEntry;
     if (regex != null) {

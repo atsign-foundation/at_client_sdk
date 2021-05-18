@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
@@ -38,6 +37,11 @@ class StreamNotificationHandler {
     var sharedKey =
         await encryptionService!.getSharedKey(streamNotification.senderAtSign);
     socket.listen((onData) async {
+      if (onData.length == 1 && onData.first == 64) {
+        //skip @ prompt
+        logger.finer('skipping prompt');
+        return;
+      }
       if (onData.first == 64 && firstByteSkipped == false) {
         onData = onData.sublist(1);
         firstByteSkipped = true;
