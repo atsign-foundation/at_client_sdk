@@ -707,6 +707,20 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  Future<String> index(String data) async {
+    var builder = IndexVerbBuilder()..data = data;
+    var indexResult = await getRemoteSecondary().executeVerb(builder);
+    return indexResult;
+  }
+
+  @override
+  Future<String> search(List<String> keys) async {
+    var builder = SearchVerbBuilder()..keys = keys.join(' ');
+    var searchResult = await getRemoteSecondary().executeVerb(builder);
+    return searchResult;
+  }
+
+  @override
   Future<bool> putMeta(AtKey atKey) async {
     var updateKey = atKey.key;
     var metadata = atKey.metadata;

@@ -206,7 +206,7 @@ class LocalSecondary implements Secondary {
             .executeCommand(command, auth: true);
       }
       List<String> keys;
-      keys = keyStore.getKeys(regex: builder.regex);
+      keys = await keyStore.getKeys(regex: builder.regex);
       // Gets keys shared to sharedWith atSign.
       if (builder.sharedWith != null) {
         keys.retainWhere(
