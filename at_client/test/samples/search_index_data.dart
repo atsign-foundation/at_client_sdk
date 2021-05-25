@@ -15,7 +15,7 @@ void main() async {
     var result = await atClient
         .getRemoteSecondary()
         .executeVerb(builder);
-    print('search verb result ${result}');
+    print('search verb result $result');
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
