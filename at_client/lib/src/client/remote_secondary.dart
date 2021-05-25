@@ -99,4 +99,9 @@ class RemoteSecondary implements Secondary {
     logger.finer('auto restarting monitor');
     await monitor(command, notificationCallBack, privateKey);
   }
+
+  Future<bool> isAvailable() async {
+    // #TODO implement
+    return true;
+  }
 }
