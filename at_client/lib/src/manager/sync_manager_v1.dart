@@ -6,9 +6,11 @@ import 'package:at_commons/at_commons.dart';
 class SyncManagerV1 {
   var _syncInProgress = false;
 
+  var _completionPercentage;
+
   String _atSign;
 
-  SyncManagerV1(this._atSign);
+  SyncManagerV1(this._atSign, this._preference);
 
   LocalSecondary _localSecondary;
 
@@ -42,5 +44,13 @@ class SyncManagerV1 {
     }
     //#TODO implement
     successCallBack(this);
+  }
+
+  bool isSyncInProgress() {
+    return _syncInProgress;
+  }
+
+  int completionPercentage() {
+    return _completionPercentage;
   }
 }
