@@ -37,13 +37,9 @@ class SyncManagerV1 {
   /// Calling [sync] with [regex] will ensure only matching keys are synced.
   /// [onDone] callback will be invoked if sync is successful
   /// [_sync] will be retried on any connection related errors
-  /// [onError] callback will be invoked if there are any other errors in the sync process.
+  /// [onError] callback will be invoked if another sync is in progress or if there are any other errors in the sync process.
   void sync(Function onDone, Function onError, {String regex}) async {
     // Return is there is any sync already in progress
-    if (_syncInProgress) {
-      return;
-    }
-    _syncInProgress = true;
     await _sync(onDone, onError, regex: regex);
     return;
   }
@@ -51,16 +47,16 @@ class SyncManagerV1 {
   Future<void> _sync(Function onDone, Function onError, {String regex}) async {
     try {
       await syncOnce(regex: regex);
-      _syncInProgress = false;
       onDone(this);
     } on AtConnectException {
       // retry if there is connection issue
+      // log retry here
       Future.delayed(
-          Duration(seconds: 5), () => _sync(onDone, onError, regex: regex));
+          Duration(seconds: 3), () => _sync(onDone, onError, regex: regex));
     } on Exception catch (e) {
       // call onError if there is any issue with sync process
+      //log here also
       onError(this, e);
-      _syncInProgress = false;
       return;
     }
   }
@@ -68,7 +64,12 @@ class SyncManagerV1 {
   /// Call [syncOnce] if you want to manually sync from app.
   /// This method will return on any exception during processing
   /// Optionally pass [regex] to sync only matching keys.
+  /// Exceptions will be rethrown and caller has to handle the exception
   Future<void> syncOnce({String regex}) async {
+    if (_syncInProgress) {
+      throw Exception('Another Sync process is in progress.');
+    }
+    _syncInProgress = true;
     try {
       await _checkConnectivity();
       var syncObject = await _getSyncObject(regex: regex);
@@ -78,6 +79,8 @@ class SyncManagerV1 {
           syncObject.serverCommitId, syncObject.lastSyncedCommitId);
       if (isInSync) {
         _logger.finer('Server and local secondary are in sync');
+        _syncInProgress = false;
+        return;
       }
       lastSyncedCommitId ??= -1;
       serverCommitId ??= -1;
@@ -87,10 +90,11 @@ class SyncManagerV1 {
       }
       //push changes from local to cloud
       await _pushChanges(syncObject, regex: regex);
-      return;
-    } on Exception catch (e) {
-      throw Exception('Error in sync operation ${e.toString}');
+    } on Exception {
+      _syncInProgress = false;
+      rethrow;
     }
+    _syncInProgress = false;
   }
 
   Future<void> _pullChanges(SyncObject syncObject, {String regex}) async {
