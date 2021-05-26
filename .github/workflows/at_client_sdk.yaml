@@ -35,11 +35,6 @@ jobs:
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
-      # Get docker-compose file
-      - name: Get docker compose file
-        working-directory: at_client/test
-        run: curl -L atsign.dev/curl/virtualenv-compose-vip.yaml -o docker-compose.yaml
-
       # Start docker container to run functional tests and unit tests
       - name: Start docker instance
         working-directory: at_client/test

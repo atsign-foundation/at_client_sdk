@@ -1,17 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:cron/cron.dart';
+
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/sync_isolate_manager.dart';
-import 'package:at_client/src/util/sync_util.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/manager/sync_isolate_manager.dart';
+import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:cron/cron.dart';
 
 class SyncManager {
   var logger = AtSignLogger('SyncManager');
@@ -29,6 +30,8 @@ class SyncManager {
   bool pendingSyncExists = false;
 
   var _isScheduled = false;
+
+  AtLookupImpl atLookupImpl;
 
   SyncManager(this._atSign);
 
@@ -110,14 +113,8 @@ class SyncManager {
       // cloud is ahead if server commit id is > last synced commit id in local
       if (serverCommitId > lastSyncedCommitId) {
         // send sync verb to server and sync the changes to local
-        var syncResponse =
-            await _remoteSecondary.sync(lastSyncedCommitId, regex: regex);
-        if (syncResponse != null && syncResponse != 'data:null') {
-          syncResponse = syncResponse.replaceFirst('data:', '');
-          var syncResponseJson = jsonDecode(syncResponse);
-          await Future.forEach(syncResponseJson,
-              (serverCommitEntry) => _syncLocal(serverCommitEntry));
-        }
+        await _remoteSecondary.sync(lastSyncedCommitId,
+            regex: regex, syncCallback: syncLocal);
         return;
       }
 
@@ -252,7 +249,7 @@ class SyncManager {
             var syncResponse = message['sync_response'];
             var syncResponseJson = jsonDecode(syncResponse);
             await Future.forEach(syncResponseJson,
-                (serverCommitEntry) => _syncLocal(serverCommitEntry));
+                (serverCommitEntry) => syncLocal(serverCommitEntry));
             syncDone = true;
             break;
           case 'push_to_remote_result':
@@ -294,7 +291,7 @@ class SyncManager {
     return jsonDecode(verbResult);
   }
 
-  Future<void> _syncLocal(serverCommitEntry) async {
+  Future<void> syncLocal(serverCommitEntry) async {
     switch (serverCommitEntry['operation']) {
       case '+':
       case '#':
