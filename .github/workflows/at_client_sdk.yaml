@@ -1,16 +1,9 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
 name: at_client_sdk
 
 on:
   pull_request:
     branches:
-      - master
       - trunk
-      - dev_env
 
 jobs:
   build:
@@ -19,10 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # Note: This workflow uses the latest stable version of the Dart SDK.
-      # You can specify other versions if desired, see documentation here:
-      # https://github.com/dart-lang/setup-dart/blob/main/README.md
-      # - uses: dart-lang/setup-dart@v1
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
@@ -39,11 +28,6 @@ jobs:
 
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
-
-      # Get docker-compose file
-      - name: Get docker compose file
-        working-directory: at_client/test
-        run: curl -L atsign.dev/curl/virtualenv-compose-vip.yaml -o docker-compose.yaml
 
       # Start docker container to run functional tests and unit tests
       - name: Start docker instance
