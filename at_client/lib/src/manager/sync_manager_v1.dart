@@ -10,7 +10,15 @@ class SyncManagerV1 {
 
   String _atSign;
 
-  SyncManagerV1(this._atSign, this._preference);
+  static final Map<String, SyncManagerV1> _syncManagerMap = {};
+
+  factory SyncManagerV1(String atSign, AtClientPreference preference) {
+    if (_syncManagerMap.containsKey(atSign)) {
+      return _syncManagerMap[atSign];
+    }
+    var syncManager = SyncManagerV1(atSign, preference);
+    return syncManager;
+  }
 
   LocalSecondary _localSecondary;
 
@@ -18,33 +26,28 @@ class SyncManagerV1 {
 
   AtClientPreference _preference;
 
-  void sync(Function successCallBack, Function errorCallback,
-      {String regex}) async {
-    //4. Prevent a sync when one is already in progress
+  void sync(Function onDone, Function onError, {String regex}) async {
     if (_syncInProgress) {
       return;
     }
-    await _sync(successCallBack, errorCallback, regex: regex);
     _syncInProgress = true;
+    await _sync(onDone, onError, regex: regex);
+
     return;
   }
 
-  Future<void> _sync(Function successCallBack, Function errorCallback,
-      {String regex}) async {
+  Future<void> _sync(Function onDone, Function onError, {String regex}) async {
     try {
       await syncOnce(regex: regex);
       _syncInProgress = false;
+      onDone(this);
     } on AtConnectException {
-      // do we need await to _sync ?
-      Future.delayed(Duration(seconds: 5),
-          () => _sync(successCallBack, errorCallback, regex: regex));
+      Future.delayed(
+          Duration(seconds: 5), () => _sync(onDone, onError, regex: regex));
     } on Exception catch (e) {
-      // 1. Let the app developer know of a sync failure and return. It's on app developer to reinitatenthe Sync
-      errorCallback(this, e);
+      onError(this, e);
       return;
     }
-    //2. Sync method can return thr sync object that can inform if an active sync is in progress
-    successCallBack(this);
   }
 
   Future<void> syncOnce({String regex}) async {
