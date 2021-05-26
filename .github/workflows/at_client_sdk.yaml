@@ -1,6 +1,12 @@
+# This workflows runs when
+# 1. pull_request raised to trunk branch.
+# 2. tag created on at_tools repository
 name: at_client_sdk
 
 on:
+  push:
+    tags:
+      - v**
   pull_request:
     branches:
       - trunk
