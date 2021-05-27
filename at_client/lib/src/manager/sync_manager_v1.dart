@@ -21,11 +21,11 @@ class SyncManagerV1 {
 
   /// Factory method ensures only one sync manager is created per atsign
   factory SyncManagerV1(String atSign, AtClientPreference preference) {
-    if (_syncManagerMap.containsKey(atSign)) {
-      return _syncManagerMap[atSign];
+    if (!_syncManagerMap.containsKey(atSign)) {
+      var syncManager = SyncManagerV1(atSign, preference);
+      _syncManagerMap[atSign] = syncManager;
     }
-    var syncManager = SyncManagerV1(atSign, preference);
-    return syncManager;
+    return _syncManagerMap[atSign];
   }
 
   LocalSecondary _localSecondary;
