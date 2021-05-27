@@ -1,27 +1,24 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/util/network_util.dart';
-import 'package:at_lookup/src/connection/outbound_connection.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 
 class Monitor {
   // Regex on with what the monitor is started
-  var _regex;
+  var regex;
 
   // Date and time of the last notification received on this minotor
-  var _lastNotificationTime;
+  DateTime lastNotificationTime;
 
-  // Status on the monitor
+  // Status on the monitorgit
   MonitorStatus status = MonitorStatus.NotStarted;
 
   var _retry = false;
 
-  Function _onDone;
-
   Function _onError;
 
-  Function _notificationCallBack;
+  Function _onResponse;
 
   AtClientPreference _preference;
 
@@ -29,19 +26,13 @@ class Monitor {
 
   RemoteSecondary _remoteSecondary;
 
-  var _command;
-
   // Constructor
-  Monitor(Function onDone, Function onError, Function notificationCallBack,
-      String atSign, String command, AtClientPreference preference,
-      {String regex, DateTime lastNotificationTime, bool retry = false}) {
-    _onDone = onDone;
+  Monitor(Function onError, Function onResponse, String atSign,
+      AtClientPreference preference,
+      {bool retry = false}) {
     _onError = onError;
     _preference = preference;
-    _regex = regex;
-    _lastNotificationTime = lastNotificationTime;
     _retry = retry;
-    _command = command;
     _remoteSecondary = RemoteSecondary(atSign, preference);
   }
 
@@ -52,18 +43,29 @@ class Monitor {
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _remoteSecondary.atLookUp.createConnection();
       await _remoteSecondary.authenticate(_preference.privateKey);
-      await _remoteSecondary.executeCommand(_command);
+
+      await _remoteSecondary.executeCommand(_buildMonitorCommand());
       var response;
       _monitorConnection.getSocket().listen((event) {
         response = utf8.decode(event);
-        _handleResponse(response, _notificationCallBack);
+        _handleResponse(response, _onResponse);
       });
 
       status = MonitorStatus.Started;
-      _onDone(this);
     } on Exception catch (e) {
       _handleError(e);
     }
+  }
+
+  String _buildMonitorCommand() {
+    var monitorVerbBuilder = MonitorVerbBuilder();
+    if (regex != null) {
+      monitorVerbBuilder.regex = regex;
+    }
+    if (lastNotificationTime != null) {
+      monitorVerbBuilder.lastNotificationTime = lastNotificationTime;
+    }
+    return monitorVerbBuilder.buildCommand();
   }
 
 // Stops the monitor from receiving notification
@@ -93,14 +95,6 @@ class Monitor {
     } else {
       _onError(this, e);
     }
-  }
-
-  DateTime getLastNotificationTime() {
-    return _lastNotificationTime;
-  }
-
-  String getRegex() {
-    return _regex;
   }
 
   Future<void> _checkConnectivity() async {
