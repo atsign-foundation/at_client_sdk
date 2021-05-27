@@ -17,8 +17,6 @@ class Monitor {
 
   var _retry = false;
 
-  OutboundConnection outboundConnection;
-
   Function _onDone;
 
   Function _onError;
@@ -53,11 +51,6 @@ class Monitor {
       await _checkConnectivity();
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _remoteSecondary.atLookUp.createConnection();
-      if (_monitorConnection.isInValid()) {
-        status = MonitorStatus.Errored;
-        _onError(this);
-        return;
-      }
       await _remoteSecondary.authenticate(_preference.privateKey);
       await _remoteSecondary.executeCommand(_command);
       var response;
@@ -93,11 +86,12 @@ class Monitor {
   void _handleError(e) {
     status = MonitorStatus.Errored;
     // Pass monitor and error
-    _onError(this, e);
     // TBD : If retry = true should the onError needs to be called?
     if (_retry) {
       // We will use a strategy here
-      Future.delayed(Duration(seconds: 5), start);
+      Future.delayed(Duration(seconds: 3), start);
+    } else {
+      _onError(this, e);
     }
   }
 
