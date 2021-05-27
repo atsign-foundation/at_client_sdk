@@ -11,7 +11,7 @@ class Monitor {
   // Date and time of the last notification received on this minotor
   DateTime lastNotificationTime;
 
-  // Status on the monitorgit
+  // Status on the monitor
   MonitorStatus status = MonitorStatus.NotStarted;
 
   var _retry = false;
