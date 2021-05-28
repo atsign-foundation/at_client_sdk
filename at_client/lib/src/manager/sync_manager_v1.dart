@@ -15,6 +15,12 @@ class SyncManagerV1 {
 
   String _atSign;
 
+  Function onDone;
+
+  Function onError;
+
+  var _regex;
+
   final _logger = AtSignLogger('SyncManagerV1');
 
   static final Map<String, SyncManagerV1> _syncManagerMap = {};
@@ -38,26 +44,25 @@ class SyncManagerV1 {
   /// [onDone] callback will be invoked if sync is successful
   /// [_sync] will be retried on any connection related errors
   /// [onError] callback will be invoked if another sync is in progress or if there are any other errors in the sync process.
-  void sync(Function onDone, Function onError, {String regex}) async {
+  void sync({String regex}) async {
     // Return is there is any sync already in progress
-    await _sync(onDone, onError, regex: regex);
+    _regex = regex;
+    await _sync(onDone, onError, regex: _regex);
     return;
   }
 
   Future<void> _sync(Function onDone, Function onError, {String regex}) async {
-    try {
-      await syncOnce(regex: regex);
-      onDone(this);
-    } on AtConnectException {
-      // retry if there is connection issue
-      // log retry here
+    await syncOnce(onDone, onError, regex: _regex);
+  }
+
+  // check whether SyncManagerV1 has to be passed as param.
+  // from where to pass_handleError ?
+  void _handleError(Exception e) {
+    if (e is AtConnectException) {
       Future.delayed(
-          Duration(seconds: 3), () => _sync(onDone, onError, regex: regex));
-    } on Exception catch (e) {
-      // call onError if there is any issue with sync process
-      //log here also
+          Duration(seconds: 3), () => _sync(onDone, onError, regex: _regex));
+    } else {
       onError(this, e);
-      return;
     }
   }
 
@@ -65,9 +70,11 @@ class SyncManagerV1 {
   /// This method will return on any exception during processing
   /// Optionally pass [regex] to sync only matching keys.
   /// Exceptions will be rethrown and caller has to handle the exception
-  Future<void> syncOnce({String regex}) async {
+  Future<void> syncOnce(Function onDone, Function onError,
+      {String regex}) async {
     if (_syncInProgress) {
-      throw Exception('Another Sync process is in progress.');
+      _logger.finer('Another Sync process is in progress.');
+      return;
     }
     _syncInProgress = true;
     try {
@@ -90,11 +97,12 @@ class SyncManagerV1 {
       }
       //push changes from local to cloud
       await _pushChanges(syncObject, regex: regex);
-    } on Exception {
+    } on Exception catch (e) {
       _syncInProgress = false;
-      rethrow;
+      onError(this, e);
     }
     _syncInProgress = false;
+    onDone(this);
   }
 
   Future<void> _pullChanges(SyncObject syncObject, {String regex}) async {
