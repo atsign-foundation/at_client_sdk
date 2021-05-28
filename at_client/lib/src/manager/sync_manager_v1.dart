@@ -15,10 +15,6 @@ class SyncManagerV1 {
 
   String _atSign;
 
-  Function onDone;
-
-  Function onError;
-
   var _regex;
 
   final _logger = AtSignLogger('SyncManagerV1');
@@ -47,22 +43,25 @@ class SyncManagerV1 {
   void sync({String regex}) async {
     // Return is there is any sync already in progress
     _regex = regex;
-    await _sync(onDone, onError, regex: _regex);
+    await _sync(_done, _onError, regex: _regex);
     return;
   }
 
   Future<void> _sync(Function onDone, Function onError, {String regex}) async {
-    await syncOnce(onDone, onError, regex: _regex);
+    await syncOnce(_done, _onError, regex: _regex);
   }
 
-  // check whether SyncManagerV1 has to be passed as param.
-  // from where to pass_handleError ?
-  void _handleError(Exception e) {
+  void _done() {
+    _logger.finer('sync complete');
+  }
+
+  // dartdoc
+  void _onError(var syncManager, Exception e) {
     if (e is AtConnectException) {
       Future.delayed(
-          Duration(seconds: 3), () => _sync(onDone, onError, regex: _regex));
+          Duration(seconds: 3), () => _sync(_done, _onError, regex: _regex));
     } else {
-      onError(this, e);
+      _logger.finer('Error in sync : ${e.toString()}');
     }
   }
 
@@ -97,12 +96,12 @@ class SyncManagerV1 {
       }
       //push changes from local to cloud
       await _pushChanges(syncObject, regex: regex);
+      _syncInProgress = false;
+      onDone(this);
     } on Exception catch (e) {
       _syncInProgress = false;
       onError(this, e);
     }
-    _syncInProgress = false;
-    onDone(this);
   }
 
   Future<void> _pullChanges(SyncObject syncObject, {String regex}) async {
