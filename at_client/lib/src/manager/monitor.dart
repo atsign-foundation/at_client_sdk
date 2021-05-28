@@ -8,8 +8,8 @@ class Monitor {
   // Regex on with what the monitor is started
   var regex;
 
-  // Date and time of the last notification received on this minotor
-  DateTime lastNotificationTime;
+  // Time epoch milliseconds of the last notification received on this monitor
+  int lastNotificationTime;
 
   // Status on the monitor
   MonitorStatus status = MonitorStatus.NotStarted;
