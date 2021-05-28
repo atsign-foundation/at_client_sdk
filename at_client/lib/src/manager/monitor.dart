@@ -27,9 +27,10 @@ class Monitor {
   RemoteSecondary _remoteSecondary;
 
   // Constructor
-  Monitor(Function onError, Function onResponse, String atSign,
+  Monitor(Function onResponse, Function onError, String atSign,
       AtClientPreference preference,
       {bool retry = false}) {
+    _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
     _retry = retry;
