@@ -43,14 +43,14 @@ class Monitor {
       await _checkConnectivity();
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _remoteSecondary.atLookUp.createConnection();
-      await _remoteSecondary.authenticate(_preference.privateKey);
-
-      await _remoteSecondary.executeCommand(_buildMonitorCommand());
       var response;
       _monitorConnection.getSocket().listen((event) {
         response = utf8.decode(event);
         _handleResponse(response, _onResponse);
       });
+      await _remoteSecondary.authenticate(_preference.privateKey);
+
+      await _remoteSecondary.executeCommand(_buildMonitorCommand());
 
       status = MonitorStatus.Started;
       return;
