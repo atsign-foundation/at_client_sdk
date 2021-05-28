@@ -52,6 +52,7 @@ class Monitor {
       });
 
       status = MonitorStatus.Started;
+      return;
     } on Exception catch (e) {
       _handleError(e);
     }
@@ -69,7 +70,7 @@ class Monitor {
   }
 
 // Stops the monitor from receiving notification
-  Future<void> stop() {
+  void stop() {
     status = MonitorStatus.Stopped;
     _monitorConnection.close();
   }
@@ -104,6 +105,7 @@ class Monitor {
     if (!(await _remoteSecondary.isAvailable())) {
       throw AtConnectException('Secondary server is unavailable');
     }
+    return;
   }
 }
 
