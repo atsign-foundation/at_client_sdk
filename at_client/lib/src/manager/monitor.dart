@@ -45,14 +45,21 @@ class Monitor {
     _onError = onError;
     _preference = preference;
     _regex = _regex;
-    _lastNotificationTime = lastNotificationTime;
     _atSign = atSign;
     _retry = retry;
     _remoteSecondary = RemoteSecondary(atSign, preference);
   }
 
 // Starts the monitor by establishing a TCP/IP connection with the secondary server
-  Future<void> start() async {
+  Future<void> start({int lastNotificationTime}) async {
+    if (status == MonitorStatus.Started) {
+      // Monitor already started
+      return;
+    }
+    // This enables start method to be called with lastNotificationTime on the same instance of Monitor
+    if (lastNotificationTime != null) {
+      _lastNotificationTime = lastNotificationTime;
+    }
     try {
       await _checkConnectivity();
       //1. Get a new outbound connection dedicated to monitor verb.
@@ -68,6 +75,7 @@ class Monitor {
       await _monitorConnection.write(_buildMonitorCommand());
 
       status = MonitorStatus.Started;
+
       return;
     } on Exception catch (e) {
       _handleError(e);
