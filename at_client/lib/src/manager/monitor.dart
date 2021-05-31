@@ -63,7 +63,7 @@ class Monitor {
     try {
       await _checkConnectivity();
       //1. Get a new outbound connection dedicated to monitor verb.
-      _monitorConnection = _createNewConnection(
+      _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
       var response;
       _monitorConnection.getSocket().listen((event) {
