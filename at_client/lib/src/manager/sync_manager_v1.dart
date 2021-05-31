@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:html';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -19,11 +20,18 @@ class SyncManagerV1 {
 
   final _logger = AtSignLogger('SyncManagerV1');
 
+  static final Map<String, SyncManagerV1> _syncManagerMap = {};
 
-  SyncManagerV1(atSign, preference) {
-    _atSign = atSign;
-    _preference = preference;
+  factory SyncManagerV1(String atSign, AtClientPreference preference) {
+    if (_syncManagerMap.containsKey(_syncManagerMap)) {
+      return _syncManagerMap[atSign];
+    }
+    final syncManager = SyncManagerV1._internal(atSign, preference);
+    _syncManagerMap[atSign] = syncManager;
+    return syncManager;
   }
+
+  SyncManagerV1._internal(this._atSign, this._preference);
 
   LocalSecondary _localSecondary;
 
