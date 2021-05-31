@@ -7,7 +7,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 
-/// Implementation to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
+///A [SyncManager] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncManager {
   var _syncInProgress = false;
 
@@ -38,10 +38,9 @@ class SyncManager {
 
   AtClientPreference preference;
 
-  /// Calling [sync] with [regex] will ensure only matching keys are synced.
-  /// [onDone] callback will be invoked if sync is successful
-  /// [_sync] will be retried on any connection related errors
-  /// [onError] callback will be invoked if another sync is in progress or if there are any other errors in the sync process.
+  /// Calling sync with [regex] will ensure only matching keys are synced.
+  /// sync will be retried on any connection related errors.
+  /// Call isSyncInProgress to know if the sync is completed or if it is still in progress.
   Future<void> sync(Function onDone, {String regex}) async {
     // Return is there is any sync already in progress
     _regex = regex;
@@ -67,10 +66,10 @@ class SyncManager {
     }
   }
 
-  /// Call [syncOnce] if you want to manually sync from app.
-  /// This method will return on any exception during processing
+  /// Initiates a Sync with the server. If the sync encounters any exceptions
+  /// [onError] call back is called and the Sync is terminated.
+  /// [onDone] callback is called if the sync completes successfully.
   /// Optionally pass [regex] to sync only matching keys.
-  /// Exceptions will be rethrown and caller has to handle the exception
   Future<void> syncOnce(Function onDone, Function onError,
       {String regex}) async {
     if (_syncInProgress) {
