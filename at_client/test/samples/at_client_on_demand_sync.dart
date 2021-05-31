@@ -12,10 +12,14 @@ void main() async {
     var atClient = await AtClientImpl.getClient(atSign);
     var result = await atClient.getSyncManager().isInSync();
     print('is in sync:$result');
-    await atClient.getSyncManager().sync();
+    await atClient.getSyncManager().sync(_onSyncDone);
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
   }
   exit(1);
+}
+
+void _onSyncDone(var syncManager){
+  print('sync done');
 }

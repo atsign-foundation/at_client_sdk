@@ -11,7 +11,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     await AtClientImpl.createClient(atsign, 'me', preference);
     AtClientImpl atClient = await AtClientImpl.getClient(atsign);
-    await atClient.getSyncManager().sync();
+    await atClient.getSyncManager().sync(_onSyncDone);
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -30,6 +30,11 @@ void main() {
     expect(deleteResult, true);
   });
   tearDown(() async => await tearDownFunc());
+}
+
+
+void _onSyncDone(var syncManager){
+  print('sync done');
 }
 
 Future<void> tearDownFunc() async {

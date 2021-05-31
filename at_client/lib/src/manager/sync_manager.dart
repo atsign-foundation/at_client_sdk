@@ -42,15 +42,15 @@ class SyncManager {
   /// [onDone] callback will be invoked if sync is successful
   /// [_sync] will be retried on any connection related errors
   /// [onError] callback will be invoked if another sync is in progress or if there are any other errors in the sync process.
-  Future<void> sync({String regex}) async {
+  Future<void> sync(Function onDone, {String regex}) async {
     // Return is there is any sync already in progress
     _regex = regex;
-    await _sync(_done, _onError, regex: _regex);
+    await _sync(onDone, _onError, regex: _regex);
     return;
   }
 
   Future<void> _sync(Function onDone, Function onError, {String regex}) async {
-    await syncOnce(_done, _onError, regex: _regex);
+    await syncOnce(onDone, _onError, regex: _regex);
   }
 
   void _done(var syncManager) {
@@ -103,21 +103,6 @@ class SyncManager {
     } on Exception catch (e) {
       _syncInProgress = false;
       onError(this, e);
-    }
-  }
-
-  Future<void> syncImmediate(
-      int localCommitId, VerbBuilder builder, CommitOp operation) async {
-    try {
-      var verbResult = await remoteSecondary.executeVerb(builder);
-      var serverCommitId = verbResult.split(':')[1];
-      var localCommitEntry =
-          await SyncUtil.getCommitEntry(localCommitId, _atSign);
-      localCommitEntry.operation = operation;
-      await SyncUtil.updateCommitEntry(
-          localCommitEntry, int.parse(serverCommitId), _atSign);
-    } on SecondaryConnectException {
-      _logger.severe('Unable to connect to secondary');
     }
   }
 

@@ -340,7 +340,11 @@ class EncryptionService {
         }
       }
     });
-    await atClient.getSyncManager().sync();
+    await atClient.getSyncManager().sync(_onSyncDone);
+  }
+
+  void _onSyncDone(var syncManager){
+    logger.finer('sync done after encrypting unencrypted data');
   }
 
   Future<String> _getSelfEncryptionKey() async {
