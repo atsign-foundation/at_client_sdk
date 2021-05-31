@@ -13,8 +13,6 @@ void main() {
     var preference = getAlicePreference(atsign);
     await AtClientImpl.createClient(atsign, 'me', preference);
     var atClient = await AtClientImpl.getClient(atsign);
-    atClient.getSyncManager().init(atsign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     await atClient.getSyncManager().sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);

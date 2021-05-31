@@ -54,6 +54,7 @@ class Monitor {
   Future<void> start({int lastNotificationTime}) async {
     if (status == MonitorStatus.Started) {
       // Monitor already started
+      _logger.finer('Monitor is already running');
       return;
     }
     // This enables start method to be called with lastNotificationTime on the same instance of Monitor
@@ -69,6 +70,12 @@ class Monitor {
       _monitorConnection.getSocket().listen((event) {
         response = utf8.decode(event);
         _handleResponse(response, _onResponse);
+        print('inside socket listen: $response');
+      }, onError: (error) {
+        print('error in monitor');
+        print(error);
+      }, onDone: () {
+        print('monitor done');
       });
       await _authenticateConnection();
 
