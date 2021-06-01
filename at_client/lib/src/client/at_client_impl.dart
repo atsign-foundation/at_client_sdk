@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
@@ -10,7 +9,6 @@ import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
@@ -133,7 +131,11 @@ class AtClientImpl implements AtClient {
 
   @override
   SyncManager getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
+    var syncManager = SyncManager.getInstance(currentAtSign);
+    syncManager.preference ??= _preference;
+    syncManager.localSecondary ??= _localSecondary;
+    syncManager.remoteSecondary ??= RemoteSecondary(currentAtSign, _preference);
+    return syncManager;
   }
 
   @override

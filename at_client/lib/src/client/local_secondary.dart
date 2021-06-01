@@ -4,7 +4,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -44,12 +43,11 @@ class LocalSecondary implements Secondary {
     try {
       sync ??= (_preference.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
-        var syncManager = SyncManagerImpl.getInstance().getSyncManager(_atSign);
-        //1. if local and server are out of sync, first sync before updating current key-value
-        if (sync) {
-          await syncManager.sync(regex: _preference.syncRegex);
-        }
-        //2 . update/delete to local store
+        var syncManager = SyncManager.getInstance(_atSign);
+        syncManager.preference ??= _preference;
+        syncManager.localSecondary ??= this;
+        syncManager.remoteSecondary ??= RemoteSecondary(_atSign, _preference);
+        //1 . update/delete to local store
         var operation;
         if (builder is UpdateVerbBuilder) {
           verbResult = await _update(builder);
@@ -67,10 +65,9 @@ class LocalSecondary implements Secondary {
           verbResult = await _delete(builder);
           operation = CommitOp.DELETE;
         }
-        // 3. sync latest update/delete if strategy is immediate
+        // 2. sync latest update/delete if strategy is immediate
         if (sync && _preference.syncStrategy == SyncStrategy.IMMEDIATE) {
-          var local_commit_seq = verbResult.split(':')[1];
-          await syncManager.syncImmediate(local_commit_seq, builder, operation);
+          await syncManager.syncOnce(_syncDoneCallback, _syncErrorCallback, regex: _preference.syncRegex);
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
@@ -87,6 +84,14 @@ class LocalSecondary implements Secondary {
       }
     }
     return verbResult;
+  }
+
+  void _syncDoneCallback(var syncManager) {
+    logger.finer('sync immediate complete on local secondary');
+  }
+
+  void _syncErrorCallback(var syncManager, Exception e) {
+    logger.finer('error in sync immediate ${e.toString()}');
   }
 
   Future<String> _update(UpdateVerbBuilder builder) async {

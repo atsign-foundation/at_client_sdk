@@ -45,5 +45,13 @@ dependencies:
 #    path: ../../at_libraries/at_lookup
 #  at_commons:
 #    path: ../../at_tools/at_commons
+#  at_utils:
+#    path: ../../at_tools/at_utils
 dev_dependencies:
   test: ^1.6.0
+  at_demo_data:
+    git:
+      url: https://github.com/atsign-foundation/at_demos.git
+      path: at_demo_data
+      ref: master
+      version: 0.0.3+1
