@@ -44,7 +44,7 @@ class Monitor {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
-    _regex = _regex;
+    _regex = regex;
     _atSign = atSign;
     _retry = retry;
     _remoteSecondary = RemoteSecondary(atSign, preference);
