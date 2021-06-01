@@ -40,13 +40,18 @@ dependencies:
       path: at_lookup
       ref: connection_issue
       version: ^1.0.0+9
-#dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_commons
+      ref: connection_issue
+      version: ^1.0.1+8
+dependency_overrides:
 #  at_lookup:
 #    path: ../../at_libraries/at_lookup
-#  at_commons:
-#    path: ../../at_tools/at_commons
-#  at_utils:
-#    path: ../../at_tools/at_utils
+  at_commons:
+    path: ../../at_tools/at_commons
+
 dev_dependencies:
   test: ^1.6.0
   at_demo_data:
