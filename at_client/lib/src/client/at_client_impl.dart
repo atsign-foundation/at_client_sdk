@@ -596,13 +596,15 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
+  Future<void> notify(AtKey atKey, String value, OperationEnum operation,
+      Function onDone, Function onError,
       {MessageTypeEnum messageType,
       PriorityEnum priority,
       StrategyEnum strategy,
       int latestN,
       String notifier = SYSTEM,
       bool isDedicated = false}) async {
+    assert(onDone != null && onError != null);
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
@@ -627,9 +629,10 @@ class AtClientImpl implements AtClient {
           builder.value =
               await _encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+          onError(e);
+          // var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          // return Future.error(AtClientException(
+          //     errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
         }
       } else {
         builder.value =
@@ -660,7 +663,8 @@ class AtClientImpl implements AtClient {
     if (isDedicated && (secondary is RemoteSecondary)) {
       await secondary.atLookUp.connection.close();
     }
-    return notifyResult != null;
+    onDone(notifyResult);
+    //return notifyResult != null;
   }
 
   @override
@@ -670,18 +674,28 @@ class AtClientImpl implements AtClient {
     var sharedWithList = jsonDecode(atKey.sharedWith);
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
-      var result =
-          await notify(atKey, value, operation, isDedicated: isDedicated);
-      returnMap.putIfAbsent(sharedWith, () => result);
+      //var result =
+      await notify(atKey, value, operation, (String id) {
+        returnMap.putIfAbsent(sharedWith, () => id);
+      }, (dynamic e) {
+        logger.severe(e);
+      }, isDedicated: isDedicated);
+      //returnMap.putIfAbsent(sharedWith, () => result);
     }
     return jsonEncode(returnMap);
   }
 
   @override
-  Future<String> notifyStatus(String notificationId) async {
+  Future<void> notifyStatus(
+      String notificationId, Function onDone, Function onError) async {
     var builder = NotifyStatusVerbBuilder()..notificationId = notificationId;
-    var notifyStatus = await getRemoteSecondary().executeVerb(builder);
-    return notifyStatus;
+    try {
+      var notifyStatus = await getRemoteSecondary().executeVerb(builder);
+      onDone(notifyStatus);
+    } on Exception catch (e) {
+      onError(e);
+    }
+    //return notifyStatus;
   }
 
   @override
