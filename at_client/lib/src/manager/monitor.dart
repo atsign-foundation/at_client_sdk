@@ -9,6 +9,9 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:crypton/crypton.dart';
 import 'package:at_utils/at_logger.dart';
 
+///
+/// A [Monitor] object is used to receive notifications from the secondary server.
+///
 class Monitor {
   // Regex on with what the monitor is started
   var _regex;
@@ -37,7 +40,39 @@ class Monitor {
 
   RemoteSecondary _remoteSecondary;
 
-  // Constructor
+  ///
+  /// Creates a [Monitor] object.
+  ///
+  /// [onResponse] function is called when a new batch of notifications are received from the server.
+  /// This cannot be null.
+  /// Example [onResponse] callback
+  /// ```
+  /// void onResponse(String notificationResponse) {
+  /// // add your notification processing logic
+  ///}
+  ///```
+  /// [onError] function is called when is some thing goes wrong with the processing.
+  /// For example this could be:
+  ///    - Unavailability of the network
+  ///    - Exception while running the code
+  /// This cannot be null.
+  /// Example [onError] callback
+  /// ```
+  /// void onError(Monitor monitor, Exception e) {
+  ///  // add your error handling logic
+  /// }
+  /// ```
+  /// After calling [onError] monitor would stop sending any more notifications. If the error is recoverable
+  /// and if [retry] is true the [Monitor] would continue and waits to recover from the error condition and not call [onError].
+  ///
+  /// For example if the app loses internet connection then [Monitor] would wait till the internet comes back and not call
+  /// [onError]
+  ///
+  /// When the [regex] is passed only those notifications matching the [regex] will be notified
+  /// When the [lastNotificationTime] is passed only those notifications AFTER the time value are notified.
+  /// This is expressed as EPOCH time milliseconds.
+  /// When [retry] is true
+  ////
   Monitor(Function onResponse, Function onError, String atSign,
       AtClientPreference preference,
       {String regex, int lastNotificationTime, bool retry = false}) {
@@ -50,7 +85,12 @@ class Monitor {
     _remoteSecondary = RemoteSecondary(atSign, preference);
   }
 
-// Starts the monitor by establishing a TCP/IP connection with the secondary server
+  /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
+  /// If [lastNotificationTime] expressed as EPOCH milliseconds is passed, only those notifications occurred after
+  /// that time are notified.
+  /// Calling start on already started monitor would not cause any exceptions and it will have no side affects.
+  /// Calling start on monitor that is not started or erred will be started again.
+  /// Calling [Monitor#getStatus] would return the status of the [Monitor]
   Future<void> start({int lastNotificationTime}) async {
     if (status == MonitorStatus.Started) {
       // Monitor already started
@@ -70,12 +110,10 @@ class Monitor {
       _monitorConnection.getSocket().listen((event) {
         response = utf8.decode(event);
         _handleResponse(response, _onResponse);
-        print('inside socket listen: $response');
       }, onError: (error) {
-        print('error in monitor');
-        print(error);
+        _logger.severe('error in monitor $error');
       }, onDone: () {
-        print('monitor done');
+        _logger.finer('monitor done');
       });
       await _authenticateConnection();
 
@@ -168,7 +206,7 @@ class Monitor {
     return monitorVerbBuilder.buildCommand();
   }
 
-// Stops the monitor from receiving notification
+  /// Stops the monitor. Call [Monitor#start] to start it again.
   void stop() {
     status = MonitorStatus.Stopped;
     _monitorConnection.close();

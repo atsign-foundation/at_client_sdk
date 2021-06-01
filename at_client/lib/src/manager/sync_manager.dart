@@ -11,13 +11,11 @@ import 'package:at_utils/at_logger.dart';
 class SyncManager {
   var _syncInProgress = false;
 
-  var _completionPercentage;
-
   String _atSign;
 
   var _regex;
 
-  final _logger = AtSignLogger('SyncManagerV1');
+  final _logger = AtSignLogger('SyncManager');
 
   static final Map<String, SyncManager> _syncManagerMap = {};
 
@@ -40,6 +38,13 @@ class SyncManager {
 
   /// Calling sync with [regex] will ensure only matching keys are synced.
   /// sync will be retried on any connection related errors.
+  /// [onDone] callback is invoked when sync completes successfully.
+  /// e.g onDone callback
+  /// ```
+  /// void onDone(SyncManager syncManager) {
+  ///  // add your sync completion logic
+  /// }
+  /// ```
   /// Call isSyncInProgress to know if the sync is completed or if it is still in progress.
   Future<void> sync(Function onDone, {String regex}) async {
     // Return is there is any sync already in progress
@@ -56,7 +61,6 @@ class SyncManager {
     _logger.finer('sync complete');
   }
 
-  // dartdoc
   void _onError(var syncManager, Exception e) {
     if (e is AtConnectException) {
       Future.delayed(
@@ -68,7 +72,19 @@ class SyncManager {
 
   /// Initiates a Sync with the server. If the sync encounters any exceptions
   /// [onError] call back is called and the Sync is terminated.
+  /// e.g onError callback
+  /// ```
+  /// void onError(SyncManagar syncManager, Exception e) {
+  /// // add your sync error logic
+  /// }
+  /// ```
   /// [onDone] callback is called if the sync completes successfully.
+  /// e.g onDone callback
+  /// ```
+  /// void onDone(SyncManager syncManager) {
+  /// // add your sync completion logic
+  /// }
+  /// ```
   /// Optionally pass [regex] to sync only matching keys.
   Future<void> syncOnce(Function onDone, Function onError,
       {String regex}) async {
@@ -106,8 +122,8 @@ class SyncManager {
   }
 
   Future<void> _pullChanges(SyncObject syncObject, {String regex}) async {
-    var syncResponse = await remoteSecondary
-        .sync(syncObject.lastSyncedCommitId, regex: regex);
+    var syncResponse =
+        await remoteSecondary.sync(syncObject.lastSyncedCommitId, regex: regex);
     if (syncResponse != null && syncResponse != 'data:null') {
       syncResponse = syncResponse.replaceFirst('data:', '');
       var syncResponseJson = jsonDecode(syncResponse);
@@ -346,11 +362,6 @@ class SyncManager {
   bool isSyncInProgress() {
     return _syncInProgress;
   }
-
-  int completionPercentage() {
-    return _completionPercentage;
-  }
-
 }
 
 class SyncObject {
