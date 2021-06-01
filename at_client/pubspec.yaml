@@ -49,8 +49,8 @@ dependencies:
 dependency_overrides:
 #  at_lookup:
 #    path: ../../at_libraries/at_lookup
-  at_commons:
-    path: ../../at_tools/at_commons
+#  at_commons:
+#    path: ../../at_tools/at_commons
 
 dev_dependencies:
   test: ^1.6.0
