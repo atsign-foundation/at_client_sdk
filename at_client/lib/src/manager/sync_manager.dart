@@ -209,7 +209,7 @@ class SyncManager {
   }
 
   Future<void> _checkConnectivity() async {
-    if (!NetworkUtil.isNetworkAvailable()) {
+    if (!(await NetworkUtil.isNetworkAvailable())) {
       throw AtConnectException('Internet connection unavailable to sync');
     }
     if (!(await remoteSecondary.isAvailable())) {

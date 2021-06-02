@@ -21,6 +21,7 @@ dependencies:
   crypto: ^3.0.0
   collection: ^1.14.12
   pedantic: ^1.8.0
+  data_connection_checker: ^0.3.4
   at_persistence_spec:
     git:
       url: https://github.com/atsign-foundation/at_server.git

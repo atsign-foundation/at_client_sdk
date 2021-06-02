@@ -1,10 +1,15 @@
 import 'package:at_utils/at_logger.dart';
+import 'package:data_connection_checker/data_connection_checker.dart';
 
 class NetworkUtil {
-  static var logger = AtSignLogger('NetworkUtil');
+  static final _logger = AtSignLogger('NetworkUtil');
 
-  static bool isNetworkAvailable() {
-    //#TODO implement
-    return true;
+  static Future<bool> isNetworkAvailable() async {
+    var result = await DataConnectionChecker().hasConnection;
+    if (!result) {
+      _logger.finer(
+          'Unable to connect to internet: ${DataConnectionChecker().lastTryResults}');
+    }
+    return result;
   }
 }

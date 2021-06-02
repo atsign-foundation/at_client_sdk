@@ -112,8 +112,10 @@ class Monitor {
         _handleResponse(response, _onResponse);
       }, onError: (error) {
         _logger.severe('error in monitor $error');
-      }, onDone: () {
+      }, onDone: () async {
         _logger.finer('monitor done');
+        // auto restart when monitor to server is closed or restart callback ?
+        await start(lastNotificationTime: _lastNotificationTime);
       });
       await _authenticateConnection();
 
@@ -238,7 +240,7 @@ class Monitor {
   }
 
   Future<void> _checkConnectivity() async {
-    if (!NetworkUtil.isNetworkAvailable()) {
+    if (!(await NetworkUtil.isNetworkAvailable())) {
       throw AtConnectException('Internet connection unavailable to sync');
     }
     if (!(await _remoteSecondary.isAvailable())) {
