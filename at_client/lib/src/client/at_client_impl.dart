@@ -595,6 +595,22 @@ class AtClientImpl implements AtClient {
         isDedicated: isDedicated);
   }
 
+  /// Calling notify with [AtKey] and value along with onDone, onError function
+  /// will notify [key] to [sharedWith] atsign
+  /// [onDone] callback is invoked with notificationId when notify completes successfully.
+  /// e.g onDone callback
+  /// ```
+  /// void onDone(String notificationId) {
+  ///  // add your notify completion logic
+  /// }
+  ///
+  /// [onError] callback is invoked with exception when notify fails.
+  //   /// e.g onError callback
+  //   /// ```
+  //   /// void onError(dynamic e) {
+  //   ///  // add your notify error logic
+  //   /// }
+  /// ```
   @override
   Future<void> notify(AtKey atKey, String value, OperationEnum operation,
       Function onDone, Function onError,
@@ -629,10 +645,10 @@ class AtClientImpl implements AtClient {
           builder.value =
               await _encryptionService.encrypt(atKey.key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
-          onError(e);
-          // var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          // return Future.error(AtClientException(
-          //     errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+          onError(AtClientException(
+              AtClientExceptionUtil.getErrorCode(e),
+              AtClientExceptionUtil.getErrorDescription(
+                  AtClientExceptionUtil.getErrorCode(e))));
         }
       } else {
         builder.value =
@@ -660,11 +676,11 @@ class AtClientImpl implements AtClient {
     }
     var notifyResult = await secondary.executeVerb(builder,
         sync: (isDedicated ? false : isSyncRequired));
+    //close connection if a dedicated connection created for this request
     if (isDedicated && (secondary is RemoteSecondary)) {
       await secondary.atLookUp.connection.close();
     }
     onDone(notifyResult);
-    //return notifyResult != null;
   }
 
   @override
@@ -674,17 +690,31 @@ class AtClientImpl implements AtClient {
     var sharedWithList = jsonDecode(atKey.sharedWith);
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
-      //var result =
       await notify(atKey, value, operation, (String id) {
         returnMap.putIfAbsent(sharedWith, () => id);
       }, (dynamic e) {
         logger.severe(e);
       }, isDedicated: isDedicated);
-      //returnMap.putIfAbsent(sharedWith, () => result);
     }
     return jsonEncode(returnMap);
   }
 
+  /// Calling notifyStatus with [notificationId] along with onDone, onError function
+  /// will get notification status
+  /// [onDone] callback is invoked with notification status when notifyStatus completes successfully.
+  /// e.g onDone callback
+  /// ```
+  /// void onDone(String notifyStatus) {
+  ///  // add your notifyStatus completion logic
+  /// }
+  ///
+  /// [onError] callback is invoked with exception when notifyStatus fails.
+  //   /// e.g onError callback
+  //   /// ```
+  //   /// void onError(dynamic e) {
+  //   ///  // add your notifyStatus error logic
+  //   /// }
+  /// ```
   @override
   Future<void> notifyStatus(
       String notificationId, Function onDone, Function onError) async {
@@ -695,7 +725,6 @@ class AtClientImpl implements AtClient {
     } on Exception catch (e) {
       onError(e);
     }
-    //return notifyStatus;
   }
 
   @override
