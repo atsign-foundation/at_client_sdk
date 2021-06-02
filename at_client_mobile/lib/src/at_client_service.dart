@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:core';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
+import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/at_client_auth.dart';
@@ -362,11 +362,12 @@ class AtClientService {
   Future<void> _sync(AtClientPreference preference, String atSign) async {
     if ((preference.privateKey != null || preference.cramSecret != null) &&
         preference.syncStrategy != null) {
-      var _syncManager = SyncManagerImpl.getInstance().getSyncManager(atSign);
-      _syncManager.init(atSign, preference, atClient.getRemoteSecondary(),
-          atClient.getLocalSecondary());
-      await _syncManager.sync(appInit: true, regex: preference.syncRegex);
+      await atClient.getSyncManager().sync(_done);
     }
+  }
+
+  void _done(var syncManager) {
+    _logger.finer('sync complete');
   }
 
   ///returns public key for [atsign] if found else returns null.
