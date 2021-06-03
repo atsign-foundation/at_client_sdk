@@ -109,7 +109,9 @@ class SyncManager {
       serverCommitId ??= -1;
       if (serverCommitId > lastSyncedCommitId) {
         //pull changes from cloud to local
-        await _pullChanges(syncObject, regex: regex);
+        await remoteSecondary.sync(syncObject.lastSyncedCommitId, _syncLocal,
+            regex: regex);
+        //await _pullChanges(syncObject, regex: regex);
       }
       //push changes from local to cloud
       await _pushChanges(syncObject, regex: regex);
@@ -121,17 +123,10 @@ class SyncManager {
     }
   }
 
-  Future<void> _pullChanges(SyncObject syncObject, {String regex}) async {
-    var syncResponse =
-        await remoteSecondary.sync(syncObject.lastSyncedCommitId, regex: regex);
-    if (syncResponse != null && syncResponse != 'data:null') {
-      syncResponse = syncResponse.replaceFirst('data:', '');
-      var syncResponseJson = jsonDecode(syncResponse);
-      await Future.forEach(syncResponseJson,
-          (serverCommitEntry) => _syncLocal(serverCommitEntry));
-    }
-    return;
-  }
+  // Future<void> _pullChanges(SyncObject syncObject, {String regex}) async {
+  //   await remoteSecondary.sync(syncObject.lastSyncedCommitId, _syncLocal,
+  //       regex: regex);
+  // }
 
   Future<void> _pushChanges(SyncObject syncObject, {String regex}) async {
     var uncommittedEntryBatch =

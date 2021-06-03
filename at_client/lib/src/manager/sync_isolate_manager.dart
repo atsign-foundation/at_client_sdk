@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
 
@@ -70,7 +71,7 @@ class SyncIsolateManager {
           case 'get_server_commits':
             // send sync verb to get latest changes from server
             var lastSyncedId = message['last_synced_commit_id'];
-            var result = await remoteSecondary.sync(lastSyncedId,
+            var result = await remoteSecondary.sync(lastSyncedId, _syncLocal,
                 privateKey: privateKey);
             var isolateResult = <String, dynamic>{};
             isolateResult['operation'] = 'get_server_commits_result';
@@ -94,6 +95,25 @@ class SyncIsolateManager {
       });
     } on Exception catch (e) {
       logger.severe('exception in executeRemoteCommandIsolate ${e.toString()}');
+    }
+  }
+
+  static Future<void> _syncLocal(serverCommitEntry) async {
+    switch (serverCommitEntry['operation']) {
+      case '+':
+      case '#':
+      case '*':
+        var builder = UpdateVerbBuilder()
+          ..atKey = serverCommitEntry['atKey']
+          ..value = serverCommitEntry['value'];
+        builder.operation = UPDATE_ALL;
+      //   _setMetaData(builder, serverCommitEntry);
+      //   await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
+      //   break;
+      // case '-':
+      //   var builder = DeleteVerbBuilder()..atKey = serverCommitEntry['atKey'];
+      //   await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
+      //   break;
     }
   }
 }
