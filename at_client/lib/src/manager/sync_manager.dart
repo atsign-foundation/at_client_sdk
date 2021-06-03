@@ -107,6 +107,7 @@ class SyncManager {
       }
       lastSyncedCommitId ??= -1;
       serverCommitId ??= -1;
+      syncObject.lastSyncedCommitId ??= -1;
       if (serverCommitId > lastSyncedCommitId) {
         //pull changes from cloud to local
         await _pullChanges(syncObject, regex: regex);
