@@ -1,6 +1,6 @@
 name: at_client
 description: at_client is the Client SDK which provides the essential methods for building an app using the @protocol.
-version: 1.0.1+9
+version: 1.1.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
@@ -24,32 +24,20 @@ dependencies:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_persistence/at_persistence_spec
-      ref: trunk
-      version: ^1.0.1+4
+      ref: null_safety
+      version: ^1.1.0
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
-      ref: trunk
-      version: ^1.0.1+7
+      ref: null_safety
+      version: ^1.1.0
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
-      ref: trunk
-      version: ^1.0.0+7
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: trunk
-      version: ^1.0.1+7
-  at_utils:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_utils
-      ref: trunk
-      version: ^1.0.1+7
+      ref: null_safety
+      version: ^1.1.0
   dart_utf7:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
