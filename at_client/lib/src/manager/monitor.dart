@@ -27,7 +27,7 @@ class Monitor {
 
   final _logger = AtSignLogger('Monitor');
 
-  var _retry = false;
+  var _keepAlive = false;
 
   var _atSign;
 
@@ -81,7 +81,7 @@ class Monitor {
     _preference = preference;
     _atSign = atSign;
     _regex = monitorPreference.regex;
-    _retry = monitorPreference.retry;
+    _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
     _remoteSecondary = RemoteSecondary(atSign, preference);
   }
@@ -113,24 +113,17 @@ class Monitor {
         _handleResponse(response, _onResponse);
       }, onError: (error) {
         _logger.severe('error in monitor $error');
-        _onError(this, error);
+        _handleError(error);
       }, onDone: () async {
         _logger.finer('monitor done');
-        // auto restart when monitor to server is closed or restart callback ?
-        await start(lastNotificationTime: _lastNotificationTime);
+        _handleError(Exception('Monitor done'));
       });
       await _authenticateConnection();
-
       await _monitorConnection.write(_buildMonitorCommand());
-
       status = MonitorStatus.Started;
       return;
     } on Exception catch (e) {
-      if (_retry) {
-        Future.delayed(Duration(seconds: 3), () => start());
-      } else {
         _handleError(e);
-      }
     }
   }
 
@@ -233,10 +226,11 @@ class Monitor {
   }
 
   void _handleError(e) {
+    _monitorConnection.destroy();
     status = MonitorStatus.Errored;
     // Pass monitor and error
     // TBD : If retry = true should the onError needs to be called?
-    if (_retry) {
+    if (_keepAlive) {
       // We will use a strategy here
       Future.delayed(Duration(seconds: 3), start);
     } else {
