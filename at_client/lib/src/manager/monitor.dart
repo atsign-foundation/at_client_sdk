@@ -113,6 +113,7 @@ class Monitor {
         _handleResponse(response, _onResponse);
       }, onError: (error) {
         _logger.severe('error in monitor $error');
+        _onError(this, error);
       }, onDone: () async {
         _logger.finer('monitor done');
         // auto restart when monitor to server is closed or restart callback ?
