@@ -1,7 +1,7 @@
 import 'dart:convert';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/preference/monitor_preference.dart';
 
 class MonitorService {
   int _lastNotificationTimestamp;
@@ -14,8 +14,9 @@ class MonitorService {
       Function errorCallback,
       String atSign,
       AtClientPreference clientPreference,
-      {String regex}) {
-    _monitor = Monitor(_processNotification, _processError, atSign, clientPreference, regex: regex);
+      MonitorPreference monitorPreference) {
+    _monitor = Monitor(_processNotification, _processError, atSign,
+        clientPreference, monitorPreference);
     _notificationCallback = notificationCallback;
     _errorCallback = errorCallback;
   }
@@ -38,7 +39,8 @@ class MonitorService {
 
     Map notificationMap = json.decode(notification);
     var currNotificationTimestamp = notificationMap['epochMillis'];
-    if (_lastNotificationTimestamp == null || currNotificationTimestamp > _lastNotificationTimestamp) {
+    if (_lastNotificationTimestamp == null ||
+        currNotificationTimestamp > _lastNotificationTimestamp) {
       _lastNotificationTimestamp = currNotificationTimestamp;
     }
     _notificationCallback(notification);

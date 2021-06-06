@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -74,14 +75,14 @@ class Monitor {
   /// When [retry] is true
   ////
   Monitor(Function onResponse, Function onError, String atSign,
-      AtClientPreference preference,
-      {String regex, int lastNotificationTime, bool retry = false}) {
+      AtClientPreference preference, MonitorPreference monitorPreference) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
-    _regex = regex;
     _atSign = atSign;
-    _retry = retry;
+    _regex = monitorPreference.regex;
+    _retry = monitorPreference.retry;
+    _lastNotificationTime = monitorPreference.lastNotificationTime;
     _remoteSecondary = RemoteSecondary(atSign, preference);
   }
 
@@ -122,10 +123,13 @@ class Monitor {
       await _monitorConnection.write(_buildMonitorCommand());
 
       status = MonitorStatus.Started;
-
       return;
     } on Exception catch (e) {
-      _handleError(e);
+      if (_retry) {
+        Future.delayed(Duration(seconds: 3), () => start());
+      } else {
+        _handleError(e);
+      }
     }
   }
 
