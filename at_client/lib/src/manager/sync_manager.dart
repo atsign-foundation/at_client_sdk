@@ -123,8 +123,14 @@ class SyncManager {
   }
 
   Future<void> _pullChanges(SyncObject syncObject, {String regex}) async {
-    await remoteSecondary.sync(syncObject.lastSyncedCommitId, _syncLocal,
+    var syncResponse = await remoteSecondary.sync(syncObject.lastSyncedCommitId, _syncLocal,
         regex: regex);
+    if (syncResponse != null && syncResponse != 'data:null') {
+      syncResponse = syncResponse.replaceFirst('data:', '');
+      var syncResponseJson = jsonDecode(syncResponse);
+      await Future.forEach(syncResponseJson,
+              (serverCommitEntry) => _syncLocal(serverCommitEntry));
+    }
   }
 
   Future<void> _pushChanges(SyncObject syncObject, {String regex}) async {
