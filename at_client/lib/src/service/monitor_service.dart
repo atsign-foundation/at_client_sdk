@@ -33,17 +33,21 @@ class MonitorService {
     _monitor.stop();
   }
 
-  void _processNotification(String notification) {
-    notification = notification.replaceFirst('notification: ', '');
-    print(notification + "\n");
+  void _processNotification(String notifications) {
+    var notificationsList = notifications.split('\n');
+    notificationsList.forEach((notification) {
+      // split can produce empty strings
+      if (notification.isEmpty) return;
 
-    Map notificationMap = json.decode(notification);
-    var currNotificationTimestamp = notificationMap['epochMillis'];
-    if (_lastNotificationTimestamp == null ||
-        currNotificationTimestamp > _lastNotificationTimestamp) {
-      _lastNotificationTimestamp = currNotificationTimestamp;
-    }
-    _notificationCallback(notification);
+      notification = notification.replaceFirst('notification: ', '');
+      Map notificationMap = json.decode(notification);
+      var currNotificationTimestamp = notificationMap['epochMillis'];
+      if (_lastNotificationTimestamp == null ||
+          currNotificationTimestamp > _lastNotificationTimestamp) {
+        _lastNotificationTimestamp = currNotificationTimestamp;
+      }
+      _notificationCallback(notification);
+    });
   }
 
   void _processError(Monitor monitor, Exception error) {

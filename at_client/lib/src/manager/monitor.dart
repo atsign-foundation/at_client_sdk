@@ -116,6 +116,7 @@ class Monitor {
         _handleError(error);
       }, onDone: () async {
         _logger.finer('monitor done');
+        if (status == MonitorStatus.Stopped) return;
         _handleError(Exception('Monitor done'));
       });
       await _authenticateConnection();
