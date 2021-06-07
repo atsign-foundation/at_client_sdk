@@ -670,17 +670,21 @@ class AtClientImpl implements AtClient {
     if (SyncUtil.shouldSkipSync(notifyKey)) {
       isSyncRequired = false;
     }
-    var secondary = getSecondary(isDedicated: isDedicated);
-    if (isDedicated) {
-      isSyncRequired = false;
+    try {
+      var secondary = getSecondary(isDedicated: isDedicated);
+      if (isDedicated) {
+        isSyncRequired = false;
+      }
+      var notifyResult = await secondary.executeVerb(builder,
+          sync: (isDedicated ? false : isSyncRequired));
+      //close connection if a dedicated connection created for this request
+      if (isDedicated && (secondary is RemoteSecondary)) {
+        await secondary.atLookUp.connection.close();
+      }
+      onDone(notifyResult);
+    } on Exception catch (e) {
+      onError(e);
     }
-    var notifyResult = await secondary.executeVerb(builder,
-        sync: (isDedicated ? false : isSyncRequired));
-    //close connection if a dedicated connection created for this request
-    if (isDedicated && (secondary is RemoteSecondary)) {
-      await secondary.atLookUp.connection.close();
-    }
-    onDone(notifyResult);
   }
 
   @override
