@@ -15,7 +15,7 @@ import 'package:at_utils/at_logger.dart';
 ///
 class Monitor {
   // Regex on with what the monitor is started
-  var _regex;
+  String _regex;
 
   // Time epoch milliseconds of the last notification received on this monitor
   int _lastNotificationTime;
@@ -27,9 +27,9 @@ class Monitor {
 
   final _logger = AtSignLogger('Monitor');
 
-  var _keepAlive = false;
+  bool _keepAlive = false;
 
-  var _atSign;
+  String _atSign;
 
   Function _onError;
 
@@ -37,7 +37,7 @@ class Monitor {
 
   AtClientPreference _preference;
 
-  var _monitorConnection;
+  OutboundConnection _monitorConnection;
 
   RemoteSecondary _remoteSecondary;
 
@@ -226,7 +226,7 @@ class Monitor {
   }
 
   void _handleError(e) {
-    _monitorConnection.destroy();
+    _monitorConnection.close();
     status = MonitorStatus.Errored;
     // Pass monitor and error
     // TBD : If retry = true should the onError needs to be called?
