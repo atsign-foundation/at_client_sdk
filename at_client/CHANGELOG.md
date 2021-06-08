@@ -16,3 +16,15 @@
 - Notification sub system introduced
 ## 1.0.1+7
 - Self keys migration issue fix
+## 1.0.1+8
+- Delete cached keys
+- Encrypt Stream data
+## 1.0.1+9
+- Third party package dependency upgrade
+- gitflow changes
+- Auto restart monitor connection
+- Stream encryption
+- Bug fixes
+## 1.0.1+10
+- Provision to request for a new outbound connection.
+- Minor bug in stream handlers
