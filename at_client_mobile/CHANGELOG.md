@@ -14,5 +14,17 @@
 - Notification sub system changes
 ## 1.0.0+7
 - Self Encryption changes
-## 1.0.0+8  
+## 1.0.0+8
 - Self keys migration issue fix
+## 1.0.0+9
+- at_client version change
+## 1.0.0+10
+- Third party package dependency upgrade
+- gitflow changes
+- Auto restart monitor connection
+- Stream encryption
+- Bug fixes
+## 1.0.0+11
+- Provision to request for a new outbound connection.
+- Minor bug in stream handlers
+- at_client version upgrade

@@ -4,7 +4,6 @@ version: 1.0.0+11
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
-publish_to: none
 
 environment:
   sdk: '>=2.7.0 <3.0.0'
@@ -16,30 +15,10 @@ dependencies:
   flutter_keychain: ^1.0.0
   hive: ^2.0.4
   crypton: ^2.0.1
-  at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: at_client
-      ref: trunk
-      version: ^1.0.1+10
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: at_lookup
-      ref: trunk
-      version: ^1.0.0+8
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: trunk
-      version: ^1.0.1+7
-  at_utils:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_utils
-      ref: trunk
-      version: ^1.0.1+7
+  at_client: ^1.0.1+10
+  at_lookup: ^1.0.0+8
+  at_commons: ^1.0.1+8
+  at_utils: ^1.0.1+8
 
 dev_dependencies:
   pedantic: ^1.8.0
