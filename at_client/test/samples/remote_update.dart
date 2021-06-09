@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:at_client/at_client.dart';
 import 'test_util.dart';
 

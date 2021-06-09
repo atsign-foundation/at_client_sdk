@@ -4,6 +4,7 @@ version: 1.1.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
+publish_to: none
 
 environment:
   sdk: '>=2.7.0 <3.0.0'

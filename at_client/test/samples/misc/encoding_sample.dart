@@ -7,7 +7,7 @@ import 'package:base2e15/base2e15.dart';
 void main() {
   var text = 'hello \r\n world';
   print(text);
-  LineSplitter linesplitter = LineSplitter();
+  var linesplitter = LineSplitter();
   var result = linesplitter.convert(text);
   print(result.length);
   var encodedText = Base2e15.encode(text.codeUnits);

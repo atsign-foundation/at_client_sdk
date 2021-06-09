@@ -378,6 +378,7 @@ class SyncManager {
 
   Future<String> _getCommand(CommitEntry entry) async {
     late var command;
+    // ignore: missing_enum_constant_in_switch
     switch (entry.operation) {
       case CommitOp.UPDATE:
         var key = entry.atKey;
