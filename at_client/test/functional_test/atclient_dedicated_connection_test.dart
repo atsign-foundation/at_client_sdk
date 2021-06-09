@@ -10,10 +10,10 @@ void main() {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     await AtClientImpl.createClient(atsign, 'me', preference);
-    AtClientImpl atClient = await AtClientImpl.getClient(atsign);
-    atClient.getSyncManager().init(atsign, preference,
+    var atClient = await AtClientImpl?.getClient(atsign);
+    atClient!.getSyncManager()!.init(atsign, preference,
         atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    await atClient.getSyncManager().sync();
+    await atClient.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠

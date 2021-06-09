@@ -13,21 +13,21 @@ class StorageManager {
 
   bool isStorageInitialized = false;
 
-  AtClientPreference preferences;
+  AtClientPreference? preferences;
 
   StorageManager(this.preferences);
 
-  Future<void> init(String currentAtSign, List<int> keyStoreSecret) async {
+  Future<void> init(String currentAtSign, List<int>? keyStoreSecret) async {
     if (!isStorageInitialized) {
       await _initStorage(currentAtSign, keyStoreSecret);
     }
   }
 
   Future<void> _initStorage(
-      String currentAtSign, List<int> keyStoreSecret) async {
+      String currentAtSign, List<int>? keyStoreSecret) async {
     print('initializing storage');
-    var storagePath = preferences.hiveStoragePath;
-    var commitLogPath = preferences.commitLogPath;
+    var storagePath = preferences!.hiveStoragePath;
+    var commitLogPath = preferences!.commitLogPath;
 
     if (storagePath == null || commitLogPath == null) {
       throw Exception('Please set local storage paths');
@@ -38,19 +38,19 @@ class StorageManager {
         enableCommitId: false);
     // Initialize Persistence
     var manager = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(currentAtSign)
-        .getHivePersistenceManager();
+        .getSecondaryPersistenceStore(currentAtSign)!
+        .getHivePersistenceManager()!;
     await manager.init(currentAtSign, storagePath);
     await manager.openVault(currentAtSign, hiveSecret: keyStoreSecret);
     //var hiveKeyStore = HiveKeystore(currentAtSign);
     var hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(currentAtSign)
-        .getSecondaryKeyStore();
+        .getSecondaryPersistenceStore(currentAtSign)!
+        .getSecondaryKeyStore()!;
     hiveKeyStore.commitLog = atCommitLog;
     //var keyStoreManager = SecondaryKeyStoreManager.getInstance();
     var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(currentAtSign)
-        .getSecondaryKeyStoreManager();
+        .getSecondaryPersistenceStore(currentAtSign)!
+        .getSecondaryKeyStoreManager()!;
     keyStoreManager.keyStore = hiveKeyStore;
     isStorageInitialized = true;
   }

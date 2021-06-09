@@ -18,9 +18,7 @@ void main() {
   test('checking for test environment readiness', () async {
     await Future.delayed(Duration(seconds: 10));
     _secureSocket = await secure_socket_connection(root_server, atsign_port);
-    if (_secureSocket != null) {
-      print('connection established');
-    }
+    print('connection established');
     socket_listener(_secureSocket);
     var response;
     while (response == null || response == 'data:null\n') {

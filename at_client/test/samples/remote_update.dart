@@ -5,9 +5,13 @@ void main() async {
   try {
     await AtClientImpl.createClient(
         '@alice', null, TestUtil.getPreferenceRemote());
-    var atClient = await AtClientImpl.getClient('@alice');
+    var atClient = await (AtClientImpl.getClient('@alice'));
+    if(atClient == null) {
+      print('unable to create at client instance');
+      return;
+    }
     var result = await atClient
-        .getRemoteSecondary()
+        .getRemoteSecondary()!
         .executeCommand('update:location@alice india\n', auth: true);
     print(result);
   } on Exception catch (e, trace) {

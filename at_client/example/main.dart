@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 
 Future<void> main(List<String> arguments) async {
@@ -5,6 +7,6 @@ Future<void> main(List<String> arguments) async {
   //creating client for alice
   // buzz is the namespace
   await AtClientImpl.createClient('@alice', 'buzz', preference);
-  var atClient = await AtClientImpl.getClient('@alice');
-  print(await atClient.getKeys());
+  var atClient = await (AtClientImpl.getClient('@alice'));
+  print(await atClient?.getKeys());
 }

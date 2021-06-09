@@ -28,3 +28,5 @@
 ## 1.0.1+10
 - Provision to request for a new outbound connection.
 - Minor bug in stream handlers
+## 1.1.0
+- Null safety upgrade

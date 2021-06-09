@@ -1,30 +1,76 @@
 name: at_client
 description: at_client is the Client SDK which provides the essential methods for building an app using the @protocol.
-version: 1.0.1+10
+version: 1.1.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
+publish_to: none
 
 environment:
-  sdk: '>=2.7.0 <3.0.0'
+  sdk: '>=2.12.0 <3.0.0'
 
 dependencies:
-  path: ^1.6.0
-  utf7: ^0.2.1
+  path: ^1.8.0
+  hive: ^2.0.4
   crypton: ^2.0.1
   encrypt: ^5.0.0
-  cron: ^0.2.2
-  convert: ^2.1.1
-  base2e15: ^0.3.0
+  cron: ^0.3.0
+  convert: ^3.0.0
   uuid: ^3.0.4
-  crypto: ^3.0.0
-  collection: ^1.14.12
-  pedantic: ^1.8.0
+  crypto: ^3.0.1
+  collection: ^1.15.0
+  pedantic: ^1.11.0
   at_persistence_spec: ^1.0.1+3
   at_persistence_secondary_server: ^1.0.1+8
   at_lookup: ^1.0.0+8
-  at_commons: ^1.0.1+8
-  at_utils: ^1.0.1+8
+  dart_utf7:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: dart_utf7
+      ref: null_safety
+      version: 0.2.1-null-safety
+  base2e15:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: base2e15
+      ref: null_safety
+      version: 0.3.0-null-safety
 
+dependency_overrides:
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_persistence/at_persistence_spec
+      ref: null_safety
+      version: ^1.1.0
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_secondary/at_persistence_secondary_server
+      ref: null_safety
+      version: ^1.1.0
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: at_lookup
+      ref: null_safety
+      version: ^1.1.0
+  at_utils:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_utils
+      ref: null_safety
+      version: ^1.1.0
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_commons
+      ref: null_safety
+      version: ^1.1.0
+  
+#dependency_overrides:
+#  at_persistence_secondary_server:
+#    path: ../../at_server/at_secondary/at_persistence_secondary_server
 dev_dependencies:
-  test: ^1.6.0
+  test: ^1.17.2
+  at_demo_data: ^0.0.3+1
