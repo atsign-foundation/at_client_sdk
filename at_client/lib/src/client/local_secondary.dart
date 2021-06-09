@@ -158,7 +158,7 @@ class LocalSecondary implements Secondary {
       var llookupMeta = await keyStore!.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
       var result;
-      if (isActive != null && isActive) {
+      if (isActive) {
         var llookupResult = await keyStore!.get(llookupKey);
         result = _prepareResponseData(builder.operation, llookupResult);
       }
@@ -221,7 +221,7 @@ class LocalSecondary implements Secondary {
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
       keyString = keyString.replaceFirst(RegExp(r'\]$'), '');
       keyString = keyString.replaceAll(', ', ',');
-      var keysArray = (keyString != null && keyString.isNotEmpty)
+      var keysArray =  keyString.isNotEmpty
           ? (keyString.split(','))
           : [];
       return json.encode(keysArray);
@@ -302,8 +302,6 @@ class LocalSecondary implements Secondary {
 
   ///Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {
-    assert(key != null && key != '');
-    assert(value != null && value != '');
     var isStored;
     var atData = AtData()..data = value;
     isStored = await keyStore!.put(key, atData);

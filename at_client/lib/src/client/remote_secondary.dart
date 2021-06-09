@@ -39,9 +39,7 @@ class RemoteSecondary implements Secondary {
 
   Future<String> executeAndParse(VerbBuilder builder, {sync = false}) async {
     var verbResult = await executeVerb(builder);
-    if (verbResult != null) {
-      verbResult = verbResult.replaceFirst('data:', '');
-    }
+    verbResult = verbResult.replaceFirst('data:', '');
     return verbResult;
   }
 

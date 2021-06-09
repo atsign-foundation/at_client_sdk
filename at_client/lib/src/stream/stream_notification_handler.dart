@@ -20,7 +20,7 @@ class StreamNotificationHandler {
       Function streamCompletionCallBack, streamReceiveCallBack) async {
     var streamId = streamNotification.streamId;
     var secondaryUrl = await AtLookupImpl.findSecondary(
-        streamNotification.senderAtSign!,
+        streamNotification.senderAtSign,
         preference!.rootDomain,
         preference!.rootPort);
     var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);

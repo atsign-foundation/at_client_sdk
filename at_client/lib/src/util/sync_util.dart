@@ -12,7 +12,7 @@ class SyncUtil {
   static Future<CommitEntry?> getCommitEntry(
       int sequenceNumber, String atSign) async {
     var commitLogInstance =
-    await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
+        await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
     var commitEntry = await commitLogInstance?.getEntry(sequenceNumber);
     return commitEntry;
   }
@@ -20,7 +20,7 @@ class SyncUtil {
   static Future<void> updateCommitEntry(
       var commitEntry, int commitId, String atSign) async {
     var commitLogInstance =
-    await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
+        await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
     await commitLogInstance?.update(commitEntry, commitId);
   }
 
@@ -39,8 +39,8 @@ class SyncUtil {
   }
 
   static Future<CommitEntry?> getEntry(int? seqNumber, String atSign) async {
-    var commitLogInstance =
-    await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign) as FutureOr<AtCommitLog>);
+    var commitLogInstance = await (AtCommitLogManagerImpl.getInstance()
+        .getCommitLog(atSign) as FutureOr<AtCommitLog>);
     var entry = await commitLogInstance.getEntry(seqNumber);
     return entry;
   }
@@ -49,16 +49,16 @@ class SyncUtil {
       int? seqNum, String? regex,
       {required String atSign}) async {
     var commitLogInstance =
-    await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
-    if(commitLogInstance == null) {
+        await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
+    if (commitLogInstance == null) {
       return [];
     }
     return commitLogInstance.getChanges(seqNum, regex);
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
-  static bool isInSync(List<CommitEntry?>? unCommittedEntries, int? serverCommitId,
-      int? lastSyncedCommitId) {
+  static bool isInSync(List<CommitEntry?>? unCommittedEntries,
+      int? serverCommitId, int? lastSyncedCommitId) {
     logger.finer('localCommitId:$lastSyncedCommitId');
     logger.finer('serverCommitId:$serverCommitId');
     logger.finer('changed entries: ${unCommittedEntries?.length}');
@@ -81,13 +81,11 @@ class SyncUtil {
       builder.regex = regex;
     }
     var result = await remoteSecondary.executeVerb(builder);
-    if (result != null) {
-      result = result.replaceAll('data: ', '');
-      var statsJson = jsonDecode(result);
-      print(statsJson);
-      if (statsJson[0]['value'] != 'null') {
-        commitId = int.parse(statsJson[0]['value']);
-      }
+    result = result.replaceAll('data: ', '');
+    var statsJson = jsonDecode(result);
+    print(statsJson);
+    if (statsJson[0]['value'] != 'null') {
+      commitId = int.parse(statsJson[0]['value']);
     }
     return commitId;
   }

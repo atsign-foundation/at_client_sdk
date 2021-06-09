@@ -276,10 +276,10 @@ class EncryptionService {
     } else {
       sharedByPublicKey = sharedByPublicKey.replaceFirst('data:', '');
     }
-    if (sharedByPublicKey == null) {
-      logger.severe('unable to verify public data sharedBy: $sharedBy');
-      return false;
-    }
+//    if (sharedByPublicKey == null) {
+//      logger.severe('unable to verify public data sharedBy: $sharedBy');
+//      return false;
+//    }
     var publicKey = RSAPublicKey.fromString(sharedByPublicKey);
     var isDataValid = publicKey.verifySHA256Signature(
         utf8.encode(value) as Uint8List, base64Decode(dataSignature));
@@ -433,9 +433,7 @@ class EncryptionService {
   }
 
   Future<String> getSharedKey(String sharedBy) async {
-    if (sharedBy != null) {
-      sharedBy = sharedBy.replaceFirst('@', '');
-    }
+    sharedBy = sharedBy.replaceFirst('@', '');
 
     var encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
     if (encryptedSharedKey == null || encryptedSharedKey == 'null') {
@@ -444,7 +442,7 @@ class EncryptionService {
     //2. decrypt shared key using private key
     var currentAtSignPrivateKey =
         await (localSecondary!.getEncryptionPrivateKey());
-    if(currentAtSignPrivateKey == null) {
+    if (currentAtSignPrivateKey == null) {
       throw KeyNotFoundException('private encryption key not found');
     }
     var sharedKey =

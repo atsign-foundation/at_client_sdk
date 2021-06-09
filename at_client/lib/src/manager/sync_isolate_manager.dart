@@ -55,12 +55,10 @@ class SyncIsolateManager {
             var commitId;
             var builder = StatsVerbBuilder()..statIds = '3';
             var result = await remoteSecondary.executeVerb(builder);
-            if (result != null) {
-              result = result.replaceAll('data: ', '');
-              var statsJson = jsonDecode(result);
-              if (statsJson[0]['value'] != 'null') {
-                commitId = int.parse(statsJson[0]['value']);
-              }
+            result = result.replaceAll('data: ', '');
+            var statsJson = jsonDecode(result);
+            if (statsJson[0]['value'] != 'null') {
+              commitId = int.parse(statsJson[0]['value']);
             }
             var isolateResult = <String, dynamic>{};
             isolateResult['operation'] = 'get_commit_id_result';
