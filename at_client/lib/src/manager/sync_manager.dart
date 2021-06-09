@@ -237,6 +237,8 @@ class SyncManager {
                   case CommitOp.UPDATE_ALL:
                     builder = UpdateVerbBuilder.getBuilder(command);
                     break;
+                  default:
+                    break;
                 }
                 isolateInput['operation'] = 'push_to_remote';
                 isolateInput['builder'] = builder;
@@ -273,9 +275,7 @@ class SyncManager {
         if (syncDone) {
           // 2.3 server ahead sync done
           // 3.3 local ahead sync done
-          if (isolate != null) {
-            isolate.kill(priority: Isolate.immediate);
-          }
+          isolate.kill(priority: Isolate.immediate);
           logger.info('isolate sync complete');
           return;
         }
