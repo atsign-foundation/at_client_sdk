@@ -26,38 +26,44 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_client_sdk.git
       path: at_client
-      ref: null_safety
+      ref: trunk
       version: ^1.1.0
   at_persistence_spec:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_persistence/at_persistence_spec
-      ref: null_safety
+      ref: trunk
       version: ^1.1.0
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
-      ref: null_safety
+      ref: trunk
       version: ^1.1.0
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
-      ref: null_safety
+      ref: trunk
       version: ^1.1.0
   at_utils:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_utils
-      ref: null_safety
+      ref: trunk
       version: ^1.1.0
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
-      ref: null_safety
-      version: ^1.1.0   
+      ref: trunk
+      version: ^1.1.0
+  dart_utf7:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: dart_utf7
+      ref: trunk
+      version: 0.2.1-null-safety
    
 dev_dependencies:
   pedantic: ^1.8.0
