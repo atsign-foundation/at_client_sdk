@@ -49,24 +49,17 @@ class SyncManager {
   Future<void> sync(Function onDone, {String regex}) async {
     // Return is there is any sync already in progress
     _regex = regex;
-    await _sync(onDone, _onError, regex: _regex);
+    await syncOnce(onDone, _handleError, regex: _regex);
     return;
   }
 
-  Future<void> _sync(Function onDone, Function onError, {String regex}) async {
-    await syncOnce(onDone, _onError, regex: _regex);
-  }
 
-  void _done(var syncManager) {
-    _logger.finer('sync complete');
-  }
-
-  void _onError(var syncManager, Exception e) {
+  void _handleError(var syncManager, Exception e,{Function onDone, Function onError}) {
     if (e is AtConnectException) {
       Future.delayed(
-          Duration(seconds: 3), () => _sync(_done, _onError, regex: _regex));
+          Duration(seconds: 3), () => syncOnce(onDone, _handleError, regex: _regex));
     } else {
-      _logger.finer('Error in sync : ${e.toString()}');
+      onError(syncManager, e);
     }
   }
 
@@ -118,7 +111,7 @@ class SyncManager {
       onDone(this);
     } on Exception catch (e) {
       _syncInProgress = false;
-      onError(this, e);
+      _handleError(this, e, onDone: onDone, onError:  onError);
     }
   }
 
