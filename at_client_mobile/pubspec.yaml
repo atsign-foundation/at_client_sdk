@@ -4,7 +4,6 @@ version: 1.1.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
-publish_to: none
 
 environment:
   sdk: '>=2.7.0 <3.0.0'
@@ -16,13 +15,49 @@ dependencies:
   flutter_keychain: ^1.0.0
   hive: ^2.0.4
   crypton: ^2.0.1
+  at_client: ^1.0.1+10
+  at_lookup: ^1.0.0+8
+  at_commons: ^1.0.1+8
+  at_utils: ^1.0.1+8
+
+dependency_overrides:
   at_client:
     git:
       url: https://github.com/atsign-foundation/at_client_sdk.git
       path: at_client
       ref: null_safety
       version: ^1.1.0
-
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_persistence/at_persistence_spec
+      ref: null_safety
+      version: ^1.1.0
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_secondary/at_persistence_secondary_server
+      ref: null_safety
+      version: ^1.1.0
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: at_lookup
+      ref: null_safety
+      version: ^1.1.0
+  at_utils:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_utils
+      ref: null_safety
+      version: ^1.1.0
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_commons
+      ref: null_safety
+      version: ^1.1.0   
+   
 dev_dependencies:
   pedantic: ^1.8.0
   test: ^1.6.0
