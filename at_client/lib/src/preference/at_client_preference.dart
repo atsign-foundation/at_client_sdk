@@ -5,28 +5,28 @@ import 'package:at_client/src/manager/sync_manager.dart';
 /// Set the preferences for your application and pass it to [AtClientImpl.getClient].
 class AtClientPreference {
   /// Local device path of hive storage
-  String hiveStoragePath;
+  String? hiveStoragePath;
 
   /// Local device path of commit log
-  String commitLogPath;
+  String? commitLogPath;
 
   /// Syncing strategy of the client [SyncStrategy]
-  SyncStrategy syncStrategy;
+  SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
   bool isLocalStoreRequired = false;
 
   /// Shared secret of the atSign
-  String cramSecret;
+  String? cramSecret;
 
   /// Private key of the atSign
-  String privateKey;
+  String? privateKey;
 
   /// Specifies the namespace of an app.
-  String namespace;
+  String? namespace;
 
   /// Secret key to encrypt keystore data
-  List<int> keyStoreSecret;
+  List<int>? keyStoreSecret;
 
   /// Domain of the root server. Defaults to root.atsign.wtf
   String rootDomain = 'root.atsign.wtf';
@@ -45,10 +45,10 @@ class AtClientPreference {
   int maxDataSize = 512000;
 
   /// Default path to download stream files
-  String downloadPath;
+  String? downloadPath;
 
   /// regex to perform sync
-  String syncRegex;
+  String? syncRegex;
 
   /// Number of keys to batch for sync to secondary server
   int syncBatchSize = 5;

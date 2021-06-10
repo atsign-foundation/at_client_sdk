@@ -7,7 +7,7 @@ class AtClientExceptionUtil {
     return error_code;
   }
 
-  static String getErrorDescription(String error_code) {
+  static String? getErrorDescription(String error_code) {
     return error_description[error_code];
   }
 }

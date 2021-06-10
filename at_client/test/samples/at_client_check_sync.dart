@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 
 import 'test_util.dart';
@@ -7,13 +8,14 @@ import 'test_util.dart';
 void main() async {
   try {
     var atSign = '@alice🛠';
-    var preference = TestUtil.getAlicePreference();
     await AtClientImpl.createClient(
         atSign, 'me', TestUtil.getAlicePreference());
-    var atClient = await AtClientImpl.getClient(atSign);
-    atClient.getSyncManager().init(atSign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    var result = await atClient.getSyncManager().isInSync();
+    var atClient = await (AtClientImpl.getClient(atSign));
+    if(atClient == null) {
+      print('unable to create at client instance');
+      return;
+    }
+    var result = await atClient.getSyncManager()!.isInSync();
     print(result);
   } on Exception catch (e, trace) {
     print(e.toString());

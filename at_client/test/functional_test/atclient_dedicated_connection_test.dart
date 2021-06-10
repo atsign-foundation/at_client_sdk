@@ -10,10 +10,8 @@ void main() {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     await AtClientImpl.createClient(atsign, 'me', preference);
-    AtClientImpl atClient = await AtClientImpl.getClient(atsign);
-    atClient.getSyncManager().init(atsign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    await atClient.getSyncManager().sync();
+    var atClient = await AtClientImpl?.getClient(atsign);
+    await atClient!.getSyncManager()!.sync(_onSyncDone);
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -39,6 +37,10 @@ Future<void> tearDownFunc() async {
   if (isExists) {
     Directory('test/hive').deleteSync(recursive: true);
   }
+}
+
+void _onSyncDone(var syncManager){
+  print('sync done');
 }
 
 AtClientPreference getAlicePreference(String atsign) {

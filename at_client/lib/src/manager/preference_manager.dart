@@ -14,8 +14,8 @@ class PreferenceManager {
     var syncData = AtData();
     syncData.data = preferences.syncStrategy.toString();
     var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(_atSign)
-        .getSecondaryKeyStoreManager();
+        .getSecondaryPersistenceStore(_atSign)!
+        .getSecondaryKeyStoreManager()!;
     await keyStoreManager.getKeyStore().put('private:sync_strategy', syncData);
   }
 // commented. is this required in client ?

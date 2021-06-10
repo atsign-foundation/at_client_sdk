@@ -2,18 +2,19 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
   /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
-  SyncManager getSyncManager();
+  SyncManager? getSyncManager();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.
-  RemoteSecondary getRemoteSecondary();
+  RemoteSecondary? getRemoteSecondary();
 
-  LocalSecondary getLocalSecondary();
+  LocalSecondary? getLocalSecondary();
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
@@ -136,7 +137,7 @@ abstract class AtClient {
   ///   getMeta(atKey);
   ///
   /// ```
-  Future<Metadata> getMeta(AtKey key);
+  Future<Metadata?> getMeta(AtKey key);
 
   /// Delete the [key] from user's local secondary and syncs the delete to cloud secondary if client's sync preference is immediate.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
@@ -198,7 +199,7 @@ abstract class AtClient {
   ///   getKeys(sharedBy:'@bob');
   ///```
   Future<List<AtKey>> getAtKeys(
-      {String regex, String sharedBy, String sharedWith});
+      {String? regex, String? sharedBy, String? sharedWith});
 
   /// Get all the keys stored in user's secondary in string format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
@@ -213,7 +214,7 @@ abstract class AtClient {
   ///   getKeys(sharedBy:'@bob');
   ///```
   Future<List<String>> getKeys(
-      {String regex, String sharedBy, String sharedWith});
+      {String? regex, String? sharedBy, String? sharedWith});
 
   /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
   /// [isDedicated] need to be set to true to create a dedicated connection
@@ -237,11 +238,11 @@ abstract class AtClient {
   ///```
   Future<void> notify(AtKey key, String value, OperationEnum operation,
       Function onDone, Function onError,
-      {MessageTypeEnum messageType,
-      PriorityEnum priority,
-      StrategyEnum strategy,
-      int latestN,
-      String notifier,
+      {MessageTypeEnum? messageType,
+      PriorityEnum? priority,
+      StrategyEnum? strategy,
+      int? latestN,
+      String? notifier,
       bool isDedicated = false});
 
   /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
@@ -286,11 +287,11 @@ abstract class AtClient {
   ///  notify:list:2021-01-28:2021-01-29:phone
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
   ///```
-  Future<String> notifyList({String fromDate, String toDate, String regex});
+  Future<String> notifyList({String? fromDate, String? toDate, String? regex});
 
-  /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
-  /// the notification on the client.
-  /// Optionally a regular expression and be passed to filter the notifications
-  Future<void> startMonitor(String privateKey, Function acceptStream,
-      {String regex});
+  Future<void> startMonitor(Function notificationCallback,
+      Function errorCallback, MonitorPreference monitorPreference);
+
+  Future<AtStreamResponse> stream(String sharedWith, String filePath,
+      {String namespace});
 }

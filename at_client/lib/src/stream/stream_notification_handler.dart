@@ -6,13 +6,13 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
 class StreamNotificationHandler {
-  RemoteSecondary remoteSecondary;
+  RemoteSecondary? remoteSecondary;
 
-  LocalSecondary localSecondary;
+  LocalSecondary? localSecondary;
 
-  AtClientPreference preference;
+  AtClientPreference? preference;
 
-  EncryptionService encryptionService;
+  EncryptionService? encryptionService;
 
   var logger = AtSignLogger('StreamNotificationHandler');
 
@@ -21,21 +21,21 @@ class StreamNotificationHandler {
     var streamId = streamNotification.streamId;
     var secondaryUrl = await AtLookupImpl.findSecondary(
         streamNotification.senderAtSign,
-        preference.rootDomain,
-        preference.rootPort);
+        preference!.rootDomain,
+        preference!.rootPort);
     var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
     var f = File(
-        '${preference.downloadPath}/encrypted_${streamNotification.fileName}');
+        '${preference!.downloadPath}/encrypted_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive $streamId\n';
     socket.write(command);
     var bytesReceived = 0;
     var firstByteSkipped = false;
     var sharedKey =
-        await encryptionService.getSharedKey(streamNotification.senderAtSign);
+        await encryptionService!.getSharedKey(streamNotification.senderAtSign);
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
@@ -53,9 +53,9 @@ class StreamNotificationHandler {
       if (bytesReceived == streamNotification.fileLength) {
         var startTime = DateTime.now();
         var decryptedBytes =
-            encryptionService.decryptStream(f.readAsBytesSync(), sharedKey);
+            encryptionService!.decryptStream(f.readAsBytesSync(), sharedKey);
         var decryptedFile =
-            File('${preference.downloadPath}/${streamNotification.fileName}');
+            File('${preference!.downloadPath}/${streamNotification.fileName}');
         decryptedFile.writeAsBytesSync(decryptedBytes);
         f.deleteSync(); // delete encrypted file
         var endTime = DateTime.now();

@@ -14,7 +14,7 @@ void main() async {
       ..sharedWith = '@bob'
       ..sharedBy = atSign;
     var notificationId;
-    await atClient.notify(atKey, 'test_value', OperationEnum.append,
+    await atClient!.notify(atKey, 'test_value', OperationEnum.append,
         (String id) {
       notificationId = id;
       print('id : $id');
@@ -22,7 +22,7 @@ void main() async {
       print('exception : $e');
     });
     if (notificationId != null) {
-      await atClient.notifyStatus(notificationId, (String status) {
+      await atClient!.notifyStatus(notificationId, (String status) {
         print('notification status : $status');
       }, (String e) {
         print('exception : $e');

@@ -1,10 +1,10 @@
 class AtStreamNotification {
-  String streamId;
-  String fileName;
-  int fileLength;
-  String namespace;
-  String senderAtSign;
-  String currentAtSign;
+  late String streamId;
+  late String fileName;
+  late int fileLength;
+  String? namespace;
+  late String senderAtSign;
+  late String currentAtSign;
 
   @override
   String toString() {
