@@ -1,8 +1,8 @@
 class Response {
-  String response;
+  String? response;
   bool isError = false;
-  String errorCode;
-  String errorDescription;
+  String? errorCode;
+  String? errorDescription;
 
   Response fromJson(Map<String, dynamic> json) {
     response = json['response'];
