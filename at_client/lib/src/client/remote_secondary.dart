@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:data_connection_checker/data_connection_checker.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/connection/outbound_connection.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 
@@ -19,6 +20,8 @@ class RemoteSecondary implements Secondary {
 
   late AtLookupImpl atLookUp;
 
+  late AtLookupSync atLookupSync;
+
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey}) {
     _atSign = AtUtils.formatAtSign(atSign)!;
@@ -26,6 +29,9 @@ class RemoteSecondary implements Secondary {
     privateKey ??= preference.privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey, cramSecret: preference.cramSecret);
+    atLookupSync = AtLookupSync(
+        atSign, preference.rootDomain, preference.rootPort,
+        privateKey: atLookUp.privateKey, cramSecret: preference.cramSecret);
   }
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
@@ -68,7 +74,7 @@ class RemoteSecondary implements Secondary {
   }
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
-  Future<String?> sync(int? lastSyncedId,
+  Future<String?> sync(int? lastSyncedId,Function syncCallBack,
       {String? privateKey, String? regex}) async {
     var atCommand = 'sync:$lastSyncedId';
     var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
@@ -78,23 +84,28 @@ class RemoteSecondary implements Secondary {
             : '');
 
     atCommand += '$regexString\n';
-    var syncResult = await atLookUp.executeCommand(atCommand, auth: true);
-    return syncResult;
+    atLookupSync.syncCallback = syncCallBack;
+    return await atLookupSync.executeCommand(atCommand, auth: true);
   }
 
-  ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
-  Future<OutboundConnection> monitor(
-      String command, Function? notificationCallBack, String privateKey) {
-    return MonitorClient(privateKey).executeMonitorVerb(
-        command, _atSign, _preference.rootDomain, _preference.rootPort,
-        (value) {
-      notificationCallBack!(value);
-    }, restartCallBack: _restartCallBack);
-  }
-
-  Future<void> _restartCallBack(
-      String command, Function notificationCallBack, String privateKey) async {
-    logger.finer('auto restarting monitor');
-    await monitor(command, notificationCallBack, privateKey);
+   Future<bool> isAvailable() async {
+    try {
+      var secondaryUrl = await AtLookupImpl.findSecondary(
+          _atSign, _preference.rootDomain, _preference.rootPort);
+      var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
+      var host = secondaryInfo[0];
+      var port = secondaryInfo[1];
+      var internetAddress = await InternetAddress.lookup(host);
+      //#TODO getting first ip for now. explore best solution
+      var addressCheckOptions = AddressCheckOptions(
+          internetAddress[0], port: int.parse(port));
+      return (await DataConnectionChecker().isHostReachable(
+          addressCheckOptions)).isSuccess;
+    } on Exception catch(e) {
+      logger.severe('Secondary server unavailable ${e.toString}');
+    } on Error catch (e) {
+      logger.severe('Secondary server unavailable ${e.toString}');
+    }
+    return false;
   }
 }

@@ -287,11 +287,8 @@ abstract class AtClient {
   ///```
   Future<String> notifyList({String? fromDate, String? toDate, String? regex});
 
-  /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
-  /// the notification on the client.
-  /// Optionally a regular expression and be passed to filter the notifications
-  Future<void> startMonitor(String privateKey, Function acceptStream,
-      {String? regex});
+  Future<void> startMonitor(Function notificationCallback,Function errorCallback,
+      MonitorPreference monitorPreference);
 
   Future<AtStreamResponse> stream(String sharedWith, String filePath, {String namespace});
 }

@@ -12,5 +12,5 @@ void lookItUp(String atSign) async {
   await _atLookup.authenticate_cram(cram_secret);
   var result = await _atLookup.scan();
   print(result);
-  await _atLookup.close();
+  _atLookup.close();
 }

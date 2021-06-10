@@ -4,7 +4,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -44,33 +43,31 @@ class LocalSecondary implements Secondary {
     try {
       sync ??= (_preference!.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
-        var syncManager = SyncManagerImpl.getInstance().getSyncManager(_atSign);
-        //1. if local and server are out of sync, first sync before updating current key-value
-        if (sync) {
-          await syncManager!.sync(regex: _preference!.syncRegex);
-        }
-        //2 . update/delete to local store
-        var operation;
+        var syncManager = SyncManager.getInstance(_atSign);
+        syncManager.preference = _preference!;
+        syncManager.localSecondary = this;
+        syncManager.remoteSecondary = RemoteSecondary(_atSign, _preference!);
+        //1 . update/delete to local store
         if (builder is UpdateVerbBuilder) {
           verbResult = await _update(builder);
-          switch (builder.operation) {
-            case UPDATE_META:
-              operation = CommitOp.UPDATE_META;
-              break;
-            case UPDATE_ALL:
-              operation = CommitOp.UPDATE_ALL;
-              break;
-            default:
-              operation = CommitOp.UPDATE;
-          }
+//          switch (builder.operation) {
+//            case UPDATE_META:
+//              operation = CommitOp.UPDATE_META;
+//              break;
+//            case UPDATE_ALL:
+//              operation = CommitOp.UPDATE_ALL;
+//              break;
+//            default:
+//              operation = CommitOp.UPDATE;
+//          }
         } else if (builder is DeleteVerbBuilder) {
           verbResult = await _delete(builder);
-          operation = CommitOp.DELETE;
+//          operation = CommitOp.DELETE;
         }
-        // 3. sync latest update/delete if strategy is immediate
+        // 2. sync latest update/delete if strategy is immediate
         if (sync && _preference!.syncStrategy == SyncStrategy.IMMEDIATE) {
-          var local_commit_seq = verbResult.split(':')[1];
-          await syncManager!.syncImmediate(local_commit_seq, builder, operation);
+          await syncManager.syncOnce(_syncDoneCallback, _syncErrorCallback,
+              regex: _preference!.syncRegex);
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
@@ -120,7 +117,8 @@ class LocalSecondary implements Secondary {
               ..isEncrypted = builder.isEncrypted
               ..dataSignature = builder.dataSignature;
             var atMetadata = AtMetadataAdapter(metadata);
-            updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
+            updateResult =
+                await keyStore!.putAll(updateKey, atData, atMetadata);
             break;
           }
           // #TODO replace below call with putAll.
@@ -221,9 +219,7 @@ class LocalSecondary implements Secondary {
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
       keyString = keyString.replaceFirst(RegExp(r'\]$'), '');
       keyString = keyString.replaceAll(', ', ',');
-      var keysArray =  keyString.isNotEmpty
-          ? (keyString.split(','))
-          : [];
+      var keysArray = keyString.isNotEmpty ? (keyString.split(',')) : [];
       return json.encode(keysArray);
     } on DataStoreException catch (e) {
       logger.severe('exception in scan:${e.toString()}');
@@ -274,6 +270,14 @@ class LocalSecondary implements Secondary {
     return result;
   }
 
+  void _syncDoneCallback(var syncManager) {
+    logger.finer('sync immediate complete on local secondary');
+  }
+
+  void _syncErrorCallback(var syncManager, Exception e) {
+    logger.finer('error in sync immediate ${e.toString()}');
+  }
+
   Future<String?> getPrivateKey() async {
     var privateKeyData = await keyStore!.get(AT_PKAM_PRIVATE_KEY);
     return privateKeyData?.data;
@@ -291,7 +295,8 @@ class LocalSecondary implements Secondary {
 
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.formatAtSign(atSign)!;
-    var privateKeyData = await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
+    var privateKeyData =
+        await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
     return privateKeyData?.data;
   }
 
