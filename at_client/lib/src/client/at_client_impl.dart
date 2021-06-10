@@ -195,9 +195,9 @@ class AtClientImpl implements AtClient {
     var builder = DeleteVerbBuilder()
       ..isCached = isCached
       ..isPublic = isPublic
-      ..sharedWith = sharedWith!
+      ..sharedWith = sharedWith
       ..atKey = keyWithNamespace
-      ..sharedBy = sharedBy!;
+      ..sharedBy = sharedBy;
     var deleteResult = await getSecondary(isDedicated: isDedicated)
         .executeVerb(builder, sync: (isDedicated ? false : null));
     return deleteResult != null;
@@ -223,8 +223,8 @@ class AtClientImpl implements AtClient {
         ..atKey = keyWithNamespace
         ..sharedBy = sharedBy
         ..isCached = isCached
-        ..sharedWith = currentAtSign!
-        ..operation = operation!;
+        ..sharedWith = currentAtSign
+        ..operation = operation;
       var secondary = getSecondary(isDedicated: isDedicated);
       var encryptedResult = await secondary.executeVerb(builder,
           sync: (isDedicated ? false : null));
@@ -311,7 +311,7 @@ class AtClientImpl implements AtClient {
         ..isPublic = isPublic!
         ..sharedWith = sharedWith
         ..atKey = keyWithNamespace
-        ..sharedBy = currentAtSign!;
+        ..sharedBy = currentAtSign;
       if (operation != null) {
         builder.operation = operation;
       }
@@ -433,9 +433,9 @@ class AtClientImpl implements AtClient {
       String? sharedWith,
       bool isDedicated = false}) async {
     var builder = ScanVerbBuilder()
-      ..sharedWith = sharedWith!
-      ..sharedBy = sharedBy!
-      ..regex = regex!
+      ..sharedWith = sharedWith
+      ..sharedBy = sharedBy
+      ..regex = regex
       ..auth = true;
     var secondary = getSecondary(isDedicated: isDedicated);
     var scanResult = await secondary.executeVerb(builder);
@@ -504,10 +504,10 @@ class AtClientImpl implements AtClient {
     sharedWith = AtUtils.formatAtSign(sharedWith!);
     var builder = UpdateVerbBuilder()
       ..atKey = updateKey!
-      ..sharedBy = currentAtSign!
+      ..sharedBy = currentAtSign
       ..sharedWith = sharedWith
       ..value = value
-      ..operation = operation!;
+      ..operation = operation;
 
     if (metadata != null) {
       builder.ttl = metadata.ttl;
@@ -518,7 +518,7 @@ class AtClientImpl implements AtClient {
       builder.isEncrypted = metadata.isEncrypted;
       builder.isPublic = metadata.isPublic!;
       if (metadata.isHidden) {
-        builder.atKey = '_' + updateKey!;
+        builder.atKey = '_' + updateKey;
       }
     }
     if (value != null) {
@@ -538,7 +538,7 @@ class AtClientImpl implements AtClient {
       }
     }
     var isSyncRequired;
-    if (updateKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
         updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
       builder.sharedBy = '';
     }
@@ -634,10 +634,10 @@ class AtClientImpl implements AtClient {
       ..sharedWith = sharedWith
       ..value = value
       ..operation = operation
-      ..messageType = messageType!
-      ..priority = priority!
-      ..strategy = strategy!
-      ..latestN = latestN!
+      ..messageType = messageType
+      ..priority = priority
+      ..strategy = strategy
+      ..latestN = latestN
       ..notifier = notifier!;
     if (value != null) {
       if (sharedWith != null && sharedWith != currentAtSign) {
@@ -739,9 +739,9 @@ class AtClientImpl implements AtClient {
       bool isDedicated = false}) async {
     try {
       var builder = NotifyListVerbBuilder()
-        ..fromDate = fromDate!
-        ..toDate = toDate!
-        ..regex = regex!;
+        ..fromDate = fromDate
+        ..toDate = toDate
+        ..regex = regex;
       var remoteSecondary = getRemoteSecondary(isDedicated: isDedicated);
       var notifyList = await remoteSecondary!.executeVerb(builder);
       if (isDedicated) {
@@ -764,7 +764,7 @@ class AtClientImpl implements AtClient {
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = updateKey
-      ..sharedBy = currentAtSign!
+      ..sharedBy = currentAtSign
       ..sharedWith = sharedWith
       ..ttl = metadata.ttl
       ..ttb = metadata.ttb
@@ -830,26 +830,26 @@ class AtClientImpl implements AtClient {
       return null;
     }
     var metadata = Metadata();
-    metadata.expiresAt = ((metadataMap['expiresAt'] != null &&
+    metadata.expiresAt = (metadataMap['expiresAt'] != null &&
             metadataMap['expiresAt'] != 'null')
         ? DateTime.parse(metadataMap['expiresAt'])
-        : null)!;
-    metadata.availableAt = ((metadataMap['availableAt'] != null &&
+        : null;
+    metadata.availableAt = (metadataMap['availableAt'] != null &&
             metadataMap['availableAt'] != 'null')
         ? DateTime.parse(metadataMap['availableAt'])
-        : null)!;
+        : null;
     metadata.refreshAt =
-        ((metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
+        (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
             ? DateTime.parse(metadataMap[REFRESH_AT])
-            : null)!;
+            : null;
     metadata.createdAt =
-        ((metadataMap[CREATED_AT] != null && metadataMap[CREATED_AT] != 'null')
+        (metadataMap[CREATED_AT] != null && metadataMap[CREATED_AT] != 'null')
             ? DateTime.parse(metadataMap[CREATED_AT])
-            : null)!;
+            : null;
     metadata.updatedAt =
-        ((metadataMap[UPDATED_AT] != null && metadataMap[UPDATED_AT] != 'null')
+        (metadataMap[UPDATED_AT] != null && metadataMap[UPDATED_AT] != 'null')
             ? DateTime.parse(metadataMap[UPDATED_AT])
-            : null)!;
+            : null;
     metadata.ttr = metadataMap[AT_TTR];
     metadata.ttl = metadataMap[AT_TTL];
     metadata.ttb = metadataMap[AT_TTB];
