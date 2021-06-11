@@ -612,7 +612,7 @@ class AtClientImpl implements AtClient {
   //   /// }
   /// ```
   @override
-  Future<void> notify(AtKey atKey, String value, OperationEnum operation,
+  Future<void> notify(AtKey atKey, String? value, OperationEnum operation,
       Function onDone, Function onError,
       {MessageTypeEnum? messageType,
       PriorityEnum? priority,
@@ -620,7 +620,6 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
-    assert(onDone != null && onError != null);
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;

@@ -22,7 +22,7 @@ void main() async {
       print('exception : $e');
     });
     if (notificationId != null) {
-      await atClient!.notifyStatus(notificationId, (String status) {
+      await atClient.notifyStatus(notificationId, (String status) {
         print('notification status : $status');
       }, (String e) {
         print('exception : $e');
