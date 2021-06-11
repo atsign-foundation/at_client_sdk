@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:data_connection_checker/data_connection_checker.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -98,7 +98,7 @@ class RemoteSecondary implements Secondary {
       //#TODO getting first ip for now. explore best solution
       var addressCheckOptions = AddressCheckOptions(
           internetAddress[0], port: int.parse(port));
-      return (await DataConnectionChecker().isHostReachable(
+      return (await InternetConnectionChecker().isHostReachable(
           addressCheckOptions)).isSuccess;
     } on Exception catch(e) {
       logger.severe('Secondary server unavailable ${e.toString}');

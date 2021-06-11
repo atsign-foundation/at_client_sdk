@@ -1,6 +1,6 @@
 name: at_client
 description: at_client is the Client SDK which provides the essential methods for building an app using the @protocol.
-version: 1.1.0
+version: 3.0.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
@@ -20,7 +20,7 @@ dependencies:
   crypto: ^3.0.1
   collection: ^1.15.0
   pedantic: ^1.11.0
-  data_connection_checker: ^0.3.4
+  internet_connection_checker: ^0.0.1+1
   at_persistence_spec: ^1.0.1+3
   at_persistence_secondary_server: ^1.0.1+8
   at_lookup: ^1.0.0+8
@@ -55,19 +55,19 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
       ref: sdk_refactoring
-      version: ^1.1.1
+      version: ^2.0.1
   at_utils:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_utils
       ref: sdk_refactoring
-      version: ^1.1.0
+      version: ^2.0.0
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
       ref: sdk_refactoring
-      version: ^1.1.1
+      version: ^2.0.1
   
 #dependency_overrides:
 #  at_persistence_secondary_server:

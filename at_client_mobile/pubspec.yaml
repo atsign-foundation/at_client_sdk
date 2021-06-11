@@ -1,19 +1,19 @@
 name: at_client_mobile
 description: Library for mobile app onboarding.
-version: 1.1.0
+version: 3.0.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
 publish_to: none
 
 environment:
-  sdk: '>=2.7.0 <3.0.0'
+  sdk: '>=2.12.0 <3.0.0'
 
 dependencies:
-  path: ^1.6.0
+  path: ^1.8.0
   flutter:
     sdk: flutter
-  flutter_keychain: ^1.0.0
+  flutter_keychain: ^2.0.1
   hive: ^2.0.4
   crypton: ^2.0.1
   at_client: ^1.0.1+10
@@ -26,8 +26,8 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_client_sdk.git
       path: at_client
-      ref: trunk
-      version: ^1.1.0
+      ref: sdk_refactoring
+      version: ^3.0.0
   at_persistence_spec:
     git:
       url: https://github.com/atsign-foundation/at_server.git
@@ -44,20 +44,20 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
-      ref: trunk
-      version: ^1.1.0
+      ref: sdk_refactoring
+      version: ^2.0.1
   at_utils:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_utils
-      ref: trunk
-      version: ^1.1.0
+      ref: sdk_refactoring
+      version: ^2.0.0
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
-      ref: trunk
-      version: ^1.1.0
+      ref: sdk_refactoring
+      version: ^2.0.1
   dart_utf7:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
@@ -66,5 +66,5 @@ dependency_overrides:
       version: 0.2.1-null-safety
    
 dev_dependencies:
-  pedantic: ^1.8.0
-  test: ^1.6.0
+  pedantic: ^1.11.0
+  test: ^1.17.7
