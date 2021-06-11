@@ -28,3 +28,5 @@
 - Provision to request for a new outbound connection.
 - Minor bug in stream handlers
 - at_client version upgrade
+## 3.0.0
+- Null safety changes

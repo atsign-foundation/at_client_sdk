@@ -28,5 +28,8 @@
 ## 1.0.1+10
 - Provision to request for a new outbound connection.
 - Minor bug in stream handlers
-## 1.1.0
+## 2.0.0
 - Null safety upgrade
+## 3.0.0
+- Changes to sync, monitor and notify implementation to handle network failures
+and retries.
