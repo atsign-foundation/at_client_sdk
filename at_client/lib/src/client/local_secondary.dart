@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';

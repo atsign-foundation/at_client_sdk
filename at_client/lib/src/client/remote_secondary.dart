@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
