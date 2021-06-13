@@ -366,7 +366,23 @@ class EncryptionService {
     await atClient.getSyncManager()!.sync(_onSyncDone);
   }
 
-  void _onSyncDone(var syncManager){
+  String generateFileEncryptionKey() {
+    return EncryptionUtil.generateAESKey();
+  }
+
+  List<int> encryptFile(
+      List<int> fileContent, String fileEncryptionKey) {
+    return EncryptionUtil.encryptBytes(fileContent, fileEncryptionKey);
+  }
+
+  List<int> decryptFile(
+      List<int> fileContent, String decryptionKey) {
+    var encryptedValue =
+    EncryptionUtil.decryptBytes(fileContent, decryptionKey);
+    return encryptedValue;
+  }
+
+  void _onSyncDone(var syncManager) {
     logger.finer('sync done after encrypting unencrypted data');
   }
 
