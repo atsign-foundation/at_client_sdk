@@ -236,7 +236,8 @@ abstract class AtClient {
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
   ///```
-  Future<bool> notify(AtKey key, String value, OperationEnum operation,
+  Future<void> notify(AtKey key, String value, OperationEnum operation,
+      Function onDone, Function onError,
       {MessageTypeEnum? messageType,
       PriorityEnum? priority,
       StrategyEnum? strategy,
@@ -271,7 +272,8 @@ abstract class AtClient {
   ///
   ///   notifyStatus('75037ac4-6a15-43cc-ba66-e621bb2a6366');
   ///```
-  Future<String> notifyStatus(String notificationId);
+  Future<void> notifyStatus(
+      String notificationId, Function onDone, Function onError);
 
   ///Returns the list of received notifications of an atsign, Optionally, notifications can be filtered on from date, to date and regular expression
   ///```
@@ -287,8 +289,9 @@ abstract class AtClient {
   ///```
   Future<String> notifyList({String? fromDate, String? toDate, String? regex});
 
-  Future<void> startMonitor(Function notificationCallback,Function errorCallback,
-      MonitorPreference monitorPreference);
+  Future<void> startMonitor(Function notificationCallback,
+      Function errorCallback, MonitorPreference monitorPreference);
 
-  Future<AtStreamResponse> stream(String sharedWith, String filePath, {String namespace});
+  Future<AtStreamResponse> stream(String sharedWith, String filePath,
+      {String namespace});
 }

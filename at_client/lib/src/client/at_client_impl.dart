@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
@@ -244,15 +243,15 @@ class AtClientImpl implements AtClient {
       }
       if (sharedBy != currentAtSign && operation == UPDATE_ALL) {
         //resultant value is encrypted. Decrypting to original value.
-        var decryptedValue = await _encryptionService.decrypt(
-            encryptedResultMap['data'], sharedBy);
+        var decryptedValue = await _encryptionService
+            .decrypt(encryptedResultMap['data'], sharedBy);
         encryptedResultMap['data'] = decryptedValue;
       } else {
         //resultant value is encrypted. Decrypting to original value.
         var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
         isEncrypted ??= false;
-        var decryptedValue = await _encryptionService.decryptForSelf(
-            encryptedResultMap['data'], isEncrypted);
+        var decryptedValue = await _encryptionService
+            .decryptForSelf(encryptedResultMap['data'], isEncrypted);
         encryptedResultMap['data'] = decryptedValue;
       }
       return encryptedResultMap;
@@ -295,8 +294,8 @@ class AtClientImpl implements AtClient {
         if (operation == UPDATE_ALL) {
           var decryptedValue;
           try {
-            decryptedValue = await _encryptionService.decrypt(
-                encryptedResultMap['data'], sharedBy);
+            decryptedValue = await _encryptionService
+                .decrypt(encryptedResultMap['data'], sharedBy);
           } on KeyNotFoundException catch (e) {
             var errorCode = AtClientExceptionUtil.getErrorCode(e);
             return Future.error(AtClientException(errorCode,
@@ -372,8 +371,8 @@ class AtClientImpl implements AtClient {
     }
     var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
     isEncrypted ??= false;
-    var decryptedValue = await _encryptionService.decryptForSelf(
-        encryptedResultMap['data'], isEncrypted);
+    var decryptedValue = await _encryptionService
+        .decryptForSelf(encryptedResultMap['data'], isEncrypted);
     encryptedResultMap['data'] = decryptedValue;
     return encryptedResultMap;
   }
@@ -405,7 +404,7 @@ class AtClientImpl implements AtClient {
         atValue.value = VerbUtil.getFormattedValue(atValue.value);
       }
     }
-    atValue.metadata = _prepareMetadata(getResult['metaData'], isPublic);
+    atValue.metadata = _prepareMetadata(getResult['metaData'], isPublic)!;
     return atValue;
   }
 
@@ -504,9 +503,9 @@ class AtClientImpl implements AtClient {
       updateKey = _getKeyWithNamespace(key);
     }
     var operation = getOperation(value, metadata);
-    sharedWith = AtUtils.formatAtSign(sharedWith);
+    sharedWith = AtUtils.formatAtSign(sharedWith!);
     var builder = UpdateVerbBuilder()
-      ..atKey = updateKey
+      ..atKey = updateKey!
       ..sharedBy = currentAtSign
       ..sharedWith = sharedWith
       ..value = value
@@ -521,7 +520,7 @@ class AtClientImpl implements AtClient {
       builder.isEncrypted = metadata.isEncrypted;
       builder.isPublic = metadata.isPublic!;
       if (metadata.isHidden) {
-        builder.atKey = '_' + updateKey!;
+        builder.atKey = '_' + updateKey;
       }
     }
     if (value != null) {
@@ -541,9 +540,9 @@ class AtClientImpl implements AtClient {
       }
     }
     var isSyncRequired;
-    if (updateKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
         updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
+      builder.sharedBy = '';
     }
     if (SyncUtil.shouldSkipSync(updateKey)) {
       isSyncRequired = false;
@@ -598,8 +597,25 @@ class AtClientImpl implements AtClient {
         isDedicated: isDedicated);
   }
 
+  /// Calling notify with [AtKey] and value along with onDone, onError function
+  /// will notify [key] to [sharedWith] atsign
+  /// [onDone] callback is invoked with notificationId when notify completes successfully.
+  /// e.g onDone callback
+  /// ```
+  /// void onDone(String notificationId) {
+  ///  // add your notify completion logic
+  /// }
+  ///
+  /// [onError] callback is invoked with exception when notify fails.
+  //   /// e.g onError callback
+  //   /// ```
+  //   /// void onError(dynamic e) {
+  //   ///  // add your notify error logic
+  //   /// }
+  /// ```
   @override
-  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
+  Future<void> notify(AtKey atKey, String? value, OperationEnum operation,
+      Function onDone, Function onError,
       {MessageTypeEnum? messageType,
       PriorityEnum? priority,
       StrategyEnum? strategy,
@@ -610,12 +626,12 @@ class AtClientImpl implements AtClient {
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
     if (metadata != null && metadata.namespaceAware) {
-      notifyKey = _getKeyWithNamespace(atKey.key);
+      notifyKey = _getKeyWithNamespace(atKey.key)!;
     }
     sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = NotifyVerbBuilder()
       ..atKey = notifyKey
-      ..sharedBy = currentAtSign
+      ..sharedBy = currentAtSign!
       ..sharedWith = sharedWith
       ..value = value
       ..operation = operation
@@ -624,43 +640,52 @@ class AtClientImpl implements AtClient {
       ..strategy = strategy
       ..latestN = latestN
       ..notifier = notifier!;
-    if (sharedWith != null && sharedWith != currentAtSign) {
-      try {
+    if (value != null) {
+      if (sharedWith != null && sharedWith != currentAtSign) {
+        try {
+          builder.value =
+              await _encryptionService.encrypt(atKey.key, value, sharedWith);
+        } on KeyNotFoundException catch (e) {
+          onError(AtClientException(
+              AtClientExceptionUtil.getErrorCode(e),
+              AtClientExceptionUtil.getErrorDescription(
+                  AtClientExceptionUtil.getErrorCode(e))));
+        }
+      } else {
         builder.value =
-            await _encryptionService.encrypt(atKey.key, value, sharedWith);
-      } on KeyNotFoundException catch (e) {
-        var errorCode = AtClientExceptionUtil.getErrorCode(e);
-        return Future.error(AtClientException(
-            errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+            await _encryptionService.encryptForSelf(atKey.key, value);
       }
-    } else {
-      builder.value = await _encryptionService.encryptForSelf(atKey.key, value);
+      if (metadata != null) {
+        builder.ttl = metadata.ttl;
+        builder.ttb = metadata.ttb;
+        builder.ttr = metadata.ttr;
+        builder.ccd = metadata.ccd;
+        builder.isPublic = metadata.isPublic!;
+      }
+      var isSyncRequired = true;
+      if (notifyKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+          notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
+        builder.sharedBy = '';
+      }
+      if (SyncUtil.shouldSkipSync(notifyKey)) {
+        isSyncRequired = false;
+      }
+      try {
+        var secondary = getSecondary(isDedicated: isDedicated);
+        if (isDedicated) {
+          isSyncRequired = false;
+        }
+        var notifyResult = await secondary.executeVerb(builder,
+            sync: (isDedicated ? false : isSyncRequired));
+        //close connection if a dedicated connection created for this request
+        if (isDedicated && (secondary is RemoteSecondary)) {
+          secondary.atLookUp.connection!.close();
+        }
+        onDone(notifyResult);
+      } on Exception catch (e) {
+        onError(e);
+      }
     }
-    if (metadata != null) {
-      builder.ttl = metadata.ttl;
-      builder.ttb = metadata.ttb;
-      builder.ttr = metadata.ttr;
-      builder.ccd = metadata.ccd;
-      builder.isPublic = metadata.isPublic!;
-    }
-    var isSyncRequired = true;
-    if (notifyKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-    if (SyncUtil.shouldSkipSync(notifyKey)) {
-      isSyncRequired = false;
-    }
-    var secondary = getSecondary(isDedicated: isDedicated);
-    if (isDedicated) {
-      isSyncRequired = false;
-    }
-    var notifyResult = await secondary.executeVerb(builder,
-        sync: (isDedicated ? false : isSyncRequired));
-    if (isDedicated && (secondary is RemoteSecondary)) {
-      secondary.atLookUp.connection!.close();
-    }
-    return notifyResult != null;
   }
 
   @override
@@ -670,18 +695,41 @@ class AtClientImpl implements AtClient {
     var sharedWithList = jsonDecode(atKey.sharedWith!);
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
-      var result =
-          await notify(atKey, value, operation, isDedicated: isDedicated);
-      returnMap.putIfAbsent(sharedWith, () => result);
+      await notify(atKey, value, operation, (String id) {
+        returnMap.putIfAbsent(sharedWith, () => id);
+      }, (dynamic e) {
+        logger.severe(e);
+      }, isDedicated: isDedicated);
     }
     return jsonEncode(returnMap);
   }
 
+  /// Calling notifyStatus with [notificationId] along with onDone, onError function
+  /// will get notification status
+  /// [onDone] callback is invoked with notification status when notifyStatus completes successfully.
+  /// e.g onDone callback
+  /// ```
+  /// void onDone(String notifyStatus) {
+  ///  // add your notifyStatus completion logic
+  /// }
+  ///
+  /// [onError] callback is invoked with exception when notifyStatus fails.
+  //   /// e.g onError callback
+  //   /// ```
+  //   /// void onError(dynamic e) {
+  //   ///  // add your notifyStatus error logic
+  //   /// }
+  /// ```
   @override
-  Future<String> notifyStatus(String notificationId) async {
+  Future<void> notifyStatus(
+      String notificationId, Function onDone, Function onError) async {
     var builder = NotifyStatusVerbBuilder()..notificationId = notificationId;
-    var notifyStatus = await getRemoteSecondary()!.executeVerb(builder);
-    return notifyStatus;
+    try {
+      var notifyStatus = await getRemoteSecondary()!.executeVerb(builder);
+      onDone(notifyStatus);
+    } on Exception catch (e) {
+      onError(e);
+    }
   }
 
   @override
@@ -711,7 +759,7 @@ class AtClientImpl implements AtClient {
     var updateKey = atKey.key;
     var metadata = atKey.metadata!;
     if (metadata.namespaceAware) {
-      updateKey = _getKeyWithNamespace(atKey.key);
+      updateKey = _getKeyWithNamespace(atKey.key)!;
     }
     var sharedWith = atKey.sharedWith;
     var builder = UpdateVerbBuilder();
@@ -783,10 +831,10 @@ class AtClientImpl implements AtClient {
       return null;
     }
     var metadata = Metadata();
-    metadata.expiresAt =
-        (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
-            ? DateTime.parse(metadataMap['expiresAt'])
-            : null;
+    metadata.expiresAt = (metadataMap['expiresAt'] != null &&
+            metadataMap['expiresAt'] != 'null')
+        ? DateTime.parse(metadataMap['expiresAt'])
+        : null;
     metadata.availableAt = (metadataMap['availableAt'] != null &&
             metadataMap['availableAt'] != 'null')
         ? DateTime.parse(metadataMap['availableAt'])
@@ -878,17 +926,18 @@ class AtClientImpl implements AtClient {
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }
 
+
   //#TODO return result object for apps to check file transfer status
   Future<void> uploadFile(
       File file, List<String> sharedWithAtSigns, String fileName) async {
     var transferId = Uuid().v4();
     var encryptionKey = _encryptionService.generateFileEncryptionKey();
     var encryptedFile =
-        _encryptionService.encryptFile(file.readAsBytesSync(), encryptionKey);
+    _encryptionService.encryptFile(file.readAsBytesSync(), encryptionKey);
     var fileUrl = FileTransferService().uploadToFileBin(encryptedFile);
     for (var sharedWithAtSign in sharedWithAtSigns) {
       var fileTransferObject =
-          FileTransferObject(transferId, fileName, encryptionKey, fileUrl);
+      FileTransferObject(transferId, fileName, encryptionKey, fileUrl);
       var atKey = AtKey()
         ..key = transferId
         ..sharedWith = sharedWithAtSign
@@ -909,16 +958,18 @@ class AtClientImpl implements AtClient {
       throw Exception('file transfer details not found');
     }
     var encryptedFile =
-        FileTransferService().downloadFromFileBin(fileTransferObject.fileUrl);
+    FileTransferService().downloadFromFileBin(fileTransferObject.fileUrl);
     var decryptedFile = _encryptionService.decryptFile(
         encryptedFile, fileTransferObject.fileEncryptionKey);
     if (downloadPath != null) {
       var downloadedFile =
-          File(downloadPath + '/' + fileTransferObject.fileName);
+      File(downloadPath + '/' + fileTransferObject.fileName);
       downloadedFile.writeAsBytesSync(decryptedFile);
     }
     return decryptedFile;
   }
+
+
 
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService.encryptUnencryptedData();

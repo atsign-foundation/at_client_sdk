@@ -14,7 +14,6 @@ dependencies:
   hive: ^2.0.4
   crypton: ^2.0.1
   encrypt: ^5.0.0
-  cron: ^0.3.0
   convert: ^3.0.0
   uuid: ^3.0.4
   crypto: ^3.0.1
