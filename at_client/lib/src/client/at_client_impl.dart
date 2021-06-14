@@ -501,7 +501,7 @@ class AtClientImpl implements AtClient {
       updateKey = _getKeyWithNamespace(key);
     }
     var operation = getOperation(value, metadata);
-    sharedWith = AtUtils.formatAtSign(sharedWith!);
+    sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = UpdateVerbBuilder()
       ..atKey = updateKey!
       ..sharedBy = currentAtSign
