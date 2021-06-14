@@ -31,10 +31,10 @@ import 'package:uuid/uuid.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
-  AtClientPreference? _preference;
+  late AtClientPreference _preference;
 
-  AtClientPreference? get preference => _preference;
-  String? currentAtSign;
+  AtClientPreference get preference => _preference;
+  late String currentAtSign;
   String? _namespace;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
@@ -76,17 +76,17 @@ class AtClientImpl implements AtClient {
 
   AtClientImpl(
       String _atSign, String? namespace, AtClientPreference preference) {
-    currentAtSign = AtUtils.formatAtSign(_atSign);
+    currentAtSign = AtUtils.formatAtSign(_atSign)!;
     _preference = preference;
     _namespace = namespace;
   }
 
   Future<void> _init() async {
-    if (_preference!.isLocalStoreRequired) {
-      _localSecondary = LocalSecondary(currentAtSign!, _preference);
+    if (_preference.isLocalStoreRequired) {
+      _localSecondary = LocalSecondary(currentAtSign, _preference);
     }
-    _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
-        privateKey: _preference!.privateKey);
+    _remoteSecondary = RemoteSecondary(currentAtSign, _preference,
+        privateKey: _preference.privateKey);
     _encryptionService = EncryptionService();
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
@@ -94,12 +94,12 @@ class AtClientImpl implements AtClient {
   }
 
   Secondary getSecondary({bool isDedicated = false}) {
-    if (_preference!.isLocalStoreRequired) {
+    if (_preference.isLocalStoreRequired) {
       return _localSecondary!;
     }
     if (isDedicated) {
-      return RemoteSecondary(currentAtSign!, _preference!,
-          privateKey: _preference!.privateKey);
+      return RemoteSecondary(currentAtSign, _preference,
+          privateKey: _preference.privateKey);
     }
     return _remoteSecondary!;
   }
@@ -108,7 +108,7 @@ class AtClientImpl implements AtClient {
   Future<void> startMonitor(Function notificationCallback,
       Function errorCallback, MonitorPreference monitorPreference) async {
     var service = MonitorService(notificationCallback, errorCallback,
-        currentAtSign!, _preference!, monitorPreference);
+        currentAtSign, _preference, monitorPreference);
     service.startMonitor();
   }
 
@@ -120,8 +120,8 @@ class AtClientImpl implements AtClient {
   @override
   RemoteSecondary? getRemoteSecondary({bool isDedicated = false}) {
     if (isDedicated) {
-      var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
-          privateKey: _preference!.privateKey);
+      var remoteSecondary = RemoteSecondary(currentAtSign, _preference,
+          privateKey: _preference.privateKey);
       return remoteSecondary;
     }
     return _remoteSecondary;
@@ -129,10 +129,10 @@ class AtClientImpl implements AtClient {
 
   @override
   SyncManager? getSyncManager() {
-    var syncManager = SyncManager.getInstance(currentAtSign!);
-    syncManager.preference = _preference!;
+    var syncManager = SyncManager.getInstance(currentAtSign);
+    syncManager.preference = _preference;
     syncManager.localSecondary = _localSecondary!;
-    syncManager.remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
+    syncManager.remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     return syncManager;
   }
 
@@ -584,7 +584,7 @@ class AtClientImpl implements AtClient {
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
     if (atKey.metadata != null && atKey.metadata!.isBinary!) {
-      if (value != null && value.length > _preference!.maxDataSize) {
+      if (value != null && value.length > _preference.maxDataSize) {
         throw AtClientException('AT0005', 'BufferOverFlowException');
       }
       value = Base2e15.encode(value);
@@ -629,7 +629,7 @@ class AtClientImpl implements AtClient {
     sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = NotifyVerbBuilder()
       ..atKey = notifyKey
-      ..sharedBy = currentAtSign!
+      ..sharedBy = currentAtSign
       ..sharedWith = sharedWith
       ..value = value
       ..operation = operation
@@ -829,10 +829,10 @@ class AtClientImpl implements AtClient {
       return null;
     }
     var metadata = Metadata();
-    metadata.expiresAt = (metadataMap['expiresAt'] != null &&
-            metadataMap['expiresAt'] != 'null')
-        ? DateTime.parse(metadataMap['expiresAt'])
-        : null;
+    metadata.expiresAt =
+        (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
+            ? DateTime.parse(metadataMap['expiresAt'])
+            : null;
     metadata.availableAt = (metadataMap['availableAt'] != null &&
             metadataMap['availableAt'] != 'null')
         ? DateTime.parse(metadataMap['availableAt'])
@@ -876,7 +876,7 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
+    var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
@@ -885,7 +885,7 @@ class AtClientImpl implements AtClient {
       logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
-          .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+          .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.COMPLETE;
@@ -916,7 +916,7 @@ class AtClientImpl implements AtClient {
     var notification = AtStreamNotification()
       ..streamId = streamId
       ..fileName = fileName
-      ..currentAtSign = currentAtSign!
+      ..currentAtSign = currentAtSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
     logger.info('Sending ack for stream notification:$notification');
@@ -926,5 +926,15 @@ class AtClientImpl implements AtClient {
 
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService!.encryptUnencryptedData();
+  }
+
+  @override
+  String getCurrentAtSign() {
+    return currentAtSign;
+  }
+
+  @override
+  AtClientPreference getPreference() {
+    return _preference;
   }
 }
