@@ -884,7 +884,7 @@ class AtClientImpl implements AtClient {
       result = result.trim();
       logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      var streamResult = await remoteSecondary.atLookUp.messageListener
+      var streamResult = await remoteSecondary.atLookUp.messageListener!
           .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         remoteSecondary.atLookUp.connection!.close();
