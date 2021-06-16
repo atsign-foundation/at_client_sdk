@@ -70,14 +70,13 @@ class LocalSecondary implements Secondary {
         // 3. sync latest update/delete if strategy is immediate
         if (sync && _preference!.syncStrategy == SyncStrategy.IMMEDIATE) {
           var local_commit_seq = verbResult.split(':')[1];
-          await syncManager!.syncImmediate(local_commit_seq, builder, operation);
+          await syncManager!
+              .syncImmediate(local_commit_seq, builder, operation);
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
       } else if (builder is ScanVerbBuilder) {
         verbResult = await _scan(builder);
-      } else if (builder is NotifyVerbBuilder) {
-        verbResult = await _notify(builder);
       }
     } on Exception catch (e) {
       if (e is AtLookUpException) {
@@ -120,7 +119,8 @@ class LocalSecondary implements Secondary {
               ..isEncrypted = builder.isEncrypted
               ..dataSignature = builder.dataSignature;
             var atMetadata = AtMetadataAdapter(metadata);
-            updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
+            updateResult =
+                await keyStore!.putAll(updateKey, atData, atMetadata);
             break;
           }
           // #TODO replace below call with putAll.
@@ -221,20 +221,12 @@ class LocalSecondary implements Secondary {
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
       keyString = keyString.replaceFirst(RegExp(r'\]$'), '');
       keyString = keyString.replaceAll(', ', ',');
-      var keysArray =  keyString.isNotEmpty
-          ? (keyString.split(','))
-          : [];
+      var keysArray = keyString.isNotEmpty ? (keyString.split(',')) : [];
       return json.encode(keysArray);
     } on DataStoreException catch (e) {
       logger.severe('exception in scan:${e.toString()}');
       rethrow;
     }
-  }
-
-  Future<String> _notify(NotifyVerbBuilder builder) async {
-    return await RemoteSecondary(_atSign, _preference!,
-            privateKey: _preference!.privateKey)
-        .executeVerb(builder);
   }
 
   bool _isActiveKey(AtMetaData? atMetaData) {
@@ -291,7 +283,8 @@ class LocalSecondary implements Secondary {
 
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.formatAtSign(atSign)!;
-    var privateKeyData = await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
+    var privateKeyData =
+        await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
     return privateKeyData?.data;
   }
 
