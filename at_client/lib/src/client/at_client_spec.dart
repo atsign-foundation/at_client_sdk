@@ -294,4 +294,8 @@ abstract class AtClient {
 
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
+
+  AtClientPreference getPreference();
+
+  String getCurrentAtSign();
 }
