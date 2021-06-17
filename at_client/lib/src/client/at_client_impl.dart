@@ -654,8 +654,8 @@ class AtClientImpl implements AtClient {
     if (isDedicated) {
       isSyncRequired = false;
     }
-    var notifyResult = await secondary.executeVerb(builder,
-        sync: (isDedicated ? false : isSyncRequired));
+    var notifyResult = await getRemoteSecondary()
+        ?.executeVerb(builder, sync: (isDedicated ? false : isSyncRequired));
     if (isDedicated && (secondary is RemoteSecondary)) {
       await secondary.atLookUp.connection!.close();
     }
