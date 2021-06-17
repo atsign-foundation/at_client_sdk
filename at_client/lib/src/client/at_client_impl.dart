@@ -928,7 +928,7 @@ class AtClientImpl implements AtClient {
 
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns, String fileName) async {
-    var transferId = Uuid().v4();
+
     var encryptionKey = _encryptionService.generateFileEncryptionKey();
     var encryptedFiles = <List<int>>[];
     for (var file in files) {
@@ -944,6 +944,7 @@ class AtClientImpl implements AtClient {
       uploaded = false;
     }
     var result = <String, FileTransferObject>{};
+    var transferId = Uuid().v4();
     for (var sharedWithAtSign in sharedWithAtSigns) {
       var fileTransferObject = FileTransferObject(
           transferId, fileName, encryptionKey, fileUrl, sharedWithAtSign);
