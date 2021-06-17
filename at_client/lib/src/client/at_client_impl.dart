@@ -243,15 +243,15 @@ class AtClientImpl implements AtClient {
       }
       if (sharedBy != currentAtSign && operation == UPDATE_ALL) {
         //resultant value is encrypted. Decrypting to original value.
-        var decryptedValue = await _encryptionService
-            .decrypt(encryptedResultMap['data'], sharedBy);
+        var decryptedValue = await _encryptionService.decrypt(
+            encryptedResultMap['data'], sharedBy);
         encryptedResultMap['data'] = decryptedValue;
       } else {
         //resultant value is encrypted. Decrypting to original value.
         var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
         isEncrypted ??= false;
-        var decryptedValue = await _encryptionService
-            .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+        var decryptedValue = await _encryptionService.decryptForSelf(
+            encryptedResultMap['data'], isEncrypted);
         encryptedResultMap['data'] = decryptedValue;
       }
       return encryptedResultMap;
@@ -294,8 +294,8 @@ class AtClientImpl implements AtClient {
         if (operation == UPDATE_ALL) {
           var decryptedValue;
           try {
-            decryptedValue = await _encryptionService
-                .decrypt(encryptedResultMap['data'], sharedBy);
+            decryptedValue = await _encryptionService.decrypt(
+                encryptedResultMap['data'], sharedBy);
           } on KeyNotFoundException catch (e) {
             var errorCode = AtClientExceptionUtil.getErrorCode(e);
             return Future.error(AtClientException(errorCode,
@@ -371,8 +371,8 @@ class AtClientImpl implements AtClient {
     }
     var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
     isEncrypted ??= false;
-    var decryptedValue = await _encryptionService
-        .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+    var decryptedValue = await _encryptionService.decryptForSelf(
+        encryptedResultMap['data'], isEncrypted);
     encryptedResultMap['data'] = decryptedValue;
     return encryptedResultMap;
   }
@@ -926,24 +926,37 @@ class AtClientImpl implements AtClient {
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }
 
-
-  //#TODO return result object for apps to check file transfer status
-  Future<void> uploadFile(
-      File file, List<String> sharedWithAtSigns, String fileName) async {
+  Future<Map<String, FileTransferObject>> uploadFile(
+      List<File> files, List<String> sharedWithAtSigns, String fileName) async {
     var transferId = Uuid().v4();
     var encryptionKey = _encryptionService.generateFileEncryptionKey();
-    var encryptedFile =
-    _encryptionService.encryptFile(file.readAsBytesSync(), encryptionKey);
-    var fileUrl = FileTransferService().uploadToFileBin(encryptedFile);
+    var encryptedFiles = <List<int>>[];
+    for (var file in files) {
+      encryptedFiles.add(_encryptionService.encryptFile(
+          file.readAsBytesSync(), encryptionKey));
+    }
+    var fileUrl;
+    var uploaded = true;
+    try {
+      fileUrl = FileTransferService().uploadMultipleToFileBin(encryptedFiles);
+    } on Exception {
+      logger.severe('exception uploading to fileBin');
+      uploaded = false;
+    }
+    var result = <String, FileTransferObject>{};
     for (var sharedWithAtSign in sharedWithAtSigns) {
-      var fileTransferObject =
-      FileTransferObject(transferId, fileName, encryptionKey, fileUrl);
+      var fileTransferObject = FileTransferObject(
+          transferId, fileName, encryptionKey, fileUrl, sharedWithAtSign);
       var atKey = AtKey()
         ..key = transferId
         ..sharedWith = sharedWithAtSign
         ..sharedBy = currentAtSign;
-      await put(atKey, fileTransferObject.toString());
+      fileTransferObject.sharedStatus =
+          await put(atKey, fileTransferObject.toString());
+      fileTransferObject.uploadStatus = uploaded;
+      result[sharedWithAtSign] = fileTransferObject;
     }
+    return result;
   }
 
   Future<List<int>> downloadFile(String transferId, String sharedByAtSign,
@@ -958,18 +971,16 @@ class AtClientImpl implements AtClient {
       throw Exception('file transfer details not found');
     }
     var encryptedFile =
-    FileTransferService().downloadFromFileBin(fileTransferObject.fileUrl);
+        FileTransferService().downloadFromFileBin(fileTransferObject.fileUrl);
     var decryptedFile = _encryptionService.decryptFile(
         encryptedFile, fileTransferObject.fileEncryptionKey);
     if (downloadPath != null) {
       var downloadedFile =
-      File(downloadPath + '/' + fileTransferObject.fileName);
+          File(downloadPath + '/' + fileTransferObject.fileName);
       downloadedFile.writeAsBytesSync(decryptedFile);
     }
     return decryptedFile;
   }
-
-
 
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService.encryptUnencryptedData();
