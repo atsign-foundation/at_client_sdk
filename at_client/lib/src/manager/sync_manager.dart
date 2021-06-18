@@ -116,14 +116,8 @@ class SyncManager {
   }
 
   Future<void> _pullChanges(SyncObject syncObject, {String? regex}) async {
-    var syncResponse = await remoteSecondary
-        .sync(syncObject.lastSyncedCommitId, _syncLocal, regex: regex);
-    if (syncResponse != null && syncResponse != 'data:null') {
-      syncResponse = syncResponse.replaceFirst('data:', '');
-      var syncResponseJson = jsonDecode(syncResponse);
-      await Future.forEach(syncResponseJson,
-          (serverCommitEntry) => _syncLocal(serverCommitEntry));
-    }
+    await remoteSecondary.sync(syncObject.lastSyncedCommitId, _syncLocal,
+        regex: regex);
   }
 
   Future<void> _pushChanges(SyncObject syncObject, {String? regex}) async {
@@ -159,6 +153,8 @@ class SyncManager {
   }
 
   Future<void> _syncLocal(serverCommitEntry) async {
+    _logger.info('Syncing ${serverCommitEntry['atKey']}');
+    print('_syncLocal ${serverCommitEntry['atKey']}');
     switch (serverCommitEntry['operation']) {
       case '+':
       case '#':
