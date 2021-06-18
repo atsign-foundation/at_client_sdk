@@ -1,14 +1,24 @@
 class FileTransferObject {
   final String transferId;
   final String fileName;
+  final List<FileStatus> fileStatus;
   final String fileEncryptionKey;
   final String fileUrl;
   final String sharedWith;
   bool? sharedStatus;
-  bool? uploadStatus;
+  DateTime? date;
 
-  FileTransferObject(this.transferId, this.fileName, this.fileEncryptionKey,
-      this.fileUrl, this.sharedWith);
+  FileTransferObject(
+    this.transferId,
+    this.fileName,
+    this.fileEncryptionKey,
+    this.fileUrl,
+    this.sharedWith,
+    this.fileStatus, {
+    this.date,
+  }) {
+    date ??= DateTime.now();
+  }
 
   @override
   String toString() {
@@ -23,16 +33,62 @@ class FileTransferObject {
     map['fileUrl'] = fileUrl;
     map['sharedWith'] = sharedWith;
     map['sharedStatus'] = sharedStatus;
+    map['fileStatus'] = fileStatus;
+    map['date'] = date;
     return map;
   }
 
   static FileTransferObject? fromJson(Map json) {
     try {
-      return FileTransferObject(json['transferId'], json['fileName'],
-          json['fileEncryptionKey'], json['fileUrl'], json['sharedWith'])
+      var fileStatus = <FileStatus>[];
+      json['fileStatus'].forEach((file) {
+        fileStatus.add(FileStatus.fromJson(file)!);
+      });
+
+      return FileTransferObject(
+          json['transferId'],
+          json['fileName'],
+          json['fileEncryptionKey'],
+          json['fileUrl'],
+          json['sharedWith'],
+          fileStatus,
+          date: DateTime.parse(json['date']).toLocal())
         ..sharedStatus = json['sharedStatus'];
     } catch (error) {
       print('FileTransferObject.fromJson error: ' + error.toString());
+    }
+    return null;
+  }
+}
+
+class FileStatus {
+  String? fileName;
+  bool? isUploaded;
+  int? size;
+
+  FileStatus({
+    required this.fileName,
+    this.isUploaded = false,
+    required this.size,
+  });
+
+  Map toJson() {
+    var map = {};
+    map['fileName'] = fileName;
+    map['isUploaded'] = isUploaded;
+    map['size'] = size;
+    return map;
+  }
+
+  static FileStatus? fromJson(Map json) {
+    try {
+      return FileStatus(
+        fileName: json['fileName'],
+        isUploaded: json['isUploaded'],
+        size: json['size'],
+      );
+    } catch (error) {
+      print('FileStatus.fromJson error: ' + error.toString());
     }
     return null;
   }
