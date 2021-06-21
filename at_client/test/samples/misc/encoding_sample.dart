@@ -1,8 +1,6 @@
 import 'dart:convert';
 
-import 'package:base2e15/base2e15.dart';
-
-
+import 'package:at_base2e15/at_base2e15.dart';
 
 void main() {
   var text = 'hello \r\n world';
@@ -14,5 +12,4 @@ void main() {
   print(encodedText);
   var decodedText = utf8.decode(Base2e15.decode(encodedText));
   print(decodedText);
-
 }

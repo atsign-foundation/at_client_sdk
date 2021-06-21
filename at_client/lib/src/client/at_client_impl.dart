@@ -27,7 +27,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:base2e15/base2e15.dart';
+import 'package:at_base2e15/at_base2e15.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 

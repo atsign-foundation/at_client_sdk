@@ -293,5 +293,6 @@ abstract class AtClient {
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
 
-  Future<AtStreamResponse> stream(String sharedWith, String filePath, {String namespace});
+  Future<AtStreamResponse> stream(String sharedWith, String filePath,
+      {String namespace});
 }
