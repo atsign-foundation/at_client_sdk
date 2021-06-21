@@ -9,12 +9,13 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
-import 'package:at_client/src/manager/stream_manager.dart';
+import 'package:at_client/src/manager/stream_handler.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
+import 'package:at_client/src/stream/stream.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -138,12 +139,9 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  StreamManager? getStreamManager() {
-    var streamManager = StreamManager.getInstance(currentAtSign);
-    streamManager.preference = _preference;
-    // create remote connection for stream only it is not created
-    streamManager.remoteSecondary ??= RemoteSecondary(currentAtSign, _preference);
-    return streamManager;
+  Stream createStream(StreamType streamType, {String? streamId}) {
+    return StreamHandler.getInstance()
+        .createStream(currentAtSign, streamType, streamId: streamId);
   }
 
   @override

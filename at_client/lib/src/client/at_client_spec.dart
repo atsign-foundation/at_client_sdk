@@ -1,9 +1,8 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
-import 'package:at_client/src/manager/stream_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/stream/at_stream_response.dart';
+import 'package:at_client/src/stream/stream.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -301,5 +300,5 @@ abstract class AtClient {
 
   String getCurrentAtSign();
 
-  StreamManager? getStreamManager();
+  Stream createStream(StreamType streamType, {String? streamId});
 }

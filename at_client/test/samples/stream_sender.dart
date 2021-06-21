@@ -17,9 +17,10 @@ void main() async {
     Function dummyFunction = (){};
     var monitorPreference = MonitorPreference();
     await atClient.startMonitor(dummyFunction, dummyFunction, monitorPreference);
-    var streamResult =
-        await atClient.stream('@bob🛠', 'cat.jpeg', namespace: 'atmosphere');
-    print(streamResult);
+    // #TODO implement
+//    var streamResult =
+//        await atClient.stream('@bob🛠', 'cat.jpeg', namespace: 'atmosphere');
+//    print(streamResult);
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
