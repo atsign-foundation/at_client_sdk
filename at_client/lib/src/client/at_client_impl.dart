@@ -929,7 +929,7 @@ class AtClientImpl implements AtClient {
   }
 
   Future<Map<String, dynamic>> uploadFile(
-      List<File> files, List<String> sharedWithAtSigns, String fileName) async {
+      List<File> files, List<String> sharedWithAtSigns) async {
     var encryptionKey = _encryptionService.generateFileEncryptionKey();
     var fileStatus = <FileStatus>[];
     var key = TextConstants.FILE_TRASNFER_KEY + Uuid().v4();
@@ -952,7 +952,7 @@ class AtClientImpl implements AtClient {
         fileDetail.fileName!,
       );
 
-      if (response is http.Response) {
+      if (response is http.Response && response.statusCode == 201) {
         Map fileInfo = jsonDecode(response.body);
         // changing file name if it's not url friendly
         fileDetail.fileName = fileInfo['file']['filename'];
@@ -966,7 +966,6 @@ class AtClientImpl implements AtClient {
     for (var sharedWithAtSign in sharedWithAtSigns) {
       var fileTransferObject = FileTransferObject(
         key,
-        fileName,
         encryptionKey,
         fileUrl,
         sharedWithAtSign,

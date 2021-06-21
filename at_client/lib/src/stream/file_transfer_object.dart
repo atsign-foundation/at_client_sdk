@@ -1,6 +1,5 @@
 class FileTransferObject {
   final String transferId;
-  final String fileName;
   final List<FileStatus> fileStatus;
   final String fileEncryptionKey;
   final String fileUrl;
@@ -10,7 +9,6 @@ class FileTransferObject {
 
   FileTransferObject(
     this.transferId,
-    this.fileName,
     this.fileEncryptionKey,
     this.fileUrl,
     this.sharedWith,
@@ -28,7 +26,6 @@ class FileTransferObject {
   Map toJson() {
     var map = {};
     map['transferId'] = transferId;
-    map['fileName'] = fileName;
     map['fileEncryptionKey'] = fileEncryptionKey;
     map['fileUrl'] = fileUrl;
     map['sharedWith'] = sharedWith;
@@ -45,13 +42,8 @@ class FileTransferObject {
         fileStatus.add(FileStatus.fromJson(file)!);
       });
 
-      return FileTransferObject(
-          json['transferId'],
-          json['fileName'],
-          json['fileEncryptionKey'],
-          json['fileUrl'],
-          json['sharedWith'],
-          fileStatus,
+      return FileTransferObject(json['transferId'], json['fileEncryptionKey'],
+          json['fileUrl'], json['sharedWith'], fileStatus,
           date: DateTime.parse(json['date']).toLocal())
         ..sharedStatus = json['sharedStatus'];
     } catch (error) {
