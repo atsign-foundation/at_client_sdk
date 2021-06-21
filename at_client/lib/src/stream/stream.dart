@@ -14,3 +14,5 @@ class Stream {
 }
 
 enum StreamType{SEND, RECEIVE}
+
+enum StreamStatus{INPROGRESS,ERROR, DONE}

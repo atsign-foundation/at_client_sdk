@@ -1,4 +1,5 @@
 import 'package:at_client/src/stream/at_stream_request.dart';
+import 'package:at_client/src/stream/stream.dart';
 import 'package:uuid/uuid.dart';
 
 class StreamSender {
@@ -15,5 +16,10 @@ class StreamSender {
 
   Future<void> cancel() async {
     //#TODO implement
+  }
+
+  StreamStatus getStatus() {
+    //#TODO implement
+    return StreamStatus.INPROGRESS;
   }
 }
