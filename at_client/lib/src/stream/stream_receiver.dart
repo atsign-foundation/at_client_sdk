@@ -17,9 +17,4 @@ class StreamReceiver {
   Future<void> cancel() async {
     //#TODO implement
   }
-
-  StreamStatus getStatus() {
-    //#TODO implement
-    return StreamStatus.INPROGRESS;
-  }
 }

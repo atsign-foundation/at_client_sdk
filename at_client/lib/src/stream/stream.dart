@@ -7,12 +7,7 @@ class Stream {
   String currentAtSign;
   StreamSender? sender;
   StreamReceiver? receiver;
-  late AtClientPreference preference;
-
-  RemoteSecondary? remoteSecondary;
   Stream(this.currentAtSign, this.streamId);
 }
 
 enum StreamType{SEND, RECEIVE}
-
-enum StreamStatus{INPROGRESS,ERROR, DONE}

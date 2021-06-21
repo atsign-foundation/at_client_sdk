@@ -1,3 +1,5 @@
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/stream/stream.dart';
 import 'package:at_client/src/stream/stream_receiver.dart';
 import 'package:at_client/src/stream/stream_sender.dart';

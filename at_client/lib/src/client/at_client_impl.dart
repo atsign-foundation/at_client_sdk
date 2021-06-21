@@ -140,8 +140,14 @@ class AtClientImpl implements AtClient {
 
   @override
   Stream createStream(StreamType streamType, {String? streamId}) {
-    return StreamHandler.getInstance()
-        .createStream(currentAtSign, streamType, streamId: streamId);
+    var stream = StreamHandler.getInstance().createStream(
+        currentAtSign, streamType,
+        streamId: streamId);
+    if(streamType == StreamType.SEND) {
+      stream.sender!.remoteSecondary = RemoteSecondary(currentAtSign, preference);
+      stream.sender!.encryptionService = _encryptionService;
+    }
+    return stream;
   }
 
   @override
