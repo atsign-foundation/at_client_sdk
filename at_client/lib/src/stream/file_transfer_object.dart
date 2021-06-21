@@ -31,7 +31,7 @@ class FileTransferObject {
     map['sharedWith'] = sharedWith;
     map['sharedStatus'] = sharedStatus;
     map['fileStatus'] = fileStatus;
-    map['date'] = date;
+    map['date'] = date.toString();
     return map;
   }
 
