@@ -863,7 +863,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtStreamResponse> stream(String sharedWith, String filePath,
+  Future<void> stream(
+      String sharedWith, String filePath, Function onDone, Function onError,
       {String? namespace}) async {
     var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
@@ -889,16 +890,18 @@ class AtClientImpl implements AtClient {
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.COMPLETE;
+        onDone(streamResponse);
       }
     } else if (result != null && result.startsWith('error:')) {
       result = result.replaceAll('error:', '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
       streamResponse.status = AtStreamStatus.ERROR;
+      onError(streamResponse);
     } else {
       streamResponse.status = AtStreamStatus.NO_ACK;
+      onError(streamResponse);
     }
-    return streamResponse;
   }
 
   Future<void> sendStreamAck(
