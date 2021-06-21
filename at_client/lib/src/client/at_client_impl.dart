@@ -9,6 +9,7 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
+import 'package:at_client/src/manager/stream_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
@@ -134,6 +135,15 @@ class AtClientImpl implements AtClient {
     syncManager.localSecondary = _localSecondary!;
     syncManager.remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     return syncManager;
+  }
+
+  @override
+  StreamManager? getStreamManager() {
+    var streamManager = StreamManager.getInstance(currentAtSign);
+    streamManager.preference = _preference;
+    // create remote connection for stream only it is not created
+    streamManager.remoteSecondary ??= RemoteSecondary(currentAtSign, _preference);
+    return streamManager;
   }
 
   @override
@@ -862,12 +872,13 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
+  ///#TODO move this impl to [StreamManager.send()]
   @override
   Future<void> stream(
       String sharedWith, String filePath, Function onDone, Function onError,
       {String? namespace}) async {
-    var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
+    var streamResponse = AtStreamResponse(streamId);
     var file = File(filePath);
     var data = file.readAsBytesSync();
     var fileName = basename(filePath);
@@ -904,6 +915,7 @@ class AtClientImpl implements AtClient {
     }
   }
 
+  ///#TODO move this impl to [StreamManager.streamAck()]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,

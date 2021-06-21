@@ -1,6 +1,9 @@
 class AtStreamResponse {
   AtStreamStatus? status;
   String? errorCode;
+  String streamId;
+
+  AtStreamResponse(this.streamId);
 
   @override
   String toString() {
