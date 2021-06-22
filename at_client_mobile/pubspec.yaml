@@ -16,54 +16,10 @@ dependencies:
   flutter_keychain: ^1.0.0
   hive: ^2.0.4
   crypton: ^2.0.1
-  at_client: ^1.0.1+10
-  at_lookup: ^1.0.0+8
-  at_commons: ^1.0.1+8
-  at_utils: ^1.0.1+8
-
-dependency_overrides:
-  at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: at_client
-      ref: trunk
-      version: ^1.1.0
-  at_persistence_spec:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      path: at_persistence/at_persistence_spec
-      ref: trunk
-      version: ^1.1.0
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      path: at_secondary/at_persistence_secondary_server
-      ref: trunk
-      version: ^1.1.0
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: at_lookup
-      ref: trunk
-      version: ^1.1.0
-  at_utils:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_utils
-      ref: trunk
-      version: ^1.1.0
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: trunk
-      version: ^1.1.0
-  dart_utf7:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: dart_utf7
-      ref: trunk
-      version: 0.2.1-null-safety
+  at_client: ^2.0.0
+  at_lookup: ^2.0.0
+  at_commons: ^2.0.0
+  at_utils: ^2.0.0
    
 dev_dependencies:
   pedantic: ^1.8.0
