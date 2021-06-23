@@ -990,6 +990,7 @@ class AtClientImpl implements AtClient {
       {String? downloadPath}) async {
     if (downloadPath == null) {
       downloadPath = preference.downloadPath;
+      throw Exception('downloadPath not found');
     }
 
     var atKey = AtKey()
