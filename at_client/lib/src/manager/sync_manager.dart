@@ -49,8 +49,12 @@ class SyncManager {
   Future<void> sync(Function onDone, {String? regex}) async {
     // Return is there is any sync already in progress
     _regex = regex;
-    await syncOnce(onDone, _handleError, regex: _regex);
+    await syncOnce(onDone, _onError, regex: _regex);
     return;
+  }
+
+  void _onError(SyncManager syncManager, Exception e) {
+    _logger.finer('error during sync process ${e.toString()}');
   }
 
   void _handleError(

@@ -40,7 +40,7 @@ class Monitor {
 
   late OutboundConnection _monitorConnection;
 
-  late RemoteSecondary _remoteSecondary;
+  RemoteSecondary? _remoteSecondary;
 
   ///
   /// Creates a [Monitor] object.
@@ -84,7 +84,7 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
-    _remoteSecondary = RemoteSecondary(atSign, preference);
+    _remoteSecondary ??= RemoteSecondary(atSign, preference);
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -132,6 +132,9 @@ class Monitor {
   Future<void> _authenticateConnection() async {
     _monitorConnection.write('from:$_atSign\n');
     var fromResponse = await _getQueueResponse();
+    if (fromResponse.isEmpty) {
+      throw UnAuthenticatedException('From response is empty');
+    }
     _logger.finer('from result:$fromResponse');
     fromResponse = fromResponse.trim().replaceAll('data:', '');
     _logger.finer('fromResponse $fromResponse');
@@ -180,7 +183,7 @@ class Monitor {
   ///Returns the response of the monitor verb queue.
   Future<String> _getQueueResponse() async {
     var maxWaitMilliSeconds = 5000;
-    late String result;
+    var result = '';
     //wait maxWaitMilliSeconds seconds for response from remote socket
     var loopCount = (maxWaitMilliSeconds / 50).round();
     for (var i = 0; i < loopCount; i++) {
@@ -214,7 +217,7 @@ class Monitor {
   /// Stops the monitor. Call [Monitor#start] to start it again.
   void stop() {
     status = MonitorStatus.Stopped;
-    _monitorConnection.close();
+    _monitorConnection.getSocket().destroy();
   }
 
 // Stops the monitor from receiving notification
@@ -231,7 +234,7 @@ class Monitor {
   }
 
   void _handleError(e) {
-    _monitorConnection.close();
+    _monitorConnection.getSocket().destroy();
     status = MonitorStatus.Errored;
     // Pass monitor and error
     // TBD : If retry = true should the onError needs to be called?
@@ -247,7 +250,7 @@ class Monitor {
     if (!(await NetworkUtil.isNetworkAvailable())) {
       throw AtConnectException('Internet connection unavailable to sync');
     }
-    if (!(await _remoteSecondary.isAvailable())) {
+    if (!(await _remoteSecondary!.isAvailable())) {
       throw AtConnectException('Secondary server is unavailable');
     }
     return;
