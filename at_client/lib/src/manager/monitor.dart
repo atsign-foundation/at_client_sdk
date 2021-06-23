@@ -217,7 +217,7 @@ class Monitor {
   /// Stops the monitor. Call [Monitor#start] to start it again.
   void stop() {
     status = MonitorStatus.Stopped;
-    _monitorConnection.getSocket().destroy();
+    _monitorConnection.close();
   }
 
 // Stops the monitor from receiving notification
@@ -234,7 +234,7 @@ class Monitor {
   }
 
   void _handleError(e) {
-    _monitorConnection.getSocket().destroy();
+    _monitorConnection.close();
     status = MonitorStatus.Errored;
     // Pass monitor and error
     // TBD : If retry = true should the onError needs to be called?
