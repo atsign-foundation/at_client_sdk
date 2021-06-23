@@ -474,28 +474,6 @@ class AtClientImpl implements AtClient {
     return result;
   }
 
-//  @override
-//  Future<bool> putBinary(String key, List<int> value,
-//      {String sharedWith, Metadata metadata}) async {
-//    if (value != null && value.length > _preference.maxDataSize) {
-//      throw AtClientException('AT0005', 'BufferOverFlowException');
-//    }
-//    var encodedValue = Base2e15.encode(value);
-//    return await put(key, encodedValue,
-//        sharedWith: sharedWith, metadata: metadata);
-//  }
-//
-//  @override
-//  Future<bool> putBinaryAtKey(AtKey key, List<int> value,
-//      {Metadata metadata}) async {
-//    if (value != null && value.length > _preference.maxDataSize) {
-//      throw AtClientException('AT0005', 'BufferOverFlowException');
-//    }
-//    var encodedValue = Base2e15.encode(value);
-//    return await put(key.key, encodedValue,
-//        sharedWith: key.sharedWith, metadata: metadata);
-//  }
-
   Future<bool> _put(String? key, dynamic value,
       {String? sharedWith,
       Metadata? metadata,
@@ -928,41 +906,26 @@ class AtClientImpl implements AtClient {
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }
 
-  Future<Map<String, dynamic>> uploadFile(
+  Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns) async {
     var encryptionKey = _encryptionService.generateFileEncryptionKey();
-    var fileStatus = <FileStatus>[];
-    var key = TextConstants.FILE_TRASNFER_KEY + Uuid().v4();
 
-    for (var file in files) {
-      var fileDetail = FileStatus(
-        fileName: file.path.split('/').last,
-        isUploaded: false,
-        size: await file.length(),
-      );
-
-      var encryptedFile = _encryptionService.encryptFile(
-        file.readAsBytesSync(),
-        encryptionKey,
-      );
-
-      var response = await FileTransferService().uploadToFileBin(
-        encryptedFile,
-        key,
-        fileDetail.fileName!,
-      );
-
-      if (response is http.Response && response.statusCode == 201) {
-        Map fileInfo = jsonDecode(response.body);
-        // changing file name if it's not url friendly
-        fileDetail.fileName = fileInfo['file']['filename'];
-        fileDetail.isUploaded = true;
-      }
-      fileStatus.add(fileDetail);
-    }
+    var key = TextConstants.FILE_TRANSFER_KEY + Uuid().v4();
+    var fileStatus = await _uploadFiles(key, files, encryptionKey);
 
     var fileUrl = TextConstants.FILEBIN_URL + 'archive/' + key + '/zip';
-    var result = <String, dynamic>{};
+
+    return _shareFiles(
+        sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
+  }
+
+  Future<Map<String, FileTransferObject>> _shareFiles(
+      List<String> sharedWithAtSigns,
+      String key,
+      String fileUrl,
+      String encryptionKey,
+      List<FileStatus> fileStatus) async {
+    var result = <String, FileTransferObject>{};
     for (var sharedWithAtSign in sharedWithAtSigns) {
       var fileTransferObject = FileTransferObject(
         key,
@@ -971,33 +934,72 @@ class AtClientImpl implements AtClient {
         sharedWithAtSign,
         fileStatus,
       );
-
-      var atKey = AtKey()
-        ..key = key
-        ..sharedWith = sharedWithAtSign
-        ..sharedBy = currentAtSign;
-      fileTransferObject.sharedStatus =
-          await put(atKey, jsonEncode(fileTransferObject.toJson()));
+      try {
+        var atKey = AtKey()
+          ..key = key
+          ..sharedWith = sharedWithAtSign
+          ..sharedBy = currentAtSign;
+        fileTransferObject.sharedStatus =
+            await put(atKey, jsonEncode(fileTransferObject.toJson()));
+      } on Exception catch (e) {
+        fileTransferObject.sharedStatus = false;
+        fileTransferObject.error = e.toString();
+      }
       result[sharedWithAtSign] = fileTransferObject;
     }
-
-    result['fileUploadStatus'] = fileStatus;
-    result['transferID'] = key;
     return result;
   }
 
+  Future<List<FileStatus>> _uploadFiles(
+      String transferId, List<File> files, String encryptionKey) async {
+    var fileStatuses = <FileStatus>[];
+    for (var file in files) {
+      var fileStatus = FileStatus(
+        fileName: file.path.split('/').last,
+        isUploaded: false,
+        size: await file.length(),
+      );
+      try {
+        var encryptedFile = _encryptionService.encryptFile(
+          file.readAsBytesSync(),
+          encryptionKey,
+        );
+
+        var response = await FileTransferService().uploadToFileBin(
+          encryptedFile,
+          transferId,
+          fileStatus.fileName!,
+        );
+
+        if (response is http.Response && response.statusCode == 201) {
+          Map fileInfo = jsonDecode(response.body);
+          // changing file name if it's not url friendly
+          fileStatus.fileName = fileInfo['file']['filename'];
+          fileStatus.isUploaded = true;
+        }
+      } on Exception catch (e) {
+        fileStatus.error = e.toString();
+      }
+      fileStatuses.add(fileStatus);
+    }
+    return fileStatuses;
+  }
+
+  @override
   Future<List<List<int>>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath}) async {
     var atKey = AtKey()
       ..key = transferId
       ..sharedBy = sharedByAtSign;
     var result = await get(atKey);
-    var fileTransferDetails = result.value;
-    var fileTransferObject = FileTransferObject.fromJson(fileTransferDetails);
-    if (fileTransferObject == null) {
+    late var fileTransferObject;
+    try {
+      fileTransferObject =
+          FileTransferObject.fromJson(jsonDecode(result.value));
+    } on Exception catch (e) {
       throw Exception('file transfer details not found');
     }
-    var downloadedFIles = <List<int>>[];
+    var downloadedFiles = <List<int>>[];
     var encryptedFiles =
         await FileTransferService().downloadFromFileBin(fileTransferObject);
 
@@ -1005,13 +1007,13 @@ class AtClientImpl implements AtClient {
       for (var encryptedFile in encryptedFiles) {
         var decryptedFile = _encryptionService.decryptFile(
             encryptedFile['file'], fileTransferObject.fileEncryptionKey);
-        downloadedFIles.add(decryptedFile);
+        downloadedFiles.add(decryptedFile);
         if (downloadPath != null) {
           var downloadedFile = File(downloadPath + '/' + encryptedFile['name']);
           downloadedFile.writeAsBytesSync(decryptedFile);
         }
       }
-      return downloadedFIles;
+      return downloadedFiles;
     } catch (e) {
       print('error in downloadFile: $e');
       return [];

@@ -22,7 +22,7 @@ void main() async {
     print(e.toString());
     print(trace);
   }
-  exit(1);
+  await Future.delayed(Duration(seconds: 10));
 }
 
 void _onSyncDone(var syncManager){

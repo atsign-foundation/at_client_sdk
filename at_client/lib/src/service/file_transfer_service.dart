@@ -14,8 +14,7 @@ class FileTransferService {
       );
       return response;
     } catch (e) {
-      print('error in uploading file: $e');
-      return null;
+      rethrow;
     }
   }
 

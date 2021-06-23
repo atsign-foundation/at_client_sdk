@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
+import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -298,4 +301,10 @@ abstract class AtClient {
   AtClientPreference getPreference();
 
   String getCurrentAtSign();
+
+  Future<Map<String, FileTransferObject>> uploadFile(
+      List<File> files, List<String> sharedWithAtSigns);
+
+  Future<List<List<int>>> downloadFile(String transferId, String sharedByAtSign,
+      {String? downloadPath});
 }
