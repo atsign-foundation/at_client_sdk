@@ -30,3 +30,5 @@
 - Minor bug in stream handlers
 ## 2.0.0
 - Null safety upgrade
+## 2.0.1
+- at_commons version upgrade
