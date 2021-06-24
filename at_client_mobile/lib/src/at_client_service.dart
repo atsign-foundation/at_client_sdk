@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:core';
 
@@ -15,10 +16,10 @@ import 'package:at_utils/at_logger.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
-  AtClientImpl atClient;
-  AtClientAuthenticator _atClientAuthenticator;
-  AtLookupImpl atLookUp;
-  OnboardingStatus _status;
+  AtClientImpl? atClient;
+  AtClientAuthenticator? _atClientAuthenticator;
+  late AtLookupImpl atLookUp;
+  OnboardingStatus? _status;
   static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
 
   // Will create at client instance for a given atSign and perform cram+pkam auth to the server.
@@ -26,60 +27,60 @@ class AtClientService {
   Future<bool> _init(String atSign, AtClientPreference preference) async {
     _atClientAuthenticator ??= AtClientAuthenticator();
     await AtClientImpl.createClient(atSign, preference.namespace, preference);
-    atClient = await AtClientImpl.getClient(atSign);
-    atLookUp = atClient.getRemoteSecondary().atLookUp;
-    if (preference.outboundConnectionTimeout != null &&
-        preference.outboundConnectionTimeout > 0) {
-      atClient.getRemoteSecondary().atLookUp.outboundConnectionTimeout =
+    atClient = (await AtClientImpl.getClient(atSign)) as AtClientImpl?;
+    atLookUp = atClient!.getRemoteSecondary()!.atLookUp;
+    if (preference.outboundConnectionTimeout > 0) {
+      atClient!.getRemoteSecondary()!.atLookUp.outboundConnectionTimeout =
           preference.outboundConnectionTimeout;
     }
-    _atClientAuthenticator.atLookUp = atClient.getRemoteSecondary().atLookUp;
+    _atClientAuthenticator!.atLookUp = atClient!.getRemoteSecondary()!.atLookUp;
     if (preference.privateKey != null) {
-      _atClientAuthenticator.atLookUp.privateKey = preference.privateKey;
-      atClient.getRemoteSecondary().atLookUp.privateKey = preference.privateKey;
+      _atClientAuthenticator!.atLookUp.privateKey = preference.privateKey;
+      atClient!.getRemoteSecondary()!.atLookUp.privateKey =
+          preference.privateKey;
     }
     return true;
   }
 
-  Future<String> getPkamPrivateKey(String atSign) async {
+  Future<String?> getPkamPrivateKey(String atSign) async {
     var pkamPrivateKey = await _keyChainManager.getPkamPrivateKey(atSign);
     return pkamPrivateKey;
   }
 
-  Future<String> getPkamPublicKey(String atSign) async {
+  Future<String?> getPkamPublicKey(String atSign) async {
     return await _keyChainManager.getPkamPublicKey(atSign);
   }
 
-  Future<String> getPrivateKey(String atSign) async {
+  Future<String?> getPrivateKey(String atSign) async {
     return await getPkamPrivateKey(atSign);
   }
 
-  Future<String> getPublicKey(String atSign) async {
+  Future<String?> getPublicKey(String atSign) async {
     return await getPkamPublicKey(atSign);
   }
 
-  Future<String> getEncryptionPrivateKey(String atSign) async {
+  Future<String?> getEncryptionPrivateKey(String atSign) async {
     return await _keyChainManager.getEncryptionPrivateKey(atSign);
   }
 
-  Future<String> getEncryptionPublicKey(String atSign) async {
+  Future<String?> getEncryptionPublicKey(String atSign) async {
     return await _keyChainManager.getEncryptionPublicKey(atSign);
   }
 
-  Future<String> getAESKey(String atsign) async {
+  Future<String?> getAESKey(String atsign) async {
     return await _keyChainManager.getValue(
         atsign, KEYCHAIN_SELF_ENCRYPTION_KEY);
   }
 
-  Future<String> getSelfEncryptionKey(String atSign) async {
+  Future<String?> getSelfEncryptionKey(String atSign) async {
     return await _keyChainManager.getSelfEncryptionAESKey(atSign);
   }
 
-  Future<String> getAtSign() async {
+  Future<String?> getAtSign() async {
     return await _keyChainManager.getAtSign();
   }
 
-  Future<List<String>> getAtsignList() async {
+  Future<List<String>?> getAtsignList() async {
     return await _keyChainManager.getAtSignListFromKeychain();
   }
 
@@ -93,13 +94,13 @@ class AtClientService {
 
   Future<bool> makeAtSignPrimary(String atsign) async {
     var atSignWithStatus = await getAtsignsWithStatus();
-    if (atSignWithStatus[atsign]) {
+    if (atSignWithStatus[atsign]!) {
       return false;
     }
     return await _keyChainManager.makeAtSignPrimary(atsign);
   }
 
-  Future<Map<String, bool>> getAtsignsWithStatus() async {
+  Future<Map<String, bool?>> getAtsignsWithStatus() async {
     return await _keyChainManager.getAtsignsWithStatus();
   }
 
@@ -109,28 +110,28 @@ class AtClientService {
     var pkamPublicKey = await getPkamPublicKey(atsign);
     var aesEncryptionKey = await getAESKey(atsign);
     var encryptedPkamPublicKey =
-        EncryptionUtil.encryptValue(pkamPublicKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
     aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
     // encrypt pkamPrivateKey with AES key
     var pkamPrivateKey = await getPkamPrivateKey(atsign);
     var encryptedPkamPrivateKey =
-        EncryptionUtil.encryptValue(pkamPrivateKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
     // encrypt encryption public key with AES key
     var encryptionPublicKey = await getEncryptionPublicKey(atsign);
     var encryptedEncryptionPublicKey =
-        EncryptionUtil.encryptValue(encryptionPublicKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
     // encrypt encryption private key with AES key
     var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
     var encryptedEncryptionPrivateKey =
-        EncryptionUtil.encryptValue(encryptionPrivateKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
@@ -142,42 +143,44 @@ class AtClientService {
   }
 
   Future<bool> cramAuth(String cramSecret) async {
-    return await _atClientAuthenticator.cramAuth(cramSecret);
+    return await _atClientAuthenticator!.cramAuth(cramSecret);
   }
 
   Future<bool> pkamAuth(String privateKey) async {
-    return await _atClientAuthenticator.pkamAuth(privateKey);
+    return await _atClientAuthenticator!.pkamAuth(privateKey);
   }
 
   ///Returns `true` on persisting keys into keystore.
   Future<bool> persistKeys(String atSign) async {
-    var pkamPrivateKey = await getPkamPrivateKey(atSign);
+    var pkamPrivateKey = await (getPkamPrivateKey(atSign) as FutureOr<String>);
 
-    var pkamPublicKey = await getPkamPublicKey(atSign);
+    var pkamPublicKey = await (getPkamPublicKey(atSign) as FutureOr<String>);
 
-    var encryptPrivateKey = await getEncryptionPrivateKey(atSign);
+    var encryptPrivateKey =
+        await (getEncryptionPrivateKey(atSign) as FutureOr<String>);
 
     var encryptPublicKey = await getEncryptionPublicKey(atSign);
 
-    var selfEncryptionKey = await getSelfEncryptionKey(atSign);
-    await atClient
-        .getLocalSecondary()
+    var selfEncryptionKey =
+        await (getSelfEncryptionKey(atSign) as FutureOr<String>);
+    await atClient!
+        .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
-    await atClient
-        .getLocalSecondary()
+    await atClient!
+        .getLocalSecondary()!
         .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
-    await atClient
-        .getLocalSecondary()
+    await atClient!
+        .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = 'publickey'
       ..isPublic = true
       ..sharedBy = atSign
       ..value = encryptPublicKey;
-    await atClient.getLocalSecondary().executeVerb(updateBuilder, sync: true);
+    await atClient!.getLocalSecondary()!.executeVerb(updateBuilder, sync: true);
 
-    await atClient
-        .getLocalSecondary()
+    await atClient!
+        .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
     var result = await _getKeysFromLocalSecondary(atSign);
 
@@ -188,27 +191,27 @@ class AtClientService {
   ///if the details for [atsign] is not found in localsecondary.
   ///Returns `true` on successful fetching of all the details.
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
-    var pkamPublicKey = await atClient.getLocalSecondary().getPublicKey();
+    var pkamPublicKey = await atClient!.getLocalSecondary()!.getPublicKey();
     if (pkamPublicKey == null) {
       throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
-    var pkamPrivateKey = await atClient.getLocalSecondary().getPrivateKey();
+    var pkamPrivateKey = await atClient!.getLocalSecondary()!.getPrivateKey();
     if (pkamPrivateKey == null) {
       throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND);
     }
     var encryptPrivateKey =
-        await atClient.getLocalSecondary().getEncryptionPrivateKey();
+        await atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
     if (encryptPrivateKey == null) {
       throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
     var encryptPublicKey =
-        await atClient.getLocalSecondary().getEncryptionPublicKey(atsign);
+        await atClient!.getLocalSecondary()!.getEncryptionPublicKey(atsign);
     if (encryptPublicKey == null) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
 
     var encryptSelfKey =
-        await atClient.getLocalSecondary().getEncryptionSelfKey();
+        await atClient!.getLocalSecondary()!.getEncryptionSelfKey();
     if (encryptSelfKey == null) {
       throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND);
     }
@@ -218,17 +221,17 @@ class AtClientService {
   ///Returns `true` on successfully authenticating [atsign] with [cramSecret]/[privateKey].
   /// if pkam is successful, encryption keys will be set for the user.
   Future<bool> authenticate(
-      String atsign, AtClientPreference atClientPreference,
-      {OnboardingStatus status, String jsonData, String decryptKey}) async {
+      String? atsign, AtClientPreference atClientPreference,
+      {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
     if (atClientPreference.cramSecret == null) {
       atsign = _formatAtSign(atsign);
       if (atsign == null) {
         return false;
       }
-      await _decodeAndStoreToKeychain(atsign, jsonData, decryptKey);
+      await _decodeAndStoreToKeychain(atsign, jsonData!, decryptKey!);
       atClientPreference.privateKey = await getPkamPrivateKey(atsign);
     }
-    var result = await _init(atsign, atClientPreference);
+    var result = await _init(atsign!, atClientPreference);
     if (!result) {
       return result;
     }
@@ -236,7 +239,7 @@ class AtClientService {
         status != OnboardingStatus.ACTIVATE) {
       await _sync(atClientPreference, atsign);
     }
-    result = await _atClientAuthenticator.performInitialAuth(
+    result = await _atClientAuthenticator!.performInitialAuth(
       atsign,
       cramSecret: atClientPreference.cramSecret,
       pkamPrivateKey: atClientPreference.privateKey,
@@ -244,8 +247,8 @@ class AtClientService {
     if (result) {
       var privateKey = atClientPreference.privateKey ??=
           await _keyChainManager.getPkamPrivateKey(atsign);
-      _atClientAuthenticator.atLookUp.privateKey = privateKey;
-      atClient.getRemoteSecondary().atLookUp.privateKey = privateKey;
+      _atClientAuthenticator!.atLookUp.privateKey = privateKey;
+      atClient!.getRemoteSecondary()!.atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
       await persistKeys(atsign);
       try {
@@ -292,7 +295,7 @@ class AtClientService {
   /// Throws [OnboardingStatus.ATSIGN_NOT_FOUND] exception if atsign not found.
   /// Throws [OnboardingStatus.PRIVATE_KEY_NOT_FOUND] exception if privatekey not found.
   Future<bool> onboard(
-      {AtClientPreference atClientPreference, String atsign}) async {
+      {required AtClientPreference atClientPreference, String? atsign}) async {
     _atClientAuthenticator = AtClientAuthenticator();
     if (atsign == null || atsign == '') {
       atsign = await _keyChainManager.getAtSign();
@@ -359,18 +362,18 @@ class AtClientService {
     }
   }
 
-  Future<void> _sync(AtClientPreference preference, String atSign) async {
+  Future<void> _sync(AtClientPreference preference, String? atSign) async {
     if ((preference.privateKey != null || preference.cramSecret != null) &&
         preference.syncStrategy != null) {
       var _syncManager = SyncManagerImpl.getInstance().getSyncManager(atSign);
-      _syncManager.init(atSign, preference, atClient.getRemoteSecondary(),
-          atClient.getLocalSecondary());
+      _syncManager!.init(atSign!, preference, atClient!.getRemoteSecondary(),
+          atClient!.getLocalSecondary());
       await _syncManager.sync(appInit: true, regex: preference.syncRegex);
     }
   }
 
   ///returns public key for [atsign] if found else returns null.
-  Future<String> _getServerEncryptionPublicKey(String atsign) async {
+  Future<String?> _getServerEncryptionPublicKey(String atsign) async {
     var command = 'lookup:publickey$atsign\n';
     var result = await atLookUp.executeCommand(command);
     if (_isNullOrEmpty(result) || _isError(result)) {
@@ -381,16 +384,16 @@ class AtClientService {
         return null;
       }
     }
-    return result.replaceFirst('data:', '');
+    return result!.replaceFirst('data:', '');
   }
 
   // @alice:shared_key@alice - previously this key was generated inside encryption service
   // and encrypted with public key. Now we use a single aes key to encrypt self keys as well as key pairs in key file
   Future<void> _migrateOldSelfKeys() async {
     _logger.finer('start migrate self keys');
-    var currentAtSign = atClient.currentAtSign;
+    var currentAtSign = atClient!.currentAtSign;
     var isMigrated =
-        await _keyChainManager.getValue(currentAtSign, 'selfKeysMigrated');
+        await _keyChainManager.getValue(currentAtSign!, 'selfKeysMigrated');
     if (isMigrated == 'true') {
       return;
     }
@@ -401,37 +404,37 @@ class AtClientService {
       ..sharedBy = currentAtSign
       ..sharedWith = currentAtSign
       ..key = AT_ENCRYPTION_SHARED_KEY;
-    var oldSelfKeyValue = await atClient.get(atKey);
-    if (oldSelfKeyValue == null || oldSelfKeyValue.value == null) {
+    var oldSelfKeyValue = await atClient!.get(atKey);
+    if (oldSelfKeyValue.value == null) {
       //check and store selfEncryption key
       var newSelfEncryptionKey =
-          await atClient.getLocalSecondary().getEncryptionSelfKey();
+          await atClient!.getLocalSecondary()!.getEncryptionSelfKey();
       if (newSelfEncryptionKey == null || newSelfEncryptionKey == '') {
         newSelfEncryptionKey =
             await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-        await atClient
-            .getLocalSecondary()
-            .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
+        await atClient!
+            .getLocalSecondary()!
+            .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey!);
       }
       _logger.severe('self encryption key is null. Skipping migration');
       return;
     }
     //old key. migrate data
     //decrypt the oldSelfKey with private key
-    var newSelfEncryptionKey =
-        await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-    await atClient
-        .getLocalSecondary()
+    var newSelfEncryptionKey = await (_keyChainManager
+        .getSelfEncryptionAESKey(currentAtSign) as FutureOr<String>);
+    await atClient!
+        .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
     var encryptionPrivateKey =
-        await atClient.getLocalSecondary().getEncryptionPrivateKey();
+        await atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
     var decryptedSelfKey =
-        EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey);
-    var selfKeys = await atClient.getAtKeys(
-        sharedWith: currentAtSign, regex: atClient.preference.syncRegex);
+        EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey!);
+    var selfKeys = await atClient!.getAtKeys(
+        sharedWith: currentAtSign, regex: atClient!.preference!.syncRegex);
     await Future.forEach(
         selfKeys,
-        (atKey) => _encryptOldSelfKey(
+        (dynamic atKey) => _encryptOldSelfKey(
             atKey, decryptedSelfKey, newSelfEncryptionKey, currentAtSign));
 
     await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
@@ -451,14 +454,14 @@ class AtClientService {
     String newAesKey,
     String atSign,
   ) async {
-    if (atKey.key.contains(AT_SIGNING_PRIVATE_KEY) ||
+    if (atKey.key!.contains(AT_SIGNING_PRIVATE_KEY) ||
         (atKey.sharedWith != null && atKey.sharedWith != atSign) ||
-        atKey.key.contains('shared_key') ||
-        atKey.key.contains('publickey') ||
-        atKey.metadata.isPublic ||
-        atKey.metadata.isCached ||
-        atKey.metadata.isHidden ||
-        atKey.key.startsWith('_')) {
+        atKey.key!.contains('shared_key') ||
+        atKey.key!.contains('publickey') ||
+        atKey.metadata!.isPublic! ||
+        atKey.metadata!.isCached ||
+        atKey.metadata!.isHidden ||
+        atKey.key!.startsWith('_')) {
       //skip signing private key, keys shared with other users and public keys
       return;
     }
@@ -468,9 +471,9 @@ class AtClientService {
         ..sharedBy = atKey.sharedBy
         ..sharedWith = atKey.sharedWith
         ..atKey = '${atKey.key}.${atKey.namespace}'
-        ..isPublic = atKey.metadata?.isPublic;
+        ..isPublic = atKey.metadata!.isPublic!;
       var existingEncryptedAtValue =
-          await atClient.getLocalSecondary().executeVerb(llookupVerbBuilder);
+          await atClient!.getLocalSecondary()!.executeVerb(llookupVerbBuilder);
       if (existingEncryptedAtValue == null ||
           existingEncryptedAtValue == 'data:null') {
         _logger
@@ -482,13 +485,13 @@ class AtClientService {
       //2. decrypt the value
       var decryptedValue =
           EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
-      if (atKey.key.startsWith('atconnections')) {
-        atKey.metadata.namespaceAware = false;
+      if (atKey.key!.startsWith('atconnections')) {
+        atKey.metadata!.namespaceAware = false;
         atKey.key = '${atKey.key}.${atKey.namespace}';
       }
 
       //3. update the new value and sync to server. value gets encrypted as a part of put.
-      await atClient.put(atKey, decryptedValue);
+      await atClient!.put(atKey, decryptedValue);
     } on Exception catch (e) {
       _logger.severe(
           'Exception migrating key : ${atKey.key} exception: ${e.toString()}');
@@ -498,7 +501,7 @@ class AtClientService {
     }
   }
 
-  bool _isNullOrEmpty(String key) {
+  bool _isNullOrEmpty(String? key) {
     if (key == null) {
       return true;
     }
@@ -509,13 +512,13 @@ class AtClientService {
     return false;
   }
 
-  bool _isError(String key) {
+  bool _isError(String? key) {
     return key != null ? key.contains('error') : false;
   }
 
   ///Returns null if [atsign] is null else the formatted [atsign].
   ///[atsign] must be non-null.
-  String _formatAtSign(String atsign) {
+  String? _formatAtSign(String? atsign) {
     if (atsign == null || atsign == '') {
       return null;
     }

@@ -14,11 +14,11 @@ abstract class AtClientAuth {
 
 class AtClientAuthenticator implements AtClientAuth {
   KeyChainManager _keyChainManager = KeyChainManager.getInstance();
-  AtLookupImpl atLookUp;
+  late AtLookupImpl atLookUp;
   bool _pkamAuthenticated = false;
   var logger = AtSignLogger('AtClientAuthenticator');
 
-  Future<bool> init(var preference, {String atSign}) async {
+  Future<bool?> init(var preference, {String? atSign}) async {
     _keyChainManager = KeyChainManager.getInstance();
     if (atSign == null || atSign.isEmpty) {
       atSign = await _keyChainManager.getAtSign();
@@ -39,7 +39,7 @@ class AtClientAuthenticator implements AtClientAuth {
 
   @override
   Future<bool> performInitialAuth(String atSign,
-      {String cramSecret, String pkamPrivateKey}) async {
+      {String? cramSecret, String? pkamPrivateKey}) async {
     // get existing keys from keychain
     var publicKey =
         await _keyChainManager.getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
