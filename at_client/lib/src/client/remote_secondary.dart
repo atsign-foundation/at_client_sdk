@@ -73,21 +73,28 @@ class RemoteSecondary implements Secondary {
   }
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
-  Future<String?> sync(int? lastSyncedId,Function syncCallBack,
-      {String? privateKey, String? regex}) async {
-    var atCommand = 'sync:$lastSyncedId';
-    var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
-        ? ':$regex'
-        : ((_preference.syncRegex != null && _preference.syncRegex.isNotEmpty)
-            ? ':${_preference.syncRegex}'
-            : '');
+  Future<String?> sync(int? lastSyncedId,
+      {Function? syncCallBack,
+      String? privateKey,
+      String? regex,
+      bool isStream = false}) async {
+    var syncVerbBuilder = SyncVerbBuilder()
+      ..commitId = lastSyncedId
+      ..regex = regex
+      ..isStream = isStream;
 
-    atCommand += '$regexString\n';
-    atLookupSync.syncCallback = syncCallBack;
-    return await atLookupSync.executeCommand(atCommand, auth: true);
+    var atCommand = syncVerbBuilder.buildCommand();
+    // If isStream is true, invoke atLookupSync to initiate sync:stream
+    // else, invoke atLookup to initiate regular sync
+    if (isStream) {
+      atLookupSync.syncCallback = syncCallBack;
+      return await atLookupSync.executeCommand(atCommand, auth: true);
+    } else {
+      return await atLookUp.executeCommand(atCommand, auth: true);
+    }
   }
 
-   Future<bool> isAvailable() async {
+  Future<bool> isAvailable() async {
     try {
       var secondaryUrl = await AtLookupImpl.findSecondary(
           _atSign, _preference.rootDomain, _preference.rootPort);
@@ -96,11 +103,12 @@ class RemoteSecondary implements Secondary {
       var port = secondaryInfo[1];
       var internetAddress = await InternetAddress.lookup(host);
       //#TODO getting first ip for now. explore best solution
-      var addressCheckOptions = AddressCheckOptions(
-          internetAddress[0], port: int.parse(port));
-      return (await InternetConnectionChecker().isHostReachable(
-          addressCheckOptions)).isSuccess;
-    } on Exception catch(e) {
+      var addressCheckOptions =
+          AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      return (await InternetConnectionChecker()
+              .isHostReachable(addressCheckOptions))
+          .isSuccess;
+    } on Exception catch (e) {
       logger.severe('Secondary server unavailable ${e.toString}');
     } on Error catch (e) {
       logger.severe('Secondary server unavailable ${e.toString}');
