@@ -120,23 +120,23 @@ class SyncManager {
 
   Future<void> _pullChanges(SyncObject syncObject,
       {String? regex, bool isStream = false}) async {
-    // If isStream is false, process regular sync response and return.
-    if (!isStream) {
-      _logger.info('Sync process started');
-      var syncResponse = await remoteSecondary
-          .sync(syncObject.lastSyncedCommitId, regex: regex);
-      if (syncResponse != null && syncResponse != 'data:null') {
-        syncResponse = syncResponse.replaceFirst('data:', '');
-        var syncResponseJson = jsonDecode(syncResponse);
-        await Future.forEach(syncResponseJson,
-            (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
-      }
+    // If isStream is true, execute sync:stream
+    if (isStream) {
+      _logger.info('Stream sync process started');
+      await remoteSecondary.sync(syncObject.lastSyncedCommitId,
+          syncCallBack: _syncLocal, regex: regex, isStream: isStream);
       return;
     }
-    // If isStream is true, execute sync:stream
-    _logger.info('Stream sync process started');
-    await remoteSecondary.sync(syncObject.lastSyncedCommitId,
-        syncCallBack: _syncLocal, regex: regex, isStream: isStream);
+    // If isStream is false, execute regular sync
+    _logger.info('Sync process started');
+    var syncResponse =
+        await remoteSecondary.sync(syncObject.lastSyncedCommitId, regex: regex);
+    if (syncResponse != null && syncResponse != 'data:null') {
+      syncResponse = syncResponse.replaceFirst('data:', '');
+      var syncResponseJson = jsonDecode(syncResponse);
+      await Future.forEach(syncResponseJson,
+          (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
+    }
   }
 
   Future<void> _pushChanges(SyncObject syncObject, {String? regex}) async {
