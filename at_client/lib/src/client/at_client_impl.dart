@@ -986,8 +986,13 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<List<List<int>>> downloadFile(String transferId, String sharedByAtSign,
+  Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath}) async {
+    if (downloadPath == null) {
+      downloadPath = preference.downloadPath;
+      throw Exception('downloadPath not found');
+    }
+
     var atKey = AtKey()
       ..key = transferId
       ..sharedBy = sharedByAtSign;
@@ -999,20 +1004,32 @@ class AtClientImpl implements AtClient {
     } on Exception catch (e) {
       throw Exception('file transfer details not found');
     }
-    var downloadedFiles = <List<int>>[];
-    var encryptedFiles =
-        await FileTransferService().downloadFromFileBin(fileTransferObject);
+    var downloadedFiles = <File>[];
+
+    var encryptedFilePath = await FileTransferService()
+        .downloadFromFileBin(fileTransferObject, downloadPath!);
+    if (encryptedFilePath == '') {
+      throw Exception('download fail');
+    }
+
+    var encryptedFileList = Directory(encryptedFilePath).listSync();
 
     try {
-      for (var encryptedFile in encryptedFiles) {
+      for (var encryptedFile in encryptedFileList) {
         var decryptedFile = _encryptionService.decryptFile(
-            encryptedFile['file'], fileTransferObject.fileEncryptionKey);
-        downloadedFiles.add(decryptedFile);
+            File(encryptedFile.path).readAsBytesSync(),
+            fileTransferObject.fileEncryptionKey);
+
         if (downloadPath != null) {
-          var downloadedFile = File(downloadPath + '/' + encryptedFile['name']);
+          var downloadedFile =
+              File(downloadPath + '/' + encryptedFile.path.split('/').last);
           downloadedFile.writeAsBytesSync(decryptedFile);
+          downloadedFiles.add(downloadedFile);
         }
       }
+
+      // deleting temp directory
+      Directory(encryptedFilePath).deleteSync(recursive: true);
       return downloadedFiles;
     } catch (e) {
       print('error in downloadFile: $e');

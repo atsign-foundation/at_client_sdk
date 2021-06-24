@@ -305,6 +305,6 @@ abstract class AtClient {
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns);
 
-  Future<List<List<int>>> downloadFile(String transferId, String sharedByAtSign,
+  Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath});
 }

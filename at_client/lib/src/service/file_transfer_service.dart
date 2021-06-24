@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:http/http.dart' as http;
@@ -18,26 +20,27 @@ class FileTransferService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> downloadFromFileBin(
-      FileTransferObject fileTransferObject) async {
+  Future<String> downloadFromFileBin(
+      FileTransferObject fileTransferObject, String downloadPath) async {
     if (fileTransferObject == null) {
       throw Exception('file transfer details not found');
     }
-    var encryptedFiles = <Map<String, dynamic>>[];
     try {
       var response = await http.get(Uri.parse(fileTransferObject.fileUrl));
       var archive = ZipDecoder().decodeBytes(response.bodyBytes);
 
+      var tempDirectory =
+          await Directory(downloadPath).createTemp('encrypted-files');
       for (var file in archive) {
         var unzippedFile = file.content as List<int>;
-        var fileObject = {'name': file.name, 'file': unzippedFile};
-        encryptedFiles.add(fileObject);
+        var encryptedFile = File(tempDirectory.path + '/' + file.name);
+        encryptedFile.writeAsBytesSync(unzippedFile);
       }
 
-      return encryptedFiles;
+      return tempDirectory.path;
     } catch (e) {
       print('error in downloading file: $e');
-      return [];
+      return '';
     }
   }
 }
