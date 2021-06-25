@@ -51,8 +51,12 @@ class SyncManager {
       {String? regex, bool isStream = false}) async {
     // Return is there is any sync already in progress
     _regex = regex;
-    await syncOnce(onDone, _handleError, regex: _regex, isStream: isStream);
+    await syncOnce(onDone, _onError, regex: _regex);
     return;
+  }
+
+  void _onError(SyncManager syncManager, Exception e) {
+    _logger.finer('error during sync process ${e.toString()}');
   }
 
   void _handleError(
