@@ -881,6 +881,7 @@ class AtClientImpl implements AtClient {
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }
 
+  @override
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns) async {
     var encryptionKey = _encryptionService!.generateFileEncryptionKey();
@@ -958,8 +959,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath}) async {
+    downloadPath ??= preference!.downloadPath;
     if (downloadPath == null) {
-      downloadPath = preference!.downloadPath;
       throw Exception('downloadPath not found');
     }
     var atKey = AtKey()
@@ -971,11 +972,11 @@ class AtClientImpl implements AtClient {
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value));
     } on Exception catch (e) {
-      throw Exception('file transfer details not found');
+      throw Exception('json decode exception in download file ${e.toString()}');
     }
     var downloadedFiles = <File>[];
     var encryptedFilePath = await FileTransferService()
-        .downloadFromFileBin(fileTransferObject, downloadPath!);
+        .downloadFromFileBin(fileTransferObject, downloadPath);
     if (encryptedFilePath == '') {
       throw Exception('download fail');
     }
@@ -985,12 +986,10 @@ class AtClientImpl implements AtClient {
         var decryptedFile = _encryptionService!.decryptFile(
             File(encryptedFile.path).readAsBytesSync(),
             fileTransferObject.fileEncryptionKey);
-        if (downloadPath != null) {
-          var downloadedFile =
-              File(downloadPath + '/' + encryptedFile.path.split('/').last);
-          downloadedFile.writeAsBytesSync(decryptedFile);
-          downloadedFiles.add(downloadedFile);
-        }
+        var downloadedFile =
+            File(downloadPath + '/' + encryptedFile.path.split('/').last);
+        downloadedFile.writeAsBytesSync(decryptedFile);
+        downloadedFiles.add(downloadedFile);
       }
       // deleting temp directory
       Directory(encryptedFilePath).deleteSync(recursive: true);

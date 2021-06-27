@@ -22,9 +22,6 @@ class FileTransferService {
 
   Future<String> downloadFromFileBin(
       FileTransferObject fileTransferObject, String downloadPath) async {
-    if (fileTransferObject == null) {
-      throw Exception('file transfer details not found');
-    }
     try {
       var response = await http.get(Uri.parse(fileTransferObject.fileUrl));
       var archive = ZipDecoder().decodeBytes(response.bodyBytes);

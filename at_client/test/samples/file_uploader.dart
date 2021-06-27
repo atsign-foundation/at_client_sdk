@@ -18,8 +18,8 @@ void main() async {
     await Future.delayed(Duration(seconds: 5));
     var file1 = File('test/data/hello.txt');
     var file2 = File('test/data/cat.jpeg');
-    var fileList = <File>[]..add(file1)..add(file2);
-    var sharedTo = <String>[]..add('@bob🛠');
+    var fileList = <File>[file1, file2];
+    var sharedTo = <String>['@bob🛠'];
     var fileTransferResult = await atClient.uploadFile(fileList, sharedTo);
     fileTransferResult.forEach((key, value) {
       print('atsign: $key');
