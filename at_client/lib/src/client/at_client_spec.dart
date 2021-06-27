@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
+import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -293,6 +296,17 @@ abstract class AtClient {
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
 
+  /// Streams the file in [filePath] to [sharedWith] atSign.
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
+
+  /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
+  /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
+  Future<Map<String, FileTransferObject>> uploadFile(
+      List<File> files, List<String> sharedWithAtSigns);
+
+  /// Downloads the list of files for a given [transferId] shared by [sharedByAtSign]
+  /// Optionally you can pass [downloadPath] to download the files.
+  Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
+      {String? downloadPath});
 }

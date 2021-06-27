@@ -14,9 +14,12 @@ import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
+import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -30,6 +33,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -875,6 +879,126 @@ class AtClientImpl implements AtClient {
     logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
         notification, streamCompletionCallBack, streamReceiveCallBack);
+  }
+
+  Future<Map<String, FileTransferObject>> uploadFile(
+      List<File> files, List<String> sharedWithAtSigns) async {
+    var encryptionKey = _encryptionService!.generateFileEncryptionKey();
+    var key = TextConstants.FILE_TRANSFER_KEY + Uuid().v4();
+    var fileStatus = await _uploadFiles(key, files, encryptionKey);
+    var fileUrl = TextConstants.FILEBIN_URL + 'archive/' + key + '/zip';
+    return _shareFiles(
+        sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
+  }
+
+  Future<Map<String, FileTransferObject>> _shareFiles(
+      List<String> sharedWithAtSigns,
+      String key,
+      String fileUrl,
+      String encryptionKey,
+      List<FileStatus> fileStatus) async {
+    var result = <String, FileTransferObject>{};
+    for (var sharedWithAtSign in sharedWithAtSigns) {
+      var fileTransferObject = FileTransferObject(
+        key,
+        encryptionKey,
+        fileUrl,
+        sharedWithAtSign,
+        fileStatus,
+      );
+      try {
+        var atKey = AtKey()
+          ..key = key
+          ..sharedWith = sharedWithAtSign
+          ..sharedBy = currentAtSign;
+        fileTransferObject.sharedStatus =
+            await put(atKey, jsonEncode(fileTransferObject.toJson()));
+      } on Exception catch (e) {
+        fileTransferObject.sharedStatus = false;
+        fileTransferObject.error = e.toString();
+      }
+      result[sharedWithAtSign] = fileTransferObject;
+    }
+    return result;
+  }
+
+  Future<List<FileStatus>> _uploadFiles(
+      String transferId, List<File> files, String encryptionKey) async {
+    var fileStatuses = <FileStatus>[];
+    for (var file in files) {
+      var fileStatus = FileStatus(
+        fileName: file.path.split('/').last,
+        isUploaded: false,
+        size: await file.length(),
+      );
+      try {
+        var encryptedFile = _encryptionService!.encryptFile(
+          file.readAsBytesSync(),
+          encryptionKey,
+        );
+        var response = await FileTransferService().uploadToFileBin(
+          encryptedFile,
+          transferId,
+          fileStatus.fileName!,
+        );
+        if (response is http.Response && response.statusCode == 201) {
+          Map fileInfo = jsonDecode(response.body);
+          // changing file name if it's not url friendly
+          fileStatus.fileName = fileInfo['file']['filename'];
+          fileStatus.isUploaded = true;
+        }
+      } on Exception catch (e) {
+        fileStatus.error = e.toString();
+      }
+      fileStatuses.add(fileStatus);
+    }
+    return fileStatuses;
+  }
+
+  @override
+  Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
+      {String? downloadPath}) async {
+    if (downloadPath == null) {
+      downloadPath = preference!.downloadPath;
+      throw Exception('downloadPath not found');
+    }
+    var atKey = AtKey()
+      ..key = transferId
+      ..sharedBy = sharedByAtSign;
+    var result = await get(atKey);
+    late var fileTransferObject;
+    try {
+      fileTransferObject =
+          FileTransferObject.fromJson(jsonDecode(result.value));
+    } on Exception catch (e) {
+      throw Exception('file transfer details not found');
+    }
+    var downloadedFiles = <File>[];
+    var encryptedFilePath = await FileTransferService()
+        .downloadFromFileBin(fileTransferObject, downloadPath!);
+    if (encryptedFilePath == '') {
+      throw Exception('download fail');
+    }
+    var encryptedFileList = Directory(encryptedFilePath).listSync();
+    try {
+      for (var encryptedFile in encryptedFileList) {
+        var decryptedFile = _encryptionService!.decryptFile(
+            File(encryptedFile.path).readAsBytesSync(),
+            fileTransferObject.fileEncryptionKey);
+        if (downloadPath != null) {
+          var downloadedFile =
+              File(downloadPath + '/' + encryptedFile.path.split('/').last);
+          downloadedFile.writeAsBytesSync(decryptedFile);
+          downloadedFiles.add(downloadedFile);
+        }
+      }
+      // deleting temp directory
+      Directory(encryptedFilePath).deleteSync(recursive: true);
+      return downloadedFiles;
+    } catch (e) {
+      print('error in downloadFile: $e');
+      return [];
+    }
   }
 
   Future<void> encryptUnEncryptedData() async {
