@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+
 import '../test_util.dart';
 
 void main() async {
@@ -9,7 +11,7 @@ void main() async {
   var commitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
       '@alice',
       commitLogPath: TestUtil.getPreferenceLocal().commitLogPath);
-  var entries = commitLog.getChanges(-1, '');
+  var entries = await commitLog.getChanges(-1, '');
   print(entries);
   var entry = commitLog.lastSyncedEntry();
   print(entry);

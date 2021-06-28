@@ -30,9 +30,9 @@ class SyncUtil {
 
     var lastEntry;
     if (regex != null) {
-      lastEntry = commitLogInstance.lastSyncedEntryWithRegex(regex);
+      lastEntry = await commitLogInstance.lastSyncedEntryWithRegex(regex);
     } else {
-      lastEntry = commitLogInstance.lastSyncedEntry();
+      lastEntry = await commitLogInstance.lastSyncedEntry();
     }
     return lastEntry;
   }
@@ -49,7 +49,7 @@ class SyncUtil {
       {String atSign}) async {
     var commitLogInstance =
     await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-    return commitLogInstance.getChanges(seqNum, regex);
+    return await commitLogInstance.getChanges(seqNum, regex);
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
