@@ -72,8 +72,6 @@ class LocalSecondary implements Secondary {
         verbResult = await _llookup(builder);
       } else if (builder is ScanVerbBuilder) {
         verbResult = await _scan(builder);
-      } else if (builder is NotifyVerbBuilder) {
-        verbResult = await _notify(builder);
       }
     } on Exception catch (e) {
       if (e is AtLookUpException) {
@@ -199,7 +197,7 @@ class LocalSecondary implements Secondary {
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
         return await RemoteSecondary(_atSign, _preference!,
-                privateKey: _preference!.privateKey)
+            privateKey: _preference!.privateKey)
             .executeCommand(command, auth: true);
       }
       List<String?> keys;
@@ -207,10 +205,10 @@ class LocalSecondary implements Secondary {
       // Gets keys shared to sharedWith atSign.
       if (builder.sharedWith != null) {
         keys.retainWhere(
-            (element) => element!.startsWith(builder.sharedWith!) == true);
+                (element) => element!.startsWith(builder.sharedWith!) == true);
       }
       keys.removeWhere((key) =>
-          key.toString().startsWith('privatekey:') ||
+      key.toString().startsWith('privatekey:') ||
           key.toString().startsWith('private:') ||
           key.toString().startsWith('public:_'));
       var keyString = keys.toString();
@@ -224,12 +222,6 @@ class LocalSecondary implements Secondary {
       logger.severe('exception in scan:${e.toString()}');
       rethrow;
     }
-  }
-
-  Future<String> _notify(NotifyVerbBuilder builder) async {
-    return await RemoteSecondary(_atSign, _preference!,
-            privateKey: _preference!.privateKey)
-        .executeVerb(builder);
   }
 
   bool _isActiveKey(AtMetaData? atMetaData) {

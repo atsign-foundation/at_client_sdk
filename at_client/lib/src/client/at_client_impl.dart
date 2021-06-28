@@ -619,8 +619,17 @@ class AtClientImpl implements AtClient {
       PriorityEnum? priority,
       StrategyEnum? strategy,
       int? latestN,
-      String? notifier = SYSTEM,
+      String? notifier,
       bool isDedicated = false}) async {
+    // For notification strategy latest, notifier ID can not be null.
+    if (strategy == StrategyEnum.latest && notifier!.isEmpty) {
+      return Future.error(AtClientException(
+          'AT0003', 'Notifier cannot be null on strategy latest'));
+    }
+    // For notification strategy all, default notifier -'system' is assigned.
+    if (strategy == StrategyEnum.all) {
+      notifier = SYSTEM;
+    }
     var notifyKey = atKey.key;
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
@@ -674,7 +683,7 @@ class AtClientImpl implements AtClient {
         if (isDedicated) {
           isSyncRequired = false;
         }
-        var notifyResult = await secondary.executeVerb(builder,
+        var notifyResult = await getRemoteSecondary()?.executeVerb(builder,
             sync: (isDedicated ? false : isSyncRequired));
         //close connection if a dedicated connection created for this request
         if (isDedicated && (secondary is RemoteSecondary)) {
