@@ -37,6 +37,7 @@ class SyncManager {
   late AtClientPreference preference;
 
   /// Calling sync with [regex] will ensure only matching keys are synced.
+  /// Setting [isStream] to true will process sync using stream
   /// sync will be retried on any connection related errors.
   /// [onDone] callback is invoked when sync completes successfully.
   /// e.g onDone callback
@@ -46,11 +47,16 @@ class SyncManager {
   /// }
   /// ```
   /// Call isSyncInProgress to know if the sync is completed or if it is still in progress.
-  Future<void> sync(Function onDone, {String? regex}) async {
+  Future<void> sync(Function onDone,
+      {String? regex, bool isStream = false}) async {
     // Return is there is any sync already in progress
     _regex = regex;
-    await syncOnce(onDone, _handleError, regex: _regex);
+    await syncOnce(onDone, _onError, regex: _regex);
     return;
+  }
+
+  void _onError(SyncManager syncManager, Exception e) {
+    _logger.finer('error during sync process ${e.toString()}');
   }
 
   void _handleError(
@@ -79,8 +85,9 @@ class SyncManager {
   /// }
   /// ```
   /// Optionally pass [regex] to sync only matching keys.
+  /// Optionally set [isStream] to true to sync large data via stream.
   Future<void> syncOnce(Function onDone, Function onError,
-      {String? regex}) async {
+      {String? regex, bool isStream = false}) async {
     if (_syncInProgress) {
       _logger.finer('Another Sync process is in progress.');
       return;
@@ -103,7 +110,7 @@ class SyncManager {
       syncObject.lastSyncedCommitId ??= -1;
       if (serverCommitId > lastSyncedCommitId) {
         //pull changes from cloud to local
-        await _pullChanges(syncObject, regex: regex);
+        await _pullChanges(syncObject, regex: regex, isStream: isStream);
       }
       //push changes from local to cloud
       await _pushChanges(syncObject, regex: regex);
@@ -115,9 +122,25 @@ class SyncManager {
     }
   }
 
-  Future<void> _pullChanges(SyncObject syncObject, {String? regex}) async {
-    await remoteSecondary.sync(syncObject.lastSyncedCommitId, _syncLocal,
-        regex: regex);
+  Future<void> _pullChanges(SyncObject syncObject,
+      {String? regex, bool isStream = false}) async {
+    // If isStream is true, execute sync:stream
+    if (isStream) {
+      _logger.info('Stream sync process started');
+      await remoteSecondary.sync(syncObject.lastSyncedCommitId,
+          syncCallBack: _syncLocal, regex: regex, isStream: isStream);
+      return;
+    }
+    // If isStream is false, execute regular sync
+    _logger.info('Sync process started');
+    var syncResponse =
+        await remoteSecondary.sync(syncObject.lastSyncedCommitId, regex: regex);
+    if (syncResponse != null && syncResponse != 'data:null') {
+      syncResponse = syncResponse.replaceFirst('data:', '');
+      var syncResponseJson = jsonDecode(syncResponse);
+      await Future.forEach(syncResponseJson,
+          (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
+    }
   }
 
   Future<void> _pushChanges(SyncObject syncObject, {String? regex}) async {

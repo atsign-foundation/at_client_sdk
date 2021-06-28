@@ -34,7 +34,7 @@ import 'package:uuid/uuid.dart';
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
   late AtClientPreference _preference;
-
+  RemoteSecondary? _syncRemoteSecondary;
   AtClientPreference get preference => _preference;
   late String currentAtSign;
   String? _namespace;
@@ -132,9 +132,10 @@ class AtClientImpl implements AtClient {
   @override
   SyncManager? getSyncManager() {
     var syncManager = SyncManager.getInstance(currentAtSign);
+    _syncRemoteSecondary ??= RemoteSecondary(currentAtSign, _preference);
     syncManager.preference = _preference;
     syncManager.localSecondary = _localSecondary!;
-    syncManager.remoteSecondary = RemoteSecondary(currentAtSign, _preference);
+    syncManager.remoteSecondary = _syncRemoteSecondary!;
     return syncManager;
   }
 
