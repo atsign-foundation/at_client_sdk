@@ -115,10 +115,10 @@ class Monitor {
       }, onError: (error) {
         _logger.severe('error in monitor $error');
         _handleError(error);
-      }, onDone: () async {
+      }, onDone: () {
         _logger.finer('monitor done');
+        _monitorConnection.close();
         if (status == MonitorStatus.Stopped) return;
-        _handleError(Exception('Monitor done'));
       });
       await _authenticateConnection();
       _monitorConnection.write(_buildMonitorCommand());
