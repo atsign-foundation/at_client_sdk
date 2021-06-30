@@ -63,7 +63,7 @@ class SyncManager {
       var syncManager, Exception e, Function onDone, Function onError) {
     if (e is AtConnectException) {
       Future.delayed(Duration(seconds: 3),
-          () => syncOnce(onDone, _handleError, regex: _regex));
+          () => syncOnce(onDone, _onError, regex: _regex));
     } else {
       onError(syncManager, e);
     }
@@ -262,6 +262,9 @@ class SyncManager {
         (metaData[IS_ENCRYPTED].toLowerCase() == 'true')
             ? builder.isEncrypted = true
             : builder.isEncrypted = false;
+      }
+      if (metaData[SHARED_KEY_STATUS] != null) {
+        builder.sharedKeyStatus = metaData[SHARED_KEY_STATUS];
       }
     }
   }
