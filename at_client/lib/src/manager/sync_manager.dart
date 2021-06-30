@@ -263,6 +263,9 @@ class SyncManager {
             ? builder.isEncrypted = true
             : builder.isEncrypted = false;
       }
+      if (metaData[SHARED_KEY_STATUS] != null) {
+        builder.sharedKeyStatus = metaData[SHARED_KEY_STATUS];
+      }
     }
   }
 
