@@ -1,5 +1,4 @@
 import 'package:at_client/src/stream/at_stream_request.dart';
-import 'package:at_client/src/stream/stream.dart';
 
 class StreamReceiver {
   String streamId;

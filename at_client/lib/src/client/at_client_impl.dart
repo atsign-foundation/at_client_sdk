@@ -13,9 +13,9 @@ import 'package:at_client/src/manager/stream_handler.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/stream/at_stream.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
-import 'package:at_client/src/stream/stream.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -137,18 +137,6 @@ class AtClientImpl implements AtClient {
     syncManager.localSecondary = _localSecondary!;
     syncManager.remoteSecondary = _syncRemoteSecondary!;
     return syncManager;
-  }
-
-  @override
-  Stream createStream(StreamType streamType, {String? streamId}) {
-    var stream = StreamHandler.getInstance().createStream(
-        currentAtSign, streamType,
-        streamId: streamId);
-    if(streamType == StreamType.SEND) {
-      stream.sender!.remoteSecondary = RemoteSecondary(currentAtSign, preference);
-      stream.sender!.encryptionService = _encryptionService;
-    }
-    return stream;
   }
 
   @override
@@ -581,8 +569,9 @@ class AtClientImpl implements AtClient {
       if (builder.dataSignature != null) {
         builder.isJson = true;
       }
-      if(sharedWith != null) {
-        builder.sharedKeyStatus = getSharedKeyName(SharedKeyStatus.LOCAL_UPDATED);
+      if (sharedWith != null) {
+        builder.sharedKeyStatus =
+            getSharedKeyName(SharedKeyStatus.LOCAL_UPDATED);
       }
       var secondary = getSecondary(isDedicated: isDedicated);
       putResult = await secondary.executeVerb(builder,
@@ -891,7 +880,7 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
-  ///#TODO add dart docs
+  ///#TODO move this impl to [StreamManager.send()]
   @override
   Future<void> stream(
       String sharedWith, String filePath, Function onDone, Function onError,
@@ -934,7 +923,18 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  ///#TODO move this impl to [StreamManager.streamAck()]
+  @override
+  AtStream createStream(StreamType streamType, {String? streamId}) {
+    var stream = StreamHandler.getInstance().createStream(
+        currentAtSign, streamType,
+        streamId: streamId);
+    if(streamType == StreamType.SEND) {
+      stream.sender!.remoteSecondary = RemoteSecondary(currentAtSign, preference);
+      stream.sender!.encryptionService = _encryptionService;
+    }
+    return stream;
+  }
+
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
