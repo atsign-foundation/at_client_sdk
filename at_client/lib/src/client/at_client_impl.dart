@@ -891,7 +891,7 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
-  ///#TODO move this impl to [StreamManager.send()]
+  ///#TODO add dart docs
   @override
   Future<void> stream(
       String sharedWith, String filePath, Function onDone, Function onError,
