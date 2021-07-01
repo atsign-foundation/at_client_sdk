@@ -9,11 +9,13 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
+import 'package:at_client/src/manager/stream_handler.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
+import 'package:at_client/src/stream/stream.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -135,6 +137,18 @@ class AtClientImpl implements AtClient {
     syncManager.localSecondary = _localSecondary!;
     syncManager.remoteSecondary = _syncRemoteSecondary!;
     return syncManager;
+  }
+
+  @override
+  Stream createStream(StreamType streamType, {String? streamId}) {
+    var stream = StreamHandler.getInstance().createStream(
+        currentAtSign, streamType,
+        streamId: streamId);
+    if(streamType == StreamType.SEND) {
+      stream.sender!.remoteSecondary = RemoteSecondary(currentAtSign, preference);
+      stream.sender!.encryptionService = _encryptionService;
+    }
+    return stream;
   }
 
   @override
@@ -877,11 +891,13 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
+  ///#TODO move this impl to [StreamManager.send()]
   @override
-  Future<AtStreamResponse> stream(String sharedWith, String filePath,
+  Future<void> stream(
+      String sharedWith, String filePath, Function onDone, Function onError,
       {String? namespace}) async {
-    var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
+    var streamResponse = AtStreamResponse(streamId);
     var file = File(filePath);
     var data = file.readAsBytesSync();
     var fileName = basename(filePath);
@@ -904,18 +920,21 @@ class AtClientImpl implements AtClient {
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.COMPLETE;
+        onDone(streamResponse);
       }
     } else if (result != null && result.startsWith('error:')) {
       result = result.replaceAll('error:', '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
       streamResponse.status = AtStreamStatus.ERROR;
+      onError(streamResponse);
     } else {
       streamResponse.status = AtStreamStatus.NO_ACK;
+      onError(streamResponse);
     }
-    return streamResponse;
   }
 
+  ///#TODO move this impl to [StreamManager.streamAck()]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,

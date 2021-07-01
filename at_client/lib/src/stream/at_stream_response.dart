@@ -1,13 +1,17 @@
 class AtStreamResponse {
   AtStreamStatus? status;
   String? errorCode;
+  String? errorMessage;
+  String streamId;
+
+  AtStreamResponse(this.streamId);
 
   @override
   String toString() {
     return 'AtStreamResponse{status: $status, errorCode: $errorCode, errorMessage: $errorMessage}';
   }
 
-  String? errorMessage;
+
 }
 
-enum AtStreamStatus { ACK, NO_ACK, COMPLETE, ERROR }
+enum AtStreamStatus { ACK, NO_ACK, COMPLETE, ERROR, CANCELLED }
