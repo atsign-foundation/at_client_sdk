@@ -41,13 +41,13 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_persistence/at_persistence_spec
-      ref: trunk
+      ref: sdk_refactoring
       version: ^2.0.0
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
-      ref: trunk
+      ref: sdk_refactoring
       version: ^2.0.1
   at_lookup:
     git:
