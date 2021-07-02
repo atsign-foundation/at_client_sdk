@@ -38,7 +38,7 @@ class Monitor {
 
   late AtClientPreference _preference;
 
-  late OutboundConnection _monitorConnection;
+  OutboundConnection? _monitorConnection;
 
   RemoteSecondary? _remoteSecondary;
 
@@ -109,7 +109,7 @@ class Monitor {
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
       var response;
-      _monitorConnection.getSocket().listen((event) {
+      _monitorConnection!.getSocket().listen((event) {
         response = utf8.decode(event);
         _handleResponse(response, _onResponse);
       }, onError: (error) {
@@ -117,11 +117,10 @@ class Monitor {
         _handleError(error);
       }, onDone: () {
         _logger.finer('monitor done');
-        _monitorConnection.close();
-        if (status == MonitorStatus.Stopped) return;
+        _monitorConnection!.close();
       });
       await _authenticateConnection();
-      _monitorConnection.write(_buildMonitorCommand());
+      _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.Started;
       return;
     } on Exception catch (e) {
@@ -130,7 +129,7 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
-    _monitorConnection.write('from:$_atSign\n');
+    _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await _getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
@@ -143,7 +142,7 @@ class Monitor {
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
     _logger.finer('Sending command pkam:$signature');
-    _monitorConnection.write('pkam:$signature\n');
+    _monitorConnection!.write('pkam:$signature\n');
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
       throw UnAuthenticatedException('Auth failed');
@@ -217,7 +216,7 @@ class Monitor {
   /// Stops the monitor. Call [Monitor#start] to start it again.
   void stop() {
     status = MonitorStatus.Stopped;
-    _monitorConnection.close();
+    _monitorConnection!.close();
   }
 
 // Stops the monitor from receiving notification
@@ -234,7 +233,7 @@ class Monitor {
   }
 
   void _handleError(e) {
-    _monitorConnection.close();
+    _monitorConnection?.close();
     status = MonitorStatus.Errored;
     // Pass monitor and error
     // TBD : If retry = true should the onError needs to be called?
