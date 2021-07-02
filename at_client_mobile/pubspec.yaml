@@ -16,10 +16,10 @@ dependencies:
   flutter_keychain: ^2.0.1
   hive: ^2.0.4
   crypton: ^2.0.1
-  at_client: ^1.0.1+10
-  at_lookup: ^1.0.0+8
-  at_commons: ^1.0.1+8
-  at_utils: ^1.0.1+8
+  at_client: ^2.0.1
+  at_lookup: ^2.0.1
+  at_commons: ^2.0.1
+  at_utils: ^2.0.1
 
 dependency_overrides:
   at_client:
@@ -39,7 +39,7 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
       ref: sdk_refactoring
-      version: ^2.0.0
+      version: ^2.0.1
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
@@ -51,7 +51,7 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_utils
       ref: sdk_refactoring
-      version: ^2.0.0
+      version: ^2.0.1
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
