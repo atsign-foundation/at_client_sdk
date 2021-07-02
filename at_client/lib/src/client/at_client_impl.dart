@@ -134,6 +134,8 @@ class AtClientImpl implements AtClient {
     syncManager.preference = _preference;
     syncManager.localSecondary = _localSecondary!;
     syncManager.remoteSecondary = _syncRemoteSecondary!;
+    syncManager.remoteSecondary.atLookUp.privateKey ??= _preference.privateKey;
+    syncManager.remoteSecondary.atLookupSync.privateKey ??= _preference.privateKey;
     return syncManager;
   }
 

@@ -249,6 +249,7 @@ class AtClientService {
       var privateKey = atClientPreference.privateKey ??=
           await _keyChainManager.getPkamPrivateKey(atsign);
       _atClientAuthenticator!.atLookUp.privateKey = privateKey;
+      atClientPreference.privateKey ??= privateKey;
       atClient!.getRemoteSecondary()!.atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
       await persistKeys(atsign);
