@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/stream/at_stream_request.dart';
@@ -23,14 +21,13 @@ void main() async {
         dummyFunction, dummyFunction, monitorPreference);
     var stream = atClient.createStream(StreamType.SEND);
     var atStreamRequest =
-    AtStreamRequest('@bob🛠', 'cat.jpeg', _onDone, _onError);
+        AtStreamRequest('@bob🛠', '/home/murali/Pictures/@/cat.jpeg');
     atStreamRequest.namespace = 'atmosphere';
-    await stream.sender!.send(atStreamRequest);
+    await stream.sender!.send(atStreamRequest, _onDone, _onError);
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
   }
-  exit(1);
 }
 
 void _onDone(AtStreamResponse response) {

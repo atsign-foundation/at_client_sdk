@@ -17,6 +17,7 @@ import 'package:at_client/src/stream/at_stream.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/stream/stream_receiver.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -925,16 +926,24 @@ class AtClientImpl implements AtClient {
 
   @override
   AtStream createStream(StreamType streamType, {String? streamId}) {
-    var stream = StreamHandler.getInstance().createStream(
-        currentAtSign, streamType,
-        streamId: streamId);
-    if(streamType == StreamType.SEND) {
-      stream.sender!.remoteSecondary = RemoteSecondary(currentAtSign, preference);
+    var stream = StreamHandler.getInstance()
+        .createStream(currentAtSign, streamType, streamId: streamId);
+    if (streamType == StreamType.SEND) {
+      stream.sender!.remoteSecondary =
+          RemoteSecondary(currentAtSign, preference);
       stream.sender!.encryptionService = _encryptionService;
+    } else if (streamType == StreamType.RECEIVE) {
+      stream.receiver!.encryptionService = _encryptionService;
+      stream.receiver!.preference = _preference;
+      stream.receiver!.remoteSecondary =
+          RemoteSecondary(currentAtSign, preference);
     }
     return stream;
   }
 
+  @deprecated
+
+  /// use [StreamReceiver.ack]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -944,7 +953,6 @@ class AtClientImpl implements AtClient {
       Function streamReceiveCallBack) async {
     var handler = StreamNotificationHandler();
     handler.remoteSecondary = getRemoteSecondary();
-    handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
     handler.encryptionService = _encryptionService;
     var notification = AtStreamNotification()

@@ -4,9 +4,6 @@ class AtStreamRequest {
   int startByte = 0;
   int? fileLength;
   String? namespace;
-  Function onDone;
-  Function onError;
 
-  AtStreamRequest(
-      this.receiverAtSign, this.filePath, this.onDone, this.onError);
+  AtStreamRequest(this.receiverAtSign, this.filePath);
 }

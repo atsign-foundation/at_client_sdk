@@ -19,7 +19,7 @@ class StreamHandler {
     if (streamType == StreamType.SEND) {
       stream.sender = StreamSender(streamId);
     } else if (streamType == StreamType.RECEIVE) {
-      stream.receiver = StreamReceiver(streamId);
+      stream.receiver = StreamReceiver(currentAtSign, streamId);
     }
     return stream;
   }

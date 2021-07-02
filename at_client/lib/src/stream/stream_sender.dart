@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:async/async.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/converters/encryption/aes_converter.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_request.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -20,33 +22,75 @@ class StreamSender {
 
   final _logger = AtSignLogger('StreamSender');
 
+  final chunkSize = 1024;
+
   /// onDone[AtStreamResponse]
   /// onError[AtStreamResponse]
-  Future<void> send(AtStreamRequest atStreamRequest) async {
+  //#TODO check use of parsers
+  Future<void> send(AtStreamRequest atStreamRequest, Function onDone,
+      Function onError) async {
     var atStreamResponse = AtStreamResponse(streamId);
     try {
       var file = File(atStreamRequest.filePath);
-      //#TODO if startByte is set..read only from startByte
-      var data = file.readAsBytesSync();
+      final fileLength = await file.length();
       var fileName = basename(atStreamRequest.filePath);
       fileName = base64.encode(utf8.encode(fileName));
-      var encryptedData = await encryptionService!
-          .encryptStream(data, atStreamRequest.receiverAtSign);
       var command =
-          'stream:init${atStreamRequest.receiverAtSign} namespace:${atStreamRequest.namespace} $streamId $fileName ${encryptedData.length}\n';
+          'stream:init${atStreamRequest.receiverAtSign} namespace:${atStreamRequest.namespace} startByte:${atStreamRequest.startByte} $streamId $fileName $fileLength\n';
       _logger.finer('sending stream init:$command');
       await _checkConnectivity();
       var result = await remoteSecondary.executeCommand(command, auth: true);
-      //#TODO wait for ack and send data through socket
-      atStreamResponse.status = AtStreamStatus.COMPLETE;
-      atStreamRequest.onDone(atStreamResponse);
+      if (result != null && result.startsWith('stream:ack')) {
+        result = result.replaceAll('stream:ack ', '');
+        result = result.trim();
+        _logger.finer('ack received for streamId:$streamId');
+        await _startStream(
+            file, atStreamRequest.receiverAtSign, atStreamRequest.startByte);
+        var streamResult =
+            await remoteSecondary.atLookUp.messageListener!.read();
+        if (streamResult != null && streamResult.startsWith('stream:done')) {
+          _logger.finer('stream done - streamId: $streamId');
+          atStreamResponse.status = AtStreamStatus.COMPLETE;
+          onDone(atStreamResponse);
+        }
+      } else if (result != null && result.startsWith('error:')) {
+        result = result.replaceAll('error:', '');
+        atStreamResponse.status = AtStreamStatus.ERROR;
+        atStreamResponse.errorCode = result.split('-')[0];
+        atStreamResponse.errorMessage = result.split('-')[1];
+        onError(atStreamResponse);
+      } else {
+        atStreamResponse.status = AtStreamStatus.NO_ACK;
+        onError(atStreamResponse);
+      }
     } on Exception catch (e) {
       atStreamResponse.errorMessage = e.toString();
-      atStreamRequest.onError(atStreamResponse);
+      onError(atStreamResponse);
     }
   }
 
-  Future<void> cancel(AtStreamRequest atStreamRequest) async {
+  Future<void> _startStream(
+      File file, String receiverAtSign, int startByte) async {
+    var readBytes = 0;
+    final length = await file.length();
+    var chunkedStream = ChunkedStreamReader(file.openRead(startByte));
+    try {
+      var encryptionKey =
+          await encryptionService!.getStreamEncryptionKey(receiverAtSign);
+      while (readBytes < length) {
+        remoteSecondary.atLookUp.connection!.getSocket().add(
+            AESCodec(encryptionKey)
+                .encoder
+                .convert(await chunkedStream.readBytes(chunkSize)));
+        readBytes += chunkSize;
+      }
+    } finally {
+      await chunkedStream.cancel();
+    }
+  }
+
+  Future<void> cancel(AtStreamRequest atStreamRequest, Function onDone,
+      Function onError) async {
     var atStreamResponse = AtStreamResponse(streamId);
     try {
       var command = 'stream:cancel $streamId';
@@ -54,10 +98,10 @@ class StreamSender {
       var result = await remoteSecondary.executeCommand(command, auth: true);
       //#TODO process result
       atStreamResponse.status = AtStreamStatus.CANCELLED;
-      atStreamRequest.onDone(atStreamResponse);
+      onDone(atStreamResponse);
     } on Exception catch (e) {
       atStreamResponse.errorMessage = e.toString();
-      atStreamRequest.onError(atStreamResponse);
+      onError(atStreamResponse);
     }
   }
 
