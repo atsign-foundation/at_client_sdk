@@ -10,8 +10,7 @@ class FileTransferService {
       List<int> file, String container, String fileName) async {
     try {
       var response = await http.post(
-        Uri.parse(TextConstants.FILEBIN_URL),
-        headers: <String, String>{'bin': container, 'filename': fileName},
+        Uri.parse(TextConstants.FILEBIN_URL + '$container/' + fileName),
         body: file,
       );
       return response;

@@ -948,7 +948,7 @@ class AtClientImpl implements AtClient {
           fileStatus.isUploaded = true;
         }
 
-        // storing sent files in a a directory, operate later.
+        // storing sent files in a a directory.
         if (preference?.downloadPath != null) {
           var sentFilesDirectory =
               await Directory(preference!.downloadPath! + '/sent-files')
