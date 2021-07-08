@@ -8,7 +8,7 @@ void main() async {
   var atsign = '@alice🛠';
   await AtClientImpl.createClient(atsign, 'me', TestUtil.getAlicePreference());
   var atClient = await (AtClientImpl.getClient(atsign));
-  if(atClient == null) {
+  if (atClient == null) {
     print('unable to create at client instance');
     return;
   }

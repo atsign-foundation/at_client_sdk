@@ -12,7 +12,7 @@ void main() async {
     //1.
     await AtClientImpl.createClient('@alice🛠', 'me', preference);
     var atClient = await (AtClientImpl.getClient('@alice🛠'));
-    if(atClient == null) {
+    if (atClient == null) {
       print('unable to create at client instance');
       return;
     }
@@ -20,22 +20,22 @@ void main() async {
     metadata.namespaceAware = false;
     var result;
     // set pkam private key
-    result = await atClient.getLocalSecondary()!.putValue(
-        AT_PKAM_PRIVATE_KEY, at_demos.pkamPrivateKeyMap[atsign]!); // set pkam public key
+    result = await atClient.getLocalSecondary()!.putValue(AT_PKAM_PRIVATE_KEY,
+        at_demos.pkamPrivateKeyMap[atsign]!); // set pkam public key
     result = await atClient
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, at_demos.pkamPublicKeyMap[atsign]!);
     // set encryption private key
-    result = await atClient
-        .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_PRIVATE_KEY, at_demos.encryptionPrivateKeyMap[atsign]!);
+    result = await atClient.getLocalSecondary()!.putValue(
+        AT_ENCRYPTION_PRIVATE_KEY, at_demos.encryptionPrivateKeyMap[atsign]!);
 
     // set encryption public key. should be synced
     metadata.isPublic = true;
     var atKey = AtKey()
       ..key = 'publickey'
       ..metadata = metadata;
-    result = await atClient.put(atKey, at_demos.encryptionPublicKeyMap[atsign]!);
+    result =
+        await atClient.put(atKey, at_demos.encryptionPublicKeyMap[atsign]!);
     print(result);
   } on Exception catch (e, trace) {
     print(e.toString());

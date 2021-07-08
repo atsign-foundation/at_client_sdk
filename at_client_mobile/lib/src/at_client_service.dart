@@ -15,7 +15,9 @@ import 'package:at_utils/at_logger.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
+
   AtClient? atClient;
+
   AtClientAuthenticator? _atClientAuthenticator;
   late AtLookupImpl atLookUp;
   OnboardingStatus? _status;
@@ -109,14 +111,14 @@ class AtClientService {
     var pkamPublicKey = await (getPkamPublicKey(atsign) as FutureOr<String>);
     var aesEncryptionKey = await (getAESKey(atsign) as FutureOr<String>);
     var encryptedPkamPublicKey =
-        EncryptionUtil.encryptValue(pkamPublicKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
     aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
     // encrypt pkamPrivateKey with AES key
     var pkamPrivateKey = await (getPkamPrivateKey(atsign) as FutureOr<String>);
     var encryptedPkamPrivateKey =
-        EncryptionUtil.encryptValue(pkamPrivateKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
@@ -124,7 +126,7 @@ class AtClientService {
     var encryptionPublicKey =
         await (getEncryptionPublicKey(atsign) as FutureOr<String>);
     var encryptedEncryptionPublicKey =
-        EncryptionUtil.encryptValue(encryptionPublicKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
@@ -132,7 +134,7 @@ class AtClientService {
     var encryptionPrivateKey =
         await (getEncryptionPrivateKey(atsign) as FutureOr<String>);
     var encryptedEncryptionPrivateKey =
-        EncryptionUtil.encryptValue(encryptionPrivateKey, aesEncryptionKey);
+        EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
@@ -396,7 +398,7 @@ class AtClientService {
     _logger.finer('start migrate self keys');
     var currentAtSign = atClient!.getCurrentAtSign();
     var isMigrated =
-        await _keyChainManager.getValue(currentAtSign, 'selfKeysMigrated');
+        await _keyChainManager.getValue(currentAtSign!, 'selfKeysMigrated');
     if (isMigrated == 'true') {
       return;
     }

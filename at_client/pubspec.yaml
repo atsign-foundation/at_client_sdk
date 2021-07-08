@@ -4,7 +4,6 @@ version: 3.0.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
-publish_to: none
 
 environment:
   sdk: '>=2.12.0 <3.0.0'

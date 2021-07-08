@@ -1,0 +1,20 @@
+name: Auto Assign Bugs to Sprint Planning Project Board
+
+on:
+  issues:
+    types: [labeled]
+env:
+  MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+
+jobs:
+  assign_one_project:
+    runs-on: ubuntu-latest
+    name: Assign to Bugs Column in Sprint Planning Project Board
+    steps:
+    - name: Assign issues and pull requests with `bug` label to project 3
+      uses: srggrs/assign-one-project-github-action@1.2.1
+      if: |
+        contains(github.event.issue.labels.*.name, 'bug') ||
+      with:
+        project: 'https://github.com/orgs/atsign-foundation/projects/3'
+        column_name: 'Bugs'
