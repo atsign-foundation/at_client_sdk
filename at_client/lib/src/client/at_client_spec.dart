@@ -295,9 +295,6 @@ abstract class AtClient {
   Future<void> startMonitor(Function notificationCallback,
       Function errorCallback, MonitorPreference monitorPreference);
 
-  Future<AtStreamResponse> stream(String sharedWith, String filePath,
-      {String namespace});
-
   AtClientPreference getPreference();
 
   String getCurrentAtSign();

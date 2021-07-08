@@ -1023,7 +1023,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath}) async {
-    downloadPath ??= preference!.downloadPath;
+    downloadPath ??= preference.downloadPath;
     if (downloadPath == null) {
       throw Exception('downloadPath not found');
     }
