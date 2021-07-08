@@ -41,36 +41,33 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_persistence/at_persistence_spec
-      ref: sdk_refactoring
+      ref: trunk
       version: ^2.0.0
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
-      ref: sdk_refactoring
+      ref: trunk
       version: ^2.0.1
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: at_lookup
-      ref: sdk_refactoring
+      ref: trunk
       version: ^2.0.1
   at_utils:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_utils
-      ref: sdk_refactoring
+      ref: trunk
       version: ^2.0.1
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
-      ref: sdk_refactoring
+      ref: trunk
       version: ^2.0.1
-  
-#dependency_overrides:
-#  at_persistence_secondary_server:
-#    path: ../../at_server/at_secondary/at_persistence_secondary_server
+
 dev_dependencies:
   test: ^1.17.2
   at_demo_data: ^0.0.3+1
