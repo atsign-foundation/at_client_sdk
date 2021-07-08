@@ -31,3 +31,5 @@
 ## 2.0.0
 - Null safety changes
 - Dependent package upgrade
+## 2.0.1
+- Updated dependent packages
