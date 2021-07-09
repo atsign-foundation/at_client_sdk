@@ -152,17 +152,15 @@ class AtClientService {
 
   ///Returns `true` on persisting keys into keystore.
   Future<bool> persistKeys(String atSign) async {
-    var pkamPrivateKey = await (getPkamPrivateKey(atSign) as FutureOr<String>);
+    var pkamPrivateKey = await (getPkamPrivateKey(atSign)) ?? '';
 
-    var pkamPublicKey = await (getPkamPublicKey(atSign) as FutureOr<String>);
+    var pkamPublicKey = await (getPkamPublicKey(atSign)) ?? '';
 
-    var encryptPrivateKey =
-        await (getEncryptionPrivateKey(atSign) as FutureOr<String>);
+    var encryptPrivateKey = await (getEncryptionPrivateKey(atSign)) ?? '';
 
     var encryptPublicKey = await getEncryptionPublicKey(atSign);
 
-    var selfEncryptionKey =
-        await (getSelfEncryptionKey(atSign) as FutureOr<String>);
+    var selfEncryptionKey = await (getSelfEncryptionKey(atSign)) ?? '';
     await atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
@@ -421,8 +419,8 @@ class AtClientService {
     }
     //old key. migrate data
     //decrypt the oldSelfKey with private key
-    var newSelfEncryptionKey = await (_keyChainManager
-        .getSelfEncryptionAESKey(currentAtSign) as FutureOr<String>);
+    var newSelfEncryptionKey =
+        await (_keyChainManager.getSelfEncryptionAESKey(currentAtSign)) ?? '';
     await atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
