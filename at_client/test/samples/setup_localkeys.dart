@@ -16,8 +16,6 @@ void main() async {
       print('unable to create at client instance');
       return;
     }
-    atClient.getSyncManager()!.init(atsign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var metadata = Metadata();
     metadata.namespaceAware = false;
     var result;

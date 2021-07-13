@@ -28,3 +28,5 @@ doc/api/
 
 #gradle
 *.gradle/
+
+**/hive/

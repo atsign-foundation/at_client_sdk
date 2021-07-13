@@ -50,7 +50,7 @@ class KeyChainManager {
     return atsigns;
   }
 
-  Future<String> getSecretFromKeychain(String atsign) async {
+  Future<String?> getSecretFromKeychain(String atsign) async {
     var secret;
     try {
       assert(atsign != '');

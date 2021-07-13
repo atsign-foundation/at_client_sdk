@@ -239,7 +239,8 @@ abstract class AtClient {
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
   ///```
-  Future<bool> notify(AtKey key, String value, OperationEnum operation,
+  Future<void> notify(AtKey key, String value, OperationEnum operation,
+      Function onDone, Function onError,
       {MessageTypeEnum? messageType,
       PriorityEnum? priority,
       StrategyEnum? strategy,
@@ -274,7 +275,8 @@ abstract class AtClient {
   ///
   ///   notifyStatus('75037ac4-6a15-43cc-ba66-e621bb2a6366');
   ///```
-  Future<String> notifyStatus(String notificationId);
+  Future<void> notifyStatus(
+      String notificationId, Function onDone, Function onError);
 
   ///Returns the list of received notifications of an atsign, Optionally, notifications can be filtered on from date, to date and regular expression
   ///```
@@ -290,12 +292,13 @@ abstract class AtClient {
   ///```
   Future<String> notifyList({String? fromDate, String? toDate, String? regex});
 
-  /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
-  /// the notification on the client.
-  /// Optionally a regular expression and be passed to filter the notifications
-  Future<void> startMonitor(String privateKey, Function acceptStream,
-      {String? regex});
+  Future<void> startMonitor(Function notificationCallback,
+      Function errorCallback, MonitorPreference monitorPreference);
 
+  AtClientPreference getPreference();
+
+  String getCurrentAtSign();
+  
   /// Streams the file in [filePath] to [sharedWith] atSign.
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});

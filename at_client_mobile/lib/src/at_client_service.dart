@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:core';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/at_client_auth.dart';
@@ -16,7 +15,9 @@ import 'package:at_utils/at_logger.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
-  AtClientImpl? atClient;
+
+  AtClient? atClient;
+
   AtClientAuthenticator? _atClientAuthenticator;
   late AtLookupImpl atLookUp;
   OnboardingStatus? _status;
@@ -27,7 +28,7 @@ class AtClientService {
   Future<bool> _init(String atSign, AtClientPreference preference) async {
     _atClientAuthenticator ??= AtClientAuthenticator();
     await AtClientImpl.createClient(atSign, preference.namespace, preference);
-    atClient = (await AtClientImpl.getClient(atSign)) as AtClientImpl?;
+    atClient = await AtClientImpl.getClient(atSign);
     atLookUp = atClient!.getRemoteSecondary()!.atLookUp;
     if (preference.outboundConnectionTimeout > 0) {
       atClient!.getRemoteSecondary()!.atLookUp.outboundConnectionTimeout =
@@ -107,31 +108,33 @@ class AtClientService {
   Future<Map<String, String>> getEncryptedKeys(String atsign) async {
     var aesEncryptedKeys = {};
     // encrypt pkamPublicKey with AES key
-    var pkamPublicKey = await getPkamPublicKey(atsign);
-    var aesEncryptionKey = await getAESKey(atsign);
+    var pkamPublicKey = await (getPkamPublicKey(atsign) as FutureOr<String>);
+    var aesEncryptionKey = await (getAESKey(atsign) as FutureOr<String>);
     var encryptedPkamPublicKey =
-        EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
+        EncryptionUtil.encryptValue(pkamPublicKey, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
     // encrypt pkamPrivateKey with AES key
-    var pkamPrivateKey = await getPkamPrivateKey(atsign);
+    var pkamPrivateKey = await (getPkamPrivateKey(atsign) as FutureOr<String>);
     var encryptedPkamPrivateKey =
-        EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
+        EncryptionUtil.encryptValue(pkamPrivateKey, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
     // encrypt encryption public key with AES key
-    var encryptionPublicKey = await getEncryptionPublicKey(atsign);
+    var encryptionPublicKey =
+        await (getEncryptionPublicKey(atsign) as FutureOr<String>);
     var encryptedEncryptionPublicKey =
-        EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
+        EncryptionUtil.encryptValue(encryptionPublicKey, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
     // encrypt encryption private key with AES key
-    var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
+    var encryptionPrivateKey =
+        await (getEncryptionPrivateKey(atsign) as FutureOr<String>);
     var encryptedEncryptionPrivateKey =
-        EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
+        EncryptionUtil.encryptValue(encryptionPrivateKey, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
@@ -246,6 +249,7 @@ class AtClientService {
       var privateKey = atClientPreference.privateKey ??=
           await _keyChainManager.getPkamPrivateKey(atsign);
       _atClientAuthenticator!.atLookUp.privateKey = privateKey;
+      atClientPreference.privateKey ??= privateKey;
       atClient!.getRemoteSecondary()!.atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
       await persistKeys(atsign);
@@ -363,11 +367,12 @@ class AtClientService {
   Future<void> _sync(AtClientPreference preference, String? atSign) async {
     if ((preference.privateKey != null || preference.cramSecret != null) &&
         preference.syncStrategy != null) {
-      var _syncManager = SyncManagerImpl.getInstance().getSyncManager(atSign);
-      _syncManager!.init(atSign!, preference, atClient!.getRemoteSecondary(),
-          atClient!.getLocalSecondary());
-      await _syncManager.sync(appInit: true, regex: preference.syncRegex);
+      await atClient!.getSyncManager()!.sync(_done);
     }
+  }
+
+  void _done(var syncManager) {
+    _logger.finer('sync complete');
   }
 
   ///returns public key for [atsign] if found else returns null.
@@ -389,9 +394,9 @@ class AtClientService {
   // and encrypted with public key. Now we use a single aes key to encrypt self keys as well as key pairs in key file
   Future<void> _migrateOldSelfKeys() async {
     _logger.finer('start migrate self keys');
-    var currentAtSign = atClient!.currentAtSign;
+    var currentAtSign = atClient!.getCurrentAtSign();
     var isMigrated =
-        await _keyChainManager.getValue(currentAtSign!, 'selfKeysMigrated');
+        await _keyChainManager.getValue(currentAtSign, 'selfKeysMigrated');
     if (isMigrated == 'true') {
       return;
     }
@@ -424,12 +429,13 @@ class AtClientService {
     await atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
-    var encryptionPrivateKey =
-        await atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
+    var encryptionPrivateKey = await (atClient!
+        .getLocalSecondary()!
+        .getEncryptionPrivateKey() as FutureOr<String>);
     var decryptedSelfKey =
-        EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey!);
+        EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey);
     var selfKeys = await atClient!.getAtKeys(
-        sharedWith: currentAtSign, regex: atClient!.preference!.syncRegex);
+        sharedWith: currentAtSign, regex: atClient!.getPreference().syncRegex);
     await Future.forEach(
         selfKeys,
         (dynamic atKey) => _encryptOldSelfKey(

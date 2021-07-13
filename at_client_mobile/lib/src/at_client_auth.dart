@@ -9,7 +9,7 @@ import 'keychain_manager.dart';
 
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(String atSign,
-      {String cramSecret, String pkamPrivateKey});
+      {String? cramSecret, String? pkamPrivateKey});
 }
 
 class AtClientAuthenticator implements AtClientAuth {

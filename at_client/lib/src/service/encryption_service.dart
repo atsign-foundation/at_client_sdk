@@ -119,6 +119,9 @@ class EncryptionService {
   /// Used for local lookup @bob:phone@alice
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
+    if(encryptedValue == null) {
+      return null;
+    }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
     var currentAtSignPrivateKey =
         await localSecondary!.getEncryptionPrivateKey();
@@ -134,7 +137,7 @@ class EncryptionService {
     var decryptedSharedKey =
         EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
     var decryptedValue =
-        EncryptionUtil.decryptValue(encryptedValue!, decryptedSharedKey);
+        EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey);
 
     return decryptedValue;
   }
@@ -363,7 +366,11 @@ class EncryptionService {
         }
       }
     });
-    await atClient.getSyncManager()!.sync();
+    await atClient.getSyncManager()!.sync(_onSyncDone);
+  }
+
+  void _onSyncDone(var syncManager){
+    logger.finer('sync done after encrypting unencrypted data');
   }
 
   Future<String?> _getSelfEncryptionKey() async {
