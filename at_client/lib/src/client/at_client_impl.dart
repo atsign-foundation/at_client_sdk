@@ -627,7 +627,7 @@ class AtClientImpl implements AtClient {
       Function onDone, Function onError,
       {MessageTypeEnum? messageType,
       PriorityEnum? priority,
-      StrategyEnum? strategy,
+      StrategyEnum? strategy = StrategyEnum.all,
       int? latestN,
       String? notifier,
       bool isDedicated = false}) async {

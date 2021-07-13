@@ -103,6 +103,7 @@ class SyncManager {
       if (isInSync) {
         _logger.finer('Server and local secondary are in sync');
         _syncInProgress = false;
+        onDone(this);
         return;
       }
       lastSyncedCommitId ??= -1;
