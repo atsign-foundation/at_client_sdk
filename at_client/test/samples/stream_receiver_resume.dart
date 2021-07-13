@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
@@ -16,18 +15,17 @@ void main() async {
     await AtClientImpl.createClient(
         '@sitaram', 'me', TestUtil.getBobPreference());
     atClient = await AtClientImpl.getClient('@sitaram');
-    // var atCommand = 'stream:resume@murali namespace:atmosphere startByte:50 ac58c95b-6a4b-4fdd-b38d-7c91382f8f0b test_1.png 142770\n';
-    // print('atCommand : ${atCommand}');
-    // await atClient!.getRemoteSecondary()!.executeCommand(atCommand);
-    var monitorPreference = MonitorPreference()..regex = 'atmosphere';
-    monitorPreference.keepAlive = true;
-    await atClient!.startMonitor(
-          _notificationCallBack, _monitorErrorCallBack, monitorPreference);
-
-    while(true) {
-      print('Waiting for notification');
-      await Future.delayed(Duration(seconds: 5));
-    }
+    var atCommand = 'stream:resume@murali namespace:atmosphere startByte:50 ac58c95b-6a4b-4fdd-b38d-7c91382f8f0b test_1.png 142770\n';
+    print('atCommand : ${atCommand}');
+    await atClient!.getRemoteSecondary()!.executeCommand(atCommand);
+    // var monitorPreference = MonitorPreference()..regex = 'atmosphere';
+    // monitorPreference.keepAlive = true;
+    // await atClient!.startMonitor(
+    //     _notificationCallBack, _monitorErrorCallBack, monitorPreference);
+    // while(true) {
+    //   print("in while");
+    //   await Future.delayed(Duration(seconds: 5));
+    // }
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
@@ -39,7 +37,6 @@ void _monitorErrorCallBack(var error) {
 }
 
 Future<void> _notificationCallBack(var response) async {
-  print('In receiver _notificationCallBack : ${response}');
   response = response.replaceFirst('notification:', '');
   var responseJson = jsonDecode(response);
   var notificationKey = responseJson['key'];
@@ -52,13 +49,13 @@ Future<void> _notificationCallBack(var response) async {
     var streamId = valueObject.split(':')[0];
     var fileName = valueObject.split(':')[1];
     var fileLength = int.parse(valueObject.split(':')[2]);
-    fileName = utf8.decode(base64.decode(fileName))+DateTime.now().toString();
+    fileName = utf8.decode(base64.decode(fileName));
     var userResponse = true; //UI user response
     if (userResponse == true) {
       print('user accepted transfer.Sending ack back');
       final atStream =
-          atClient!.createStream(StreamType.RECEIVE, streamId: streamId);
-
+      atClient!.createStream(StreamType.RECEIVE, streamId: streamId);
+      ;
       await atStream.receiver!.ack(
           AtStreamAck()
             ..senderAtSign = fromAtSign
@@ -78,12 +75,8 @@ void _streamProgressCallBack(var bytesReceived) {
   print('Receive callback bytes received: $bytesReceived');
 }
 
-Future<void> _streamCompletionCallBack(var streamId) async {
+void _streamCompletionCallBack(var streamId) {
   print('Transfer done for stream: $streamId');
-  //sleep(Duration(seconds: 1));
-  var atCommand = 'stream:resume@murali namespace:atmosphere startByte:3 $streamId test1.txt 15\n';
-  print('In _streamCompletionCallBack atCommand : ${atCommand}');
-  await atClient!.getRemoteSecondary()!.executeCommand(atCommand);
 }
 
 void streamResumeTest(String streamId, int startByte) {

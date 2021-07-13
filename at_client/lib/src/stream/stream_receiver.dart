@@ -34,8 +34,24 @@ class StreamReceiver {
         notification, streamCompletionCallBack, streamProgressCallBack);
   }
 
-  Future<void> resume() async {
-    //#TODO implement
+  Future<void> resume(
+      String streamId,
+      int startByte,
+      String senderAtSign,
+      Function streamCompletionCallBack,
+      Function streamProgressCallBack) async {
+    var handler = StreamNotificationHandler();
+    handler.remoteSecondary = remoteSecondary;
+    handler.preference = preference;
+    handler.encryptionService = encryptionService;
+    var notification = AtStreamNotification()
+      ..streamId = streamId
+      ..currentAtSign = _currentAtSign
+      ..senderAtSign = senderAtSign
+      ..startByte = startByte;
+    print('Sending resume for stream notification:$notification');
+    await handler.streamResume(
+        notification, streamCompletionCallBack, streamProgressCallBack);
   }
 
   Future<void> cancel() async {
