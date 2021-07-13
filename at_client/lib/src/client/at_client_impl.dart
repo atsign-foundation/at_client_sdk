@@ -888,29 +888,28 @@ class AtClientImpl implements AtClient {
     var key = TextConstants.FILE_TRANSFER_KEY + Uuid().v4();
     var fileStatus = await _uploadFiles(key, files, encryptionKey);
     var fileUrl = TextConstants.FILEBIN_URL + 'archive/' + key + '/zip';
-    return _shareFiles(
+    return shareFiles(
         sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
   }
 
-  Future<Map<String, FileTransferObject>> _shareFiles(
+  Future<Map<String, FileTransferObject>> shareFiles(
       List<String> sharedWithAtSigns,
       String key,
       String fileUrl,
       String encryptionKey,
-      List<FileStatus> fileStatus) async {
+      List<FileStatus> fileStatus,
+      {DateTime? date}) async {
     var result = <String, FileTransferObject>{};
     for (var sharedWithAtSign in sharedWithAtSigns) {
       var fileTransferObject = FileTransferObject(
-        key,
-        encryptionKey,
-        fileUrl,
-        sharedWithAtSign,
-        fileStatus,
-      );
+          key, encryptionKey, fileUrl, sharedWithAtSign, fileStatus,
+          date: date);
       try {
         var atKey = AtKey()
           ..key = key
           ..sharedWith = sharedWithAtSign
+          ..metadata = Metadata()
+          ..metadata!.ttr = -1
           ..sharedBy = currentAtSign;
         fileTransferObject.sharedStatus =
             await put(atKey, jsonEncode(fileTransferObject.toJson()));
@@ -948,12 +947,28 @@ class AtClientImpl implements AtClient {
           fileStatus.fileName = fileInfo['file']['filename'];
           fileStatus.isUploaded = true;
         }
+
+        // storing sent files in a a directory.
+        if (preference?.downloadPath != null) {
+          var sentFilesDirectory =
+              await Directory(preference!.downloadPath! + '/sent-files')
+                  .create();
+          await File(file.path)
+              .copy(sentFilesDirectory.path + '/${fileStatus.fileName}');
+        }
       } on Exception catch (e) {
         fileStatus.error = e.toString();
       }
       fileStatuses.add(fileStatus);
     }
     return fileStatuses;
+  }
+
+  Future<List<FileStatus>> reuploadFiles(
+      List<File> files, FileTransferObject fileTransferObject) async {
+    var response = await _uploadFiles(fileTransferObject.transferId, files,
+        fileTransferObject.fileEncryptionKey);
+    return response;
   }
 
   @override
