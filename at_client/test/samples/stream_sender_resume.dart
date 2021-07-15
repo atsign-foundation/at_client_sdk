@@ -7,6 +7,7 @@ import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/at_stream.dart';
 
 import 'test_util.dart';
+
 AtClient? atClient;
 void main() async {
   try {
@@ -19,14 +20,16 @@ void main() async {
     }
     Function dummyFunction = () {};
     var monitorPreference = MonitorPreference();
-    await atClient!.startMonitor(_notificationCallback, dummyFunction, monitorPreference);
-    var stream = atClient!.createStream(StreamType.SEND, );
+    await atClient!
+        .startMonitor(_notificationCallback, dummyFunction, monitorPreference);
+    var stream = atClient!.createStream(
+      StreamType.SEND,
+    );
     print('sender : ${stream.sender} receiver : ${stream.receiver}');
     var atStreamRequest =
-        AtStreamRequest('@bob🛠', 'cat.jpeg');
+        AtStreamRequest('@bob🛠', '/home/murali/Pictures/@/cat.jpeg');
     atStreamRequest.namespace = 'atmosphere';
-    await stream.sender!.send(atStreamRequest, _onDone, _onError);
-    while(true) {
+    while (true) {
       print('Waiting for notification');
       await Future.delayed(Duration(seconds: 5));
     }
@@ -47,5 +50,21 @@ void _onError(AtStreamResponse response) {
 }
 
 Future<void> _notificationCallback(var response) async {
-  print('notification received $response');
+  print('stream resume notification received $response');
+  response = response.replaceFirst('notification:', '');
+  var responseJson = jsonDecode(response);
+  var notificationKey = responseJson['key'].toString();
+  notificationKey = notificationKey.replaceFirst('null', '');
+  notificationKey = notificationKey.replaceFirst('stream_resume ', '');
+  var fromAtSign = responseJson['from'];
+  print(notificationKey);
+  var streamId = notificationKey.split(':')[1];
+  var startByte = int.parse(notificationKey.split(':')[2]);
+  var stream = atClient!.createStream(StreamType.SEND, streamId: streamId);
+  print(
+      'sender : ${stream.sender} receiver : ${stream.receiver} streamId:$streamId startByte: $startByte');
+  var atStreamRequest = AtStreamRequest('@bob🛠', 'cat.jpeg');
+  atStreamRequest.namespace = 'atmosphere';
+  atStreamRequest.startByte = startByte;
+  await stream.sender!.send(atStreamRequest, _onDone, _onError);
 }

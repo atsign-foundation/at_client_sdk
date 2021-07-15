@@ -14,17 +14,17 @@ AtClient? atClient;
 void main() async {
   try {
     await AtClientImpl.createClient(
-        '@sitaram', 'me', TestUtil.getBobPreference());
-    atClient = await AtClientImpl.getClient('@sitaram');
+        '@bob🛠', 'me', TestUtil.getBobPreference());
+    atClient = await AtClientImpl.getClient('@bob🛠');
     // var atCommand = 'stream:resume@murali namespace:atmosphere startByte:50 ac58c95b-6a4b-4fdd-b38d-7c91382f8f0b test_1.png 142770\n';
     // print('atCommand : ${atCommand}');
     // await atClient!.getRemoteSecondary()!.executeCommand(atCommand);
     var monitorPreference = MonitorPreference()..regex = 'atmosphere';
     monitorPreference.keepAlive = true;
     await atClient!.startMonitor(
-          _notificationCallBack, _monitorErrorCallBack, monitorPreference);
+        _notificationCallBack, _monitorErrorCallBack, monitorPreference);
 
-    while(true) {
+    while (true) {
       print('Waiting for notification');
       await Future.delayed(Duration(seconds: 5));
     }
@@ -39,7 +39,7 @@ void _monitorErrorCallBack(var error) {
 }
 
 Future<void> _notificationCallBack(var response) async {
-  print('In receiver _notificationCallBack : ${response}');
+  print('In receiver _notificationCallBack : $response');
   response = response.replaceFirst('notification:', '');
   var responseJson = jsonDecode(response);
   var notificationKey = responseJson['key'];
@@ -52,7 +52,8 @@ Future<void> _notificationCallBack(var response) async {
     var streamId = valueObject.split(':')[0];
     var fileName = valueObject.split(':')[1];
     var fileLength = int.parse(valueObject.split(':')[2]);
-    fileName = utf8.decode(base64.decode(fileName))+DateTime.now().toString();
+    //+DateTime.now().toString()
+    fileName = utf8.decode(base64.decode(fileName));
     var userResponse = true; //UI user response
     if (userResponse == true) {
       print('user accepted transfer.Sending ack back');
@@ -81,9 +82,9 @@ void _streamProgressCallBack(var bytesReceived) {
 Future<void> _streamCompletionCallBack(var streamId) async {
   print('Transfer done for stream: $streamId');
   //sleep(Duration(seconds: 1));
-  var atCommand = 'stream:resume@murali namespace:atmosphere startByte:3 $streamId test1.txt 15\n';
-  print('In _streamCompletionCallBack atCommand : ${atCommand}');
-  await atClient!.getRemoteSecondary()!.executeCommand(atCommand);
+//  var atCommand = 'stream:resume@murali namespace:atmosphere startByte:3 $streamId test1.txt 15\n';
+//  print('In _streamCompletionCallBack atCommand : ${atCommand}');
+//  await atClient!.getRemoteSecondary()!.executeCommand(atCommand);
 }
 
 void streamResumeTest(String streamId, int startByte) {

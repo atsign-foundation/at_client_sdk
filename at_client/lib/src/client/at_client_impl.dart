@@ -18,6 +18,7 @@ import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/stream/stream_receiver.dart';
+import 'package:at_client/src/stream/stream_sender.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -881,7 +882,8 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
-  ///#TODO move this impl to [StreamManager.send()]
+  ///@deprecated  - use [createStream.sender.send]
+  /// TODO change this method to previous sdk version for backward compatibility
   @override
   Future<void> stream(
       String sharedWith, String filePath, Function onDone, Function onError,
@@ -941,9 +943,8 @@ class AtClientImpl implements AtClient {
     return stream;
   }
 
+  /// use [createStream.receiver.ack]
   @deprecated
-
-  /// use [StreamReceiver.ack]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
