@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/stream/at_stream.dart';
 import 'package:at_client/src/stream/at_stream_ack.dart';
 
@@ -40,7 +41,7 @@ void _monitorErrorCallBack(var error) {
 
 Future<void> _notificationCallBack(var response) async {
   print('notification received: $response');
-  response = response.replaceFirst('notification:', '');
+  response = NotificationResponseParser().parse(response);
   var responseJson = jsonDecode(response);
   var notificationKey = responseJson['key'];
   var fromAtSign = responseJson['from'];

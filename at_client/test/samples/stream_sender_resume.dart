@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/stream/at_stream_request.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/at_stream.dart';
@@ -51,12 +52,11 @@ void _onError(AtStreamResponse response) {
 
 Future<void> _notificationCallback(var response) async {
   print('stream resume notification received $response');
-  response = response.replaceFirst('notification:', '');
+  response = NotificationResponseParser().parse(response);
   var responseJson = jsonDecode(response);
   var notificationKey = responseJson['key'].toString();
   notificationKey = notificationKey.replaceFirst('null', '');
   notificationKey = notificationKey.replaceFirst('stream_resume ', '');
-  var fromAtSign = responseJson['from'];
   print(notificationKey);
   var streamId = notificationKey.split(':')[1];
   var startByte = int.parse(notificationKey.split(':')[2]);
