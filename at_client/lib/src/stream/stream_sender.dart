@@ -24,9 +24,10 @@ class StreamSender {
 
   final chunkSize = 1024;
 
-  /// onDone[AtStreamResponse]
-  /// onError[AtStreamResponse]
-  //#TODO check use of parsers
+  /// Sends a file specified in [atStreamRequest.filePath] through a stream verb.
+  /// onDone[AtStreamResponse] is called upon stream completion.
+  /// onError[AtStreamResponse] is called when stream errors out.
+  /// If a stream transfer has to be resumed then specify [atStreamRequest.startByte]. Stream transfer will be resumed from startByte.
   Future<void> send(AtStreamRequest atStreamRequest, Function onDone,
       Function onError) async {
     var atStreamResponse = AtStreamResponse(streamId);
@@ -89,6 +90,9 @@ class StreamSender {
     }
   }
 
+  /// Cancels a [atStreamRequest]
+  /// onDone[AtStreamResponse] gets called upon successful completion of cancel request
+  /// onError[AtStreamResponse] gets called upon failure of the cancel request
   Future<void> cancel(AtStreamRequest atStreamRequest, Function onDone,
       Function onError) async {
     var atStreamResponse = AtStreamResponse(streamId);

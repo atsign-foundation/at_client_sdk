@@ -292,13 +292,17 @@ abstract class AtClient {
   Future<void> startMonitor(Function notificationCallback,
       Function errorCallback, MonitorPreference monitorPreference);
 
-  Future<void> stream(
-      String sharedWith, String filePath, Function onDone, Function onError,
-      {String namespace});
+  /// Transfers a file specified by [filePath] to the [sharedWith] atSign through a stream verb
+  /// Optionally specify a unique [namespace] for all stream transfers from your app
+  /// [Deprecated] use [createStream]
+  Future<void> stream(String sharedWith, String filePath, {String namespace});
 
   AtClientPreference getPreference();
 
   String getCurrentAtSign();
 
+  /// Create a stream for a given [streamType]. If your app is sending a file through stream
+  /// then pass [StreamType.SEND]. If your app is receiving a file pass [StreamType.RECEIVE].
+  /// Optionally pass [streamId] if you want to create a stream for a known stream transfer.
   AtStream createStream(StreamType streamType, {String? streamId});
 }

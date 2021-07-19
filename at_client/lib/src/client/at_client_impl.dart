@@ -882,11 +882,9 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
-  ///@deprecated  - use [createStream.sender.send]
-  /// TODO change this method to previous sdk version for backward compatibility
+  /// [deprecated] Create a sender stream using [createStream] with [StreamType.SEND] and call [StreamSender.send]
   @override
-  Future<void> stream(
-      String sharedWith, String filePath, Function onDone, Function onError,
+  Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
     var streamId = Uuid().v4();
     var streamResponse = AtStreamResponse(streamId);
@@ -912,18 +910,16 @@ class AtClientImpl implements AtClient {
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.COMPLETE;
-        onDone(streamResponse);
       }
     } else if (result != null && result.startsWith('error:')) {
       result = result.replaceAll('error:', '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
       streamResponse.status = AtStreamStatus.ERROR;
-      onError(streamResponse);
     } else {
       streamResponse.status = AtStreamStatus.NO_ACK;
-      onError(streamResponse);
     }
+    return streamResponse;
   }
 
   @override
@@ -943,8 +939,7 @@ class AtClientImpl implements AtClient {
     return stream;
   }
 
-  /// use [createStream.receiver.ack]
-  @deprecated
+  /// [deprecated] Create a receiver stream using [createStream] with [StreamType.RECEIVE] and call [StreamReceiver.ack]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,

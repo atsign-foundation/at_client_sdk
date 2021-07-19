@@ -23,6 +23,9 @@ class StreamReceiver {
 
   final _logger = AtSignLogger('StreamReceiver');
 
+  /// Acknowledges a stream transfer from [atStreamAck.senderAtSign]
+  /// Upon stream completion [streamCompletionCallBack] is triggered with the streamId for the transfer.
+  /// App can use [streamProgressCallBack] to know the total bytes received so far for the acknowledged transfer.
   Future<void> ack(AtStreamAck atStreamAck, Function streamCompletionCallBack,
       Function streamProgressCallBack) async {
     var handler = StreamNotificationHandler();
@@ -40,12 +43,9 @@ class StreamReceiver {
         notification, streamCompletionCallBack, streamProgressCallBack);
   }
 
+  /// Initiates a stream resume from receiver to the [senderAtSign] from the byte [startByte]
   Future<void> resume(
-      String streamId,
-      int startByte,
-      String senderAtSign,
-      Function streamCompletionCallBack,
-      Function streamProgressCallBack) async {
+      String streamId, int startByte, String senderAtSign) async {
     var secondaryUrl = await AtLookupImpl.findSecondary(
         senderAtSign, preference.rootDomain, preference.rootPort);
     var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
