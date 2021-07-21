@@ -34,13 +34,17 @@ import 'package:at_base2e15/at_base2e15.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
+import 'package:at_client/src/manager/stream_handler.dart';
+import 'package:at_client/src/stream/at_stream.dart';
+import 'package:at_client/src/stream/stream_receiver.dart';
+import 'package:at_client/src/stream/stream_sender.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
-  AtClientPreference? _preference;
+  late AtClientPreference _preference;
 
-  AtClientPreference? get preference => _preference;
-  String? currentAtSign;
+  AtClientPreference get preference => _preference;
+  late String currentAtSign;
   String? _namespace;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
@@ -819,11 +823,12 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
+  /// [deprecated] Create a sender stream using [createStream] with [StreamType.SEND] and call [StreamSender.send]
   @override
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
-    var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
+    var streamResponse = AtStreamResponse(streamId);
     var file = File(filePath);
     var data = file.readAsBytesSync();
     var fileName = basename(filePath);
@@ -858,6 +863,24 @@ class AtClientImpl implements AtClient {
     return streamResponse;
   }
 
+  @override
+  AtStream createStream(StreamType streamType, {String? streamId}) {
+    var stream = StreamHandler.getInstance()
+        .createStream(currentAtSign, streamType, streamId: streamId);
+    if (streamType == StreamType.SEND) {
+      stream.sender!.remoteSecondary =
+          RemoteSecondary(currentAtSign, preference);
+      stream.sender!.encryptionService = _encryptionService;
+    } else if (streamType == StreamType.RECEIVE) {
+      stream.receiver!.encryptionService = _encryptionService;
+      stream.receiver!.preference = _preference;
+      stream.receiver!.remoteSecondary =
+          RemoteSecondary(currentAtSign, preference);
+    }
+    return stream;
+  }
+
+  /// [deprecated] Create a receiver stream using [createStream] with [StreamType.RECEIVE] and call [StreamReceiver.ack]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,

@@ -22,12 +22,12 @@ dependencies:
   archive: ^3.1.2
   http: ^0.13.3
   at_persistence_spec: ^2.0.0
-  at_persistence_secondary_server: ^2.0.2
-  at_lookup: ^2.0.2
+  at_persistence_secondary_server: ^2.0.3
+  at_lookup: ^2.0.3
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^2.0.2
-  at_utils: ^2.0.2
+  at_commons: ^2.0.3
+  at_utils: ^2.0.3
 
 dev_dependencies:
   test: ^1.17.2

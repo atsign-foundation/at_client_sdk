@@ -188,8 +188,14 @@ class EncryptionService {
     }
   }
 
-  //TODO remove code duplication - encrypt and encryptStream
   Future<List<int>> encryptStream(List<int> value, String sharedWith) async {
+    var sharedKey = await getStreamEncryptionKey(sharedWith);
+    var encryptedValue = EncryptionUtil.encryptBytes(value, sharedKey);
+    return encryptedValue;
+  }
+
+  //TODO remove code duplication - encrypt and getStreamEncryptionKey
+  Future<String> getStreamEncryptionKey(String sharedWith) async {
     var currentAtSignPublicKey =
         await (localSecondary!.getEncryptionPublicKey(currentAtSign!));
     var currentAtSignPrivateKey =
@@ -206,6 +212,7 @@ class EncryptionService {
       sharedKey = sharedKey.replaceFirst('data:', '');
       sharedKey =
           EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+      return sharedKey;
     }
     //2. Lookup public key of sharedWith atsign
     var plookupBuilder = PLookupVerbBuilder()
@@ -241,10 +248,7 @@ class EncryptionService {
       ..value = encryptedSharedKeyForCurrentAtSign;
     await localSecondary!
         .executeVerb(updateSharedKeyForCurrentAtSignBuilder, sync: true);
-
-    //5. Encrypt value using sharedKey
-    var encryptedValue = EncryptionUtil.encryptBytes(value, sharedKey);
-    return encryptedValue;
+    return sharedKey;
   }
 
   List<int> decryptStream(List<int> encryptedValue, String sharedKey) {
@@ -323,6 +327,7 @@ class EncryptionService {
     return base64Encode(dataSignature);
   }
 
+  /// [Deprecated] This function was implemented to migrate old unencrypted keys. No longer applicable.
   Future<void> encryptUnencryptedData() async {
     var atClient = await (AtClientImpl.getClient(currentAtSign));
     if (atClient == null) {
