@@ -97,38 +97,27 @@ class LocalSecondary implements Secondary {
             ..ccd = builder.ccd
             ..isBinary = builder.isBinary
             ..isEncrypted = builder.isEncrypted
-          ..sharedKeyStatus = builder.sharedKeyStatus;
+            ..sharedKeyStatus = builder.sharedKeyStatus;
           var atMetadata = AtMetadataAdapter(metadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          if (builder.dataSignature != null) {
-            var metadata = Metadata();
-            metadata
-              ..ttl = builder.ttl
-              ..ttb = builder.ttb
-              ..ttr = builder.ttr
-              ..ccd = builder.ccd
-              ..isBinary = builder.isBinary
-              ..isEncrypted = builder.isEncrypted
-              ..dataSignature = builder.dataSignature
+          var metadata = Metadata();
+          metadata
+            ..ttl = builder.ttl
+            ..ttb = builder.ttb
+            ..ttr = builder.ttr
+            ..ccd = builder.ccd
+            ..isBinary = builder.isBinary
+            ..isEncrypted = builder.isEncrypted
             ..sharedKeyStatus = builder.sharedKeyStatus;
-            var atMetadata = AtMetadataAdapter(metadata);
-            updateResult =
-                await keyStore!.putAll(updateKey, atData, atMetadata);
-            break;
+          if (builder.dataSignature != null) {
+            metadata.dataSignature = builder.dataSignature;
           }
-          // #TODO replace below call with putAll.
-          updateResult = await keyStore!.put(updateKey, atData,
-              time_to_live: builder.ttl,
-              time_to_born: builder.ttb,
-              time_to_refresh: builder.ttr,
-              isCascade: builder.ccd,
-              isBinary: builder.isBinary,
-              isEncrypted: builder.isEncrypted);
-          break;
+          var atMetadata = AtMetadataAdapter(metadata);
+          updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
       }
       return 'data:$updateResult';
     } on DataStoreException catch (e) {
@@ -199,7 +188,7 @@ class LocalSecondary implements Secondary {
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
         return await RemoteSecondary(_atSign, _preference!,
-            privateKey: _preference!.privateKey)
+                privateKey: _preference!.privateKey)
             .executeCommand(command, auth: true);
       }
       List<String?> keys;
@@ -207,10 +196,10 @@ class LocalSecondary implements Secondary {
       // Gets keys shared to sharedWith atSign.
       if (builder.sharedWith != null) {
         keys.retainWhere(
-                (element) => element!.startsWith(builder.sharedWith!) == true);
+            (element) => element!.startsWith(builder.sharedWith!) == true);
       }
       keys.removeWhere((key) =>
-      key.toString().startsWith('privatekey:') ||
+          key.toString().startsWith('privatekey:') ||
           key.toString().startsWith('private:') ||
           key.toString().startsWith('public:_'));
       var keyString = keys.toString();
