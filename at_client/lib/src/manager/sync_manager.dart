@@ -59,6 +59,15 @@ class SyncManager {
         unCommittedEntries, serverCommitId, lastSyncedCommitId);
   }
 
+  /// sync the data between the local secondary and remote secondary
+  /// If local secondary commit-id is greater the remote secondary, syncs data from local secondary
+  /// to remote secondary
+  /// If remote secondary commit-id is greater then local secondary, syncs data from remote secondary
+  /// to local secondary
+  ///
+  /// Optionally accepts
+  ///   appInit: To indicate the initialization of mobile apps for first time.
+  ///   regex: Filters the keys that matches the regex and perform sync operation.
   Future<void> sync({bool appInit = false, String? regex}) async {
     //initially isSyncInProgress and pendingSyncExists are false.
     //If a new sync triggered while previous sync isInprogress,then pendingSyncExists set to true and returns.

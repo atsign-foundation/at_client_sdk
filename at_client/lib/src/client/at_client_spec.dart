@@ -57,6 +57,8 @@ abstract class AtClient {
   ///             sharedWith='@bob'
   ///    put(key, '+1 999 9999');
   /// ```
+  /// Throws [AtClientException] when binary data size exceeds the [AtClientPreference.maxDataSize]
+  /// Throws [AtClientException] when keys to encrypt the data are not found.
   Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
 
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.
@@ -120,6 +122,7 @@ abstract class AtClient {
   ///             ..metadata=metaData
   ///   get(key);
   /// ```
+  /// Throws [AtClientException] when keys to decrypt the data are not found.
   Future<AtValue> get(AtKey key, {bool isDedicated = false});
 
   /// Gets the metadata of [AtKey.key]
@@ -138,8 +141,8 @@ abstract class AtClient {
   ///    var atKey = AtKey()..key='phone'
   ///                   ..metadata=metaData
   ///   getMeta(atKey);
-  ///
   /// ```
+  /// Throws [AtClientException] when keys to decrypt the data are not found.
   Future<Metadata?> getMeta(AtKey key);
 
   /// Delete the [key] from user's local secondary and syncs the delete to cloud secondary if client's sync preference is immediate.
@@ -187,6 +190,7 @@ abstract class AtClient {
   ///             ..metadata = metaData
   ///   delete(key);
   ///```
+  /// Throws [DataStoreException]  when fails to reach the [SecondaryKeyStore]
   Future<bool> delete(AtKey key, {bool isDedicated = false});
 
   /// Get all the keys stored in user's secondary in [AtKey] format. If [regex] is specified only matching keys are returned.
@@ -201,6 +205,7 @@ abstract class AtClient {
   ///  scan:@bob
   ///   getKeys(sharedBy:'@bob');
   ///```
+  /// Throws [DataStoreException] when fails to connect to [SecondaryKeyStore]
   Future<List<AtKey>> getAtKeys(
       {String? regex, String? sharedBy, String? sharedWith});
 
@@ -216,28 +221,92 @@ abstract class AtClient {
   ///  scan:@bob
   ///   getKeys(sharedBy:'@bob');
   ///```
+  /// Throws [DataStoreException] when fails to connect to [SecondaryKeyStore]
   Future<List<String>> getKeys(
       {String? regex, String? sharedBy, String? sharedWith});
 
-  /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
-  /// [isDedicated] need to be set to true to create a dedicated connection
-  ///```
-  ///e.g alice is the current atsign
-  /// notify:update:@bob:phone@alice:+1 999 9999
+  /// Notifies the [AtKey] with the [sharedWith] atSign.
+  /// Optionally, following preferences can be set on the notification:
+  /// messageType: KEY, TEXT
+  ///   This field indicates the type of notification. This is an optional field. Defaults to Key.
+  ///   KEY: To notify a key
+  ///     Example: notify:messageType:key:@colin:phone@kevin:'+1 987 345 234'
+  ///     var atKey = AtKey()..sharedWith = '@colin'
+  ///                        ..sharedBy = '@kevin'
+  ///                        ..key = 'phone';
+  ///     var value = '+1 987 345 234';
+  ///     notify(atKey, value, OperationEnum.update,
+  ///                          MessageTypeEnum:messageTypeEnum.Key);
+  ///   TEXT: To notify a message.
+  ///     Example: notify:messageType:text:@colin:hi
+  /// priority: LOW, MEDIUM, HIGH
+  ///   This fields indicates the priority of the notification. Defaults to low priority.
+  ///   Example: notify:priority:low:@colin:phone@kevin:'+1 987 345 234'
+  ///   var atKey = AtKey()..sharedWith = '@colin'
+  ///                      ..sharedBy = '@kevin'
+  ///                      ..key = 'phone';
+  ///   var value = '+1 987 345 234';
+  ///   notify(atKey, value, OperationEnum.update,
+  ///                        PriorityEnum:PriorityEnum.low);
+  /// strategy: ALL, LATEST
+  ///   Strategy 'ALL' ensures to deliver all the notifications.
+  ///     Example: notify:strategy:all:@alice:location@bob:California
+  ///     var atKey = AtKey()..sharedWith = '@alice'
+  ///                        ..sharedBy = '@bob'
+  ///                        ..key = 'location';
+  ///     var value = 'California';
+  ///     notify(atKey, value, OperationEnum.update,
+  ///                          StrategyEnum:StrategyEnum.ALL);
+  ///   Strategy 'LATEST' notifies the latest N notifications. When strategy is set to latest, following preferences are to be set:
+  ///     Notifier: This is a mandatory field. The notifier groups the notifications with same notifier and deliver the latest N notifications.
+  ///     LatestN: This is optional field. The latest N notifications to deliver. Defaults to 1.
+  ///     Example: notify:strategy:latest:latestN:5:notifier:wavi:@alice:location@bob:California
+  ///     var atKey = AtKey()..sharedWith = '@alice'
+  ///                        ..sharedBy = '@bob'
+  ///                        ..key = 'location';
+  ///     var value = 'California';
+  ///     notify(atKey, value, OperationEnum.update,
+  ///                          StrategyEnum:StrategyEnum.LATEST,
+  ///                          latestN:5,
+  ///                          notifier:wavi);
+  ///
+  /// operationEnum: update, delete
+  ///   update: When ttr is set and operationEnum is update, creates a cached key on the receiver end.
+  ///   delete: When operationEnum is delete, deletes a cached key on the receiver end.
+  ///
+  /// value: The value to notify
+  ///
+  /// metadata:
+  ///   ttr:
+  ///     Creates a cached key at the receiver side.
+  ///     Accepts a time duration in seconds which is a positive integer value to refresh the cached key or -1 to cache for forever.
+  ///     Example: notify:ttr:-1:@alice:city@bob:california.
+  ///     var metadata = Metadata()..ttr = -1
+  ///     var atKey = AtKey()..sharedWith = '@alice'
+  ///                        ..sharedBy = '@bob'
+  ///                        ..key = 'city'
+  ///                        ..metadata = metadata
+  ///     var value = 'California'
+  ///     notify(atKey, value, operationEnum.update)
+  ///   ttl:
+  ///     The time after which the key expires.
+  ///   ttb:
+  ///     Time from which the key becomes active.
+  ///     notify:update:ttl:60000:ttb:30000:@bob:phone@alice:+1 999 9999
+  ///     var metaData = Metadata()..ttl='60000'
+  ///                              ..ttb='30000'
   ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith='@bob'
+  ///                    ..sharedWith='@bob'
+  ///                    ..sharedBy='@alice'
+  ///                    ..metadata=metaData
   ///   var value='+1 999 9999'
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
-  /// notify:update:ttl:60000:ttb:30000:@bob:phone@alice:+1 999 9999
-  ///   var metaData = Metadata()..ttl='60000'
-  ///                  ..ttb='30000'
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith='@bob'
-  ///             ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
+  /// [isDedicated]: need to be set to true to create a dedicated connection
+  ///
+  /// @returns: Future<bool>: Returns true when notification is sent successfully, else false.
+  ///
+  /// Throws [AtClientException] when keys to encrypt the data are not found.
   ///```
   Future<bool> notify(AtKey key, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
@@ -266,6 +335,7 @@ abstract class AtClient {
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
   /// ```
+  /// Throws [AtClientException] when keys to encrypt the data are not found.
   Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation);
 
   ///Returns the status of the notification
@@ -290,9 +360,20 @@ abstract class AtClient {
   ///```
   Future<String> notifyList({String? fromDate, String? toDate, String? regex});
 
-  /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
+  /// Creates a monitor connection to atSign's cloud secondary server.
+  /// Whenever a notification is created on the server, monitor receives
   /// the notification on the client.
+  ///
+  /// When a monitor connection expires or closes, restarts the monitor connection.
+  ///
+  /// Throws [ConnectionInvalidException] when connection limit reaches on secondary server.
+  /// Throws [Exception] when secondary server is not reachable.
+  ///
+  /// privateKey: The privateKey of the atSign to authenticate the monitor connection.
+  /// Function acceptStream: The callback function that invokes on receiving the notifications.
+  ///
   /// Optionally a regular expression and be passed to filter the notifications
+  ///
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
 
