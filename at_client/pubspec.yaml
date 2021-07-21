@@ -21,6 +21,7 @@ dependencies:
   pedantic: ^1.11.0
   archive: ^3.1.2
   http: ^0.13.3
+  internet_connection_checker: 0.0.1+1
   at_persistence_spec: ^2.0.0
   at_persistence_secondary_server: ^2.0.3
   at_lookup: ^2.0.3
@@ -28,6 +29,7 @@ dependencies:
   at_base2e15: ^1.0.0
   at_commons: ^2.0.3
   at_utils: ^2.0.3
+
 
 dev_dependencies:
   test: ^1.17.2

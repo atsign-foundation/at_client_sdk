@@ -8,6 +8,8 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_connection.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
+import 'dart:io';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
@@ -96,5 +98,27 @@ class RemoteSecondary implements Secondary {
       String command, Function notificationCallBack, String privateKey) async {
     logger.finer('auto restarting monitor');
     await monitor(command, notificationCallBack, privateKey);
+  }
+
+  Future<bool> isAvailable() async {
+    try {
+      var secondaryUrl = await AtLookupImpl.findSecondary(
+          _atSign, _preference.rootDomain, _preference.rootPort);
+      var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
+      var host = secondaryInfo[0];
+      var port = secondaryInfo[1];
+      var internetAddress = await InternetAddress.lookup(host);
+      //#TODO getting first ip for now. explore best solution
+      var addressCheckOptions =
+          AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      return (await InternetConnectionChecker()
+              .isHostReachable(addressCheckOptions))
+          .isSuccess;
+    } on Exception catch (e) {
+      logger.severe('Secondary server unavailable ${e.toString}');
+    } on Error catch (e) {
+      logger.severe('Secondary server unavailable ${e.toString}');
+    }
+    return false;
   }
 }
