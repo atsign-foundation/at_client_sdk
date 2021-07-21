@@ -8,7 +8,7 @@ class NetworkUtil {
     var result = await InternetConnectionChecker().hasConnection;
     if (!result) {
       _logger.finer(
-          'Unable to connect to internet: ${InternetConnectionChecker().lastTryResults}');
+          'Unable to connect to internet');
     }
     return result;
   }
