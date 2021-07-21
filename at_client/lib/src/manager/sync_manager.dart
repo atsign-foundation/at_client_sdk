@@ -33,6 +33,7 @@ class SyncManager {
 
   SyncManager(this._atSign);
 
+  /// Initializes the sync manager
   void init(String atSign, AtClientPreference preference,
       RemoteSecondary? _remoteSecondary, LocalSecondary? _localSecondary) {
     _atSign = atSign;
@@ -44,6 +45,8 @@ class SyncManager {
     }
   }
 
+  /// Verifies if local secondary and remote secondary are in sync
+  /// Returns True if local secondary and remote secondary are in sync, else false.
   Future<bool> isInSync() async {
     var serverCommitId = await SyncUtil.getLatestServerCommitId(
         _remoteSecondary!, _preference!.syncRegex);
