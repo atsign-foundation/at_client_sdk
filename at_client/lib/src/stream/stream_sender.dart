@@ -41,6 +41,7 @@ class StreamSender {
       _logger.finer('sending stream init:$command');
       await _checkConnectivity();
       var result = await remoteSecondary.executeCommand(command, auth: true);
+      _logger.finer('got result in stream sender: $result');
       if (result != null && result.startsWith('stream:ack')) {
         result = result.replaceAll('stream:ack ', '');
         result = result.trim();
@@ -48,7 +49,7 @@ class StreamSender {
         await _startStream(
             file, atStreamRequest.receiverAtSign, atStreamRequest.startByte);
         var streamResult =
-        await remoteSecondary.atLookUp.messageListener!.read();
+            await remoteSecondary.atLookUp.messageListener.read();
         if (streamResult != null && streamResult.startsWith('stream:done')) {
           _logger.finer('stream done - streamId: $streamId');
           atStreamResponse.status = AtStreamStatus.COMPLETE;
@@ -77,7 +78,7 @@ class StreamSender {
     var chunkedStream = ChunkedStreamReader(file.openRead(startByte));
     try {
       var encryptionKey =
-      await encryptionService!.getStreamEncryptionKey(receiverAtSign);
+          await encryptionService!.getStreamEncryptionKey(receiverAtSign);
       while (readBytes < length) {
         remoteSecondary.atLookUp.connection!.getSocket().add(
             AESCodec(encryptionKey)
@@ -95,18 +96,19 @@ class StreamSender {
   /// onError[AtStreamResponse] gets called upon failure of the cancel request
   Future<void> cancel(AtStreamRequest atStreamRequest, Function onDone,
       Function onError) async {
-    var atStreamResponse = AtStreamResponse(streamId);
-    try {
-      var command = 'stream:cancel $streamId';
-      await _checkConnectivity();
-      var result = await remoteSecondary.executeCommand(command, auth: true);
-      //#TODO process result
-      atStreamResponse.status = AtStreamStatus.CANCELLED;
-      onDone(atStreamResponse);
-    } on Exception catch (e) {
-      atStreamResponse.errorMessage = e.toString();
-      onError(atStreamResponse);
-    }
+    // #TODO complete implementation when server support is ready
+//    var atStreamResponse = AtStreamResponse(streamId);
+//    try {
+//      var command = 'stream:cancel $streamId';
+//      await _checkConnectivity();
+//      var result = await remoteSecondary.executeCommand(command, auth: true);
+//      //#TODO process result
+//      atStreamResponse.status = AtStreamStatus.CANCELLED;
+//      onDone(atStreamResponse);
+//    } on Exception catch (e) {
+//      atStreamResponse.errorMessage = e.toString();
+//      onError(atStreamResponse);
+//    }
   }
 
   Future<void> _checkConnectivity() async {
