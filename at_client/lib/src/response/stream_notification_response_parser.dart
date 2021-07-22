@@ -3,7 +3,7 @@ import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 
 class StreamNotificationParser extends NotificationResponseParser {
-  final notificationKey = 'stream_id';
+  final streamNotificationKey = 'stream_id';
 
   final namespace;
 
@@ -17,7 +17,7 @@ class StreamNotificationParser extends NotificationResponseParser {
     var atKey = notificationKey.split(':')[1];
     atKey = atKey.replaceFirst(fromAtSign, '');
     atKey = atKey.trim();
-    if (atKey == '$notificationKey.$namespace') {
+    if (atKey == '$streamNotificationKey.$namespace') {
       var valueObject = streamNotificationJson['value'];
       var streamId = valueObject.split(':')[0];
       var fileName = valueObject.split(':')[1];

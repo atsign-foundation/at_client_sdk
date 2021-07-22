@@ -5,7 +5,7 @@ class AtStreamNotification {
   String? namespace;
   late String senderAtSign;
   late String currentAtSign;
-  late int startByte;
+  int? startByte;
 
   @override
   String toString() {
