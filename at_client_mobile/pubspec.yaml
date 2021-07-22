@@ -1,5 +1,5 @@
 name: at_client_mobile
-description: Library for mobile app onboarding.
+description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
 version: 2.0.3
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
