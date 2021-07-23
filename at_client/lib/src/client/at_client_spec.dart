@@ -295,19 +295,34 @@ abstract class AtClient {
   ///```
   ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366
   ///
-  ///   notifyStatus('75037ac4-6a15-43cc-ba66-e621bb2a6366');
+  /// var atKey = AtKey()..key = 'phone@bob'
+  ///                    ..sharedWith = '@alice'
+  ///                    ..sharedBy = ‘@bob’
+  /// Execute the notify verb
+  /// var notiticationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
+  ///  Get the status for notificationId
+  ///   notifyStatus(notiticationId);
+  ///
   ///```
   Future<String> notifyStatus(String notificationId);
 
   ///Returns the list of received notifications of an atsign, Optionally, notifications can be filtered on from date, to date and regular expression
   ///```
   ///e.g alice is the current atsign
+  ///  Get all the notifications
   ///  notify:list
   ///    notifyList();
+  ///
+  ///  Get notification starting from 2021-01-28 to 2021-01-29
   ///  notify:list:2021-01-28:2021-01-29
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29);
+  ///
+  ///  Get notifications list which matches with the regex 'phone'
   ///  notify:list:phone
   ///     notifyList(regex: phone);
+  ///
+  ///  Get notification starting from 2021-01-28 to 2021-01-29 and
+  ///         matches with the regex 'phone'
   ///  notify:list:2021-01-28:2021-01-29:phone
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
   ///```
