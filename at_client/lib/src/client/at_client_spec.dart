@@ -107,6 +107,14 @@ abstract class AtClient {
   ///             ..sharedWith='@alice'
   ///   get(key);
   ///
+  /// plookup public phone number of @bob
+  /// plookup:phone@bob
+  /// var metadata = Metadata()..isPublic=true;
+  /// var publicPhoneKey = AtKey()..key = 'phone'
+  ///                             ..sharedBy = '@bob'
+  ///                             ..metadata = metadata;
+  ///  get(publicPhoneKey);
+  ///
   /// @alice : update:@bob:phone.personal@alice
   /// @bob   : lookup:phone.persona@alice
   ///   var key = AtKey()..key='phone'
@@ -238,6 +246,21 @@ abstract class AtClient {
   ///   var value='+1 999 9999'
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
+  ///
+  /// var atKey = AtKey()..key = 'phone@alice'
+  ///                    ..sharedWith = '@bob'
+  ///                    ..sharedBy = ‘@alice’
+  /// Sending Notification with Notification Strategy ‘ALL’ and priority low
+  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
+  ///                       priority: PriorityEnum.low,
+  ///                      strategy: StrategyEnum.all);
+  ///
+  /// Sending Notification with Notification Strategy ‘Latest N’ and priority high
+  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
+  ///                       priority: PriorityEnum.high,
+  ///                       strategy: StrategyEnum.latest,
+  ///                       latestN:3,
+  ///                       Notifier: ‘wavi’);
   ///```
   Future<bool> notify(AtKey key, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
