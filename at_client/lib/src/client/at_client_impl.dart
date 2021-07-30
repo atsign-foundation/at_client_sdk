@@ -15,6 +15,7 @@ import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -137,8 +138,15 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+
+  ///[Deprecated] Use [getSyncService]
   SyncManager? getSyncManager() {
     return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
+  }
+
+  @override
+  SyncService? getSyncService() {
+    return SyncService.getInstance(currentAtSign!);
   }
 
   @override
