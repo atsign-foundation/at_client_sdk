@@ -18,6 +18,7 @@ abstract class AtClient {
 
   /// Returns a singleton instance of [SyncService] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
+  /// Refer [SyncService.sync] for details on usage
   SyncService? getSyncService();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.

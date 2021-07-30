@@ -65,7 +65,8 @@ class ChangeServiceImpl implements ChangeService {
           .getSyncService()!
           .sync(onDone: onDone, onError: onError, regex: regex));
     } else {
-      await _atClient.getSyncService()!.sync(regex: regex);
+      await _atClient
+          .getSyncService()!.sync(regex: regex);
     }
   }
 }
