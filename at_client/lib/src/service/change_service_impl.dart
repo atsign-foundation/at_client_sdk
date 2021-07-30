@@ -60,6 +60,8 @@ class ChangeServiceImpl implements ChangeService {
   @override
   Future<void> sync(
       {Function? onDone, Function? onError, String? regex}) async {
+    // Murali - is _atClient
+    //          .getSyncService() required or should we call ChangeService.sync() ?
     if (onDone != null && onError != null) {
       unawaited(_atClient
           .getSyncService()!
