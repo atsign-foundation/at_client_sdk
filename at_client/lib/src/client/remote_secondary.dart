@@ -19,6 +19,8 @@ class RemoteSecondary implements Secondary {
 
   late AtLookupImpl atLookUp;
 
+  late AtLookupSync atLookupSync;
+
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey}) {
     _atSign = AtUtils.formatAtSign(atSign)!;
@@ -26,6 +28,9 @@ class RemoteSecondary implements Secondary {
     privateKey ??= preference.privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey, cramSecret: preference.cramSecret);
+    atLookupSync = AtLookupSync(
+        atSign, preference.rootDomain, preference.rootPort,
+        privateKey: atLookUp.privateKey, cramSecret: preference.cramSecret);
   }
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
@@ -69,17 +74,24 @@ class RemoteSecondary implements Secondary {
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
   Future<String?> sync(int? lastSyncedId,
-      {String? privateKey, String? regex}) async {
-    var atCommand = 'sync:$lastSyncedId';
-    var regexString = (regex != null && regex != 'null' && regex.isNotEmpty)
-        ? ':$regex'
-        : ((_preference.syncRegex != null && _preference.syncRegex.isNotEmpty)
-            ? ':${_preference.syncRegex}'
-            : '');
+      {Function? syncCallBack,
+      String? privateKey,
+      String? regex,
+      bool isStream = false}) async {
+    var syncVerbBuilder = SyncVerbBuilder()
+      ..commitId = lastSyncedId
+      ..regex = regex
+      ..isStream = isStream;
 
-    atCommand += '$regexString\n';
-    var syncResult = await atLookUp.executeCommand(atCommand, auth: true);
-    return syncResult;
+    var atCommand = syncVerbBuilder.buildCommand();
+    // If isStream is true, invoke atLookupSync to initiate sync:stream
+    // else, invoke atLookup to initiate regular sync
+    if (isStream) {
+      atLookupSync.syncCallback = syncCallBack;
+      return await atLookupSync.executeCommand(atCommand, auth: true);
+    } else {
+      return await atLookUp.executeCommand(atCommand, auth: true);
+    }
   }
 
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
@@ -94,7 +106,7 @@ class RemoteSecondary implements Secondary {
 
   Future<void> _restartCallBack(
       String command, Function notificationCallBack, String privateKey) async {
-    logger.finer('auto restarting monitor');
+    logger.info('auto restarting monitor');
     await monitor(command, notificationCallBack, privateKey);
   }
 }
