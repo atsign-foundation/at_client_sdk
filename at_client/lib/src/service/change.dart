@@ -10,10 +10,10 @@ abstract class Change {
 
   void notify({Function? onSuccess, Function? onError});
 
-  void sync({Function? onDone});
+  Future<void> sync({Function? onDone, Function? onError,String? regex});
 
   /// True if in sync
-  bool isInSync();
+  Future<bool> isInSync();
 
   /// Status of the change. #TODO replace string with enum
   String getStatus();

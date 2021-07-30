@@ -59,8 +59,8 @@ class SyncService {
   void _handleError(
       var syncService, Exception e, Function onDone, Function onError) {
     if (e is AtConnectException) {
-      Future.delayed(
-          Duration(seconds: 3), () => sync(onDone, _onError, regex: _regex));
+      Future.delayed(Duration(seconds: 3),
+          () => sync(onDone: onDone, onError: _onError, regex: _regex));
     } else {
       onError(syncService, e);
     }
@@ -81,8 +81,10 @@ class SyncService {
   /// // add your sync completion logic
   /// }
   /// ```
+  /// If no callbacks are passed, use await sync() or await sync(regex: regex)
   /// Optionally pass [regex] to sync only matching keys.
-  Future<void> sync(Function onDone, Function onError, {String? regex}) async {
+  Future<void> sync(
+      {Function? onDone, Function? onError, String? regex}) async {
     if (_syncInProgress) {
       _logger.finer('Another Sync process is in progress.');
       return;
@@ -98,7 +100,9 @@ class SyncService {
       if (isInSync) {
         _logger.finer('Server and local secondary are in sync');
         _syncInProgress = false;
-        onDone(this);
+        if (onDone != null) {
+          onDone(this);
+        }
         return;
       }
       lastSyncedCommitId ??= -1;
@@ -112,10 +116,16 @@ class SyncService {
       //push changes from local to cloud
       await _pushChanges(syncObject, regex: regex);
       _syncInProgress = false;
-      onDone(this);
+      if (onDone != null) {
+        onDone(this);
+      }
     } on Exception catch (e) {
       _syncInProgress = false;
-      _handleError(this, e, onDone, onError);
+      if (onDone != null && onError != null) {
+        _handleError(this, e, onDone, onError);
+      } else {
+        rethrow;
+      }
     }
   }
 
