@@ -4,8 +4,14 @@ import 'package:at_commons/src/keystore/at_key.dart';
 import 'package:at_commons/src/verb/operation_enum.dart';
 
 class ChangeImpl implements Change {
-  AtClient _atClient;
+  final AtClient _atClient;
+  StatusEnum? statusEnum;
+  AtKey? atKey;
+  OperationEnum? operationEnum;
+  AtValue? atValue;
+
   ChangeImpl(this._atClient);
+
   @override
   AtKey getKey() {
     // TODO: implement getKey
@@ -46,3 +52,5 @@ class ChangeImpl implements Change {
     // TODO: implement sync
   }
 }
+
+enum StatusEnum { success, failure }
