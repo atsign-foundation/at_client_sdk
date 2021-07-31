@@ -61,7 +61,7 @@ abstract class ChangeService {
 
   Future<void> sync({Function? onDone});
 
-  bool isInSync();
+  Future<bool> isInSync();
 
   AtClient getClient();
 }
