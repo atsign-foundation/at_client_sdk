@@ -531,10 +531,8 @@ class AtClientImpl implements AtClient {
         try {
           builder.value =
               await _encryptionService!.encrypt(key, value, sharedWith);
-        } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+        } on KeyNotFoundException {
+          rethrow;
         }
       } else if (!builder.isPublic &&
           !builder.atKey.toString().startsWith('_')) {

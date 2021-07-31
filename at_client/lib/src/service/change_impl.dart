@@ -5,10 +5,10 @@ import 'package:at_commons/src/verb/operation_enum.dart';
 
 class ChangeImpl implements Change {
   final AtClient _atClient;
-  StatusEnum? statusEnum;
   AtKey? atKey;
   OperationEnum? operationEnum;
   AtValue? atValue;
+  ResponseStatusEnum? responseStatusEnum;
 
   ChangeImpl(this._atClient);
 
@@ -53,4 +53,4 @@ class ChangeImpl implements Change {
   }
 }
 
-enum StatusEnum { success, failure }
+enum ResponseStatusEnum { success, failure }

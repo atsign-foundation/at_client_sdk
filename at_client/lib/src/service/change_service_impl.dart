@@ -32,8 +32,11 @@ class ChangeServiceImpl implements ChangeService {
   @override
   Future<Change> put(AtKey key, value) async {
     var changeImpl = ChangeImpl(_atClient);
+    // Setting the syncStrategy to 'ONDEMAND' to write only to local secondary.
+    _atClient.setPreferences(
+        AtClientPreference()..syncStrategy = SyncStrategy.ONDEMAND);
     // The changeStatus defaults to failure.
-    changeImpl.statusEnum = StatusEnum.failure;
+    changeImpl.responseStatusEnum = ResponseStatusEnum.failure;
     var isSuccess;
     try {
       isSuccess = await _atClient.put(key, value);
@@ -42,7 +45,7 @@ class ChangeServiceImpl implements ChangeService {
     }
     // If put the result is successful, build the change object.
     if (isSuccess) {
-      changeImpl.statusEnum = StatusEnum.success;
+      changeImpl.responseStatusEnum = ResponseStatusEnum.success;
       changeImpl.atKey = key;
       changeImpl.operationEnum = OperationEnum.update;
       changeImpl.atValue = AtValue();

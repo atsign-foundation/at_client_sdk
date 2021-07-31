@@ -5,6 +5,8 @@ import 'change.dart';
 
 abstract class ChangeService {
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key.
+  /// The put method updates the [AtKey] only to the local storage.
+  /// To sync [AtKey] to cloud remote secondary call [Change.sync] method.
   /// Set [AtKey.sharedWith] if the key has to be shared with another atSign.
   /// Set [AtKey.metadata.isBinary] if you are updating binary value e.g image,file.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
@@ -34,17 +36,32 @@ abstract class ChangeService {
   ///   var key = AtKey()..key='phone'
   ///            sharedWith='@alice'
   ///   put(key, '+1 999 9999');
-  /// update:@bob:phone.persona@alice +1 999 9999
+  /// update:@bob:phone.persona@alice '+1 999 9999'
   ///   var key = AtKey()..key='phone'
-  ///             sharedWith='@bob'
+  ///                    ..sharedWith='@bob';
   ///    put(key, '+1 999 9999');
+  /// update:ttl:60000:ttb:60000:@bob:phone.persona@alice '+1 999 9999'
+  ///   var metadata = Metadata()..ttl = 60000
+  ///                            ..ttb = 60000;
+  ///   var key = AtKey()..key = 'phone'
+  ///                    ..sharedWith = '@bob'
+  ///                    ..metadata = metadata;
+  ///   put(key, '+1 999 9999')
   /// ```
+  /// Returns the [Change] object.
+  /// Throws [SecondaryNotFoundException] when sharedWith atSign secondary is not reachable.
+  /// Throws [KeyNotFoundException] when keys to encrypt the data are not found.
   /// Throws [AtClientException] when binary data size exceeds the [AtClientPreference.maxDataSize].
-  /// Throws [AtClientException] when keys to encrypt the data are not found.
+  /// Throws [AtClientException] for any other exceptions.
   Future<Change> put(AtKey key, dynamic value);
+
   Future<Change> putMeta(AtKey key);
+
   Future<Change> delete(key);
+
   Future<void> sync({Function? onDone});
+
   bool isInSync();
+
   Future<AtClient> getClient();
 }
