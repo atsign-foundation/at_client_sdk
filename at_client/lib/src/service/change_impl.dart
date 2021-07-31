@@ -2,6 +2,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/change.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
 import 'package:at_commons/src/verb/operation_enum.dart';
+import 'package:pedantic/pedantic.dart';
 
 class ChangeImpl implements Change {
   final AtClient _atClient;
@@ -37,9 +38,8 @@ class ChangeImpl implements Change {
   }
 
   @override
-  bool isInSync() {
-    // TODO: implement isInSync
-    throw UnimplementedError();
+  Future<bool> isInSync() async {
+    return await _atClient.getSyncService()!.isInSync();
   }
 
   @override
@@ -48,8 +48,15 @@ class ChangeImpl implements Change {
   }
 
   @override
-  void sync({Function? onDone}) {
-    // TODO: implement sync
+  Future<void> sync(
+      {Function? onDone, Function? onError, String? regex}) async {
+    if (onDone != null && onError != null) {
+      unawaited(_atClient
+          .getSyncService()!
+          .sync(onDone: onDone, onError: onError, regex: regex));
+    } else {
+      await _atClient.getSyncService()!.sync(regex: regex);
+    }
   }
 }
 

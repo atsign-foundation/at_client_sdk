@@ -59,7 +59,11 @@ class SyncManager {
         unCommittedEntries, serverCommitId, lastSyncedCommitId);
   }
 
-  Future<void> sync({bool appInit = false, String? regex}) async {
+  /// Cloud Secondary server throws [BufferOverFlowException] is sync data is large than the buffer size.
+  /// Optionally isStream when set to true, initiates the sync process via streams which facilitates in
+  /// syncing large data without [BufferOverFlowException].
+  Future<void> sync(
+      {bool appInit = false, String? regex, bool isStream = false}) async {
     //initially isSyncInProgress and pendingSyncExists are false.
     //If a new sync triggered while previous sync isInprogress,then pendingSyncExists set to true and returns.
     if (isSyncInProgress) {
@@ -67,17 +71,18 @@ class SyncManager {
       return;
     }
     regex ??= _preference!.syncRegex;
-    await _sync(appInit: appInit, regex: regex);
+    await _sync(appInit: appInit, regex: regex, isStream: isStream);
     //once the sync done, we will check for any new sync requests(pendingSyncExists == true)
     //If pendingSyncExists is true,then sync triggers again.
     if (pendingSyncExists) {
       pendingSyncExists = false;
-      return sync(appInit: appInit, regex: regex);
+      return sync(appInit: appInit, regex: regex, isStream: isStream);
     }
     return;
   }
 
-  Future<void> _sync({bool appInit = false, String? regex}) async {
+  Future<void> _sync(
+      {bool appInit = false, String? regex, bool isStream = false}) async {
     try {
       regex ??= _preference!.syncRegex;
       //isSyncProgress set to true during the sync is in progress.
@@ -111,6 +116,11 @@ class SyncManager {
       // cloud is ahead if server commit id is > last synced commit id in local
       if (serverCommitId > lastSyncedCommitId) {
         // send sync verb to server and sync the changes to local
+        if (isStream) {
+          await _remoteSecondary!.sync(lastSyncedCommitId,
+              syncCallBack: _syncLocal, regex: regex, isStream: isStream);
+          return;
+        }
         var syncResponse =
             await _remoteSecondary!.sync(lastSyncedCommitId, regex: regex);
         if (syncResponse != null && syncResponse != 'data:null') {

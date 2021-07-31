@@ -63,5 +63,5 @@ abstract class ChangeService {
 
   bool isInSync();
 
-  Future<AtClient> getClient();
+  AtClient getClient();
 }

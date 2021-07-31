@@ -5,6 +5,7 @@ import 'package:at_client/src/service/change_impl.dart';
 import 'package:at_client/src/service/change_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/src/keystore/at_key.dart';
+import 'package:pedantic/pedantic.dart';
 
 class ChangeServiceImpl implements ChangeService {
   final AtClient _atClient;
@@ -18,15 +19,13 @@ class ChangeServiceImpl implements ChangeService {
   }
 
   @override
-  Future<AtClient> getClient() {
-    // TODO: implement getClient
-    throw UnimplementedError();
+  AtClient getClient() {
+    return _atClient;
   }
 
   @override
-  bool isInSync() {
-    // TODO: implement isInSync
-    throw UnimplementedError();
+  Future<bool> isInSync() async {
+    return await _atClient.getSyncService()!.isInSync();
   }
 
   @override
@@ -62,8 +61,17 @@ class ChangeServiceImpl implements ChangeService {
   }
 
   @override
-  Future<void> sync({Function? onDone}) {
-    // TODO: implement sync
-    throw UnimplementedError();
+  Future<void> sync(
+      {Function? onDone, Function? onError, String? regex}) async {
+    // Murali - is _atClient
+    //          .getSyncService() required or should we call ChangeService.sync() ?
+    if (onDone != null && onError != null) {
+      unawaited(_atClient
+          .getSyncService()!
+          .sync(onDone: onDone, onError: onError, regex: regex));
+    } else {
+      await _atClient
+          .getSyncService()!.sync(regex: regex);
+    }
   }
 }

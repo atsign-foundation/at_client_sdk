@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
@@ -12,7 +13,13 @@ import 'package:at_commons/at_commons.dart';
 abstract class AtClient {
   /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
+  /// [Deprecated] Use [getSyncService]
   SyncManager? getSyncManager();
+
+  /// Returns a singleton instance of [SyncService] that is responsible for syncing data between
+  /// local secondary server and remote secondary server.
+  /// Refer [SyncService.sync] for details on usage
+  SyncService? getSyncService();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.
   RemoteSecondary? getRemoteSecondary();
@@ -106,6 +113,14 @@ abstract class AtClient {
   ///   var key = AtKey()..key='phone'
   ///             ..sharedWith='@alice'
   ///   get(key);
+  ///
+  /// plookup public phone number of @bob
+  /// plookup:phone@bob
+  /// var metadata = Metadata()..isPublic=true;
+  /// var publicPhoneKey = AtKey()..key = 'phone'
+  ///                             ..sharedBy = '@bob'
+  ///                             ..metadata = metadata;
+  ///  get(publicPhoneKey);
   ///
   /// @alice : update:@bob:phone.personal@alice
   /// @bob   : lookup:phone.persona@alice
@@ -238,6 +253,21 @@ abstract class AtClient {
   ///   var value='+1 999 9999'
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
+  ///
+  /// var atKey = AtKey()..key = 'phone@alice'
+  ///                    ..sharedWith = '@bob'
+  ///                    ..sharedBy = ‘@alice’
+  /// Sending Notification with Notification Strategy ‘ALL’ and priority low
+  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
+  ///                       priority: PriorityEnum.low,
+  ///                      strategy: StrategyEnum.all);
+  ///
+  /// Sending Notification with Notification Strategy ‘Latest N’ and priority high
+  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
+  ///                       priority: PriorityEnum.high,
+  ///                       strategy: StrategyEnum.latest,
+  ///                       latestN:3,
+  ///                       Notifier: ‘wavi’);
   ///```
   Future<bool> notify(AtKey key, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
@@ -272,19 +302,34 @@ abstract class AtClient {
   ///```
   ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366
   ///
-  ///   notifyStatus('75037ac4-6a15-43cc-ba66-e621bb2a6366');
+  /// var atKey = AtKey()..key = 'phone@bob'
+  ///                    ..sharedWith = '@alice'
+  ///                    ..sharedBy = ‘@bob’
+  /// Execute the notify verb
+  /// var notiticationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
+  ///  Get the status for notificationId
+  ///   notifyStatus(notiticationId);
+  ///
   ///```
   Future<String> notifyStatus(String notificationId);
 
   ///Returns the list of received notifications of an atsign, Optionally, notifications can be filtered on from date, to date and regular expression
   ///```
   ///e.g alice is the current atsign
+  ///  Get all the notifications
   ///  notify:list
   ///    notifyList();
+  ///
+  ///  Get notification starting from 2021-01-28 to 2021-01-29
   ///  notify:list:2021-01-28:2021-01-29
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29);
+  ///
+  ///  Get notifications list which matches with the regex 'phone'
   ///  notify:list:phone
   ///     notifyList(regex: phone);
+  ///
+  ///  Get notification starting from 2021-01-28 to 2021-01-29 and
+  ///         matches with the regex 'phone'
   ///  notify:list:2021-01-28:2021-01-29:phone
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
   ///```
