@@ -28,7 +28,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message == 'Key cannot contain whitespaces')));
+              e.errorMessage == 'Key cannot contain whitespaces')));
     });
 
     test('Throws AtKeyException when key contains @', () {
@@ -37,7 +37,7 @@ void main() async {
       expect(
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
-              e is AtKeyException && e.message == 'Key cannot contain @')));
+              e is AtKeyException && e.errorMessage == 'Key cannot contain @')));
     });
 
     test(
@@ -53,7 +53,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message == 'Cannot update a cached key.')));
+              e.errorMessage == 'Cannot update a cached key.')));
     });
 
     test(
@@ -65,7 +65,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message == 'Cannot update a cached key.')));
+              e.errorMessage == 'Cannot update a cached key.')));
     });
   });
 
@@ -81,7 +81,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message ==
+              e.errorMessage ==
                   'Invalid TTL value: ${metadata.ttl}. TTL value cannot be less than 0')));
     });
 
@@ -96,7 +96,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message ==
+              e.errorMessage ==
                   'Invalid TTB value: ${metadata.ttb}. TTB value cannot be less than 0')));
     });
 
@@ -111,7 +111,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message ==
+              e.errorMessage ==
                   'Invalid TTR value: ${metadata.ttr}. valid values for TTR are -1 and greater than or equal to 1')));
     });
   });
@@ -126,7 +126,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message == AtMessage.moreThanOneAt.text)));
+              e.errorMessage == AtMessage.moreThanOneAt.text)));
     });
     test('Test to verify the invalid sharedWith atSign - whitespace in atSign',
         () {
@@ -138,7 +138,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message == AtMessage.whiteSpaceNotAllowed.text)));
+              e.errorMessage == AtMessage.whiteSpaceNotAllowed.text)));
     });
     test(
         'Test to verify the invalid sharedWith atSign - reserved characters not allowed',
@@ -151,7 +151,7 @@ void main() async {
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.message == AtMessage.reservedCharacterUsed.text)));
+              e.errorMessage == AtMessage.reservedCharacterUsed.text)));
     });
   });
 
