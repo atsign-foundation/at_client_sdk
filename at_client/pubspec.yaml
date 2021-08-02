@@ -1,9 +1,9 @@
 name: at_client
-description: A Dart library with the core, non-platform specific abstract and implementation classes that define what an atClient SDK responsibilities are.
+description: The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the @protocol.
 version: 2.0.3
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
-documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
+documentation: https://atsign.dev/docs/
 
 environment:
   sdk: '>=2.12.0 <3.0.0'
