@@ -34,13 +34,17 @@ import 'package:at_base2e15/at_base2e15.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
+import 'package:at_client/src/manager/stream_handler.dart';
+import 'package:at_client/src/stream/at_stream.dart';
+import 'package:at_client/src/stream/stream_receiver.dart';
+import 'package:at_client/src/stream/stream_sender.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
-  AtClientPreference? _preference;
+  late AtClientPreference _preference;
 
-  AtClientPreference? get preference => _preference;
-  String? currentAtSign;
+  AtClientPreference get preference => _preference;
+  late String currentAtSign;
   String? _namespace;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
@@ -82,17 +86,17 @@ class AtClientImpl implements AtClient {
 
   AtClientImpl(
       String _atSign, String? namespace, AtClientPreference preference) {
-    currentAtSign = AtUtils.formatAtSign(_atSign);
+    currentAtSign = AtUtils.formatAtSign(_atSign)!;
     _preference = preference;
     _namespace = namespace;
   }
 
   Future<void> _init() async {
-    if (_preference!.isLocalStoreRequired) {
-      _localSecondary = LocalSecondary(currentAtSign!, _preference);
+    if (_preference.isLocalStoreRequired) {
+      _localSecondary = LocalSecondary(currentAtSign, _preference);
     }
-    _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
-        privateKey: _preference!.privateKey);
+    _remoteSecondary = RemoteSecondary(currentAtSign, _preference,
+        privateKey: _preference.privateKey);
     _encryptionService = EncryptionService();
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
@@ -100,12 +104,12 @@ class AtClientImpl implements AtClient {
   }
 
   Secondary getSecondary({bool isDedicated = false}) {
-    if (_preference!.isLocalStoreRequired) {
+    if (_preference.isLocalStoreRequired) {
       return _localSecondary!;
     }
     if (isDedicated) {
-      return RemoteSecondary(currentAtSign!, _preference!,
-          privateKey: _preference!.privateKey);
+      return RemoteSecondary(currentAtSign, _preference,
+          privateKey: _preference.privateKey);
     }
     return _remoteSecondary!;
   }
@@ -129,8 +133,8 @@ class AtClientImpl implements AtClient {
   @override
   RemoteSecondary? getRemoteSecondary({bool isDedicated = false}) {
     if (isDedicated) {
-      var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
-          privateKey: _preference!.privateKey);
+      var remoteSecondary = RemoteSecondary(currentAtSign, _preference,
+          privateKey: _preference.privateKey);
       return remoteSecondary;
     }
     return _remoteSecondary;
@@ -589,7 +593,7 @@ class AtClientImpl implements AtClient {
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
     if (atKey.metadata != null && atKey.metadata!.isBinary!) {
-      if (value != null && value.length > _preference!.maxDataSize) {
+      if (value != null && value.length > _preference.maxDataSize) {
         throw AtClientException('AT0005', 'BufferOverFlowException');
       }
       value = Base2e15.encode(value);
@@ -819,11 +823,12 @@ class AtClientImpl implements AtClient {
     return metadata;
   }
 
+  /// [deprecated] Create a sender stream using [createStream] with [StreamType.SEND] and call [StreamSender.send]
   @override
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
-    var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
+    var streamResponse = AtStreamResponse(streamId);
     var file = File(filePath);
     var data = file.readAsBytesSync();
     var fileName = basename(filePath);
@@ -833,7 +838,7 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
+    var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
@@ -842,7 +847,7 @@ class AtClientImpl implements AtClient {
       logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
-          .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+          .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.COMPLETE;
@@ -858,6 +863,24 @@ class AtClientImpl implements AtClient {
     return streamResponse;
   }
 
+  @override
+  AtStream createStream(StreamType streamType, {String? streamId}) {
+    var stream = StreamHandler.getInstance()
+        .createStream(currentAtSign, streamType, streamId: streamId);
+    if (streamType == StreamType.SEND) {
+      stream.sender!.remoteSecondary =
+          RemoteSecondary(currentAtSign, preference);
+      stream.sender!.encryptionService = _encryptionService;
+    } else if (streamType == StreamType.RECEIVE) {
+      stream.receiver!.encryptionService = _encryptionService;
+      stream.receiver!.preference = _preference;
+      stream.receiver!.remoteSecondary =
+          RemoteSecondary(currentAtSign, preference);
+    }
+    return stream;
+  }
+
+  /// [deprecated] Create a receiver stream using [createStream] with [StreamType.RECEIVE] and call [StreamReceiver.ack]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -867,13 +890,12 @@ class AtClientImpl implements AtClient {
       Function streamReceiveCallBack) async {
     var handler = StreamNotificationHandler();
     handler.remoteSecondary = getRemoteSecondary();
-    handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
     handler.encryptionService = _encryptionService;
     var notification = AtStreamNotification()
       ..streamId = streamId
       ..fileName = fileName
-      ..currentAtSign = currentAtSign!
+      ..currentAtSign = currentAtSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
     logger.info('Sending ack for stream notification:$notification');
@@ -949,9 +971,9 @@ class AtClientImpl implements AtClient {
         }
 
         // storing sent files in a a directory.
-        if (preference?.downloadPath != null) {
+        if (preference.downloadPath != null) {
           var sentFilesDirectory =
-              await Directory(preference!.downloadPath! + '/sent-files')
+              await Directory(preference.downloadPath! + '/sent-files')
                   .create();
           await File(file.path)
               .copy(sentFilesDirectory.path + '/${fileStatus.fileName}');
@@ -974,7 +996,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath}) async {
-    downloadPath ??= preference!.downloadPath;
+    downloadPath ??= preference.downloadPath;
     if (downloadPath == null) {
       throw Exception('downloadPath not found');
     }

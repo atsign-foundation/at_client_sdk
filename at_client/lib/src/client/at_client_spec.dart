@@ -7,6 +7,7 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/stream/at_stream.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
@@ -335,8 +336,15 @@ abstract class AtClient {
       {String? regex});
 
   /// Streams the file in [filePath] to [sharedWith] atSign.
+  /// Optionally specify a unique [namespace] for all stream transfers from your app
+  /// [Deprecated] use [createStream]
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
+
+  /// Create a stream for a given [streamType]. If your app is sending a file through stream
+  /// then pass [StreamType.SEND]. If your app is receiving a file pass [StreamType.RECEIVE].
+  /// Optionally pass [streamId] if you want to create a stream for a known stream transfer.
+  AtStream createStream(StreamType streamType, {String? streamId});
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
