@@ -12,47 +12,62 @@ abstract class ChangeService {
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
   /// phone.persona@alice where 'persona' is the namespace. If you want to save by ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
-  /// Additional metadata can be set using [AtKey.metadata]
+  /// Optionally metadata can be set using [AtKey.metadata]
+  ///
+  /// @returns
+  ///  Returns a [Change] object.
+  ///
+  /// @ throws
+  /// Throws [KeyNotFoundException] when keys to encrypt the data are not found.
+  /// Throws [AtKeyException] for invalid key formed.
   /// ```
-  /// update:phone@alice +1 999 9999
+  /// @usage
+  /// CurrentAtSign = @alice
+  ///
+  /// 1. Update a private key and value.
   ///   var key = AtKey()..key='phone'
-  ///   put(key,'+1 999 9999');
-  /// update:public:phone@alice +1 999 9999
+  ///   var changeServiceImpl = ChangeServiceImpl(_atClient);
+  ///   changeServiceImpl.put(key,'+1 999 9999');
+  ///
+  /// 2. Update a public key and value.
   ///   var metaData = Metadata()..isPublic=true;
   ///   var key = AtKey()..key='phone'
   ///             ..metadata=metaData
-  ///   put(key,'+1 999 9999');
-  /// update:@bob:phone@alice +1 999 9999
-  ///   var metaData = Metadata()..sharedWith='@bob';
+  ///   var changeServiceImpl = ChangeServiceImpl(_atClient);
+  ///   changeServiceImpl.put(key,'+1 999 9999');
+  ///
+  /// 3. Update a key for @bob atSign.
   ///    var key = AtKey()..key='phone'
-  ///                   ..metadata=metaData
-  ///   put(key,'+1 999 9999');
-  /// update:@alice:phone.persona@alice +1 999 9999
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith='@alice'
-  ///   put(key, '+1 999 9999');
-  /// update:@alice:phone@alice +1 999 9999
-  ///   var metaData = Metadata()..namespaceAware=false
-  ///   var key = AtKey()..key='phone'
-  ///            sharedWith='@alice'
-  ///   put(key, '+1 999 9999');
-  /// update:@bob:phone.persona@alice '+1 999 9999'
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob';
-  ///    put(key, '+1 999 9999');
-  /// update:ttl:60000:ttb:60000:@bob:phone.persona@alice '+1 999 9999'
-  ///   var metadata = Metadata()..ttl = 60000
+  ///                     ..sharedWith='@bob';
+  ///    var changeServiceImpl = ChangeServiceImpl(_atClient);
+  ///    changeServiceImpl.put(key,'+1 999 9999');
+  ///
+  /// 4. Setting namespace to false.
+  ///    var metaData = Metadata()..namespaceAware=false
+  ///    var key = AtKey()..key='phone'
+  ///                    ..sharedWith='@alice'
+  ///                    ..metadata = metaData;
+  ///    var changeServiceImpl = ChangeServiceImpl(_atClient);
+  ///    changeServiceImpl.put(key, '+1 999 9999');
+  ///
+  /// 5. Setting metadata to key - TTL and TTB
+  ///    var metaData = Metadata()..ttl = 60000
   ///                            ..ttb = 60000;
-  ///   var key = AtKey()..key = 'phone'
+  ///    var key = AtKey()..key = 'phone'
   ///                    ..sharedWith = '@bob'
-  ///                    ..metadata = metadata;
-  ///   put(key, '+1 999 9999')
+  ///                    ..metadata = metaData;
+  ///    var changeServiceImpl = ChangeServiceImpl(_atClient);
+  ///    changeServiceImpl.put(key, '+1 999 9999')
+  ///
+  /// 6. Enable another atSign(here @bob) to cache a key and value
+  ///    var metaData = Metadata()..ttr = -1
+  ///
+  ///    var key = AtKey()..key = 'phone'
+  ///                    ..sharedWith = '@bob'
+  ///                    ..metadata = metaData;
+  ///    var changeServiceImpl = ChangeServiceImpl(_atClient);
+  ///    changeServiceImpl.put(key, '+1 999 9999')
   /// ```
-  /// Returns the [Change] object.
-  /// Throws [SecondaryNotFoundException] when sharedWith atSign secondary is not reachable.
-  /// Throws [KeyNotFoundException] when keys to encrypt the data are not found.
-  /// Throws [AtClientException] when binary data size exceeds the [AtClientPreference.maxDataSize].
-  /// Throws [AtClientException] for any other exceptions.
   Future<Change> put(AtKey key, dynamic value);
 
   Future<Change> putMeta(AtKey key);
