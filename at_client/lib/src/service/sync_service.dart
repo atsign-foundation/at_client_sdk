@@ -66,7 +66,10 @@ class SyncService {
     }
   }
 
-  /// Initiates a Sync with the server. If the sync encounters any exceptions
+  /// Initiates a Sync with the server.
+  /// If another sync is already inProgress, method returns immediately
+  /// If cloud server and local server are in sync, then [onDone] is called and method returns.
+  /// If the sync encounters any exceptions
   /// [onError] call back is called and the Sync is terminated.
   /// e.g onError callback
   /// ```
@@ -82,7 +85,10 @@ class SyncService {
   /// }
   /// ```
   /// If no callbacks are passed, use await sync() or await sync(regex: regex)
-  /// Optionally pass [regex] to sync only matching keys.
+  /// Optionally pass [regex] to sync only keys that matches the [regex]
+  /// If no [onError] callback is passed, below exceptions are thrown.
+  /// [AtConnectException] is thrown if internet is not available
+  /// [SecondaryNotFoundException] is thrown if the secondary service is down or not available
   Future<void> sync(
       {Function? onDone, Function? onError, String? regex}) async {
     if (_syncInProgress) {
@@ -100,9 +106,7 @@ class SyncService {
       if (isInSync) {
         _logger.finer('Server and local secondary are in sync');
         _syncInProgress = false;
-        if (onDone != null) {
-          onDone(this);
-        }
+        _onDone(onDone);
         return;
       }
       lastSyncedCommitId ??= -1;
@@ -116,9 +120,7 @@ class SyncService {
       //push changes from local to cloud
       await _pushChanges(syncObject, regex: regex);
       _syncInProgress = false;
-      if (onDone != null) {
-        onDone(this);
-      }
+      _onDone(onDone);
     } on Exception catch (e) {
       _syncInProgress = false;
       if (onDone != null && onError != null) {
@@ -126,6 +128,13 @@ class SyncService {
       } else {
         rethrow;
       }
+    }
+  }
+
+  void _onDone(Function? onDone) {
+    if (onDone != null) {
+      _logger.finer('sync service onDone invoked');
+      onDone(this);
     }
   }
 
@@ -232,7 +241,7 @@ class SyncService {
       throw AtConnectException('Internet connection unavailable to sync');
     }
     if (!(await remoteSecondary.isAvailable())) {
-      throw AtConnectException('Secondary server is unavailable');
+      throw SecondaryNotFoundException('Secondary server is unavailable');
     }
   }
 

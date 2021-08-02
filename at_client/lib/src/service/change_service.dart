@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_commons/at_commons.dart';
 
 import 'change.dart';
@@ -74,8 +75,13 @@ abstract class ChangeService {
 
   Future<Change> delete(key);
 
-  Future<void> sync({Function? onDone});
+  /// Keeps the local storage and cloud secondary storage in sync.
+  /// Pushes uncommitted local changes to remote secondary storage and vice versa.
+  /// Refer [SyncService.sync] for usage details, callback usage and exceptions thrown
+  Future<void> sync({Function? onDone, Function? onError, String? regex});
 
+  /// Checks whether commit id on local storage and on cloud secondary server are the same.
+  /// If the commit ids are equal then returns true. otherwise returns false.
   Future<bool> isInSync();
 
   AtClient getClient();
