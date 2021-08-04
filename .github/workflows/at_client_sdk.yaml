@@ -62,7 +62,7 @@ jobs:
 
       # Adding flutter to path
       - name: Installing Flutter
-        uses: britannio/action-install-flutter@v1.0
+        uses: britannio/action-install-flutter@v1.1
         with:
           version: stable
 
