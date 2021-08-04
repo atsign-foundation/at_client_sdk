@@ -7,22 +7,20 @@ import 'package:pedantic/pedantic.dart';
 
 class ChangeImpl implements Change {
   final AtClient _atClient;
-  AtKey? atKey;
-  OperationEnum? operationEnum;
+  late AtKey atKey;
+  late OperationEnum operationEnum;
   AtValue? atValue;
 
   ChangeImpl(this._atClient);
 
   @override
   AtKey getKey() {
-    // TODO: implement getKey
-    throw UnimplementedError();
+    return atKey;
   }
 
   @override
   OperationEnum getOperation() {
-    // TODO: implement getOperation
-    throw UnimplementedError();
+    return operationEnum;
   }
 
   @override
@@ -44,7 +42,7 @@ class ChangeImpl implements Change {
 
   @override
   void notify({Function? onSuccess, Function? onError}) {
-    // TODO: implement notify
+    _atClient.notify(getKey(), getValue().toString(), getOperation());
   }
 
   @override

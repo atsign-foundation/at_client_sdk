@@ -9,6 +9,10 @@ abstract class Change {
 
   OperationEnum getOperation();
 
+  /// Notifies to [AtKey.sharedWith] that a key [AtKey.key] has been newly created or the vaue
+  /// of the key has changed. If internet is not available or [AtKey.sharedWith] secondary is down
+  /// [onError] callback is invoked. If the key is notified successfully without any errors [onSuccess]
+  /// callback is invoked.
   void notify({Function? onSuccess, Function? onError});
 
   /// Keeps the local storage and cloud secondary storage in sync.
