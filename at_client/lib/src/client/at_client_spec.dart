@@ -347,4 +347,6 @@ abstract class AtClient {
   /// Optionally you can pass [downloadPath] to download the files.
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath});
+
+  String getCurrentAtSign();
 }
