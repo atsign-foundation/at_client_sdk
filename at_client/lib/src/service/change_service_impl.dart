@@ -20,18 +20,6 @@ class ChangeServiceImpl implements ChangeService {
 
   @override
   Future<Change> delete(AtKey atKey) async {
-    // 1. Verify if the key is well formed.
-    _validateKey(atKey.key!);
-    // 2. Verify if the key belong to the proper namespace.
-    _validateNamespace(atKey.namespace);
-    // 3. Check if the sharedWith @Sign is a valid @Sign.
-    if (atKey.sharedWith != null) {
-      atKey.sharedWith = AtUtils.fixAtSign(atKey.sharedWith!);
-      // 3.1 verify only if network is available. validate if the sharedWith @sign exists.
-      if (await NetworkUtil.isNetworkAvailable()) {
-        _validateAtSign(atKey.sharedWith!);
-      }
-    }
     await _atClient.delete(atKey);
     // If delete is successful, return a change object.
     return ChangeImpl.from(_atClient, atKey, OperationEnum.delete);
@@ -49,25 +37,8 @@ class ChangeServiceImpl implements ChangeService {
 
   @override
   Future<Change> put(AtKey atKey, value) async {
-    // 1. Verify if the key is well formed.
-    _validateKey(atKey.key!);
-    // 2. Verify if the key belong to the proper namespace.
-    _validateNamespace(atKey.namespace);
-    // 3. Verify if the put is allowed. cached key's cannot be updated.
-    if ((atKey.metadata != null && atKey.metadata!.isCached) ||
-        atKey.key!.startsWith('cached:')) {
-      throw PermissionDeniedException('Cannot update a cached key.');
-    }
-    //4. Verify if metadata is valid.
-    _validateMetadata(atKey.metadata);
-    // 5. Check if the sharedWith @Sign is a valid @Sign.
-    if (atKey.sharedWith != null) {
-      atKey.sharedWith = AtUtils.fixAtSign(atKey.sharedWith!);
-      // 5.1 verify only if network is available. validate if the sharedWith @sign exists.
-      if (await NetworkUtil.isNetworkAvailable()) {
-        _validateAtSign(atKey.sharedWith!);
-      }
-    }
+    // Validates the atKey's
+    await _validateAtKey(atKey);
     await _atClient.put(atKey, value);
     // If put is successful, return change object.
     return ChangeImpl.from(_atClient, atKey, OperationEnum.update,
@@ -76,25 +47,8 @@ class ChangeServiceImpl implements ChangeService {
 
   @override
   Future<Change> putMeta(AtKey atKey) async {
-    // 1. Verify if the key is well formed.
-    _validateKey(atKey.key!);
-    // 2. Verify if the key belong to the proper namespace.
-    _validateNamespace(atKey.namespace);
-    // 3. Verify if the put is allowed. cached key's cannot be updated.
-    if ((atKey.metadata != null && atKey.metadata!.isCached) ||
-        atKey.key!.startsWith('cached:')) {
-      throw PermissionDeniedException('Cannot update a cached key.');
-    }
-    //4. Verify if metadata is valid.
-    _validateMetadata(atKey.metadata);
-    // 5. Check if the sharedWith @Sign is a valid @Sign.
-    if (atKey.sharedWith != null) {
-      atKey.sharedWith = AtUtils.fixAtSign(atKey.sharedWith!);
-      // 5.1 verify only if network is available. validate if the sharedWith @sign exists.
-      if (await NetworkUtil.isNetworkAvailable()) {
-        _validateAtSign(atKey.sharedWith!);
-      }
-    }
+    // validates the atKey
+    await _validateAtKey(atKey);
     await _atClient.putMeta(atKey);
     // If put is successful, return change object.
     return ChangeImpl.from(_atClient, atKey, OperationEnum.update);
@@ -111,6 +65,29 @@ class ChangeServiceImpl implements ChangeService {
           .sync(onDone: onDone, onError: onError, regex: regex));
     } else {
       await _atClient.getSyncService()!.sync(regex: regex);
+    }
+  }
+
+  /// Validates the atKey
+  Future<void> _validateAtKey(AtKey atKey) async {
+    // 1. Verify if the key is well formed.
+    _validateKey(atKey.key!);
+    // 2. Verify if the key belong to the proper namespace.
+    _validateNamespace(atKey.namespace);
+    // 3. Verify if the put is allowed. cached key's cannot be updated.
+    if ((atKey.metadata != null && atKey.metadata!.isCached) ||
+        atKey.key!.startsWith('cached:')) {
+      throw PermissionDeniedException('Cannot update a cached key.');
+    }
+    //4. Verify if metadata is valid.
+    _validateMetadata(atKey.metadata);
+    // 5. Check if the sharedWith @Sign is a valid @Sign.
+    if (atKey.sharedWith != null) {
+      atKey.sharedWith = AtUtils.fixAtSign(atKey.sharedWith!);
+      // 5.1 verify only if network is available. validate if the sharedWith @sign exists.
+      if (await NetworkUtil.isNetworkAvailable()) {
+        _validateAtSign(atKey.sharedWith!);
+      }
     }
   }
 

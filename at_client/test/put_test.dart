@@ -52,7 +52,7 @@ void main() async {
       expect(
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
-              e is AtKeyException &&
+              e is PermissionDeniedException &&
               e.errorMessage == 'Cannot update a cached key.')));
     });
 
@@ -64,7 +64,7 @@ void main() async {
       expect(
           () => changeServiceImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
-              e is AtKeyException &&
+              e is PermissionDeniedException &&
               e.errorMessage == 'Cannot update a cached key.')));
     });
   });

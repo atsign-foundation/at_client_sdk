@@ -152,7 +152,7 @@ abstract class ChangeService {
   /// Returns a [Change] object.
   ///
   /// @throws
-  /// Throws [DataStoreException] is local storage is not initialized.
+  /// Throws [DataStoreException] when local storage is not initialized.
   ///
   /// @usage
   ///
