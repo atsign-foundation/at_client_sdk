@@ -120,7 +120,7 @@ class Monitor {
         _monitorConnection!.close();
       });
       await _authenticateConnection();
-      _monitorConnection!.write(_buildMonitorCommand());
+     await  _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.Started;
       return;
     } on Exception catch (e) {
@@ -241,7 +241,7 @@ class Monitor {
       // We will use a strategy here
       Future.delayed(Duration(seconds: 3), start);
     } else {
-      _onError(this, e);
+      _onError(e);
     }
   }
 

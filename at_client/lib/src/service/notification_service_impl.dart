@@ -1,5 +1,7 @@
-
+import 'dart:convert';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -7,36 +9,29 @@ class NotificationServiceImpl implements NotificationService {
   Map<String, NotificationService> instances = {};
   Map<String, Function> listeners = {};
   final EMPTY_REGEX = '';
+  static const notificationIdKey = '_latestNotificationId';
 
   late AtClient atClient;
 
   NotificationService? getInstance() {
-    _loadSubscriptions();
+    _startMonitor();
     return instances[atClient.getCurrentAtSign()];
   }
 
-  void _loadSubscriptions() async {
-    // Remember the subscriptions beyond the app restart
-    // jagan. have to validate whether below will work since we are retrieving dart object from hive
-   var subscriptions = atClient.get(AtKey()..key='_nf_listeners');
-
-
-    //String lastReceivedNotification = atClient.put("_latestNotificationId", notification.id);
-
-    final lastNotificationTimeMillis = await _getLastNotificationTime ();
-    //jagan.should we iterate through subscriptions and start monitor for each subscription ?
-    // Start Monitor
-//    Monitor.start(lastReceivedNotification);
-//
-//    // If the monitor could not be started.. make sure that no exception is thrown and the code here
-//    while(!Monitor.isRunning) {
-//      Future.delayed(_tryLater , Seconds.3);
-//    }
+  void _startMonitor() async {
+    final lastNotificationId = await _getLastNotificationId();
+    final monitor = Monitor(
+        _internalNotificationCallback,
+        _onMonitorError,
+        atClient.getCurrentAtSign(),
+        atClient.getPreferences(),
+        MonitorPreference()..keepAlive = true);
+    await monitor.start(lastNotificationTime: lastNotificationId);
   }
 
-  Future<int?> _getLastNotificationTime() async {
-    final atValue = await atClient.get(AtKey()..key='_latestNotificationTime');
-    if(atValue != null) {
+  Future<int?> _getLastNotificationId() async {
+    final atValue = await atClient.get(AtKey()..key = notificationIdKey);
+    if (atValue != null) {
       return int.parse(atValue.value);
     }
     return null;
@@ -45,19 +40,46 @@ class NotificationServiceImpl implements NotificationService {
   @override
   void listen(Function notificationCallback, {String? regex}) {
     regex ??= EMPTY_REGEX;
+    listeners[regex] = notificationCallback;
+  }
 
-    listeners[regex] =  notificationCallback;
-    // Remember the subscription
-    // Jagan. listener is a dart map object. not sure whether this will work in hive like
-    // java serialization/deserialization
-    atClient.put(AtKey()..key='_nf_listeners', listeners);
-    // Jagan. should a monitor be started here?
-    // should listen method return a Stream or StreamSubscription ? similar to socket.listen ?
+  void _internalNotificationCallback(String notificationJSON) {
+    final atNotification =
+        AtNotification.fromJson(jsonDecode(notificationJSON));
+    atClient.put(
+        AtKey()..key = notificationIdKey, atNotification.notificationId);
+    listeners.forEach((regex, subscriptionCallback) {
+      final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
+      if (isMatches) {
+        subscriptionCallback(atNotification);
+      }
+    });
+  }
+
+  void _onMonitorError() {
+    //#TODO implement
   }
 
   @override
-  void notify(NotificationParams notificationParams, onSuccessCallback, onErrorCallback) {
+  void notify(NotificationParams notificationParams, onSuccessCallback,
+      onErrorCallback) {
     // TODO: implement notify
   }
+}
 
+class AtNotification {
+  late int notificationId;
+  late String key;
+  dynamic? value;
+
+  static AtNotification fromJson(Map json) {
+    //#TODO complete impl
+    return AtNotification();
+  }
+
+  static Map toJson(AtNotification notification) {
+    //#TODO complete impl
+    final jsonMap = {};
+    return jsonMap;
+  }
 }

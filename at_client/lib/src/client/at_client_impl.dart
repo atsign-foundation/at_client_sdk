@@ -1018,4 +1018,14 @@ class AtClientImpl implements AtClient {
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService!.encryptUnencryptedData();
   }
+
+  @override
+  String? getCurrentAtSign() {
+    return currentAtSign;
+  }
+
+  @override
+  AtClientPreference? getPreferences() {
+    return _preference;
+  }
 }

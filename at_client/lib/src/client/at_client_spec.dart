@@ -22,6 +22,8 @@ abstract class AtClient {
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
 
+  AtClientPreference? getPreferences();
+
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
   /// has to be shared with another atSign. Set [AtKey.metadata.isBinary] if you are updating binary value e.g image,file.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
@@ -348,5 +350,5 @@ abstract class AtClient {
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath});
 
-  String getCurrentAtSign();
+  String? getCurrentAtSign();
 }

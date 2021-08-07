@@ -3,6 +3,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 
+// #TODO Remove this class..since we have notification service ?
 class MonitorService {
   int? _lastNotificationTimestamp;
   late Monitor _monitor;
