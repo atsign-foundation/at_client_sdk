@@ -27,7 +27,7 @@ class FileTransferObject {
     map['sharedWith'] = sharedWith;
     map['sharedStatus'] = sharedStatus;
     map['fileStatus'] = fileStatus;
-    map['date'] = date.toString();
+    map['date'] = date!.toUtc().toString();
     map['error'] = error;
     return map;
   }

@@ -23,6 +23,9 @@ class FileTransferService {
       FileTransferObject fileTransferObject, String downloadPath) async {
     try {
       var response = await http.get(Uri.parse(fileTransferObject.fileUrl));
+      if (response.statusCode != 200) {
+        return '';
+      }
       var archive = ZipDecoder().decodeBytes(response.bodyBytes);
 
       var tempDirectory =
