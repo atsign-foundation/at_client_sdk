@@ -97,11 +97,11 @@ class NotificationServiceImpl implements NotificationService {
     });
   }
 
-  void _monitorRetry() async {
+  void _monitorRetry() {
     _logger.finer('monitor retry');
     Future.delayed(
         Duration(seconds: 5),
-        () async => await _monitor.start(
+        () async => _monitor.start(
             lastNotificationTime: await _getLastNotificationTime()));
   }
 
