@@ -16,13 +16,17 @@ class NotificationServiceImpl implements NotificationService {
 
   late AtClient atClient;
 
+  bool isMonitorStarted = false;
+
   NotificationServiceImpl(this.atClient);
 
-  NotificationService? getInstance() {
-    _startMonitor();
-    instances[atClient.getCurrentAtSign()!] = this;
-    return instances[atClient.getCurrentAtSign()];
-  }
+//  NotificationService? getInstance() {
+//    if(instances[atClient.getCurrentAtSign()] == null) {
+//      _startMonitor();
+//    }
+//    instances[atClient.getCurrentAtSign()!] = this;
+//    return instances[atClient.getCurrentAtSign()];
+//  }
 
   void _startMonitor() async {
     final lastNotificationTime = await _getLastNotificationTime();
@@ -48,6 +52,9 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   void listen(Function notificationCallback, {String? regex}) {
+    if(!isMonitorStarted) {
+      _startMonitor();
+    }
     regex ??= EMPTY_REGEX;
     listeners[regex] = notificationCallback;
     logger.finer('added regex to listener $regex');
