@@ -4,12 +4,15 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
 
 class NotificationServiceImpl implements NotificationService {
   Map<String, NotificationService> instances = {};
   Map<String, Function> listeners = {};
   final EMPTY_REGEX = '';
   static const notificationIdKey = '_latestNotificationId';
+
+  var logger = AtSignLogger('NotificationServiceImpl');
 
   late AtClient atClient;
 
@@ -29,7 +32,7 @@ class NotificationServiceImpl implements NotificationService {
         atClient.getCurrentAtSign()!,
         atClient.getPreferences()!,
         MonitorPreference()..keepAlive = true);
-    print(
+    logger.finer(
         'starting monitor with last notification time: $lastNotificationTime');
     await monitor.start(lastNotificationTime: lastNotificationTime);
   }
@@ -37,7 +40,7 @@ class NotificationServiceImpl implements NotificationService {
   Future<int?> _getLastNotificationTime() async {
     final atValue = await atClient.get(AtKey()..key = notificationIdKey);
     if (atValue.value != null) {
-      print('json from hive: ${atValue.value}');
+      logger.finer('json from hive: ${atValue.value}');
       return jsonDecode(atValue.value)['epochMillis'];
     }
     return null;
@@ -47,7 +50,7 @@ class NotificationServiceImpl implements NotificationService {
   void listen(Function notificationCallback, {String? regex}) {
     regex ??= EMPTY_REGEX;
     listeners[regex] = notificationCallback;
-    print('added regex to listener $regex');
+    logger.finer('added regex to listener $regex');
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
@@ -55,14 +58,13 @@ class NotificationServiceImpl implements NotificationService {
     var notifications = notificationJSON.split('notification: ');
     notifications.forEach((notification) async {
       if (notification.isEmpty) {
-        print('empty string in notification');
+        logger.finer('empty string in notification');
         return;
       }
       notification = notification.replaceFirst('notification:', '');
       notification = notification.trim();
       print(notification);
       final atNotification = AtNotification.fromJson(jsonDecode(notification));
-      print('processing ${atNotification.notificationId}');
       await atClient.put(AtKey()..key = notificationIdKey, notification);
       listeners.forEach((regex, subscriptionCallback) {
         if (regex != EMPTY_REGEX) {
