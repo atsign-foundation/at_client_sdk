@@ -19,12 +19,13 @@ class FileTransferService {
     }
   }
 
-  Future<String> downloadFromFileBin(
+  Future<FileDownloadResponse> downloadFromFileBin(
       FileTransferObject fileTransferObject, String downloadPath) async {
     try {
       var response = await http.get(Uri.parse(fileTransferObject.fileUrl));
       if (response.statusCode != 200) {
-        return '';
+        return FileDownloadResponse(
+            isError: true, errorMsg: 'error in fetching data');
       }
       var archive = ZipDecoder().decodeBytes(response.bodyBytes);
 
@@ -36,10 +37,10 @@ class FileTransferService {
         encryptedFile.writeAsBytesSync(unzippedFile);
       }
 
-      return tempDirectory.path;
+      return FileDownloadResponse(filePath: tempDirectory.path);
     } catch (e) {
       print('error in downloading file: $e');
-      return '';
+      return FileDownloadResponse(isError: true, errorMsg: e.toString());
     }
   }
 }

@@ -990,12 +990,12 @@ class AtClientImpl implements AtClient {
       throw Exception('json decode exception in download file ${e.toString()}');
     }
     var downloadedFiles = <File>[];
-    var encryptedFilePath = await FileTransferService()
+    var fileDownloadReponse = await FileTransferService()
         .downloadFromFileBin(fileTransferObject, downloadPath);
-    if (encryptedFilePath == '') {
+    if (fileDownloadReponse.isError) {
       throw Exception('download fail');
     }
-    var encryptedFileList = Directory(encryptedFilePath).listSync();
+    var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = _encryptionService!.decryptFile(
@@ -1007,7 +1007,7 @@ class AtClientImpl implements AtClient {
         downloadedFiles.add(downloadedFile);
       }
       // deleting temp directory
-      Directory(encryptedFilePath).deleteSync(recursive: true);
+      Directory(fileDownloadReponse.filePath!).deleteSync(recursive: true);
       return downloadedFiles;
     } catch (e) {
       print('error in downloadFile: $e');

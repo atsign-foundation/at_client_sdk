@@ -85,3 +85,11 @@ class FileStatus {
     return null;
   }
 }
+
+class FileDownloadResponse {
+  String? filePath;
+  bool isError;
+  String? errorMsg;
+
+  FileDownloadResponse({this.filePath, this.isError = false, this.errorMsg});
+}
