@@ -13,6 +13,8 @@ class NotificationServiceImpl implements NotificationService {
 
   late AtClient atClient;
 
+  NotificationServiceImpl(this.atClient);
+
   NotificationService? getInstance() {
     _startMonitor();
     return instances[atClient.getCurrentAtSign()];
@@ -23,15 +25,15 @@ class NotificationServiceImpl implements NotificationService {
     final monitor = Monitor(
         _internalNotificationCallback,
         _onMonitorError,
-        atClient.getCurrentAtSign(),
-        atClient.getPreferences(),
+        atClient.getCurrentAtSign()!,
+        atClient.getPreferences()!,
         MonitorPreference()..keepAlive = true);
     await monitor.start(lastNotificationTime: lastNotificationId);
   }
 
   Future<int?> _getLastNotificationId() async {
     final atValue = await atClient.get(AtKey()..key = notificationIdKey);
-    if (atValue != null) {
+    if (atValue.value != null) {
       return int.parse(atValue.value);
     }
     return null;
@@ -43,14 +45,20 @@ class NotificationServiceImpl implements NotificationService {
     listeners[regex] = notificationCallback;
   }
 
-  void _internalNotificationCallback(String notificationJSON) {
+  void _internalNotificationCallback(String notificationJSON) async {
     final atNotification =
         AtNotification.fromJson(jsonDecode(notificationJSON));
-    atClient.put(
+    await atClient.put(
         AtKey()..key = notificationIdKey, atNotification.notificationId);
     listeners.forEach((regex, subscriptionCallback) {
-      final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
-      if (isMatches) {
+      if(regex != EMPTY_REGEX) {
+        final isMatches = regex
+            .allMatches(atNotification.key)
+            .isNotEmpty;
+        if (isMatches) {
+          subscriptionCallback(atNotification);
+        }
+      } else {
         subscriptionCallback(atNotification);
       }
     });
@@ -73,13 +81,15 @@ class AtNotification {
   dynamic? value;
 
   static AtNotification fromJson(Map json) {
-    //#TODO complete impl
-    return AtNotification();
+    return AtNotification()
+      ..notificationId = json['notificationId']
+      ..key = json['key'];
   }
 
-  static Map toJson(AtNotification notification) {
-    //#TODO complete impl
+  Map toJson() {
     final jsonMap = {};
+    jsonMap['notificationId'] = notificationId;
+    jsonMap['key'] = key;
     return jsonMap;
   }
 }
