@@ -101,6 +101,8 @@ class Monitor {
     }
     // This enables start method to be called with lastNotificationTime on the same instance of Monitor
     if (lastNotificationTime != null) {
+      _logger.finer(
+          'starting monitor with lastnotificationTime: $lastNotificationTime');
       _lastNotificationTime = lastNotificationTime;
     }
     try {
@@ -118,9 +120,13 @@ class Monitor {
       }, onDone: () {
         _logger.finer('monitor done');
         _monitorConnection!.close();
+        status = MonitorStatus.Stopped;
+        Future.delayed(Duration(seconds: 3), () {
+          start(lastNotificationTime: _lastNotificationTime);
+        });
       });
       await _authenticateConnection();
-     await  _monitorConnection!.write(_buildMonitorCommand());
+      await _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.Started;
       return;
     } on Exception catch (e) {
@@ -139,7 +145,7 @@ class Monitor {
     _logger.finer('fromResponse $fromResponse');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature =
-    key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
     _logger.finer('Sending command pkam:$signature');
     _monitorConnection!.write('pkam:$signature\n');
@@ -154,7 +160,7 @@ class Monitor {
       String toAtSign, String rootDomain, int rootPort) async {
     //1. find secondary url for atsign from lookup library
     var secondaryUrl =
-    await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
+        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
     if (secondaryUrl == null) {
       throw Exception('Secondary url not found');
     }
@@ -165,7 +171,7 @@ class Monitor {
     //2. create a connection to secondary server
     var secureSocket = await SecureSocket.connect(host, int.parse(port));
     OutboundConnection _monitorConnection =
-    OutboundConnectionImpl(secureSocket);
+        OutboundConnectionImpl(secureSocket);
     return _monitorConnection;
   }
 
@@ -204,7 +210,7 @@ class Monitor {
 
   String _buildMonitorCommand() {
     var monitorVerbBuilder = MonitorVerbBuilder();
-    if (_regex != null) {
+    if (_regex != null && _regex!.isNotEmpty) {
       monitorVerbBuilder.regex = _regex;
     }
     if (_lastNotificationTime != null) {
@@ -239,7 +245,10 @@ class Monitor {
     // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
       // We will use a strategy here
-      Future.delayed(Duration(seconds: 3), start);
+      _logger.finer('Retrying start monitor due to error');
+      Future.delayed(Duration(seconds: 3), () {
+        start(lastNotificationTime: _lastNotificationTime);
+      });
     } else {
       _onError(e);
     }
