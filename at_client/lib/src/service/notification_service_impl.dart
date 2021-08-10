@@ -5,18 +5,20 @@ import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:pedantic/pedantic.dart';
 
 class NotificationServiceImpl implements NotificationService {
-  Map<String, NotificationService> instances = {};
+//  Map<String, NotificationService> instances = {};
   Map<String, Function> listeners = {};
   final EMPTY_REGEX = '';
   static const notificationIdKey = '_latestNotificationId';
 
-  var logger = AtSignLogger('NotificationServiceImpl');
+  final _logger = AtSignLogger('NotificationServiceImpl');
 
   late AtClient atClient;
 
   bool isMonitorStarted = false;
+  late Monitor _monitor;
 
   NotificationServiceImpl(this.atClient);
 
@@ -28,23 +30,25 @@ class NotificationServiceImpl implements NotificationService {
 //    return instances[atClient.getCurrentAtSign()];
 //  }
 
-  void _startMonitor() async {
+  Future<void> _startMonitor() async {
     final lastNotificationTime = await _getLastNotificationTime();
-    final monitor = Monitor(
+    _monitor = Monitor(
         _internalNotificationCallback,
         _onMonitorError,
         atClient.getCurrentAtSign()!,
         atClient.getPreferences()!,
-        MonitorPreference()..keepAlive = true);
-    logger.finer(
+        MonitorPreference()..keepAlive = true,
+        _monitorRetry);
+    _logger.finer(
         'starting monitor with last notification time: $lastNotificationTime');
-    await monitor.start(lastNotificationTime: lastNotificationTime);
+    await _monitor.start(lastNotificationTime: lastNotificationTime);
+    isMonitorStarted = true;
   }
 
   Future<int?> _getLastNotificationTime() async {
     final atValue = await atClient.get(AtKey()..key = notificationIdKey);
     if (atValue.value != null) {
-      logger.finer('json from hive: ${atValue.value}');
+      _logger.finer('json from hive: ${atValue.value}');
       return jsonDecode(atValue.value)['epochMillis'];
     }
     return null;
@@ -52,12 +56,19 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   void listen(Function notificationCallback, {String? regex}) {
-    if(!isMonitorStarted) {
+    if (!isMonitorStarted) {
+      _logger
+          .finer('starting monitor for atsign: ${atClient.getCurrentAtSign()}');
       _startMonitor();
     }
     regex ??= EMPTY_REGEX;
     listeners[regex] = notificationCallback;
-    logger.finer('added regex to listener $regex');
+    _logger.finer('added regex to listener $regex');
+  }
+
+  void stop() {
+    listeners.clear();
+    _monitor.stop();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
@@ -65,7 +76,7 @@ class NotificationServiceImpl implements NotificationService {
     var notifications = notificationJSON.split('notification: ');
     notifications.forEach((notification) async {
       if (notification.isEmpty) {
-        logger.finer('empty string in notification');
+        _logger.finer('empty string in notification');
         return;
       }
       notification = notification.replaceFirst('notification:', '');
@@ -84,6 +95,14 @@ class NotificationServiceImpl implements NotificationService {
         }
       });
     });
+  }
+
+  void _monitorRetry() async {
+    _logger.finer('monitor retry');
+    Future.delayed(
+        Duration(seconds: 5),
+        () async => await _monitor.start(
+            lastNotificationTime: await _getLastNotificationTime()));
   }
 
   void _onMonitorError() {

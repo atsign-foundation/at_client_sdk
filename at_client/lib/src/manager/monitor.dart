@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -35,6 +36,8 @@ class Monitor {
   late Function _onError;
 
   late Function _onResponse;
+
+  late Function _retryCallBack;
 
   late AtClientPreference _preference;
 
@@ -76,7 +79,7 @@ class Monitor {
   /// When [retry] is true
   ////
   Monitor(Function onResponse, Function onError, String atSign,
-      AtClientPreference preference, MonitorPreference monitorPreference) {
+      AtClientPreference preference, MonitorPreference monitorPreference, Function retryCallBack) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -85,6 +88,7 @@ class Monitor {
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
     _remoteSecondary ??= RemoteSecondary(atSign, preference);
+    _retryCallBack = retryCallBack;
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -121,9 +125,8 @@ class Monitor {
         _logger.finer('monitor done');
         _monitorConnection!.close();
         status = MonitorStatus.Stopped;
-        Future.delayed(Duration(seconds: 3), () {
-          start(lastNotificationTime: _lastNotificationTime);
-        });
+        // Future.delayed(Duration(seconds: 5), () => retryCallBack);
+        _retryCallBack;
       });
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
@@ -135,7 +138,7 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
-    _monitorConnection!.write('from:$_atSign\n');
+    await _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await _getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
@@ -148,7 +151,7 @@ class Monitor {
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
     _logger.finer('Sending command pkam:$signature');
-    _monitorConnection!.write('pkam:$signature\n');
+    await _monitorConnection!.write('pkam:$signature\n');
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
       throw UnAuthenticatedException('Auth failed');
@@ -246,9 +249,7 @@ class Monitor {
     if (_keepAlive) {
       // We will use a strategy here
       _logger.finer('Retrying start monitor due to error');
-      Future.delayed(Duration(seconds: 3), () {
-        start(lastNotificationTime: _lastNotificationTime);
-      });
+      _retryCallBack;
     } else {
       _onError(e);
     }

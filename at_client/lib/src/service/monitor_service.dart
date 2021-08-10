@@ -17,7 +17,7 @@ class MonitorService {
       AtClientPreference clientPreference,
       MonitorPreference monitorPreference) {
     _monitor = Monitor(_processNotification, _processError, atSign,
-        clientPreference, monitorPreference);
+        clientPreference, monitorPreference,()=>{});
     _notificationCallback = notificationCallback;
     _errorCallback = errorCallback;
   }
