@@ -1,4 +1,4 @@
-import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/exception/at_client_error_codes.dart';
 
 class AtClientException implements Exception {
   String? errorCode;
@@ -13,5 +13,6 @@ class AtClientException implements Exception {
 }
 
 class AtKeyException extends AtClientException {
-  AtKeyException(message) : super(error_codes['AtKeyException'], message);
+  AtKeyException(message)
+      : super(at_client_error_codes['AtKeyException'], message);
 }

@@ -113,24 +113,28 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      onSuccessCallback, onErrorCallback) async {
-    var notificationResult;
+      {Function? onSuccess, Function? onError}) async {
+    var notificationResult = NotificationResult()
+      ..atKey = notificationParams.atKey;
     var notificationId;
     try {
-      notificationResult = NotificationResult()
-        ..atKey = notificationParams.atKey;
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       // Returns the notificationId.
       notificationId = await atClient.notifyChange(notificationParams);
     } on AtLookUpException catch (e) {
+      // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.errored;
+      // Set AtClientException object to notificationResult
       var errorCode = AtClientExceptionUtil.getErrorCode(e);
       var atClientException = AtClientException(
           errorCode, AtClientExceptionUtil.getErrorDescription(errorCode));
       notificationResult.atClientException = atClientException;
-      onErrorCallback(notificationResult);
-      throw atClientException;
+      // Invoke onErrorCallback
+      if (onError != null) {
+        onError(notificationResult);
+      }
+      return notificationResult;
     }
     notificationId = notificationId.replaceAll('data:', '');
     notificationResult.notificationID = notificationId;
@@ -143,7 +147,9 @@ class NotificationServiceImpl implements NotificationService {
       case NotificationStatusEnum.delivered:
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.delivered;
-        onSuccessCallback(notificationResult);
+        if (onSuccess != null) {
+          onSuccess(notificationResult);
+        }
         break;
       case NotificationStatusEnum.errored:
         notificationResult.notificationStatusEnum =
@@ -151,7 +157,9 @@ class NotificationServiceImpl implements NotificationService {
         notificationResult.atClientException = AtClientException(
             error_codes['SecondaryConnectException'],
             error_description[error_codes['SecondaryConnectException']]);
-        onErrorCallback(notificationResult);
+        if (onError != null) {
+          onError(notificationResult);
+        }
         break;
     }
     return notificationResult;
