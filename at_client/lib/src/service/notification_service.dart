@@ -11,7 +11,7 @@ abstract class NotificationService {
   // onSuccessCallback is called when the notification gas been delivered to the recipient successfully.
   // onErrorCallback is called when the notification could not delivered
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      onSuccessCallback, onErrorCallback);
+  {onSuccessCallback, onErrorCallback});
 }
 
 class NotificationParams {

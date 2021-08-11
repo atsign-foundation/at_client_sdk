@@ -25,13 +25,18 @@ void main() async {
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
     await aliceNotificationService.init();
+    aliceNotificationService.listen(_waviCallback,regex:
+    '.wavi');
     aliceNotificationService.listen(_notificationCallback);
-    // bob - notify to alice
+    // bob - notify to alice.two keys. 1 without namespace. 1 with namespace
     final bobNotificationService = NotificationServiceImpl(bobClient);
-    var notificationKey = AtKey()..key='phone'..sharedWith=aliceAtSign;
-    ;
+    var notificationKey = AtKey()..key='phone'..sharedWith=aliceAtSign;;
     var notificationResult = await bobNotificationService.notify(NotificationParams.forUpdate(notificationKey));
     print('notification result: $notificationResult');
+    final metaData = Metadata()..namespaceAware=true;;
+    var notificationKeyWithNamespace = AtKey()..key='email'..sharedWith=aliceAtSign..namespace='wavi'..metadata=metaData;
+    var notificationResultNamespace = await bobNotificationService.notify(NotificationParams.forUpdate(notificationKeyWithNamespace));
+    print('wavi notification result: $notificationResultNamespace');
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
@@ -40,6 +45,13 @@ void main() async {
   print('end of test');
 }
 
-void _notificationCallback(AtNotification notification) {
-  print('alice notification received: ${notification.toString()}');
+
+
+void _waviCallback(AtNotification notification) {
+  print('wavi notification received: ${notification.toString()}');
 }
+
+void _notificationCallback(AtNotification notification) {
+  print('no regex notification received: ${notification.toString()}');
+}
+

@@ -10,7 +10,6 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_client/src/responseParser/notification_response_parser.dart';
 
 class NotificationServiceImpl implements NotificationService {
-//  Map<String, NotificationService> instances = {};
   Map<String, Function> listeners = {};
   final EMPTY_REGEX = '';
   static const notificationIdKey = '_latestNotificationId';
@@ -24,14 +23,13 @@ class NotificationServiceImpl implements NotificationService {
 
   NotificationServiceImpl(this.atClient);
 
-//  NotificationService? getInstance() {
-//    if(instances[atClient.getCurrentAtSign()] == null) {
-//      _startMonitor();
-//    }
-//    instances[atClient.getCurrentAtSign()!] = this;
-//    return instances[atClient.getCurrentAtSign()];
-//  }
-
+  Future<void> init() async {
+    if (!isMonitorStarted) {
+      _logger
+          .finer('starting monitor for atsign: ${atClient.getCurrentAtSign()}');
+      await _startMonitor();
+    }
+  }
   Future<void> _startMonitor() async {
     final lastNotificationTime = await _getLastNotificationTime();
     _monitor = Monitor(
@@ -58,19 +56,13 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   void listen(Function notificationCallback, {String? regex}) {
-    if (!isMonitorStarted) {
-      _logger
-          .finer('starting monitor for atsign: ${atClient.getCurrentAtSign()}');
-      _startMonitor();
-    }
     regex ??= EMPTY_REGEX;
     listeners[regex] = notificationCallback;
     _logger.finer('added regex to listener $regex');
   }
 
-  void stop() {
-    listeners.clear();
-    _monitor.stop();
+  Future<void> stop() async {
+    await _monitor.stop();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
@@ -100,7 +92,7 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   void _monitorRetry() {
-    _logger.finer('monitor retry');
+    print('monitor retry');
     Future.delayed(
         Duration(seconds: 5),
         () async => _monitor.start(
@@ -113,7 +105,7 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      onSuccessCallback, onErrorCallback) async {
+  {onSuccessCallback, onErrorCallback}) async {
     var notificationResult;
     var notificationId;
     try {
@@ -143,7 +135,9 @@ class NotificationServiceImpl implements NotificationService {
       case NotificationStatusEnum.delivered:
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.delivered;
-        onSuccessCallback(notificationResult);
+        if(onSuccessCallback != null) {
+          onSuccessCallback(notificationResult);
+        }
         break;
       case NotificationStatusEnum.errored:
         notificationResult.notificationStatusEnum =
@@ -151,7 +145,9 @@ class NotificationServiceImpl implements NotificationService {
         notificationResult.atClientException = AtClientException(
             error_codes['SecondaryConnectException'],
             error_description[error_codes['SecondaryConnectException']]);
-        onErrorCallback(notificationResult);
+        if(onErrorCallback != null) {
+          onErrorCallback(notificationResult);
+        }
         break;
     }
     return notificationResult;
@@ -178,7 +174,7 @@ class NotificationResult {
 
   @override
   String toString() {
-    return 'key: ${atKey.key} status: $notificationStatusEnum';
+    return 'key: ${atKey.key} sharedWith: ${atKey.sharedWith} status: $notificationStatusEnum';
   }
 }
 
