@@ -21,7 +21,9 @@ class NotificationServiceImpl implements NotificationService {
   bool isMonitorStarted = false;
   late Monitor _monitor;
 
-  NotificationServiceImpl(this.atClient);
+  NotificationServiceImpl(AtClient atClient){
+    this.atClient =atClient;
+  }
 
   Future<void> init() async {
     if (!isMonitorStarted) {
@@ -61,8 +63,8 @@ class NotificationServiceImpl implements NotificationService {
     _logger.finer('added regex to listener $regex');
   }
 
-  Future<void> stop() async {
-    await _monitor.stop();
+  void stop() {
+    _monitor.stop();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
@@ -75,7 +77,6 @@ class NotificationServiceImpl implements NotificationService {
       }
       notification = notification.replaceFirst('notification:', '');
       notification = notification.trim();
-      print(notification);
       final atNotification = AtNotification.fromJson(jsonDecode(notification));
       await atClient.put(AtKey()..key = notificationIdKey, notification);
       listeners.forEach((regex, subscriptionCallback) {
@@ -92,7 +93,7 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   void _monitorRetry() {
-    print('monitor retry');
+    _logger.finer('monitor retry');
     Future.delayed(
         Duration(seconds: 5),
         () async => _monitor.start(
