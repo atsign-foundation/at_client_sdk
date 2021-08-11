@@ -30,14 +30,11 @@ void main() async {
     final bobNotificationService = NotificationServiceImpl(bobClient);
     var notificationKey = AtKey()..key='phone'..sharedWith=aliceAtSign;
     ;
-    var notificationResult = await bobNotificationService.notify(NotificationParams.forUpdate(notificationKey));
-    print('notification result: $notificationResult');
+    await bobNotificationService.notify(NotificationParams.forUpdate(notificationKey));
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
   }
-
-  print('end of test');
 }
 
 void _notificationCallback(AtNotification notification) {

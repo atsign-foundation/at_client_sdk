@@ -19,11 +19,9 @@ void main() async {
     }
     final notificationService = NotificationServiceImpl(atClient);
     await notificationService.init();
-    notificationService.listen(_notificationCallback,regex: '.wavi');
-//    Future.delayed(Duration(seconds: 5));
-    print('stopping monitor');
-    await notificationService.stop();
-//    Future.delayed(Duration(seconds: 5));
+    notificationService.listen(_notificationCallback);
+    print('closing monitor socket');
+    notificationService.stop();
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
