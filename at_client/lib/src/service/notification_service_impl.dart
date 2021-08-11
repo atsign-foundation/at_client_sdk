@@ -61,8 +61,8 @@ class NotificationServiceImpl implements NotificationService {
     _logger.finer('added regex to listener $regex');
   }
 
-  Future<void> stop() async {
-    await _monitor.stop();
+  void stop()  {
+    _monitor.stop();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
