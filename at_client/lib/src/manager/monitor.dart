@@ -78,8 +78,13 @@ class Monitor {
   /// This is expressed as EPOCH time milliseconds.
   /// When [retry] is true
   ////
-  Monitor(Function onResponse, Function onError, String atSign,
-      AtClientPreference preference, MonitorPreference monitorPreference, Function retryCallBack) {
+  Monitor(
+      Function onResponse,
+      Function onError,
+      String atSign,
+      AtClientPreference preference,
+      MonitorPreference monitorPreference,
+      Function retryCallBack) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -126,7 +131,7 @@ class Monitor {
         _monitorConnection!.close();
         status = MonitorStatus.Stopped;
         // Future.delayed(Duration(seconds: 5), () => retryCallBack);
-        _retryCallBack;
+        _retryCallBack();
       });
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
@@ -249,7 +254,7 @@ class Monitor {
     if (_keepAlive) {
       // We will use a strategy here
       _logger.finer('Retrying start monitor due to error');
-      _retryCallBack;
+      _retryCallBack();
     } else {
       _onError(e);
     }

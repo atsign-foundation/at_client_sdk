@@ -5,7 +5,6 @@ import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:pedantic/pedantic.dart';
 
 class NotificationServiceImpl implements NotificationService {
 //  Map<String, NotificationService> instances = {};

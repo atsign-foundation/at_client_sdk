@@ -1,11 +1,8 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 
-import 'test_util.dart';
+import '../test_util.dart';
 
 void main() async {
   try {
@@ -24,6 +21,8 @@ void main() async {
     print(e.toString());
     print(trace);
   }
+
+  print('end of test');
 }
 
 void _notificationCallback(AtNotification notification) {
