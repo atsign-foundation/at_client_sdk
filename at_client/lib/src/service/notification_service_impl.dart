@@ -10,7 +10,6 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_client/src/responseParser/notification_response_parser.dart';
 
 class NotificationServiceImpl implements NotificationService {
-//  Map<String, NotificationService> instances = {};
   Map<String, Function> listeners = {};
   final EMPTY_REGEX = '';
   static const notificationIdKey = '_latestNotificationId';
@@ -24,14 +23,13 @@ class NotificationServiceImpl implements NotificationService {
 
   NotificationServiceImpl(this.atClient);
 
-//  NotificationService? getInstance() {
-//    if(instances[atClient.getCurrentAtSign()] == null) {
-//      _startMonitor();
-//    }
-//    instances[atClient.getCurrentAtSign()!] = this;
-//    return instances[atClient.getCurrentAtSign()];
-//  }
-
+  Future<void> init() async {
+    if (!isMonitorStarted) {
+      _logger
+          .finer('starting monitor for atsign: ${atClient.getCurrentAtSign()}');
+      await _startMonitor();
+    }
+  }
   Future<void> _startMonitor() async {
     final lastNotificationTime = await _getLastNotificationTime();
     _monitor = Monitor(
@@ -58,19 +56,13 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   void listen(Function notificationCallback, {String? regex}) {
-    if (!isMonitorStarted) {
-      _logger
-          .finer('starting monitor for atsign: ${atClient.getCurrentAtSign()}');
-      _startMonitor();
-    }
     regex ??= EMPTY_REGEX;
     listeners[regex] = notificationCallback;
     _logger.finer('added regex to listener $regex');
   }
 
-  void stop() {
-    listeners.clear();
-    _monitor.stop();
+  Future<void> stop() async {
+    await _monitor.stop();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
@@ -125,7 +117,6 @@ class NotificationServiceImpl implements NotificationService {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.errored;
-      // Set AtClientException object to notificationResult
       var errorCode = AtClientExceptionUtil.getErrorCode(e);
       var atClientException = AtClientException(
           errorCode, AtClientExceptionUtil.getErrorDescription(errorCode));
@@ -186,7 +177,7 @@ class NotificationResult {
 
   @override
   String toString() {
-    return 'key: ${atKey.key} status: $notificationStatusEnum';
+    return 'key: ${atKey.key} sharedWith: ${atKey.sharedWith} status: $notificationStatusEnum';
   }
 }
 

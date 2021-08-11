@@ -25,13 +25,17 @@ void main() async {
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
     await aliceNotificationService.init();
-    aliceNotificationService.listen(_notificationCallback);
-    // bob - notify to alice
+    aliceNotificationService.listen(_notificationCallback,regex:
+    '.wavi');
+    // bob - notify to alice.two keys. 1 without namespace. 1 with namespace
     final bobNotificationService = NotificationServiceImpl(bobClient);
-    var notificationKey = AtKey()..key='phone'..sharedWith=aliceAtSign;
-    ;
+    var notificationKey = AtKey()..key='phone'..sharedWith=aliceAtSign;;
     var notificationResult = await bobNotificationService.notify(NotificationParams.forUpdate(notificationKey));
     print('notification result: $notificationResult');
+    final metaData = Metadata()..namespaceAware=true;;
+    var notificationKeyWithNamespace = AtKey()..key='email'..sharedWith=aliceAtSign..namespace='wavi'..metadata=metaData;
+    var notificationResultNamespace = await bobNotificationService.notify(NotificationParams.forUpdate(notificationKeyWithNamespace));
+    print('notification with namespace result: $notificationResultNamespace');
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
