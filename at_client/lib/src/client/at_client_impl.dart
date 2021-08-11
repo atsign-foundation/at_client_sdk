@@ -15,10 +15,12 @@ import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -1027,5 +1029,72 @@ class AtClientImpl implements AtClient {
   @override
   AtClientPreference? getPreferences() {
     return _preference;
+  }
+
+  @override
+  Future<String> notifyChange(NotificationParams notificationParams) async {
+    //1. validate atKey
+    AtClientValidation.validateKey(notificationParams.atKey.key!);
+    //2. validate sharedWith atSign
+    AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
+    //3. validate sharedBy atSign
+    notificationParams.atKey.sharedBy ??= getCurrentAtSign();
+    AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
+    //4. validate metadata
+    AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
+    //5. validates the notification request.
+    AtClientValidation.validateNotificationRequest(notificationParams);
+
+    //var sharedWith = notificationParams.atKey.sharedWith;
+    if (notificationParams.atKey.metadata != null &&
+        notificationParams.atKey.metadata!.namespaceAware) {
+      notificationParams.atKey.key =
+          _getKeyWithNamespace(notificationParams.atKey.key);
+    }
+    notificationParams.atKey.sharedWith =
+        AtUtils.formatAtSign(notificationParams.atKey.sharedWith);
+    var builder = NotifyVerbBuilder()
+      ..atKey = notificationParams.atKey.key
+      ..sharedBy = currentAtSign
+      ..sharedWith = notificationParams.atKey.sharedWith
+      ..operation = notificationParams.operation
+      ..messageType = notificationParams.messageType
+      ..priority = notificationParams.priority
+      ..strategy = notificationParams.strategy
+      ..latestN = notificationParams.latestN
+      ..notifier = notificationParams.notifier;
+    if (notificationParams.value != null &&
+        notificationParams.value!.isNotEmpty) {
+      if (notificationParams.atKey.sharedWith != null &&
+          notificationParams.atKey.sharedWith != currentAtSign) {
+        try {
+          builder.value = await _encryptionService!.encrypt(
+              notificationParams.atKey.key,
+              notificationParams.value!,
+              notificationParams.atKey.sharedWith!);
+        } on KeyNotFoundException catch (e) {
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(
+              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+        }
+      } else {
+        builder.value = await _encryptionService!.encryptForSelf(
+            notificationParams.atKey.key, notificationParams.value!);
+      }
+    }
+    if (notificationParams.atKey.metadata != null) {
+      builder.ttl = notificationParams.atKey.metadata!.ttl;
+      builder.ttb = notificationParams.atKey.metadata!.ttb;
+      builder.ttr = notificationParams.atKey.metadata!.ttr;
+      builder.ccd = notificationParams.atKey.metadata!.ccd;
+      builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
+    }
+    if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
+      builder.sharedBy = null;
+    }
+    var notifyResult;
+    notifyResult = await getRemoteSecondary()?.executeVerb(builder);
+    return notifyResult;
   }
 }

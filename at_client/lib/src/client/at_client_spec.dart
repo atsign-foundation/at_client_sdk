@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
@@ -271,6 +272,18 @@ abstract class AtClient {
       int? latestN,
       String? notifier,
       bool isDedicated = false});
+
+  /// Notifies the [NotificationParams.atKey] to [notificationParams.atKey.sharedWith] user
+  /// of the atSign. Optionally, operation, value and metadata can be set along with key to
+  /// notify.
+  ///Throws [LateInitializationError] when [NotificationParams.atKey] is not initialized
+  ///Throws [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
+  ///invalid metadata is provided.
+  ///Throws [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
+  ///Throws [AtClientException] when keys to encrypt the data are not found.
+  ///Throws [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
+  ///Throws [AtClientException] when fails to connect to cloud secondary server.
+  Future<String> notifyChange(NotificationParams notificationParams);
 
   /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
   /// ```
