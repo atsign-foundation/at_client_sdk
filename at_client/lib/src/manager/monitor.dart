@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -35,6 +36,8 @@ class Monitor {
   late Function _onError;
 
   late Function _onResponse;
+
+  late Function _retryCallBack;
 
   late AtClientPreference _preference;
 
@@ -75,8 +78,13 @@ class Monitor {
   /// This is expressed as EPOCH time milliseconds.
   /// When [retry] is true
   ////
-  Monitor(Function onResponse, Function onError, String atSign,
-      AtClientPreference preference, MonitorPreference monitorPreference) {
+  Monitor(
+      Function onResponse,
+      Function onError,
+      String atSign,
+      AtClientPreference preference,
+      MonitorPreference monitorPreference,
+      Function retryCallBack) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -85,6 +93,7 @@ class Monitor {
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
     _remoteSecondary ??= RemoteSecondary(atSign, preference);
+    _retryCallBack = retryCallBack;
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -101,6 +110,8 @@ class Monitor {
     }
     // This enables start method to be called with lastNotificationTime on the same instance of Monitor
     if (lastNotificationTime != null) {
+      _logger.finer(
+          'starting monitor with lastnotificationTime: $lastNotificationTime');
       _lastNotificationTime = lastNotificationTime;
     }
     try {
@@ -118,9 +129,12 @@ class Monitor {
       }, onDone: () {
         _logger.finer('monitor done');
         _monitorConnection!.close();
+        status = MonitorStatus.Stopped;
+        // Future.delayed(Duration(seconds: 5), () => retryCallBack);
+        _retryCallBack();
       });
       await _authenticateConnection();
-     await  _monitorConnection!.write(_buildMonitorCommand());
+      await _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.Started;
       return;
     } on Exception catch (e) {
@@ -129,7 +143,7 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
-    _monitorConnection!.write('from:$_atSign\n');
+    await _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await _getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
@@ -139,10 +153,10 @@ class Monitor {
     _logger.finer('fromResponse $fromResponse');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature =
-    key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
     _logger.finer('Sending command pkam:$signature');
-    _monitorConnection!.write('pkam:$signature\n');
+    await _monitorConnection!.write('pkam:$signature\n');
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
       throw UnAuthenticatedException('Auth failed');
@@ -154,7 +168,7 @@ class Monitor {
       String toAtSign, String rootDomain, int rootPort) async {
     //1. find secondary url for atsign from lookup library
     var secondaryUrl =
-    await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
+        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
     if (secondaryUrl == null) {
       throw Exception('Secondary url not found');
     }
@@ -165,7 +179,7 @@ class Monitor {
     //2. create a connection to secondary server
     var secureSocket = await SecureSocket.connect(host, int.parse(port));
     OutboundConnection _monitorConnection =
-    OutboundConnectionImpl(secureSocket);
+        OutboundConnectionImpl(secureSocket);
     return _monitorConnection;
   }
 
@@ -204,7 +218,7 @@ class Monitor {
 
   String _buildMonitorCommand() {
     var monitorVerbBuilder = MonitorVerbBuilder();
-    if (_regex != null) {
+    if (_regex != null && _regex!.isNotEmpty) {
       monitorVerbBuilder.regex = _regex;
     }
     if (_lastNotificationTime != null) {
@@ -239,7 +253,8 @@ class Monitor {
     // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
       // We will use a strategy here
-      Future.delayed(Duration(seconds: 3), start);
+      _logger.finer('Retrying start monitor due to error');
+      _retryCallBack();
     } else {
       _onError(e);
     }
