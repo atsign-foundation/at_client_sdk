@@ -8,6 +8,7 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
+import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
@@ -22,6 +23,7 @@ import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
+import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -1032,30 +1034,36 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<String> notifyChange(NotificationParams notificationParams) async {
-    //1. validate atKey
-    AtClientValidation.validateKey(notificationParams.atKey.key!);
-    //2. validate sharedWith atSign
+  Future<String?> notifyChange(NotificationParams notificationParams) async {
+    // Check for internet. Since notify invoke remote secondary directly, network connection
+    // is mandatory.
+    if (!await NetworkUtil.isNetworkAvailable()) {
+      throw AtClientException(at_client_error_codes['AtClientException'],
+          'No network availability');
+    }
+    // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
-    //3. validate sharedBy atSign
+    // Check if sharedWith AtSign exists
+    AtClientValidation.isAtSignExists(notificationParams.atKey.sharedWith!,
+        _preference!.rootDomain, _preference!.rootPort);
+    // validate sharedBy atSign
     notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
-    //4. validate metadata
+    // validate atKey
+    AtClientValidation.validateKey(notificationParams.atKey.key!);
+    // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
-    //5. validates the notification request.
-    AtClientValidation.validateNotificationRequest(notificationParams);
-
-    //var sharedWith = notificationParams.atKey.sharedWith;
+    // If namespaceAware is set to true, append nameSpace to key.
     if (notificationParams.atKey.metadata != null &&
         notificationParams.atKey.metadata!.namespaceAware) {
       notificationParams.atKey.key =
           _getKeyWithNamespace(notificationParams.atKey.key);
     }
-    notificationParams.atKey.sharedWith =
-        AtUtils.formatAtSign(notificationParams.atKey.sharedWith);
+    notificationParams.atKey.sharedBy ??= currentAtSign;
+
     var builder = NotifyVerbBuilder()
       ..atKey = notificationParams.atKey.key
-      ..sharedBy = currentAtSign
+      ..sharedBy = notificationParams.atKey.sharedBy
       ..sharedWith = notificationParams.atKey.sharedWith
       ..operation = notificationParams.operation
       ..messageType = notificationParams.messageType
@@ -1063,8 +1071,12 @@ class AtClientImpl implements AtClient {
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
       ..notifier = notificationParams.notifier;
+
+    // If value is not null, encrypt the value
     if (notificationParams.value != null &&
         notificationParams.value!.isNotEmpty) {
+      // If atKey is being notified to another atSign, encrypt data with other
+      // atSign encryption public key.
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
@@ -1077,11 +1089,15 @@ class AtClientImpl implements AtClient {
           return Future.error(AtClientException(
               errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
         }
-      } else {
+      }
+      // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
+      if (notificationParams.atKey.sharedWith == null ||
+          notificationParams.atKey.sharedWith == currentAtSign) {
         builder.value = await _encryptionService!.encryptForSelf(
             notificationParams.atKey.key, notificationParams.value!);
       }
     }
+    // If metadata is not null, add metadata to notify builder object.
     if (notificationParams.atKey.metadata != null) {
       builder.ttl = notificationParams.atKey.metadata!.ttl;
       builder.ttb = notificationParams.atKey.metadata!.ttb;
@@ -1093,8 +1109,6 @@ class AtClientImpl implements AtClient {
         notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
       builder.sharedBy = null;
     }
-    var notifyResult;
-    notifyResult = await getRemoteSecondary()?.executeVerb(builder);
-    return notifyResult;
+    return await getRemoteSecondary()?.executeVerb(builder);
   }
 }

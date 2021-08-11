@@ -1,6 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/exception/at_client_exception_util.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtClientValidation {
@@ -41,12 +39,16 @@ class AtClientValidation {
     }
   }
 
-  static void validateNotificationRequest(
-      NotificationParams notificationParams) {
-    if (notificationParams.strategy == StrategyEnum.latest &&
-        notificationParams.notifier.isEmpty) {
-      throw AtClientException(
-          'AT0014', AtClientExceptionUtil.getErrorDescription('AT0014'));
+  /// Verify if the atSign exists in root server.
+  /// Throws [InvalidAtSignException] if atSign does not exist.
+  static void isAtSignExists(String atSign, String rootDomain, int rootPort) async {
+    if (atSign.isEmpty) {
+      throw AtKeyException('@sign cannot be empty');
+    }
+    try {
+      await AtClientUtil.findSecondary(atSign, rootDomain, rootPort);
+    } on SecondaryNotFoundException {
+      throw AtKeyException('$atSign does not exist');
     }
   }
 }
