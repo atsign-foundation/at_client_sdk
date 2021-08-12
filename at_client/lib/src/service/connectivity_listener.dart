@@ -1,17 +1,17 @@
 import 'dart:async';
 
-import 'package:data_connection_checker/data_connection_checker.dart';
-
+//import 'package:data_connection_checker/data_connection_checker.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 class ConnectivityListener {
   var _listener;
   Stream<bool> subscribe() {
     final _controller = StreamController<bool>();
-    _listener = DataConnectionChecker().onStatusChange.listen((status) {
+    _listener = InternetConnectionChecker().onStatusChange.listen((status) {
       switch (status) {
-        case DataConnectionStatus.connected:
+        case InternetConnectionStatus.connected:
           _controller.add(true);
           break;
-        case DataConnectionStatus.disconnected:
+        case InternetConnectionStatus.disconnected:
           _controller.add(false);
           break;
       }
