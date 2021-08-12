@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -22,7 +20,7 @@ void main() async {
     notificationService.listen(_notificationCallback,regex: '.wavi');
 //    Future.delayed(Duration(seconds: 5));
     print('stopping monitor');
-    await notificationService.stop();
+    notificationService.stop();
 //    Future.delayed(Duration(seconds: 5));
   } on Exception catch (e, trace) {
     print(e.toString());

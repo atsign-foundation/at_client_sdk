@@ -10,19 +10,19 @@ abstract class NotificationService {
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///
   /// When await on the method returns [NotificationResult].
-  /// when run asynchronously, register to onSuccess and onError callbacks to get [NotificationResult].
+  /// When run asynchronously, register to onSuccess and onError callbacks to get [NotificationResult].
   ///
   /// OnSuccess is called when the notification has been delivered to the recipient successfully.
   ///
   /// onError is called when the notification could not delivered
   ///
-  ///* Throws [LateInitializationError] when [NotificationParams.atKey] is not initialized
-  ///* Throws [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
+  ///* Returns [LateInitializationError] when [NotificationParams.atKey] is not initialized
+  ///* Returns [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
   ///invalid metadata is provided.
-  ///* Throws [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
-  ///* Throws [AtClientException] when keys to encrypt the data are not found.
-  ///* Throws [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
-  ///* Throws [AtClientException] when fails to connect to cloud secondary server.
+  ///* Returns [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
+  ///* Returns [AtClientException] when keys to encrypt the data are not found.
+  ///* Returns [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
+  ///* Returns [AtClientException] when fails to connect to cloud secondary server.
   ///
   /// Usage
   ///
@@ -47,8 +47,10 @@ abstract class NotificationService {
   ///    ..sharedWith = '@bob'
   ///    ..metadata = metaData;
   ///
+  ///  var value = '+1 998 999 4940'
+  ///
   ///  var notification = NotificationServiceImpl(atClient!);
-  /// await notification.notify(NotificationParams.forUpdate(key));
+  /// await notification.notify(NotificationParams.forUpdate(key, value: value));
   ///```
   ///3. To notify deletion of a key to @bob.
   ///```dart
@@ -68,6 +70,7 @@ abstract class NotificationService {
       {Function? onSuccess, Function? onError});
 }
 
+/// [NotificationParams] represents a notification input params.
 class NotificationParams {
   late AtKey _atKey;
   String? _value;
