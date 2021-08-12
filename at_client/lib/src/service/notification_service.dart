@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -6,6 +8,8 @@ abstract class NotificationService {
   // notificationCallback is called with regex and the first argument and the Notification bean as the second argument
   // Ex: notificationCallback(regex, Notification)
   void listen(Function notificationCallback, {String? regex});
+
+  Stream<AtNotification> subscribe({String? regex});
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///

@@ -13,11 +13,8 @@ void main() async {
     await AtClientImpl.createClient(
         aliceAtSign, 'wavi', TestUtil.getAlicePreference());
     var aliceClient = await (AtClientImpl.getClient(aliceAtSign));
-    aliceClient!.getSyncManager()!.init(
-        aliceAtSign,
-        TestUtil.getAlicePreference(),
-        aliceClient.getRemoteSecondary(),
-        aliceClient.getLocalSecondary());
+    aliceClient!.getSyncManager()!.init(aliceAtSign, TestUtil.getAlicePreference(),
+        aliceClient.getRemoteSecondary(), aliceClient.getLocalSecondary());
 
     // create bob client
     await AtClientImpl.createClient(
@@ -27,15 +24,9 @@ void main() async {
         bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
-    aliceNotificationService.listen(_notificationCallback);
-    // bob - notify to alice
-    final bobNotificationService = NotificationServiceImpl(bobClient);
-    var notificationKey = AtKey()
-      ..key = 'phone'
-      ..sharedWith = aliceAtSign;
-    ;
-    await bobNotificationService
-        .notify(NotificationParams.forUpdate(notificationKey));
+    aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
+      print('notification event received: ${notification.toString()}');
+    });
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

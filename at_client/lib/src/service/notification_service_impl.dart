@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
@@ -11,6 +12,7 @@ import 'package:at_client/src/responseParser/notification_response_parser.dart';
 
 class NotificationServiceImpl implements NotificationService {
   Map<String, Function> listeners = {};
+  Map<String, StreamController> streamListeners = {};
   final EMPTY_REGEX = '';
   static const notificationIdKey = '_latestNotificationId';
 
@@ -21,17 +23,18 @@ class NotificationServiceImpl implements NotificationService {
   bool isMonitorStarted = false;
   late Monitor _monitor;
 
-  NotificationServiceImpl(AtClient atClient){
-    this.atClient =atClient;
+  NotificationServiceImpl(AtClient atClient) {
+    this.atClient = atClient;
   }
 
-  Future<void> init() async {
+  void _init() {
     if (!isMonitorStarted) {
       _logger
           .finer('starting monitor for atsign: ${atClient.getCurrentAtSign()}');
-      await _startMonitor();
+      _startMonitor();
     }
   }
+
   Future<void> _startMonitor() async {
     final lastNotificationTime = await _getLastNotificationTime();
     _monitor = Monitor(
@@ -58,12 +61,13 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   void listen(Function notificationCallback, {String? regex}) {
+    _init();
     regex ??= EMPTY_REGEX;
     listeners[regex] = notificationCallback;
     _logger.finer('added regex to listener $regex');
   }
 
-  void stop()  {
+  void stop() {
     _monitor.stop();
   }
 
@@ -87,6 +91,16 @@ class NotificationServiceImpl implements NotificationService {
           }
         } else {
           subscriptionCallback(atNotification);
+        }
+      });
+      streamListeners.forEach((regex, streamController) {
+        if (regex != EMPTY_REGEX) {
+          final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
+          if (isMatches) {
+            streamController.add(atNotification);
+          }
+        } else {
+          streamController.add(atNotification);
         }
       });
     });
@@ -167,6 +181,16 @@ class NotificationServiceImpl implements NotificationService {
           () async => status = await atClient.notifyStatus(notificationId));
     }
     return status;
+  }
+
+  @override
+  Stream<AtNotification> subscribe({String? regex}) {
+    _init();
+    regex ??= EMPTY_REGEX;
+    final _controller = StreamController<AtNotification>();
+    streamListeners[regex] = _controller;
+    _logger.finer('added regex to listener $regex');
+    return _controller.stream;
   }
 }
 

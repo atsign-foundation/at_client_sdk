@@ -18,7 +18,6 @@ void main() async {
       return;
     }
     final notificationService = NotificationServiceImpl(atClient);
-    await notificationService.init();
     notificationService.listen(_notificationCallback);
     print('closing monitor socket');
     notificationService.stop();

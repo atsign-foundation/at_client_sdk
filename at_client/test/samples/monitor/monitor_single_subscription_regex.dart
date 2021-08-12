@@ -13,8 +13,11 @@ void main() async {
     await AtClientImpl.createClient(
         aliceAtSign, 'wavi', TestUtil.getAlicePreference());
     var aliceClient = await (AtClientImpl.getClient(aliceAtSign));
-    aliceClient!.getSyncManager()!.init(aliceAtSign, TestUtil.getAlicePreference(),
-        aliceClient.getRemoteSecondary(), aliceClient.getLocalSecondary());
+    aliceClient!.getSyncManager()!.init(
+        aliceAtSign,
+        TestUtil.getAlicePreference(),
+        aliceClient.getRemoteSecondary(),
+        aliceClient.getLocalSecondary());
 
     // create bob client
     await AtClientImpl.createClient(
@@ -24,17 +27,25 @@ void main() async {
         bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
-    await aliceNotificationService.init();
-    aliceNotificationService.listen(_notificationCallback,regex:
-    '.wavi');
+    aliceNotificationService.listen(_notificationCallback, regex: '.wavi');
     // bob - notify to alice.two keys. 1 without namespace. 1 with namespace
     final bobNotificationService = NotificationServiceImpl(bobClient);
-    var notificationKey = AtKey()..key='phone'..sharedWith=aliceAtSign;;
-    var notificationResult = await bobNotificationService.notify(NotificationParams.forUpdate(notificationKey));
+    var notificationKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = aliceAtSign;
+    ;
+    var notificationResult = await bobNotificationService
+        .notify(NotificationParams.forUpdate(notificationKey));
     print('notification result: $notificationResult');
-    final metaData = Metadata()..namespaceAware=true;;
-    var notificationKeyWithNamespace = AtKey()..key='email'..sharedWith=aliceAtSign..namespace='wavi'..metadata=metaData;
-    var notificationResultNamespace = await bobNotificationService.notify(NotificationParams.forUpdate(notificationKeyWithNamespace));
+    final metaData = Metadata()..namespaceAware = true;
+    ;
+    var notificationKeyWithNamespace = AtKey()
+      ..key = 'email'
+      ..sharedWith = aliceAtSign
+      ..namespace = 'wavi'
+      ..metadata = metaData;
+    var notificationResultNamespace = await bobNotificationService
+        .notify(NotificationParams.forUpdate(notificationKeyWithNamespace));
     print('notification with namespace result: $notificationResultNamespace');
   } on Exception catch (e, trace) {
     print(e.toString());

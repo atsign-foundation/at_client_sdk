@@ -136,7 +136,8 @@ class Monitor {
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.Started;
-      _logger.finer('monitor started with last notification time: $_lastNotificationTime');
+      _logger.finer(
+          'monitor started with last notification time: $_lastNotificationTime');
       return;
     } on Exception catch (e) {
       _handleError(e);
