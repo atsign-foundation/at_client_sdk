@@ -6,7 +6,6 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_client/src/responseParser/notification_response_parser.dart';
 
@@ -128,7 +127,7 @@ class NotificationServiceImpl implements NotificationService {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       // Returns the notificationId.
       notificationId = await atClient.notifyChange(notificationParams);
-    } on AtLookUpException catch (e) {
+    } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.errored;
@@ -153,6 +152,7 @@ class NotificationServiceImpl implements NotificationService {
       case NotificationStatusEnum.delivered:
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.delivered;
+        // If onSuccess callback is registered, invoke callback method.
         if (onSuccess != null) {
           onSuccess(notificationResult);
         }
@@ -163,6 +163,7 @@ class NotificationServiceImpl implements NotificationService {
         notificationResult.atClientException = AtClientException(
             error_codes['SecondaryConnectException'],
             error_description[error_codes['SecondaryConnectException']]);
+        // If onError callback is registered, invoke callback method.
         if (onError != null) {
           onError(notificationResult);
         }
@@ -194,6 +195,7 @@ class NotificationServiceImpl implements NotificationService {
   }
 }
 
+/// [NotificationResult] encapsulates the notification response
 class NotificationResult {
   String? notificationID;
   late AtKey atKey;
