@@ -25,11 +25,13 @@ void main() async {
     var bobClient = await (AtClientImpl.getClient(bobAtSign));
     bobClient!.getSyncManager()!.init(bobAtSign, TestUtil.getBobPreference(),
         bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
+
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
     aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
       _notificationCallback(notification);
     });
+
     // bob - notify to alice.two keys. 1 without namespace. 1 with namespace
     final bobNotificationService = NotificationServiceImpl(bobClient);
     var notificationKey = AtKey()

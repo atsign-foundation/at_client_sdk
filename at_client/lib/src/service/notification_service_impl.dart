@@ -21,7 +21,7 @@ class NotificationServiceImpl implements NotificationService {
   late AtClient atClient;
 
   bool isMonitorStarted = false;
-  late Monitor _monitor;
+  Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
   NotificationServiceImpl(AtClient atClient) {
     this.atClient = atClient;
@@ -44,6 +44,7 @@ class NotificationServiceImpl implements NotificationService {
 
   Future<void> _startMonitor() async {
     if (isMonitorStarted) {
+      _logger.finer('monitor is already started');
       return;
     }
     final lastNotificationTime = await _getLastNotificationTime();
@@ -56,7 +57,7 @@ class NotificationServiceImpl implements NotificationService {
         _monitorRetry);
     _logger.finer(
         'starting monitor with last notification time: $lastNotificationTime');
-    await _monitor.start(lastNotificationTime: lastNotificationTime);
+    await _monitor!.start(lastNotificationTime: lastNotificationTime);
     isMonitorStarted = true;
   }
 
@@ -70,45 +71,51 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   void stop() {
-    _monitor.stop();
+    _monitor?.stop();
     _connectivityListener?.unSubscribe();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
     // #TODO move some of this logic to notification parser
-    var notifications = notificationJSON.split('notification: ');
-    notifications.forEach((notification) async {
-      if (notification.isEmpty) {
-        _logger.finer('empty string in notification');
-        return;
-      }
-      notification = notification.replaceFirst('notification:', '');
-      notification = notification.trim();
-      final atNotification = AtNotification.fromJson(jsonDecode(notification));
-      await atClient.put(AtKey()..key = notificationIdKey, notification);
-      streamListeners.forEach((regex, streamController) {
-        if (regex != EMPTY_REGEX) {
-          final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
-          if (isMatches) {
+    try {
+      var notifications = notificationJSON.split('notification: ');
+      notifications.forEach((notification) async {
+        if (notification.isEmpty) {
+          _logger.finer('empty string in notification');
+          return;
+        }
+        notification = notification.replaceFirst('notification:', '');
+        notification = notification.trim();
+        final atNotification =
+            AtNotification.fromJson(jsonDecode(notification));
+        await atClient.put(AtKey()..key = notificationIdKey, notification);
+        streamListeners.forEach((regex, streamController) {
+          if (regex != EMPTY_REGEX) {
+            final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
+            if (isMatches) {
+              streamController.add(atNotification);
+            }
+          } else {
             streamController.add(atNotification);
           }
-        } else {
-          streamController.add(atNotification);
-        }
+        });
       });
-    });
+    } on Exception catch (e) {
+      _logger.severe(
+          'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+    }
   }
 
   void _monitorRetry() {
     _logger.finer('monitor retry');
     Future.delayed(
         Duration(seconds: 5),
-        () async => _monitor.start(
-            lastNotificationTime: await _getLastNotificationTime()));
+        () async => _monitor!
+            .start(lastNotificationTime: await _getLastNotificationTime()));
   }
 
-  void _onMonitorError() {
-    //#TODO implement
+  void _onMonitorError(Exception e) {
+    _logger.severe('internal error in monitor: ${e.toString()}');
   }
 
   @override

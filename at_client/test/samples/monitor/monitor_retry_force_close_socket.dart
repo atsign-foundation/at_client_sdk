@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -23,7 +25,7 @@ void main() async {
       _notificationCallback(notification);
     });
     print('stopping monitor');
-    notificationService.stop();
+    Future.delayed(Duration(seconds: 5), () => notificationService.stop());
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
