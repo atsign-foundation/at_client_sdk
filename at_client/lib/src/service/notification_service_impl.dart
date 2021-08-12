@@ -20,7 +20,9 @@ class NotificationServiceImpl implements NotificationService {
   bool isMonitorStarted = false;
   late Monitor _monitor;
 
-  NotificationServiceImpl(this.atClient);
+  NotificationServiceImpl(AtClient atClient){
+    this.atClient =atClient;
+  }
 
   Future<void> init() async {
     if (!isMonitorStarted) {
@@ -75,7 +77,6 @@ class NotificationServiceImpl implements NotificationService {
       }
       notification = notification.replaceFirst('notification:', '');
       notification = notification.trim();
-      print(notification);
       final atNotification = AtNotification.fromJson(jsonDecode(notification));
       await atClient.put(AtKey()..key = notificationIdKey, notification);
       listeners.forEach((regex, subscriptionCallback) {
