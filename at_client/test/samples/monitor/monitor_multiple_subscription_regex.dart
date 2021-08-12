@@ -27,8 +27,12 @@ void main() async {
         bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
-    aliceNotificationService.listen(_waviCallback, regex: '.wavi');
-    aliceNotificationService.listen(_buzzCallBack, regex: '.buzz');
+    aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
+      _waviCallback(notification);
+    });
+    aliceNotificationService.subscribe(regex: '.buzz').listen((notification) {
+      _buzzCallBack(notification);
+    });
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/service/connectivity_listener.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -21,20 +22,30 @@ class NotificationServiceImpl implements NotificationService {
 
   bool isMonitorStarted = false;
   late Monitor _monitor;
-
+  ConnectivityListener? _connectivityListener;
   NotificationServiceImpl(AtClient atClient) {
     this.atClient = atClient;
   }
 
   void _init() {
-    if (!isMonitorStarted) {
-      _logger
-          .finer('starting monitor for atsign: ${atClient.getCurrentAtSign()}');
-      _startMonitor();
+    if (_connectivityListener == null) {
+      _connectivityListener = ConnectivityListener();
+      _connectivityListener!.subscribe().listen((isConnected) {
+        if (isConnected) {
+          _logger.finer(
+              'starting monitor for atsign: ${atClient.getCurrentAtSign()}');
+          _startMonitor();
+        } else {
+          _logger.finer('lost network connectivity');
+        }
+      });
     }
   }
 
   Future<void> _startMonitor() async {
+    if (isMonitorStarted) {
+      return;
+    }
     final lastNotificationTime = await _getLastNotificationTime();
     _monitor = Monitor(
         _internalNotificationCallback,
@@ -58,16 +69,9 @@ class NotificationServiceImpl implements NotificationService {
     return null;
   }
 
-  @override
-  void listen(Function notificationCallback, {String? regex}) {
-    _init();
-    regex ??= EMPTY_REGEX;
-    listeners[regex] = notificationCallback;
-    _logger.finer('added regex to listener $regex');
-  }
-
   void stop() {
     _monitor.stop();
+    _connectivityListener?.unSubscribe();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
@@ -82,16 +86,6 @@ class NotificationServiceImpl implements NotificationService {
       notification = notification.trim();
       final atNotification = AtNotification.fromJson(jsonDecode(notification));
       await atClient.put(AtKey()..key = notificationIdKey, notification);
-      listeners.forEach((regex, subscriptionCallback) {
-        if (regex != EMPTY_REGEX) {
-          final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
-          if (isMatches) {
-            subscriptionCallback(atNotification);
-          }
-        } else {
-          subscriptionCallback(atNotification);
-        }
-      });
       streamListeners.forEach((regex, streamController) {
         if (regex != EMPTY_REGEX) {
           final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
@@ -186,11 +180,11 @@ class NotificationServiceImpl implements NotificationService {
 
   @override
   Stream<AtNotification> subscribe({String? regex}) {
-    _init();
     regex ??= EMPTY_REGEX;
     final _controller = StreamController<AtNotification>();
     streamListeners[regex] = _controller;
     _logger.finer('added regex to listener $regex');
+    _init();
     return _controller.stream;
   }
 }

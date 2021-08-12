@@ -4,11 +4,8 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 
 abstract class NotificationService {
-  // Gives back notifications that matches regex. Regex is optional.
-  // notificationCallback is called with regex and the first argument and the Notification bean as the second argument
-  // Ex: notificationCallback(regex, Notification)
-  void listen(Function notificationCallback, {String? regex});
-
+  // Gives back stream of notifications from the server to the subscribing client.
+  // Optionally pass a regex to filter notification keys matching the regex.
   Stream<AtNotification> subscribe({String? regex});
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.

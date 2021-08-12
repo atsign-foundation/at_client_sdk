@@ -16,8 +16,12 @@ void main() async {
       return;
     }
     final notificationService = NotificationServiceImpl(atClient);
-    notificationService.listen(_notificationCallback);
-    notificationService.listen(_notificationCallback,regex: '.wavi');
+    notificationService.subscribe().listen((notification) {
+      _notificationCallback(notification);
+    });
+    notificationService.subscribe(regex: '.wavi').listen((notification) {
+      _notificationCallback(notification);
+    });
     print('stopping monitor');
     notificationService.stop();
   } on Exception catch (e, trace) {

@@ -27,7 +27,9 @@ void main() async {
         bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
-    aliceNotificationService.listen(_notificationCallback);
+    aliceNotificationService.subscribe().listen((notification) {
+      _notificationCallback(notification);
+    });
     // bob - notify to alice
     final bobNotificationService = NotificationServiceImpl(bobClient);
     var notificationKey = AtKey()

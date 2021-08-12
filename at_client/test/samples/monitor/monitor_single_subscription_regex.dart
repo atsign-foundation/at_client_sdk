@@ -27,18 +27,18 @@ void main() async {
         bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
     // alice - listen for notification
     final aliceNotificationService = NotificationServiceImpl(aliceClient);
-    aliceNotificationService.listen(_notificationCallback, regex: '.wavi');
+    aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
+      _notificationCallback(notification);
+    });
     // bob - notify to alice.two keys. 1 without namespace. 1 with namespace
     final bobNotificationService = NotificationServiceImpl(bobClient);
     var notificationKey = AtKey()
       ..key = 'phone'
       ..sharedWith = aliceAtSign;
-    ;
     var notificationResult = await bobNotificationService
         .notify(NotificationParams.forUpdate(notificationKey));
     print('notification result: $notificationResult');
     final metaData = Metadata()..namespaceAware = true;
-    ;
     var notificationKeyWithNamespace = AtKey()
       ..key = 'email'
       ..sharedWith = aliceAtSign
