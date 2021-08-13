@@ -20,7 +20,7 @@ class NotificationServiceImpl implements NotificationService {
 
   late AtClient atClient;
 
-  bool isMonitorStarted = false;
+  bool _isMonitorStarted = false;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
   NotificationServiceImpl(AtClient atClient) {
@@ -43,7 +43,7 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   Future<void> _startMonitor() async {
-    if (isMonitorStarted) {
+    if (_isMonitorStarted) {
       _logger.finer('monitor is already started');
       return;
     }
@@ -58,7 +58,7 @@ class NotificationServiceImpl implements NotificationService {
     _logger.finer(
         'starting monitor with last notification time: $lastNotificationTime');
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
-    isMonitorStarted = true;
+    _isMonitorStarted = true;
   }
 
   Future<int?> _getLastNotificationTime() async {
@@ -91,8 +91,7 @@ class NotificationServiceImpl implements NotificationService {
         await atClient.put(AtKey()..key = notificationIdKey, notification);
         streamListeners.forEach((regex, streamController) {
           if (regex != EMPTY_REGEX) {
-            final isMatches = regex.allMatches(atNotification.key).isNotEmpty;
-            if (isMatches) {
+            if (regex.allMatches(atNotification.key).isNotEmpty) {
               streamController.add(atNotification);
             }
           } else {
