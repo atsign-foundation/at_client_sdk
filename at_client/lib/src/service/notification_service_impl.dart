@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/connectivity_listener.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
@@ -76,19 +77,13 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
-    // #TODO move some of this logic to notification parser
     try {
-      var notifications = notificationJSON.split('notification: ');
-      notifications.forEach((notification) async {
-        if (notification.isEmpty) {
-          _logger.finer('empty string in notification');
-          return;
-        }
-        notification = notification.replaceFirst('notification:', '');
-        notification = notification.trim();
-        final atNotification =
-            AtNotification.fromJson(jsonDecode(notification));
-        await atClient.put(AtKey()..key = notificationIdKey, notification);
+      final notificationParser = NotificationResponseParser();
+      final atNotifications = notificationParser
+          .getAtNotifications(notificationParser.parse(notificationJSON));
+      atNotifications.forEach((atNotification) async {
+        await atClient.put(AtKey()..key = notificationIdKey,
+            jsonEncode(atNotification.toJson()));
         streamListeners.forEach((regex, streamController) {
           if (regex != EMPTY_REGEX) {
             if (regex.allMatches(atNotification.key).isNotEmpty) {
@@ -230,6 +225,6 @@ class AtNotification {
 
   @override
   String toString() {
-    return 'AtNotification{notificationId: $notificationId, key: $key, epochMillis: $epochMillis}';
+    return 'AtNotification{id: $notificationId, key: $key, epochMillis: $epochMillis}';
   }
 }
