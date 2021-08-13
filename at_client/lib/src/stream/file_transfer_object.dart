@@ -27,7 +27,7 @@ class FileTransferObject {
     map['sharedWith'] = sharedWith;
     map['sharedStatus'] = sharedStatus;
     map['fileStatus'] = fileStatus;
-    map['date'] = date.toString();
+    map['date'] = date!.toUtc().toString();
     map['error'] = error;
     return map;
   }
@@ -84,4 +84,12 @@ class FileStatus {
     }
     return null;
   }
+}
+
+class FileDownloadResponse {
+  String? filePath;
+  bool isError;
+  String? errorMsg;
+
+  FileDownloadResponse({this.filePath, this.isError = false, this.errorMsg});
 }
