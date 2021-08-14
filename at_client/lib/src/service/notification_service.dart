@@ -10,20 +10,20 @@ abstract class NotificationService {
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///
-  /// When await on the method returns [NotificationResult].
+  /// Returns [NotificationResult] when await on the method .
   /// When run asynchronously, register to onSuccess and onError callbacks to get [NotificationResult].
   ///
   /// OnSuccess is called when the notification has been delivered to the recipient successfully.
   ///
   /// onError is called when the notification could not delivered
   ///
-  ///* Returns [LateInitializationError] when [NotificationParams.atKey] is not initialized
-  ///* Returns [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
+  /// Following exceptions are encapsulated in [NotificationResult.atClientException]
+  ///* [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
   ///invalid metadata is provided.
-  ///* Returns [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
-  ///* Returns [AtClientException] when keys to encrypt the data are not found.
-  ///* Returns [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
-  ///* Returns [AtClientException] when fails to connect to cloud secondary server.
+  ///* [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
+  ///* [AtClientException] when keys to encrypt the data are not found.
+  ///* [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
+  ///* [AtClientException] when fails to connect to cloud secondary server.
   ///
   /// Usage
   ///
@@ -63,6 +63,8 @@ abstract class NotificationService {
   ///   await notification.notify(NotificationParams.forDelete(key));
   ///```
   ///4. To notify a text message to @bob
+  ///   await notification.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));
+  ///
   ///```dart
   ///   var notification = NotificationServiceImpl(atClient!);
   ///   await notification.notify(NotificationParams.forText('Hello','@bob'));
@@ -110,7 +112,7 @@ class NotificationParams {
       .._strategy = StrategyEnum.all;
   }
 
-  /// Returns [NotificationParams] to send an delete notification.
+  /// Returns [NotificationParams] to send a delete notification.
   static NotificationParams forDelete(AtKey atKey) {
     return NotificationParams()
       .._atKey = atKey
@@ -120,7 +122,7 @@ class NotificationParams {
       .._strategy = StrategyEnum.all;
   }
 
-  /// Returns [NotificationParams] to send an text message to another atSign.
+  /// Returns [NotificationParams] to send a text message to another atSign.
   static NotificationParams forText(String text, String whomToNotify) {
     var atKey = AtKey()
       ..key = text

@@ -9,7 +9,6 @@ import 'package:at_client/src/service/connectivity_listener.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_client/src/responseParser/notification_response_parser.dart';
 
 class NotificationServiceImpl implements NotificationService {
   Map<String, Function> listeners = {};
@@ -24,6 +23,7 @@ class NotificationServiceImpl implements NotificationService {
   bool _isMonitorStarted = false;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
+
   NotificationServiceImpl(AtClient atClient) {
     this.atClient = atClient;
   }
@@ -140,11 +140,10 @@ class NotificationServiceImpl implements NotificationService {
     notificationResult.notificationID = notificationId;
 
     // Gets the notification status and parse the response.
-    var notificationStatus = ResponseParser.parseNotificationResponse(
-        await _getFinalNotificationStatus(notificationId));
-
-    switch (notificationStatus) {
-      case NotificationStatusEnum.delivered:
+    var notificationStatus = NotificationResponseParser()
+        .parse(await _getFinalNotificationStatus(notificationId));
+    switch (notificationStatus.response) {
+      case 'delivered':
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.delivered;
         // If onSuccess callback is registered, invoke callback method.
@@ -152,7 +151,7 @@ class NotificationServiceImpl implements NotificationService {
           onSuccess(notificationResult);
         }
         break;
-      case NotificationStatusEnum.errored:
+      case 'errored':
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.errored;
         notificationResult.atClientException = AtClientException(
@@ -228,3 +227,5 @@ class AtNotification {
     return 'AtNotification{id: $notificationId, key: $key, epochMillis: $epochMillis}';
   }
 }
+
+enum NotificationStatusEnum { delivered, errored }

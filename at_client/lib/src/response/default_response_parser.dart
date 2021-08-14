@@ -9,9 +9,6 @@ class DefaultResponseParser implements ResponseParser {
   @override
   Response parse(String responseString) {
     var response = Response();
-    if (responseString == null) {
-      return response;
-    }
     // if responseString starts with data: will call parseSuccessResponse
     if (responseString.startsWith('data:')) {
       parseSuccessResponse(responseString, response);

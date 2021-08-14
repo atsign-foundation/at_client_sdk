@@ -2,9 +2,9 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtClientValidation {
-  static void validateKey(String key) {
-    if (key.isEmpty) {
-      throw AtKeyException('Key cannot be empty');
+  static void validateKey(String? key) {
+    if (key == null || key.isEmpty) {
+      throw AtKeyException('Key cannot be null or empty');
     }
     // Key cannot contain @
     if (key.contains('@')) {

@@ -178,7 +178,7 @@ class AtClientImpl implements AtClient {
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
-    return _delete(atKey.key,
+    return _delete(atKey.key!,
         sharedWith: atKey.sharedWith,
         sharedBy: atKey.sharedBy,
         isPublic: isPublic,
@@ -187,7 +187,7 @@ class AtClientImpl implements AtClient {
         isDedicated: isDedicated);
   }
 
-  Future<bool> _delete(String? key,
+  Future<bool> _delete(String key,
       {String? sharedWith,
       String? sharedBy,
       bool isPublic = false,
@@ -212,7 +212,7 @@ class AtClientImpl implements AtClient {
     return deleteResult != null;
   }
 
-  Future<dynamic> _get(String? key,
+  Future<dynamic> _get(String key,
       {String? sharedWith,
       String? sharedBy,
       bool? isPublic = false,
@@ -390,7 +390,7 @@ class AtClientImpl implements AtClient {
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
-    var getResult = await _get(atKey.key,
+    var getResult = await _get(atKey.key!,
         sharedWith: AtUtils.formatAtSign(atKey.sharedWith),
         sharedBy: AtUtils.formatAtSign(atKey.sharedBy),
         isPublic: isPublic,
@@ -421,7 +421,7 @@ class AtClientImpl implements AtClient {
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
-    var getResult = await _get(atKey.key,
+    var getResult = await _get(atKey.key!,
         sharedWith: atKey.sharedWith,
         sharedBy: atKey.sharedBy,
         isPublic: isPublic,
@@ -501,7 +501,7 @@ class AtClientImpl implements AtClient {
 //        sharedWith: key.sharedWith, metadata: metadata);
 //  }
 
-  Future<bool> _put(String? key, dynamic value,
+  Future<bool> _put(String key, dynamic value,
       {String? sharedWith,
       Metadata? metadata,
       bool isDedicated = false}) async {
@@ -527,7 +527,7 @@ class AtClientImpl implements AtClient {
       builder.isEncrypted = metadata.isEncrypted;
       builder.isPublic = metadata.isPublic!;
       if (metadata.isHidden) {
-        builder.atKey = '_' + updateKey!;
+        builder.atKey = '_' + updateKey;
       }
     }
     if (value != null) {
@@ -547,7 +547,7 @@ class AtClientImpl implements AtClient {
       }
     }
     var isSyncRequired;
-    if (updateKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
         updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
       builder.sharedBy = null;
     }
@@ -598,7 +598,7 @@ class AtClientImpl implements AtClient {
       }
       value = Base2e15.encode(value);
     }
-    return _put(atKey.key, value,
+    return _put(atKey.key!, value,
         sharedWith: atKey.sharedWith,
         metadata: atKey.metadata,
         isDedicated: isDedicated);
@@ -616,7 +616,7 @@ class AtClientImpl implements AtClient {
     var metadata = atKey.metadata;
     var sharedWith = atKey.sharedWith;
     if (metadata != null && metadata.namespaceAware) {
-      notifyKey = _getKeyWithNamespace(atKey.key);
+      notifyKey = _getKeyWithNamespace(atKey.key!);
     }
     sharedWith = AtUtils.formatAtSign(sharedWith);
     var builder = NotifyVerbBuilder()
@@ -718,7 +718,7 @@ class AtClientImpl implements AtClient {
     var updateKey = atKey.key;
     var metadata = atKey.metadata!;
     if (metadata.namespaceAware) {
-      updateKey = _getKeyWithNamespace(atKey.key);
+      updateKey = _getKeyWithNamespace(atKey.key!);
     }
     var sharedWith = atKey.sharedWith;
     var builder = UpdateVerbBuilder();
@@ -745,7 +745,7 @@ class AtClientImpl implements AtClient {
     return updateMetaResult != null;
   }
 
-  String? _getKeyWithNamespace(String? key) {
+  String _getKeyWithNamespace(String key) {
     var keyWithNamespace = key;
     if (_namespace != null && _namespace!.isNotEmpty) {
       keyWithNamespace = '$keyWithNamespace.$_namespace';
@@ -1050,14 +1050,14 @@ class AtClientImpl implements AtClient {
     notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
-    AtClientValidation.validateKey(notificationParams.atKey.key!);
+    AtClientValidation.validateKey(notificationParams.atKey.key);
     // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
     // If namespaceAware is set to true, append nameSpace to key.
     if (notificationParams.atKey.metadata != null &&
         notificationParams.atKey.metadata!.namespaceAware) {
       notificationParams.atKey.key =
-          _getKeyWithNamespace(notificationParams.atKey.key);
+          _getKeyWithNamespace(notificationParams.atKey.key!);
     }
     notificationParams.atKey.sharedBy ??= currentAtSign;
 
