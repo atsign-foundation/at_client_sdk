@@ -34,6 +34,27 @@ void main() {
     expect(result.atKey.sharedWith, phoneKey.sharedWith);
   });
 
+  test('notify updating of a key to sharedWith atSign - using callback',
+      () async {
+    var atsign = '@alice🛠';
+    var preference = getAlicePreference(atsign);
+    await AtClientImpl.createClient(atsign, 'me', preference);
+    var atClient = await AtClientImpl.getClient(atsign);
+    atClient!.getSyncManager()!.init(atsign, preference,
+        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
+    await atClient.getSyncManager()!.sync();
+    // To setup encryption keys
+    await setEncryptionKeys(atsign, preference);
+    // phone.me@alice🛠
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠';
+    var value = '+1 100 200 300';
+    var notification = NotificationServiceImpl(atClient);
+    notification.notify(NotificationParams.forUpdate(phoneKey, value: value));
+    await Future.delayed(Duration(seconds: 10));
+  });
+
   test('notify deletion of a key to sharedWith atSign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
@@ -57,6 +78,25 @@ void main() {
     expect(notificationResult.atKey.sharedWith, phoneKey.sharedWith);
   });
 
+  test('notify deletion of a key to sharedWith atSign - callback', () async {
+    var atsign = '@alice🛠';
+    var preference = getAlicePreference(atsign);
+    await AtClientImpl.createClient(atsign, 'me', preference);
+    var atClient = await AtClientImpl.getClient(atsign);
+    atClient!.getSyncManager()!.init(atsign, preference,
+        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
+    await atClient.getSyncManager()!.sync();
+    // To setup encryption keys
+    await setEncryptionKeys(atsign, preference);
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠';
+    var notification = NotificationServiceImpl(atClient);
+    notification.notify(NotificationParams.forDelete(phoneKey),
+        onSuccess: onSuccessCallback);
+    await Future.delayed(Duration(seconds: 10));
+  });
+
   test('notify text of to sharedWith atSign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
@@ -68,16 +108,29 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = NotificationServiceImpl(atClient);
-    var notificationResult =
-    await notification.notify(NotificationParams.forText('Hello', '@bob🛠'));
+    var notificationResult = await notification
+        .notify(NotificationParams.forText('Hello', '@bob🛠'));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
     expect(notificationResult.atKey.key, 'Hello');
     expect(notificationResult.atKey.sharedWith, '@bob🛠');
   });
 
-
-
+  test('notify text of to sharedWith atSign - callback', () async {
+    var atsign = '@alice🛠';
+    var preference = getAlicePreference(atsign);
+    await AtClientImpl.createClient(atsign, 'me', preference);
+    var atClient = await AtClientImpl.getClient(atsign);
+    atClient!.getSyncManager()!.init(atsign, preference,
+        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
+    await atClient.getSyncManager()!.sync();
+    // To setup encryption keys
+    await setEncryptionKeys(atsign, preference);
+    var notification = NotificationServiceImpl(atClient);
+    notification.notify(NotificationParams.forText('phone', '@bob🛠'),
+        onSuccess: onSuccessCallback);
+    await Future.delayed(Duration(seconds: 10));
+  });
   tearDown(() async => await tearDownFunc());
 }
 
