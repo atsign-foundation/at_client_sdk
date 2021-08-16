@@ -36,3 +36,6 @@
 - filebin upload changes
 ## 2.0.3
 - at_commons version upgrade
+## 2.0.4
+- Improve notification service
+- Improve monitor
