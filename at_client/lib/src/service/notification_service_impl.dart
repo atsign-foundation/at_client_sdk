@@ -197,7 +197,7 @@ class NotificationServiceImpl implements NotificationService {
 class NotificationResult {
   String? notificationID;
   late AtKey atKey;
-  late NotificationStatusEnum notificationStatusEnum = NotificationStatusEnum.undelivered;
+  NotificationStatusEnum notificationStatusEnum = NotificationStatusEnum.undelivered;
 
   AtClientException? atClientException;
 
