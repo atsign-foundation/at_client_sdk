@@ -54,7 +54,8 @@ class NotificationServiceImpl implements NotificationService {
         _onMonitorError,
         atClient.getCurrentAtSign()!,
         atClient.getPreferences()!,
-        MonitorPreference()..keepAlive = true,
+        MonitorPreference()
+          ..keepAlive = true,
         _monitorRetry);
     _logger.finer(
         'starting monitor with last notification time: $lastNotificationTime');
@@ -63,7 +64,8 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   Future<int?> _getLastNotificationTime() async {
-    final atValue = await atClient.get(AtKey()..key = notificationIdKey);
+    final atValue = await atClient.get(AtKey()
+      ..key = notificationIdKey);
     if (atValue.value != null) {
       _logger.finer('json from hive: ${atValue.value}');
       return jsonDecode(atValue.value)['epochMillis'];
@@ -82,11 +84,17 @@ class NotificationServiceImpl implements NotificationService {
       final atNotifications = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       atNotifications.forEach((atNotification) async {
-        await atClient.put(AtKey()..key = notificationIdKey,
-            jsonEncode(atNotification.toJson()));
+        // Saves latest notification id to the keys if its not a stats notification.
+        if (atNotification.notificationId != '-1') {
+          await atClient.put(AtKey()
+            ..key = notificationIdKey,
+              jsonEncode(atNotification.toJson()));
+        }
         streamListeners.forEach((regex, streamController) {
           if (regex != EMPTY_REGEX) {
-            if (regex.allMatches(atNotification.key).isNotEmpty) {
+            if (regex
+                .allMatches(atNotification.key)
+                .isNotEmpty) {
               streamController.add(atNotification);
             }
           } else {
@@ -96,7 +104,8 @@ class NotificationServiceImpl implements NotificationService {
       });
     } on Exception catch (e) {
       _logger.severe(
-          'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+          'exception processing: error:${e
+              .toString()} notificationJson: $notificationJSON');
     }
   }
 
@@ -104,8 +113,9 @@ class NotificationServiceImpl implements NotificationService {
     _logger.finer('monitor retry');
     Future.delayed(
         Duration(seconds: 5),
-        () async => _monitor!
-            .start(lastNotificationTime: await _getLastNotificationTime()));
+            () async =>
+            _monitor!
+                .start(lastNotificationTime: await _getLastNotificationTime()));
   }
 
   void _onMonitorError(Exception e) {
@@ -125,7 +135,7 @@ class NotificationServiceImpl implements NotificationService {
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
-          NotificationStatusEnum.errored;
+          NotificationStatusEnum.undelivered;
       var errorCode = AtClientExceptionUtil.getErrorCode(e);
       var atClientException = AtClientException(
           errorCode, AtClientExceptionUtil.getErrorDescription(errorCode));
@@ -151,9 +161,9 @@ class NotificationServiceImpl implements NotificationService {
           onSuccess(notificationResult);
         }
         break;
-      case 'errored':
+      case 'undelivered':
         notificationResult.notificationStatusEnum =
-            NotificationStatusEnum.errored;
+            NotificationStatusEnum.undelivered;
         notificationResult.atClientException = AtClientException(
             error_codes['SecondaryConnectException'],
             error_description[error_codes['SecondaryConnectException']]);
@@ -173,7 +183,7 @@ class NotificationServiceImpl implements NotificationService {
     // For every 2 seconds, queries the status of the notification
     while (status == null || status == 'data:queued') {
       await Future.delayed(Duration(seconds: 2),
-          () async => status = await atClient.notifyStatus(notificationId));
+              () async => status = await atClient.notifyStatus(notificationId));
     }
     return status;
   }
@@ -193,12 +203,14 @@ class NotificationServiceImpl implements NotificationService {
 class NotificationResult {
   String? notificationID;
   late AtKey atKey;
-  late NotificationStatusEnum notificationStatusEnum;
+  late NotificationStatusEnum notificationStatusEnum = NotificationStatusEnum.undelivered;
+
   AtClientException? atClientException;
 
   @override
   String toString() {
-    return 'key: ${atKey.key} sharedWith: ${atKey.sharedWith} status: $notificationStatusEnum';
+    return 'key: ${atKey.key} sharedWith: ${atKey
+        .sharedWith} status: $notificationStatusEnum';
   }
 }
 
@@ -228,4 +240,4 @@ class AtNotification {
   }
 }
 
-enum NotificationStatusEnum { delivered, errored }
+enum NotificationStatusEnum { delivered, undelivered }
