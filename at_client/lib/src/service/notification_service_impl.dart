@@ -82,14 +82,11 @@ class NotificationServiceImpl implements NotificationService {
       final atNotifications = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       atNotifications.forEach((atNotification) async {
-        //StatsNotificationServer sends notification to
-        // keep monitor alive with notificationId is -1.
-        // Do nothing here.
-        if(atNotification.notificationId == '-1'){
-          return;
+        // Saves latest notification id to the keys if its not a stats notification.
+        if (atNotification.notificationId != '-1') {
+          await atClient.put(AtKey()..key = notificationIdKey,
+              jsonEncode(atNotification.toJson()));
         }
-        await atClient.put(AtKey()..key = notificationIdKey,
-            jsonEncode(atNotification.toJson()));
         streamListeners.forEach((regex, streamController) {
           if (regex != EMPTY_REGEX) {
             if (regex.allMatches(atNotification.key).isNotEmpty) {
