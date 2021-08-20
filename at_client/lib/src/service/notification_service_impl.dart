@@ -84,8 +84,7 @@ class NotificationServiceImpl implements NotificationService {
       atNotifications.forEach((atNotification) async {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.notificationId != '-1') {
-          await atClient.put(AtKey()
-            ..key = notificationIdKey,
+          await atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
         streamListeners.forEach((regex, streamController) {
