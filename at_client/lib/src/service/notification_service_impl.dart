@@ -128,7 +128,7 @@ class NotificationServiceImpl implements NotificationService {
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
-          NotificationStatusEnum.errored;
+          NotificationStatusEnum.undelivered;
       var errorCode = AtClientExceptionUtil.getErrorCode(e);
       var atClientException = AtClientException(
           errorCode, AtClientExceptionUtil.getErrorDescription(errorCode));
@@ -154,9 +154,9 @@ class NotificationServiceImpl implements NotificationService {
           onSuccess(notificationResult);
         }
         break;
-      case 'errored':
+      case 'undelivered':
         notificationResult.notificationStatusEnum =
-            NotificationStatusEnum.errored;
+            NotificationStatusEnum.undelivered;
         notificationResult.atClientException = AtClientException(
             error_codes['SecondaryConnectException'],
             error_description[error_codes['SecondaryConnectException']]);
@@ -196,7 +196,8 @@ class NotificationServiceImpl implements NotificationService {
 class NotificationResult {
   String? notificationID;
   late AtKey atKey;
-  late NotificationStatusEnum notificationStatusEnum;
+  NotificationStatusEnum notificationStatusEnum = NotificationStatusEnum.undelivered;
+
   AtClientException? atClientException;
 
   @override
@@ -231,4 +232,4 @@ class AtNotification {
   }
 }
 
-enum NotificationStatusEnum { delivered, errored }
+enum NotificationStatusEnum { delivered, undelivered }
