@@ -1,8 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_commons/at_commons.dart';
 
 import '../test_util.dart';
 
