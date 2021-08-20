@@ -152,17 +152,15 @@ class AtClientService {
 
   ///Returns `true` on persisting keys into keystore.
   Future<bool> persistKeys(String atSign) async {
-    var pkamPrivateKey = await (getPkamPrivateKey(atSign) as FutureOr<String>);
+    var pkamPrivateKey = await (getPkamPrivateKey(atSign)) ?? '';
 
-    var pkamPublicKey = await (getPkamPublicKey(atSign) as FutureOr<String>);
+    var pkamPublicKey = await (getPkamPublicKey(atSign)) ?? '';
 
-    var encryptPrivateKey =
-        await (getEncryptionPrivateKey(atSign) as FutureOr<String>);
+    var encryptPrivateKey = await (getEncryptionPrivateKey(atSign)) ?? '';
 
     var encryptPublicKey = await getEncryptionPublicKey(atSign);
 
-    var selfEncryptionKey =
-        await (getSelfEncryptionKey(atSign) as FutureOr<String>);
+    var selfEncryptionKey = await (getSelfEncryptionKey(atSign)) ?? '';
     await atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
@@ -251,12 +249,6 @@ class AtClientService {
       atClient!.getRemoteSecondary()!.atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
       await persistKeys(atsign);
-      try {
-        await _migrateOldSelfKeys();
-      } on Exception catch (e) {
-        _logger
-            .severe('Exception while migrating old self keys: ${e.toString()}');
-      }
     }
     return result;
   }
@@ -325,14 +317,6 @@ class AtClientService {
     //no need of having pkam auth as unauth error can be thrown by keypolicy.
     var result = await pkamAuth(privateKey);
     if (result) await _sync(atClientPreference, atsign);
-    try {
-      await _migrateOldSelfKeys();
-    } on Exception catch (e) {
-      _logger
-          .severe('Exception while migrating old self keys: ${e.toString()}');
-    } on Error catch (e) {
-      _logger.severe('Error migrating old self keys : ${e.toString()}');
-    }
     return result;
   }
 
@@ -385,120 +369,6 @@ class AtClientService {
       }
     }
     return result!.replaceFirst('data:', '');
-  }
-
-  // @alice:shared_key@alice - previously this key was generated inside encryption service
-  // and encrypted with public key. Now we use a single aes key to encrypt self keys as well as key pairs in key file
-  Future<void> _migrateOldSelfKeys() async {
-    _logger.finer('start migrate self keys');
-    var currentAtSign = atClient!.currentAtSign;
-    var isMigrated =
-        await _keyChainManager.getValue(currentAtSign!, 'selfKeysMigrated');
-    if (isMigrated == 'true') {
-      return;
-    }
-    //1. local lookup up self encryption key
-    var metadata = Metadata()..namespaceAware = false;
-    var atKey = AtKey()
-      ..metadata = metadata
-      ..sharedBy = currentAtSign
-      ..sharedWith = currentAtSign
-      ..key = AT_ENCRYPTION_SHARED_KEY;
-    var oldSelfKeyValue = await atClient!.get(atKey);
-    if (oldSelfKeyValue.value == null) {
-      //check and store selfEncryption key
-      var newSelfEncryptionKey =
-          await atClient!.getLocalSecondary()!.getEncryptionSelfKey();
-      if (newSelfEncryptionKey == null || newSelfEncryptionKey == '') {
-        newSelfEncryptionKey =
-            await _keyChainManager.getSelfEncryptionAESKey(currentAtSign);
-        await atClient!
-            .getLocalSecondary()!
-            .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey!);
-      }
-      _logger.severe('self encryption key is null. Skipping migration');
-      return;
-    }
-    //old key. migrate data
-    //decrypt the oldSelfKey with private key
-    var newSelfEncryptionKey = await (_keyChainManager
-        .getSelfEncryptionAESKey(currentAtSign) as FutureOr<String>);
-    await atClient!
-        .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_SELF_KEY, newSelfEncryptionKey);
-    var encryptionPrivateKey =
-        await atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
-    var decryptedSelfKey =
-        EncryptionUtil.decryptKey(oldSelfKeyValue.value, encryptionPrivateKey!);
-    var selfKeys = await atClient!.getAtKeys(
-        sharedWith: currentAtSign, regex: atClient!.preference!.syncRegex);
-    await Future.forEach(
-        selfKeys,
-        (dynamic atKey) => _encryptOldSelfKey(
-            atKey, decryptedSelfKey, newSelfEncryptionKey, currentAtSign));
-
-    await _keyChainManager.putValue(currentAtSign, 'selfKeysMigrated', 'true');
-    _logger.finer('end migrate self keys');
-    //delete old self encryption key from server
-    /// commenting since we need old self key for migrating across apps
-//    var builder = DeleteVerbBuilder()
-//      ..sharedBy = currentAtSign
-//      ..sharedWith = currentAtSign
-//      ..atKey = AT_ENCRYPTION_SHARED_KEY;
-//    await atClient.getLocalSecondary().executeVerb(builder, sync: true);
-  }
-
-  void _encryptOldSelfKey(
-    AtKey atKey,
-    String oldSelfKey,
-    String newAesKey,
-    String atSign,
-  ) async {
-    if (atKey.key!.contains(AT_SIGNING_PRIVATE_KEY) ||
-        (atKey.sharedWith != null && atKey.sharedWith != atSign) ||
-        atKey.key!.contains('shared_key') ||
-        atKey.key!.contains('publickey') ||
-        atKey.metadata!.isPublic! ||
-        atKey.metadata!.isCached ||
-        atKey.metadata!.isHidden ||
-        atKey.key!.startsWith('_')) {
-      //skip signing private key, keys shared with other users and public keys
-      return;
-    }
-    try {
-      //1. get the existing value encrypted with previous key
-      var llookupVerbBuilder = LLookupVerbBuilder()
-        ..sharedBy = atKey.sharedBy
-        ..sharedWith = atKey.sharedWith
-        ..atKey = '${atKey.key}.${atKey.namespace}'
-        ..isPublic = atKey.metadata!.isPublic!;
-      var existingEncryptedAtValue =
-          await atClient!.getLocalSecondary()!.executeVerb(llookupVerbBuilder);
-      if (existingEncryptedAtValue == null ||
-          existingEncryptedAtValue == 'data:null') {
-        _logger
-            .severe('_encryptOldSelfKey value not found for key ${atKey.key}');
-        return;
-      }
-      var existingEncryptedValue =
-          existingEncryptedAtValue.replaceFirst('data:', '');
-      //2. decrypt the value
-      var decryptedValue =
-          EncryptionUtil.decryptValue(existingEncryptedValue, oldSelfKey);
-      if (atKey.key!.startsWith('atconnections')) {
-        atKey.metadata!.namespaceAware = false;
-        atKey.key = '${atKey.key}.${atKey.namespace}';
-      }
-
-      //3. update the new value and sync to server. value gets encrypted as a part of put.
-      await atClient!.put(atKey, decryptedValue);
-    } on Exception catch (e) {
-      _logger.severe(
-          'Exception migrating key : ${atKey.key} exception: ${e.toString()}');
-    } on Error catch (e) {
-      _logger
-          .severe('Error migrating key : ${atKey.key} error: ${e.toString()}');
-    }
   }
 
   bool _isNullOrEmpty(String? key) {

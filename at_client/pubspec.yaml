@@ -1,9 +1,9 @@
 name: at_client
-description: at_client is the Client SDK which provides the essential methods for building an app using the @protocol.
-version: 2.0.2
+description: The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the @protocol.
+version: 2.0.4
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
-documentation: https://atsign.dev/at_docs-dev_env/at_client/index.html
+documentation: https://atsign.dev/docs/
 
 environment:
   sdk: '>=2.12.0 <3.0.0'
@@ -21,13 +21,41 @@ dependencies:
   pedantic: ^1.11.0
   archive: ^3.1.2
   http: ^0.13.3
+  internet_connection_checker: ^0.0.1+2
   at_persistence_spec: ^2.0.0
-  at_persistence_secondary_server: ^2.0.1
-  at_lookup: ^2.0.1
+  at_persistence_secondary_server: ^2.0.4
+  at_lookup: ^2.0.5
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^2.0.1
-  at_utils: ^2.0.1
+  at_commons: ^2.0.5
+  at_utils: ^2.0.4
+
+#dependency_overrides:
+#  at_persistence_spec:
+#    git:
+#      url: https://github.com/atsign-foundation/at_server.git
+#      path: at_persistence/at_persistence_spec
+#      ref: trunk
+#  at_utils:
+#    git:
+#      url: https://github.com/atsign-foundation/at_tools.git
+#      path: at_utils
+#      ref: trunk
+#  at_commons:
+#    git:
+#      url: https://github.com/atsign-foundation/at_tools.git
+#      path: at_commons
+#      ref: trunk
+#  at_persistence_secondary_server:
+#    git:
+#      url: https://github.com/atsign-foundation/at_server.git
+#      path: at_secondary/at_persistence_secondary_server
+#      ref: trunk
+#  at_lookup:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: at_lookup
+#      ref: trunk
 
 dev_dependencies:
   test: ^1.17.2

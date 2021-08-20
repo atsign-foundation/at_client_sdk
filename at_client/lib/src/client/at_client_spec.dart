@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
@@ -21,6 +22,8 @@ abstract class AtClient {
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
+
+  AtClientPreference? getPreferences();
 
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
   /// has to be shared with another atSign. Set [AtKey.metadata.isBinary] if you are updating binary value e.g image,file.
@@ -106,6 +109,14 @@ abstract class AtClient {
   ///   var key = AtKey()..key='phone'
   ///             ..sharedWith='@alice'
   ///   get(key);
+  ///
+  /// plookup public phone number of @bob
+  /// plookup:phone@bob
+  /// var metadata = Metadata()..isPublic=true;
+  /// var publicPhoneKey = AtKey()..key = 'phone'
+  ///                             ..sharedBy = '@bob'
+  ///                             ..metadata = metadata;
+  ///  get(publicPhoneKey);
   ///
   /// @alice : update:@bob:phone.personal@alice
   /// @bob   : lookup:phone.persona@alice
@@ -238,6 +249,21 @@ abstract class AtClient {
   ///   var value='+1 999 9999'
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
+  ///
+  /// var atKey = AtKey()..key = 'phone@alice'
+  ///                    ..sharedWith = '@bob'
+  ///                    ..sharedBy = ‘@alice’
+  /// Sending Notification with Notification Strategy ‘ALL’ and priority low
+  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
+  ///                       priority: PriorityEnum.low,
+  ///                      strategy: StrategyEnum.all);
+  ///
+  /// Sending Notification with Notification Strategy ‘Latest N’ and priority high
+  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
+  ///                       priority: PriorityEnum.high,
+  ///                       strategy: StrategyEnum.latest,
+  ///                       latestN:3,
+  ///                       Notifier: ‘wavi’);
   ///```
   Future<bool> notify(AtKey key, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
@@ -246,6 +272,62 @@ abstract class AtClient {
       int? latestN,
       String? notifier,
       bool isDedicated = false});
+
+  /// Notifies the [NotificationParams.atKey] to [notificationParams.atKey.sharedWith] user
+  /// of the atSign. Optionally, operation, value and metadata can be set along with key to
+  /// notify.
+  ///
+  ///* Throws [LateInitializationError] when [NotificationParams.atKey] is not initialized
+  ///* Throws [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
+  ///invalid metadata is provided.
+  ///* Throws [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
+  ///* Throws [AtClientException] when keys to encrypt the data are not found.
+  ///* Throws [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
+  ///* Throws [AtClientException] when fails to connect to cloud secondary server.
+  ///
+  ///e.g alice is the current atsign
+  ///
+  /// 1. To notify a update of key to @bob
+  /// ```dart
+  ///   var key = AtKey()..key='phone'
+  ///                    ..sharedWith='@bob'
+  ///   var notificationParams = NotificationParams().._atKey = key
+  ///                                                .._operation = OperationEnum.update
+  ///                                                .._messageType = MessageTypeEnum.key;
+  ///   notifyChange(notificationParams);
+  /// ```
+  /// 2. To notify and cache a key - value in @bob
+  /// ```dart
+  ///   var metaData = Metadata()..ttr='6000000';
+  ///   var key = AtKey()..key='phone'
+  ///                    ..sharedWith='@bob'
+  ///                    ..metadata=metaData
+  ///   var value='+1 999 9999'
+  ///   var notificationParams = NotificationParams().._atKey = key
+  ///                                                .._operation = OperationEnum.update
+  ///                                                .._value = value
+  ///                                                .._messageType = MessageTypeEnum.key;
+  ///   notifyChange(notificationParams);
+  ///```
+  ///3. To notify a text message
+  ///```dart
+  ///   var key = AtKey()..key='phone'
+  ///                    ..sharedWith='@bob'
+  ///   var notificationParams = NotificationParams().._atKey = key
+  ///                                                .._operation = OperationEnum.update
+  ///                                                .._messageType = MessageTypeEnum.text;
+  ///   notifyChange(notificationParams);
+  ///```
+  ///4. To notify a deletion of a key to @bob.
+  ///```dart
+  ///   var key = AtKey()..key='phone'
+  ///                    ..sharedWith='@bob'
+  ///   var notificationParams = NotificationParams().._atKey = key
+  ///                                                .._operation = OperationEnum.delete
+  ///                                                .._messageType = MessageTypeEnum.key;
+  ///   notifyChange(notificationParams);
+  ///```
+  Future<String?> notifyChange(NotificationParams notificationParams);
 
   /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
   /// ```
@@ -272,19 +354,34 @@ abstract class AtClient {
   ///```
   ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366
   ///
-  ///   notifyStatus('75037ac4-6a15-43cc-ba66-e621bb2a6366');
+  /// var atKey = AtKey()..key = 'phone@bob'
+  ///                    ..sharedWith = '@alice'
+  ///                    ..sharedBy = ‘@bob’
+  /// Execute the notify verb
+  /// var notiticationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
+  ///  Get the status for notificationId
+  ///   notifyStatus(notiticationId);
+  ///
   ///```
   Future<String> notifyStatus(String notificationId);
 
   ///Returns the list of received notifications of an atsign, Optionally, notifications can be filtered on from date, to date and regular expression
   ///```
   ///e.g alice is the current atsign
+  ///  Get all the notifications
   ///  notify:list
   ///    notifyList();
+  ///
+  ///  Get notification starting from 2021-01-28 to 2021-01-29
   ///  notify:list:2021-01-28:2021-01-29
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29);
+  ///
+  ///  Get notifications list which matches with the regex 'phone'
   ///  notify:list:phone
   ///     notifyList(regex: phone);
+  ///
+  ///  Get notification starting from 2021-01-28 to 2021-01-29 and
+  ///         matches with the regex 'phone'
   ///  notify:list:2021-01-28:2021-01-29:phone
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
   ///```
@@ -309,4 +406,6 @@ abstract class AtClient {
   /// Optionally you can pass [downloadPath] to download the files.
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath});
+
+  String? getCurrentAtSign();
 }
