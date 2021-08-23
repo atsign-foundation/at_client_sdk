@@ -83,7 +83,6 @@ class NotificationParams {
   late StrategyEnum _strategy;
   final int _latestN = 1;
   final String _notifier = SYSTEM;
-  final bool _isDedicated = false;
 
   AtKey get atKey => _atKey;
 

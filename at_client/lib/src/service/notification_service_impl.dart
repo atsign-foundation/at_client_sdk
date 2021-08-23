@@ -82,8 +82,11 @@ class NotificationServiceImpl implements NotificationService {
       final atNotifications = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       atNotifications.forEach((atNotification) async {
-        await atClient.put(AtKey()..key = notificationIdKey,
-            jsonEncode(atNotification.toJson()));
+        // Saves latest notification id to the keys if its not a stats notification.
+        if (atNotification.notificationId != '-1') {
+          await atClient.put(AtKey()..key = notificationIdKey,
+              jsonEncode(atNotification.toJson()));
+        }
         streamListeners.forEach((regex, streamController) {
           if (regex != EMPTY_REGEX) {
             if (regex.allMatches(atNotification.key).isNotEmpty) {
@@ -125,7 +128,7 @@ class NotificationServiceImpl implements NotificationService {
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
-          NotificationStatusEnum.errored;
+          NotificationStatusEnum.undelivered;
       var errorCode = AtClientExceptionUtil.getErrorCode(e);
       var atClientException = AtClientException(
           errorCode, AtClientExceptionUtil.getErrorDescription(errorCode));
@@ -151,9 +154,9 @@ class NotificationServiceImpl implements NotificationService {
           onSuccess(notificationResult);
         }
         break;
-      case 'errored':
+      case 'undelivered':
         notificationResult.notificationStatusEnum =
-            NotificationStatusEnum.errored;
+            NotificationStatusEnum.undelivered;
         notificationResult.atClientException = AtClientException(
             error_codes['SecondaryConnectException'],
             error_description[error_codes['SecondaryConnectException']]);
@@ -193,7 +196,8 @@ class NotificationServiceImpl implements NotificationService {
 class NotificationResult {
   String? notificationID;
   late AtKey atKey;
-  late NotificationStatusEnum notificationStatusEnum;
+  NotificationStatusEnum notificationStatusEnum = NotificationStatusEnum.undelivered;
+
   AtClientException? atClientException;
 
   @override
@@ -228,4 +232,4 @@ class AtNotification {
   }
 }
 
-enum NotificationStatusEnum { delivered, errored }
+enum NotificationStatusEnum { delivered, undelivered }

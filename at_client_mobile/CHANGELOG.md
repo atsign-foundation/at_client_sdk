@@ -1,3 +1,6 @@
+## 2.0.4
+- at_client version change
+- removed obsolete self key migration code
 ## 2.0.3
 - at_client version change
 ## 2.0.2

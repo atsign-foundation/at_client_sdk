@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -13,10 +11,6 @@ void main() async {
     var atClient = await (AtClientImpl.getClient('@alice🛠'));
     atClient!.getSyncManager()!.init('@alice🛠', TestUtil.getAlicePreference(),
         atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
     final notificationService = NotificationServiceImpl(atClient);
     notificationService.subscribe().listen((notification) {
       _notificationCallback(notification);
