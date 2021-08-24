@@ -25,8 +25,6 @@ class SyncService {
 
   final _logger = AtSignLogger('SyncService');
 
-  RemoteSecondary get remoteSecondary => _remoteSecondary;
-
   SyncService(this._atClient) {
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
