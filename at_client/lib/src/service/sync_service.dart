@@ -25,6 +25,8 @@ class SyncService {
 
   final _logger = AtSignLogger('SyncService');
 
+  RemoteSecondary get remoteSecondary => _remoteSecondary;
+
   SyncService(this._atClient) {
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
@@ -89,7 +91,7 @@ class SyncService {
     var serverCommitId;
     try {
       // Check if local and cloud secondary are in sync. If true, return.
-      if (await _isInSync()) {
+      if (await isInSync()) {
         syncResult = SyncResult();
         _logger.info('Local Secondary and Cloud Secondary are in sync');
         // Setting isSyncInProgress to false, to allow next sync call.
@@ -200,6 +202,7 @@ class SyncService {
           (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
+      _logger.info('Setting localCommitId to $localCommitId');
     }
   }
 
@@ -281,7 +284,7 @@ class SyncService {
   ///Verifies if local secondary are cloud secondary are in sync.
   ///Returns true if local secondary and cloud secondary are in sync; else false.
   ///Throws [AtLookUpException] if cloud secondary is not reachable
-  Future<bool> _isInSync() async {
+  Future<bool> isInSync() async {
     var serverCommitId = await _getServerCommitId();
     var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
@@ -298,18 +301,17 @@ class SyncService {
   /// Returns the cloud secondary latest commit id. if null, returns -1.
   ///Throws [AtLookUpException] if secondary is not reachable
   Future<int> _getServerCommitId({bool getFromServer = false}) async {
-    if (_serverCommitId == null ||
-        getFromServer ||
-        (_lastServerCommitIdDateTime != null &&
-            DateTime.now()
-                    .toUtc()
-                    .difference(_lastServerCommitIdDateTime)
-                    .inMinutes >
-                5)) {
+    // 1. If server commit id is null, fetch from remote secondary
+    // 2. If lastServerCommit id is null or difference is more than 5 minutes
+    // 3. If user sets getFromServer to true.
+    if ((_serverCommitId == null || _lastServerCommitIdDateTime == null) ||
+        (DateTime.now().difference(_lastServerCommitIdDateTime).inMinutes >
+            5) ||
+        getFromServer) {
       _logger.finer('Getting server commit Id from cloud secondary');
       _serverCommitId = await SyncUtil.getLatestServerCommitId(
-          _atClient.getRemoteSecondary()!,
-          _atClient.getPreferences()!.syncRegex);
+          _remoteSecondary, _atClient.getPreferences()!.syncRegex);
+      _lastServerCommitIdDateTime = DateTime.now().toUtc();
     }
     // If server commit id is null, set to -1;
     _serverCommitId ??= -1;
@@ -349,9 +351,7 @@ class SyncService {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
-    var verbResult = await _atClient
-        .getRemoteSecondary()!
-        .executeCommand(command, auth: true);
+    var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('batch result:$verbResult');
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');
