@@ -322,6 +322,8 @@ class SyncService {
   /// Listens on stats notification sent by the cloud secondary server
   void _statsServiceListener() {
     final notificationService = NotificationServiceImpl(_atClient);
+    // Setting the regex to 'statsNotification' to receive only the notifications
+    // from stats notification service.
     notificationService.subscribe(regex: 'statsNotification').listen((notification) {
       _serverCommitId = notification.value;
       _lastServerCommitIdDateTime =
