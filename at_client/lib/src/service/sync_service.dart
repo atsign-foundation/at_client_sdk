@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -20,6 +21,7 @@ class SyncService {
   var _serverCommitId;
   var _lastServerCommitIdDateTime;
   late final RemoteSecondary _remoteSecondary;
+  static const LIMIT = 10;
 
   final _logger = AtSignLogger('SyncService');
 
@@ -182,25 +184,20 @@ class SyncService {
   }
 
   /// Syncs the cloud secondary changes to local secondary.
-  /// Setting [isPaginated] to true, bring the pagination sync response.
-  /// The [limit] variables defines the numbers of entries per sync a response
-  Future<void> _syncFromServer(int serverCommitId, int localCommitId,
-      {bool isPaginated = true, int limit = 10}) async {
+  Future<void> _syncFromServer(int serverCommitId, int localCommitId) async {
     // Iterates until serverCommitId and localCommitId are equal.
     while (serverCommitId != localCommitId) {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
-        ..limit = limit
-        ..isPaginated = isPaginated;
-      var syncResponse = await _remoteSecondary.executeVerb(syncBuilder);
-      if (syncResponse != null && syncResponse != 'data:null') {
-        syncResponse = syncResponse.replaceFirst('data:', '');
-        var syncResponseJson = jsonDecode(syncResponse);
-        // Iterates over each commit
-        await Future.forEach(syncResponseJson,
-            (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
-      }
+        ..limit = LIMIT
+        ..isPaginated = true;
+      var syncResponse = DefaultResponseParser()
+          .parse(await _remoteSecondary.executeVerb(syncBuilder));
+      var syncResponseJson = jsonDecode(syncResponse.response);
+      // Iterates over each commit
+      await Future.forEach(syncResponseJson,
+          (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
     }
@@ -324,7 +321,9 @@ class SyncService {
     final notificationService = NotificationServiceImpl(_atClient);
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
-    notificationService.subscribe(regex: 'statsNotification').listen((notification) {
+    notificationService
+        .subscribe(regex: 'statsNotification')
+        .listen((notification) {
       _serverCommitId = notification.value;
       _lastServerCommitIdDateTime =
           DateTime.fromMillisecondsSinceEpoch(notification.epochMillis);
