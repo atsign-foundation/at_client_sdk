@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -196,7 +197,8 @@ class NotificationServiceImpl implements NotificationService {
 class NotificationResult {
   String? notificationID;
   late AtKey atKey;
-  NotificationStatusEnum notificationStatusEnum = NotificationStatusEnum.undelivered;
+  NotificationStatusEnum notificationStatusEnum =
+      NotificationStatusEnum.undelivered;
 
   AtClientException? atClientException;
 
@@ -210,12 +212,14 @@ class AtNotification {
   late String notificationId;
   late String key;
   late int epochMillis;
+  String? value;
 
   static AtNotification fromJson(Map json) {
     return AtNotification()
       ..notificationId = json['id']
       ..key = json['key']
-      ..epochMillis = json['epochMillis'];
+      ..epochMillis = json['epochMillis']
+      ..value = json['value'];
   }
 
   Map toJson() {
@@ -223,12 +227,13 @@ class AtNotification {
     jsonMap['id'] = notificationId;
     jsonMap['key'] = key;
     jsonMap['epochMillis'] = epochMillis;
+    jsonMap['value'] = value;
     return jsonMap;
   }
 
   @override
   String toString() {
-    return 'AtNotification{id: $notificationId, key: $key, epochMillis: $epochMillis}';
+    return 'AtNotification{id: $notificationId, key: $key, epochMillis: $epochMillis, value: $value}';
   }
 }
 

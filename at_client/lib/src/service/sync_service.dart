@@ -3,23 +3,31 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
+import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncService {
   bool _isSyncInProgress = false;
   final AtClient _atClient;
+  var _serverCommitId;
+  var _lastServerCommitIdDateTime;
+  late final RemoteSecondary _remoteSecondary;
 
   final _logger = AtSignLogger('SyncService');
 
-  SyncService(this._atClient);
+  SyncService(this._atClient) {
+    _remoteSecondary = RemoteSecondary(
+        _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+    _statsServiceListener();
+  }
 
   /// Sync local secondary and cloud secondary.
   ///
@@ -101,37 +109,28 @@ class SyncService {
       onError(syncResult);
       return;
     }
-    // Get lastSynced local commit id.
-    var lastSyncEntry = await SyncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
-    var localCommitId;
-    // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
-    // Else set to -1.
-    (lastSyncEntry != null)
-        ? localCommitId = lastSyncEntry.commitId
-        : localCommitId = -1;
     // Sync
-    _sync(serverCommitId, localCommitId, lastSyncEntry, onDone, onError);
+    _sync(serverCommitId, onDone, onError);
   }
 
-  void _sync(int serverCommitId, int localCommitId,
-      CommitEntry? lastSyncedEntry, Function onDone, Function onError) async {
-    //Set isSyncInProgress to false to allow next sync process.
+  void _sync(int serverCommitId, Function onDone, Function onError) async {
     var syncResult = SyncResult();
+    var localCommitId = await _getLocalCommitId();
     try {
       _logger.finer('Sync in progress');
       if (serverCommitId > localCommitId) {
         _logger.finer('syncing to local');
         await _syncFromServer(serverCommitId, localCommitId);
+        // Getting localCommitId to get the latest commit id after cloud secondary changes are
+        // synced.
+        localCommitId = await _getLocalCommitId();
       }
       var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
           localCommitId, _atClient.getPreferences()!.syncRegex,
           atSign: _atClient.getCurrentAtSign()!);
       if (unCommittedEntries.isNotEmpty) {
         _logger.finer('syncing to remote');
-        await _syncToRemote(
-            serverCommitId, localCommitId, unCommittedEntries, lastSyncedEntry);
+        await _syncToRemote(unCommittedEntries);
       }
       _isSyncInProgress = false;
       syncResult.lastSyncedOn = DateTime.now().toUtc();
@@ -145,11 +144,8 @@ class SyncService {
     }
   }
 
-  Future<void> _syncToRemote(
-      int serverCommitId,
-      int localCommitId,
-      List<CommitEntry> unCommittedEntries,
-      CommitEntry? lastSyncedEntry) async {
+  /// Syncs the local entries to cloud secondary.
+  Future<void> _syncToRemote(List<CommitEntry> unCommittedEntries) async {
     var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
     for (var unCommittedEntryList in uncommittedEntryBatch) {
       try {
@@ -185,15 +181,28 @@ class SyncService {
     }
   }
 
-  Future<void> _syncFromServer(int serverCommitId, int localCommitId) async {
-    var syncResponse = await _atClient
-        .getRemoteSecondary()!
-        .sync(localCommitId, regex: _atClient.getPreferences()!.syncRegex);
-    if (syncResponse != null && syncResponse != 'data:null') {
-      syncResponse = syncResponse.replaceFirst('data:', '');
-      var syncResponseJson = jsonDecode(syncResponse);
-      await Future.forEach(syncResponseJson,
-          (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
+  /// Syncs the cloud secondary changes to local secondary.
+  /// Setting [isPaginated] to true, bring the pagination sync response.
+  /// The [limit] variables defines the numbers of entries per sync a response
+  Future<void> _syncFromServer(int serverCommitId, int localCommitId,
+      {bool isPaginated = true, int limit = 10}) async {
+    // Iterates until serverCommitId and localCommitId are equal.
+    while (serverCommitId != localCommitId) {
+      var syncBuilder = SyncVerbBuilder()
+        ..commitId = localCommitId
+        ..regex = _atClient.getPreferences()!.syncRegex
+        ..limit = limit
+        ..isPaginated = isPaginated;
+      var syncResponse = await _remoteSecondary.executeVerb(syncBuilder);
+      if (syncResponse != null && syncResponse != 'data:null') {
+        syncResponse = syncResponse.replaceFirst('data:', '');
+        var syncResponseJson = jsonDecode(syncResponse);
+        // Iterates over each commit
+        await Future.forEach(syncResponseJson,
+            (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
+      }
+      // assigning the lastSynced local commit id.
+      localCommitId = await _getLocalCommitId();
     }
   }
 
@@ -291,12 +300,48 @@ class SyncService {
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
   ///Throws [AtLookUpException] if secondary is not reachable
-  Future<int> _getServerCommitId() async {
-    var serverCommitId = await SyncUtil.getLatestServerCommitId(
-        _atClient.getRemoteSecondary()!, _atClient.getPreferences()!.syncRegex);
+  Future<int> _getServerCommitId({bool getFromServer = false}) async {
+    if (_serverCommitId == null ||
+        getFromServer ||
+        (_lastServerCommitIdDateTime != null &&
+            DateTime.now()
+                    .toUtc()
+                    .difference(_lastServerCommitIdDateTime)
+                    .inMinutes >
+                5)) {
+      _logger.finer('Getting server commit Id from cloud secondary');
+      _serverCommitId = await SyncUtil.getLatestServerCommitId(
+          _atClient.getRemoteSecondary()!,
+          _atClient.getPreferences()!.syncRegex);
+    }
     // If server commit id is null, set to -1;
-    serverCommitId ??= -1;
-    return serverCommitId;
+    _serverCommitId ??= -1;
+    return _serverCommitId;
+  }
+
+  /// Listens on stats notification sent by the cloud secondary server
+  void _statsServiceListener() {
+    final notificationService = NotificationServiceImpl(_atClient);
+    notificationService.subscribe(regex: 'statsNotification').listen((notification) {
+      _serverCommitId = notification.value;
+      _lastServerCommitIdDateTime =
+          DateTime.fromMillisecondsSinceEpoch(notification.epochMillis);
+    });
+  }
+
+  /// Returns the local commit id. If null, returns -1.
+  Future<int> _getLocalCommitId() async {
+    // Get lastSynced local commit id.
+    var lastSyncEntry = await SyncUtil.getLastSyncedEntry(
+        _atClient.getPreferences()!.syncRegex,
+        atSign: _atClient.getCurrentAtSign()!);
+    var localCommitId;
+    // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
+    // Else set to -1.
+    (lastSyncEntry != null)
+        ? localCommitId = lastSyncEntry.commitId
+        : localCommitId = -1;
+    return localCommitId;
   }
 
   dynamic _sendBatch(List<BatchRequest> requests) async {
