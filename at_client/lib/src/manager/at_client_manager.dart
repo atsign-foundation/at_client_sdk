@@ -1,5 +1,5 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/listener/AtSignChangeListener.dart';
+import 'package:at_client/src/listener/at_sign_change_listener.dart';
 
 class AtClientManager {
   var _atSign;

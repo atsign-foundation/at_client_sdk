@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
-import 'package:at_client/src/listener/AtSignChangeListener.dart';
+import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
