@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
+import 'package:at_client/src/listener/AtSignChangeListener.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -11,7 +12,7 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
-class NotificationServiceImpl implements NotificationService {
+class NotificationServiceImpl implements NotificationService, AtSignChangeListener {
   Map<String, Function> listeners = {};
   Map<String, StreamController> streamListeners = {};
   final EMPTY_REGEX = '';
@@ -19,14 +20,14 @@ class NotificationServiceImpl implements NotificationService {
 
   final _logger = AtSignLogger('NotificationServiceImpl');
 
-  late AtClient atClient;
+  late AtClient _atClient;
 
   bool _isMonitorStarted = false;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
 
   NotificationServiceImpl(AtClient atClient) {
-    this.atClient = atClient;
+    this._atClient = atClient;
   }
 
   void _init() {
@@ -35,7 +36,7 @@ class NotificationServiceImpl implements NotificationService {
       _connectivityListener!.subscribe().listen((isConnected) {
         if (isConnected) {
           _logger.finer(
-              'starting monitor for atsign: ${atClient.getCurrentAtSign()}');
+              'starting monitor for atsign: ${_atClient.getCurrentAtSign()}');
           _startMonitor();
         } else {
           _logger.finer('lost network connectivity');
@@ -53,8 +54,8 @@ class NotificationServiceImpl implements NotificationService {
     _monitor = Monitor(
         _internalNotificationCallback,
         _onMonitorError,
-        atClient.getCurrentAtSign()!,
-        atClient.getPreferences()!,
+        _atClient.getCurrentAtSign()!,
+        _atClient.getPreferences()!,
         MonitorPreference()..keepAlive = true,
         _monitorRetry);
     _logger.finer(
@@ -64,7 +65,7 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   Future<int?> _getLastNotificationTime() async {
-    final atValue = await atClient.get(AtKey()..key = notificationIdKey);
+    final atValue = await _atClient.get(AtKey()..key = notificationIdKey);
     if (atValue.value != null) {
       _logger.finer('json from hive: ${atValue.value}');
       return jsonDecode(atValue.value)['epochMillis'];
@@ -85,7 +86,7 @@ class NotificationServiceImpl implements NotificationService {
       atNotifications.forEach((atNotification) async {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.notificationId != '-1') {
-          await atClient.put(AtKey()..key = notificationIdKey,
+          await _atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
         streamListeners.forEach((regex, streamController) {
@@ -125,7 +126,7 @@ class NotificationServiceImpl implements NotificationService {
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       // Returns the notificationId.
-      notificationId = await atClient.notifyChange(notificationParams);
+      notificationId = await _atClient.notifyChange(notificationParams);
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
@@ -177,7 +178,7 @@ class NotificationServiceImpl implements NotificationService {
     // For every 2 seconds, queries the status of the notification
     while (status == null || status == 'data:queued') {
       await Future.delayed(Duration(seconds: 2),
-          () async => status = await atClient.notifyStatus(notificationId));
+          () async => status = await _atClient.notifyStatus(notificationId));
     }
     return status;
   }
@@ -190,6 +191,12 @@ class NotificationServiceImpl implements NotificationService {
     _logger.finer('added regex to listener $regex');
     _init();
     return _controller.stream;
+  }
+
+  @override
+  void listenToAtSignChange(AtClient atClient) {
+    stop();
+    _atClient = atClient;
   }
 }
 

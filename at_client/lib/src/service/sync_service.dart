@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/listener/AtSignChangeListener.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -15,9 +17,9 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
-class SyncService {
+class SyncService implements AtSignChangeListener {
   bool _isSyncInProgress = false;
-  final AtClient _atClient;
+  late final AtClient _atClient;
   var _serverCommitId;
   var _lastServerCommitIdDateTime;
   late final RemoteSecondary _remoteSecondary;
@@ -28,6 +30,7 @@ class SyncService {
   SyncService(this._atClient) {
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+    AtClientManager.getInstance().listenToAtSignChange(this);
     _statsServiceListener();
   }
 
@@ -442,6 +445,11 @@ class SyncService {
     commitEntry.operation = operation;
     await SyncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
         _atClient.getCurrentAtSign()!);
+  }
+
+  @override
+  void listenToAtSignChange(AtClient atClient) {
+    _atClient = atClient;
   }
 }
 
