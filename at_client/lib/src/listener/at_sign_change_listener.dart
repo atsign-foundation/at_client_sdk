@@ -1,5 +1,5 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/listener/switch_at_sign_event.dart';
 
 abstract class AtSignChangeListener {
-  void listenToAtSignChange(AtClient atClient);
+  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent);
 }

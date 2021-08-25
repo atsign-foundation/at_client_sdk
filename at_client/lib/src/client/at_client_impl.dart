@@ -58,6 +58,7 @@ class AtClientImpl implements AtClient {
 
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
   /// and the client preference.
+  @deprecated
   static Future<AtClient?> getClient(String? currentAtSign) async {
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
@@ -67,6 +68,8 @@ class AtClientImpl implements AtClient {
     return null;
   }
 
+  @deprecated
+  /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
       AtClientPreference preferences) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
@@ -84,7 +87,33 @@ class AtClientImpl implements AtClient {
     _atClientInstanceMap[currentAtSign] = atClientImpl;
   }
 
+  /// use [create]
   AtClientImpl(
+      String _atSign, String? namespace, AtClientPreference preference) {
+    currentAtSign = AtUtils.formatAtSign(_atSign);
+    _preference = preference;
+    _namespace = namespace;
+  }
+
+  static Future<AtClient> create(String currentAtSign, String? namespace,
+      AtClientPreference preferences) async {
+    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
+    if (_atClientInstanceMap.containsKey(currentAtSign)) {
+      return _atClientInstanceMap[currentAtSign];
+    }
+    if (preferences.isLocalStoreRequired) {
+      var storageManager = StorageManager(preferences);
+      await storageManager.init(currentAtSign, preferences.keyStoreSecret);
+    }
+    var atClientImpl = AtClientImpl._(currentAtSign, namespace, preferences);
+    await atClientImpl._init();
+    atClientImpl.logger
+        .info('AtClient init  done for : ${atClientImpl.currentAtSign}');
+    _atClientInstanceMap[currentAtSign] = atClientImpl;
+    return _atClientInstanceMap[currentAtSign];
+  }
+
+  AtClientImpl._(
       String _atSign, String? namespace, AtClientPreference preference) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;

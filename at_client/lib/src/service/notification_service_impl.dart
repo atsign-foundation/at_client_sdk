@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
+import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -12,11 +12,13 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
-class NotificationServiceImpl implements NotificationService, AtSignChangeListener {
+class NotificationServiceImpl
+    implements NotificationService, AtSignChangeListener {
   Map<String, Function> listeners = {};
   Map<String, StreamController> streamListeners = {};
   final EMPTY_REGEX = '';
   static const notificationIdKey = '_latestNotificationId';
+  static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
 
@@ -26,8 +28,17 @@ class NotificationServiceImpl implements NotificationService, AtSignChangeListen
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
 
-  NotificationServiceImpl(AtClient atClient) {
-    this._atClient = atClient;
+  static NotificationService create(AtClient atClient) {
+    if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
+      return _notificationServiceMap[atClient.getCurrentAtSign()]!;
+    }
+    final syncService = NotificationServiceImpl._(atClient);
+    _notificationServiceMap[atClient.getCurrentAtSign()!] = syncService;
+    return _notificationServiceMap[atClient.getCurrentAtSign()]!;
+  }
+
+  NotificationServiceImpl._(AtClient atClient) {
+    _atClient = atClient;
   }
 
   void _init() {
@@ -194,9 +205,8 @@ class NotificationServiceImpl implements NotificationService, AtSignChangeListen
   }
 
   @override
-  void listenToAtSignChange(AtClient atClient) {
-    stop();
-    _atClient = atClient;
+  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
+    //# TODO implement. Whether to remember previous at sign or clean up?
   }
 }
 
