@@ -1,3 +1,5 @@
+import 'package:at_client/src/service/sync_service_impl.dart';
+
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
   ///
@@ -29,5 +31,8 @@ abstract class SyncService {
   ///   print(syncResult.atClientException);
   /// }
   /// ```
-  Future<void> sync(Function onDone, Function onError);
+  Future<SyncResult> sync({Function? onDone, Function? onError});
+
+  /// Returns true if local and cloud secondary are in sync. false otherwise
+  Future<bool> isInSync();
 }

@@ -45,7 +45,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     AtClientManager.getInstance().listenToAtSignChange(this);
   }
 
-  Future<void> sync(Function onDone, Function onError) async {
+  Future<SyncResult> sync({Function? onDone, Function? onError}) async {
     SyncResult syncResult;
     // If sync in-progress, return.
     if (_isSyncInProgress) {
@@ -54,52 +54,65 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncResult.syncStatus = SyncStatus.failure;
       syncResult.atClientException = AtClientException(
           'AT0014', 'Sync-InProgress. Cannot start a new sync process');
-      onError(syncResult);
-      return;
+      if (onError != null) {
+        onError(syncResult);
+      }
+      return syncResult;
     }
-    //Setting isSyncInProgress to true to prevent parallel sync calls.
-    _isSyncInProgress = true;
-    // If network is not available, return.
-    if (!await NetworkUtil.isNetworkAvailable()) {
-      _logger.severe('Failed connecting to internet');
-      syncResult = SyncResult();
-      syncResult.syncStatus = SyncStatus.failure;
-      syncResult.atClientException =
-          AtClientException('AT0014', 'Failed connecting to internet');
-      _isSyncInProgress = false;
-      onError(syncResult);
-      return;
-    }
-    var serverCommitId;
     try {
-      // Check if local and cloud secondary are in sync. If true, return.
-      if (await _isInSync()) {
+      //Setting isSyncInProgress to true to prevent parallel sync calls.
+      _isSyncInProgress = true;
+      // If network is not available, return.
+      if (!await NetworkUtil.isNetworkAvailable()) {
+        _logger.severe('Failed connecting to internet');
         syncResult = SyncResult();
-        _logger.info('Local Secondary and Cloud Secondary are in sync');
+        syncResult.syncStatus = SyncStatus.failure;
+        syncResult.atClientException =
+            AtClientException('AT0014', 'Failed connecting to internet');
+        _isSyncInProgress = false;
+        if (onError != null) {
+          onError(syncResult);
+        }
+        return syncResult;
+      }
+      var serverCommitId;
+      try {
+        // Check if local and cloud secondary are in sync. If true, return.
+        if (await isInSync()) {
+          syncResult = SyncResult();
+          _logger.info('Local Secondary and Cloud Secondary are in sync');
+          // Setting isSyncInProgress to false, to allow next sync call.
+          _isSyncInProgress = false;
+          if (onDone != null) {
+            onDone(syncResult);
+          }
+          return syncResult;
+        }
+        // Get latest server commit id.
+        serverCommitId = await _getServerCommitId();
+      } on AtLookUpException catch (exception) {
+        _logger.severe(
+            '${_atClient.getCurrentAtSign()} ${exception.errorMessage}');
+        syncResult = SyncResult();
+        syncResult.syncStatus = SyncStatus.failure;
+        syncResult.atClientException =
+            AtClientException(exception.errorCode, exception.errorMessage);
         // Setting isSyncInProgress to false, to allow next sync call.
         _isSyncInProgress = false;
-        onDone(syncResult);
-        return;
+        if (onError != null) {
+          onError(syncResult);
+        }
+        return syncResult;
       }
-      // Get latest server commit id.
-      serverCommitId = await _getServerCommitId();
-    } on AtLookUpException catch (exception) {
-      _logger
-          .severe('${_atClient.getCurrentAtSign()} ${exception.errorMessage}');
-      syncResult = SyncResult();
-      syncResult.syncStatus = SyncStatus.failure;
-      syncResult.atClientException =
-          AtClientException(exception.errorCode, exception.errorMessage);
-      // Setting isSyncInProgress to false, to allow next sync call.
+      // Sync
+      return await _sync(serverCommitId, onDone, onError);
+    } finally {
       _isSyncInProgress = false;
-      onError(syncResult);
-      return;
     }
-    // Sync
-    _sync(serverCommitId, onDone, onError);
   }
 
-  void _sync(int serverCommitId, Function onDone, Function onError) async {
+  Future<SyncResult> _sync(
+      int serverCommitId, Function? onDone, Function? onError) async {
     var syncResult = SyncResult();
     var localCommitId = await _getLocalCommitId();
     try {
@@ -120,15 +133,21 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       _isSyncInProgress = false;
       syncResult.lastSyncedOn = DateTime.now().toUtc();
-      onDone(syncResult);
+      if (onDone != null) {
+        onDone(syncResult);
+      }
     } on Exception catch (e) {
       syncResult.atClientException = AtClientException(
           at_client_error_codes['SyncException'], e.toString());
       syncResult.syncStatus = SyncStatus.failure;
       _isSyncInProgress = false;
-      onError(syncResult);
+      if (onError != null) {
+        onError(syncResult);
+      }
     }
+    return syncResult;
   }
+
 
   /// Syncs the local entries to cloud secondary.
   Future<void> _syncToRemote(List<CommitEntry> unCommittedEntries) async {
@@ -265,7 +284,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Verifies if local secondary are cloud secondary are in sync.
   ///Returns true if local secondary and cloud secondary are in sync; else false.
   ///Throws [AtLookUpException] if cloud secondary is not reachable
-  Future<bool> _isInSync() async {
+  Future<bool> isInSync() async {
     var serverCommitId = await _getServerCommitId();
     var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,

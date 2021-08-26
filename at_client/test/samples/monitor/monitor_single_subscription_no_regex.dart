@@ -20,12 +20,12 @@ void main() async {
     var bobClient = await (AtClientImpl.getClient(bobAtSign));
 
     // alice - listen for notification
-    final aliceNotificationService = NotificationServiceImpl(aliceClient!);
+    final aliceNotificationService = NotificationServiceImpl.create(aliceClient!);
     aliceNotificationService.subscribe().listen((notification) {
       _notificationCallback(notification);
     });
     // bob - notify to alice
-    final bobNotificationService = NotificationServiceImpl(bobClient!);
+    final bobNotificationService = NotificationServiceImpl.create(bobClient!);
     var notificationKey = AtKey()
       ..key = 'phone'
       ..sharedWith = aliceAtSign;

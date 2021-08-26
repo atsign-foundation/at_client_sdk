@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:test/test.dart';
 
 import 'test_util.dart';
@@ -10,7 +11,7 @@ void main() {
     var preference = TestUtil.getAlicePreference();
     await AtClientImpl.createClient(atsign, 'me', preference);
     var atClient = await AtClientImpl.getClient(atsign);
-    var syncService = SyncService(atClient!);
+    var syncService = SyncServiceImpl.create(atClient!);
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary
@@ -28,10 +29,10 @@ void main() {
 
   test('Parallel sync calls to remote from local', () async {
     var atsign = '@sitaram';
-    var preference = TestUtil.getSitaramPreference();
+    var preference = TestUtil.getPreferenceLocal();
     await AtClientImpl.createClient(atsign, 'me', preference);
     var atClient = await AtClientImpl.getClient(atsign);
-    var syncService = SyncService(atClient!);
+    var syncService = SyncServiceImpl.create(atClient!);
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary

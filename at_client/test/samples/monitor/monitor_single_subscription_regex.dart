@@ -20,13 +20,13 @@ void main() async {
     var bobClient = await (AtClientImpl.getClient(bobAtSign));
 
     // alice - listen for notification
-    final aliceNotificationService = NotificationServiceImpl(aliceClient!);
+    final aliceNotificationService = NotificationServiceImpl.create(aliceClient!);
     aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
       _notificationCallback(notification);
     });
 
     // bob - notify to alice.two keys. 1 without namespace. 1 with namespace
-    final bobNotificationService = NotificationServiceImpl(bobClient!);
+    final bobNotificationService = NotificationServiceImpl.create(bobClient!) as NotificationServiceImpl;
     var notificationKey = AtKey()
       ..key = 'phone'
       ..sharedWith = aliceAtSign;
