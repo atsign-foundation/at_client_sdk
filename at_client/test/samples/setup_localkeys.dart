@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 // ignore: import_of_legacy_library_into_null_safe
@@ -8,38 +9,33 @@ import 'test_util.dart';
 
 void main() async {
   try {
-    var preference = TestUtil.getAlicePreference();
-    var atsign = '@alice🛠';
-    //1.
-    await AtClientImpl.createClient('@alice🛠', 'me', preference);
-    var atClient = await (AtClientImpl.getClient('@alice🛠'));
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
+    final atSign = '@alice🛠';
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
+    final atClient = atClientManager.atClient;
     SyncServiceImpl.create(atClient);
-//    atClient.getSyncManager()!.init(atsign, preference,
-//        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var metadata = Metadata();
     metadata.namespaceAware = false;
     var result;
     // set pkam private key
     result = await atClient.getLocalSecondary()!.putValue(AT_PKAM_PRIVATE_KEY,
-        at_demos.pkamPrivateKeyMap[atsign]!); // set pkam public key
+        at_demos.pkamPrivateKeyMap[atSign]!); // set pkam public key
     result = await atClient
         .getLocalSecondary()!
-        .putValue(AT_PKAM_PUBLIC_KEY, at_demos.pkamPublicKeyMap[atsign]!);
+        .putValue(AT_PKAM_PUBLIC_KEY, at_demos.pkamPublicKeyMap[atSign]!);
     // set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(
-        AT_ENCRYPTION_PRIVATE_KEY, at_demos.encryptionPrivateKeyMap[atsign]!);
-
+        AT_ENCRYPTION_PRIVATE_KEY, at_demos.encryptionPrivateKeyMap[atSign]!);
+    result = await atClient
+        .getLocalSecondary()!
+        .putValue(AT_ENCRYPTION_SELF_KEY, at_demos.aesKeyMap[atSign]!);
     // set encryption public key. should be synced
     metadata.isPublic = true;
     var atKey = AtKey()
       ..key = 'publickey'
       ..metadata = metadata;
     result =
-        await atClient.put(atKey, at_demos.encryptionPublicKeyMap[atsign]!);
+        await atClient.put(atKey, at_demos.encryptionPublicKeyMap[atSign]!);
     print(result);
   } on Exception catch (e, trace) {
     print(e.toString());

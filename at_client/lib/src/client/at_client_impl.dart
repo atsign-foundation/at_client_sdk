@@ -53,7 +53,7 @@ class AtClientImpl implements AtClient {
 
   EncryptionService? get encryptionService => _encryptionService;
 
-  var logger = AtSignLogger('AtClientImpl');
+  final _logger = AtSignLogger('AtClientImpl');
   static final Map _atClientInstanceMap = <String, AtClient>{};
 
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
@@ -69,6 +69,7 @@ class AtClientImpl implements AtClient {
   }
 
   @deprecated
+
   /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
       AtClientPreference preferences) async {
@@ -82,8 +83,6 @@ class AtClientImpl implements AtClient {
     }
     var atClientImpl = AtClientImpl(currentAtSign, namespace, preferences);
     await atClientImpl._init();
-    atClientImpl.logger
-        .info('AtClient init  done for : ${atClientImpl.currentAtSign}');
     _atClientInstanceMap[currentAtSign] = atClientImpl;
   }
 
@@ -107,8 +106,6 @@ class AtClientImpl implements AtClient {
     }
     var atClientImpl = AtClientImpl._(currentAtSign, namespace, preferences);
     await atClientImpl._init();
-    atClientImpl.logger
-        .info('AtClient init  done for : ${atClientImpl.currentAtSign}');
     _atClientInstanceMap[currentAtSign] = atClientImpl;
     return _atClientInstanceMap[currentAtSign];
   }
@@ -279,9 +276,14 @@ class AtClientImpl implements AtClient {
       }
       if (sharedBy != currentAtSign && operation == UPDATE_ALL) {
         //resultant value is encrypted. Decrypting to original value.
-        var decryptedValue = await _encryptionService!
-            .decrypt(encryptedResultMap['data'], sharedBy);
-        encryptedResultMap['data'] = decryptedValue;
+        try {
+          var decryptedValue = await _encryptionService!
+              .decrypt(encryptedResultMap['data'], sharedBy);
+          encryptedResultMap['data'] = decryptedValue;
+        } on Error catch (e) {
+          _logger.severe(
+              'decryption error for command ${builder.buildCommand()}: ${e}');
+        }
       } else {
         //resultant value is encrypted. Decrypting to original value.
         var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
@@ -367,9 +369,17 @@ class AtClientImpl implements AtClient {
         encryptedResult = _formatResult(encryptedResult);
         var encryptedResultMap = jsonDecode(encryptedResult!);
         if (operation == UPDATE_ALL) {
-          var decryptedValue = await _encryptionService!.decryptLocal(
-              encryptedResultMap['data'], currentAtSign, sharedWith!);
-          encryptedResultMap['data'] = decryptedValue;
+          try {
+            var decryptedValue = await _encryptionService!.decryptLocal(
+                encryptedResultMap['data'], currentAtSign, sharedWith!);
+            encryptedResultMap['data'] = decryptedValue;
+          } on Exception catch (e) {
+            _logger.severe(
+                'decryption exception for command ${builder.buildCommand()}: ${e.toString}');
+          } on Error catch (e) {
+            _logger.severe(
+                'decryption error for command ${builder.buildCommand()}: ${e}');
+          }
         }
         return encryptedResultMap;
       }
@@ -589,12 +599,12 @@ class AtClientImpl implements AtClient {
         var encryptionPrivateKey =
             await _localSecondary!.getEncryptionPrivateKey();
         if (encryptionPrivateKey != null) {
-          logger.finer('signing public data for key:$key');
+          _logger.finer('signing public data for key:$key');
           builder.dataSignature =
               _encryptionService!.signPublicData(encryptionPrivateKey, value);
         }
       } on Exception catch (e) {
-        logger.severe('Exception trying to sign public data:${e.toString()}');
+        _logger.severe('Exception trying to sign public data:${e.toString()}');
       }
     }
 
@@ -610,10 +620,10 @@ class AtClientImpl implements AtClient {
         await secondary.atLookUp.connection!.close();
       }
     } on AtClientException catch (e) {
-      logger.severe(
+      _logger.severe(
           'error code: ${e.errorCode} error message: ${e.errorMessage}');
     } on Exception catch (e) {
-      logger.severe('error in put: ${e.toString()}');
+      _logger.severe('error in put: ${e.toString()}');
     }
     return putResult != null;
   }
@@ -865,14 +875,14 @@ class AtClientImpl implements AtClient {
         await _encryptionService!.encryptStream(data, sharedWith);
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
-    logger.finer('sending stream init:$command');
+    _logger.finer('sending stream init:$command');
     var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
     var result = await remoteSecondary.executeCommand(command, auth: true);
-    logger.finer('ack message:$result');
+    _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
-      logger.finer('ack received for streamId:$streamId');
+      _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
@@ -909,7 +919,7 @@ class AtClientImpl implements AtClient {
       ..currentAtSign = currentAtSign!
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
-    logger.info('Sending ack for stream notification:$notification');
+    _logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }
@@ -1048,6 +1058,7 @@ class AtClientImpl implements AtClient {
     }
   }
 
+  @deprecated
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService!.encryptUnencryptedData();
   }

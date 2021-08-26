@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -36,13 +37,16 @@ class LocalSecondary implements Secondary {
   @override
   Future<String?> executeVerb(VerbBuilder builder, {sync}) async {
     var verbResult;
+    final syncService = AtClientManager.getInstance().syncService;
     try {
       sync ??=
           (_atClient.getPreferences()!.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         //1. if local and server are out of sync, first sync before updating current key-value
-        if (sync) {
-          var syncResponse = await _atClient.getSyncManager().sync();
+
+        if (sync && !await syncService.isInSync()) {
+          _logger.finer('not in sync. calling sync before sync immediate');
+          var syncResponse = await syncService.sync();
           _logger.info(syncResponse);
         }
         //2 . update/delete to local store
@@ -67,10 +71,8 @@ class LocalSecondary implements Secondary {
         if (sync &&
             _atClient.getPreferences()!.syncStrategy ==
                 SyncStrategy.IMMEDIATE) {
-          // var local_commit_seq = verbResult.split(':')[1];
-          // await syncManager!
-          //     .syncImmediate(local_commit_seq, builder, operation);
-          await _atClient.getSyncManager().sync();
+          _logger.finer('calling sync immediate from local secondary');
+          await AtClientManager.getInstance().syncService.sync();
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
