@@ -348,11 +348,6 @@ class AtClientService {
   Future<void> _sync(AtClientPreference preference, String? atSign) async {
     if ((preference.privateKey != null || preference.cramSecret != null) &&
         preference.syncStrategy != null) {
-
-      // var _syncManager = SyncManagerImpl.getInstance().getSyncManager(atSign);
-      // _syncManager!.init(atSign!, preference, atClient!.getRemoteSecondary(),
-      //     atClient!.getLocalSecondary());
-      // await _syncManager.sync(appInit: true, regex: preference.syncRegex);
       var syncResponse = await atClient!.getSyncManager().sync();
       _logger.info(syncResponse);
     }
