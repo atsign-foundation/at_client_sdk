@@ -364,7 +364,7 @@ class EncryptionService {
         }
       }
     });
-    await atClient.getSyncManager().sync();
+    await atClient.getSyncManager()!.sync();
   }
 
   Future<String?> _getSelfEncryptionKey() async {

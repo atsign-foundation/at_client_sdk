@@ -37,13 +37,13 @@ class LocalSecondary implements Secondary {
   @override
   Future<String?> executeVerb(VerbBuilder builder, {sync}) async {
     var verbResult;
-    final syncService = AtClientManager.getInstance().syncService;
+
     try {
       sync ??=
           (_atClient.getPreferences()!.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         //1. if local and server are out of sync, first sync before updating current key-value
-
+        final syncService = AtClientManager.getInstance().syncService;
         if (sync && !await syncService.isInSync()) {
           _logger.finer('not in sync. calling sync before sync immediate');
           var syncResponse = await syncService.sync();

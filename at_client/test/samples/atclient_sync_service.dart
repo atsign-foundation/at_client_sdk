@@ -11,7 +11,7 @@ void main() {
     var preference = TestUtil.getAlicePreference();
     await AtClientImpl.createClient(atsign, 'me', preference);
     var atClient = await AtClientImpl.getClient(atsign);
-    var syncService = SyncServiceImpl.create(atClient!);
+    var syncService = await SyncServiceImpl.create(atClient!);
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary
@@ -32,7 +32,7 @@ void main() {
     var preference = TestUtil.getPreferenceLocal();
     await AtClientImpl.createClient(atsign, 'me', preference);
     var atClient = await AtClientImpl.getClient(atsign);
-    var syncService = SyncServiceImpl.create(atClient!);
+    var syncService = await SyncServiceImpl.create(atClient!);
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary

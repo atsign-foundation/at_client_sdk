@@ -12,6 +12,7 @@ import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
+import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
@@ -167,8 +168,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  SyncService getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(this);
+  SyncManager? getSyncManager() {
+    return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
   }
 
   @override
