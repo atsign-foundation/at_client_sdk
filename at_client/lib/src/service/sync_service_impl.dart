@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
@@ -45,6 +46,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     AtClientManager.getInstance().listenToAtSignChange(this);
   }
 
+  @override
   Future<SyncResult> sync({Function? onDone, Function? onError}) async {
     SyncResult syncResult;
     // If sync in-progress, return.
@@ -148,7 +150,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return syncResult;
   }
 
-
   /// Syncs the local entries to cloud secondary.
   Future<void> _syncToRemote(List<CommitEntry> unCommittedEntries) async {
     var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
@@ -188,8 +189,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Syncs the cloud secondary changes to local secondary.
   Future<void> _syncFromServer(int serverCommitId, int localCommitId) async {
-    // Iterates until serverCommitId and localCommitId are equal.
-    while (serverCommitId != localCommitId) {
+    // Iterates until serverCommitId is greater than localCommitId are equal.
+    while (serverCommitId > localCommitId) {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
@@ -284,6 +285,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Verifies if local secondary are cloud secondary are in sync.
   ///Returns true if local secondary and cloud secondary are in sync; else false.
   ///Throws [AtLookUpException] if cloud secondary is not reachable
+  @override
   Future<bool> isInSync() async {
     var serverCommitId = await _getServerCommitId();
     var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
@@ -301,21 +303,21 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Returns the cloud secondary latest commit id. if null, returns -1.
   ///Throws [AtLookUpException] if secondary is not reachable
   Future<int> _getServerCommitId({bool getFromServer = false}) async {
-    if (_serverCommitId == null ||
-        getFromServer ||
-        (_lastServerCommitIdDateTime != null &&
-            DateTime.now()
-                    .toUtc()
-                    .difference(_lastServerCommitIdDateTime)
-                    .inMinutes >
-                5)) {
+    // 1. If server commit id is null, fetch from remote secondary
+    // 2. If lastServerCommit id is null or difference is more than 5 minutes
+    // 3. If user sets getFromServer to true.
+    if ((_serverCommitId == null || _lastServerCommitIdDateTime == null) ||
+        (DateTime.now().difference(_lastServerCommitIdDateTime).inMinutes >
+            5) ||
+        getFromServer) {
       _logger.finer('Getting server commit Id from cloud secondary');
       _serverCommitId = await SyncUtil.getLatestServerCommitId(
-          _atClient.getRemoteSecondary()!,
-          _atClient.getPreferences()!.syncRegex);
+          _remoteSecondary, _atClient.getPreferences()!.syncRegex);
+      _lastServerCommitIdDateTime = DateTime.now().toUtc();
     }
     // If server commit id is null, set to -1;
     _serverCommitId ??= -1;
+    _logger.info('Returning the serverCommitId $_serverCommitId');
     return _serverCommitId;
   }
 
@@ -328,9 +330,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) {
-      _serverCommitId = notification.value;
-      _lastServerCommitIdDateTime =
-          DateTime.fromMillisecondsSinceEpoch(notification.epochMillis);
+      if (notification.value != null) {
+        _serverCommitId = int.parse(notification.value!);
+        _lastServerCommitIdDateTime =
+            DateTime.fromMillisecondsSinceEpoch(notification.epochMillis);
+      }
     });
   }
 
