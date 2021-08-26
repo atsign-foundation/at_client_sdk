@@ -14,7 +14,6 @@ import 'package:at_utils/at_logger.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
-  Map<String, Function> listeners = {};
   Map<String, StreamController> streamListeners = {};
   final EMPTY_REGEX = '';
   static const notificationIdKey = '_latestNotificationId';
@@ -41,7 +40,7 @@ class NotificationServiceImpl
     _atClient = atClient;
   }
 
-  void _init() {
+  void _initSubscription() {
     if (_connectivityListener == null) {
       _connectivityListener = ConnectivityListener();
       _connectivityListener!.subscribe().listen((isConnected) {
@@ -84,9 +83,13 @@ class NotificationServiceImpl
     return null;
   }
 
-  void stop() {
+  void stopAllSubscriptions() {
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
+    streamListeners.forEach((regex, streamController) {
+      if (!streamController.isClosed) () => streamController.close();
+    });
+    streamListeners.clear();
   }
 
   void _internalNotificationCallback(String notificationJSON) async {
@@ -200,13 +203,18 @@ class NotificationServiceImpl
     final _controller = StreamController<AtNotification>();
     streamListeners[regex] = _controller;
     _logger.finer('added regex to listener $regex');
-    _init();
+    _initSubscription();
     return _controller.stream;
   }
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    //# TODO implement. Whether to remember previous at sign or clean up?
+    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
+        _atClient.getCurrentAtSign()) {
+      // actions for previous atSign
+      _logger.finer('stopping listeners for ${_atClient.getCurrentAtSign()}');
+      stopAllSubscriptions();
+    }
   }
 }
 

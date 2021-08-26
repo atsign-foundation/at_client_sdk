@@ -24,6 +24,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   var _serverCommitId;
   var _lastServerCommitIdDateTime;
   late final RemoteSecondary _remoteSecondary;
+  late final NotificationServiceImpl _statsNotificationListener;
   static const LIMIT = 10;
   static final Map<String, SyncService> _syncServiceMap = {};
 
@@ -42,9 +43,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
     AtClientManager.getInstance().listenToAtSignChange(this);
-    _statsServiceListener();
   }
-
 
   Future<void> sync(Function onDone, Function onError) async {
     SyncResult syncResult;
@@ -303,10 +302,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Listens on stats notification sent by the cloud secondary server
   void _statsServiceListener() {
-    final notificationService = NotificationServiceImpl.create(_atClient);
+    _statsNotificationListener =
+        NotificationServiceImpl.create(_atClient) as NotificationServiceImpl;
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
-    notificationService
+    _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) {
       _serverCommitId = notification.value;
@@ -431,7 +431,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    //# TODO implement. Whether to remember previous at sign or clean up?
+    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
+        _atClient.getCurrentAtSign()) {
+      // actions for previous atSign
+      _logger.finer(
+          'stopping monitor and listeners for ${_atClient.getCurrentAtSign()}');
+      _statsNotificationListener.stopAllSubscriptions();
+    } else {
+      // actions for new atSign
+      _logger.finer(
+          'starting monitor and stats listener for ${_atClient.getCurrentAtSign()}');
+      _statsServiceListener();
+    }
   }
 }
 
