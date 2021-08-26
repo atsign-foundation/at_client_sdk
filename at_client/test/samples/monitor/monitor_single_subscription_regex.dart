@@ -13,27 +13,20 @@ void main() async {
     await AtClientImpl.createClient(
         aliceAtSign, 'wavi', TestUtil.getAlicePreference());
     var aliceClient = await (AtClientImpl.getClient(aliceAtSign));
-    aliceClient!.getSyncManager()!.init(
-        aliceAtSign,
-        TestUtil.getAlicePreference(),
-        aliceClient.getRemoteSecondary(),
-        aliceClient.getLocalSecondary());
 
     // create bob client
     await AtClientImpl.createClient(
         bobAtSign, 'wavi', TestUtil.getBobPreference());
     var bobClient = await (AtClientImpl.getClient(bobAtSign));
-    bobClient!.getSyncManager()!.init(bobAtSign, TestUtil.getBobPreference(),
-        bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
 
     // alice - listen for notification
-    final aliceNotificationService = NotificationServiceImpl(aliceClient);
+    final aliceNotificationService = NotificationServiceImpl(aliceClient!);
     aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
       _notificationCallback(notification);
     });
 
     // bob - notify to alice.two keys. 1 without namespace. 1 with namespace
-    final bobNotificationService = NotificationServiceImpl(bobClient);
+    final bobNotificationService = NotificationServiceImpl(bobClient!);
     var notificationKey = AtKey()
       ..key = 'phone'
       ..sharedWith = aliceAtSign;

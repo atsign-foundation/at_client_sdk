@@ -22,13 +22,13 @@ void main() {
       print('putResult $putResult');
     }
     expect(await syncService.isInSync(), false);
-    syncService.sync(onSuccess, onError);
+    syncService.sync(onDone: onSuccess, onError: onError);
     await Future.delayed(Duration(seconds: 10));
   });
 
   test('Parallel sync calls to remote from local', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtil.getAlicePreference();
+    var atsign = '@sitaram';
+    var preference = TestUtil.getSitaramPreference();
     await AtClientImpl.createClient(atsign, 'me', preference);
     var atClient = await AtClientImpl.getClient(atsign);
     var syncService = SyncService(atClient!);
@@ -43,17 +43,27 @@ void main() {
       print('putResult $putResult');
     }
     expect(await syncService.isInSync(), false);
-    syncService.sync(onSuccess, onError);
-    syncService.sync(onSuccess, (syncResult) {
-      expect(syncResult.syncStatus, SyncStatus.failure);
-      expect(syncResult.atClientException.errorMessage,
-          'Sync-InProgress. Cannot start a new sync process');
-    });
+    syncService.sync(
+        onDone: (syncResult) async {
+          var isInSync = await syncService.isInSync();
+          expect(isInSync, true);
+          print('Success: $syncResult : isInSync: $isInSync');
+          expect(syncResult.syncStatus, SyncStatus.success);
+        },
+        onError: onError);
+    syncService.sync(
+        onDone: onSuccess,
+        onError: (syncResult) {
+          expect(syncResult.syncStatus, SyncStatus.failure);
+          expect(syncResult.atClientException.errorMessage,
+              'Sync-InProgress. Cannot start a new sync process');
+        });
     await Future.delayed(Duration(seconds: 10));
   });
 }
 
-void onSuccess(syncResult) {
+void onSuccess(syncResult) async {
+  print('Success: $syncResult');
   expect(syncResult.syncStatus, SyncStatus.success);
 }
 

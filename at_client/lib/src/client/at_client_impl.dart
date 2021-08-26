@@ -2,21 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -34,10 +35,9 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:at_base2e15/at_base2e15.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-import 'package:http/http.dart' as http;
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -93,7 +93,7 @@ class AtClientImpl implements AtClient {
 
   Future<void> _init() async {
     if (_preference!.isLocalStoreRequired) {
-      _localSecondary = LocalSecondary(currentAtSign!, _preference);
+      _localSecondary = LocalSecondary(this);
     }
     _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
         privateKey: _preference!.privateKey);
@@ -141,8 +141,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  SyncManager? getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
+  SyncService getSyncManager() {
+    return SyncManagerImpl.getInstance().getSyncManager(this);
   }
 
   @override

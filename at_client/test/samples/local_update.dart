@@ -13,8 +13,6 @@ void main() async {
     print('unable to create at client instance');
     return;
   }
-  atClient.getSyncManager()!.init(atsign, preference,
-      atClient.getRemoteSecondary(), atClient.getLocalSecondary());
   // phone.me@alice🛠
   var phoneKey = AtKey()..key = 'phone';
   var value = '+1 100 200 300';
