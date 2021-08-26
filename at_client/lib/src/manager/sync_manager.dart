@@ -117,8 +117,8 @@ class SyncManager {
       serverCommitId ??= -1;
       // cloud is ahead if server commit id is > last synced commit id in local
       if (serverCommitId > lastSyncedCommitId) {
-        // Iterates until serverCommitId and localCommitId are equal.
-        while (serverCommitId != lastSyncedCommitId) {
+        // Iterates until serverCommitId is greater than localCommitId are equal.
+        while (serverCommitId > lastSyncedCommitId!) {
           var syncBuilder = SyncVerbBuilder()
             ..commitId = lastSyncedCommitId
             ..regex = regex;

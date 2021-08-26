@@ -1,5 +1,3 @@
-
-
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
   ///

@@ -9,9 +9,8 @@ void main() async {
     await AtClientImpl.createClient(
         '@alice🛠', 'wavi', TestUtil.getAlicePreference());
     var atClient = await (AtClientImpl.getClient('@alice🛠'));
-    atClient!.getSyncManager()!.init('@alice🛠', TestUtil.getAlicePreference(),
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    final notificationService = NotificationServiceImpl(atClient);
+
+    final notificationService = NotificationServiceImpl(atClient!);
     notificationService.subscribe().listen((notification) {
       _notificationCallback(notification);
     });

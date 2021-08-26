@@ -16,13 +16,21 @@ void main() async {
       print('unable to create at client instance');
       return;
     }
-    atClient.getSyncManager()!.init(atSign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    var result = await atClient.getSyncManager()!.isInSync();
+    var result = await atClient.getSyncManager().isInSync();
     print(result);
+    await atClient.getSyncManager().sync(onDone: onDone, onError: onError);
+    await Future.delayed(Duration(minutes: 10));
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
   }
   exit(1);
+}
+
+void onDone(syncResult) {
+  print(syncResult);
+}
+
+void onError(syncResult) {
+  print('${syncResult.syncStatus} ${syncResult.atClientException}');
 }
