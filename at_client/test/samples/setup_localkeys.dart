@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 // ignore: import_of_legacy_library_into_null_safe
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
@@ -16,8 +17,9 @@ void main() async {
       print('unable to create at client instance');
       return;
     }
-    atClient.getSyncManager()!.init(atsign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
+    SyncServiceImpl.create(atClient);
+//    atClient.getSyncManager()!.init(atsign, preference,
+//        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
     var metadata = Metadata();
     metadata.namespaceAware = false;
     var result;

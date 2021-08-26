@@ -23,7 +23,7 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    var notification = NotificationServiceImpl(atClient);
+    var notification = NotificationServiceImpl.create(atClient);
     var result = await notification
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(result.notificationStatusEnum.toString(),
@@ -46,7 +46,7 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    var notification = NotificationServiceImpl(atClient);
+    var notification = NotificationServiceImpl.create(atClient);
     notification.notify(NotificationParams.forUpdate(phoneKey, value: value));
     await Future.delayed(Duration(seconds: 10));
   });
@@ -63,7 +63,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
-    var notification = NotificationServiceImpl(atClient);
+    var notification = NotificationServiceImpl.create(atClient);
     var notificationResult =
         await notification.notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult.notificationStatusEnum.toString(),
@@ -83,7 +83,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
-    var notification = NotificationServiceImpl(atClient);
+    var notification = NotificationServiceImpl.create(atClient);
     notification.notify(NotificationParams.forDelete(phoneKey),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
@@ -97,7 +97,7 @@ void main() {
     await atClient!.getSyncManager().sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
-    var notification = NotificationServiceImpl(atClient);
+    var notification = NotificationServiceImpl.create(atClient);
     var notificationResult = await notification
         .notify(NotificationParams.forText('Hello', '@bob🛠'));
     expect(notificationResult.notificationStatusEnum.toString(),
@@ -114,7 +114,7 @@ void main() {
     await atClient!.getSyncManager().sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
-    var notification = NotificationServiceImpl(atClient);
+    var notification = NotificationServiceImpl.create(atClient);
     notification.notify(NotificationParams.forText('phone', '@bob🛠'),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));

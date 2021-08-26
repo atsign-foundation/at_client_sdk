@@ -16,7 +16,7 @@ void main() async {
         bobAtSign, 'wavi', TestUtil.getBobPreference());
     var bobClient = await (AtClientImpl.getClient(bobAtSign));
     // alice - listen for notification
-    final aliceNotificationService = NotificationServiceImpl(aliceClient!);
+    final aliceNotificationService = NotificationServiceImpl.create(aliceClient!);
     aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
       _waviCallback(notification);
     });

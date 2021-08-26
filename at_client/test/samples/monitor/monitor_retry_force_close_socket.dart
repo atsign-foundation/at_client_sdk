@@ -10,7 +10,7 @@ void main() async {
         '@alice🛠', 'wavi', TestUtil.getAlicePreference());
     var atClient = await (AtClientImpl.getClient('@alice🛠'));
 
-    final notificationService = NotificationServiceImpl(atClient!);
+    final notificationService = NotificationServiceImpl.create(atClient!) as NotificationServiceImpl;
     notificationService.subscribe().listen((notification) {
       _notificationCallback(notification);
     });
@@ -18,7 +18,7 @@ void main() async {
       _notificationCallback(notification);
     });
     print('stopping monitor');
-    Future.delayed(Duration(seconds: 5), () => notificationService.stop());
+    Future.delayed(Duration(seconds: 5), () => notificationService.stopAllSubscriptions());
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

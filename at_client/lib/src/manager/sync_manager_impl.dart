@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 
 class SyncManagerImpl {
   static final SyncManagerImpl _singleton = SyncManagerImpl._internal();
@@ -15,7 +16,7 @@ class SyncManagerImpl {
   /// Returns an instance of [SyncService] of the current atsign.
   SyncService getSyncManager(AtClient atClient) {
     if (!_syncManagerMap.containsKey(atClient.getCurrentAtSign())) {
-      var syncService = SyncService(atClient);
+      var syncService = SyncServiceImpl.create(atClient);
       _syncManagerMap[atClient.getCurrentAtSign()!] = syncService;
     }
     return _syncManagerMap[atClient.getCurrentAtSign()]!;
