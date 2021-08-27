@@ -15,7 +15,7 @@ import 'package:at_utils/at_logger.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
-  AtClientImpl? atClient;
+  AtClient? atClient;
   AtClientAuthenticator? _atClientAuthenticator;
   late AtLookupImpl atLookUp;
   OnboardingStatus? _status;
@@ -25,8 +25,8 @@ class AtClientService {
   // if pkam is successful, encryption keys will be set for the user./// Will create at client instance for a given atSign.
   Future<bool> _init(String atSign, AtClientPreference preference) async {
     _atClientAuthenticator ??= AtClientAuthenticator();
-    await AtClientImpl.createClient(atSign, preference.namespace, preference);
-    atClient = (await AtClientImpl.getClient(atSign)) as AtClientImpl?;
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atSign, preference.namespace, preference);
+    atClient = atClientManager.atClient;
     atLookUp = atClient!.getRemoteSecondary()!.atLookUp;
     if (preference.outboundConnectionTimeout > 0) {
       atClient!.getRemoteSecondary()!.atLookUp.outboundConnectionTimeout =

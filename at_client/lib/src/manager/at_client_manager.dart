@@ -35,7 +35,7 @@ class AtClientManager {
   }
 
   Future<AtClientManager> setCurrentAtSign(
-      String atSign, String namespace, AtClientPreference preference) async {
+      String atSign, String? namespace, AtClientPreference preference) async {
     _atSign = atSign;
     _currentAtClient =
         await AtClientImpl.create(_atSign, namespace, preference);
