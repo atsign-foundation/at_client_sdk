@@ -15,7 +15,8 @@ import 'package:at_utils/at_logger.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
-  AtClient? atClient;
+  AtClient? _atClient;
+  late AtClientManager atClientManager;
   AtClientAuthenticator? _atClientAuthenticator;
   late AtLookupImpl atLookUp;
   OnboardingStatus? _status;
@@ -25,17 +26,19 @@ class AtClientService {
   // if pkam is successful, encryption keys will be set for the user./// Will create at client instance for a given atSign.
   Future<bool> _init(String atSign, AtClientPreference preference) async {
     _atClientAuthenticator ??= AtClientAuthenticator();
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atSign, preference.namespace, preference);
-    atClient = atClientManager.atClient;
-    atLookUp = atClient!.getRemoteSecondary()!.atLookUp;
+    atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atSign, preference.namespace, preference);
+    _atClient = AtClientManager.getInstance().atClient;
+    atLookUp = _atClient!.getRemoteSecondary()!.atLookUp;
     if (preference.outboundConnectionTimeout > 0) {
-      atClient!.getRemoteSecondary()!.atLookUp.outboundConnectionTimeout =
+      _atClient!.getRemoteSecondary()!.atLookUp.outboundConnectionTimeout =
           preference.outboundConnectionTimeout;
     }
-    _atClientAuthenticator!.atLookUp = atClient!.getRemoteSecondary()!.atLookUp;
+    _atClientAuthenticator!.atLookUp =
+        _atClient!.getRemoteSecondary()!.atLookUp;
     if (preference.privateKey != null) {
       _atClientAuthenticator!.atLookUp.privateKey = preference.privateKey;
-      atClient!.getRemoteSecondary()!.atLookUp.privateKey =
+      _atClient!.getRemoteSecondary()!.atLookUp.privateKey =
           preference.privateKey;
     }
     return true;
@@ -160,13 +163,13 @@ class AtClientService {
     var encryptPublicKey = await getEncryptionPublicKey(atSign);
 
     var selfEncryptionKey = await (getSelfEncryptionKey(atSign)) ?? '';
-    await atClient!
+    await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
-    await atClient!
+    await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
-    await atClient!
+    await _atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
     var updateBuilder = UpdateVerbBuilder()
@@ -174,9 +177,11 @@ class AtClientService {
       ..isPublic = true
       ..sharedBy = atSign
       ..value = encryptPublicKey;
-    await atClient!.getLocalSecondary()!.executeVerb(updateBuilder, sync: true);
+    await _atClient!
+        .getLocalSecondary()!
+        .executeVerb(updateBuilder, sync: true);
 
-    await atClient!
+    await _atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
     var result = await _getKeysFromLocalSecondary(atSign);
@@ -188,27 +193,27 @@ class AtClientService {
   ///if the details for [atsign] is not found in localsecondary.
   ///Returns `true` on successful fetching of all the details.
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
-    var pkamPublicKey = await atClient!.getLocalSecondary()!.getPublicKey();
+    var pkamPublicKey = await _atClient!.getLocalSecondary()!.getPublicKey();
     if (pkamPublicKey == null) {
       throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
-    var pkamPrivateKey = await atClient!.getLocalSecondary()!.getPrivateKey();
+    var pkamPrivateKey = await _atClient!.getLocalSecondary()!.getPrivateKey();
     if (pkamPrivateKey == null) {
       throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND);
     }
     var encryptPrivateKey =
-        await atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
+        await _atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
     if (encryptPrivateKey == null) {
       throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
     var encryptPublicKey =
-        await atClient!.getLocalSecondary()!.getEncryptionPublicKey(atsign);
+        await _atClient!.getLocalSecondary()!.getEncryptionPublicKey(atsign);
     if (encryptPublicKey == null) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
 
     var encryptSelfKey =
-        await atClient!.getLocalSecondary()!.getEncryptionSelfKey();
+        await _atClient!.getLocalSecondary()!.getEncryptionSelfKey();
     if (encryptSelfKey == null) {
       throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND);
     }
@@ -245,7 +250,7 @@ class AtClientService {
       var privateKey = atClientPreference.privateKey ??=
           await _keyChainManager.getPkamPrivateKey(atsign);
       _atClientAuthenticator!.atLookUp.privateKey = privateKey;
-      atClient!.getRemoteSecondary()!.atLookUp.privateKey = privateKey;
+      _atClient!.getRemoteSecondary()!.atLookUp.privateKey = privateKey;
       await _sync(atClientPreference, atsign);
       await persistKeys(atsign);
     }
