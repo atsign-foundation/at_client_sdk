@@ -1,7 +1,10 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 
+/// [Deprecated] Use [AtClientManager.syncService]
 class SyncManagerImpl {
   static final SyncManagerImpl _singleton = SyncManagerImpl._internal();
 
@@ -11,14 +14,13 @@ class SyncManagerImpl {
     return _singleton;
   }
 
-  final Map<String, SyncService> _syncManagerMap = {};
+  final Map<String?, SyncManager> _syncManagerMap = {};
 
-  /// Returns an instance of [SyncService] of the current atsign.
-  SyncService getSyncManager(AtClient atClient) {
-    if (!_syncManagerMap.containsKey(atClient.getCurrentAtSign())) {
-      var syncService = SyncServiceImpl.create(atClient);
-      _syncManagerMap[atClient.getCurrentAtSign()!] = syncService;
+  SyncManager? getSyncManager(String? atSign) {
+    if (!_syncManagerMap.containsKey(atSign)) {
+      var syncManager = SyncManager(atSign);
+      _syncManagerMap[atSign] = syncManager;
     }
-    return _syncManagerMap[atClient.getCurrentAtSign()]!;
+    return _syncManagerMap[atSign];
   }
 }

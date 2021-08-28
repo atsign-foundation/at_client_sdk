@@ -20,19 +20,18 @@ class NotificationServiceImpl
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
-
+  var _isMonitorPaused = false;
   late AtClient _atClient;
-
-  bool _isMonitorStarted = false;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
 
-  static NotificationService create(AtClient atClient) {
+  static Future<NotificationService> create(AtClient atClient) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
-    final syncService = NotificationServiceImpl._(atClient);
-    _notificationServiceMap[atClient.getCurrentAtSign()!] = syncService;
+    final notificationService = NotificationServiceImpl._(atClient);
+    await notificationService._init();
+    _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
@@ -40,13 +39,15 @@ class NotificationServiceImpl
     _atClient = atClient;
   }
 
-  void _initSubscription() {
+  Future<void> _init() async {
+    _logger.finer('notification init starting monitor');
+    await _startMonitor();
     if (_connectivityListener == null) {
       _connectivityListener = ConnectivityListener();
       _connectivityListener!.subscribe().listen((isConnected) {
         if (isConnected) {
           _logger.finer(
-              'starting monitor for atsign: ${_atClient.getCurrentAtSign()}');
+              'starting monitor through connectivity listener event');
           _startMonitor();
         } else {
           _logger.finer('lost network connectivity');
@@ -56,8 +57,9 @@ class NotificationServiceImpl
   }
 
   Future<void> _startMonitor() async {
-    if (_isMonitorStarted) {
-      _logger.finer('monitor is already started');
+    if (_monitor != null && _monitor!.status == MonitorStatus.Started) {
+      _logger.finer(
+          'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
     }
     final lastNotificationTime = await _getLastNotificationTime();
@@ -68,10 +70,10 @@ class NotificationServiceImpl
         _atClient.getPreferences()!,
         MonitorPreference()..keepAlive = true,
         _monitorRetry);
-    _logger.finer(
-        'starting monitor with last notification time: $lastNotificationTime');
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
-    _isMonitorStarted = true;
+    if (_monitor!.status == MonitorStatus.Started) {
+      _isMonitorPaused = false;
+    }
   }
 
   Future<int?> _getLastNotificationTime() async {
@@ -84,6 +86,7 @@ class NotificationServiceImpl
   }
 
   void stopAllSubscriptions() {
+    _isMonitorPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
     streamListeners.forEach((regex, streamController) {
@@ -120,7 +123,11 @@ class NotificationServiceImpl
   }
 
   void _monitorRetry() {
-    _logger.finer('monitor retry');
+    if (_isMonitorPaused) {
+      _logger.finer('monitor is paused. not retrying');
+      return;
+    }
+    _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
     Future.delayed(
         Duration(seconds: 5),
         () async => _monitor!
@@ -203,7 +210,7 @@ class NotificationServiceImpl
     final _controller = StreamController<AtNotification>();
     streamListeners[regex] = _controller;
     _logger.finer('added regex to listener $regex');
-    _initSubscription();
+    _init();
     return _controller.stream;
   }
 
@@ -212,7 +219,8 @@ class NotificationServiceImpl
     if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
         _atClient.getCurrentAtSign()) {
       // actions for previous atSign
-      _logger.finer('stopping listeners for ${_atClient.getCurrentAtSign()}');
+      _logger.finer(
+          'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
       stopAllSubscriptions();
     }
   }

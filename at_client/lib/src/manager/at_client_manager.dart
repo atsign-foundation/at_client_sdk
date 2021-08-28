@@ -6,9 +6,19 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 
+/// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
+///
+/// Usage
+/// ```
+/// final atClientManager = AtClientManager.getInstance().setCurrentAtSign(<current_atsign>, <app_namespace>, <preferences>)
+/// Apps have to call the above method again while switching atsign.
+/// ```
+/// atClientManager.atClient - for at client method calls
+/// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
+/// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
 class AtClientManager {
   var _atSign;
-  var _previousAtClient;
+  AtClient? _previousAtClient;
   late AtClient _currentAtClient;
 
   AtClient get atClient => _currentAtClient;
@@ -25,14 +35,19 @@ class AtClientManager {
   }
 
   Future<AtClientManager> setCurrentAtSign(
-      String atSign, String namespace, AtClientPreference preference) async {
+      String atSign, String? namespace, AtClientPreference preference) async {
+    if (_previousAtClient != null &&
+        _previousAtClient?.getCurrentAtSign() == atSign) {
+      return this;
+    }
     _atSign = atSign;
     _currentAtClient =
         await AtClientImpl.create(_atSign, namespace, preference);
     final switchAtSignEvent =
         SwitchAtSignEvent(_previousAtClient, _currentAtClient);
-    syncService = SyncServiceImpl.create(_currentAtClient);
-    notificationService = NotificationServiceImpl.create(_currentAtClient);
+    notificationService =
+        await NotificationServiceImpl.create(_currentAtClient);
+    syncService = await SyncServiceImpl.create(_currentAtClient);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
     return this;
