@@ -18,7 +18,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 /// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
 class AtClientManager {
   var _atSign;
-  var _previousAtClient;
+  AtClient? _previousAtClient;
   late AtClient _currentAtClient;
 
   AtClient get atClient => _currentAtClient;
@@ -36,6 +36,10 @@ class AtClientManager {
 
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference) async {
+    if (_previousAtClient != null &&
+        _previousAtClient?.getCurrentAtSign() == atSign) {
+      return this;
+    }
     _atSign = atSign;
     _currentAtClient =
         await AtClientImpl.create(_atSign, namespace, preference);

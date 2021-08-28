@@ -20,6 +20,7 @@ class AtClientService {
   AtClientAuthenticator? _atClientAuthenticator;
   late AtLookupImpl atLookUp;
   OnboardingStatus? _status;
+
   static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
 
   // Will create at client instance for a given atSign and perform cram+pkam auth to the server.
@@ -44,106 +45,6 @@ class AtClientService {
     return true;
   }
 
-  Future<String?> getPkamPrivateKey(String atSign) async {
-    var pkamPrivateKey = await _keyChainManager.getPkamPrivateKey(atSign);
-    return pkamPrivateKey;
-  }
-
-  Future<String?> getPkamPublicKey(String atSign) async {
-    return await _keyChainManager.getPkamPublicKey(atSign);
-  }
-
-  Future<String?> getPrivateKey(String atSign) async {
-    return await getPkamPrivateKey(atSign);
-  }
-
-  Future<String?> getPublicKey(String atSign) async {
-    return await getPkamPublicKey(atSign);
-  }
-
-  Future<String?> getEncryptionPrivateKey(String atSign) async {
-    return await _keyChainManager.getEncryptionPrivateKey(atSign);
-  }
-
-  Future<String?> getEncryptionPublicKey(String atSign) async {
-    return await _keyChainManager.getEncryptionPublicKey(atSign);
-  }
-
-  Future<String?> getAESKey(String atsign) async {
-    return await _keyChainManager.getValue(
-        atsign, KEYCHAIN_SELF_ENCRYPTION_KEY);
-  }
-
-  Future<String?> getSelfEncryptionKey(String atSign) async {
-    return await _keyChainManager.getSelfEncryptionAESKey(atSign);
-  }
-
-  Future<String?> getAtSign() async {
-    return await _keyChainManager.getAtSign();
-  }
-
-  Future<List<String>?> getAtsignList() async {
-    return await _keyChainManager.getAtSignListFromKeychain();
-  }
-
-  Future<void> resetAtSignFromKeychain(String atsign) async {
-    return await _keyChainManager.resetAtSignFromKeychain(atsign);
-  }
-
-  Future<void> deleteAtSignFromKeychain(String atsign) async {
-    return await _keyChainManager.deleteAtSignFromKeychain(atsign);
-  }
-
-  Future<bool> makeAtSignPrimary(String atsign) async {
-    var atSignWithStatus = await getAtsignsWithStatus();
-    if (atSignWithStatus[atsign]!) {
-      return false;
-    }
-    return await _keyChainManager.makeAtSignPrimary(atsign);
-  }
-
-  Future<Map<String, bool?>> getAtsignsWithStatus() async {
-    return await _keyChainManager.getAtsignsWithStatus();
-  }
-
-  Future<Map<String, String>> getEncryptedKeys(String atsign) async {
-    var aesEncryptedKeys = {};
-    // encrypt pkamPublicKey with AES key
-    var pkamPublicKey = await getPkamPublicKey(atsign);
-    var aesEncryptionKey = await getAESKey(atsign);
-    var encryptedPkamPublicKey =
-        EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
-    aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
-        encryptedPkamPublicKey;
-
-    // encrypt pkamPrivateKey with AES key
-    var pkamPrivateKey = await getPkamPrivateKey(atsign);
-    var encryptedPkamPrivateKey =
-        EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
-        encryptedPkamPrivateKey;
-
-    // encrypt encryption public key with AES key
-    var encryptionPublicKey = await getEncryptionPublicKey(atsign);
-    var encryptedEncryptionPublicKey =
-        EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
-        encryptedEncryptionPublicKey;
-
-    // encrypt encryption private key with AES key
-    var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
-    var encryptedEncryptionPrivateKey =
-        EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
-        encryptedEncryptionPrivateKey;
-
-    // store  self encryption key as it is.This will be same as AES key in key zip file
-    var selfEncryptionKey = await getSelfEncryptionKey(atsign);
-    aesEncryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
-        selfEncryptionKey;
-    return Map<String, String>.from(aesEncryptedKeys);
-  }
-
   Future<bool> cramAuth(String cramSecret) async {
     return await _atClientAuthenticator!.cramAuth(cramSecret);
   }
@@ -154,15 +55,17 @@ class AtClientService {
 
   ///Returns `true` on persisting keys into keystore.
   Future<bool> persistKeys(String atSign) async {
-    var pkamPrivateKey = await (getPkamPrivateKey(atSign)) ?? '';
+    var pkamPrivateKey = await (KeychainUtil.getPkamPrivateKey(atSign)) ?? '';
 
-    var pkamPublicKey = await (getPkamPublicKey(atSign)) ?? '';
+    var pkamPublicKey = await (KeychainUtil.getPkamPublicKey(atSign)) ?? '';
 
-    var encryptPrivateKey = await (getEncryptionPrivateKey(atSign)) ?? '';
+    var encryptPrivateKey =
+        await (KeychainUtil.getEncryptionPrivateKey(atSign)) ?? '';
 
-    var encryptPublicKey = await getEncryptionPublicKey(atSign);
+    var encryptPublicKey = await KeychainUtil.getEncryptionPublicKey(atSign);
 
-    var selfEncryptionKey = await (getSelfEncryptionKey(atSign)) ?? '';
+    var selfEncryptionKey =
+        await (KeychainUtil.getSelfEncryptionKey(atSign)) ?? '';
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
@@ -231,7 +134,8 @@ class AtClientService {
         return false;
       }
       await _decodeAndStoreToKeychain(atsign, jsonData!, decryptKey!);
-      atClientPreference.privateKey = await getPkamPrivateKey(atsign);
+      atClientPreference.privateKey =
+          await KeychainUtil.getPkamPrivateKey(atsign);
     }
     var result = await _init(atsign!, atClientPreference);
     if (!result) {
@@ -406,4 +310,108 @@ class BackupKeyConstants {
   static const String ENCRYPTION_PUBLIC_KEY_FROM_FILE = 'aesEncryptPublicKey';
   static const String ENCRYPTION_PRIVATE_KEY_FROM_FILE = 'aesEncryptPrivateKey';
   static const String SELF_ENCRYPTION_KEY_FROM_FILE = 'selfEncryptionKey';
+}
+
+class KeychainUtil {
+  static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
+
+  static Future<String?> getPkamPrivateKey(String atSign) async {
+    var pkamPrivateKey = await _keyChainManager.getPkamPrivateKey(atSign);
+    return pkamPrivateKey;
+  }
+
+  static Future<String?> getPkamPublicKey(String atSign) async {
+    return await _keyChainManager.getPkamPublicKey(atSign);
+  }
+
+  static Future<String?> getPrivateKey(String atSign) async {
+    return await getPkamPrivateKey(atSign);
+  }
+
+  static Future<String?> getPublicKey(String atSign) async {
+    return await getPkamPublicKey(atSign);
+  }
+
+  static Future<String?> getEncryptionPrivateKey(String atSign) async {
+    return await _keyChainManager.getEncryptionPrivateKey(atSign);
+  }
+
+  static Future<String?> getEncryptionPublicKey(String atSign) async {
+    return await _keyChainManager.getEncryptionPublicKey(atSign);
+  }
+
+  static Future<String?> getAESKey(String atsign) async {
+    return await _keyChainManager.getValue(
+        atsign, KEYCHAIN_SELF_ENCRYPTION_KEY);
+  }
+
+  static Future<String?> getSelfEncryptionKey(String atSign) async {
+    return await _keyChainManager.getSelfEncryptionAESKey(atSign);
+  }
+
+  static Future<String?> getAtSign() async {
+    return await _keyChainManager.getAtSign();
+  }
+
+  static Future<List<String>?> getAtsignList() async {
+    return await _keyChainManager.getAtSignListFromKeychain();
+  }
+
+  static Future<void> resetAtSignFromKeychain(String atsign) async {
+    return await _keyChainManager.resetAtSignFromKeychain(atsign);
+  }
+
+  static Future<void> deleteAtSignFromKeychain(String atsign) async {
+    return await _keyChainManager.deleteAtSignFromKeychain(atsign);
+  }
+
+  static Future<bool> makeAtSignPrimary(String atsign) async {
+    var atSignWithStatus = await getAtsignsWithStatus();
+    if (atSignWithStatus[atsign]!) {
+      return false;
+    }
+    return await _keyChainManager.makeAtSignPrimary(atsign);
+  }
+
+  static Future<Map<String, bool?>> getAtsignsWithStatus() async {
+    return await _keyChainManager.getAtsignsWithStatus();
+  }
+
+  static Future<Map<String, String>> getEncryptedKeys(String atsign) async {
+    var aesEncryptedKeys = {};
+    // encrypt pkamPublicKey with AES key
+    var pkamPublicKey = await getPkamPublicKey(atsign);
+    var aesEncryptionKey = await getAESKey(atsign);
+    var encryptedPkamPublicKey =
+        EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
+    aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
+        encryptedPkamPublicKey;
+
+    // encrypt pkamPrivateKey with AES key
+    var pkamPrivateKey = await getPkamPrivateKey(atsign);
+    var encryptedPkamPrivateKey =
+        EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
+    aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
+        encryptedPkamPrivateKey;
+
+    // encrypt encryption public key with AES key
+    var encryptionPublicKey = await getEncryptionPublicKey(atsign);
+    var encryptedEncryptionPublicKey =
+        EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
+    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
+        encryptedEncryptionPublicKey;
+
+    // encrypt encryption private key with AES key
+    var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
+    var encryptedEncryptionPrivateKey =
+        EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
+    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
+        encryptedEncryptionPrivateKey;
+
+    // store  self encryption key as it is.This will be same as AES key in key zip file
+    var selfEncryptionKey = await getSelfEncryptionKey(atsign);
+    aesEncryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
+        selfEncryptionKey;
+    return Map<String, String>.from(aesEncryptedKeys);
+  }
 }
