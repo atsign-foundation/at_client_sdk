@@ -38,7 +38,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClient.getSyncManager()!.sync();
+    await atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -56,7 +56,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClient.getSyncManager()!.sync();
+    await atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -77,7 +77,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClient.getSyncManager()!.sync();
+    await atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var phoneKey = AtKey()
@@ -94,7 +94,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClient.getSyncManager()!.sync();
+    await atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = await NotificationServiceImpl.create(atClient);
@@ -111,7 +111,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClient.getSyncManager()!.sync();
+    await atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = await NotificationServiceImpl.create(atClient);
