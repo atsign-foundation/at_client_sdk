@@ -1,8 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_commons/at_commons.dart';
 
 import '../test_util.dart';
 
@@ -13,20 +11,12 @@ void main() async {
     await AtClientImpl.createClient(
         aliceAtSign, 'wavi', TestUtil.getAlicePreference());
     var aliceClient = await (AtClientImpl.getClient(aliceAtSign));
-    aliceClient!.getSyncManager()!.init(
-        aliceAtSign,
-        TestUtil.getAlicePreference(),
-        aliceClient.getRemoteSecondary(),
-        aliceClient.getLocalSecondary());
-
     // create bob client
     await AtClientImpl.createClient(
         bobAtSign, 'wavi', TestUtil.getBobPreference());
     var bobClient = await (AtClientImpl.getClient(bobAtSign));
-    bobClient!.getSyncManager()!.init(bobAtSign, TestUtil.getBobPreference(),
-        bobClient.getRemoteSecondary(), bobClient.getLocalSecondary());
     // alice - listen for notification
-    final aliceNotificationService = NotificationServiceImpl(aliceClient);
+    final aliceNotificationService = await NotificationServiceImpl.create(aliceClient!);
     aliceNotificationService.subscribe(regex: '.wavi').listen((notification) {
       _waviCallback(notification);
     });

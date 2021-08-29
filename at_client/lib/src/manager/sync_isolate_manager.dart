@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:isolate';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_utils/at_logger.dart';
 
 class SyncIsolateManager {
   static final SyncIsolateManager _singleton = SyncIsolateManager._internal();
@@ -68,8 +69,7 @@ class SyncIsolateManager {
           case 'get_server_commits':
             // send sync verb to get latest changes from server
             var lastSyncedId = message['last_synced_commit_id'];
-            var result = await remoteSecondary.sync(lastSyncedId,
-                privateKey: privateKey);
+            var result = await remoteSecondary.sync(lastSyncedId);
             var isolateResult = <String, dynamic>{};
             isolateResult['operation'] = 'get_server_commits_result';
             isolateResult['sync_response'] = result;

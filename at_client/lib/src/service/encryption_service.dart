@@ -323,6 +323,7 @@ class EncryptionService {
     return base64Encode(dataSignature);
   }
 
+  @deprecated
   Future<void> encryptUnencryptedData() async {
     var atClient = await (AtClientImpl.getClient(currentAtSign));
     if (atClient == null) {
