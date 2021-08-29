@@ -15,6 +15,7 @@ abstract class AtClient {
   /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
   /// [Deprecated] Use [AtClientManager.syncService]
+  @deprecated
   SyncManager? getSyncManager();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.
