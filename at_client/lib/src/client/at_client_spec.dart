@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -13,6 +14,7 @@ import 'package:at_commons/at_commons.dart';
 abstract class AtClient {
   /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
+  /// [Deprecated] Use [AtClientManager.syncService]
   SyncManager? getSyncManager();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.

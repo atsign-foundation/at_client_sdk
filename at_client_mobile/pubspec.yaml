@@ -15,10 +15,10 @@ dependencies:
   flutter_keychain: ^2.0.1
   hive: ^2.0.4
   crypton: ^2.0.1
-  at_client: ^2.0.3
-  at_lookup: ^2.0.2
-  at_commons: ^2.0.2
-  at_utils: ^2.0.2
+  at_client: ^2.0.4
+  at_lookup: ^2.0.5
+  at_commons: ^2.0.5
+  at_utils: ^2.0.4
    
 dev_dependencies:
   pedantic: ^1.8.0

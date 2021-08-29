@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -11,13 +9,8 @@ void main() async {
     await AtClientImpl.createClient(
         '@alice🛠', 'wavi', TestUtil.getAlicePreference());
     var atClient = await (AtClientImpl.getClient('@alice🛠'));
-    atClient!.getSyncManager()!.init('@alice🛠', TestUtil.getAlicePreference(),
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
-    final notificationService = NotificationServiceImpl(atClient);
+
+    final notificationService = NotificationServiceImpl.create(atClient!) as NotificationServiceImpl;
     notificationService.subscribe().listen((notification) {
       _notificationCallback(notification);
     });
@@ -25,7 +18,7 @@ void main() async {
       _notificationCallback(notification);
     });
     print('stopping monitor');
-    Future.delayed(Duration(seconds: 5), () => notificationService.stop());
+    Future.delayed(Duration(seconds: 5), () => notificationService.stopAllSubscriptions());
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

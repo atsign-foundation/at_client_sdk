@@ -111,7 +111,7 @@ class Monitor {
     // This enables start method to be called with lastNotificationTime on the same instance of Monitor
     if (lastNotificationTime != null) {
       _logger.finer(
-          'starting monitor with lastnotificationTime: $lastNotificationTime');
+          'starting monitor for $_atSign with lastnotificationTime: $lastNotificationTime');
       _lastNotificationTime = lastNotificationTime;
     }
     try {
@@ -137,7 +137,7 @@ class Monitor {
       await _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.Started;
       _logger.finer(
-          'monitor started with last notification time: $_lastNotificationTime');
+          'monitor started for $_atSign with last notification time: $_lastNotificationTime');
       return;
     } on Exception catch (e) {
       _handleError(e);
@@ -232,7 +232,9 @@ class Monitor {
   /// Stops the monitor. Call [Monitor#start] to start it again.
   void stop() {
     status = MonitorStatus.Stopped;
-    _monitorConnection!.close();
+    if(_monitorConnection != null) {
+      _monitorConnection!.close();
+    }
   }
 
 // Stops the monitor from receiving notification

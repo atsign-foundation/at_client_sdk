@@ -1,7 +1,9 @@
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
+
 import 'at_demo_credentials.dart' as demo_credentials;
 import 'set_encryption_keys.dart';
 
@@ -11,9 +13,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     await AtClientImpl.createClient(atsign, 'me', preference);
     var atClient = await AtClientImpl?.getClient(atsign);
-    atClient!.getSyncManager()!.init(atsign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    await atClient.getSyncManager()!.sync();
+    await atClient!.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠

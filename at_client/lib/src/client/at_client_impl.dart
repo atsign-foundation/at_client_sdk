@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
@@ -17,6 +18,7 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -34,10 +36,9 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:at_base2e15/at_base2e15.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-import 'package:http/http.dart' as http;
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -53,11 +54,12 @@ class AtClientImpl implements AtClient {
 
   EncryptionService? get encryptionService => _encryptionService;
 
-  var logger = AtSignLogger('AtClientImpl');
+  final _logger = AtSignLogger('AtClientImpl');
   static final Map _atClientInstanceMap = <String, AtClient>{};
 
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
   /// and the client preference.
+  @deprecated
   static Future<AtClient?> getClient(String? currentAtSign) async {
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
@@ -67,6 +69,9 @@ class AtClientImpl implements AtClient {
     return null;
   }
 
+  @deprecated
+
+  /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
       AtClientPreference preferences) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
@@ -79,12 +84,34 @@ class AtClientImpl implements AtClient {
     }
     var atClientImpl = AtClientImpl(currentAtSign, namespace, preferences);
     await atClientImpl._init();
-    atClientImpl.logger
-        .info('AtClient init  done for : ${atClientImpl.currentAtSign}');
     _atClientInstanceMap[currentAtSign] = atClientImpl;
   }
 
+  /// use [create]
   AtClientImpl(
+      String _atSign, String? namespace, AtClientPreference preference) {
+    currentAtSign = AtUtils.formatAtSign(_atSign);
+    _preference = preference;
+    _namespace = namespace;
+  }
+
+  static Future<AtClient> create(String currentAtSign, String? namespace,
+      AtClientPreference preferences) async {
+    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
+    if (_atClientInstanceMap.containsKey(currentAtSign)) {
+      return _atClientInstanceMap[currentAtSign];
+    }
+    if (preferences.isLocalStoreRequired) {
+      var storageManager = StorageManager(preferences);
+      await storageManager.init(currentAtSign, preferences.keyStoreSecret);
+    }
+    var atClientImpl = AtClientImpl._(currentAtSign, namespace, preferences);
+    await atClientImpl._init();
+    _atClientInstanceMap[currentAtSign] = atClientImpl;
+    return _atClientInstanceMap[currentAtSign];
+  }
+
+  AtClientImpl._(
       String _atSign, String? namespace, AtClientPreference preference) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
@@ -93,7 +120,7 @@ class AtClientImpl implements AtClient {
 
   Future<void> _init() async {
     if (_preference!.isLocalStoreRequired) {
-      _localSecondary = LocalSecondary(currentAtSign!, _preference);
+      _localSecondary = LocalSecondary(this);
     }
     _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
         privateKey: _preference!.privateKey);
@@ -250,9 +277,14 @@ class AtClientImpl implements AtClient {
       }
       if (sharedBy != currentAtSign && operation == UPDATE_ALL) {
         //resultant value is encrypted. Decrypting to original value.
-        var decryptedValue = await _encryptionService!
-            .decrypt(encryptedResultMap['data'], sharedBy);
-        encryptedResultMap['data'] = decryptedValue;
+        try {
+          var decryptedValue = await _encryptionService!
+              .decrypt(encryptedResultMap['data'], sharedBy);
+          encryptedResultMap['data'] = decryptedValue;
+        } on Error catch (e) {
+          _logger.severe(
+              'decryption error for command ${builder.buildCommand()}: ${e}');
+        }
       } else {
         //resultant value is encrypted. Decrypting to original value.
         var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
@@ -338,9 +370,17 @@ class AtClientImpl implements AtClient {
         encryptedResult = _formatResult(encryptedResult);
         var encryptedResultMap = jsonDecode(encryptedResult!);
         if (operation == UPDATE_ALL) {
-          var decryptedValue = await _encryptionService!.decryptLocal(
-              encryptedResultMap['data'], currentAtSign, sharedWith!);
-          encryptedResultMap['data'] = decryptedValue;
+          try {
+            var decryptedValue = await _encryptionService!.decryptLocal(
+                encryptedResultMap['data'], currentAtSign, sharedWith!);
+            encryptedResultMap['data'] = decryptedValue;
+          } on Exception catch (e) {
+            _logger.severe(
+                'decryption exception for command ${builder.buildCommand()}: ${e.toString}');
+          } on Error catch (e) {
+            _logger.severe(
+                'decryption error for command ${builder.buildCommand()}: ${e}');
+          }
         }
         return encryptedResultMap;
       }
@@ -560,12 +600,12 @@ class AtClientImpl implements AtClient {
         var encryptionPrivateKey =
             await _localSecondary!.getEncryptionPrivateKey();
         if (encryptionPrivateKey != null) {
-          logger.finer('signing public data for key:$key');
+          _logger.finer('signing public data for key:$key');
           builder.dataSignature =
               _encryptionService!.signPublicData(encryptionPrivateKey, value);
         }
       } on Exception catch (e) {
-        logger.severe('Exception trying to sign public data:${e.toString()}');
+        _logger.severe('Exception trying to sign public data:${e.toString()}');
       }
     }
 
@@ -581,10 +621,10 @@ class AtClientImpl implements AtClient {
         await secondary.atLookUp.connection!.close();
       }
     } on AtClientException catch (e) {
-      logger.severe(
+      _logger.severe(
           'error code: ${e.errorCode} error message: ${e.errorMessage}');
     } on Exception catch (e) {
-      logger.severe('error in put: ${e.toString()}');
+      _logger.severe('error in put: ${e.toString()}');
     }
     return putResult != null;
   }
@@ -836,14 +876,14 @@ class AtClientImpl implements AtClient {
         await _encryptionService!.encryptStream(data, sharedWith);
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
-    logger.finer('sending stream init:$command');
+    _logger.finer('sending stream init:$command');
     var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
     var result = await remoteSecondary.executeCommand(command, auth: true);
-    logger.finer('ack message:$result');
+    _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
-      logger.finer('ack received for streamId:$streamId');
+      _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
@@ -880,7 +920,7 @@ class AtClientImpl implements AtClient {
       ..currentAtSign = currentAtSign!
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
-    logger.info('Sending ack for stream notification:$notification');
+    _logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
         notification, streamCompletionCallBack, streamReceiveCallBack);
   }
@@ -1019,6 +1059,7 @@ class AtClientImpl implements AtClient {
     }
   }
 
+  @deprecated
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService!.encryptUnencryptedData();
   }
