@@ -13,9 +13,9 @@ void main() {
   test('notify updating of a key to sharedWith atSign - using await', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    await atClient!.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    await atClient.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -36,9 +36,9 @@ void main() {
       () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    await atClient!.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    await atClient.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -54,9 +54,9 @@ void main() {
   test('notify deletion of a key to sharedWith atSign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    await atClient!.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    await atClient.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -75,9 +75,9 @@ void main() {
   test('notify deletion of a key to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    await atClient!.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    await atClient.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var phoneKey = AtKey()
@@ -92,9 +92,9 @@ void main() {
   test('notify text of to sharedWith atSign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    await atClient!.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    await atClient.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = await NotificationServiceImpl.create(atClient);
@@ -109,9 +109,9 @@ void main() {
   test('notify text of to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    await atClient!.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    await atClient.getSyncManager()!.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = await NotificationServiceImpl.create(atClient);

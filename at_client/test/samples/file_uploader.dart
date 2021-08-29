@@ -9,12 +9,9 @@ void main() async {
     var preference = TestUtil.getAlicePreference();
     var atsign = '@alice🛠';
     //1.
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await (AtClientImpl.getClient(atsign));
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClient = atClientManager.atClient;
     await Future.delayed(Duration(seconds: 5));
     var file1 = File('test/data/hello.txt');
     var file2 = File('test/data/cat.jpeg');

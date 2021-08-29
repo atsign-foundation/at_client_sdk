@@ -9,9 +9,10 @@ void main() {
   test('sync from remote to local', () async {
     var atsign = '@alice🛠';
     var preference = TestUtil.getAlicePreference();
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    var syncService = await SyncServiceImpl.create(atClient!);
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClient = atClientManager.atClient;
+    var syncService = await SyncServiceImpl.create(atClient);
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary
@@ -30,9 +31,10 @@ void main() {
   test('Parallel sync calls to remote from local', () async {
     var atsign = '@sitaram';
     var preference = TestUtil.getPreferenceLocal();
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    var syncService = await SyncServiceImpl.create(atClient!);
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClient = atClientManager.atClient;
+    var syncService = atClientManager.syncService;
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary

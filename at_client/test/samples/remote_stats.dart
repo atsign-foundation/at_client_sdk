@@ -5,13 +5,11 @@ import 'test_util.dart';
 
 void main() async {
   try {
-    await AtClientImpl.createClient(
-        '@alice', null, TestUtil.getPreferenceRemote());
-    var atClient = await (AtClientImpl.getClient('@alice'));
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
+    final atsign = '@alice🛠';
+    final preference = TestUtil.getPreferenceRemote();
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClient = atClientManager.atClient;
     var stats_result = await atClient
         .getRemoteSecondary()!
         .executeCommand('stats\n', auth: true);

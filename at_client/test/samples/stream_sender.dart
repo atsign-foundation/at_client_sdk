@@ -8,13 +8,11 @@ import 'test_util.dart';
 
 void main() async {
   try {
-    await AtClientImpl.createClient(
-        '@alice🛠', 'me', TestUtil.getAlicePreference());
-    var atClient = await (AtClientImpl.getClient('@alice🛠'));
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
+    final atsign = '@alice🛠';
+    final preference = TestUtil.getAlicePreference();
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClient = atClientManager.atClient;
     SyncServiceImpl.create(atClient);
 //    atClient.getSyncManager()!.init('@alice🛠', TestUtil.getAlicePreference(),
 //        atClient.getRemoteSecondary(), atClient.getLocalSecondary());

@@ -9,9 +9,10 @@ import 'package:at_commons/at_commons.dart';
 void main() async {
   try {
     //1.1 put image for self
-    await AtClientImpl.createClient(
-        '@alice🛠', 'me', TestUtil.getAlicePreference());
-    var atClient = await (AtClientImpl.getClient('@alice🛠'));
+    var atsign = '@alice';
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', TestUtil.getAlicePreference());
+    var atClient = atClientManager.atClient;
     if (atClient == null) {
       print('unable to create at client instance');
       return;
