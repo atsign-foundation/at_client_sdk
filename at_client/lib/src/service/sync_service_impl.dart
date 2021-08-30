@@ -34,6 +34,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return _syncServiceMap[atClient.getCurrentAtSign()]!;
     }
     final syncService = SyncServiceImpl._(atClient);
+    await syncService._statsServiceListener();
     _syncServiceMap[atClient.getCurrentAtSign()!] = syncService;
     return _syncServiceMap[atClient.getCurrentAtSign()]!;
   }
@@ -310,6 +311,19 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _serverCommitId ??= -1;
     _logger.info('Returning the serverCommitId $_serverCommitId');
     return _serverCommitId;
+  }
+
+  /// Listens on stats notification sent by the cloud secondary server
+  Future<void> _statsServiceListener() async {
+    _statsNotificationListener =
+        NotificationServiceImpl.create(_atClient) as NotificationServiceImpl;
+    // Setting the regex to 'statsNotification' to receive only the notifications
+    // from stats notification service.
+    _statsNotificationListener
+        .subscribe(regex: 'statsNotification')
+        .listen((notification) {
+          // Do nothing, sending stats notification to keep the monitor connection alive.
+    });
   }
 
   /// Returns the local commit id. If null, returns -1.
