@@ -28,6 +28,15 @@ class AtNotification {
     };
   }
 
+  static List<AtNotification> fromJsonList(
+      List<Map<String, dynamic>> jsonList) {
+    final notificationList = <AtNotification>[];
+    for (var json in jsonList) {
+      notificationList.add(AtNotification.fromJson(json));
+    }
+    return notificationList;
+  }
+
   @override
   String toString() {
     return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation}';
