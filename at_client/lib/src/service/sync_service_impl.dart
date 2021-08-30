@@ -3,11 +3,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -19,11 +15,11 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
-class SyncServiceImpl implements SyncService, AtSignChangeListener {
+class SyncServiceImpl implements SyncService {
   bool _isSyncInProgress = false;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
-  late final NotificationServiceImpl _statsNotificationListener;
+
   static const LIMIT = 10;
   static final Map<String, SyncService> _syncServiceMap = {};
 
@@ -41,7 +37,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   SyncServiceImpl._(this._atClient) {
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
-    AtClientManager.getInstance().listenToAtSignChange(this);
   }
 
   @override
@@ -424,17 +419,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     commitEntry.operation = operation;
     await SyncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
         _atClient.getCurrentAtSign()!);
-  }
-
-  @override
-  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
-        _atClient.getCurrentAtSign()) {
-      // actions for previous atSign
-      _logger.finer(
-          'stopping stats notificationlistener for ${_atClient.getCurrentAtSign()}');
-      _statsNotificationListener.stopAllSubscriptions();
-    }
   }
 }
 
