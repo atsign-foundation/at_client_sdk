@@ -24,7 +24,9 @@ jobs:
       # You can specify other versions if desired, see documentation here:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
       # - uses: dart-lang/setup-dart@v1
-      - uses: dart-lang/setup-dart@9a04e6d73cca37bd455e0608d7e5092f881fd603
+      - uses: dart-lang/setup-dart@v1.2
+        with:
+          sdk: stable
 
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
@@ -62,7 +64,7 @@ jobs:
 
       # Adding flutter to path
       - name: Installing Flutter
-        uses: britannio/action-install-flutter@v1.0
+        uses: britannio/action-install-flutter@v1.1
         with:
           version: stable
 
