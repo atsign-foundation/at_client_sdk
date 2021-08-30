@@ -27,6 +27,6 @@ void main() async {
 //  print('end of test');
 }
 
-void _notificationCallback(AtNotification notification) {
-  print('notification received: ${notification.toString()}');
-}
+//void _notificationCallback(AtNotification notification) {
+//  print('notification received: ${notification.toString()}');
+//}

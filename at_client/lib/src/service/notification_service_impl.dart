@@ -7,6 +7,7 @@ import 'package:at_client/src/listener/connectivity_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
@@ -238,35 +239,6 @@ class NotificationResult {
   @override
   String toString() {
     return 'key: ${atKey.key} sharedWith: ${atKey.sharedWith} status: $notificationStatusEnum';
-  }
-}
-
-class AtNotification {
-  late String notificationId;
-  late String key;
-  late int epochMillis;
-  String? value;
-
-  static AtNotification fromJson(Map json) {
-    return AtNotification()
-      ..notificationId = json['id']
-      ..key = json['key']
-      ..epochMillis = json['epochMillis']
-      ..value = json['value'];
-  }
-
-  Map toJson() {
-    final jsonMap = {};
-    jsonMap['id'] = notificationId;
-    jsonMap['key'] = key;
-    jsonMap['epochMillis'] = epochMillis;
-    jsonMap['value'] = value;
-    return jsonMap;
-  }
-
-  @override
-  String toString() {
-    return 'AtNotification{id: $notificationId, key: $key, epochMillis: $epochMillis, value: $value}';
   }
 }
 

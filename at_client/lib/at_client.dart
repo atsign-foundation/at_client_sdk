@@ -9,3 +9,4 @@ export 'package:at_client/src/exception/at_client_exception.dart';
 export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/listener/connectivity_listener.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
+export 'package:at_client/src/response/at_notification.dart';

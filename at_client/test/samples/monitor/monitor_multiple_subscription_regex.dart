@@ -31,10 +31,10 @@ void main() async {
 //  print('end of test');
 }
 
-void _waviCallback(AtNotification notification) {
-  print('wavi notification received: ${notification.toString()}');
-}
-
-void _buzzCallBack(AtNotification notification) {
-  print('buzz notification received: ${notification.toString()}');
-}
+//void _waviCallback(AtNotification notification) {
+//  print('wavi notification received: ${notification.toString()}');
+//}
+//
+//void _buzzCallBack(AtNotification notification) {
+//  print('buzz notification received: ${notification.toString()}');
+//}

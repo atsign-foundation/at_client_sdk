@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
