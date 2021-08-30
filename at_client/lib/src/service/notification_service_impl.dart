@@ -103,7 +103,7 @@ class NotificationServiceImpl
           .getAtNotifications(notificationParser.parse(notificationJSON));
       atNotifications.forEach((atNotification) async {
         // Saves latest notification id to the keys if its not a stats notification.
-        if (atNotification.notificationId != '-1') {
+        if (atNotification.id != '-1') {
           await _atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
