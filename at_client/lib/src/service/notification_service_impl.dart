@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
@@ -226,20 +227,3 @@ class NotificationServiceImpl
     }
   }
 }
-
-/// [NotificationResult] encapsulates the notification response
-class NotificationResult {
-  String? notificationID;
-  late AtKey atKey;
-  NotificationStatusEnum notificationStatusEnum =
-      NotificationStatusEnum.undelivered;
-
-  AtClientException? atClientException;
-
-  @override
-  String toString() {
-    return 'key: ${atKey.key} sharedWith: ${atKey.sharedWith} status: $notificationStatusEnum';
-  }
-}
-
-enum NotificationStatusEnum { delivered, undelivered }
