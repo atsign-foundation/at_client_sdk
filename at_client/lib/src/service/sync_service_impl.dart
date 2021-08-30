@@ -315,14 +315,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Listens on stats notification sent by the cloud secondary server
   Future<void> _statsServiceListener() async {
-    _statsNotificationListener =
-        NotificationServiceImpl.create(_atClient) as NotificationServiceImpl;
+    _statsNotificationListener = await NotificationServiceImpl.create(_atClient)
+        as NotificationServiceImpl;
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
     _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) {
-          // Do nothing, sending stats notification to keep the monitor connection alive.
+      // Do nothing, sending stats notification to keep the monitor connection alive.
     });
   }
 
