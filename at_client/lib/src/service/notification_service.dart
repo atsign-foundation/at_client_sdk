@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 
