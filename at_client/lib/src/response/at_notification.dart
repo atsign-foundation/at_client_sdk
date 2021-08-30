@@ -1,29 +1,35 @@
-
 class AtNotification {
-  late String notificationId;
+  late String id;
   late String key;
+  late String from;
+  late String to;
   late int epochMillis;
   String? value;
+  String? operation;
 
-  static AtNotification fromJson(Map json) {
-    return AtNotification()
-      ..notificationId = json['id']
-      ..key = json['key']
-      ..epochMillis = json['epochMillis']
-      ..value = json['value'];
+  AtNotification(this.id, this.key, this.from, this.to, this.epochMillis,
+      {this.value, this.operation});
+
+  factory AtNotification.fromJson(Map<String, dynamic> json) {
+    return AtNotification(
+        json['id'], json['key'], json['from'], json['to'], json['epochMillis'],
+        value: json['value'], operation: json['operation']);
   }
 
-  Map toJson() {
-    final jsonMap = {};
-    jsonMap['id'] = notificationId;
-    jsonMap['key'] = key;
-    jsonMap['epochMillis'] = epochMillis;
-    jsonMap['value'] = value;
-    return jsonMap;
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'key': key,
+      'from': from,
+      'to': to,
+      'epochMillis': epochMillis,
+      'value': value,
+      'operation': operation
+    };
   }
 
   @override
   String toString() {
-    return 'AtNotification{id: $notificationId, key: $key, epochMillis: $epochMillis, value: $value}';
+    return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation}';
   }
 }
