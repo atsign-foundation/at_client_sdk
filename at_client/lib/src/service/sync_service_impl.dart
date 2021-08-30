@@ -22,8 +22,6 @@ import 'package:at_utils/at_utils.dart';
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
   bool _isSyncInProgress = false;
   late final AtClient _atClient;
-  var _serverCommitId;
-  var _lastServerCommitIdDateTime;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
   static const LIMIT = 10;
@@ -119,11 +117,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var syncResult = SyncResult();
     try {
       _logger.finer('Sync in progress');
-      var lastSyncedEntry =
-      await SyncUtil.getLastSyncedEntry(_atClient.getPreferences()!.syncRegex, atSign: _atClient.getCurrentAtSign()!);
+      var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
+          _atClient.getPreferences()!.syncRegex,
+          atSign: _atClient.getCurrentAtSign()!);
       // Get lastSyncedLocalSeq to get the list of uncommitted entries.
       var lastSyncedLocalSeq =
-      lastSyncedEntry != null ? lastSyncedEntry.key : -1;
+          lastSyncedEntry != null ? lastSyncedEntry.key : -1;
       var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
           lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
           atSign: _atClient.getCurrentAtSign()!);
@@ -305,19 +304,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
   ///Throws [AtLookUpException] if secondary is not reachable
-  Future<int> _getServerCommitId({bool getFromServer = false}) async {
-    // 1. If server commit id is null, fetch from remote secondary
-    // 2. If lastServerCommit id is null or difference is more than 5 minutes
-    // 3. If user sets getFromServer to true.
-    if ((_serverCommitId == null || _lastServerCommitIdDateTime == null) ||
-        (DateTime.now().difference(_lastServerCommitIdDateTime).inMinutes >
-            5) ||
-        getFromServer) {
-      _logger.finer('Getting server commit Id from cloud secondary');
-      _serverCommitId = await SyncUtil.getLatestServerCommitId(
-          _remoteSecondary, _atClient.getPreferences()!.syncRegex);
-      _lastServerCommitIdDateTime = DateTime.now().toUtc();
-    }
+  Future<int> _getServerCommitId() async {
+    var _serverCommitId = await SyncUtil.getLatestServerCommitId(
+        _remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
     _serverCommitId ??= -1;
     _logger.info('Returning the serverCommitId $_serverCommitId');
@@ -326,21 +315,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Listens on stats notification sent by the cloud secondary server
   Future<void> _statsServiceListener() async {
-    _statsNotificationListener =
-        (await NotificationServiceImpl.create(_atClient))
-            as NotificationServiceImpl;
+    _statsNotificationListener = await NotificationServiceImpl.create(_atClient)
+        as NotificationServiceImpl;
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
     _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) {
-      if (notification.value != null) {
-        _serverCommitId = int.parse(notification.value!);
-        _logger.finer(
-            'stats notification received for ${_atClient.getCurrentAtSign()} $_serverCommitId');
-        _lastServerCommitIdDateTime =
-            DateTime.fromMillisecondsSinceEpoch(notification.epochMillis);
-      }
+      // Do nothing, sending stats notification to keep the monitor connection alive.
     });
   }
 
