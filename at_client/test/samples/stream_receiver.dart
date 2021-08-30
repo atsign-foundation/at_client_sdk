@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 
 import 'test_util.dart';
@@ -9,9 +10,11 @@ var atClient;
 
 void main() async {
   try {
-    await AtClientImpl.createClient(
-        '@bob🛠', 'me', TestUtil.getBobPreference());
-    atClient = await (AtClientImpl.getClient('@bob🛠'));
+    final atsign = '@bob🛠';
+    final preference = TestUtil.getBobPreference();
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    atClient = atClientManager.atClient;
     atClient.getSyncManager().init('@bob🛠', TestUtil.getBobPreference(),
         atClient!.getRemoteSecondary(), atClient!.getLocalSecondary());
     await atClient!.startMonitor(

@@ -1,17 +1,14 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'test_util.dart';
 import 'package:at_commons/at_commons.dart';
 
 void main() async {
   try {
-    await AtClientImpl.createClient(
-        '@alice🛠', 'me', TestUtil.getAlicePreference());
-    var atClient = await (AtClientImpl.getClient('@alice🛠'));
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
+    final atsign = '@alice🛠';
+    final preference = TestUtil.getAlicePreference();
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClient = atClientManager.atClient;
     //llookup:phone.me@alice🛠
     var atKey = AtKey()..key = 'phone';
     var alicePhone = await atClient.get(atKey);

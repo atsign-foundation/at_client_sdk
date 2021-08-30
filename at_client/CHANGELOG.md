@@ -1,3 +1,5 @@
+## 3.0.0
+- Resilient SDK changes and bug fixes
 ## 2.0.4
 - Improve notification service
 - Improve monitor

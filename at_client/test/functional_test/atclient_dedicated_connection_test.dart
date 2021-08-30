@@ -1,7 +1,9 @@
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
+
 import 'at_demo_credentials.dart' as demo_credentials;
 import 'set_encryption_keys.dart';
 
@@ -9,11 +11,9 @@ void main() {
   test('put method - create a key sharing to other atsign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl?.getClient(atsign);
-    atClient!.getSyncManager()!.init(atsign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    await atClient.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    await atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠

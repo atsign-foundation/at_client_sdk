@@ -4,13 +4,11 @@ import 'test_util.dart';
 import 'package:at_commons/at_commons.dart';
 
 void main() async {
-  await AtClientImpl.createClient(
-      '@alice🛠', 'me', TestUtil.getAlicePreference());
-  var atClient = await (AtClientImpl.getClient('@alice🛠'));
-  if (atClient == null) {
-    print('unable to create at client instance');
-    return;
-  }
+  final atsign = '@alice🛠';
+  final preference = TestUtil.getAlicePreference();
+  var atClientManager = await AtClientManager.getInstance()
+      .setCurrentAtSign(atsign, 'wavi', preference);
+  var atClient = atClientManager.atClient;
   var atKey = AtKey()..key = 'testkey12';
   var value = '123';
   var metadata = Metadata()..isPublic = true;
