@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/response/at_notification.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 
 abstract class NotificationService {
@@ -135,3 +135,20 @@ class NotificationParams {
       .._strategy = StrategyEnum.all;
   }
 }
+
+/// [NotificationResult] encapsulates the notification response
+class NotificationResult {
+  String? notificationID;
+  late AtKey atKey;
+  NotificationStatusEnum notificationStatusEnum =
+      NotificationStatusEnum.undelivered;
+
+  AtClientException? atClientException;
+
+  @override
+  String toString() {
+    return 'key: ${atKey.key} sharedWith: ${atKey.sharedWith} status: $notificationStatusEnum';
+  }
+}
+
+enum NotificationStatusEnum { delivered, undelivered }
