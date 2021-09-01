@@ -936,6 +936,7 @@ class AtClientImpl implements AtClient {
         sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
   }
 
+  @override
   Future<Map<String, FileTransferObject>> shareFiles(
       List<String> sharedWithAtSigns,
       String key,
@@ -1008,6 +1009,7 @@ class AtClientImpl implements AtClient {
     return fileStatuses;
   }
 
+  @override
   Future<List<FileStatus>> reuploadFiles(
       List<File> files, FileTransferObject fileTransferObject) async {
     var response = await _uploadFiles(fileTransferObject.transferId, files,
