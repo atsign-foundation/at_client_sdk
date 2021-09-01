@@ -19,7 +19,6 @@ class AtClientService {
   late AtClientManager atClientManager;
   AtClientAuthenticator? _atClientAuthenticator;
   late AtLookupImpl atLookUp;
-  OnboardingStatus? _status;
 
   static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
 
@@ -126,39 +125,49 @@ class AtClientService {
   ///Returns `true` on successfully authenticating [atsign] with [cramSecret]/[privateKey].
   /// if pkam is successful, encryption keys will be set for the user.
   Future<bool> authenticate(
-      String? atsign, AtClientPreference atClientPreference,
+      String atsign, AtClientPreference atClientPreference,
       {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
+    // If cramSecret is null, PKAMAuth is completed,
+    // decode the json data and add keys to KeyChainManager
     if (atClientPreference.cramSecret == null) {
       atsign = _formatAtSign(atsign);
-      if (atsign == null) {
+      if (atsign.isEmpty) {
         return false;
       }
       await _decodeAndStoreToKeychain(atsign, jsonData!, decryptKey!);
-      atClientPreference.privateKey =
-          await KeychainUtil.getPkamPrivateKey(atsign);
     }
-    var result = await _init(atsign!, atClientPreference);
-    if (!result) {
-      return result;
+    // If cramSecret is not null and privateKey is null, pkam auth is not completed.
+    // Perform initial auth to generate keys.
+    var isInitialAuthSuccessful = false;
+    if (atClientPreference.cramSecret != null &&
+        atClientPreference.privateKey == null) {
+      _atClientAuthenticator ??= AtClientAuthenticator();
+      isInitialAuthSuccessful = await _atClientAuthenticator!
+          .performInitialAuth(atsign, atClientPreference);
     }
-    if (_status != OnboardingStatus.ACTIVATE &&
-        status != OnboardingStatus.ACTIVATE) {
+    // Get privateKey from KeyChainManager.
+    atClientPreference.privateKey ??=
+        await _keyChainManager.getPkamPrivateKey(atsign);
+    // If privatekey is null, authentication failed. return false.
+    if (atClientPreference.privateKey == null) {
+      return false;
+    }
+    // If atClientPreference.privateKey is not empty, initialize the AtClientService fields.
+    if (atClientPreference.privateKey!.isNotEmpty) {
+      await _init(atsign, atClientPreference);
+      _atClientAuthenticator!.atLookUp.privateKey =
+          atClientPreference.privateKey;
+      _atClient!.getRemoteSecondary()!.atLookUp.privateKey =
+          atClientPreference.privateKey;
       await _sync(atClientPreference, atsign);
+      // persist keys only when server is initialized for first time,
+      // in subsequent login, skip.
+      if (isInitialAuthSuccessful) {
+        _logger.finer('Persisting the keys');
+        await persistKeys(atsign);
+      }
     }
-    result = await _atClientAuthenticator!.performInitialAuth(
-      atsign,
-      cramSecret: atClientPreference.cramSecret,
-      pkamPrivateKey: atClientPreference.privateKey,
-    );
-    if (result) {
-      var privateKey = atClientPreference.privateKey ??=
-          await _keyChainManager.getPkamPrivateKey(atsign);
-      _atClientAuthenticator!.atLookUp.privateKey = privateKey;
-      _atClient!.getRemoteSecondary()!.atLookUp.privateKey = privateKey;
-      await _sync(atClientPreference, atsign);
-      await persistKeys(atsign);
-    }
-    return result;
+    return true;
   }
 
   ///Decodes the [jsonData] with [decryptKey] for [atsign] and stores it in keychain.
@@ -219,7 +228,6 @@ class AtClientService {
     var keyRestorePolicyStatus = await getKeyRestorePolicy(atsign);
     if (keyRestorePolicyStatus == OnboardingStatus.ACTIVATE ||
         keyRestorePolicyStatus == OnboardingStatus.RESTORE) {
-      _status = keyRestorePolicyStatus;
       throw (keyRestorePolicyStatus);
     }
     //no need of having pkam auth as unauth error can be thrown by keypolicy.
@@ -294,9 +302,9 @@ class AtClientService {
 
   ///Returns null if [atsign] is null else the formatted [atsign].
   ///[atsign] must be non-null.
-  String? _formatAtSign(String? atsign) {
+  String _formatAtSign(String? atsign) {
     if (atsign == null || atsign == '') {
-      return null;
+      return '';
     }
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
     atsign = !atsign.startsWith('@') ? '@' + atsign : atsign;
