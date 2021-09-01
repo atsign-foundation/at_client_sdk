@@ -46,8 +46,7 @@ class LocalSecondary implements Secondary {
         final syncService = AtClientManager.getInstance().syncService;
         if (sync && !await syncService.isInSync()) {
           _logger.finer('not in sync. calling sync before sync immediate');
-          var syncResponse = await syncService.sync();
-          _logger.info(syncResponse);
+           syncService.sync();
         }
         //2 . update/delete to local store
         var operation;
@@ -72,7 +71,7 @@ class LocalSecondary implements Secondary {
             _atClient.getPreferences()!.syncStrategy ==
                 SyncStrategy.IMMEDIATE) {
           _logger.finer('calling sync immediate from local secondary');
-          await AtClientManager.getInstance().syncService.sync();
+          AtClientManager.getInstance().syncService.sync();
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);

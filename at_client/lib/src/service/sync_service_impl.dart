@@ -21,7 +21,9 @@ import 'package:uuid/uuid.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
-  bool _isSyncInProgress = false;
+  static const int _syncMaxRetryTime = 2,
+      _syncRequestThreshold = 3,
+      _syncRequestTriggerInSeconds = 30;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
@@ -56,58 +58,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     syncRequest.onDone = onDone;
     syncRequest.onError = onError;
     syncRequest.requestedOn = DateTime.now().toUtc();
+    syncRequest.result = SyncResult();
     _syncRequests.add(syncRequest);
+    //#TODO should we call below logic here or in cron or in _statsServiceListener ?
+    if (_syncRequests.length > _syncRequestThreshold ||
+        (_syncRequests.isNotEmpty &&
+            _syncRequests[0]
+                    .requestedOn
+                    .difference(DateTime.now().toUtc())
+                    .inSeconds >
+                _syncRequestTriggerInSeconds)) {
+      _logger.finer('triggering sync');
+      _processQueue();
+    }
     return;
-//    try {
-//      //Setting isSyncInProgress to true to prevent parallel sync calls.
-//      _isSyncInProgress = true;
-//      // If network is not available, return.
-//      if (!await NetworkUtil.isNetworkAvailable()) {
-//        _logger.severe('Failed connecting to internet');
-//        syncResult = SyncResult();
-//        syncResult.syncStatus = SyncStatus.failure;
-//        syncResult.atClientException =
-//            AtClientException('AT0014', 'Failed connecting to internet');
-//        _isSyncInProgress = false;
-//        if (onError != null) {
-//          onError(syncResult);
-//        }
-//        return syncResult;
-//      }
-//      var serverCommitId;
-//      try {
-//        // Check if local and cloud secondary are in sync. If true, return.
-//        if (await isInSync()) {
-//          syncResult = SyncResult();
-//          _logger.info('Local Secondary and Cloud Secondary are in sync');
-//          // Setting isSyncInProgress to false, to allow next sync call.
-//          _isSyncInProgress = false;
-//          if (onDone != null) {
-//            onDone(syncResult);
-//          }
-//          return syncResult;
-//        }
-//        // Get latest server commit id.
-//        serverCommitId = await _getServerCommitId();
-//      } on AtLookUpException catch (exception) {
-//        _logger.severe(
-//            '${_atClient.getCurrentAtSign()} ${exception.errorMessage}');
-//        syncResult = SyncResult();
-//        syncResult.syncStatus = SyncStatus.failure;
-//        syncResult.atClientException =
-//            AtClientException(exception.errorCode, exception.errorMessage);
-//        // Setting isSyncInProgress to false, to allow next sync call.
-//        _isSyncInProgress = false;
-//        if (onError != null) {
-//          onError(syncResult);
-//        }
-//        return syncResult;
-//      }
-//      // Sync
-//      return await _sync(serverCommitId, onDone, onError);
-//    } finally {
-//      _isSyncInProgress = false;
-//    }
   }
 
   /// Listens on stats notification sent by the cloud secondary server
@@ -130,6 +94,34 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     });
   }
 
+  void _processQueue() async {
+    for (var syncRequest in _syncRequests) {
+      if (!await NetworkUtil.isNetworkAvailable()) {
+        _logger.severe(
+            'skipping sync - ${syncRequest._id} since due to network unavailability');
+        continue;
+      }
+      try {
+        if (await isInSync()) {
+          _logger.finer('server and local are in sync - ${syncRequest._id}');
+          syncRequest.result!
+            ..syncStatus = SyncStatus.success
+            ..lastSyncedOn = DateTime.now().toUtc();
+          continue;
+        }
+      } on AtLookUpException catch (e) {
+        _logger.severe(
+            'Atlookup exception for sync ${syncRequest._id}. Reason ${e.toString()}');
+        syncRequest.result!.atClientException =
+            AtClientException(e.errorCode, e.errorMessage);
+        continue;
+      }
+      final serverCommitId = await _getServerCommitId();
+      await _sync(serverCommitId, syncRequest);
+    }
+    _clearQueue();
+  }
+
   void _onDone() {
     //#TODO implement
   }
@@ -138,21 +130,32 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     //#TODO implement
   }
 
-  void _processQueue() {
-    _syncRequests.forEach((SyncRequest syncRequest) {
-      //TODO implement
-      syncRequest.isDone = true;
-    });
-    _clearQueue();
-  }
-
   void _clearQueue() {
-    _syncRequests.removeWhere((syncRequest) => syncRequest.isDone == true);
+    _syncRequests
+        .removeWhere((syncRequest) => _checkSyncRequestStatus(syncRequest));
   }
 
-  Future<SyncResult> _sync(
-      int serverCommitId, Function? onDone, Function? onError) async {
-    var syncResult = SyncResult();
+  bool _checkSyncRequestStatus(SyncRequest syncRequest) {
+    if (syncRequest.result != null &&
+        syncRequest.result!.syncStatus == SyncStatus.success) {
+      if (syncRequest.onDone != null) {
+        syncRequest.onDone!(syncRequest.result);
+      }
+      return true;
+    } else if (syncRequest.result != null &&
+            syncRequest.result!.syncStatus == SyncStatus.failure ||
+        syncRequest.requestedOn.difference(DateTime.now().toUtc()).inMinutes >
+            _syncMaxRetryTime) {
+      if (syncRequest.onError != null) {
+        syncRequest.onError!(syncRequest.result);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  Future<SyncResult> _sync(int serverCommitId, SyncRequest syncRequest) async {
+    var syncResult = syncRequest.result!;
     try {
       _logger.finer('Sync in progress');
       var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
@@ -173,19 +176,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _logger.finer('syncing to remote');
         await _syncToRemote(unCommittedEntries);
       }
-      _isSyncInProgress = false;
       syncResult.lastSyncedOn = DateTime.now().toUtc();
-      if (onDone != null) {
-        onDone(syncResult);
-      }
+      syncResult.syncStatus = SyncStatus.success;
     } on Exception catch (e) {
       syncResult.atClientException = AtClientException(
           at_client_error_codes['SyncException'], e.toString());
       syncResult.syncStatus = SyncStatus.failure;
-      _isSyncInProgress = false;
-      if (onError != null) {
-        onError(syncResult);
-      }
     }
     return syncResult;
   }
@@ -479,7 +475,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
 ///Class to represent sync response.
 class SyncResult {
-  SyncStatus syncStatus = SyncStatus.success;
+  SyncStatus syncStatus = SyncStatus.not_started;
   AtClientException? atClientException;
   DateTime? lastSyncedOn;
 
@@ -490,7 +486,7 @@ class SyncResult {
 }
 
 ///Enum to represent the sync status
-enum SyncStatus { success, failure }
+enum SyncStatus { not_started, success, failure }
 
 enum SyncRequestSource { app, system }
 
@@ -500,7 +496,7 @@ class SyncRequest {
   late DateTime requestedOn;
   Function? onDone;
   Function? onError;
-  bool isDone = false;
+  SyncResult? result;
   SyncRequest(this._requestSource, {this.onDone, this.onError}) {
     _id = Uuid().v4();
     requestedOn = DateTime.now().toUtc();
