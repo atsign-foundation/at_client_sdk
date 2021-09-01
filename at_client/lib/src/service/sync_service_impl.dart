@@ -122,9 +122,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverCommitId = notification.value;
       if (serverCommitId != null &&
           int.parse(serverCommitId) > await _getLocalCommitId()) {
-        _syncRequests.add(SyncRequest(SyncRequestSource.system));
+        sync(
+            onDone: _onDone,
+            onError: _onError,
+            requestSource: SyncRequestSource.system);
       }
     });
+  }
+
+  void _onDone() {
+    //#TODO implement
+  }
+
+  void _onError() {
+    //#TODO implement
   }
 
   void _processQueue() {
