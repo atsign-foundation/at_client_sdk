@@ -31,7 +31,7 @@ abstract class SyncService {
   ///   print(syncResult.atClientException);
   /// }
   /// ```
-  Future<SyncResult> sync({Function? onDone, Function? onError});
+  void sync({Function? onDone, Function? onError});
 
   /// Returns true if local and cloud secondary are in sync. false otherwise
   Future<bool> isInSync();
