@@ -19,7 +19,6 @@ class AtClientService {
   late AtClientManager atClientManager;
   AtClientAuthenticator? _atClientAuthenticator;
   late AtLookupImpl atLookUp;
-  OnboardingStatus? _status;
 
   static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
 
@@ -229,7 +228,6 @@ class AtClientService {
     var keyRestorePolicyStatus = await getKeyRestorePolicy(atsign);
     if (keyRestorePolicyStatus == OnboardingStatus.ACTIVATE ||
         keyRestorePolicyStatus == OnboardingStatus.RESTORE) {
-      _status = keyRestorePolicyStatus;
       throw (keyRestorePolicyStatus);
     }
     //no need of having pkam auth as unauth error can be thrown by keypolicy.
