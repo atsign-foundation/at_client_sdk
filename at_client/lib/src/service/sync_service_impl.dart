@@ -50,17 +50,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @override
-  void sync(
-      {Function? onDone,
-      Function? onError,
-      SyncRequestSource requestSource = SyncRequestSource.app}) {
-    final syncRequest = SyncRequest(requestSource);
+  void sync({Function? onDone, Function? onError}) {
+    final syncRequest = SyncRequest();
     syncRequest.onDone = onDone;
     syncRequest.onError = onError;
     syncRequest.requestedOn = DateTime.now().toUtc();
     syncRequest.result = SyncResult();
     _syncRequests.add(syncRequest);
-    //#TODO should we call below logic here or in cron or in _statsServiceListener ?
+    //#TODO should we call _processQueue here or in cron or in _statsServiceListener ?
     if (_syncRequests.length > _syncRequestThreshold ||
         (_syncRequests.isNotEmpty &&
             _syncRequests[0]
@@ -86,10 +83,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverCommitId = notification.value;
       if (serverCommitId != null &&
           int.parse(serverCommitId) > await _getLocalCommitId()) {
-        sync(
-            onDone: _onDone,
-            onError: _onError,
-            requestSource: SyncRequestSource.system);
+        final syncRequest = SyncRequest();
+        syncRequest.onDone = _onDone;
+        syncRequest.onError = _onError;
+        syncRequest.requestSource = SyncRequestSource.system;
+        syncRequest.requestedOn = DateTime.now().toUtc();
+        syncRequest.result = SyncResult();
+        _syncRequests.add(syncRequest);
       }
     });
   }
@@ -492,12 +492,12 @@ enum SyncRequestSource { app, system }
 
 class SyncRequest {
   late String _id;
-  final SyncRequestSource _requestSource;
+  SyncRequestSource requestSource = SyncRequestSource.app;
   late DateTime requestedOn;
   Function? onDone;
   Function? onError;
   SyncResult? result;
-  SyncRequest(this._requestSource, {this.onDone, this.onError}) {
+  SyncRequest({this.onDone, this.onError}) {
     _id = Uuid().v4();
     requestedOn = DateTime.now().toUtc();
   }
