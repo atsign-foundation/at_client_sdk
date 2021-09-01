@@ -415,6 +415,21 @@ abstract class AtClient {
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath});
 
+  /// re uploads file in [fileTransferObject.fileUrl]
+  /// returns list of [FileStatus] which contains upload status of each file.
+  Future<List<FileStatus>> reuploadFiles(
+      List<File> files, FileTransferObject fileTransferObject);
+
+  /// re sends file notifications to [sharedWithAtSigns]
+  /// returns [Map<String, FileTransferObject>] which contains transfer status for each atsign.
+  Future<Map<String, FileTransferObject>> shareFiles(
+      List<String> sharedWithAtSigns,
+      String key,
+      String fileUrl,
+      String encryptionKey,
+      List<FileStatus> fileStatus,
+      {DateTime? date});
+
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;
