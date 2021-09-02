@@ -198,6 +198,9 @@ class AtClientService {
         atsign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY, encryptionPrivateKey);
     await _keyChainManager.putValue(
         atsign, KEYCHAIN_SELF_ENCRYPTION_KEY, decryptKey);
+    // Add atsign to the keychain.
+    await _keyChainManager.storeCredentialToKeychain(atsign,
+        privateKey: pkamPrivateKey, publicKey: pkamPublicKey);
   }
 
   ///Returns `true` on successfully completing onboarding.
