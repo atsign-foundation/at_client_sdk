@@ -25,12 +25,12 @@ import 'package:uuid/uuid.dart';
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static const _syncRequestThreshold = 3,
       _syncRequestTriggerInSeconds = 30,
-      _syncRunIntervalSeconds = 30;
+      _syncRunIntervalSeconds = 30,_queueSize=5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
   late final Cron _cron;
-  final _syncRequests = ListQueue<SyncRequest>(5);
+  final _syncRequests = ListQueue<SyncRequest>(_queueSize);
   static const LIMIT = 10;
   static final Map<String, SyncService> _syncServiceMap = {};
 
@@ -94,6 +94,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _processSyncRequests() async {
     if (!await NetworkUtil.isNetworkAvailable()) {
       _logger.finer('skipping sync due to network unavailability');
+      return;
     }
     if (_syncRequests.length < _syncRequestThreshold &&
         (_syncRequests.isNotEmpty &&
@@ -105,6 +106,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
                 _syncRequestTriggerInSeconds)) {
       _logger.finer(
           'skipping sync - queue length ${_syncRequests.length} - first request time ${_syncRequests.elementAt(0).requestedOn}');
+      return;
     }
     final syncRequest = _syncRequests.removeFirst();
     try {
@@ -153,7 +155,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
-    _syncRequests.removeLast();
+    if(_syncRequests.length == _queueSize) {
+      _syncRequests.removeLast();
+    }
     _syncRequests.addLast(syncRequest);
     syncRequest.result = SyncResult();
   }
