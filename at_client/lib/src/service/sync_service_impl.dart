@@ -25,7 +25,8 @@ import 'package:uuid/uuid.dart';
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static const _syncRequestThreshold = 3,
       _syncRequestTriggerInSeconds = 30,
-      _syncRunIntervalSeconds = 30,_queueSize=5;
+      _syncRunIntervalSeconds = 30,
+      _queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
@@ -65,6 +66,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     final syncRequest = SyncRequest();
     syncRequest.onDone = onDone;
     syncRequest.requestedOn = DateTime.now().toUtc();
+    syncRequest.result = SyncResult();
     _addSyncRequestToQueue(syncRequest);
     return;
   }
@@ -78,6 +80,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
+      _logger.finer('got stats notification in sync: ${notification.value}');
       final serverCommitId = notification.value;
       if (serverCommitId != null &&
           int.parse(serverCommitId) > await _getLocalCommitId()) {
@@ -86,26 +89,33 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         syncRequest.onError = _onError;
         syncRequest.requestSource = SyncRequestSource.system;
         syncRequest.requestedOn = DateTime.now().toUtc();
+        syncRequest.result = SyncResult();
         _addSyncRequestToQueue(syncRequest);
       }
     });
   }
 
   void _processSyncRequests() async {
+    _logger.finer('in _processSyncRequests');
     if (!await NetworkUtil.isNetworkAvailable()) {
       _logger.finer('skipping sync due to network unavailability');
       return;
     }
-    if (_syncRequests.length < _syncRequestThreshold &&
-        (_syncRequests.isNotEmpty &&
-            _syncRequests
-                    .elementAt(0)
-                    .requestedOn
-                    .difference(DateTime.now().toUtc())
-                    .inSeconds <
-                _syncRequestTriggerInSeconds)) {
-      _logger.finer(
-          'skipping sync - queue length ${_syncRequests.length} - first request time ${_syncRequests.elementAt(0).requestedOn}');
+//    if (_syncRequests.isNotEmpty) {
+//      var lastRequested = _syncRequests.elementAt(0).requestedOn;
+//      print('first request time: ${lastRequested}');
+//      print('current time: ${DateTime.now().toUtc()}');
+//      print('difference: ${lastRequested.difference(DateTime.now().toUtc())}');
+//    }
+    if (_syncRequests.isEmpty ||
+        (_syncRequests.length < _syncRequestThreshold &&
+            (_syncRequests.isNotEmpty &&
+                DateTime.now()
+                        .toUtc()
+                        .difference(_syncRequests.elementAt(0).requestedOn)
+                        .inSeconds <
+                    _syncRequestTriggerInSeconds))) {
+      _logger.finer('skipping sync - queue length ${_syncRequests.length}');
       return;
     }
     final syncRequest = _syncRequests.removeFirst();
@@ -155,14 +165,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
-    if(_syncRequests.length == _queueSize) {
+    if (_syncRequests.length == _queueSize) {
       _syncRequests.removeLast();
     }
     _syncRequests.addLast(syncRequest);
-    syncRequest.result = SyncResult();
   }
 
   void _clearQueue() {
+    _logger.finer('clearing sync queue');
     _syncRequests.clear();
   }
 
@@ -185,7 +195,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         await _syncFromServer(serverCommitId, localCommitId);
       }
       if (unCommittedEntries.isNotEmpty) {
-        _logger.finer('syncing to remote');
+        _logger.finer(
+            'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
         await _syncToRemote(unCommittedEntries);
       }
       syncResult.lastSyncedOn = DateTime.now().toUtc();
@@ -378,9 +389,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
-    var verbResult = await _atClient
-        .getRemoteSecondary()!
-        .executeCommand(command, auth: true);
+    var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('batch result:$verbResult');
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');

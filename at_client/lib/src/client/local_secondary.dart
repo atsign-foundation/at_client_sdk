@@ -43,11 +43,7 @@ class LocalSecondary implements Secondary {
           (_atClient.getPreferences()!.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         //1. if local and server are out of sync, first sync before updating current key-value
-        final syncService = AtClientManager.getInstance().syncService;
-        if (sync && !await syncService.isInSync()) {
-          _logger.finer('not in sync. calling sync before sync immediate');
-           syncService.sync();
-        }
+
         //2 . update/delete to local store
         var operation;
         if (builder is UpdateVerbBuilder) {
