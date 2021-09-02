@@ -466,9 +466,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
         _atClient.getCurrentAtSign()) {
       // actions for previous atSign
+      _syncRequests.clear();
       _logger.finer(
           'stopping stats notificationlistener for ${_atClient.getCurrentAtSign()}');
       _statsNotificationListener.stopAllSubscriptions();
+      _syncServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }
 }
