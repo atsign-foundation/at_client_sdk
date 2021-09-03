@@ -175,8 +175,8 @@ class NotificationServiceImpl
     notificationResult.notificationID =
         notificationParser.parse(notificationId).response;
     // Gets the notification status and parse the response.
-    var notificationStatus = notificationParser
-        .parse(await _getFinalNotificationStatus(notificationId));
+    var notificationStatus = notificationParser.parse(
+        await _getFinalNotificationStatus(notificationResult.notificationID!));
     switch (notificationStatus.response) {
       case 'delivered':
         notificationResult.notificationStatusEnum =
