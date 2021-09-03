@@ -138,11 +138,10 @@ class AtClientService {
     }
     // If cramSecret is not null and privateKey is null, pkam auth is not completed.
     // Perform initial auth to generate keys.
-    var isInitialAuthSuccessful = false;
     if (atClientPreference.cramSecret != null &&
         atClientPreference.privateKey == null) {
       _atClientAuthenticator ??= AtClientAuthenticator();
-      isInitialAuthSuccessful = await _atClientAuthenticator!
+      await _atClientAuthenticator!
           .performInitialAuth(atsign, atClientPreference);
     }
     // Get privateKey from KeyChainManager.
@@ -160,12 +159,8 @@ class AtClientService {
       _atClient!.getRemoteSecondary()!.atLookUp.privateKey =
           atClientPreference.privateKey;
       await _sync(atClientPreference, atsign);
-      // persist keys only when server is initialized for first time,
-      // in subsequent login, skip.
-      if (isInitialAuthSuccessful) {
-        _logger.finer('Persisting the keys');
-        await persistKeys(atsign);
-      }
+      // persist keys to the local- keystore
+      await persistKeys(atsign);
     }
     return true;
   }
