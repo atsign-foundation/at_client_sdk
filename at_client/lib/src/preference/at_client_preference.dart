@@ -1,8 +1,7 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
 
 /// Class to hold attributes for client preferences.
-/// Set the preferences for your application and pass it to [AtClientImpl.getClient].
+/// Set the preferences for your application and pass it to [AtClientManager.setCurrentAtSign].
 class AtClientPreference {
   /// Local device path of hive storage
   String? hiveStoragePath;
@@ -11,6 +10,8 @@ class AtClientPreference {
   String? commitLogPath;
 
   /// Syncing strategy of the client [SyncStrategy]
+  /// [Deprecated] Use [SyncService]
+  @deprecated
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
@@ -54,11 +55,11 @@ class AtClientPreference {
   int syncBatchSize = 5;
 }
 
+@deprecated
 enum SyncStrategy {
   /// Sync local keys immediately to secondary server for update and delete commands.
   IMMEDIATE,
 
-  /// Sync only when [SyncManager.sync] is invoked.
   ONDEMAND,
 
   /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].

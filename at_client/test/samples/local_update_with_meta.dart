@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'test_util.dart';
 import 'package:at_commons/at_commons.dart';
 

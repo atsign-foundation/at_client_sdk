@@ -8,8 +8,10 @@ class PreferenceManager {
 
   PreferenceManager(this.preferences, this._atSign);
 
+  @deprecated
   Future<void> setPreferences() async => _persistSyncStrategy();
 
+  @deprecated
   void _persistSyncStrategy() async {
     var syncData = AtData();
     syncData.data = preferences.syncStrategy.toString();

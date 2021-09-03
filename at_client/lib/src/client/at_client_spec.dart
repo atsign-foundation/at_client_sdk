@@ -64,6 +64,7 @@ abstract class AtClient {
   ///             sharedWith='@bob'
   ///    put(key, '+1 999 9999');
   /// ```
+  /// Starting version 3.0.0 [isDedicated] is deprecated
   Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
 
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.

@@ -15,7 +15,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -37,8 +37,7 @@ void main() {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
-    await atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -46,26 +45,22 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    var notification = await NotificationServiceImpl.create(atClient);
-    notification.notify(NotificationParams.forUpdate(phoneKey, value: value));
-    await Future.delayed(Duration(seconds: 10));
+    await atClientManager.notificationService.notify(NotificationParams.forUpdate(phoneKey, value: value));
   });
 
   test('notify deletion of a key to sharedWith atSign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
-    await atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
-    var notification = await NotificationServiceImpl.create(atClient);
     var notificationResult =
-        await notification.notify(NotificationParams.forDelete(phoneKey));
+        await atClientManager.notificationService.notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
     expect(notificationResult.atKey.key, 'phone');
@@ -76,15 +71,13 @@ void main() {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
-    await atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
-    var notification = await NotificationServiceImpl.create(atClient);
-    notification.notify(NotificationParams.forDelete(phoneKey),
+    await atClientManager.notificationService.notify(NotificationParams.forDelete(phoneKey),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
@@ -94,7 +87,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = await NotificationServiceImpl.create(atClient);
@@ -110,12 +103,10 @@ void main() {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
-    await atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
-    var notification = await NotificationServiceImpl.create(atClient);
-    notification.notify(NotificationParams.forText('phone', '@bob🛠'),
+    await atClientManager.notificationService.notify(NotificationParams.forText('phone', '@bob🛠'),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
@@ -141,7 +132,6 @@ AtClientPreference getAlicePreference(String atsign) {
   preference.hiveStoragePath = 'test/hive/client';
   preference.commitLogPath = 'test/hive/client/commit';
   preference.isLocalStoreRequired = true;
-  preference.syncStrategy = SyncStrategy.IMMEDIATE;
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   return preference;

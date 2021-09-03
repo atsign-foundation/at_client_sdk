@@ -1,5 +1,3 @@
-import 'package:at_client/src/service/sync_service_impl.dart';
-
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
   ///

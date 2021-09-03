@@ -7,6 +7,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_isolate_manager.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -15,6 +16,8 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart';
 import 'package:cron/cron.dart';
 
+/// [Deprecate] Use [SyncService]
+@deprecated
 class SyncManager {
   var logger = AtSignLogger('SyncManager');
 
@@ -46,6 +49,7 @@ class SyncManager {
     }
   }
 
+  @deprecated
   Future<bool> isInSync() async {
     var serverCommitId = await SyncUtil.getLatestServerCommitId(
         _remoteSecondary!, _preference!.syncRegex);
@@ -64,6 +68,8 @@ class SyncManager {
   /// Cloud Secondary server throws [BufferOverFlowException] is sync data is large than the buffer size.
   /// Optionally isStream when set to true, initiates the sync process via streams which facilitates in
   /// syncing large data without [BufferOverFlowException].
+  /// [Deprecated] Use [SyncService]
+  @deprecated
   Future<void> sync(
       {bool appInit = false, String? regex}) async {
     //initially isSyncInProgress and pendingSyncExists are false.
@@ -123,7 +129,7 @@ class SyncManager {
             ..commitId = lastSyncedCommitId
             ..regex = regex;
           var syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
-          if (syncResponse != null && syncResponse != 'data:null') {
+          if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
             syncResponse = syncResponse.replaceFirst('data:', '');
             var syncResponseJson = jsonDecode(syncResponse);
             // Iterates over each commit

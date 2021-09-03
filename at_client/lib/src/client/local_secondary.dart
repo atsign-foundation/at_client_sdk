@@ -4,7 +4,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -16,7 +15,7 @@ import 'package:at_utils/at_utils.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
 /// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
-/// Delete and Update commands will be synced to the server by [SyncManager] based on [SyncStrategy].
+/// Delete and Update commands will be synced to the server
 class LocalSecondary implements Secondary {
   final AtClient _atClient;
 
@@ -32,40 +31,24 @@ class LocalSecondary implements Secondary {
   }
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
-  /// set to true or if [SyncStrategy] is [SyncStrategy.IMMEDIATE] then data is synced from local to remote.
+  /// set to true then data is synced from local to remote.
   /// if [sync] is set to false, no sync operation is done.
   @override
   Future<String?> executeVerb(VerbBuilder builder, {sync}) async {
     var verbResult;
 
     try {
-      sync ??=
-          (_atClient.getPreferences()!.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         //1. if local and server are out of sync, first sync before updating current key-value
 
         //2 . update/delete to local store
-        var operation;
         if (builder is UpdateVerbBuilder) {
           verbResult = await _update(builder);
-          switch (builder.operation) {
-            case UPDATE_META:
-              operation = CommitOp.UPDATE_META;
-              break;
-            case UPDATE_ALL:
-              operation = CommitOp.UPDATE_ALL;
-              break;
-            default:
-              operation = CommitOp.UPDATE;
-          }
         } else if (builder is DeleteVerbBuilder) {
           verbResult = await _delete(builder);
-          operation = CommitOp.DELETE;
         }
         // 3. sync latest update/delete if strategy is immediate
-        if (sync &&
-            _atClient.getPreferences()!.syncStrategy ==
-                SyncStrategy.IMMEDIATE) {
+        if (sync != null && sync) {
           _logger.finer('calling sync immediate from local secondary');
           AtClientManager.getInstance().syncService.sync();
         }
