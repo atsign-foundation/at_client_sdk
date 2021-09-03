@@ -57,7 +57,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
     _cron.schedule(Schedule(seconds: _syncRunIntervalSeconds), () async {
-      _processSyncRequests();
+      await _processSyncRequests();
     });
   }
 
@@ -95,7 +95,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     });
   }
 
-  void _processSyncRequests() async {
+  Future<void> _processSyncRequests() async {
     _logger.finer('in _processSyncRequests');
     if (!await NetworkUtil.isNetworkAvailable()) {
       _logger.finer('skipping sync due to network unavailability');
