@@ -3,14 +3,15 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:crypton/crypton.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:crypton/crypton.dart';
 
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
@@ -128,9 +129,8 @@ class Monitor {
         _handleError(error);
       }, onDone: () {
         _logger.finer('monitor done');
-        _monitorConnection!.close();
+        _monitorConnection!.getSocket().destroy();
         status = MonitorStatus.Stopped;
-        // Future.delayed(Duration(seconds: 5), () => retryCallBack);
         _retryCallBack();
       });
       await _authenticateConnection();
@@ -138,6 +138,7 @@ class Monitor {
       status = MonitorStatus.Started;
       _logger.finer(
           'monitor started for $_atSign with last notification time: $_lastNotificationTime');
+
       return;
     } on Exception catch (e) {
       _handleError(e);
@@ -150,20 +151,20 @@ class Monitor {
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
     }
-    _logger.finer('from result:$fromResponse');
+    _logger.finer(
+        'Authenticating the monitor connection: from result:$fromResponse');
     fromResponse = fromResponse.trim().replaceAll('data:', '');
-    _logger.finer('fromResponse $fromResponse');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature =
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
-    _logger.finer('Sending command pkam:$signature');
+    _logger.finer('Authenticating the monitor connection: pkam:$signature');
     await _monitorConnection!.write('pkam:$signature\n');
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
-      throw UnAuthenticatedException('Auth failed');
+      throw UnAuthenticatedException('Monitor connection authentication failed');
     }
-    _logger.finer('auth success');
+    _logger.finer('Monitor connection authentication successful');
   }
 
   Future<OutboundConnection> _createNewConnection(
@@ -232,7 +233,7 @@ class Monitor {
   /// Stops the monitor. Call [Monitor#start] to start it again.
   void stop() {
     status = MonitorStatus.Stopped;
-    if(_monitorConnection != null) {
+    if (_monitorConnection != null) {
       _monitorConnection!.close();
     }
   }

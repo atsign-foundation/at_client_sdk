@@ -389,7 +389,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
-    var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
+    var verbResult = await _remoteSecondary
+        .executeCommand(command, auth: true);
     _logger.finer('batch result:$verbResult');
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');

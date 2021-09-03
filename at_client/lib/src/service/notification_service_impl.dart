@@ -26,6 +26,7 @@ class NotificationServiceImpl
   late AtClient _atClient;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
+  var _lastMonitorRetried;
 
   static Future<NotificationService> create(AtClient atClient) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
@@ -125,13 +126,19 @@ class NotificationServiceImpl
   }
 
   void _monitorRetry() {
+    if (_lastMonitorRetried != null &&
+        DateTime.now().toUtc().difference(_lastMonitorRetried).inSeconds < 15) {
+      _logger.info('Attempting to retry in less than 15 seconds... Rejected');
+      return;
+    }
     if (_isMonitorPaused) {
       _logger.finer('monitor is paused. not retrying');
       return;
     }
+    _lastMonitorRetried = DateTime.now().toUtc();
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
     Future.delayed(
-        Duration(seconds: 5),
+        Duration(seconds: 15),
         () async => _monitor!
             .start(lastNotificationTime: await _getLastNotificationTime()));
   }
@@ -164,12 +171,12 @@ class NotificationServiceImpl
       }
       return notificationResult;
     }
-    notificationId = notificationId.replaceAll('data:', '');
-    notificationResult.notificationID = notificationId;
-
+    var notificationParser = NotificationResponseParser();
+    notificationResult.notificationID =
+        notificationParser.parse(notificationId).response;
     // Gets the notification status and parse the response.
-    var notificationStatus = NotificationResponseParser()
-        .parse(await _getFinalNotificationStatus(notificationId));
+    var notificationStatus = notificationParser.parse(
+        await _getFinalNotificationStatus(notificationResult.notificationID!));
     switch (notificationStatus.response) {
       case 'delivered':
         notificationResult.notificationStatusEnum =
@@ -212,7 +219,6 @@ class NotificationServiceImpl
     final _controller = StreamController<AtNotification>();
     streamListeners[regex] = _controller;
     _logger.finer('added regex to listener $regex');
-    _init();
     return _controller.stream;
   }
 
