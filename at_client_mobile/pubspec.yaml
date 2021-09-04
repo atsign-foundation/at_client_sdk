@@ -16,16 +16,13 @@ dependencies:
   hive: ^2.0.4
   crypton: ^2.0.1
   at_client: ^2.0.4
-  at_lookup: ^2.0.5
-  at_commons: ^2.0.5
-  at_utils: ^2.0.4
+  at_lookup: ^3.0.0
+  at_commons: ^3.0.0
+  at_utils: ^3.0.0
 
 dependency_overrides:
   at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: at_client
-      ref: trunk
+    path: ../at_client
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
