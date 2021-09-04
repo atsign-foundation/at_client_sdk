@@ -13,7 +13,7 @@ void main() {
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    await atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -41,7 +41,6 @@ AtClientPreference getAlicePreference(String atsign) {
   preference.hiveStoragePath = 'test/hive/client';
   preference.commitLogPath = 'test/hive/client/commit';
   preference.isLocalStoreRequired = true;
-  preference.syncStrategy = SyncStrategy.IMMEDIATE;
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   return preference;

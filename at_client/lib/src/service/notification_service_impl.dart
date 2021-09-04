@@ -88,6 +88,7 @@ class NotificationServiceImpl
     return null;
   }
 
+  @override
   void stopAllSubscriptions() {
     _isMonitorPaused = true;
     _monitor?.stop();

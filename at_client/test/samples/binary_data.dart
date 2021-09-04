@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:path/path.dart';
 import 'test_util.dart';
 import 'package:at_commons/at_commons.dart';
@@ -13,10 +12,6 @@ void main() async {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', TestUtil.getAlicePreference());
     var atClient = atClientManager.atClient;
-    if (atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
     var imageLocation = 'image.jpg'; //path to your image file
     var imageData = getdata(imageLocation);
     var metadata = Metadata()..isBinary = true;

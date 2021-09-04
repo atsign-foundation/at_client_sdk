@@ -10,7 +10,6 @@ import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
-import 'package:at_client/src/manager/preference_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
@@ -168,14 +167,14 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  @deprecated
   SyncManager? getSyncManager() {
     return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
   }
 
   @override
   void setPreferences(AtClientPreference preference) async {
-    var preferenceManager = PreferenceManager(preference, currentAtSign);
-    await preferenceManager.setPreferences();
+    _preference = preference;
   }
 
   Future<bool> persistPrivateKey(String privateKey) async {
@@ -283,7 +282,7 @@ class AtClientImpl implements AtClient {
           encryptedResultMap['data'] = decryptedValue;
         } on Error catch (e) {
           _logger.severe(
-              'decryption error for command ${builder.buildCommand()}: ${e}');
+              'decryption error for command ${builder.buildCommand()}: $e');
         }
       } else {
         //resultant value is encrypted. Decrypting to original value.
@@ -379,7 +378,7 @@ class AtClientImpl implements AtClient {
                 'decryption exception for command ${builder.buildCommand()}: ${e.toString}');
           } on Error catch (e) {
             _logger.severe(
-                'decryption error for command ${builder.buildCommand()}: ${e}');
+                'decryption error for command ${builder.buildCommand()}: $e');
           }
         }
         return encryptedResultMap;

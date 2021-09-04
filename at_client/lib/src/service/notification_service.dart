@@ -72,6 +72,9 @@ abstract class NotificationService {
   ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {Function? onSuccess, Function? onError});
+
+  /// Stops all subscriptions on the current instance
+  void stopAllSubscriptions();
 }
 
 /// [NotificationParams] represents a notification input params.

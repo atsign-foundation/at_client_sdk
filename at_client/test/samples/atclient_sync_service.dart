@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:test/test.dart';
 
@@ -12,7 +11,6 @@ void main() {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
-    var syncService = await SyncServiceImpl.create(atClient);
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary
@@ -23,8 +21,8 @@ void main() {
       expect(putResult, startsWith('data:'));
       print('putResult $putResult');
     }
-    expect(await syncService.isInSync(), false);
-    syncService.sync(onDone: onSuccess, onError: onError);
+    expect(await atClientManager.syncService.isInSync(), false);
+    atClientManager.syncService.sync(onDone: onSuccess);
     await Future.delayed(Duration(seconds: 10));
   });
 
@@ -52,15 +50,9 @@ void main() {
           expect(isInSync, true);
           print('Success: $syncResult : isInSync: $isInSync');
           expect(syncResult.syncStatus, SyncStatus.success);
-        },
-        onError: onError);
-    syncService.sync(
-        onDone: onSuccess,
-        onError: (syncResult) {
-          expect(syncResult.syncStatus, SyncStatus.failure);
-          expect(syncResult.atClientException.errorMessage,
-              'Sync-InProgress. Cannot start a new sync process');
         });
+    syncService.sync(
+        onDone: onSuccess);
     await Future.delayed(Duration(seconds: 10));
   });
 }

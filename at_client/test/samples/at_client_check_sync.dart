@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_utils/at_logger.dart';
 
