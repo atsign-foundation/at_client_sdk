@@ -24,8 +24,8 @@ import 'package:uuid/uuid.dart';
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static const _syncRequestThreshold = 3,
-      _syncRequestTriggerInSeconds = 30,
-      _syncRunIntervalSeconds = 30,
+      _syncRequestTriggerInSeconds = 3,
+      _syncRunIntervalSeconds = 5,
       _queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
@@ -57,7 +57,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
     _cron.schedule(Schedule(seconds: _syncRunIntervalSeconds), () async {
-      await _processSyncRequests();
+      try {
+        await _processSyncRequests();
+      } on Exception catch (e) {
+        _logger.severe('exception while running process sync:  $e');
+      }
     });
   }
 
@@ -118,7 +122,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.finer('skipping sync - queue length ${_syncRequests.length}');
       return;
     }
-    final syncRequest = _syncRequests.removeFirst();
+    final syncRequest = _getSyncRequest();
     try {
       if (await isInSync()) {
         _logger.finer('server and local are in sync - ${syncRequest._id}');
@@ -139,6 +143,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     final serverCommitId = await _getServerCommitId();
     await _sync(serverCommitId, syncRequest);
     _syncComplete(syncRequest);
+  }
+
+  SyncRequest _getSyncRequest() {
+    return _syncRequests.firstWhere(
+        (syncRequest) => syncRequest.requestSource == SyncRequestSource.app,
+        orElse: () => _syncRequests.removeFirst());
   }
 
   void _syncError(SyncRequest syncRequest) {
@@ -389,8 +399,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
-    var verbResult = await _remoteSecondary
-        .executeCommand(command, auth: true);
+    var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('batch result:$verbResult');
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');
