@@ -145,6 +145,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _syncComplete(syncRequest);
   }
 
+  /// Fetches the first app request from the queue. If there are no app requests, the first element of the
+  /// queue is returned.
   SyncRequest _getSyncRequest() {
     return _syncRequests.firstWhere(
         (syncRequest) => syncRequest.requestSource == SyncRequestSource.app,
