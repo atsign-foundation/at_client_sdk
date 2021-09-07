@@ -17,6 +17,7 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/stream_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -863,10 +864,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  @deprecated
+  /// use [StreamService.createStream]
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
-    var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
+    var streamResponse = AtStreamResponse(streamId);
     var file = File(filePath);
     var data = file.readAsBytesSync();
     var fileName = basename(filePath);
@@ -901,6 +904,7 @@ class AtClientImpl implements AtClient {
     return streamResponse;
   }
 
+  /// [deprecated] Create a receiver stream using use [StreamService.createStream] and call [StreamReceiver.ack]
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -910,7 +914,6 @@ class AtClientImpl implements AtClient {
       Function streamReceiveCallBack) async {
     var handler = StreamNotificationHandler();
     handler.remoteSecondary = getRemoteSecondary();
-    handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
     handler.encryptionService = _encryptionService;
     var notification = AtStreamNotification()

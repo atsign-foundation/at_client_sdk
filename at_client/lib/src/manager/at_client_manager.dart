@@ -3,6 +3,8 @@ import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/stream_service.dart';
+import 'package:at_client/src/service/stream_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 
@@ -24,6 +26,7 @@ class AtClientManager {
   AtClient get atClient => _currentAtClient;
   late SyncService syncService;
   late NotificationService notificationService;
+  late StreamService streamService;
   final _changeListeners = <AtSignChangeListener>[];
 
   static final AtClientManager _singleton = AtClientManager._internal();
@@ -48,6 +51,7 @@ class AtClientManager {
     notificationService =
         await NotificationServiceImpl.create(_currentAtClient);
     syncService = await SyncServiceImpl.create(_currentAtClient);
+    streamService = StreamServiceImpl.create(_currentAtClient);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
     return this;

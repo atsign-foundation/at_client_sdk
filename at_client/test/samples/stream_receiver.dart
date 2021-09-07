@@ -2,12 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-
+import 'package:at_client/src/response/stream_notification_parser.dart';
+import 'package:at_client/src/stream/at_stream.dart';
+import 'package:at_client/src/stream/at_stream_ack.dart';
+import 'package:at_utils/at_logger.dart';
 import 'test_util.dart';
 
 var atClient;
 
 void main() async {
+  AtSignLogger.root_level = 'finer';
   try {
     final atsign = '@bob🛠';
     final preference = TestUtil.getBobPreference();
@@ -31,16 +35,24 @@ Future<void> _notificationCallBack(AtNotification atNotification) async {
   atKey = atKey.replaceFirst(fromAtSign, '');
   atKey = atKey.trim();
   if (atKey == 'stream_id.atmosphere') {
-    var valueObject = atNotification.value!;
-    var streamId = valueObject.split(':')[0];
-    var fileName = valueObject.split(':')[1];
-    var fileLength = int.parse(valueObject.split(':')[2]);
-    fileName = utf8.decode(base64.decode(fileName));
+    final streamNotification = StreamNotificationParser('atmosphere')
+        .parseStreamNotification(atNotification);
+    if (streamNotification == null) {
+      return;
+    }
     var userResponse = true; //UI user response
     if (userResponse == true) {
       print('user accepted transfer.Sending ack back');
-      await atClient!.sendStreamAck(streamId, fileName, fileLength, fromAtSign,
-          _streamCompletionCallBack, _streamReceiveCallBack);
+      final atStream = AtClientManager.getInstance().streamService.createStream(
+          StreamType.RECEIVE,
+          streamId: streamNotification.streamId);
+      await atStream.receiver!.ack(
+          AtStreamAck()
+            ..senderAtSign = streamNotification.senderAtSign
+            ..fileName = streamNotification.fileName
+            ..fileLength = streamNotification.fileLength,
+          _streamCompletionCallBack,
+          _streamProgressCallBack);
     }
   } else {
     //TODO handle other notifications
@@ -49,7 +61,7 @@ Future<void> _notificationCallBack(AtNotification atNotification) async {
   }
 }
 
-void _streamReceiveCallBack(var bytesReceived) {
+void _streamProgressCallBack(var bytesReceived) {
   print('Receive callback bytes received: $bytesReceived');
 }
 
