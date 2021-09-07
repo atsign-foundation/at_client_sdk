@@ -56,7 +56,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _scheduleSyncRun() {
     _cron = Cron();
-    _cron.schedule(Schedule(seconds: _syncRunIntervalSeconds), () async {
+    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
+        () async {
       try {
         await _processSyncRequests();
       } on Exception catch (e) {
@@ -69,6 +70,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void sync({Function? onDone}) {
     final syncRequest = SyncRequest();
     syncRequest.onDone = onDone;
+    syncRequest.requestSource = SyncRequestSource.app;
     syncRequest.requestedOn = DateTime.now().toUtc();
     syncRequest.result = SyncResult();
     _addSyncRequestToQueue(syncRequest);
