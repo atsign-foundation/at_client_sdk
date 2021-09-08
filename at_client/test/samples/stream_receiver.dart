@@ -45,8 +45,8 @@ Future<void> _notificationCallBack(AtNotification atNotification) async {
       print('user accepted transfer.Sending ack back');
       final atStream = AtClientManager.getInstance().streamService.createStream(
           StreamType.RECEIVE,
-          streamId: streamNotification.streamId);
-      await atStream.receiver!.ack(
+          streamId: streamNotification.streamId) as StreamReceiver;
+      await atStream.ack(
           AtStreamAck()
             ..senderAtSign = streamNotification.senderAtSign
             ..fileName = streamNotification.fileName

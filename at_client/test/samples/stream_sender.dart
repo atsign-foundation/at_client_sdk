@@ -14,11 +14,13 @@ void main() async {
     final preference = TestUtil.getAlicePreference();
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
-    var atStreamRequest = AtStreamRequest('@bob🛠', '/home/murali/Pictures/@/cat.jpeg');
+    var atStreamRequest =
+        AtStreamRequest('@bob🛠', '/home/murali/Pictures/@/cat.jpeg');
     atStreamRequest.namespace = 'atmosphere';
-    final streamSender =
-        atClientManager.streamService.createStream(StreamType.SEND).sender;
-    await streamSender!.send(atStreamRequest, _onDone, _onError);
+    final streamSender = atClientManager.streamService
+        .createStream(StreamType.SEND) as StreamSender;
+    var streamId =  await streamSender.send(atStreamRequest, _onDone, _onError);
+    print('sent stream : $streamId');
     while (true) {
       print('Waiting for notification');
       await Future.delayed(Duration(seconds: 5));
@@ -31,7 +33,7 @@ void main() async {
 }
 
 void _onDone(AtStreamResponse response) {
-  print('stream done callback');
+  print('stream done callback for streamId: ${response.streamId}');
   print(response);
 }
 

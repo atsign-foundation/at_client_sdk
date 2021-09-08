@@ -30,14 +30,11 @@ class StreamServiceImpl implements StreamService, AtSignChangeListener {
         _atClient.getCurrentAtSign()!, streamType,
         streamId: streamId);
     if (streamType == StreamType.SEND) {
-      stream.sender!.remoteSecondary = RemoteSecondary(
-          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
-      stream.sender!.encryptionService = _atClient.encryptionService;
+      stream.encryptionService = _atClient.encryptionService;
+      stream.preference = _atClient.getPreferences()!;
     } else if (streamType == StreamType.RECEIVE) {
-      stream.receiver!.encryptionService = _atClient.encryptionService;
-      stream.receiver!.preference = _atClient.getPreferences()!;
-      stream.receiver!.remoteSecondary = RemoteSecondary(
-          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+      stream.encryptionService = _atClient.encryptionService;
+      stream.preference = _atClient.getPreferences()!;
     }
     return stream;
   }

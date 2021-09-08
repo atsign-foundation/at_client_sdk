@@ -9,8 +9,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
 class StreamNotificationHandler {
-  RemoteSecondary? remoteSecondary;
-
   AtClientPreference? preference;
 
   EncryptionService? encryptionService;

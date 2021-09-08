@@ -913,7 +913,6 @@ class AtClientImpl implements AtClient {
       Function streamCompletionCallBack,
       Function streamReceiveCallBack) async {
     var handler = StreamNotificationHandler();
-    handler.remoteSecondary = getRemoteSecondary();
     handler.preference = _preference;
     handler.encryptionService = _encryptionService;
     var notification = AtStreamNotification()
