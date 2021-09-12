@@ -13,6 +13,9 @@ class AtClientException implements Exception {
 }
 
 class AtKeyException extends AtClientException {
-  AtKeyException(message)
-      : super(at_client_error_codes['AtKeyException'], message);
+  AtKeyException(message) : super(at_client_error_codes['AtKeyException'], message);
+}
+
+class AtNamespaceException extends AtClientException {
+  AtNamespaceException(message) : super(at_client_error_codes['NamespaceException'], message);
 }
