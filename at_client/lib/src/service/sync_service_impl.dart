@@ -25,7 +25,7 @@ import 'package:uuid/uuid.dart';
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static const _syncRequestThreshold = 3,
       _syncRequestTriggerInSeconds = 3,
-      _syncRunIntervalSeconds = 5,
+      _syncRunIntervalSeconds = 30,
       _queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
@@ -107,12 +107,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.finer('skipping sync due to network unavailability');
       return;
     }
-//    if (_syncRequests.isNotEmpty) {
-//      var lastRequested = _syncRequests.elementAt(0).requestedOn;
-//      print('first request time: ${lastRequested}');
-//      print('current time: ${DateTime.now().toUtc()}');
-//      print('difference: ${lastRequested.difference(DateTime.now().toUtc())}');
-//    }
     if (_syncRequests.isEmpty ||
         (_syncRequests.length < _syncRequestThreshold &&
             (_syncRequests.isNotEmpty &&

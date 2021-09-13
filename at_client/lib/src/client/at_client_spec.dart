@@ -7,6 +7,7 @@ import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/stream_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
@@ -403,6 +404,7 @@ abstract class AtClient {
       {String? regex});
 
   /// Streams the file in [filePath] to [sharedWith] atSign.
+  @deprecated /// use [StreamService.createStream]
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
 

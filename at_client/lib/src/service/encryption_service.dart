@@ -188,12 +188,18 @@ class EncryptionService {
     }
   }
 
-  //TODO remove code duplication - encrypt and encryptStream
   Future<List<int>> encryptStream(List<int> value, String sharedWith) async {
+    var sharedKey = await getStreamEncryptionKey(sharedWith);
+    var encryptedValue = EncryptionUtil.encryptBytes(value, sharedKey);
+    return encryptedValue;
+  }
+
+  //TODO remove code duplication - encrypt and getStreamEncryptionKey
+  Future<String> getStreamEncryptionKey(String sharedWith) async {
     var currentAtSignPublicKey =
-        await (localSecondary!.getEncryptionPublicKey(currentAtSign!));
+    await (localSecondary!.getEncryptionPublicKey(currentAtSign!));
     var currentAtSignPrivateKey =
-        await localSecondary!.getEncryptionPrivateKey();
+    await localSecondary!.getEncryptionPrivateKey();
     var sharedWithUser = sharedWith.replaceFirst('@', '');
     // //1. Get/Generate AES key for sharedWith atsign
     var llookupVerbBuilder = LLookupVerbBuilder()
@@ -206,20 +212,21 @@ class EncryptionService {
       sharedKey = sharedKey.replaceFirst('data:', '');
       sharedKey =
           EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+      return sharedKey;
     }
     //2. Lookup public key of sharedWith atsign
     var plookupBuilder = PLookupVerbBuilder()
       ..atKey = 'publickey'
       ..sharedBy = sharedWith;
     var sharedWithPublicKey =
-        await remoteSecondary!.executeAndParse(plookupBuilder);
+    await remoteSecondary!.executeAndParse(plookupBuilder);
     if (sharedWithPublicKey == 'null' || sharedWithPublicKey.isEmpty) {
       throw KeyNotFoundException(
           'shared key not found. data sharing is forbidden.');
     }
     //3. Encrypt shared key with public key of sharedWith atsign and store
     var encryptedSharedKey =
-        EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
+    EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
 
     var updateSharedKeyBuilder = UpdateVerbBuilder()
       ..sharedWith = sharedWith
@@ -233,7 +240,7 @@ class EncryptionService {
       throw KeyNotFoundException('encryption public key not found');
     }
     var encryptedSharedKeyForCurrentAtSign =
-        EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey);
+    EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey);
 
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
       ..sharedBy = currentAtSign
@@ -241,10 +248,7 @@ class EncryptionService {
       ..value = encryptedSharedKeyForCurrentAtSign;
     await localSecondary!
         .executeVerb(updateSharedKeyForCurrentAtSignBuilder, sync: true);
-
-    //5. Encrypt value using sharedKey
-    var encryptedValue = EncryptionUtil.encryptBytes(value, sharedKey);
-    return encryptedValue;
+    return sharedKey;
   }
 
   List<int> decryptStream(List<int> encryptedValue, String sharedKey) {
@@ -293,6 +297,7 @@ class EncryptionService {
     return base64Encode(dataSignature);
   }
 
+  /// This function was implemented to migrate old unencrypted keys. No longer applicable.
   @deprecated
   Future<void> encryptUnencryptedData() async {
     var atClient = await (AtClientImpl.getClient(currentAtSign));
@@ -389,7 +394,9 @@ class EncryptionService {
       ..atKey = AT_ENCRYPTION_SHARED_KEY;
     encryptedSharedKey =
         await localSecondary!.executeVerb(localLookupSharedKeyBuilder);
+    print('encryptedSharedKey from local: $encryptedSharedKey');
     if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
+      print('getting encrypted shared key from remote');
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
         ..atKey = AT_ENCRYPTION_SHARED_KEY
         ..sharedBy = sharedBy

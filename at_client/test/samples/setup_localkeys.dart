@@ -7,9 +7,9 @@ import 'test_util.dart';
 
 void main() async {
   try {
-    final atSign = '@alice🛠';
+    final atSign = '@bob🛠';
     var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
+        .setCurrentAtSign(atSign, 'wavi', TestUtil.getBobPreference());
     final atClient = atClientManager.atClient;
     var metadata = Metadata();
     metadata.namespaceAware = false;
