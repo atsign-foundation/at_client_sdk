@@ -34,16 +34,16 @@ class AtClientValidation {
   static void _validateMetadata(Metadata? metadata) {
     if (metadata == null) {
       return;
-    } else
+    }
     // validate TTL
     if (metadata.ttl != null && metadata.ttl! < 0) {
       throw AtKeyException('Invalid TTL value: ${metadata.ttl}. TTL value cannot be less than 0');
-    } else
+    }
 
     // validate TTB
     if (metadata.ttb != null && metadata.ttb! < 0) {
       throw AtKeyException('Invalid TTB value: ${metadata.ttb}. TTB value cannot be less than 0');
-    } else
+    }
 
     //validate TTR
     if (metadata.ttr != null && metadata.ttr! < -1) {
