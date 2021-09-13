@@ -34,19 +34,14 @@ class AtClientManager {
     return _singleton;
   }
 
-  Future<AtClientManager> setCurrentAtSign(
-      String atSign, String? namespace, AtClientPreference preference) async {
-    if (_previousAtClient != null &&
-        _previousAtClient?.getCurrentAtSign() == atSign) {
+  Future<AtClientManager> setCurrentAtSign(String atSign, String? namespace, AtClientPreference preference) async {
+    if (_previousAtClient != null && _previousAtClient?.getCurrentAtSign() == atSign) {
       return this;
     }
     _atSign = atSign;
-    _currentAtClient =
-        await AtClientImpl.create(_atSign, namespace, preference);
-    final switchAtSignEvent =
-        SwitchAtSignEvent(_previousAtClient, _currentAtClient);
-    notificationService =
-        await NotificationServiceImpl.create(_currentAtClient);
+    _currentAtClient = await AtClientImpl.create(_atSign, namespace, preference);
+    final switchAtSignEvent = SwitchAtSignEvent(_previousAtClient, _currentAtClient);
+    notificationService = await NotificationServiceImpl.create(_currentAtClient);
     syncService = await SyncServiceImpl.create(_currentAtClient);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
@@ -58,8 +53,8 @@ class AtClientManager {
   }
 
   void _notifyListeners(SwitchAtSignEvent switchAtSignEvent) {
-    _changeListeners.forEach((listener) {
+    for (AtSignChangeListener listener in _changeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
-    });
+    }
   }
 }

@@ -978,13 +978,15 @@ class AtClientImpl implements AtClient {
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    AtClientValidation.validateAtSign(
+    await AtClientValidation.validateAtSign(
         notificationParams.atKey.sharedWith!, _preference!.rootDomain, _preference!.rootPort);
     // validate sharedBy atSign
     notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
-    AtClientValidation.validateAtKey(notificationParams.atKey, preferences: _preference);
+    await AtClientValidation.validateAtKey(
+        notificationParams.atKey, AtClientManager.getInstance().atClient.getCurrentAtSign()!,
+        preferences: _preference);
     // validate metadata
     // If namespaceAware is set to true, append nameSpace to key.
     if (notificationParams.atKey.metadata != null && notificationParams.atKey.metadata!.namespaceAware) {

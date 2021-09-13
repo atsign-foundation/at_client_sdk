@@ -26,7 +26,7 @@ void main() {
     var getResult = await atClient.get(phoneKey);
     expect(getResult.value, value);
   });
-  tearDown(() async => await tearDownFunc());
+  tearDown(() async => tearDownFunc());
 }
 
 Future<void> tearDownFunc() async {

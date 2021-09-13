@@ -76,7 +76,7 @@ class RemoteSecondary implements Secondary {
       ..regex = regex;
 
     var atCommand = syncVerbBuilder.buildCommand();
-    return await atLookUp.executeCommand(atCommand, auth: true);
+    return atLookUp.executeCommand(atCommand, auth: true);
   }
 
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].

@@ -108,7 +108,7 @@ void main() {
         .notify(NotificationParams.forText('phone', '@bob🛠')..atKey.namespace = 'me', onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
-  tearDown(() async => await tearDownFunc());
+  tearDown(() async => tearDownFunc());
 }
 
 void onSuccessCallback(NotificationResult notificationResult) {

@@ -31,7 +31,7 @@ void main() {
     var deleteResult = await atClient.delete(locationKey, isDedicated: true);
     expect(deleteResult, true);
   });
-  tearDown(() async => await tearDownFunc());
+  tearDown(() async => tearDownFunc());
 }
 
 Future<void> tearDownFunc() async {
