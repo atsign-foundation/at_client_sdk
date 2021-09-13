@@ -85,12 +85,13 @@ void main() {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
+    AtClient atClient = atClientManager.atClient;
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = await NotificationServiceImpl.create(atClient);
-    var notificationResult = await notification.notify(NotificationParams.forText('Hello', '@bob🛠'));
+    var notificationResult =
+        await notification.notify(NotificationParams.forText('Hello', '@bob🛠')..atKey.namespace = 'me');
     expect(notificationResult.notificationStatusEnum.toString(), 'NotificationStatusEnum.delivered');
     expect(notificationResult.atKey.key, 'Hello');
     expect(notificationResult.atKey.sharedWith, '@bob🛠');
@@ -104,10 +105,10 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     await atClientManager.notificationService
-        .notify(NotificationParams.forText('phone', '@bob🛠'), onSuccess: onSuccessCallback);
+        .notify(NotificationParams.forText('phone', '@bob🛠')..atKey.namespace = 'me', onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
-  // tearDown(() async => await tearDownFunc());
+  tearDown(() async => await tearDownFunc());
 }
 
 void onSuccessCallback(NotificationResult notificationResult) {
