@@ -51,6 +51,8 @@ class Monitor {
 
   RemoteSecondary? _remoteSecondary;
 
+  final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
+
   ///
   /// Creates a [Monitor] object.
   ///
@@ -209,7 +211,7 @@ class Monitor {
       if (queueLength > 0) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
-        monitorResponse = DefaultResponseParser()
+        monitorResponse = _defaultResponseParser
             .parse(_monitorVerbResponseQueue.removeFirst());
       }
     }
