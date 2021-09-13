@@ -21,6 +21,7 @@ import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -35,99 +36,6 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
-abstract class AtClientBase implements AtClient {
-  AtClient? _atClient;
-
-  /// This function is used to validate the [key].
-  /// Throws [AtKeyException] if key has invalid values.
-  static bool validateKey(String? key) {
-    /// Key cannot be null.
-    if (key == null) {
-      throw AtKeyException('AtKey is null');
-    } else
-
-    /// Key cannot be empty.
-    if (key.isEmpty) {
-      throw AtKeyException('Key cannot be empty');
-    } else
-
-    /// Key cannot contain @
-    if (key.contains('@')) {
-      throw AtKeyException('Key cannot contain @');
-    } else
-
-    /// Key cannot contain whitespaces
-    if (key.contains(' ')) {
-      throw AtKeyException('Key cannot contain whitespaces');
-    } else {
-      return true;
-    }
-  }
-
-  /// Validates the atKey
-  Future<void> validateAtKey(AtKey atKey) async {
-    validateKey(atKey.key!);
-    validateNamespace(atKey.namespace);
-    if ((atKey.metadata != null && atKey.metadata!.isCached) || atKey.key!.startsWith('cached:')) {
-      throw UnAuthorizedException('Cannot update a cached key.');
-    }
-    validateMetadata(atKey.metadata);
-    if (atKey.sharedWith != null) {
-      atKey.sharedWith = AtUtils.fixAtSign(atKey.sharedWith!);
-      // 5.1 verify only if network is available. validate if the sharedWith @sign exists.
-      if (await NetworkUtil.isNetworkAvailable()) {
-        validateAtSign(
-            atKey.sharedWith!, _atClient!.getPreferences()!.rootDomain, _atClient!.getPreferences()!.rootPort);
-      }
-    }
-  }
-
-  /// validateNamespace checks if the namespace is valid.
-  /// Throws [AtNamespaceException] if namespace is empty or null.
-  static bool validateNamespace(String? namespace) {
-    if (namespace == null || namespace.isEmpty || namespace == 'null') {
-      throw AtNamespaceException('Namespace cannot be null or empty');
-    }
-    return true;
-  }
-
-  /// Validates the metadata of the key.
-  /// Throws [AtKeyException] if metadata has invalid values.
-  static void validateMetadata(Metadata? metadata) {
-    if (metadata == null) {
-      return;
-    } else
-    // validate TTL
-    if (metadata.ttl != null && metadata.ttl! < 0) {
-      throw AtKeyException('Invalid TTL value: ${metadata.ttl}. TTL value cannot be less than 0');
-    } else
-
-    // validate TTB
-    if (metadata.ttb != null && metadata.ttb! < 0) {
-      throw AtKeyException('Invalid TTB value: ${metadata.ttb}. TTB value cannot be less than 0');
-    } else
-
-    //validate TTR
-    if (metadata.ttr != null && metadata.ttr! < -1) {
-      throw AtKeyException(
-          'Invalid TTR value: ${metadata.ttr}. valid values for TTR are -1 and greater than or equal to 1');
-    }
-  }
-
-  /// Verify if the atSign exists.
-  /// Throws [InvalidAtSignException] if atSign does not exist.
-  static Future<void> validateAtSign(String atSign, String rootDomain, int rootPort) async {
-    if (atSign.isEmpty) {
-      throw AtKeyException('@sign cannot be empty');
-    }
-    try {
-      await AtClientUtil.findSecondary(atSign, rootDomain, rootPort);
-    } on SecondaryNotFoundException {
-      throw AtKeyException('$atSign does not exist');
-    }
-  }
-}
-
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
@@ -137,7 +45,6 @@ class AtClientImpl implements AtClient {
   String? _namespace;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
-
   EncryptionService? _encryptionService;
 
   @override
@@ -1071,14 +978,13 @@ class AtClientImpl implements AtClient {
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    AtClientBase.validateAtSign(notificationParams.atKey.sharedWith!, _preference!.rootDomain, _preference!.rootPort);
+    AtClientValidation.validateAtSign(notificationParams.atKey.sharedWith!, _preference!.rootDomain, _preference!.rootPort);
     // validate sharedBy atSign
     notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
-    AtClientBase.validateKey(notificationParams.atKey.key);
+    AtClientValidation.validateAtKey(notificationParams.atKey);
     // validate metadata
-    AtClientBase.validateMetadata(notificationParams.atKey.metadata);
     // If namespaceAware is set to true, append nameSpace to key.
     if (notificationParams.atKey.metadata != null && notificationParams.atKey.metadata!.namespaceAware) {
       notificationParams.atKey.key = _getKeyWithNamespace(notificationParams.atKey.key!);
