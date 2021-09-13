@@ -25,7 +25,7 @@ import 'package:uuid/uuid.dart';
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static const _syncRequestThreshold = 3,
       _syncRequestTriggerInSeconds = 3,
-      _syncRunIntervalSeconds = 5,
+      _syncRunIntervalSeconds = 30,
       _queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;

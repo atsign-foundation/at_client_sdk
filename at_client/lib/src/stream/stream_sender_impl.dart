@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:async/async.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
 import 'package:at_client/src/stream/at_stream.dart';
@@ -10,6 +11,7 @@ import 'package:at_client/src/util/network_util.dart';
 import 'package:path/path.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:pedantic/pedantic.dart';
 import 'package:uuid/uuid.dart';
 
 class StreamSenderImpl extends StreamSender {
@@ -44,15 +46,20 @@ class StreamSenderImpl extends StreamSender {
         result = result.replaceAll('stream:ack ', '');
         result = result.trim();
         _logger.finer('ack received for streamId:$streamId');
-          await _startStream(remoteSecondary, file,
-              atStreamRequest.receiverAtSign, atStreamRequest.startByte);
-          var streamResult =
-              await remoteSecondary.atLookUp.messageListener.read();
-          if (streamResult != null && streamResult.startsWith('stream:done')) {
-            _logger.finer('stream done - streamId: $streamId');
+        AtClientManager.getInstance().notificationService.subscribe(regex: streamId).listen((atNotification) {
+            print('stream done notification: $atNotification');
             atStreamResponse.status = AtStreamStatus.COMPLETE;
             onDone(atStreamResponse);
-          }
+        });
+          unawaited(_startStream(remoteSecondary, file,
+              atStreamRequest.receiverAtSign, atStreamRequest.startByte));
+//          var streamResult =
+////              await remoteSecondary.atLookUp.messageListener.read();
+//          if (streamResult != null && streamResult.startsWith('stream:done')) {
+//            _logger.finer('stream done - streamId: $streamId');
+//            atStreamResponse.status = AtStreamStatus.COMPLETE;
+//            onDone(atStreamResponse);
+//          }
       } else if (result != null && result.startsWith('error:')) {
         result = result.replaceAll('error:', '');
         atStreamResponse.status = AtStreamStatus.ERROR;
@@ -78,6 +85,7 @@ class StreamSenderImpl extends StreamSender {
     try {
       var encryptionKey =
           await encryptionService!.getStreamEncryptionKey(receiverAtSign);
+      print('***encryption key : $encryptionKey');
       while (readBytes < length) {
         final actualBytes = await chunkedStream.readBytes(chunkSize);
         final encryptedBytes =

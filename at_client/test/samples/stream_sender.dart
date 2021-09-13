@@ -15,21 +15,21 @@ void main() async {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atStreamRequest =
-        AtStreamRequest('@bob🛠', '/home/murali/Pictures/@/cat.jpeg');
+        AtStreamRequest('@bob🛠', '/home/murali/Pictures/@/dog.jpeg');
     atStreamRequest.namespace = 'atmosphere';
     final streamSender = atClientManager.streamService
         .createStream(StreamType.SEND) as StreamSender;
-    var streamId =  await streamSender.send(atStreamRequest, _onDone, _onError);
-    print('sent stream : $streamId');
-    while (true) {
-      print('Waiting for notification');
-      await Future.delayed(Duration(seconds: 5));
-    }
+    var streamId1 =  streamSender.send(atStreamRequest, _onDone, _onError);
+    print('sent stream : $streamId1');
+    var atStreamRequest2 =
+    AtStreamRequest('@bob🛠', '/home/murali/Pictures/@/cat.jpeg');
+    atStreamRequest.namespace = 'atmosphere';
+    var streamId2 =  streamSender.send(atStreamRequest2, _onDone, _onError);
+    print('sent stream : $streamId2');
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
   }
-  exit(1);
 }
 
 void _onDone(AtStreamResponse response) {

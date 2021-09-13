@@ -4,9 +4,12 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
 import 'package:at_client/src/converters/byte_splitter.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:pedantic/pedantic.dart';
 
 class StreamNotificationHandler {
   AtClientPreference? preference;
@@ -40,7 +43,10 @@ class StreamNotificationHandler {
     }
     _logger.finer('partial transfer size: $partialTransferSize');
     bytesReceived += partialTransferSize;
-    var sharedKey;
+    print('*** getting shared key for decryption');
+    var sharedKey= await encryptionService!
+        .getSharedKey(streamNotification.senderAtSign);
+    print('***decryption key: $sharedKey');
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
@@ -52,8 +58,6 @@ class StreamNotificationHandler {
         firstByteSkipped = true;
         _logger.finer('skipping @');
       }
-      sharedKey ??= await encryptionService!
-          .getSharedKey(streamNotification.senderAtSign);
 
       Splitter(chunkSize).convert(onData).forEach((fileChunk) {
         _logger.finer('encrypted data length received ${onData.length}');
@@ -64,6 +68,7 @@ class StreamNotificationHandler {
       streamProgressCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         _logger.info('Stream transfer complete:$streamId');
+        await AtClientManager.getInstance().atClient.notifyChange(NotificationParams.forText(streamId, streamNotification.senderAtSign));
         socket.write('stream:done $streamId\n');
         streamCompletionCallBack(streamId);
         return;

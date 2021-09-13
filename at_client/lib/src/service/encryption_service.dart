@@ -394,7 +394,9 @@ class EncryptionService {
       ..atKey = AT_ENCRYPTION_SHARED_KEY;
     encryptedSharedKey =
         await localSecondary!.executeVerb(localLookupSharedKeyBuilder);
+    print('encryptedSharedKey from local: $encryptedSharedKey');
     if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
+      print('getting encrypted shared key from remote');
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
         ..atKey = AT_ENCRYPTION_SHARED_KEY
         ..sharedBy = sharedBy

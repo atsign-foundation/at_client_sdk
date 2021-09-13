@@ -20,6 +20,7 @@ void main() async {
     atClientManager.notificationService
         .subscribe(regex: 'atmosphere')
         .listen((notification) {
+          print('****** got stream receive notification: $notification');
       _notificationCallBack(notification);
     });
   } on Exception catch (e, trace) {

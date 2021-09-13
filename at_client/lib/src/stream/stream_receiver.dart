@@ -29,7 +29,6 @@ class StreamReceiver {
   Future<void> ack(AtStreamAck atStreamAck, Function streamCompletionCallBack,
       Function streamProgressCallBack) async {
     var handler = StreamNotificationHandler();
-    handler.remoteSecondary = remoteSecondary;
     handler.preference = preference;
     handler.encryptionService = encryptionService;
     var notification = AtStreamNotification()
