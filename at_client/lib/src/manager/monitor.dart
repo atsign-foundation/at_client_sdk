@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -20,6 +21,8 @@ class Monitor {
   // Regex on with what the monitor is started
   String? _regex;
 
+  /// Capacity is represented in bytes.
+  /// Throws [BufferOverFlowException] if data size exceeds 10MB.
   final _buffer = ByteBuffer(capacity: 10240000);
 
   // Time epoch milliseconds of the last notification received on this monitor
@@ -47,6 +50,8 @@ class Monitor {
   OutboundConnection? _monitorConnection;
 
   RemoteSecondary? _remoteSecondary;
+
+  final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
 
   ///
   /// Creates a [Monitor] object.
@@ -197,23 +202,20 @@ class Monitor {
   ///Returns the response of the monitor verb queue.
   Future<String> _getQueueResponse() async {
     var maxWaitMilliSeconds = 5000;
-    var result = '';
+    var monitorResponse;
     //wait maxWaitMilliSeconds seconds for response from remote socket
     var loopCount = (maxWaitMilliSeconds / 50).round();
     for (var i = 0; i < loopCount; i++) {
       await Future.delayed(Duration(milliseconds: 90));
       var queueLength = _monitorVerbResponseQueue.length;
       if (queueLength > 0) {
-        result = _monitorVerbResponseQueue.removeFirst();
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
-        if (result.startsWith('data:')) {
-          result = result.replaceAll('data:', '');
-          break;
-        }
+        monitorResponse = _defaultResponseParser
+            .parse(_monitorVerbResponseQueue.removeFirst());
       }
     }
-    return result;
+    return monitorResponse.response;
   }
 
   String _buildMonitorCommand() {
