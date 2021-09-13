@@ -21,19 +21,17 @@ void main() {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = '@bob🛠'
+      ..namespace = 'me';
     var value = '+1 100 200 300';
     var notification = await NotificationServiceImpl.create(atClient);
-    var result = await notification
-        .notify(NotificationParams.forUpdate(phoneKey, value: value));
-    expect(result.notificationStatusEnum.toString(),
-        'NotificationStatusEnum.delivered');
+    var result = await notification.notify(NotificationParams.forUpdate(phoneKey, value: value));
+    expect(result.notificationStatusEnum.toString(), 'NotificationStatusEnum.delivered');
     expect(result.atKey.key, 'phone');
     expect(result.atKey.sharedWith, phoneKey.sharedWith);
   });
 
-  test('notify updating of a key to sharedWith atSign - using callback',
-      () async {
+  test('notify updating of a key to sharedWith atSign - using callback', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
     final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
@@ -43,6 +41,7 @@ void main() {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
+      ..namespace = 'me'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
     await atClientManager.notificationService.notify(NotificationParams.forUpdate(phoneKey, value: value));
@@ -58,11 +57,10 @@ void main() {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
+      ..namespace = 'me'
       ..sharedWith = '@bob🛠';
-    var notificationResult =
-        await atClientManager.notificationService.notify(NotificationParams.forDelete(phoneKey));
-    expect(notificationResult.notificationStatusEnum.toString(),
-        'NotificationStatusEnum.delivered');
+    var notificationResult = await atClientManager.notificationService.notify(NotificationParams.forDelete(phoneKey));
+    expect(notificationResult.notificationStatusEnum.toString(), 'NotificationStatusEnum.delivered');
     expect(notificationResult.atKey.key, 'phone');
     expect(notificationResult.atKey.sharedWith, phoneKey.sharedWith);
   });
@@ -76,9 +74,10 @@ void main() {
     await setEncryptionKeys(atsign, preference);
     var phoneKey = AtKey()
       ..key = 'phone'
+      ..namespace = 'me'
       ..sharedWith = '@bob🛠';
-    await atClientManager.notificationService.notify(NotificationParams.forDelete(phoneKey),
-        onSuccess: onSuccessCallback);
+    await atClientManager.notificationService
+        .notify(NotificationParams.forDelete(phoneKey), onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
 
@@ -91,10 +90,8 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var notification = await NotificationServiceImpl.create(atClient);
-    var notificationResult = await notification
-        .notify(NotificationParams.forText('Hello', '@bob🛠'));
-    expect(notificationResult.notificationStatusEnum.toString(),
-        'NotificationStatusEnum.delivered');
+    var notificationResult = await notification.notify(NotificationParams.forText('Hello', '@bob🛠'));
+    expect(notificationResult.notificationStatusEnum.toString(), 'NotificationStatusEnum.delivered');
     expect(notificationResult.atKey.key, 'Hello');
     expect(notificationResult.atKey.sharedWith, '@bob🛠');
   });
@@ -106,16 +103,15 @@ void main() {
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
-    await atClientManager.notificationService.notify(NotificationParams.forText('phone', '@bob🛠'),
-        onSuccess: onSuccessCallback);
+    await atClientManager.notificationService
+        .notify(NotificationParams.forText('phone', '@bob🛠'), onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
-  tearDown(() async => await tearDownFunc());
+  // tearDown(() async => await tearDownFunc());
 }
 
-void onSuccessCallback(notificationResult) {
-  expect(notificationResult.notificationStatusEnum.toString(),
-      'NotificationStatusEnum.delivered');
+void onSuccessCallback(NotificationResult notificationResult) {
+  expect(notificationResult.notificationStatusEnum.toString(), 'NotificationStatusEnum.delivered');
   expect(notificationResult.atKey.key, 'phone');
   expect(notificationResult.atKey.sharedWith, '@bob🛠');
 }
@@ -123,7 +119,7 @@ void onSuccessCallback(notificationResult) {
 Future<void> tearDownFunc() async {
   var isExists = await Directory('test/hive').exists();
   if (isExists) {
-    Directory('test/hive').deleteSync(recursive: true);
+    await Directory('test/hive').delete(recursive: true);
   }
 }
 

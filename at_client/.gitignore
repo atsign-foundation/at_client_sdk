@@ -28,3 +28,8 @@ doc/api/
 
 #gradle
 *.gradle/
+
+#Hive files
+*.hive
+*.lock
+*.hash
