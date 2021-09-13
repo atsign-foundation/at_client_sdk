@@ -49,8 +49,7 @@ class NotificationServiceImpl
       _connectivityListener = ConnectivityListener();
       _connectivityListener!.subscribe().listen((isConnected) {
         if (isConnected) {
-          _logger.finer(
-              'starting monitor through connectivity listener event');
+          _logger.finer('starting monitor through connectivity listener event');
           _startMonitor();
         } else {
           _logger.finer('lost network connectivity');
@@ -217,7 +216,11 @@ class NotificationServiceImpl
   @override
   Stream<AtNotification> subscribe({String? regex}) {
     regex ??= EMPTY_REGEX;
-    final _controller = StreamController<AtNotification>();
+    if (streamListeners.containsKey(regex)) {
+      _logger.finer('subscription already exists');
+      return streamListeners[regex]!.stream as Stream<AtNotification>;
+    }
+    final _controller = StreamController<AtNotification>.broadcast();
     streamListeners[regex] = _controller;
     _logger.finer('added regex to listener $regex');
     return _controller.stream;
