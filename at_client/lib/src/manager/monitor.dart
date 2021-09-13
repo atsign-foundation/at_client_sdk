@@ -20,6 +20,8 @@ class Monitor {
   // Regex on with what the monitor is started
   String? _regex;
 
+  final _buffer = ByteBuffer(capacity: 10240000);
+
   // Time epoch milliseconds of the last notification received on this monitor
   int? _lastNotificationTime;
 
@@ -120,18 +122,14 @@ class Monitor {
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
-      var response;
-      _monitorConnection!.getSocket().listen((event) {
-        response = utf8.decode(event);
-        _handleResponse(response, _onResponse);
-      }, onError: (error) {
-        _logger.severe('error in monitor $error');
-        _handleError(error);
-      }, onDone: () {
+      _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
         _logger.finer('monitor done');
         _monitorConnection!.getSocket().destroy();
         status = MonitorStatus.Stopped;
         _retryCallBack();
+      }, onError: (error) {
+        _logger.severe('error in monitor $error');
+        _handleError(error);
       });
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
@@ -153,7 +151,6 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    fromResponse = fromResponse.trim().replaceAll('data:', '');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature =
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
@@ -162,7 +159,8 @@ class Monitor {
     await _monitorConnection!.write('pkam:$signature\n');
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
-      throw UnAuthenticatedException('Monitor connection authentication failed');
+      throw UnAuthenticatedException(
+          'Monitor connection authentication failed');
     }
     _logger.finer('Monitor connection authentication successful');
   }
@@ -210,8 +208,7 @@ class Monitor {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
         if (result.startsWith('data:')) {
-          var index = result.indexOf(':');
-          result = result.substring(index + 1, result.length - 2);
+          result = result.replaceAll('data:', '');
           break;
         }
       }
@@ -273,6 +270,39 @@ class Monitor {
       throw AtConnectException('Secondary server is unavailable');
     }
     return;
+  }
+
+  /// Handles messages on the inbound client's connection and calls the verb executor
+  /// Closes the inbound connection in case of any error.
+  /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
+  Future<void> _messageHandler(data) async {
+    String result;
+    if (!_buffer.isOverFlow(data)) {
+      // skip @ prompt. byte code for @ is 64
+      if (data.length == 1 && data.first == 64) {
+        return;
+      }
+      //ignore prompt(@ or @<atSign>@) after '\n'. byte code for \n is 10
+      if (data.last == 64 && data.contains(10)) {
+        data = data.sublist(0, data.lastIndexOf(10) + 1);
+        _buffer.append(data);
+      } else if (data.length > 1 && data.first == 64 && data.last == 64) {
+        // pol responses do not end with '\n'. Add \n for buffer completion
+        _buffer.append(data);
+        _buffer.addByte(10);
+      } else {
+        _buffer.append(data);
+      }
+    } else {
+      _buffer.clear();
+      throw BufferOverFlowException('Buffer overflow on outbound connection');
+    }
+    if (_buffer.isEnd()) {
+      result = utf8.decode(_buffer.getData());
+      result = result.trim();
+      _buffer.clear();
+      _handleResponse(result, _onResponse);
+    }
   }
 }
 
