@@ -2,18 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:cron/cron.dart';
+
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/sync_isolate_manager.dart';
-import 'package:at_client/src/util/sync_util.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/manager/sync_isolate_manager.dart';
+import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:cron/cron.dart';
 
+/// [Deprecate] Use [SyncService]
+@deprecated
 class SyncManager {
   var logger = AtSignLogger('SyncManager');
 
@@ -38,12 +42,14 @@ class SyncManager {
     _atSign = atSign;
     _preference = preference;
     this._localSecondary = _localSecondary;
-    this._remoteSecondary = _remoteSecondary;
+    this._remoteSecondary = RemoteSecondary(atSign, _preference!,
+        privateKey: _preference!.privateKey);
     if (preference.syncStrategy == SyncStrategy.SCHEDULED && !_isScheduled) {
       _scheduleSyncTask();
     }
   }
 
+  @deprecated
   Future<bool> isInSync() async {
     var serverCommitId = await SyncUtil.getLatestServerCommitId(
         _remoteSecondary!, _preference!.syncRegex);
@@ -59,7 +65,13 @@ class SyncManager {
         unCommittedEntries, serverCommitId, lastSyncedCommitId);
   }
 
-  Future<void> sync({bool appInit = false, String? regex}) async {
+  /// Cloud Secondary server throws [BufferOverFlowException] is sync data is large than the buffer size.
+  /// Optionally isStream when set to true, initiates the sync process via streams which facilitates in
+  /// syncing large data without [BufferOverFlowException].
+  /// [Deprecated] Use [SyncService]
+  @deprecated
+  Future<void> sync(
+      {bool appInit = false, String? regex}) async {
     //initially isSyncInProgress and pendingSyncExists are false.
     //If a new sync triggered while previous sync isInprogress,then pendingSyncExists set to true and returns.
     if (isSyncInProgress) {
@@ -77,7 +89,8 @@ class SyncManager {
     return;
   }
 
-  Future<void> _sync({bool appInit = false, String? regex}) async {
+  Future<void> _sync(
+      {bool appInit = false, String? regex}) async {
     try {
       regex ??= _preference!.syncRegex;
       //isSyncProgress set to true during the sync is in progress.
@@ -110,14 +123,23 @@ class SyncManager {
       serverCommitId ??= -1;
       // cloud is ahead if server commit id is > last synced commit id in local
       if (serverCommitId > lastSyncedCommitId) {
-        // send sync verb to server and sync the changes to local
-        var syncResponse =
-            await _remoteSecondary!.sync(lastSyncedCommitId, regex: regex);
-        if (syncResponse != null && syncResponse != 'data:null') {
-          syncResponse = syncResponse.replaceFirst('data:', '');
-          var syncResponseJson = jsonDecode(syncResponse);
-          await Future.forEach(syncResponseJson,
-              (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
+        // Iterates until serverCommitId is greater than localCommitId are equal.
+        while (serverCommitId > lastSyncedCommitId!) {
+          var syncBuilder = SyncVerbBuilder()
+            ..commitId = lastSyncedCommitId
+            ..regex = regex;
+          var syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
+          if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
+            syncResponse = syncResponse.replaceFirst('data:', '');
+            var syncResponseJson = jsonDecode(syncResponse);
+            // Iterates over each commit
+            await Future.forEach(syncResponseJson,
+                (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
+          }
+          // assigning the lastSynced local commit id.
+          var lastSyncedEntry =
+          await SyncUtil.getLastSyncedEntry(regex, atSign: _atSign!);
+          lastSyncedCommitId = lastSyncedEntry?.commitId;
         }
         return;
       }

@@ -1,18 +1,15 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 
 import 'test_util.dart';
 
 void main() async {
   try {
-    await AtClientImpl.createClient(
-        '@alice🛠', 'me', TestUtil.getAlicePreference());
-    var atClient = await (AtClientImpl.getClient('@alice🛠'));
-    if(atClient == null) {
-      print('unable to create at client instance');
-      return;
-    }
+    final atSign = '@alice🛠';
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
+    final atClient = atClientManager.atClient;
     // Option 1. Get string keys and convert to AtKey
     var result = await atClient.getKeys();
     for (var key in result) {

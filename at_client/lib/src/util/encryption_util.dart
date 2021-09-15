@@ -38,7 +38,7 @@ class EncryptionUtil {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
     var initializationVector = IV.fromLength(16);
     var encryptedValue =
-    aesEncrypter.encryptBytes(value, iv: initializationVector);
+        aesEncrypter.encryptBytes(value, iv: initializationVector);
     return encryptedValue.bytes;
   }
 
@@ -47,6 +47,7 @@ class EncryptionUtil {
     var aesKey = AES(Key.fromBase64(decryptionKey));
     var decrypter = Encrypter(aesKey);
     var iv2 = IV.fromLength(16);
-    return decrypter.decryptBytes(Encrypted(encryptedValue as Uint8List), iv: iv2);
+    return decrypter.decryptBytes(Encrypted(encryptedValue as Uint8List),
+        iv: iv2);
   }
 }

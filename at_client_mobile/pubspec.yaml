@@ -1,50 +1,46 @@
 name: at_client_mobile
-description: Library for mobile app onboarding.
-version: 1.0.0+11
+description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
+version: 3.0.0
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
-publish_to: none
 
 environment:
-  sdk: '>=2.7.0 <3.0.0'
+  sdk: '>=2.12.0 <3.0.0'
 
 dependencies:
   path: ^1.6.0
   flutter:
     sdk: flutter
-  # flutter_keychain: ^1.0.0
+  # flutter_keychain: ^2.0.1
   biometric_storage: ^2.0.2
   hive: ^2.0.4
   crypton: ^2.0.1
+  at_client: ^2.0.4
+  at_lookup: ^3.0.0
+  at_commons: ^3.0.0
+  at_utils: ^3.0.0
+
+dependency_overrides:
+  logging: ^1.0.0
   at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: at_client
-      ref: trunk
-      version: ^1.0.1+10
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: at_lookup
-      ref: trunk
-      version: ^1.0.0+8
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: trunk
-      version: ^1.0.1+7
-  at_utils:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_utils
-      ref: trunk
-      version: ^1.0.1+7
+    path: ../at_client
+  # at_lookup:
+  #   git:
+  #     url: https://github.com/atsign-foundation/at_libraries.git
+  #     path: at_lookup
+  #     ref: trunk
+  # at_utils:
+  #   git:
+  #     url: https://github.com/atsign-foundation/at_tools.git
+  #     path: at_utils
+  #     ref: trunk
+  # at_commons:
+  #   git:
+  #     url: https://github.com/atsign-foundation/at_tools.git
+  #     path: at_commons
+  #     ref: trunk
 
 dev_dependencies:
   pedantic: ^1.8.0
   test: ^1.6.0
-
-dependency_overrides:
-  logging: ^1.0.0

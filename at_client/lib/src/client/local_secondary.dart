@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_exception.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -16,68 +15,47 @@ import 'package:at_utils/at_utils.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
 /// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
-/// Delete and Update commands will be synced to the server by [SyncManager] based on [SyncStrategy].
+/// Delete and Update commands will be synced to the server
 class LocalSecondary implements Secondary {
-  var logger = AtSignLogger('LocalSecondary');
+  final AtClient _atClient;
 
-  var _atSign;
+  final _logger = AtSignLogger('LocalSecondary');
 
   /// Local keystore used to store data for the current atSign.
   SecondaryKeyStore? keyStore;
 
-  AtClientPreference? _preference;
-
-  LocalSecondary(String atSign, AtClientPreference? preference) {
-    _atSign = AtUtils.formatAtSign(atSign);
-    _preference = preference;
+  LocalSecondary(this._atClient) {
     keyStore = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(atSign)!
+        .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();
   }
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
-  /// set to true or if [SyncStrategy] is [SyncStrategy.IMMEDIATE] then data is synced from local to remote.
+  /// set to true then data is synced from local to remote.
   /// if [sync] is set to false, no sync operation is done.
   @override
   Future<String?> executeVerb(VerbBuilder builder, {sync}) async {
     var verbResult;
+
     try {
-      sync ??= (_preference!.syncStrategy == SyncStrategy.IMMEDIATE);
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
-        var syncManager = SyncManagerImpl.getInstance().getSyncManager(_atSign);
         //1. if local and server are out of sync, first sync before updating current key-value
-        if (sync) {
-          await syncManager!.sync(regex: _preference!.syncRegex);
-        }
+
         //2 . update/delete to local store
-        var operation;
         if (builder is UpdateVerbBuilder) {
           verbResult = await _update(builder);
-          switch (builder.operation) {
-            case UPDATE_META:
-              operation = CommitOp.UPDATE_META;
-              break;
-            case UPDATE_ALL:
-              operation = CommitOp.UPDATE_ALL;
-              break;
-            default:
-              operation = CommitOp.UPDATE;
-          }
         } else if (builder is DeleteVerbBuilder) {
           verbResult = await _delete(builder);
-          operation = CommitOp.DELETE;
         }
         // 3. sync latest update/delete if strategy is immediate
-        if (sync && _preference!.syncStrategy == SyncStrategy.IMMEDIATE) {
-          var local_commit_seq = verbResult.split(':')[1];
-          await syncManager!.syncImmediate(local_commit_seq, builder, operation);
+        if (sync != null && sync) {
+          _logger.finer('calling sync immediate from local secondary');
+          AtClientManager.getInstance().syncService.sync();
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
       } else if (builder is ScanVerbBuilder) {
         verbResult = await _scan(builder);
-      } else if (builder is NotifyVerbBuilder) {
-        verbResult = await _notify(builder);
       }
     } on Exception catch (e) {
       if (e is AtLookUpException) {
@@ -120,7 +98,8 @@ class LocalSecondary implements Secondary {
               ..isEncrypted = builder.isEncrypted
               ..dataSignature = builder.dataSignature;
             var atMetadata = AtMetadataAdapter(metadata);
-            updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
+            updateResult =
+                await keyStore!.putAll(updateKey, atData, atMetadata);
             break;
           }
           // #TODO replace below call with putAll.
@@ -135,7 +114,7 @@ class LocalSecondary implements Secondary {
       }
       return 'data:$updateResult';
     } on DataStoreException catch (e) {
-      logger.severe('exception in local update:${e.toString()}');
+      _logger.severe('exception in local update:${e.toString()}');
       rethrow;
     }
   }
@@ -164,7 +143,7 @@ class LocalSecondary implements Secondary {
       }
       return 'data:$result';
     } on DataStoreException catch (e) {
-      logger.severe('exception in llookup:${e.toString()}');
+      _logger.severe('exception in llookup:${e.toString()}');
       rethrow;
     }
   }
@@ -190,7 +169,7 @@ class LocalSecondary implements Secondary {
       var deleteResult = await keyStore!.remove(deleteKey);
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
-      logger.severe('exception in delete:${e.toString()}');
+      _logger.severe('exception in delete:${e.toString()}');
       rethrow;
     }
   }
@@ -201,8 +180,9 @@ class LocalSecondary implements Secondary {
       // shared with current atSign
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
-        return await RemoteSecondary(_atSign, _preference!,
-                privateKey: _preference!.privateKey)
+        return await RemoteSecondary(
+                _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
+                privateKey: _atClient.getPreferences()!.privateKey)
             .executeCommand(command, auth: true);
       }
       List<String?> keys;
@@ -221,20 +201,12 @@ class LocalSecondary implements Secondary {
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
       keyString = keyString.replaceFirst(RegExp(r'\]$'), '');
       keyString = keyString.replaceAll(', ', ',');
-      var keysArray =  keyString.isNotEmpty
-          ? (keyString.split(','))
-          : [];
+      var keysArray = keyString.isNotEmpty ? (keyString.split(',')) : [];
       return json.encode(keysArray);
     } on DataStoreException catch (e) {
-      logger.severe('exception in scan:${e.toString()}');
+      _logger.severe('exception in scan:${e.toString()}');
       rethrow;
     }
-  }
-
-  Future<String> _notify(NotifyVerbBuilder builder) async {
-    return await RemoteSecondary(_atSign, _preference!,
-            privateKey: _preference!.privateKey)
-        .executeVerb(builder);
   }
 
   bool _isActiveKey(AtMetaData? atMetaData) {
@@ -291,7 +263,8 @@ class LocalSecondary implements Secondary {
 
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.formatAtSign(atSign)!;
-    var privateKeyData = await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
+    var privateKeyData =
+        await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
     return privateKeyData?.data;
   }
 

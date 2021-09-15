@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -19,7 +20,8 @@ class KeyChainManager {
     return _singleton;
   }
 
-  BiometricStorageFile _storage;
+  BiometricStorageFile? _storage;
+
   Future<BiometricStorageFile> getBiometricStorageFile(String key) async {
     return await BiometricStorage().getStorage(key,
         options: StorageFileInitOptions(
@@ -49,7 +51,7 @@ class KeyChainManager {
     return secretAsUint8List;
   }
 
-  Future<List<String>> getAtSignListFromKeychain() async {
+  Future<List<String>?> getAtSignListFromKeychain() async {
     var atsignMap = await _getAtSignMap();
     if (atsignMap.isEmpty) {
       return null;
@@ -74,7 +76,7 @@ class KeyChainManager {
 
   /// Use [getValue]
   @deprecated
-  Future<String> getPrivateKeyFromKeyChain(String atsign) async {
+  Future<String?> getPrivateKeyFromKeyChain(String atsign) async {
     var pkamPrivateKey;
     try {
       assert(atsign != null && atsign != '');
@@ -88,7 +90,7 @@ class KeyChainManager {
 
   /// Use [getValue]
   @deprecated
-  Future<String> getPublicKeyFromKeyChain(String atsign) async {
+  Future<String?> getPublicKeyFromKeyChain(String atsign) async {
     var pkamPublicKey;
     try {
       assert(atsign != null && atsign != '');
@@ -100,24 +102,12 @@ class KeyChainManager {
     return pkamPublicKey;
   }
 
-  Future<String> getValue(String atsign, String key) async {
+  Future<String?> getValue(String atsign, String key) async {
     var value;
     try {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + ':' + key);
       value = await _storage?.read();
-    } on Exception catch (e) {
-      _logger.severe(
-          'flutter keychain - exception in get value for $key :${e.toString()}');
-    }
-    return value;
-  }
-
-  Future<String> putValue(String atsign, String key, String value) async {
-    try {
-      assert(atsign != null && atsign != '');
-      _storage = await getBiometricStorageFile(atsign + ':' + key);
-      await _storage?.write(value);
     } on Exception catch (e) {
       _logger.severe(
           'flutter keychain - exception in put value for $key :${e.toString()}');
@@ -126,10 +116,10 @@ class KeyChainManager {
   }
 
   Future<bool> storeCredentialToKeychain(String atSign,
-      {String secret, String privateKey, String publicKey}) async {
+      {String? secret, String? privateKey, String? publicKey}) async {
     var success = false;
     try {
-      assert(atSign != null && atSign != '');
+      assert(atSign != '');
       atSign = atSign.trim().toLowerCase().replaceAll(' ', '');
       if (secret != null) {
         secret = secret.trim().toLowerCase().replaceAll(' ', '');
@@ -149,8 +139,8 @@ class KeyChainManager {
   }
 
   Future<void> storePkamKeysToKeychain(String atsign,
-      {String privateKey, String publicKey}) async {
-    assert(atsign != null && atsign != '');
+      {String? privateKey, String? publicKey}) async {
+    assert(atsign != '');
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
     try {
       if (privateKey != null) {
@@ -178,41 +168,41 @@ class KeyChainManager {
     return rsaKeypair;
   }
 
-  Future<String> getCramSecret(String atSign) async {
+  Future<String?> getCramSecret(String atSign) async {
     return getSecretFromKeychain(atSign);
   }
 
-  Future<String> getPkamPrivateKey(String atSign) async {
+  Future<String?> getPkamPrivateKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_PKAM_PRIVATE_KEY);
   }
 
-  Future<String> getPkamPublicKey(String atSign) async {
+  Future<String?> getPkamPublicKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
   }
 
-  Future<String> getEncryptionPrivateKey(String atSign) async {
+  Future<String?> getEncryptionPrivateKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
   }
 
-  Future<String> getEncryptionPublicKey(String atSign) async {
+  Future<String?> getEncryptionPublicKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
   }
 
-  Future<String> getSelfEncryptionAESKey(String atSign) async {
+  Future<String?> getSelfEncryptionAESKey(String atSign) async {
     return getValue(atSign, KEYCHAIN_SELF_ENCRYPTION_KEY);
   }
 
-  Future<List<int>> getKeyStoreSecret(String atSign) async {
+  Future<List<int>?> getKeyStoreSecret(String atSign) async {
     return getHiveSecretFromKeychain(atSign);
   }
 
-  Future<String> getAtSign() async {
+  Future<String?> getAtSign() async {
     var atSignList = await getAtSignListFromKeychain();
-    return atSignList == null ? atSignList : atSignList[0];
+    return atSignList == null ? atSignList as FutureOr<String?> : atSignList[0];
   }
 
   Future<void> _saveAtSignToKeychain(String atsign) async {
-    var atsignMap = <String, bool>{};
+    Map<String, bool?> atsignMap = <String, bool>{};
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
     atsignMap = await _getAtSignMap();
     if (atsignMap.isNotEmpty) {
@@ -226,14 +216,14 @@ class KeyChainManager {
     await _storeAtsign(atsignMap);
   }
 
-  Future<void> _storeAtsign(Map<String, bool> atsignMap) async {
+  Future<void> _storeAtsign(Map<String, bool?> atsignMap) async {
     var value = jsonEncode(atsignMap);
     _storage = await getBiometricStorageFile('@atsign');
     await _storage?.write(value);
   }
 
-  Future<Map<String, bool>> _getAtSignMap() async {
-    var atsignMap = <String, bool>{};
+  Future<Map<String, bool?>> _getAtSignMap() async {
+    var atsignMap = <String, bool?>{};
     var atsignSecondMap = <String, bool>{};
     _storage = await getBiometricStorageFile('@atsign');
     var value = await _storage?.read();
@@ -258,7 +248,7 @@ class KeyChainManager {
     return atsignMap;
   }
 
-  Future<Map<String, bool>> getAtsignsWithStatus() async {
+  Future<Map<String, bool?>> getAtsignsWithStatus() async {
     return await _getAtSignMap();
   }
 
@@ -270,7 +260,7 @@ class KeyChainManager {
     }
     var activeAtsign =
         atsignMap.keys.firstWhere((key) => atsignMap[key] == true);
-    if (activeAtsign != null && activeAtsign != atsign) {
+    if (activeAtsign != atsign) {
       atsignMap[activeAtsign] = false;
     }
     atsignMap[atsign] = true;
@@ -292,7 +282,7 @@ class KeyChainManager {
       await _storage?.delete();
       return;
     }
-    if (isDeletedActiveAtsign) {
+    if (isDeletedActiveAtsign!) {
       atsignMap[atsignMap.keys.first] = true;
     }
     var value = jsonEncode(atsignMap);

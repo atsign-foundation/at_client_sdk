@@ -11,11 +11,9 @@ void main() {
   test('put method - create a key sharing to other atsign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    await AtClientImpl.createClient(atsign, 'me', preference);
-    var atClient = await AtClientImpl.getClient(atsign);
-    atClient!.getSyncManager()!.init(atsign, preference,
-        atClient.getRemoteSecondary(), atClient.getLocalSecondary());
-    await atClient.getSyncManager()!.sync();
+    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -43,7 +41,6 @@ AtClientPreference getAlicePreference(String atsign) {
   preference.hiveStoragePath = 'test/hive/client';
   preference.commitLogPath = 'test/hive/client/commit';
   preference.isLocalStoreRequired = true;
-  preference.syncStrategy = SyncStrategy.IMMEDIATE;
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   return preference;

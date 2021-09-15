@@ -286,36 +286,6 @@ class EncryptionService {
     return isDataValid;
   }
 
-  void signOldPublicData() async {
-    var atClient = await (AtClientImpl.getClient(currentAtSign));
-    if (atClient == null) {
-      return;
-    }
-    var selfKeys = await atClient.getAtKeys(regex: '^public:');
-    await Future.forEach(
-        selfKeys, (dynamic atKey) => _updateSignature(atClient, atKey));
-  }
-
-  void _updateSignature(atClient, atKey) async {
-    if (atKey.metadata != null) {
-      if (atKey.metadata.isPublic != null && atKey.metadata.isPublic) {
-        var atValue = await atClient.get(atKey);
-        if (atValue.metadata?.dataSignature == null) {
-          var value = atValue.value;
-          var encryptionPrivateKey =
-              await (localSecondary!.getEncryptionPrivateKey());
-          if (encryptionPrivateKey == null) {
-            throw KeyNotFoundException('encryption private key not found');
-          }
-          var dataSignature = signPublicData(encryptionPrivateKey, value);
-          atKey.metadata.dataSignature = dataSignature;
-          await atClient.put(atKey, value);
-          logger.finer('update data signature for key: ${atKey.key}');
-        }
-      }
-    }
-  }
-
   String signPublicData(String encryptionPrivateKey, dynamic value) {
     var privateKey = RSAPrivateKey.fromString(encryptionPrivateKey);
     var dataSignature =
@@ -323,6 +293,7 @@ class EncryptionService {
     return base64Encode(dataSignature);
   }
 
+  @deprecated
   Future<void> encryptUnencryptedData() async {
     var atClient = await (AtClientImpl.getClient(currentAtSign));
     if (atClient == null) {
@@ -448,5 +419,19 @@ class EncryptionService {
     var sharedKey =
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
     return sharedKey;
+  }
+
+  String generateFileEncryptionKey() {
+    return EncryptionUtil.generateAESKey();
+  }
+
+  List<int> encryptFile(List<int> fileContent, String fileEncryptionKey) {
+    return EncryptionUtil.encryptBytes(fileContent, fileEncryptionKey);
+  }
+
+  List<int> decryptFile(List<int> fileContent, String decryptionKey) {
+    var encryptedValue =
+        EncryptionUtil.decryptBytes(fileContent, decryptionKey);
+    return encryptedValue;
   }
 }
