@@ -57,21 +57,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _scheduleSyncRun() {
     _cron = Cron();
-    Future.delayed(
-        Duration(seconds: 10),
-        () => {
-              _cron.schedule(
-                  Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
-                  () async {
-                try {
-                  await _processSyncRequests();
-                } on Exception catch (e, trace) {
-                  _logger.finest(trace);
-                  _logger.severe('exception while running process sync:  $e');
-                  _syncInProgress = false;
-                }
-              })
-            });
+
+    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
+        () async {
+      try {
+        await _processSyncRequests();
+      } on Exception catch (e, trace) {
+        _logger.finest(trace);
+        _logger.severe('exception while running process sync:  $e');
+        _syncInProgress = false;
+      }
+    });
   }
 
   @override
