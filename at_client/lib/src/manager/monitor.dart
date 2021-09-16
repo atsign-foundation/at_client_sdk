@@ -178,7 +178,12 @@ class Monitor {
     var port = secondaryInfo[1];
 
     //2. create a connection to secondary server
-    var secureSocket = await SecureSocket.connect(host, int.parse(port));
+    var secureSocket = await SecureSocket.connect(host, int.parse(port))
+        .catchError((error, stackTrace) {
+      _logger.finer('exception connecting to socket in monitor: $stackTrace');
+      throw SecondaryConnectException('unable to connect to secondary');
+    });
+
     OutboundConnection _monitorConnection =
         OutboundConnectionImpl(secureSocket);
     return _monitorConnection;
