@@ -58,7 +58,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
 
-    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds     *'),
+    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
         () async {
       try {
         await _processSyncRequests();
