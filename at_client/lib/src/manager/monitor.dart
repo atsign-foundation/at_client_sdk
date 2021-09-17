@@ -135,7 +135,7 @@ class Monitor {
       }, onError: (error) {
         _logger.severe('error in monitor $error');
         _handleError(error);
-      }, cancelOnError: true);
+      });
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.Started;
