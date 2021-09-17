@@ -132,7 +132,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _logger.finer('server and local are in sync - ${syncRequest._id}');
         syncRequest.result!
           ..syncStatus = SyncStatus.success
-          ..lastSyncedOn = DateTime.now().toUtc();
+          ..lastSyncedOn = DateTime.now().toUtc()
+          ..dataChange = false;
         _syncComplete(syncRequest);
         _syncInProgress = false;
         return;
@@ -538,6 +539,7 @@ class SyncResult {
   SyncStatus syncStatus = SyncStatus.not_started;
   AtClientException? atClientException;
   DateTime? lastSyncedOn;
+  bool dataChange = true;
 
   @override
   String toString() {
