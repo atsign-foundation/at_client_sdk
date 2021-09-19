@@ -1,6 +1,6 @@
 import 'package:at_client/src/stream/at_stream.dart';
-import 'package:at_client/src/stream/stream_receiver_impl.dart';
-import 'package:at_client/src/stream/stream_sender_impl.dart';
+import 'package:at_client/src/stream/stream_receiver.dart';
+import 'package:at_client/src/stream/stream_sender.dart';
 import 'package:uuid/uuid.dart';
 
 class StreamHandler {
@@ -14,11 +14,12 @@ class StreamHandler {
 
   AtStream createStream(String currentAtSign, StreamType streamType,
       {String? streamId}) {
-    var stream;
+    streamId ??= Uuid().v4();
+    var stream = AtStream(currentAtSign, streamId);
     if (streamType == StreamType.SEND) {
-      stream = StreamSenderImpl(currentAtSign);
+      stream.sender = StreamSender(streamId);
     } else if (streamType == StreamType.RECEIVE) {
-      stream = StreamReceiverImpl(currentAtSign, streamId!);
+      stream.receiver = StreamReceiver(currentAtSign, streamId);
     }
     return stream;
   }

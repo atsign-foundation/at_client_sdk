@@ -14,6 +14,8 @@ import 'package:pedantic/pedantic.dart';
 class StreamNotificationHandler {
   AtClientPreference? preference;
 
+  RemoteSecondary? remoteSecondary;
+
   EncryptionService? encryptionService;
 
   final chunkSize = 1024;
@@ -35,7 +37,8 @@ class StreamNotificationHandler {
     var command = 'stream:receive $streamId\n';
     socket.write(command);
     var bytesReceived = 0, partialTransferSize = 0;
-    var firstByteSkipped = false;
+    var firstByteSkipped = false, sharedKeyFetched = false;
+    var sharedKey;
     var decryptedFile =
         File('${preference!.downloadPath}/${streamNotification.fileName}');
     if (decryptedFile.existsSync()) {
@@ -43,10 +46,7 @@ class StreamNotificationHandler {
     }
     _logger.finer('partial transfer size: $partialTransferSize');
     bytesReceived += partialTransferSize;
-    print('*** getting shared key for decryption');
-    var sharedKey= await encryptionService!
-        .getSharedKey(streamNotification.senderAtSign);
-    print('***decryption key: $sharedKey');
+
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
@@ -58,6 +58,12 @@ class StreamNotificationHandler {
         firstByteSkipped = true;
         _logger.finer('skipping @');
       }
+      if (!sharedKeyFetched) {
+        sharedKey = await encryptionService!
+            .getSharedKey(streamNotification.senderAtSign);
+        print('*** getting shared key for decryption');
+        print('***decryption key: $sharedKey');
+      }
 
       Splitter(chunkSize).convert(onData).forEach((fileChunk) {
         _logger.finer('encrypted data length received ${onData.length}');
@@ -68,7 +74,9 @@ class StreamNotificationHandler {
       streamProgressCallBack(bytesReceived);
       if (bytesReceived == streamNotification.fileLength) {
         _logger.info('Stream transfer complete:$streamId');
-        await AtClientManager.getInstance().atClient.notifyChange(NotificationParams.forText(streamId, streamNotification.senderAtSign));
+        await AtClientManager.getInstance().atClient.notifyChange(
+            NotificationParams.forText(
+                streamId, streamNotification.senderAtSign));
         socket.write('stream:done $streamId\n');
         streamCompletionCallBack(streamId);
         return;
