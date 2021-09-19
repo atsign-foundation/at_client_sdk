@@ -408,6 +408,15 @@ abstract class AtClient {
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
 
+  /// Sends stream acknowledgement
+  Future<void> sendStreamAck(
+      String streamId,
+      String fileName,
+      int fileLength,
+      String senderAtSign,
+      Function streamCompletionCallBack,
+      Function streamReceiveCallBack);
+
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
   Future<Map<String, FileTransferObject>> uploadFile(

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -19,6 +20,10 @@ import 'package:crypton/crypton.dart';
 class Monitor {
   // Regex on with what the monitor is started
   String? _regex;
+
+  /// Capacity is represented in bytes.
+  /// Throws [BufferOverFlowException] if data size exceeds 10MB.
+  final _buffer = ByteBuffer(capacity: 10240000);
 
   // Time epoch milliseconds of the last notification received on this monitor
   int? _lastNotificationTime;
@@ -45,6 +50,8 @@ class Monitor {
   OutboundConnection? _monitorConnection;
 
   RemoteSecondary? _remoteSecondary;
+
+  final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
 
   ///
   /// Creates a [Monitor] object.
@@ -120,18 +127,14 @@ class Monitor {
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
-      var response;
-      _monitorConnection!.getSocket().listen((event) {
-        response = utf8.decode(event);
-        _handleResponse(response, _onResponse);
-      }, onError: (error) {
-        _logger.severe('error in monitor $error');
-        _handleError(error);
-      }, onDone: () {
+      _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
         _logger.finer('monitor done');
         _monitorConnection!.getSocket().destroy();
         status = MonitorStatus.Stopped;
         _retryCallBack();
+      }, onError: (error) {
+        _logger.severe('error in monitor $error');
+        _handleError(error);
       });
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
@@ -153,7 +156,6 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    fromResponse = fromResponse.trim().replaceAll('data:', '');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature =
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
@@ -162,7 +164,8 @@ class Monitor {
     await _monitorConnection!.write('pkam:$signature\n');
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
-      throw UnAuthenticatedException('Monitor connection authentication failed');
+      throw UnAuthenticatedException(
+          'Monitor connection authentication failed');
     }
     _logger.finer('Monitor connection authentication successful');
   }
@@ -199,24 +202,20 @@ class Monitor {
   ///Returns the response of the monitor verb queue.
   Future<String> _getQueueResponse() async {
     var maxWaitMilliSeconds = 5000;
-    var result = '';
+    var monitorResponse;
     //wait maxWaitMilliSeconds seconds for response from remote socket
     var loopCount = (maxWaitMilliSeconds / 50).round();
     for (var i = 0; i < loopCount; i++) {
       await Future.delayed(Duration(milliseconds: 90));
       var queueLength = _monitorVerbResponseQueue.length;
       if (queueLength > 0) {
-        result = _monitorVerbResponseQueue.removeFirst();
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
-        if (result.startsWith('data:')) {
-          var index = result.indexOf(':');
-          result = result.substring(index + 1, result.length - 2);
-          break;
-        }
+        monitorResponse = _defaultResponseParser
+            .parse(_monitorVerbResponseQueue.removeFirst());
       }
     }
-    return result;
+    return monitorResponse.response;
   }
 
   String _buildMonitorCommand() {
@@ -273,6 +272,39 @@ class Monitor {
       throw AtConnectException('Secondary server is unavailable');
     }
     return;
+  }
+
+  /// Handles messages on the inbound client's connection and calls the verb executor
+  /// Closes the inbound connection in case of any error.
+  /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
+  Future<void> _messageHandler(data) async {
+    String result;
+    if (!_buffer.isOverFlow(data)) {
+      // skip @ prompt. byte code for @ is 64
+      if (data.length == 1 && data.first == 64) {
+        return;
+      }
+      //ignore prompt(@ or @<atSign>@) after '\n'. byte code for \n is 10
+      if (data.last == 64 && data.contains(10)) {
+        data = data.sublist(0, data.lastIndexOf(10) + 1);
+        _buffer.append(data);
+      } else if (data.length > 1 && data.first == 64 && data.last == 64) {
+        // pol responses do not end with '\n'. Add \n for buffer completion
+        _buffer.append(data);
+        _buffer.addByte(10);
+      } else {
+        _buffer.append(data);
+      }
+    } else {
+      _buffer.clear();
+      throw BufferOverFlowException('Buffer overflow on outbound connection');
+    }
+    if (_buffer.isEnd()) {
+      result = utf8.decode(_buffer.getData());
+      result = result.trim();
+      _buffer.clear();
+      _handleResponse(result, _onResponse);
+    }
   }
 }
 
