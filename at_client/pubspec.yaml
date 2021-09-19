@@ -59,4 +59,4 @@ dependency_overrides:
 
 dev_dependencies:
   test: ^1.17.2
-  at_demo_data: ^0.0.3+1
+  at_demo_data: ^1.0.0
