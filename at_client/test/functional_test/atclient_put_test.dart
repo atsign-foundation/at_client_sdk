@@ -11,7 +11,8 @@ void main() {
   test('put method - create a key sharing to other atsign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
     atClientManager.syncService.sync();
     // To setup encryption keys

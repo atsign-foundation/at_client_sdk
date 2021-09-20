@@ -13,7 +13,6 @@ class SyncManagerImpl {
     return _singleton;
   }
 
-
   final Map<String?, SyncManager> _syncManagerMap = {};
 
   @deprecated

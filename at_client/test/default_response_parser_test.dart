@@ -10,7 +10,8 @@ void main() {
     });
 
     test('test error response', () {
-      var response = DefaultResponseParser().parse('error:AT-1234:Test Exception');
+      var response =
+          DefaultResponseParser().parse('error:AT-1234:Test Exception');
       expect(response.isError, true);
       expect(response.errorCode, 'AT-1234');
       expect(response.errorDescription, 'Test Exception');
@@ -34,6 +35,5 @@ void main() {
       expect(response.isError, false);
       expect(response.response, 'this is some random text');
     });
-
   });
 }

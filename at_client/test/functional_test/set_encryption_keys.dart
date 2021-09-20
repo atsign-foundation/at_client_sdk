@@ -6,7 +6,8 @@ import 'at_demo_credentials.dart' as demo_credentials;
 Future<void> setEncryptionKeys(
     String atsign, AtClientPreference atClientPreference) async {
   try {
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', atClientPreference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', atClientPreference);
     var atClient = atClientManager.atClient;
     var metadata = Metadata();
     metadata.namespaceAware = false;
