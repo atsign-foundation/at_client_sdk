@@ -54,7 +54,8 @@ class AtClientAuthenticator implements AtClientAuth {
     // If cram secret is null, perform cram authentication
     if (atClientPreference.cramSecret != null) {
       logger.finer('private key is empty. Performing cram');
-      var isCramSuccessful = await atLookupInitialAuth.authenticate_cram(atClientPreference.cramSecret);
+      var isCramSuccessful = await atLookupInitialAuth
+          .authenticate_cram(atClientPreference.cramSecret);
       // If cram auth is not successful, return false.
       if (!isCramSuccessful) {
         return false;
@@ -74,8 +75,8 @@ class AtClientAuthenticator implements AtClientAuth {
         logger.finer('updating pkam public key to server');
         var updateCommand = 'update:$AT_PKAM_PUBLIC_KEY $publicKey\n';
         // auth is false since already cram authenticated
-        var pkamUpdateResult =
-            await atLookupInitialAuth.executeCommand(updateCommand, auth: false);
+        var pkamUpdateResult = await atLookupInitialAuth
+            .executeCommand(updateCommand, auth: false);
         logger.finer('pkam update result:$pkamUpdateResult');
       } else {
         logger.finer('pkam auth already done');
@@ -90,7 +91,9 @@ class AtClientAuthenticator implements AtClientAuth {
       if (privateKey != null) {
         // Save pkam public/private key pair in keychain
         await _keyChainManager.storeCredentialToKeychain(atSign,
-            secret: atClientPreference.cramSecret, privateKey: privateKey, publicKey: publicKey);
+            secret: atClientPreference.cramSecret,
+            privateKey: privateKey,
+            publicKey: publicKey);
         // Generate key pair for encryption if not already present
         if (encryptionPrivateKey == null || encryptionPrivateKey == '') {
           logger
@@ -108,7 +111,8 @@ class AtClientAuthenticator implements AtClientAuth {
               atSign, KEYCHAIN_SELF_ENCRYPTION_KEY, selfEncryptionKey);
         }
         var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
-        var delete_response = await atLookupInitialAuth.executeVerb(deleteBuilder);
+        var delete_response =
+            await atLookupInitialAuth.executeVerb(deleteBuilder);
         logger.finer('cram secret delete response : $delete_response');
       }
     }
