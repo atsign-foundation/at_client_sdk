@@ -21,7 +21,9 @@ abstract class SyncService {
   /// ```
   void sync({Function? onDone});
 
-  /// Set the onDone call function to get the [SyncResult] for the system generated sync.
+  /// Call this method to set the Global onDone callback.
+  /// This method will be called when a sync is completed.
+  /// When a specific onDone function is passed to the sync Function, Then the specific onDone is called.
   void setOnDone(Function onDone);
 
   /// Returns true if local and cloud secondary are in sync. false otherwise
