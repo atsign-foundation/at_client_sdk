@@ -13,7 +13,8 @@ void main() {
   test('notify updating of a key to sharedWith atSign - using await', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
     atClientManager.syncService.sync();
     // To setup encryption keys
@@ -36,7 +37,8 @@ void main() {
       () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
@@ -45,13 +47,15 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    await atClientManager.notificationService.notify(NotificationParams.forUpdate(phoneKey, value: value));
+    await atClientManager.notificationService
+        .notify(NotificationParams.forUpdate(phoneKey, value: value));
   });
 
   test('notify deletion of a key to sharedWith atSign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
@@ -59,8 +63,8 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
-    var notificationResult =
-        await atClientManager.notificationService.notify(NotificationParams.forDelete(phoneKey));
+    var notificationResult = await atClientManager.notificationService
+        .notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
     expect(notificationResult.atKey.key, 'phone');
@@ -70,14 +74,16 @@ void main() {
   test('notify deletion of a key to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
-    await atClientManager.notificationService.notify(NotificationParams.forDelete(phoneKey),
+    await atClientManager.notificationService.notify(
+        NotificationParams.forDelete(phoneKey),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
@@ -85,7 +91,8 @@ void main() {
   test('notify text of to sharedWith atSign', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
     atClientManager.syncService.sync();
     // To setup encryption keys
@@ -102,11 +109,13 @@ void main() {
   test('notify text of to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
     var preference = getAlicePreference(atsign);
-    final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atsign, 'me', preference);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
-    await atClientManager.notificationService.notify(NotificationParams.forText('phone', '@bob🛠'),
+    await atClientManager.notificationService.notify(
+        NotificationParams.forText('phone', '@bob🛠'),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });

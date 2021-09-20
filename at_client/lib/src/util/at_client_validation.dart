@@ -41,7 +41,8 @@ class AtClientValidation {
 
   /// Verify if the atSign exists in root server.
   /// Throws [InvalidAtSignException] if atSign does not exist.
-  static void isAtSignExists(String atSign, String rootDomain, int rootPort) async {
+  static void isAtSignExists(
+      String atSign, String rootDomain, int rootPort) async {
     if (atSign.isEmpty) {
       throw AtKeyException('@sign cannot be empty');
     }

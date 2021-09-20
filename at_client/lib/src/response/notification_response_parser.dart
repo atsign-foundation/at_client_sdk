@@ -5,7 +5,6 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
 
 class NotificationResponseParser extends DefaultResponseParser {
-
   @override
   Response parse(String responseString) {
     return super.parse(responseString);

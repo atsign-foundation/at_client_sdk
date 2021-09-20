@@ -44,15 +44,13 @@ void main() {
       print('putResult $putResult');
     }
     expect(await syncService.isInSync(), false);
-    syncService.sync(
-        onDone: (syncResult) async {
-          var isInSync = await syncService.isInSync();
-          expect(isInSync, true);
-          print('Success: $syncResult : isInSync: $isInSync');
-          expect(syncResult.syncStatus, SyncStatus.success);
-        });
-    syncService.sync(
-        onDone: onSuccess);
+    syncService.sync(onDone: (syncResult) async {
+      var isInSync = await syncService.isInSync();
+      expect(isInSync, true);
+      print('Success: $syncResult : isInSync: $isInSync');
+      expect(syncResult.syncStatus, SyncStatus.success);
+    });
+    syncService.sync(onDone: onSuccess);
     await Future.delayed(Duration(seconds: 10));
   });
 }

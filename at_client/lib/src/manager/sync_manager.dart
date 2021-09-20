@@ -70,8 +70,7 @@ class SyncManager {
   /// syncing large data without [BufferOverFlowException].
   /// [Deprecated] Use [SyncService]
   @deprecated
-  Future<void> sync(
-      {bool appInit = false, String? regex}) async {
+  Future<void> sync({bool appInit = false, String? regex}) async {
     //initially isSyncInProgress and pendingSyncExists are false.
     //If a new sync triggered while previous sync isInprogress,then pendingSyncExists set to true and returns.
     if (isSyncInProgress) {
@@ -89,8 +88,7 @@ class SyncManager {
     return;
   }
 
-  Future<void> _sync(
-      {bool appInit = false, String? regex}) async {
+  Future<void> _sync({bool appInit = false, String? regex}) async {
     try {
       regex ??= _preference!.syncRegex;
       //isSyncProgress set to true during the sync is in progress.
@@ -138,7 +136,7 @@ class SyncManager {
           }
           // assigning the lastSynced local commit id.
           var lastSyncedEntry =
-          await SyncUtil.getLastSyncedEntry(regex, atSign: _atSign!);
+              await SyncUtil.getLastSyncedEntry(regex, atSign: _atSign!);
           lastSyncedCommitId = lastSyncedEntry?.commitId;
         }
         return;
