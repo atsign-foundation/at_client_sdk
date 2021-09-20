@@ -35,6 +35,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static const LIMIT = 10;
   static final Map<String, SyncService> _syncServiceMap = {};
   bool _syncInProgress = false;
+  Function? onDone;
 
   final _logger = AtSignLogger('SyncService');
 
@@ -172,6 +173,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
     if (syncRequest.onDone != null) {
       syncRequest.onDone!(syncRequest.result);
+    }
+    if(onDone != null) {
+      onDone!(syncRequest.result);
     }
     _clearQueue();
   }
@@ -531,6 +535,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _cron.close();
       _syncServiceMap.remove(_atClient.getCurrentAtSign());
     }
+  }
+
+  @override
+  void setOnDone(Function onDone) {
+    this.onDone = onDone;
   }
 }
 

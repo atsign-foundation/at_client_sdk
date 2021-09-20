@@ -21,6 +21,9 @@ abstract class SyncService {
   /// ```
   void sync({Function? onDone});
 
+  /// Set the onDone call function to get the [SyncResult] for the system generated sync.
+  void setOnDone(Function onDone);
+
   /// Returns true if local and cloud secondary are in sync. false otherwise
   Future<bool> isInSync();
 }
