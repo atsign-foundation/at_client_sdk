@@ -201,19 +201,17 @@ class Monitor {
 
   ///Returns the response of the monitor verb queue.
   Future<String> _getQueueResponse() async {
-    var maxWaitMilliSeconds = 5000;
     var monitorResponse;
-    //wait maxWaitMilliSeconds seconds for response from remote socket
-    var loopCount = (maxWaitMilliSeconds / 50).round();
-    for (var i = 0; i < loopCount; i++) {
-      await Future.delayed(Duration(milliseconds: 90));
-      var queueLength = _monitorVerbResponseQueue.length;
-      if (queueLength > 0) {
+    //waits for 30 seconds
+    for (var i = 0; i < 6000; i++) {
+      if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
         monitorResponse = _defaultResponseParser
             .parse(_monitorVerbResponseQueue.removeFirst());
+        break;
       }
+      await Future.delayed(Duration(milliseconds: 5));
     }
     return monitorResponse.response;
   }
