@@ -1,3 +1,5 @@
+## 3.0.2
+- at_client version change
 ## 3.0.1
 - at_client version change
 - at_lookup version change
