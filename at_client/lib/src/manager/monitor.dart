@@ -213,6 +213,10 @@ class Monitor {
       }
       await Future.delayed(Duration(milliseconds: 5));
     }
+    // If monitor response contains error, return error
+    if(monitorResponse.isError){
+      return '${monitorResponse.errorCode}: ${monitorResponse.errorDescription}';
+    }
     return monitorResponse.response;
   }
 
