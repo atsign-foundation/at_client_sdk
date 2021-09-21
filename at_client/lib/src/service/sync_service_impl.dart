@@ -35,6 +35,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static const LIMIT = 10;
   static final Map<String, SyncService> _syncServiceMap = {};
   bool _syncInProgress = false;
+
+  @override
+  bool get isSyncInProgress => _syncInProgress;
+
   Function? onDone;
 
   final _logger = AtSignLogger('SyncService');
