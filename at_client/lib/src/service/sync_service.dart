@@ -28,4 +28,7 @@ abstract class SyncService {
 
   /// Returns true if local and cloud secondary are in sync. false otherwise
   Future<bool> isInSync();
+
+  /// Returns true if sync is in-progress; else false.
+  bool get isSyncInProgress;
 }
