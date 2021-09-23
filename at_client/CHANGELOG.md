@@ -1,3 +1,5 @@
+## 3.0.3
+- Sync pagination limit in preference
 ## 3.0.2
 - Expose isSyncInProgress in SyncService
 ## 3.0.1
