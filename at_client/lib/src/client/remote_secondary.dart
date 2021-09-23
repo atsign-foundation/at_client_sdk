@@ -73,7 +73,8 @@ class RemoteSecondary implements Secondary {
   Future<String?> sync(int? lastSyncedId, {String? regex}) async {
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = lastSyncedId
-      ..regex = regex;
+      ..regex = regex
+      ..limit = _preference.syncPageLimit;
 
     var atCommand = syncVerbBuilder.buildCommand();
     return await atLookUp.executeCommand(atCommand, auth: true);

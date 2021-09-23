@@ -32,7 +32,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final NotificationServiceImpl _statsNotificationListener;
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
-  static const LIMIT = 10;
   static final Map<String, SyncService> _syncServiceMap = {};
   bool _syncInProgress = false;
 
@@ -284,7 +283,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
-        ..limit = LIMIT
+        ..limit = _atClient.getPreferences()!.syncPageLimit
         ..isPaginated = true;
       _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
       var syncResponse = DefaultResponseParser()
