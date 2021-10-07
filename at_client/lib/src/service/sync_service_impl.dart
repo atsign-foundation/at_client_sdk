@@ -32,8 +32,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final NotificationServiceImpl _statsNotificationListener;
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
-  static const LIMIT = 10;
   static final Map<String, SyncService> _syncServiceMap = {};
+  bool _syncInProgress = false;
+
+  @override
+  bool get isSyncInProgress => _syncInProgress;
+
+  Function? onDone;
 
   final _logger = AtSignLogger('SyncService');
 
@@ -56,12 +61,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _scheduleSyncRun() {
     _cron = Cron();
+
     _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
         () async {
       try {
         await _processSyncRequests();
-      } on Exception catch (e) {
+      } on Exception catch (e, trace) {
+        _logger.finest(trace);
         _logger.severe('exception while running process sync:  $e');
+        _syncInProgress = false;
       }
     });
   }
@@ -102,17 +110,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   Future<void> _processSyncRequests() async {
-    _logger.finer('in _processSyncRequests');
+    _logger.finest('in _processSyncRequests');
+    if (_syncInProgress) {
+      _logger.finer('**** another sync in progress');
+      return;
+    }
     if (!await NetworkUtil.isNetworkAvailable()) {
       _logger.finer('skipping sync due to network unavailability');
       return;
     }
-//    if (_syncRequests.isNotEmpty) {
-//      var lastRequested = _syncRequests.elementAt(0).requestedOn;
-//      print('first request time: ${lastRequested}');
-//      print('current time: ${DateTime.now().toUtc()}');
-//      print('difference: ${lastRequested.difference(DateTime.now().toUtc())}');
-//    }
     if (_syncRequests.isEmpty ||
         (_syncRequests.length < _syncRequestThreshold &&
             (_syncRequests.isNotEmpty &&
@@ -121,7 +127,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
                         .difference(_syncRequests.elementAt(0).requestedOn)
                         .inSeconds <
                     _syncRequestTriggerInSeconds))) {
-      _logger.finer('skipping sync - queue length ${_syncRequests.length}');
+      _logger.finest('skipping sync - queue length ${_syncRequests.length}');
       return;
     }
     final syncRequest = _getSyncRequest();
@@ -130,8 +136,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _logger.finer('server and local are in sync - ${syncRequest._id}');
         syncRequest.result!
           ..syncStatus = SyncStatus.success
-          ..lastSyncedOn = DateTime.now().toUtc();
+          ..lastSyncedOn = DateTime.now().toUtc()
+          ..dataChange = false;
         _syncComplete(syncRequest);
+        _syncInProgress = false;
         return;
       }
     } on AtLookUpException catch (e) {
@@ -140,11 +148,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncRequest.result!.atClientException =
           AtClientException(e.errorCode, e.errorMessage);
       _syncError(syncRequest);
+      _syncInProgress = false;
       return;
     }
+    _syncInProgress = true;
     final serverCommitId = await _getServerCommitId();
     await _sync(serverCommitId, syncRequest);
     _syncComplete(syncRequest);
+    _syncInProgress = false;
   }
 
   /// Fetches the first app request from the queue. If there are no app requests, the first element of the
@@ -163,8 +174,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
-    if (syncRequest.onDone != null) {
+    // If specific onDone callback is set, call specific onDone callback,
+    // else call the global onDone callback.
+    if (syncRequest.onDone != null &&
+        syncRequest.requestSource == SyncRequestSource.app) {
       syncRequest.onDone!(syncRequest.result);
+    } else if (onDone != null) {
+      onDone!(syncRequest.result);
     }
     _clearQueue();
   }
@@ -267,16 +283,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
-        ..limit = LIMIT
+        ..limit = _atClient.getPreferences()!.syncPageLimit
         ..isPaginated = true;
+      _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
       var syncResponse = DefaultResponseParser()
           .parse(await _remoteSecondary.executeVerb(syncBuilder));
+
       var syncResponseJson = jsonDecode(syncResponse.response);
+      _logger.finest('** syncResponse ${syncResponseJson}');
       // Iterates over each commit
       await Future.forEach(syncResponseJson,
           (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
+      _logger.finest('**localCommitId $localCommitId');
     }
   }
 
@@ -360,11 +380,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Throws [AtLookUpException] if cloud secondary is not reachable
   @override
   Future<bool> isInSync() async {
+    if (_syncInProgress) {
+      _logger.finest('*** isInSync..sync in progress');
+      return true;
+    }
     var serverCommitId = await _getServerCommitId();
     var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
         atSign: _atClient.getCurrentAtSign()!);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
+    _logger.finest(
+        'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
     var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
     var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
         lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
@@ -421,10 +447,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ..value = serverCommitEntry['value'];
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
+        _logger.finest(
+            'syncing to local: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
         var builder = DeleteVerbBuilder()..atKey = serverCommitEntry['atKey'];
+        _logger.finest(
+            'syncing to local delete: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
         break;
     }
@@ -492,6 +522,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return;
     }
     commitEntry.operation = operation;
+    _logger.finest(
+        '*** updating commitId to local ${serverCommitEntry['commitId']}');
     await SyncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
         _atClient.getCurrentAtSign()!);
   }
@@ -509,6 +541,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _syncServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }
+
+  @override
+  void setOnDone(Function onDone) {
+    this.onDone = onDone;
+  }
 }
 
 ///Class to represent sync response.
@@ -516,6 +553,7 @@ class SyncResult {
   SyncStatus syncStatus = SyncStatus.not_started;
   AtClientException? atClientException;
   DateTime? lastSyncedOn;
+  bool dataChange = true;
 
   @override
   String toString() {
@@ -535,6 +573,7 @@ class SyncRequest {
   Function? onDone;
   Function? onError;
   SyncResult? result;
+
   SyncRequest({this.onDone, this.onError}) {
     _id = Uuid().v4();
     requestedOn = DateTime.now().toUtc();

@@ -7,8 +7,7 @@ class NetworkUtil {
   static Future<bool> isNetworkAvailable() async {
     var result = await InternetConnectionChecker().hasConnection;
     if (!result) {
-      _logger.finer(
-          'Unable to connect to internet');
+      _logger.finer('Unable to connect to internet');
     }
     return result;
   }
