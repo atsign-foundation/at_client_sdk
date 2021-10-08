@@ -24,12 +24,10 @@ dependencies:
 #dependency_overrides:
 logging: ^1.0.0
 at_client:
-  path: ../at_client
-#  at_client:
-#    git:
-#      url: https://github.com/atsign-foundation/at_client_sdk.git
-#      path: at_lookup
-#      ref: trunk
+  git:
+    url: https://github.com/atsign-foundation/at_client_sdk.git
+    path: at_client
+    ref: desktop-compatible
 #  at_lookup:
 #    git:
 #      url: https://github.com/atsign-foundation/at_libraries.git
