@@ -31,7 +31,7 @@ class KeyChainManager {
 
   Future<List<int>> getHiveSecretFromKeychain(String atsign) async {
     assert(atsign != null && atsign.isNotEmpty);
-    List<int> secretAsUint8List;
+    List<int> secretAsUint8List = [];
     try {
       var hiveKey = atsign + '_hive_secret';
       _storage = await getBiometricStorageFile(hiveKey);
@@ -95,7 +95,7 @@ class KeyChainManager {
     try {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + '_pkam_public_key');
-      pkamPublicKey = await _storage.read();
+      pkamPublicKey = await _storage?.read();
     } on Exception catch (e) {
       _logger.severe('exception in getPublicKeyFromKeyChain :${e.toString()}');
     }
@@ -108,6 +108,18 @@ class KeyChainManager {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + ':' + key);
       value = await _storage?.read();
+    } on Exception catch (e) {
+      _logger.severe(
+          'flutter keychain - exception in put value for $key :${e.toString()}');
+    }
+    return value;
+  }
+
+  Future<String> putValue(String atsign, String key, String value) async {
+    try {
+      assert(atsign != '');
+      _storage = await getBiometricStorageFile(atsign + ':' + key);
+      await _storage?.write(value);
     } on Exception catch (e) {
       _logger.severe(
           'flutter keychain - exception in put value for $key :${e.toString()}');
@@ -151,7 +163,7 @@ class KeyChainManager {
       if (publicKey != null) {
         _storage = await getBiometricStorageFile(
             atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY);
-        await _storage.write(publicKey.toString());
+        await _storage?.write(publicKey.toString());
       }
     } on Exception catch (exception) {
       _logger.severe(
