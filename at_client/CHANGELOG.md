@@ -1,3 +1,10 @@
+## 3.0.3
+- Sync pagination limit in preference
+## 3.0.2
+- Expose isSyncInProgress in SyncService
+## 3.0.1
+- Reduce wait time on monitor connection
+- at_lookup version upgrade
 ## 3.0.0
 - Resilient SDK changes and bug fixes
 ## 2.0.4

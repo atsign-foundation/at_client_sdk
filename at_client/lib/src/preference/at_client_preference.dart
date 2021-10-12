@@ -53,13 +53,15 @@ class AtClientPreference {
 
   /// Number of keys to batch for sync to secondary server
   int syncBatchSize = 5;
+
+  /// The number of keys to pull from cloud secondary to local secondary in a single call.
+  int syncPageLimit = 10;
 }
 
 @deprecated
 enum SyncStrategy {
   /// Sync local keys immediately to secondary server for update and delete commands.
   IMMEDIATE,
-
   ONDEMAND,
 
   /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].

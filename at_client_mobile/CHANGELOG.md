@@ -1,3 +1,10 @@
+## 3.0.3
+- at_client version change
+## 3.0.2
+- at_client version change
+## 3.0.1
+- at_client version change
+- at_lookup version change
 ## 3.0.0
 - Resilient SDK uptake for notification, monitor and sync improvements
 ## 2.0.4

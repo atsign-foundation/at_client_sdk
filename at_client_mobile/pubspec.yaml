@@ -1,6 +1,6 @@
 name: at_client_mobile
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 3.0.0
+version: 3.0.3
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/at_docs-dev_env/at_client_mobile/at_client_mobile/at_client_mobile-library.html
@@ -15,29 +15,32 @@ dependencies:
   flutter_keychain: ^2.0.1
   hive: ^2.0.4
   crypton: ^2.0.1
-  at_client: ^2.0.4
-  at_lookup: ^3.0.1
+  at_client: ^3.0.3
+  at_lookup: ^3.0.3
   at_commons: ^3.0.0
   at_utils: ^3.0.0
 
-dependency_overrides:
-  at_client:
-    path: ../at_client
+#dependency_overrides:
+#  at_client:
+#    git:
+#      url: https://github.com/atsign-foundation/at_client_sdk.git
+#      path: at_lookup
+#      ref: trunk
 #  at_lookup:
 #    git:
 #      url: https://github.com/atsign-foundation/at_libraries.git
 #      path: at_lookup
 #      ref: trunk
-  at_utils:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_utils
-      ref: trunk
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: trunk
+#  at_utils:
+#    git:
+#      url: https://github.com/atsign-foundation/at_tools.git
+#      path: at_utils
+#      ref: trunk
+#  at_commons:
+#    git:
+#      url: https://github.com/atsign-foundation/at_tools.git
+#      path: at_commons
+#      ref: trunk
 
 dev_dependencies:
   pedantic: ^1.8.0
