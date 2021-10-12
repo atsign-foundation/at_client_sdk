@@ -1,15 +1,22 @@
 # Defines a default set of lint rules enforced for
 # projects at Google. For details and rationale,
 # see https://pub.dev/packages/lints.
-include: package:lints/recommended.yaml
+include: package:flutter_lints/flutter.yaml
 
 # For lint rules and documentation, see http://dart-lang.github.io/linter/lints.
 # Uncomment to specify additional rules.
 linter:
   rules:
-    - camel_case_types
-    - unnecessary_string_interpolations
-    - await_only_futures
+# Supresses 22 issues
+    constant_identifier_names: false
+# Supresses 5 issues
+    prefer_typing_uninitialized_variables: false
+# Supresses 2 issues
+    provide_deprecation_message: false
+# Supresses 2 issues
+    implementation_imports: false
+# Supresses 2 issues
+    non_constant_identifier_names: false
 
 analyzer:
 #   exclude:
