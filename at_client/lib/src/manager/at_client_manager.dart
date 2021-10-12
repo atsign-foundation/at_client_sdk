@@ -9,10 +9,12 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 /// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
 ///
 /// Usage
-/// ```
+/// 
+/// ```dart
 /// final atClientManager = AtClientManager.getInstance().setCurrentAtSign(<current_atsign>, <app_namespace>, <preferences>)
 /// Apps have to call the above method again while switching atsign.
 /// ```
+/// 
 /// atClientManager.atClient - for at client method calls
 /// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
 /// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage

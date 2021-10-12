@@ -10,3 +10,5 @@ export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/listener/connectivity_listener.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/response/at_notification.dart';
+export 'package:at_client/src/service/sync_service.dart';
+export 'package:at_client/src/service/notification_service.dart';

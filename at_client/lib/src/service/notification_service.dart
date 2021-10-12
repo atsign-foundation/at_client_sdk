@@ -4,6 +4,8 @@ import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
 
+/// NotificationService is an abstract class that can be implemented to
+/// send and receive notifications from the secondary server.
 abstract class NotificationService {
   // Gives back stream of notifications from the server to the subscribing client.
   // Optionally pass a regex to filter notification keys matching the regex.
@@ -70,8 +72,7 @@ abstract class NotificationService {
   ///   var notification = NotificationServiceImpl(atClient!);
   ///   await notification.notify(NotificationParams.forText('Hello','@bob'));
   ///```
-  Future<NotificationResult> notify(NotificationParams notificationParams,
-      {Function? onSuccess, Function? onError});
+  Future<NotificationResult> notify(NotificationParams notificationParams, {Function? onSuccess, Function? onError});
 
   /// Stops all subscriptions on the current instance
   void stopAllSubscriptions();
@@ -143,8 +144,7 @@ class NotificationParams {
 class NotificationResult {
   String? notificationID;
   late AtKey atKey;
-  NotificationStatusEnum notificationStatusEnum =
-      NotificationStatusEnum.undelivered;
+  NotificationStatusEnum notificationStatusEnum = NotificationStatusEnum.undelivered;
 
   AtClientException? atClientException;
 

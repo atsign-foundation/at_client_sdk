@@ -1,3 +1,4 @@
+/// SyncService is an abstract class that can implmented to keep local and cloud secondary data in sync.
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
   ///
