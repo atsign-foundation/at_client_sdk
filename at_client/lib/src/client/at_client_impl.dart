@@ -1027,7 +1027,11 @@ class AtClientImpl implements AtClient {
     notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
-    AtClientValidation.validateKey(notificationParams.atKey.key);
+    // For messageType is text, text may contains spaces but key should not have spaces
+    // Hence do not validate the key.
+    if (notificationParams.messageType != MessageTypeEnum.text) {
+      AtClientValidation.validateKey(notificationParams.atKey.key);
+    }
     // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
     // If namespaceAware is set to true, append nameSpace to key.
