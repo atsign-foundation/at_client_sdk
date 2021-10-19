@@ -31,9 +31,9 @@ class SyncUtil {
 
     var lastEntry;
     if (regex != null) {
-      lastEntry = commitLogInstance!.lastSyncedEntryWithRegex(regex);
+      lastEntry = await commitLogInstance!.lastSyncedEntryWithRegex(regex);
     } else {
-      lastEntry = commitLogInstance!.lastSyncedEntry();
+      lastEntry = await commitLogInstance!.lastSyncedEntry();
     }
     return lastEntry;
   }
