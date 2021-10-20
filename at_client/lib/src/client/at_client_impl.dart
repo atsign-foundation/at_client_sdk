@@ -402,7 +402,7 @@ class AtClientImpl implements AtClient {
         operation: UPDATE_ALL);
 
     var atValue = AtValue();
-    if (getResult == null || getResult == 'null') {
+    if (getResult == null || getResult == 'null' || getResult['data'] == null) {
       return atValue;
     }
     if (atKey.metadata != null && atKey.metadata!.isBinary!) {
