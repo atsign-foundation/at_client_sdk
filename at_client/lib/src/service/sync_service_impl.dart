@@ -282,9 +282,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     while (serverCommitId > localCommitId) {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
-        ..regex = _atClient.getPreferences()!.syncRegex;
-      // ..limit = _atClient.getPreferences()!.syncPageLimit
-      // ..isPaginated = true;
+        ..regex = _atClient.getPreferences()!.syncRegex
+        ..limit = _atClient.getPreferences()!.syncPageLimit
+        ..isPaginated = true;
       _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
       var syncResponse = DefaultResponseParser()
           .parse(await _remoteSecondary.executeVerb(syncBuilder));
