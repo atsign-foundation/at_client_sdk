@@ -32,6 +32,12 @@ class EncryptionService {
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
+    // If sharedKey is not found in localSecondary, search in remote secondary.
+    if(sharedKey == null || sharedKey == 'data:null'){
+      sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
+    }
+    // If sharedKey is null, generate a new sharedKey,
+    // Else decrypt the existing shared key.
     if (sharedKey == null || sharedKey == 'data:null') {
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
@@ -40,7 +46,6 @@ class EncryptionService {
       sharedKey =
           EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
     }
-
     //2. Verify if encryptedSharedKey for sharedWith atSign is available.
     var lookupEncryptionSharedKey = LLookupVerbBuilder()
       ..sharedWith = sharedWith
@@ -103,14 +108,12 @@ class EncryptionService {
     var currentAtSignPrivateKey =
         await (localSecondary!.getEncryptionPrivateKey());
     if (currentAtSignPrivateKey == null) {
-      throw throw KeyNotFoundException('encryption private not found');
+      throw KeyNotFoundException('encryption private not found');
     }
     var sharedKey =
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
 
     //3. decrypt value using shared key
-
-    //@bob 5. decrypt phone using decrypted aes shared key
     var decryptedValue = EncryptionUtil.decryptValue(encryptedValue, sharedKey);
     return decryptedValue;
   }

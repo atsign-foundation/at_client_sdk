@@ -311,7 +311,7 @@ class AtClientImpl implements AtClient {
           } on KeyNotFoundException catch (e) {
             var errorCode = AtClientExceptionUtil.getErrorCode(e);
             return Future.error(AtClientException(errorCode,
-                AtClientExceptionUtil.getErrorDescription(errorCode)));
+                e.message));
           }
           encryptedResultMap['data'] = decryptedValue;
         }
@@ -533,7 +533,7 @@ class AtClientImpl implements AtClient {
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+              errorCode, e.message));
         }
       } else if (!builder.isPublic &&
           !builder.atKey.toString().startsWith('_')) {
@@ -626,7 +626,7 @@ class AtClientImpl implements AtClient {
       } on KeyNotFoundException catch (e) {
         var errorCode = AtClientExceptionUtil.getErrorCode(e);
         return Future.error(AtClientException(
-            errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+            errorCode, e.message));
       }
     } else {
       builder.value =
@@ -1068,7 +1068,7 @@ class AtClientImpl implements AtClient {
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+              errorCode, e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
