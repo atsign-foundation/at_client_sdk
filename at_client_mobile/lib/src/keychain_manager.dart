@@ -304,9 +304,31 @@ class KeyChainManager {
 
   Future<void> resetAtSignFromKeychain(String atsign) async {
     await deleteAtSignFromKeychain(atsign);
-    _storage = await getBiometricStorageFile(atsign + ':_pkam_private_key');
+    _storage =
+        await getBiometricStorageFile(atsign + ':' + KEYCHAIN_PKAM_PRIVATE_KEY);
     await _storage?.delete();
-    _storage = await getBiometricStorageFile(atsign + ':_pkam_public_key');
+    _storage =
+        await getBiometricStorageFile(atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY);
     await _storage?.delete();
+    _storage = await getBiometricStorageFile(
+        atsign + ':' + KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
+    await _storage?.delete();
+    _storage = await getBiometricStorageFile(
+        atsign + ':' + KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
+    await _storage?.delete();
+    _storage = await getBiometricStorageFile(
+        atsign + ':' + KEYCHAIN_SELF_ENCRYPTION_KEY);
+    await _storage?.delete();
+  }
+
+  Future<void> clearKeychainEntries() async {
+    var atsignList = await getAtSignListFromKeychain();
+    if (atsignList == null) {
+      return;
+    } else {
+      await Future.forEach(atsignList, (String atsign) async {
+        await resetAtSignFromKeychain(atsign);
+      });
+    }
   }
 }
