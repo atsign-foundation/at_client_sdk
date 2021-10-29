@@ -16,7 +16,11 @@ dependencies:
   biometric_storage: ^2.0.2
   hive: ^2.0.4
   crypton: ^2.0.1
-  at_client: ^3.0.3
+  at_client:
+    git:
+      url: https://github.com/atsign-foundation/at_client_sdk.git
+      path: at_client
+      ref: desktop-compatible
   at_lookup: ^3.0.3
   at_commons: ^3.0.0
   at_utils: ^3.0.0
@@ -24,27 +28,10 @@ dependencies:
 dependency_overrides:
   logging: ^1.0.0
   at_client:
-    path: ../at_client
-  # git:
-  #   url: https://github.com/atsign-foundation/at_client_sdk.git
-  #   path: at_client
-  #   ref: desktop-compatible
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: trunk
-#  at_utils:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_utils
-#      ref: trunk
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-
+    git:
+      url: https://github.com/atsign-foundation/at_client_sdk.git
+      path: at_client
+      ref: desktop-compatible
 dev_dependencies:
   lints: ^1.0.1
   test: ^1.6.0
