@@ -7,6 +7,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_isolate_manager.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -129,7 +130,7 @@ class SyncManager {
           var syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
           if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
             syncResponse = syncResponse.replaceFirst('data:', '');
-            var syncResponseJson = jsonDecode(syncResponse);
+            var syncResponseJson = JsonUtils.jsonDecodeWrapper(syncResponse);
             // Iterates over each commit
             await Future.forEach(syncResponseJson,
                 (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));

@@ -96,6 +96,9 @@ class EncryptionService {
   }
 
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
+    if(encryptedValue == null || encryptedValue.isEmpty){
+      throw AtClientException('AT0014', 'Decryption failed. Encrypted value is null');
+    }
     sharedBy = sharedBy.replaceFirst('@', '');
     var encryptedSharedKey;
     //1. Get encrypted shared key
@@ -122,6 +125,9 @@ class EncryptionService {
   /// Used for local lookup @bob:phone@alice
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
+    if(encryptedValue == null || encryptedValue.isEmpty){
+      throw AtClientException('AT0014', 'Decryption failed. Encrypted value is null');
+    }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
     var currentAtSignPrivateKey =
         await localSecondary!.getEncryptionPrivateKey();
@@ -137,7 +143,7 @@ class EncryptionService {
     var decryptedSharedKey =
         EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
     var decryptedValue =
-        EncryptionUtil.decryptValue(encryptedValue!, decryptedSharedKey);
+        EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey);
 
     return decryptedValue;
   }
@@ -170,7 +176,7 @@ class EncryptionService {
   Future<String?> decryptForSelf(
       String? encryptedValue, bool isEncrypted) async {
     if (!isEncrypted || encryptedValue == null || encryptedValue == 'null') {
-      return encryptedValue;
+      throw AtClientException('AT0014', 'Decryption failed. Encrypted value is null');
     }
     try {
       var selfEncryptionKey = await _getSelfEncryptionKey();

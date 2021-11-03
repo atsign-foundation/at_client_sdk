@@ -14,6 +14,7 @@ import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -252,7 +253,7 @@ class AtClientImpl implements AtClient {
         return null;
       }
       encryptedResult = _formatResult(encryptedResult);
-      var encryptedResultMap = jsonDecode(encryptedResult!);
+      var encryptedResultMap = JsonUtils.jsonDecodeWrapper(encryptedResult);
       if (operation == UPDATE_META) {
         return encryptedResultMap;
       }
@@ -286,8 +287,8 @@ class AtClientImpl implements AtClient {
         var remoteSecondary = getRemoteSecondary();
         var result = await remoteSecondary!.executeVerb(builder);
 
-        result = _formatResult(result)!;
-        return jsonDecode(result);
+        result = _formatResult(result);
+        return JsonUtils.jsonDecodeWrapper(result);
       } else {
         builder = LookupVerbBuilder()
           ..atKey = keyWithNamespace
@@ -301,8 +302,8 @@ class AtClientImpl implements AtClient {
         if (encryptedResult == 'data:null') {
           return null;
         }
-        encryptedResult = _formatResult(encryptedResult)!;
-        var encryptedResultMap = jsonDecode(encryptedResult);
+        encryptedResult = _formatResult(encryptedResult);
+        var encryptedResultMap = JsonUtils.jsonDecodeWrapper(encryptedResult);
         if (operation == UPDATE_ALL) {
           var decryptedValue;
           try {
@@ -310,8 +311,7 @@ class AtClientImpl implements AtClient {
                 .decrypt(encryptedResultMap['data'], sharedBy);
           } on KeyNotFoundException catch (e) {
             var errorCode = AtClientExceptionUtil.getErrorCode(e);
-            return Future.error(AtClientException(errorCode,
-                e.message));
+            return Future.error(AtClientException(errorCode, e.message));
           }
           encryptedResultMap['data'] = decryptedValue;
         }
@@ -336,7 +336,7 @@ class AtClientImpl implements AtClient {
         }
         // If encrypted result is metadata decryption is not needed.
         encryptedResult = _formatResult(encryptedResult);
-        var encryptedResultMap = jsonDecode(encryptedResult!);
+        var encryptedResultMap = JsonUtils.jsonDecodeWrapper(encryptedResult);
         if (operation == UPDATE_ALL) {
           try {
             var decryptedValue = await _encryptionService!.decryptLocal(
@@ -347,7 +347,7 @@ class AtClientImpl implements AtClient {
                 'decryption exception for command ${builder.buildCommand()}: ${e.toString}');
           } on Error catch (e) {
             _logger.severe(
-                'decryption error for command ${builder.buildCommand()}: $e');
+                'decryption error for command ${builder.buildCommand()}: ${e.toString}');
           }
         }
         return encryptedResultMap;
@@ -374,7 +374,7 @@ class AtClientImpl implements AtClient {
       return null;
     }
     result = _formatResult(result);
-    var encryptedResultMap = jsonDecode(result!);
+    var encryptedResultMap = JsonUtils.jsonDecodeWrapper(result);
     //If operation is update_meta, return metadata.
     if (operation == UPDATE_META) {
       return encryptedResultMap;
@@ -532,8 +532,7 @@ class AtClientImpl implements AtClient {
               await _encryptionService!.encrypt(key, value, sharedWith);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, e.message));
+          return Future.error(AtClientException(errorCode, e.message));
         }
       } else if (!builder.isPublic &&
           !builder.atKey.toString().startsWith('_')) {
@@ -625,8 +624,7 @@ class AtClientImpl implements AtClient {
             await _encryptionService!.encrypt(atKey.key, value, sharedWith);
       } on KeyNotFoundException catch (e) {
         var errorCode = AtClientExceptionUtil.getErrorCode(e);
-        return Future.error(AtClientException(
-            errorCode, e.message));
+        return Future.error(AtClientException(errorCode, e.message));
       }
     } else {
       builder.value =
@@ -750,12 +748,12 @@ class AtClientImpl implements AtClient {
     return null;
   }
 
-  String? _formatResult(String? commandResult) {
+  String _formatResult(String? commandResult) {
     var result = commandResult;
     if (result != null) {
       result = result.replaceFirst('data:', '');
     }
-    return result;
+    return result ??= '';
   }
 
   Metadata? _prepareMetadata(
@@ -1067,8 +1065,7 @@ class AtClientImpl implements AtClient {
               notificationParams.atKey.sharedWith!);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, e.message));
+          return Future.error(AtClientException(errorCode, e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
