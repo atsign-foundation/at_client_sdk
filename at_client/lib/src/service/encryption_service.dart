@@ -33,7 +33,7 @@ class EncryptionService {
       ..sharedBy = currentAtSign;
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     // If sharedKey is not found in localSecondary, search in remote secondary.
-    if(sharedKey == null || sharedKey == 'data:null'){
+    if (sharedKey == null || sharedKey == 'data:null') {
       sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
     }
     // If sharedKey is null, generate a new sharedKey,
@@ -96,8 +96,9 @@ class EncryptionService {
   }
 
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
-    if(encryptedValue == null || encryptedValue.isEmpty){
-      throw AtClientException('AT0014', 'Decryption failed. Encrypted value is null');
+    if (encryptedValue == null || encryptedValue.isEmpty) {
+      throw AtClientException(
+          'AT0014', 'Decryption failed. Encrypted value is null');
     }
     sharedBy = sharedBy.replaceFirst('@', '');
     var encryptedSharedKey;
@@ -125,8 +126,9 @@ class EncryptionService {
   /// Used for local lookup @bob:phone@alice
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
-    if(encryptedValue == null || encryptedValue.isEmpty){
-      throw AtClientException('AT0014', 'Decryption failed. Encrypted value is null');
+    if (encryptedValue == null || encryptedValue.isEmpty) {
+      throw AtClientException(
+          'AT0014', 'Decryption failed. Encrypted value is null');
     }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
     var currentAtSignPrivateKey =
@@ -175,8 +177,12 @@ class EncryptionService {
   /// Used for local lookup @alice:phone@alice
   Future<String?> decryptForSelf(
       String? encryptedValue, bool isEncrypted) async {
-    if (!isEncrypted || encryptedValue == null || encryptedValue == 'null') {
-      throw AtClientException('AT0014', 'Decryption failed. Encrypted value is null');
+    if (encryptedValue == null || encryptedValue == 'null') {
+      throw AtClientException(
+          'AT0014', 'Decryption failed. Encrypted value is null');
+    }
+    if (!isEncrypted) {
+      return encryptedValue;
     }
     try {
       var selfEncryptionKey = await _getSelfEncryptionKey();
