@@ -59,7 +59,7 @@ jobs:
       # Run unit and functional tests
       - name: Run unit and functional tests
         working-directory: at_client
-        run: dart test
+        run: dart test --concurrency=1
 
       # Adding flutter to path
       - name: Installing Flutter
