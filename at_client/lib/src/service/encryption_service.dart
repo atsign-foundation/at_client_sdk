@@ -138,7 +138,8 @@ class EncryptionService {
       ..sharedBy = currentAtSign;
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     if (sharedKey == null) {
-      return null;
+      throw AtClientException(
+          'AT0014', 'Decryption failed. SharedKey is null');
     }
     //trying to llookup a value without shared key. throw exception or return null}
     sharedKey = sharedKey.replaceFirst('data:', '');
@@ -182,6 +183,7 @@ class EncryptionService {
           'AT0014', 'Decryption failed. Encrypted value is null');
     }
     if (!isEncrypted) {
+      logger.info('isEncrypted is set to false, Returning the original value without decrypting');
       return encryptedValue;
     }
     try {
