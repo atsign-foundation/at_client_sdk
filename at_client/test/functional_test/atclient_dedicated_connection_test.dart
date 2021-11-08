@@ -27,6 +27,7 @@ void main() {
     expect(putResult, true);
     // get locationKey value using dedicated connection
     var getResult = await atClient.get(locationKey, isDedicated: true);
+    print(getResult);
     expect(getResult.value, value);
     // delete locationKey using dedicated connection
     var deleteResult = await atClient.delete(locationKey, isDedicated: true);

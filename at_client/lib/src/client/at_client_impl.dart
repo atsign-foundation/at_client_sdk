@@ -347,7 +347,7 @@ class AtClientImpl implements AtClient {
                 'decryption exception for command ${builder.buildCommand()}: ${e.toString}');
           } on Error catch (e) {
             _logger.severe(
-                'decryption error for command ${builder.buildCommand()}: ${e.toString}');
+                'decryption error for command ${builder.buildCommand()}: $e');
           }
         }
         return encryptedResultMap;
