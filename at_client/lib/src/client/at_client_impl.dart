@@ -890,7 +890,6 @@ class AtClientImpl implements AtClient {
           ..metadata = Metadata()
           ..metadata!.ttr = -1
           ..sharedBy = currentAtSign;
-        fileTransferObject.sharedStatus;
 
         var notificationResult =
             await AtClientManager.getInstance().notificationService.notify(
