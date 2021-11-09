@@ -890,8 +890,21 @@ class AtClientImpl implements AtClient {
           ..metadata = Metadata()
           ..metadata!.ttr = -1
           ..sharedBy = currentAtSign;
-        fileTransferObject.sharedStatus =
-            await put(atKey, jsonEncode(fileTransferObject.toJson()));
+
+        var notificationResult =
+            await AtClientManager.getInstance().notificationService.notify(
+                  NotificationParams.forUpdate(
+                    atKey,
+                    value: jsonEncode(fileTransferObject.toJson()),
+                  ),
+                );
+
+        if (notificationResult.notificationStatusEnum ==
+            NotificationStatusEnum.delivered) {
+          fileTransferObject.sharedStatus = true;
+        } else {
+          fileTransferObject.sharedStatus = false;
+        }
       } on Exception catch (e) {
         fileTransferObject.sharedStatus = false;
         fileTransferObject.error = e.toString();
