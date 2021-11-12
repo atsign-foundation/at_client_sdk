@@ -51,11 +51,13 @@ class KeyChainManager {
   }
 
   Future<String> getSecretFromKeychain(String atsign) async {
-    var secret;
+    String secret = '';
     try {
       assert(atsign != '');
       var secretString = await FlutterKeychain.get(key: atsign + '_secret');
-      secret = secretString;
+      if(secretString != null){
+        secret = secretString;
+      }
     } on Exception catch (e) {
       _logger.severe('Exception in getSecretFromKeychain :${e.toString()}');
     }
@@ -63,9 +65,9 @@ class KeyChainManager {
   }
 
   /// Use [getValue]
-  @deprecated
+  @Deprecated("Use getValue")
   Future<String?> getPrivateKeyFromKeyChain(String atsign) async {
-    var pkamPrivateKey;
+    String? pkamPrivateKey;
     try {
       assert(atsign != '');
       pkamPrivateKey =
@@ -77,9 +79,9 @@ class KeyChainManager {
   }
 
   /// Use [getValue]
-  @deprecated
+  @Deprecated("Use getValue")
   Future<String?> getPublicKeyFromKeyChain(String atsign) async {
-    var pkamPublicKey;
+    String? pkamPublicKey;
     try {
       assert(atsign != '');
       pkamPublicKey =
@@ -91,7 +93,7 @@ class KeyChainManager {
   }
 
   Future<String?> getValue(String atsign, String key) async {
-    var value;
+    String? value;
     try {
       assert(atsign != '');
       value = await FlutterKeychain.get(key: atsign + ':' + key);
@@ -122,7 +124,7 @@ class KeyChainManager {
       if (secret != null) {
         secret = secret.trim().toLowerCase().replaceAll(' ', '');
         await FlutterKeychain.put(
-            key: atSign + ':' + KEYCHAIN_SECRET, value: secret);
+            key: atSign + ':' + keychainSecret, value: secret);
       }
       await _saveAtSignToKeychain(atSign);
       await storePkamKeysToKeychain(atSign,
@@ -142,12 +144,12 @@ class KeyChainManager {
     try {
       if (privateKey != null) {
         await FlutterKeychain.put(
-            key: atsign + ':' + KEYCHAIN_PKAM_PRIVATE_KEY,
+            key: atsign + ':' + keychainPKAMPrivateKey,
             value: privateKey.toString());
       }
       if (publicKey != null) {
         await FlutterKeychain.put(
-            key: atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY,
+            key: atsign + ':' + keychainPKAMPublicKey,
             value: publicKey.toString());
       }
     } on Exception catch (exception) {
@@ -170,23 +172,23 @@ class KeyChainManager {
   }
 
   Future<String?> getPkamPrivateKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_PKAM_PRIVATE_KEY);
+    return getValue(atSign, keychainPKAMPrivateKey);
   }
 
   Future<String?> getPkamPublicKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
+    return getValue(atSign, keychainPKAMPublicKey);
   }
 
   Future<String?> getEncryptionPrivateKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
+    return getValue(atSign, keychainEncryptionPrivateKey);
   }
 
   Future<String?> getEncryptionPublicKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
+    return getValue(atSign, keychainEncryptionPublicKey);
   }
 
   Future<String?> getSelfEncryptionAESKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_SELF_ENCRYPTION_KEY);
+    return getValue(atSign, keychainSelfEncryptionKey);
   }
 
   Future<List<int>?> getKeyStoreSecret(String atSign) async {

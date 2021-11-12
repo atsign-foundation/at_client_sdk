@@ -20,8 +20,9 @@ dependencies:
   at_commons: ^3.0.0
   at_utils: ^3.0.0
 
-#dependency_overrides:
-#  at_client:
+dependency_overrides:
+  at_client:
+    path: ../at_client
 #    git:
 #      url: https://github.com/atsign-foundation/at_client_sdk.git
 #      path: at_lookup

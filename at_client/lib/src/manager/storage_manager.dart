@@ -40,14 +40,11 @@ class StorageManager {
     var manager = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)!
         .getHivePersistenceManager()!;
-    await manager.init(currentAtSign, storagePath);
-    await manager.openVault(currentAtSign, hiveSecret: keyStoreSecret);
-    //var hiveKeyStore = HiveKeystore(currentAtSign);
+    await manager.init(storagePath);
     var hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)!
         .getSecondaryKeyStore()!;
     hiveKeyStore.commitLog = atCommitLog;
-    //var keyStoreManager = SecondaryKeyStoreManager.getInstance();
     var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)!
         .getSecondaryKeyStoreManager()!;
