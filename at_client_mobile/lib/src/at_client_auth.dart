@@ -1,10 +1,11 @@
-import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:crypton/crypton.dart';
 
 import 'keychain_manager.dart';
 
@@ -45,11 +46,11 @@ class AtClientAuthenticator implements AtClientAuth {
         atSign, atClientPreference.rootDomain, atClientPreference.rootPort);
     // get existing keys from keychain
     var publicKey =
-        await _keyChainManager.getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
+        await _keyChainManager.getValue(atSign, keychainPKAMPublicKey);
     var privateKey = atClientPreference.privateKey ??=
-        await _keyChainManager.getValue(atSign, KEYCHAIN_PKAM_PRIVATE_KEY);
+        await _keyChainManager.getValue(atSign, keychainPKAMPrivateKey);
     var encryptionPrivateKey = await _keyChainManager.getValue(
-        atSign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
+        atSign, keychainEncryptionPrivateKey);
 
     // If cram secret is null, perform cram authentication
     if (atClientPreference.cramSecret != null) {
@@ -61,7 +62,7 @@ class AtClientAuthenticator implements AtClientAuth {
         return false;
       }
 
-      var keypair;
+      RSAKeypair keypair;
       // If PKAM Authenticated is false, perform PKAM auth
       if (!_isPKAMAuthenticated) {
         // Generate keypair if not already generated
@@ -83,9 +84,9 @@ class AtClientAuthenticator implements AtClientAuth {
         return true; //Auth already performed
       }
     }
-    var pkam_auth_result = await atLookupInitialAuth.authenticate(privateKey);
+    var pkamAuthResult = await atLookupInitialAuth.authenticate(privateKey);
 
-    if (pkam_auth_result) {
+    if (pkamAuthResult) {
       logger.finer('pkam auth is successful');
       _isPKAMAuthenticated = true;
       if (privateKey != null) {
@@ -101,19 +102,19 @@ class AtClientAuthenticator implements AtClientAuth {
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
           await _keyChainManager.putValue(
               atSign,
-              KEYCHAIN_ENCRYPTION_PRIVATE_KEY,
+              keychainEncryptionPrivateKey,
               encryptionKeyPair.privateKey.toString());
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
           await _keyChainManager.putValue(
-              atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY, encryptionPubKey);
+              atSign, keychainEncryptionPublicKey, encryptionPubKey);
           var selfEncryptionKey = EncryptionUtil.generateAESKey();
           await _keyChainManager.putValue(
-              atSign, KEYCHAIN_SELF_ENCRYPTION_KEY, selfEncryptionKey);
+              atSign, keychainSelfEncryptionKey, selfEncryptionKey);
         }
         var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
-        var delete_response =
+        var deleteResponse =
             await atLookupInitialAuth.executeVerb(deleteBuilder);
-        logger.finer('cram secret delete response : $delete_response');
+        logger.finer('cram secret delete response : $deleteResponse');
       }
     }
     // Close the connection on atLookupInitalAuth.
