@@ -233,7 +233,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncResult.syncStatus = SyncStatus.success;
     } on Exception catch (e) {
       syncResult.atClientException = AtClientException(
-          at_client_error_codes['SyncException'], e.toString());
+          atClientErrorCodes['SyncException'], e.toString());
       syncResult.syncStatus = SyncStatus.failure;
     }
     return syncResult;

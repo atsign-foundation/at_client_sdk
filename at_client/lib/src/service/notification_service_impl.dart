@@ -59,7 +59,7 @@ class NotificationServiceImpl
   }
 
   Future<void> _startMonitor() async {
-    if (_monitor != null && _monitor!.status == MonitorStatus.Started) {
+    if (_monitor != null && _monitor!.status == MonitorStatus.started) {
       _logger.finer(
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
@@ -73,7 +73,7 @@ class NotificationServiceImpl
         MonitorPreference()..keepAlive = true,
         _monitorRetry);
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
-    if (_monitor!.status == MonitorStatus.Started) {
+    if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
     }
   }

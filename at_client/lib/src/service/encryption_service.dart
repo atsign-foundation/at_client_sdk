@@ -52,7 +52,7 @@ class EncryptionService {
     // a. encryptedSharedKey not available (or)
     // b. If the sharedKey is changed.
     if (result == null || result == 'data:null' || !isSharedKeyAvailable) {
-      var sharedWithPublicKey;
+      String sharedWithPublicKey;
       try {
         sharedWithPublicKey = await _getSharedWithPublicKey(sharedWithUser);
       } on Exception {
@@ -92,7 +92,7 @@ class EncryptionService {
 
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
     sharedBy = sharedBy.replaceFirst('@', '');
-    var encryptedSharedKey;
+    String encryptedSharedKey;
     //1. Get encrypted shared key
     encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
     if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
@@ -293,7 +293,7 @@ class EncryptionService {
     return base64Encode(dataSignature);
   }
 
-  @deprecated
+  @Deprecated("not in use")
   Future<void> encryptUnencryptedData() async {
     var atClient = await (AtClientImpl.getClient(currentAtSign));
     if (atClient == null) {
@@ -344,9 +344,9 @@ class EncryptionService {
 
   /// Returns sharedWith atSign publicKey.
   /// Throws [KeyNotFoundException] if sharedWith atSign publicKey is not found.
-  Future<String?> _getSharedWithPublicKey(String sharedWithUser) async {
+  Future<String> _getSharedWithPublicKey(String sharedWithUser) async {
     //a local lookup the cached public key of sharedWith atsign.
-    var sharedWithPublicKey;
+    String? sharedWithPublicKey;
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
       ..atKey = 'publickey.$sharedWithUser'
       ..sharedBy = currentAtSign;
@@ -380,8 +380,8 @@ class EncryptionService {
     return sharedWithPublicKey;
   }
 
-  Future<String?> _getEncryptedSharedKey(String sharedBy) async {
-    var encryptedSharedKey;
+  Future<String> _getEncryptedSharedKey(String sharedBy) async {
+    String? encryptedSharedKey;
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
       ..isCached = true
       ..sharedBy = sharedBy
@@ -397,7 +397,7 @@ class EncryptionService {
       encryptedSharedKey =
           await remoteSecondary!.executeAndParse(sharedKeyLookUpBuilder);
     }
-    if ((encryptedSharedKey != null) && (encryptedSharedKey.isNotEmpty)) {
+    if (encryptedSharedKey.isNotEmpty) {
       encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
     }
     return encryptedSharedKey;
@@ -407,7 +407,7 @@ class EncryptionService {
     sharedBy = sharedBy.replaceFirst('@', '');
 
     var encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
-    if (encryptedSharedKey == null || encryptedSharedKey == 'null') {
+    if (encryptedSharedKey == 'null') {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
     //2. decrypt shared key using private key

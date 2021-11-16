@@ -3,7 +3,7 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 
 /// [Deprecated] Use [AtClientManager.syncService]
-@deprecated
+@Deprecated("Use SyncService")
 class SyncManagerImpl {
   static final SyncManagerImpl _singleton = SyncManagerImpl._internal();
 
@@ -15,7 +15,7 @@ class SyncManagerImpl {
 
   final Map<String?, SyncManager> _syncManagerMap = {};
 
-  @deprecated
+  @Deprecated("Use SyncService")
   SyncManager? getSyncManager(String? atSign) {
     if (!_syncManagerMap.containsKey(atSign)) {
       var syncManager = SyncManager(atSign);
