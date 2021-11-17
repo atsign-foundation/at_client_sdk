@@ -290,7 +290,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           .parse(await _remoteSecondary.executeVerb(syncBuilder));
 
       var syncResponseJson = jsonDecode(syncResponse.response);
-      _logger.finest('** syncResponse ${syncResponseJson}');
+      _logger.finest('** syncResponse $syncResponseJson');
       // Iterates over each commit
       await Future.forEach(syncResponseJson,
           (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
@@ -317,7 +317,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   Future<String> _getCommand(CommitEntry entry) async {
-    late var command;
+    late String command;
     // ignore: missing_enum_constant_in_switch
     switch (entry.operation) {
       case CommitOp.UPDATE:
@@ -416,11 +416,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var lastSyncEntry = await SyncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
         atSign: _atClient.getCurrentAtSign()!);
-    var localCommitId;
+    int localCommitId;
     // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
     // Else set to -1.
-    (lastSyncEntry != null)
-        ? localCommitId = lastSyncEntry.commitId
+    (lastSyncEntry != null && lastSyncEntry.commitId != null)
+        ? localCommitId = lastSyncEntry.commitId!
         : localCommitId = -1;
     return localCommitId;
   }
@@ -550,7 +550,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
 ///Class to represent sync response.
 class SyncResult {
-  SyncStatus syncStatus = SyncStatus.not_started;
+  SyncStatus syncStatus = SyncStatus.notStarted;
   AtClientException? atClientException;
   DateTime? lastSyncedOn;
   bool dataChange = true;
@@ -562,7 +562,7 @@ class SyncResult {
 }
 
 ///Enum to represent the sync status
-enum SyncStatus { not_started, success, failure }
+enum SyncStatus { notStarted, success, failure }
 
 enum SyncRequestSource { app, system }
 

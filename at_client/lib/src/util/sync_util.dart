@@ -29,7 +29,7 @@ class SyncUtil {
     var commitLogInstance =
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
 
-    var lastEntry;
+    CommitEntry? lastEntry;
     if (regex != null) {
       lastEntry = await commitLogInstance!.lastSyncedEntryWithRegex(regex);
     } else {
@@ -75,7 +75,7 @@ class SyncUtil {
 
   static Future<int?> getLatestServerCommitId(
       RemoteSecondary remoteSecondary, String? regex) async {
-    var commitId;
+    int? commitId;
     var builder = StatsVerbBuilder()..statIds = '3';
     if (regex != null && regex != 'null' && regex.isNotEmpty) {
       builder.regex = regex;

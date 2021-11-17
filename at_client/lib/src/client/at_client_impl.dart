@@ -29,7 +29,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:http/http.dart' as http;
@@ -730,7 +729,7 @@ class AtClientImpl implements AtClient {
       return VALUE;
     }
     // Verifies if any of the args are not null
-    var isMetadataNotNull = ObjectsUtil.isAnyNotNull(
+    var isMetadataNotNull = AtClientUtil.isAnyNotNull(
         a1: data!.ttl,
         a2: data.ttb,
         a3: data.ttr,
@@ -821,15 +820,15 @@ class AtClientImpl implements AtClient {
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
-        streamResponse.status = AtStreamStatus.COMPLETE;
+        streamResponse.status = AtStreamStatus.complete;
       }
     } else if (result != null && result.startsWith('error:')) {
       result = result.replaceAll('error:', '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
-      streamResponse.status = AtStreamStatus.ERROR;
+      streamResponse.status = AtStreamStatus.error;
     } else {
-      streamResponse.status = AtStreamStatus.NO_ACK;
+      streamResponse.status = AtStreamStatus.noAck;
     }
     return streamResponse;
   }
@@ -862,9 +861,9 @@ class AtClientImpl implements AtClient {
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns) async {
     var encryptionKey = _encryptionService!.generateFileEncryptionKey();
-    var key = TextConstants.FILE_TRANSFER_KEY + Uuid().v4();
+    var key = TextConstants.fileTransferKey + Uuid().v4();
     var fileStatus = await _uploadFiles(key, files, encryptionKey);
-    var fileUrl = TextConstants.FILEBIN_URL + 'archive/' + key + '/zip';
+    var fileUrl = TextConstants.fileBinURL + 'archive/' + key + '/zip';
     return shareFiles(
         sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
   }
