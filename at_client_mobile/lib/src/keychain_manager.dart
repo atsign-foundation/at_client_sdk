@@ -29,7 +29,7 @@ class KeyChainManager {
   }
 
   Future<List<int>> getHiveSecretFromKeychain(String atsign) async {
-    assert(atsign != null && atsign.isNotEmpty);
+    assert(atsign.isNotEmpty);
     List<int> secretAsUint8List = [];
     try {
       var hiveKey = atsign + '_hive_secret';
@@ -63,7 +63,7 @@ class KeyChainManager {
   Future<String> getSecretFromKeychain(String atsign) async {
     String secret = '';
     try {
-      assert(atsign != null && atsign != '');
+      assert(atsign.isNotEmpty);
       _storage = await getBiometricStorageFile(atsign + '_secret');
       var secretString = await _storage?.read();
       secret = secretString ?? '';
@@ -78,7 +78,7 @@ class KeyChainManager {
   Future<String?> getPrivateKeyFromKeyChain(String atsign) async {
     String? pkamPrivateKey;
     try {
-      assert(atsign != null && atsign != '');
+      assert(atsign.isNotEmpty);
       _storage = await getBiometricStorageFile(atsign + '_pkam_private_key');
       pkamPrivateKey = await _storage?.read();
     } on Exception catch (e) {
@@ -92,7 +92,7 @@ class KeyChainManager {
   Future<String?> getPublicKeyFromKeyChain(String atsign) async {
     String? pkamPublicKey;
     try {
-      assert(atsign != null && atsign != '');
+      assert(atsign.isNotEmpty);
       _storage = await getBiometricStorageFile(atsign + '_pkam_public_key');
       pkamPublicKey = await _storage?.read();
     } on Exception catch (e) {
@@ -104,7 +104,7 @@ class KeyChainManager {
   Future<String?> getValue(String atsign, String key) async {
     String? value;
     try {
-      assert(atsign != null && atsign != '');
+      assert(atsign.isNotEmpty);
       _storage = await getBiometricStorageFile(atsign + ':' + key);
       value = await _storage?.read();
     } on Exception catch (e) {
