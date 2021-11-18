@@ -308,6 +308,7 @@ class AtClientService {
 }
 
 class BackupKeyConstants {
+  // ignore_for_file: constant_identifier_names
   static const String PKAM_PUBLIC_KEY_FROM_KEY_FILE = 'aesPkamPublicKey';
   static const String PKAM_PRIVATE_KEY_FROM_KEY_FILE = 'aesPkamPrivateKey';
   static const String ENCRYPTION_PUBLIC_KEY_FROM_FILE = 'aesEncryptPublicKey';

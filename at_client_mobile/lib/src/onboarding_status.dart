@@ -1,3 +1,4 @@
+// ignore_for_file: constant_identifier_names
 enum OnboardingStatus {
   ATSIGN_NOT_FOUND,
   PRIVATE_KEY_NOT_FOUND,
