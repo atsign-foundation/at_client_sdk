@@ -1,3 +1,7 @@
+## 3.0.5
+- Uptake at_persistence_secondary_server changes
+## 3.0.4
+- Uptake Hive Lazy Box changes
 ## 3.0.3
 - Sync pagination limit in preference
 ## 3.0.2

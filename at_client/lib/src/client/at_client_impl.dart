@@ -402,7 +402,7 @@ class AtClientImpl implements AtClient {
         operation: UPDATE_ALL);
 
     var atValue = AtValue();
-    if (getResult == null || getResult == 'null') {
+    if (getResult == null || getResult == 'null' || getResult['data'] == null) {
       return atValue;
     }
     if (atKey.metadata != null && atKey.metadata!.isBinary!) {
@@ -890,8 +890,21 @@ class AtClientImpl implements AtClient {
           ..metadata = Metadata()
           ..metadata!.ttr = -1
           ..sharedBy = currentAtSign;
-        fileTransferObject.sharedStatus =
-            await put(atKey, jsonEncode(fileTransferObject.toJson()));
+
+        var notificationResult =
+            await AtClientManager.getInstance().notificationService.notify(
+                  NotificationParams.forUpdate(
+                    atKey,
+                    value: jsonEncode(fileTransferObject.toJson()),
+                  ),
+                );
+
+        if (notificationResult.notificationStatusEnum ==
+            NotificationStatusEnum.delivered) {
+          fileTransferObject.sharedStatus = true;
+        } else {
+          fileTransferObject.sharedStatus = false;
+        }
       } on Exception catch (e) {
         fileTransferObject.sharedStatus = false;
         fileTransferObject.error = e.toString();
@@ -1027,7 +1040,11 @@ class AtClientImpl implements AtClient {
     notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
-    AtClientValidation.validateKey(notificationParams.atKey.key);
+    // For messageType is text, text may contains spaces but key should not have spaces
+    // Hence do not validate the key.
+    if (notificationParams.messageType != MessageTypeEnum.text) {
+      AtClientValidation.validateKey(notificationParams.atKey.key);
+    }
     // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
     // If namespaceAware is set to true, append nameSpace to key.

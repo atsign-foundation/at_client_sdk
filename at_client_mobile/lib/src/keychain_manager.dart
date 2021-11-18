@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
-// import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:hive/hive.dart';
 
@@ -62,7 +61,7 @@ class KeyChainManager {
   }
 
   Future<String> getSecretFromKeychain(String atsign) async {
-    var secret;
+    String secret = '';
     try {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + '_secret');
@@ -75,9 +74,9 @@ class KeyChainManager {
   }
 
   /// Use [getValue]
-  @deprecated
+  @Deprecated("Use getValue")
   Future<String?> getPrivateKeyFromKeyChain(String atsign) async {
-    var pkamPrivateKey;
+    String? pkamPrivateKey;
     try {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + '_pkam_private_key');
@@ -89,9 +88,9 @@ class KeyChainManager {
   }
 
   /// Use [getValue]
-  @deprecated
+  @Deprecated("Use getValue")
   Future<String?> getPublicKeyFromKeyChain(String atsign) async {
-    var pkamPublicKey;
+    String? pkamPublicKey;
     try {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + '_pkam_public_key');
@@ -103,7 +102,7 @@ class KeyChainManager {
   }
 
   Future<String?> getValue(String atsign, String key) async {
-    var value;
+    String? value;
     try {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + ':' + key);
@@ -185,23 +184,23 @@ class KeyChainManager {
   }
 
   Future<String?> getPkamPrivateKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_PKAM_PRIVATE_KEY);
+    return getValue(atSign, keychainPKAMPrivateKey);
   }
 
   Future<String?> getPkamPublicKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_PKAM_PUBLIC_KEY);
+    return getValue(atSign, keychainPKAMPublicKey);
   }
 
   Future<String?> getEncryptionPrivateKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
+    return getValue(atSign, keychainEncryptionPrivateKey);
   }
 
   Future<String?> getEncryptionPublicKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
+    return getValue(atSign, keychainEncryptionPublicKey);
   }
 
   Future<String?> getSelfEncryptionAESKey(String atSign) async {
-    return getValue(atSign, KEYCHAIN_SELF_ENCRYPTION_KEY);
+    return getValue(atSign, keychainSelfEncryptionKey);
   }
 
   Future<List<int>?> getKeyStoreSecret(String atSign) async {
