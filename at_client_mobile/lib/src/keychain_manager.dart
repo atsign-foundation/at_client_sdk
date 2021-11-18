@@ -66,7 +66,7 @@ class KeyChainManager {
       assert(atsign != null && atsign != '');
       _storage = await getBiometricStorageFile(atsign + '_secret');
       var secretString = await _storage?.read();
-      secret = secretString;
+      secret = secretString ?? '';
     } on Exception catch (e) {
       _logger.severe('Exception in getSecretFromKeychain :${e.toString()}');
     }
@@ -134,8 +134,7 @@ class KeyChainManager {
       atSign = atSign.trim().toLowerCase().replaceAll(' ', '');
       if (secret != null) {
         secret = secret.trim().toLowerCase().replaceAll(' ', '');
-        _storage =
-            await getBiometricStorageFile(atSign + ':' + KEYCHAIN_SECRET);
+        _storage = await getBiometricStorageFile(atSign + ':' + keychainSecret);
         await _storage?.write(secret);
       }
       await _saveAtSignToKeychain(atSign);
@@ -156,12 +155,12 @@ class KeyChainManager {
     try {
       if (privateKey != null) {
         _storage = await getBiometricStorageFile(
-            atsign + ':' + KEYCHAIN_PKAM_PRIVATE_KEY);
+            atsign + ':' + keychainPKAMPrivateKey);
         await _storage?.write(privateKey.toString());
       }
       if (publicKey != null) {
-        _storage = await getBiometricStorageFile(
-            atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY);
+        _storage =
+            await getBiometricStorageFile(atsign + ':' + keychainPKAMPublicKey);
         await _storage?.write(publicKey.toString());
       }
     } on Exception catch (exception) {
@@ -304,19 +303,19 @@ class KeyChainManager {
   Future<void> resetAtSignFromKeychain(String atsign) async {
     await deleteAtSignFromKeychain(atsign);
     _storage =
-        await getBiometricStorageFile(atsign + ':' + KEYCHAIN_PKAM_PRIVATE_KEY);
+        await getBiometricStorageFile(atsign + ':' + keychainPKAMPrivateKey);
     await _storage?.delete();
     _storage =
-        await getBiometricStorageFile(atsign + ':' + KEYCHAIN_PKAM_PUBLIC_KEY);
+        await getBiometricStorageFile(atsign + ':' + keychainPKAMPublicKey);
     await _storage?.delete();
     _storage = await getBiometricStorageFile(
-        atsign + ':' + KEYCHAIN_ENCRYPTION_PRIVATE_KEY);
+        atsign + ':' + keychainEncryptionPrivateKey);
     await _storage?.delete();
     _storage = await getBiometricStorageFile(
-        atsign + ':' + KEYCHAIN_ENCRYPTION_PUBLIC_KEY);
+        atsign + ':' + keychainEncryptionPublicKey);
     await _storage?.delete();
-    _storage = await getBiometricStorageFile(
-        atsign + ':' + KEYCHAIN_SELF_ENCRYPTION_KEY);
+    _storage =
+        await getBiometricStorageFile(atsign + ':' + keychainSelfEncryptionKey);
     await _storage?.delete();
   }
 
