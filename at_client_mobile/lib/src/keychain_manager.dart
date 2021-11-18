@@ -109,7 +109,7 @@ class KeyChainManager {
       value = await _storage?.read();
     } on Exception catch (e) {
       _logger.severe(
-          'flutter keychain - exception in put value for $key :${e.toString()}');
+          'Biometric storage - exception in get value for $key :${e.toString()}');
     }
     return value;
   }
@@ -121,7 +121,7 @@ class KeyChainManager {
       await _storage?.write(value);
     } on Exception catch (e) {
       _logger.severe(
-          'flutter keychain - exception in put value for $key :${e.toString()}');
+          'Biometric storage - exception in put value for $key :${e.toString()}');
     }
     return value;
   }
