@@ -470,7 +470,11 @@ class AtClientImpl implements AtClient {
     var result = <AtKey>[];
     if (getKeysResult.isNotEmpty) {
       getKeysResult.forEach((key) {
-        result.add(AtKey.fromString(key));
+        try {
+          result.add(AtKey.fromString(key));
+        } on InvalidSyntaxException {
+          _logger.severe('Failed to return. $key is not a well-formed key');
+        }
       });
     }
     return result;
