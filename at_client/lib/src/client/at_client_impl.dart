@@ -473,9 +473,10 @@ class AtClientImpl implements AtClient {
         try {
           result.add(AtKey.fromString(key));
         } on InvalidSyntaxException {
-          _logger.severe('Failed to return. $key is not a well-formed key');
-        } on Exception {
-          _logger.severe('Unable to form key $key');
+          _logger.severe('$key is not a well-formed key');
+        } on Exception catch (e) {
+          _logger.severe(
+              'Exception occured: ${e.toString()}. Unable to form key $key');
         }
       });
     }
