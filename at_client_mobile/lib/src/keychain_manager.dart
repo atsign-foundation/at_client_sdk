@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:hive/hive.dart';
 
@@ -53,11 +55,63 @@ class KeyChainManager {
   Future<List<String>?> getAtSignListFromKeychain() async {
     var atsignMap = await _getAtSignMap();
     if (atsignMap.isEmpty) {
-      return null;
+      // no atsigns found in biometric storage
+      // read entries from flutter keychain
+      atsignMap = await checkForValuesInFlutterKeychain();
+      if (atsignMap.isEmpty) {
+        return null;
+      }
     }
     var atsigns = atsignMap.keys.toList();
     _logger.info('Retrieved atsigns $atsigns from Keychain');
     return atsigns;
+  }
+
+  Future<Map<String, bool?>> checkForValuesInFlutterKeychain() async {
+    var atsignMap = await _getAtSignMap(useFlutterKeychain: true);
+    if (atsignMap.isNotEmpty) {
+      var atsigns = atsignMap.keys.toList();
+      await Future.forEach(atsigns, (String atsign) async {
+        await Future.forEach(keychainKeys, (String keychainKey) async {
+          try {
+            assert(atsign.isNotEmpty);
+            var value =
+                await FlutterKeychain.get(key: atsign + ':' + keychainKey);
+            putValue(atsign, keychainKey, value ?? '');
+          } on Exception catch (e) {
+            _logger.severe(
+                'Exception in transferring keychain entries :${e.toString()}');
+          }
+        });
+      });
+
+      // verify and delete flutter keychain entry
+      var atsignMapFromBS = await _getAtSignMap();
+      if (mapEquals(atsignMap, atsignMapFromBS)) {
+        var atsignsFromFK = atsignMap.keys.toList();
+        await Future.forEach(atsignsFromFK, (String atsign) async {
+          await Future.forEach(keychainKeys, (String keychainKey) async {
+            try {
+              assert(atsign.isNotEmpty);
+              await FlutterKeychain.remove(key: atsign + ':' + keychainKey);
+            } on Exception catch (e) {
+              _logger.severe(
+                  'Exception in removing flutter keychain entries :${e.toString()}');
+            }
+          });
+        });
+        try {
+          await FlutterKeychain.remove(key: '@atsign');
+        } on Exception catch (e) {
+          _logger.severe(
+              'Exception in removing flutter keychain entry for @atsign :${e.toString()}');
+        }
+      }
+      // TODO: else condition
+      // Question: what should be done if the flutter keychain values are not copied over completely?
+      return atsignMapFromBS;
+    }
+    return atsignMap;
   }
 
   Future<String> getSecretFromKeychain(String atsign) async {
@@ -232,11 +286,17 @@ class KeyChainManager {
     await _storage?.write(value);
   }
 
-  Future<Map<String, bool?>> _getAtSignMap() async {
-    var atsignMap = <String, bool?>{};
+  Future<Map<String, bool?>> _getAtSignMap(
+      {bool useFlutterKeychain = false}) async {
+    Map<String, bool?> atsignMap = <String, bool?>{};
     var atsignSecondMap = <String, bool>{};
-    _storage = await getBiometricStorageFile('@atsign');
-    var value = await _storage?.read();
+    dynamic value;
+    if (useFlutterKeychain) {
+      value = await FlutterKeychain.get(key: '@atsign');
+    } else {
+      _storage = await getBiometricStorageFile('@atsign');
+      value = await _storage?.read();
+    }
     if (value != null && value.isNotEmpty) {
       if (!value.contains(':')) {
         atsignMap[value] = true;
@@ -253,8 +313,10 @@ class KeyChainManager {
       });
       atsignMap.addAll(atsignSecondMap);
       atsignSecondMap.clear();
+      if (useFlutterKeychain) {
+        await _storeAtsign(atsignMap);
+      }
     }
-    _logger.info('atsignMap: $atsignMap');
     return atsignMap;
   }
 
