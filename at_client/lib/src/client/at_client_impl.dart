@@ -931,15 +931,14 @@ class AtClientImpl implements AtClient {
         size: await file.length(),
       );
       try {
-        var encryptedFile = _encryptionService!.encryptFile(
-          file.readAsBytesSync(),
-          encryptionKey,
-        );
+        final encryptedFile = await _encryptionService!.encryptFileInChunks(
+            file, encryptionKey, _preference!.fileEncryptionChunkSize);
         var response = await FileTransferService().uploadToFileBin(
-          encryptedFile,
+          encryptedFile.readAsBytesSync(),
           transferId,
           fileStatus.fileName!,
         );
+        encryptedFile.deleteSync();
         if (response is http.Response && response.statusCode == 201) {
           Map fileInfo = jsonDecode(response.body);
           // changing file name if it's not url friendly
@@ -998,13 +997,17 @@ class AtClientImpl implements AtClient {
     var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
-        var decryptedFile = _encryptionService!.decryptFile(
-            File(encryptedFile.path).readAsBytesSync(),
-            fileTransferObject.fileEncryptionKey);
-        var downloadedFile =
-            File(downloadPath + '/' + encryptedFile.path.split('/').last);
-        downloadedFile.writeAsBytesSync(decryptedFile);
-        downloadedFiles.add(downloadedFile);
+        var decryptedFile = await _encryptionService!.decryptFileInChunks(
+            File(encryptedFile.path),
+            fileTransferObject.fileEncryptionKey,
+            _preference!.fileEncryptionChunkSize);
+//        var downloadedFile =
+//            File(downloadPath + '/' + encryptedFile.path.split('/').last);
+        decryptedFile
+            .copySync(downloadPath + '/' + encryptedFile.path.split('/').last);
+        downloadedFiles
+            .add(File(downloadPath + '/' + encryptedFile.path.split('/').last));
+        decryptedFile.deleteSync();
       }
       // deleting temp directory
       Directory(fileDownloadReponse.filePath!).deleteSync(recursive: true);
