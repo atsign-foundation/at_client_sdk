@@ -1,3 +1,5 @@
+## 3.1.1
+- at_client version change
 ## 3.1.0
 - moved keys storage from flutter_keychain to biometric_storage
 - updated package dependencies

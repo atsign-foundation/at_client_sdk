@@ -345,8 +345,7 @@ class KeychainUtil {
   }
 
   static Future<String?> getAESKey(String atsign) async {
-    return await _keyChainManager.getValue(
-        atsign, keychainSelfEncryptionKey);
+    return await _keyChainManager.getValue(atsign, keychainSelfEncryptionKey);
   }
 
   static Future<String?> getSelfEncryptionKey(String atSign) async {
