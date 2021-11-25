@@ -11,6 +11,8 @@ import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:hive/hive.dart';
 
+/// Service to manage keychain entries. This includes saving the
+/// encryption keys and secret to keychain
 class KeyChainManager {
   static final KeyChainManager _singleton = KeyChainManager._internal();
 
@@ -31,6 +33,7 @@ class KeyChainManager {
         ));
   }
 
+  /// Function to get hive secret from keychain
   Future<List<int>> getHiveSecretFromKeychain(String atsign) async {
     assert(atsign.isNotEmpty);
     List<int> secretAsUint8List = [];
@@ -53,6 +56,7 @@ class KeyChainManager {
     return secretAsUint8List;
   }
 
+  /// Fetches list of all the onboarded atsigns
   Future<List<String>?> getAtSignListFromKeychain() async {
     var atsignMap = await _getAtSignMap();
     if (atsignMap.isEmpty) {
@@ -73,6 +77,7 @@ class KeyChainManager {
     return atsigns;
   }
 
+  /// Fetches the list of onboarded atsign saved in map datatype
   Future<Map<String, bool?>> checkForValuesInFlutterKeychain() async {
     var atsignMap = await _getAtSignMap(useFlutterKeychain: true);
     if (atsignMap.isNotEmpty) {
@@ -120,6 +125,7 @@ class KeyChainManager {
     return atsignMap;
   }
 
+  /// Function to get atsign secret from keychain
   Future<String> getSecretFromKeychain(String atsign) async {
     String secret = '';
     try {
@@ -161,6 +167,7 @@ class KeyChainManager {
     return pkamPublicKey;
   }
 
+  /// Function to get value for the key passed from keychain
   Future<String?> getValue(String atsign, String key) async {
     String? value;
     try {
@@ -174,6 +181,7 @@ class KeyChainManager {
     return value;
   }
 
+  /// Function to save value for the key passed to keychain
   Future<String> putValue(String atsign, String key, String value) async {
     try {
       assert(atsign != '');
@@ -186,6 +194,7 @@ class KeyChainManager {
     return value;
   }
 
+  /// Function to save atsign and pkam keys passed to keychain
   Future<bool> storeCredentialToKeychain(String atSign,
       {String? secret, String? privateKey, String? publicKey}) async {
     var success = false;
@@ -208,6 +217,7 @@ class KeyChainManager {
     return success;
   }
 
+  /// Function to save pkam keys for the atsign passed to keychain
   Future<void> storePkamKeysToKeychain(String atsign,
       {String? privateKey, String? publicKey}) async {
     assert(atsign != '');
@@ -229,48 +239,59 @@ class KeyChainManager {
     }
   }
 
+  /// Function to generate a secure encryption key
   List<int> _generatePersistenceSecret() {
     return Hive.generateSecureKey();
   }
 
+  /// Function to generate an RSA key pair
   RSAKeypair generateKeyPair() {
     var rsaKeypair = RSAKeypair.fromRandom();
     return rsaKeypair;
   }
 
+  /// Function to get cram secret from keychain
   Future<String?> getCramSecret(String atSign) async {
     return getSecretFromKeychain(atSign);
   }
 
+  /// Function to get pkam private key from keychain
   Future<String?> getPkamPrivateKey(String atSign) async {
     return getValue(atSign, keychainPKAMPrivateKey);
   }
 
+  /// Function to get pkam public key from keychain
   Future<String?> getPkamPublicKey(String atSign) async {
     return getValue(atSign, keychainPKAMPublicKey);
   }
 
+  /// Function to get encryption private key from keychain
   Future<String?> getEncryptionPrivateKey(String atSign) async {
     return getValue(atSign, keychainEncryptionPrivateKey);
   }
 
+  /// Function to get encryption public key from keychain
   Future<String?> getEncryptionPublicKey(String atSign) async {
     return getValue(atSign, keychainEncryptionPublicKey);
   }
 
+  /// Function to get self encryption key from keychain
   Future<String?> getSelfEncryptionAESKey(String atSign) async {
     return getValue(atSign, keychainSelfEncryptionKey);
   }
 
+  /// Function to get hive secret from keychain
   Future<List<int>?> getKeyStoreSecret(String atSign) async {
     return getHiveSecretFromKeychain(atSign);
   }
 
+  /// Function to get list of atsigns from keychain
   Future<String?> getAtSign() async {
     var atSignList = await getAtSignListFromKeychain();
     return atSignList == null ? atSignList as FutureOr<String?> : atSignList[0];
   }
 
+  /// Function to add atsign to map of atsigns and save to keychain
   Future<void> _saveAtSignToKeychain(String atsign) async {
     Map<String, bool?> atsignMap = <String, bool>{};
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
@@ -286,12 +307,14 @@ class KeyChainManager {
     await _storeAtsign(atsignMap);
   }
 
+  /// Function to store Map of atsigns to keychain
   Future<void> _storeAtsign(Map<String, bool?> atsignMap) async {
     var value = jsonEncode(atsignMap);
     _storage = await getBiometricStorageFile('@atsign');
     await _storage?.write(value);
   }
 
+  /// Function to get Map of atsigns from keychain
   Future<Map<String, bool?>> _getAtSignMap(
       {bool useFlutterKeychain = false}) async {
     Map<String, bool?> atsignMap = <String, bool?>{};
@@ -326,10 +349,12 @@ class KeyChainManager {
     return atsignMap;
   }
 
+  /// Function to get Map of atsigns from keychain
   Future<Map<String, bool?>> getAtsignsWithStatus() async {
     return await _getAtSignMap();
   }
 
+  /// Function to make the atsign passed as primary
   Future<bool> makeAtSignPrimary(String atsign) async {
     //check whether given atsign is an already active atsign
     var atsignMap = await _getAtSignMap();
@@ -348,6 +373,7 @@ class KeyChainManager {
     return true;
   }
 
+  /// Function to remove an atsign from list of atsigns and hence, from keychain
   Future<void> deleteAtSignFromKeychain(String atsign) async {
     var atsignMap = await _getAtSignMap();
     if (!atsignMap.containsKey(atsign)) {
@@ -368,6 +394,7 @@ class KeyChainManager {
     await _storage?.write(value);
   }
 
+  /// Function to delete all values related to the atsign passed from keychain
   Future<void> resetAtSignFromKeychain(String atsign) async {
     await deleteAtSignFromKeychain(atsign);
     _storage =
@@ -387,6 +414,7 @@ class KeyChainManager {
     await _storage?.delete();
   }
 
+  /// Function to clear all entries from keychain
   Future<void> clearKeychainEntries() async {
     var atsignList = await getAtSignListFromKeychain();
     if (atsignList == null) {
