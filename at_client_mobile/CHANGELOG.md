@@ -1,3 +1,5 @@
+## 3.1.2
+- **FIX**: Added check to use flutter_keychain only on mobile platforms
 ## 3.1.1
 - at_client version change
 ## 3.1.0
