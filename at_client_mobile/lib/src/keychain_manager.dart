@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client_mobile/src/auth_constants.dart';
@@ -57,8 +58,13 @@ class KeyChainManager {
     if (atsignMap.isEmpty) {
       // no atsigns found in biometric storage
       // read entries from flutter keychain
-      atsignMap = await checkForValuesInFlutterKeychain();
-      if (atsignMap.isEmpty) {
+      // for mobile platforms only
+      if (Platform.isAndroid || Platform.isIOS) {
+        atsignMap = await checkForValuesInFlutterKeychain();
+        if (atsignMap.isEmpty) {
+          return null;
+        }
+      } else {
         return null;
       }
     }
