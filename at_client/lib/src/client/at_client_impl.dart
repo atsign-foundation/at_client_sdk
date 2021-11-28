@@ -1071,7 +1071,8 @@ class AtClientImpl implements AtClient {
       ..priority = notificationParams.priority
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
-      ..notifier = notificationParams.notifier;
+      ..notifier = notificationParams.notifier
+      ..ttln = notificationParams.ttl;
 
     // If value is not null, encrypt the value
     if (notificationParams.value != null &&

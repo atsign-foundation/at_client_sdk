@@ -197,6 +197,13 @@ class NotificationServiceImpl
           onError(notificationResult);
         }
         break;
+      case 'expired':
+        notificationResult.notificationStatusEnum =
+            NotificationStatusEnum.expired;
+        if (onSuccess != null) {
+          onSuccess(notificationResult);
+        }
+        break;
     }
     return notificationResult;
   }

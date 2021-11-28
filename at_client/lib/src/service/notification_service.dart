@@ -86,6 +86,7 @@ class NotificationParams {
   late PriorityEnum _priority;
   late StrategyEnum _strategy;
   final int _latestN = 1;
+  int? ttln;
   final String _notifier = SYSTEM;
 
   AtKey get atKey => _atKey;
@@ -154,4 +155,4 @@ class NotificationResult {
   }
 }
 
-enum NotificationStatusEnum { delivered, undelivered }
+enum NotificationStatusEnum { delivered, undelivered, expired }
