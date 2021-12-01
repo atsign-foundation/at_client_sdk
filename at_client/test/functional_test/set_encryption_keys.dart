@@ -11,7 +11,7 @@ Future<void> setEncryptionKeys(
     var atClient = atClientManager.atClient;
     var metadata = Metadata();
     metadata.namespaceAware = false;
-    var result;
+    bool result;
 
     //Set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(

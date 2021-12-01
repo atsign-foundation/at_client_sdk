@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 
 /// Listener class that returns a Stream<True> if internet connection is on in the running device, Stream<False> if internet gets disconnected.
@@ -13,7 +14,7 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 /// });
 /// ```
 class ConnectivityListener {
-  var _listener;
+  late StreamSubscription _listener;
 
   /// Listen to [InternetConnectionChecker.onStatusChange] and returns Stream<True> whenever
   /// internet connection is online. Returns Stream<False> if internet connection is lost.
@@ -34,8 +35,6 @@ class ConnectivityListener {
 
   /// Cancels the active subscription to [InternetConnectionChecker]
   void unSubscribe() {
-    if (_listener != null) {
-      _listener.cancel();
-    }
+    _listener.cancel();
   }
 }

@@ -11,7 +11,7 @@ class AtClientPreference {
 
   /// Syncing strategy of the client [SyncStrategy]
   /// [Deprecated] Use [SyncService]
-  @deprecated
+  @Deprecated("Use [SyncService]")
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
@@ -58,12 +58,11 @@ class AtClientPreference {
   int syncPageLimit = 10;
 }
 
-@deprecated
+@Deprecated("Use SyncService")
 enum SyncStrategy {
   /// Sync local keys immediately to secondary server for update and delete commands.
-  IMMEDIATE,
-  ONDEMAND,
-
+  immediate,
+  onDemand,
   /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].
-  SCHEDULED
+  scheduled
 }

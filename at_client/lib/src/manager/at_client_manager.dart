@@ -17,7 +17,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 /// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
 /// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
 class AtClientManager {
-  var _atSign;
+  String _atSign = '';
   AtClient? _previousAtClient;
   late AtClient _currentAtClient;
 
@@ -58,8 +58,8 @@ class AtClientManager {
   }
 
   void _notifyListeners(SwitchAtSignEvent switchAtSignEvent) {
-    _changeListeners.forEach((listener) {
+    for (var listener in _changeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
-    });
+    }
   }
 }
