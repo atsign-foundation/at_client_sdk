@@ -448,7 +448,6 @@ class EncryptionService {
     try {
       while (readBytes < length) {
         final actualBytes = await chunkedStream.readBytes(chunkSize);
-        print('actualBytes: ${actualBytes.length}');
         final encryptedBytes =
             AESCodec(fileEncryptionKey).encoder.convert(actualBytes);
         encryptedFile.writeAsBytesSync(encryptedBytes, mode: FileMode.append);

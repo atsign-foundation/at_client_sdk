@@ -896,6 +896,8 @@ class AtClientImpl implements AtClient {
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
           ..metadata!.ttr = -1
+          // file transfer key will deleted after 30 days
+          ..metadata!.ttl = 2592000000
           ..sharedBy = currentAtSign;
 
         var notificationResult =
@@ -933,16 +935,17 @@ class AtClientImpl implements AtClient {
       try {
         final encryptedFile = await _encryptionService!.encryptFileInChunks(
             file, encryptionKey, _preference!.fileEncryptionChunkSize);
-        var response = await FileTransferService().uploadToFileBin(
-          encryptedFile.readAsBytesSync(),
+        var response =
+            await FileTransferService().uploadToFileBinWithStreamedRequest(
+          encryptedFile,
           transferId,
           fileStatus.fileName!,
         );
         encryptedFile.deleteSync();
-        if (response is http.Response && response.statusCode == 201) {
-          Map fileInfo = jsonDecode(response.body);
-          // changing file name if it's not url friendly
-          fileStatus.fileName = fileInfo['file']['filename'];
+        if (response != null && response.statusCode == 201) {
+          final responseStr = await response.stream.bytesToString();
+          var responseMap = jsonDecode(responseStr);
+          fileStatus.fileName = responseMap['file']['filename'];
           fileStatus.isUploaded = true;
         }
 
@@ -1001,8 +1004,6 @@ class AtClientImpl implements AtClient {
             File(encryptedFile.path),
             fileTransferObject.fileEncryptionKey,
             _preference!.fileEncryptionChunkSize);
-//        var downloadedFile =
-//            File(downloadPath + '/' + encryptedFile.path.split('/').last);
         decryptedFile
             .copySync(downloadPath + '/' + encryptedFile.path.split('/').last);
         downloadedFiles
