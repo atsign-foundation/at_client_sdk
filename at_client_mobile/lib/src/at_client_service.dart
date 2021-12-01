@@ -96,27 +96,27 @@ class AtClientService {
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
     var pkamPublicKey = await _atClient!.getLocalSecondary()!.getPublicKey();
     if (pkamPublicKey == null) {
-      throw (OnboardingStatus.pkamPublicKeyNotFound);
+      throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
     var pkamPrivateKey = await _atClient!.getLocalSecondary()!.getPrivateKey();
     if (pkamPrivateKey == null) {
-      throw (OnboardingStatus.pkamPrivateKeyNotFound);
+      throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND);
     }
     var encryptPrivateKey =
         await _atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
     if (encryptPrivateKey == null) {
-      throw (OnboardingStatus.encryptionPrivateKeyNotFound);
+      throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
     var encryptPublicKey =
         await _atClient!.getLocalSecondary()!.getEncryptionPublicKey(atsign);
     if (encryptPublicKey == null) {
-      throw (OnboardingStatus.encryptionPublicKeyNotFound);
+      throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
 
     var encryptSelfKey =
         await _atClient!.getLocalSecondary()!.getEncryptionSelfKey();
     if (encryptSelfKey == null) {
-      throw (OnboardingStatus.selfEncryptionKeyNotFound);
+      throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND);
     }
     return false;
   }
@@ -170,23 +170,23 @@ class AtClientService {
     var extractedjsonData = jsonDecode(jsonData);
 
     var pkamPublicKey = EncryptionUtil.decryptValue(
-        extractedjsonData[BackupKeyConstants.pkamPublicKeyFromKeyFile],
+        extractedjsonData[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
         decryptKey);
 
     var pkamPrivateKey = EncryptionUtil.decryptValue(
-        extractedjsonData[BackupKeyConstants.pkamPrivateKeyFromKeyFile],
+        extractedjsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
         decryptKey);
     await _keyChainManager.storePkamKeysToKeychain(atsign,
         privateKey: pkamPrivateKey, publicKey: pkamPublicKey);
 
     var encryptionPublicKey = EncryptionUtil.decryptValue(
-        extractedjsonData[BackupKeyConstants.encryptionPublicKeyFromFile],
+        extractedjsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
         decryptKey);
     await _keyChainManager.putValue(
         atsign, keychainEncryptionPublicKey, encryptionPublicKey);
 
     var encryptionPrivateKey = EncryptionUtil.decryptValue(
-        extractedjsonData[BackupKeyConstants.encryptionPrivateKeyFromFile],
+        extractedjsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
         decryptKey);
     await _keyChainManager.putValue(
         atsign, keychainEncryptionPrivateKey, encryptionPrivateKey);
@@ -210,7 +210,7 @@ class AtClientService {
     }
     if (atsign == null || atsign == '') {
       _logger.severe('Atsign not found');
-      throw OnboardingStatus.atSignNotFound;
+      throw OnboardingStatus.ATSIGN_NOT_FOUND;
     }
     var privateKey = atClientPreference.privateKey;
     if (privateKey == null || privateKey == '') {
@@ -218,13 +218,13 @@ class AtClientService {
     }
     if (privateKey == null || privateKey == '') {
       _logger.severe('PrivateKey not found');
-      throw OnboardingStatus.privateKeyNotFound;
+      throw OnboardingStatus.PRIVATE_KEY_NOT_FOUND;
     }
     atClientPreference.privateKey = privateKey;
     await _init(atsign, atClientPreference);
     var keyRestorePolicyStatus = await getKeyRestorePolicy(atsign);
-    if (keyRestorePolicyStatus == OnboardingStatus.activate ||
-        keyRestorePolicyStatus == OnboardingStatus.restore) {
+    if (keyRestorePolicyStatus == OnboardingStatus.ACTIVATE ||
+        keyRestorePolicyStatus == OnboardingStatus.RESTORE) {
       throw (keyRestorePolicyStatus);
     }
     //no need of having pkam auth as unauth error can be thrown by keypolicy.
@@ -242,19 +242,19 @@ class AtClientService {
             _isNullOrEmpty(serverEncryptionPublicKey) ||
         (_isNullOrEmpty(serverEncryptionPublicKey) &&
             !(_isNullOrEmpty(localEncryptionPublicKey)))) {
-      return OnboardingStatus.activate;
+      return OnboardingStatus.ACTIVATE;
     } else if (!_isNullOrEmpty(serverEncryptionPublicKey) &&
         _isNullOrEmpty(localEncryptionPublicKey)) {
-      return OnboardingStatus.restore;
+      return OnboardingStatus.RESTORE;
     } else if (_isNullOrEmpty(serverEncryptionPublicKey) &&
         !_isNullOrEmpty(localEncryptionPublicKey)) {
-      return OnboardingStatus.syncToServer;
+      return OnboardingStatus.SYNC_TO_SERVER;
     } else {
       //both keys not null
       if (serverEncryptionPublicKey == localEncryptionPublicKey) {
-        return OnboardingStatus.reuse;
+        return OnboardingStatus.REUSE;
       } else {
-        return OnboardingStatus.restore;
+        return OnboardingStatus.RESTORE;
       }
     }
   }
@@ -308,11 +308,12 @@ class AtClientService {
 }
 
 class BackupKeyConstants {
-  static const String pkamPublicKeyFromKeyFile = 'aesPkamPublicKey';
-  static const String pkamPrivateKeyFromKeyFile = 'aesPkamPrivateKey';
-  static const String encryptionPublicKeyFromFile = 'aesEncryptPublicKey';
-  static const String encryptionPrivateKeyFromFile = 'aesEncryptPrivateKey';
-  static const String selfEncryptionKeyFromFile = 'selfEncryptionKey';
+  // ignore_for_file: constant_identifier_names
+  static const String PKAM_PUBLIC_KEY_FROM_KEY_FILE = 'aesPkamPublicKey';
+  static const String PKAM_PRIVATE_KEY_FROM_KEY_FILE = 'aesPkamPrivateKey';
+  static const String ENCRYPTION_PUBLIC_KEY_FROM_FILE = 'aesEncryptPublicKey';
+  static const String ENCRYPTION_PRIVATE_KEY_FROM_FILE = 'aesEncryptPrivateKey';
+  static const String SELF_ENCRYPTION_KEY_FROM_FILE = 'selfEncryptionKey';
 }
 
 class KeychainUtil {
@@ -344,8 +345,7 @@ class KeychainUtil {
   }
 
   static Future<String?> getAESKey(String atsign) async {
-    return await _keyChainManager.getValue(
-        atsign, keychainSelfEncryptionKey);
+    return await _keyChainManager.getValue(atsign, keychainSelfEncryptionKey);
   }
 
   static Future<String?> getSelfEncryptionKey(String atSign) async {
@@ -387,33 +387,33 @@ class KeychainUtil {
     var aesEncryptionKey = await getAESKey(atsign);
     var encryptedPkamPublicKey =
         EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
-    aesEncryptedKeys[BackupKeyConstants.pkamPublicKeyFromKeyFile] =
+    aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
     // encrypt pkamPrivateKey with AES key
     var pkamPrivateKey = await getPkamPrivateKey(atsign);
     var encryptedPkamPrivateKey =
         EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.pkamPrivateKeyFromKeyFile] =
+    aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
     // encrypt encryption public key with AES key
     var encryptionPublicKey = await getEncryptionPublicKey(atsign);
     var encryptedEncryptionPublicKey =
         EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.encryptionPublicKeyFromFile] =
+    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
     // encrypt encryption private key with AES key
     var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
     var encryptedEncryptionPrivateKey =
         EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.encryptionPrivateKeyFromFile] =
+    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
     // store  self encryption key as it is.This will be same as AES key in key zip file
     var selfEncryptionKey = await getSelfEncryptionKey(atsign);
-    aesEncryptedKeys[BackupKeyConstants.selfEncryptionKeyFromFile] =
+    aesEncryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
         selfEncryptionKey;
     return Map<String, String>.from(aesEncryptedKeys);
   }
