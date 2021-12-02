@@ -130,7 +130,7 @@ class SyncManager {
           var syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
           if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
             syncResponse = syncResponse.replaceFirst('data:', '');
-            var syncResponseJson = JsonUtils.jsonDecodeWrapper(syncResponse);
+            var syncResponseJson = JsonUtils.decodeJson(syncResponse);
             // Iterates over each commit
             await Future.forEach(syncResponseJson,
                 (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));

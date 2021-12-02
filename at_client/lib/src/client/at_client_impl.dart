@@ -253,7 +253,7 @@ class AtClientImpl implements AtClient {
         return null;
       }
       encryptedResult = _formatResult(encryptedResult);
-      var encryptedResultMap = JsonUtils.jsonDecodeWrapper(encryptedResult);
+      var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
       if (operation == UPDATE_META) {
         return encryptedResultMap;
       }
@@ -288,7 +288,7 @@ class AtClientImpl implements AtClient {
         var result = await remoteSecondary!.executeVerb(builder);
 
         result = _formatResult(result);
-        return JsonUtils.jsonDecodeWrapper(result);
+        return JsonUtils.decodeJson(result);
       } else {
         builder = LookupVerbBuilder()
           ..atKey = keyWithNamespace
@@ -303,7 +303,7 @@ class AtClientImpl implements AtClient {
           return null;
         }
         encryptedResult = _formatResult(encryptedResult);
-        var encryptedResultMap = JsonUtils.jsonDecodeWrapper(encryptedResult);
+        var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
         if (operation == UPDATE_ALL) {
           var decryptedValue;
           try {
@@ -336,7 +336,7 @@ class AtClientImpl implements AtClient {
         }
         // If encrypted result is metadata decryption is not needed.
         encryptedResult = _formatResult(encryptedResult);
-        var encryptedResultMap = JsonUtils.jsonDecodeWrapper(encryptedResult);
+        var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
         if (operation == UPDATE_ALL) {
           try {
             var decryptedValue = await _encryptionService!.decryptLocal(
@@ -374,7 +374,7 @@ class AtClientImpl implements AtClient {
       return null;
     }
     result = _formatResult(result);
-    var encryptedResultMap = JsonUtils.jsonDecodeWrapper(result);
+    var encryptedResultMap = JsonUtils.decodeJson(result);
     //If operation is update_meta, return metadata.
     if (operation == UPDATE_META) {
       return encryptedResultMap;

@@ -23,7 +23,7 @@ class NotificationResponseParser extends DefaultResponseParser {
       }
       notification = notification.replaceFirst('notification:', '');
       notification = notification.trim();
-      final atNotification = AtNotification.fromJson(JsonUtils.jsonDecodeWrapper(notification));
+      final atNotification = AtNotification.fromJson(JsonUtils.decodeJson(notification));
       notificationList.add(atNotification);
     });
     return notificationList;

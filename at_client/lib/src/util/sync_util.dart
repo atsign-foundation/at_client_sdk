@@ -83,7 +83,7 @@ class SyncUtil {
     }
     var result = await remoteSecondary.executeVerb(builder);
     result = result.replaceAll('data: ', '');
-    var statsJson = JsonUtils.jsonDecodeWrapper(result);
+    var statsJson = JsonUtils.decodeJson(result);
     if (statsJson[0]['value'] != 'null') {
       commitId = int.parse(statsJson[0]['value']);
     }

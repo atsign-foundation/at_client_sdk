@@ -290,7 +290,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var syncResponse = DefaultResponseParser()
           .parse(await _remoteSecondary.executeVerb(syncBuilder));
 
-      var syncResponseJson = JsonUtils.jsonDecodeWrapper(syncResponse.response);
+      var syncResponseJson = JsonUtils.decodeJson(syncResponse.response);
       _logger.finest('** syncResponse $syncResponseJson');
       // Iterates over each commit
       await Future.forEach(syncResponseJson,
