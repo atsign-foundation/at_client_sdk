@@ -1,4 +1,4 @@
-const Map at_client_error_codes = {
+const Map atClientErrorCodes = {
   'AtClientException': 'AT0014',
   'AtKeyException': 'AT0023',
   'PermissionDeniedException': 'AT0024',
