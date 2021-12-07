@@ -32,6 +32,12 @@ class EncryptionService {
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
+    // If sharedKey is not found in localSecondary, search in remote secondary.
+    if (sharedKey == null || sharedKey == 'data:null') {
+      sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
+    }
+    // If sharedKey is null, generate a new sharedKey,
+    // Else decrypt the existing shared key.
     if (sharedKey == null || sharedKey == 'data:null') {
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
@@ -40,7 +46,6 @@ class EncryptionService {
       sharedKey =
           EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
     }
-
     //2. Verify if encryptedSharedKey for sharedWith atSign is available.
     var lookupEncryptionSharedKey = LLookupVerbBuilder()
       ..sharedWith = sharedWith
@@ -91,6 +96,10 @@ class EncryptionService {
   }
 
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
+    if (encryptedValue == null || encryptedValue.isEmpty) {
+      throw AtClientException(
+          'AT0014', 'Decryption failed. Encrypted value is null');
+    }
     sharedBy = sharedBy.replaceFirst('@', '');
     String encryptedSharedKey;
     //1. Get encrypted shared key
@@ -103,14 +112,12 @@ class EncryptionService {
     var currentAtSignPrivateKey =
     await (localSecondary!.getEncryptionPrivateKey());
     if (currentAtSignPrivateKey == null) {
-      throw throw KeyNotFoundException('encryption private not found');
+      throw KeyNotFoundException('encryption private not found');
     }
     var sharedKey =
     EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
 
     //3. decrypt value using shared key
-
-    //@bob 5. decrypt phone using decrypted aes shared key
     var decryptedValue = EncryptionUtil.decryptValue(encryptedValue, sharedKey);
     return decryptedValue;
   }
@@ -119,6 +126,11 @@ class EncryptionService {
   /// Used for local lookup @bob:phone@alice
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
+    if (encryptedValue == null || encryptedValue.isEmpty) {
+      logger.severe('Decryption failed. Encrypted value is null');
+      throw AtClientException(
+          'AT0014', 'Decryption failed. Encrypted value is null');
+    }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
     var currentAtSignPrivateKey =
     await localSecondary!.getEncryptionPrivateKey();
@@ -127,15 +139,15 @@ class EncryptionService {
       ..sharedBy = currentAtSign;
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     if (sharedKey == null) {
-      return null;
+      logger.severe('Decryption failed. SharedKey is null');
+      throw AtClientException('AT0014', 'Decryption failed. SharedKey is null');
     }
     //trying to llookup a value without shared key. throw exception or return null}
     sharedKey = sharedKey.replaceFirst('data:', '');
     var decryptedSharedKey =
     EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
     var decryptedValue =
-    EncryptionUtil.decryptValue(encryptedValue!, decryptedSharedKey);
-
+        EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey);
     return decryptedValue;
   }
 
@@ -164,9 +176,15 @@ class EncryptionService {
 
   /// returns decrypted value
   /// Used for local lookup @alice:phone@alice
-  Future<String?> decryptForSelf(String? encryptedValue,
-      bool isEncrypted) async {
-    if (!isEncrypted || encryptedValue == null || encryptedValue == 'null') {
+  Future<String?> decryptForSelf(
+      String? encryptedValue, bool isEncrypted) async {
+    if (encryptedValue == null || encryptedValue == 'null') {
+      throw AtClientException(
+          'AT0014', 'Decryption failed. Encrypted value is null');
+    }
+    if (!isEncrypted) {
+      logger.info(
+          'isEncrypted is set to false, Returning the original value without decrypting');
       return encryptedValue;
     }
     try {

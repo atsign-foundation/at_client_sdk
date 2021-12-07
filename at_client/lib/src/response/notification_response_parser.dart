@@ -1,7 +1,7 @@
-import 'dart:convert';
 
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/response/response.dart';
 
 class NotificationResponseParser extends DefaultResponseParser {
@@ -19,7 +19,7 @@ class NotificationResponseParser extends DefaultResponseParser {
       }
       notification = notification.replaceFirst('notification:', '');
       notification = notification.trim();
-      final atNotification = AtNotification.fromJson(jsonDecode(notification));
+      final atNotification = AtNotification.fromJson(JsonUtils.decodeJson(notification));
       notificationList.add(atNotification);
     }
     return notificationList;

@@ -8,6 +8,7 @@ import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -289,7 +290,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var syncResponse = DefaultResponseParser()
           .parse(await _remoteSecondary.executeVerb(syncBuilder));
 
-      var syncResponseJson = jsonDecode(syncResponse.response);
+      var syncResponseJson = JsonUtils.decodeJson(syncResponse.response);
       _logger.finest('** syncResponse $syncResponseJson');
       // Iterates over each commit
       await Future.forEach(syncResponseJson,
