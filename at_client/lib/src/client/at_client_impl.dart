@@ -893,6 +893,8 @@ class AtClientImpl implements AtClient {
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
           ..metadata!.ttr = -1
+          // file transfer key will be deleted after 30 days
+          ..metadata!.ttl = 2592000000
           ..sharedBy = currentAtSign;
 
         var notificationResult =
@@ -1036,8 +1038,8 @@ class AtClientImpl implements AtClient {
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
-      throw AtClientException(atClientErrorCodes['AtClientException'],
-          'No network availability');
+      throw AtClientException(
+          atClientErrorCodes['AtClientException'], 'No network availability');
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
