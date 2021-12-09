@@ -4,14 +4,14 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 /// Manager to init local preferences
 class PreferenceManager {
   AtClientPreference preferences;
-  final _atSign;
+  final String _atSign;
 
   PreferenceManager(this.preferences, this._atSign);
 
-  @deprecated
+  @Deprecated("Not in use")
   Future<void> setPreferences() async => _persistSyncStrategy();
 
-  @deprecated
+  @Deprecated("Not in use")
   void _persistSyncStrategy() async {
     var syncData = AtData();
     syncData.data = preferences.syncStrategy.toString();

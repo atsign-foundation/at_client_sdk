@@ -49,8 +49,8 @@ class AtClientAuthenticator implements AtClientAuth {
         await _keyChainManager.getValue(atSign, keychainPKAMPublicKey);
     var privateKey = atClientPreference.privateKey ??=
         await _keyChainManager.getValue(atSign, keychainPKAMPrivateKey);
-    var encryptionPrivateKey = await _keyChainManager.getValue(
-        atSign, keychainEncryptionPrivateKey);
+    var encryptionPrivateKey =
+        await _keyChainManager.getValue(atSign, keychainEncryptionPrivateKey);
 
     // If cram secret is null, perform cram authentication
     if (atClientPreference.cramSecret != null) {
@@ -100,9 +100,7 @@ class AtClientAuthenticator implements AtClientAuth {
           logger
               .finer('generating encryption key pair and self encryption key');
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
-          await _keyChainManager.putValue(
-              atSign,
-              keychainEncryptionPrivateKey,
+          await _keyChainManager.putValue(atSign, keychainEncryptionPrivateKey,
               encryptionKeyPair.privateKey.toString());
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
           await _keyChainManager.putValue(

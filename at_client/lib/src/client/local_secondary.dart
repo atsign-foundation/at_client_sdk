@@ -35,7 +35,7 @@ class LocalSecondary implements Secondary {
   /// if [sync] is set to false, no sync operation is done.
   @override
   Future<String?> executeVerb(VerbBuilder builder, {sync}) async {
-    var verbResult;
+    String? verbResult;
 
     try {
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
@@ -69,7 +69,7 @@ class LocalSecondary implements Secondary {
 
   Future<String> _update(UpdateVerbBuilder builder) async {
     try {
-      var updateResult;
+      dynamic updateResult;
       var updateKey = AtClientUtil.buildKey(builder);
       switch (builder.operation) {
         case UPDATE_META:
@@ -136,7 +136,7 @@ class LocalSecondary implements Secondary {
       }
       var llookupMeta = await keyStore!.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
-      var result;
+      String? result;
       if (isActive) {
         var llookupResult = await keyStore!.get(llookupKey);
         result = _prepareResponseData(builder.operation, llookupResult);
@@ -216,19 +216,19 @@ class LocalSecondary implements Secondary {
     if (ttb == null && ttl == null) return true;
     var now = DateTime.now().toUtc().millisecondsSinceEpoch;
     if (ttb != null) {
-      var ttb_ms = ttb.toUtc().millisecondsSinceEpoch;
-      if (ttb_ms > now) return false;
+      var ttbMs = ttb.toUtc().millisecondsSinceEpoch;
+      if (ttbMs > now) return false;
     }
     if (ttl != null) {
-      var ttl_ms = ttl.toUtc().millisecondsSinceEpoch;
-      if (ttl_ms < now) return false;
+      var ttlMs = ttl.toUtc().millisecondsSinceEpoch;
+      if (ttlMs < now) return false;
     }
     //If TTB or TTL populated but not met, return true.
     return true;
   }
 
   String? _prepareResponseData(String? operation, AtData? atData) {
-    var result;
+    String? result;
     if (atData == null) {
       return result;
     }
@@ -275,7 +275,7 @@ class LocalSecondary implements Secondary {
 
   ///Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {
-    var isStored;
+    dynamic isStored;
     var atData = AtData()..data = value;
     isStored = await keyStore!.put(key, atData);
     return isStored != null ? true : false;
