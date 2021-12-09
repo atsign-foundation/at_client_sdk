@@ -16,7 +16,7 @@ abstract class AtClient {
   /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
   /// [Deprecated] Use [AtClientManager.syncService]
-  @deprecated
+  @Deprecated("Use SyncManager.sync")
   SyncManager? getSyncManager();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.
@@ -271,7 +271,7 @@ abstract class AtClient {
   ///                       Notifier: ‘wavi’);
   ///```
   ///[Deprecated] Use [AtClientManager.notificationService]
-  @deprecated
+  @Deprecated("Use NotificationService")
   Future<bool> notify(AtKey key, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
       PriorityEnum? priority,
@@ -398,7 +398,7 @@ abstract class AtClient {
   /// the notification on the client.
   /// Optionally a regular expression and be passed to filter the notifications
   /// [deprecated] Use [NotificationService.subscribe]
-  @deprecated
+  @Deprecated("Use Monitor Service")
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
 

@@ -3,6 +3,7 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 // ignore: import_of_legacy_library_into_null_safe
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
+
 import 'test_util.dart';
 
 void main() async {
@@ -13,7 +14,7 @@ void main() async {
     final atClient = atClientManager.atClient;
     var metadata = Metadata();
     metadata.namespaceAware = false;
-    var result;
+    bool result;
     // set pkam private key
     result = await atClient.getLocalSecondary()!.putValue(AT_PKAM_PRIVATE_KEY,
         at_demos.pkamPrivateKeyMap[atSign]!); // set pkam public key

@@ -51,4 +51,19 @@ class AtClientUtil {
         key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
     return base64Encode(signature);
   }
+
+  static bool isAnyNotNull(
+      {dynamic a1,
+        dynamic a2,
+        dynamic a3,
+        dynamic a4,
+        dynamic a5,
+        dynamic a6}) {
+    return ((a1 != null) ||
+        (a2 != null) ||
+        (a3 != null) ||
+        (a4 != null) ||
+        (a5 != null)) ||
+        (a6 != null);
+  }
 }

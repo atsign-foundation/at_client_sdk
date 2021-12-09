@@ -17,7 +17,7 @@ import 'package:at_utils/at_logger.dart';
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
   Map<String, StreamController> streamListeners = {};
-  final EMPTY_REGEX = '';
+  final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationId';
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
@@ -26,7 +26,7 @@ class NotificationServiceImpl
   late AtClient _atClient;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
-  var _lastMonitorRetried;
+  dynamic _lastMonitorRetried;
 
   static Future<NotificationService> create(AtClient atClient) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
@@ -59,7 +59,7 @@ class NotificationServiceImpl
   }
 
   Future<void> _startMonitor() async {
-    if (_monitor != null && _monitor!.status == MonitorStatus.Started) {
+    if (_monitor != null && _monitor!.status == MonitorStatus.started) {
       _logger.finer(
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
@@ -70,10 +70,11 @@ class NotificationServiceImpl
         _onMonitorError,
         _atClient.getCurrentAtSign()!,
         _atClient.getPreferences()!,
-        MonitorPreference()..keepAlive = true,
+        MonitorPreference()
+          ..keepAlive = true,
         _monitorRetry);
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
-    if (_monitor!.status == MonitorStatus.Started) {
+    if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
     }
   }
@@ -106,31 +107,38 @@ class NotificationServiceImpl
       final notificationParser = NotificationResponseParser();
       final atNotifications = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
-      atNotifications.forEach((atNotification) async {
+      for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
-          await _atClient.put(AtKey()..key = notificationIdKey,
+          await _atClient.put(AtKey()
+            ..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
         streamListeners.forEach((regex, streamController) {
-          if (regex != EMPTY_REGEX) {
-            if (regex.allMatches(atNotification.key).isNotEmpty) {
+          if (regex != emptyRegex) {
+            if (regex
+                .allMatches(atNotification.key)
+                .isNotEmpty) {
               streamController.add(atNotification);
             }
           } else {
             streamController.add(atNotification);
           }
         });
-      });
+      }
     } on Exception catch (e) {
-      _logger.severe(
-          'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+    _logger.severe(
+    'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
     }
   }
 
   void _monitorRetry() {
     if (_lastMonitorRetried != null &&
-        DateTime.now().toUtc().difference(_lastMonitorRetried).inSeconds < 15) {
+        DateTime
+            .now()
+            .toUtc()
+            .difference(_lastMonitorRetried)
+            .inSeconds < 15) {
       _logger.info('Attempting to retry in less than 15 seconds... Rejected');
       return;
     }
@@ -142,8 +150,9 @@ class NotificationServiceImpl
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
     Future.delayed(
         Duration(seconds: 15),
-        () async => _monitor!
-            .start(lastNotificationTime: await _getLastNotificationTime()));
+            () async =>
+            _monitor!
+                .start(lastNotificationTime: await _getLastNotificationTime()));
   }
 
   void _onMonitorError(Exception e) {
@@ -155,7 +164,7 @@ class NotificationServiceImpl
       {Function? onSuccess, Function? onError}) async {
     var notificationResult = NotificationResult()
       ..atKey = notificationParams.atKey;
-    var notificationId;
+    dynamic notificationId;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       // Returns the notificationId.
@@ -176,7 +185,9 @@ class NotificationServiceImpl
     }
     var notificationParser = NotificationResponseParser();
     notificationResult.notificationID =
-        notificationParser.parse(notificationId).response;
+        notificationParser
+            .parse(notificationId)
+            .response;
     // Gets the notification status and parse the response.
     var notificationStatus = notificationParser.parse(
         await _getFinalNotificationStatus(notificationResult.notificationID!));
@@ -207,18 +218,19 @@ class NotificationServiceImpl
   /// Queries the status of the notification
   /// Takes the notificationId as input as returns the status of the notification
   Future<String> _getFinalNotificationStatus(String notificationId) async {
-    var status;
+    String status = '';
     // For every 2 seconds, queries the status of the notification
-    while (status == null || status == 'data:queued') {
+    while (status.isEmpty || status == 'data:queued') {
       await Future.delayed(Duration(seconds: 2),
-          () async => status = await _atClient.notifyStatus(notificationId));
+              () async =>
+          status = await _atClient.notifyStatus(notificationId));
     }
     return status;
   }
 
   @override
   Stream<AtNotification> subscribe({String? regex}) {
-    regex ??= EMPTY_REGEX;
+    regex ??= emptyRegex;
     if (streamListeners.containsKey(regex)) {
       _logger.finer('subscription already exists');
       return streamListeners[regex]!.stream as Stream<AtNotification>;
@@ -235,7 +247,8 @@ class NotificationServiceImpl
         _atClient.getCurrentAtSign()) {
       // actions for previous atSign
       _logger.finer(
-          'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
+          'stopping notification listeners for ${_atClient
+              .getCurrentAtSign()}');
       stopAllSubscriptions();
     }
   }

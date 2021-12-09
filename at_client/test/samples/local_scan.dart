@@ -1,4 +1,5 @@
 import 'package:at_client/src/manager/at_client_manager.dart';
+
 import 'test_util.dart';
 
 void main() async {
@@ -8,9 +9,9 @@ void main() async {
         .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
 
     var result = await atClientManager.atClient.getKeys();
-    result.forEach((key) {
+    for(var key in result){
       print(key.toString());
-    });
+    }
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

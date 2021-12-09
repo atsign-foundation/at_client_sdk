@@ -39,7 +39,7 @@ void main() {
     });
 
     test('url is null', () {
-      var url;
+      String? url;
       var secondaryInfo = AtClientUtil.getSecondaryInfo(url);
       expect(secondaryInfo.length, 0);
     });
