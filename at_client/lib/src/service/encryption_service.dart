@@ -7,6 +7,7 @@ import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 
@@ -31,10 +32,19 @@ class EncryptionService {
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
-    var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
+    var sharedKey;
+    try {
+      sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
+    } on KeyNotFoundException {
+      logger.finer('${llookupVerbBuilder.atKey} not found in local secondary');
+    }
     // If sharedKey is not found in localSecondary, search in remote secondary.
-    if (sharedKey == null || sharedKey == 'data:null') {
-      sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
+    try {
+      if (sharedKey == null || sharedKey == 'data:null') {
+        sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
+      }
+    } on AtLookUpException {
+      logger.finer('${llookupVerbBuilder.atKey} not found in remote secondary');
     }
     // If sharedKey is null, generate a new sharedKey,
     // Else decrypt the existing shared key.
@@ -51,7 +61,12 @@ class EncryptionService {
       ..sharedWith = sharedWith
       ..sharedBy = currentAtSign
       ..atKey = AT_ENCRYPTION_SHARED_KEY;
-    var result = await localSecondary!.executeVerb(lookupEncryptionSharedKey);
+    String? result;
+    try {
+      result = await localSecondary!.executeVerb(lookupEncryptionSharedKey);
+    } on KeyNotFoundException {
+      logger.finer('$AT_ENCRYPTION_SHARED_KEY not found in local secondary');
+    }
 
     //3. Create the encryptedSharedKey if
     // a. encryptedSharedKey not available (or)
@@ -218,7 +233,12 @@ class EncryptionService {
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
-    var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
+    String? sharedKey;
+    try {
+      sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
+    } on KeyNotFoundException {
+      logger.finer('${llookupVerbBuilder.atKey} not found in local secondary');
+    }
     if (sharedKey == null || sharedKey == 'data:null') {
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
@@ -277,8 +297,14 @@ class EncryptionService {
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
       ..atKey = 'publickey.$sharedBy'
       ..sharedBy = currentAtSign;
-    var sharedByPublicKey =
-        await localSecondary!.executeVerb(cachedPublicKeyBuilder);
+    String? sharedByPublicKey;
+    try {
+      sharedByPublicKey =
+          await localSecondary!.executeVerb(cachedPublicKeyBuilder);
+    } on KeyNotFoundException {
+      logger.finer(
+          '${cachedPublicKeyBuilder.atKey} not found in local secondary');
+    }
     if (sharedByPublicKey == null || sharedByPublicKey == 'data:null') {
       var plookupBuilder = PLookupVerbBuilder()
         ..atKey = 'publickey'
@@ -369,8 +395,13 @@ class EncryptionService {
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
       ..atKey = 'publickey.$sharedWithUser'
       ..sharedBy = currentAtSign;
-    sharedWithPublicKey =
-        await localSecondary!.executeVerb(cachedPublicKeyBuilder);
+    try {
+      sharedWithPublicKey =
+          await localSecondary!.executeVerb(cachedPublicKeyBuilder);
+    } on KeyNotFoundException {
+      logger.finer(
+          '${cachedPublicKeyBuilder.atKey} not found in local secondary');
+    }
     if (sharedWithPublicKey != null && sharedWithPublicKey != 'data:null') {
       sharedWithPublicKey =
           sharedWithPublicKey.toString().replaceAll('data:', '');
@@ -406,8 +437,13 @@ class EncryptionService {
       ..sharedBy = sharedBy
       ..sharedWith = currentAtSign
       ..atKey = AT_ENCRYPTION_SHARED_KEY;
-    encryptedSharedKey =
-        await localSecondary!.executeVerb(localLookupSharedKeyBuilder);
+    try {
+      encryptedSharedKey =
+          await localSecondary!.executeVerb(localLookupSharedKeyBuilder);
+    } on KeyNotFoundException {
+      logger.finer(
+          '${localLookupSharedKeyBuilder.atKey} not found in local secondary');
+    }
     if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
         ..atKey = AT_ENCRYPTION_SHARED_KEY
