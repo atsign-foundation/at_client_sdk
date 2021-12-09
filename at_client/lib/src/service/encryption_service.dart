@@ -36,7 +36,8 @@ class EncryptionService {
     try {
       sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     } on KeyNotFoundException {
-      logger.finer('${llookupVerbBuilder.atKey} not found in local secondary');
+      logger.finer(
+          '${llookupVerbBuilder.atKey}$currentAtSign not found in local secondary. Fetching from cloud secondary.');
     }
     // If sharedKey is not found in localSecondary, search in remote secondary.
     try {
@@ -44,11 +45,13 @@ class EncryptionService {
         sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
       }
     } on AtLookUpException {
-      logger.finer('${llookupVerbBuilder.atKey} not found in remote secondary');
+      logger.finer(
+          '${llookupVerbBuilder.atKey}$currentAtSign not found in remote secondary. Generating a new shared key');
     }
     // If sharedKey is null, generate a new sharedKey,
     // Else decrypt the existing shared key.
     if (sharedKey == null || sharedKey == 'data:null') {
+      logger.finer('Generated a AES Key for $sharedWithUser');
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
       isSharedKeyAvailable = true;
@@ -65,7 +68,7 @@ class EncryptionService {
     try {
       result = await localSecondary!.executeVerb(lookupEncryptionSharedKey);
     } on KeyNotFoundException {
-      logger.finer('$AT_ENCRYPTION_SHARED_KEY not found in local secondary');
+      logger.finer('$sharedWith:$AT_ENCRYPTION_SHARED_KEY@$currentAtSign not found in local secondary. Fetching from cloud secondary');
     }
 
     //3. Create the encryptedSharedKey if
@@ -400,7 +403,7 @@ class EncryptionService {
           await localSecondary!.executeVerb(cachedPublicKeyBuilder);
     } on KeyNotFoundException {
       logger.finer(
-          '${cachedPublicKeyBuilder.atKey} not found in local secondary');
+          '${cachedPublicKeyBuilder.atKey}@$currentAtSign not found in local secondary. Fetching from cloud secondary');
     }
     if (sharedWithPublicKey != null && sharedWithPublicKey != 'data:null') {
       sharedWithPublicKey =
@@ -442,7 +445,7 @@ class EncryptionService {
           await localSecondary!.executeVerb(localLookupSharedKeyBuilder);
     } on KeyNotFoundException {
       logger.finer(
-          '${localLookupSharedKeyBuilder.atKey} not found in local secondary');
+          '$sharedBy:${localLookupSharedKeyBuilder.atKey}@$currentAtSign not found in local secondary. Fetching from cloud secondary');
     }
     if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
