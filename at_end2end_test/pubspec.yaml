@@ -1,14 +1,14 @@
 name: at_end2end_test
-publish_to: none
-description: End to end tests for the at_client_sdk packages
+description: A starting point for Dart libraries or applications.
 version: 1.0.0
+# homepage: https://www.example.com
 
 environment:
   sdk: '>=2.14.4 <3.0.0'
 
-dependencies:
-  at_client:
-    path: ../at_client
+
+# dependencies:
+#   path: ^1.8.0
 
 dev_dependencies:
   lints: ^1.0.1

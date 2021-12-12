@@ -2,10 +2,6 @@
 .dart_tool/
 .packages
 
-# code coverage related
-coverage
-coverage.lcov
-
 # Conventional directory for build outputs.
 build/
 
