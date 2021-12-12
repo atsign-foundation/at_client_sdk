@@ -1,14 +1,14 @@
 name: at_functional_test
-description: A starting point for Dart libraries or applications.
+publish_to: none
+description: Functional tests for the at_client_sdk packages
 version: 1.0.0
-# homepage: https://www.example.com
 
 environment:
   sdk: '>=2.14.4 <3.0.0'
 
-
-# dependencies:
-#   path: ^1.8.0
+dependencies:
+  at_client:
+    path: ../at_client
 
 dev_dependencies:
   lints: ^1.0.1
