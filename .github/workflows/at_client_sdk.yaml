@@ -79,7 +79,7 @@ jobs:
 
       - name: Convert coverage to LCOV format
         working-directory: at_end2end_test
-        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
+        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2.1.0
