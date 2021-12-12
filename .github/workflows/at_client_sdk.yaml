@@ -56,24 +56,9 @@ jobs:
         working-directory: at_client
         run: dart run test/functional_test/check_test_env.dart
 
-      # Run unit tests
-      - name: Run unit tests, with code coverage measurement
+      # Run unit and functional tests
+      - name: Run unit and functional tests
         working-directory: at_client
-        run: dart test --concurrency=1 --coverage="coverage"
-
-      - name: Convert coverage to LCOV format
-        working-directory: at_client
-        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v2.1.0
-        with:
-          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-          file: at_client/coverage.lcov
-
-      # Run end2end tests
-      - name: Run end2end tests
-        working-directory: at_end2end_test
         run: dart test --concurrency=1
 
       # Adding flutter to path
