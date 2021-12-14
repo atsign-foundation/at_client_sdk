@@ -1,20 +1,19 @@
-name: Auto Assign Bugs to Sprint Planning Project Board
+name: Auto Assign Issues to Triage column in Sprint Planning Project Board
 
 on:
   issues:
-    types: [labeled]
-env:
-  MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+    types: [opened]
 
 jobs:
-  assign_one_project:
+  issue_opened:
+    name: issue_opened
     runs-on: ubuntu-latest
-    name: Assign to Bugs Column in Sprint Planning Project Board
     steps:
-    - name: Assign issues and pull requests with `bug` label to project 3
-      uses: srggrs/assign-one-project-github-action@1.3.1
-      if: |
-        contains(github.event.issue.labels.*.name, 'bug')
-      with:
-        project: 'https://github.com/orgs/atsign-foundation/projects/3'
-        column_name: 'Bugs'
+      - name: 'Move issue to "Triage"'
+        uses: leonsteinhaeuser/project-beta-automations@v1.0.2
+        with:
+          gh_token: ${{ secrets.MY_GITHUB_TOKEN }}
+          organization: atsign-foundation
+          project_id: 8
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: "Triage"
