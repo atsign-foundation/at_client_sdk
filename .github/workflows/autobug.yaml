@@ -1,12 +1,12 @@
-name: Auto Assign Bugs to Sprint Planning Project Board
+name: Auto Assign Issues to Triage column in Sprint Planning Project Board
 
 on:
   issues:
-    types: [labeled]
+    types: [opened]
 
 jobs:
-  issue_opened_and_reopened:
-    name: issue_opened_and_reopened
+  issue_opened:
+    name: issue_opened
     runs-on: ubuntu-latest
     steps:
       - name: 'Move issue to "Triage"'
