@@ -101,4 +101,14 @@ bool isNotified = await atClientManagerInstance.notify(atKey, value, operation);
 print(isNotified); // true if notified
 ```
 
+- Notify an update operation to an atsign.
+
+```dart
+String toAtsign = '@bob';
+var key = AtKey()
+        ..key = 'phone'
+        ..sharedWith = toAtSign;
+var notification = NotificationServiceImpl(atClient!);
+await notification.notify(NotificationParams.forUpdate(key));
+```
 AtClient has many more methods that are exposed. Please refer to the [atsign docs](https://atsign.dev/docs/overview/) for more details.
