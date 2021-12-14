@@ -23,7 +23,7 @@ dependencies:
   http: ^0.13.3
   internet_connection_checker: ^0.0.1+2
   at_persistence_spec: ^2.0.2
-  at_persistence_secondary_server: ^3.0.8
+  at_persistence_secondary_server: ^3.0.11
   at_lookup: ^3.0.4
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
@@ -60,3 +60,5 @@ dependencies:
 dev_dependencies:
   test: ^1.17.2
   at_demo_data: ^0.0.3+1
+  coverage: ^1.0.3
+  mockito: ^5.0.7
