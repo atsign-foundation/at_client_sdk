@@ -113,6 +113,9 @@ class EncryptionService {
     return encryptedValue;
   }
 
+  /// Returns the decrypted value for the given encrypted value.
+  /// Throws [IllegalArgumentException] if encrypted value is null.
+  /// Throws [KeyNotFoundException] if encryption keys are not found.
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
       throw IllegalArgumentException(
@@ -142,6 +145,7 @@ class EncryptionService {
 
   ///Returns `decrypted value` on successful decryption.
   /// Used for local lookup @bob:phone@alice
+  /// Throws [IllegalArgumentException] if encrypted value is null.
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
@@ -192,8 +196,9 @@ class EncryptionService {
     }
   }
 
-  /// returns decrypted value
+  /// Returns decrypted value
   /// Used for local lookup @alice:phone@alice
+  /// Throws [IllegalArgumentException] if encrypted value is null.
   Future<String?> decryptForSelf(
       String? encryptedValue, bool isEncrypted) async {
     if (encryptedValue == null || encryptedValue == 'null') {
