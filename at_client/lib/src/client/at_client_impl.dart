@@ -260,6 +260,9 @@ class AtClientImpl implements AtClient {
           var decryptedValue = await _encryptionService!
               .decrypt(encryptedResultMap['data'], sharedBy);
           encryptedResultMap['data'] = decryptedValue;
+        } on IllegalArgumentException {
+          _logger.severe(
+              'Decryption failed. encryption value is null for $keyWithNamespace');
         } on Error catch (e) {
           _logger.severe(
               'decryption error for command ${builder.buildCommand()}: $e');
@@ -268,8 +271,14 @@ class AtClientImpl implements AtClient {
         //resultant value is encrypted. Decrypting to original value.
         var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
         isEncrypted ??= false;
-        var decryptedValue = await _encryptionService!
-            .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+        String? decryptedValue;
+        try {
+          decryptedValue = await _encryptionService!
+              .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+        } on IllegalArgumentException {
+          _logger.severe(
+              'Decryption failed. encryption value is null for $keyWithNamespace');
+        }
         encryptedResultMap['data'] = decryptedValue;
       }
       return encryptedResultMap;
@@ -302,10 +311,13 @@ class AtClientImpl implements AtClient {
         encryptedResult = _formatResult(encryptedResult);
         var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
         if (operation == UPDATE_ALL) {
-          String decryptedValue;
+          String decryptedValue = '';
           try {
             decryptedValue = await _encryptionService!
                 .decrypt(encryptedResultMap['data'], sharedBy);
+          } on IllegalArgumentException {
+            _logger.severe(
+                'Decryption failed. encrypted value is null for $keyWithNamespace');
           } on KeyNotFoundException catch (e) {
             var errorCode = AtClientExceptionUtil.getErrorCode(e);
             return Future.error(AtClientException(errorCode, e.message));
@@ -378,8 +390,14 @@ class AtClientImpl implements AtClient {
     }
     var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
     isEncrypted ??= false;
-    var decryptedValue = await _encryptionService!
-        .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+    String? decryptedValue;
+    try {
+      decryptedValue = await _encryptionService!
+          .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+    } on IllegalArgumentException {
+      _logger.severe(
+          'Decryption failed. encryption value is null for $keyWithNamespace');
+    }
     encryptedResultMap['data'] = decryptedValue;
     return encryptedResultMap;
   }

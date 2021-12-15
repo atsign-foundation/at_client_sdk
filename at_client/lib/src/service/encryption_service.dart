@@ -115,8 +115,8 @@ class EncryptionService {
 
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     sharedBy = sharedBy.replaceFirst('@', '');
     var encryptedSharedKey;
@@ -145,9 +145,8 @@ class EncryptionService {
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      logger.severe('Decryption failed. Encrypted value is null');
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
     var currentAtSignPrivateKey =
@@ -198,8 +197,8 @@ class EncryptionService {
   Future<String?> decryptForSelf(
       String? encryptedValue, bool isEncrypted) async {
     if (encryptedValue == null || encryptedValue == 'null') {
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     if (!isEncrypted) {
       logger.info(
