@@ -13,4 +13,4 @@ linter:
 
 analyzer:
   exclude:
-    - /example/*
+    - example/*
