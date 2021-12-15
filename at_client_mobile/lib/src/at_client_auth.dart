@@ -6,7 +6,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 
-
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(
       String atSign, AtClientPreference atClientPreference);
