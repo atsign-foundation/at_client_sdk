@@ -12,5 +12,4 @@ linter:
     - await_only_futures
 
 analyzer:
-  exclude:
-    - example/*
+
