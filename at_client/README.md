@@ -8,6 +8,8 @@
 
 ### Introduction
 
+The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the @protocol.
+
 SDK that provides the essential methods for building an app using [The @protocol](https://atsign.com). You may also want to look at [at_client_mobile](https://pub.dev/packages/at_client_mobile).
 
 **at_client** package is written in Dart, supports Flutter and follows the
