@@ -610,10 +610,11 @@ class AtClientImpl implements AtClient {
       bool isDedicated = false}) async {
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
-    await AtClientManager.getInstance()
+    final notifyResult = await AtClientManager.getInstance()
         .notificationService
         .notify(notificationParams);
-    return true;
+    return notifyResult.notificationStatusEnum ==
+        NotificationStatusEnum.delivered;
   }
 
   @override
@@ -625,10 +626,13 @@ class AtClientImpl implements AtClient {
       atKey.sharedWith = sharedWith;
       final notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
-      await AtClientManager.getInstance()
+      final notifyResult = await AtClientManager.getInstance()
           .notificationService
           .notify(notificationParams);
-      returnMap.putIfAbsent(sharedWith, () => true);
+      returnMap.putIfAbsent(
+          sharedWith,
+          () => (notifyResult.notificationStatusEnum ==
+              NotificationStatusEnum.delivered));
     }
     return jsonEncode(returnMap);
   }
