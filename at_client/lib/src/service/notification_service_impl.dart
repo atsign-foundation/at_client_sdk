@@ -4,11 +4,9 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/connectivity_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
-import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
@@ -70,8 +68,7 @@ class NotificationServiceImpl
         _onMonitorError,
         _atClient.getCurrentAtSign()!,
         _atClient.getPreferences()!,
-        MonitorPreference()
-          ..keepAlive = true,
+        MonitorPreference()..keepAlive = true,
         _monitorRetry);
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
     if (_monitor!.status == MonitorStatus.started) {
@@ -110,15 +107,12 @@ class NotificationServiceImpl
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
-          await _atClient.put(AtKey()
-            ..key = notificationIdKey,
+          await _atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
         streamListeners.forEach((regex, streamController) {
           if (regex != emptyRegex) {
-            if (regex
-                .allMatches(atNotification.key)
-                .isNotEmpty) {
+            if (regex.allMatches(atNotification.key).isNotEmpty) {
               streamController.add(atNotification);
             }
           } else {
@@ -127,18 +121,14 @@ class NotificationServiceImpl
         });
       }
     } on Exception catch (e) {
-    _logger.severe(
-    'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+      _logger.severe(
+          'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
     }
   }
 
   void _monitorRetry() {
     if (_lastMonitorRetried != null &&
-        DateTime
-            .now()
-            .toUtc()
-            .difference(_lastMonitorRetried)
-            .inSeconds < 15) {
+        DateTime.now().toUtc().difference(_lastMonitorRetried).inSeconds < 15) {
       _logger.info('Attempting to retry in less than 15 seconds... Rejected');
       return;
     }
@@ -150,9 +140,8 @@ class NotificationServiceImpl
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
     Future.delayed(
         Duration(seconds: 15),
-            () async =>
-            _monitor!
-                .start(lastNotificationTime: await _getLastNotificationTime()));
+        () async => _monitor!
+            .start(lastNotificationTime: await _getLastNotificationTime()));
   }
 
   void _onMonitorError(Exception e) {
@@ -185,9 +174,7 @@ class NotificationServiceImpl
     }
     var notificationParser = NotificationResponseParser();
     notificationResult.notificationID =
-        notificationParser
-            .parse(notificationId)
-            .response;
+        notificationParser.parse(notificationId).response;
     // Gets the notification status and parse the response.
     var notificationStatus = notificationParser.parse(
         await _getFinalNotificationStatus(notificationResult.notificationID!));
@@ -222,8 +209,7 @@ class NotificationServiceImpl
     // For every 2 seconds, queries the status of the notification
     while (status.isEmpty || status == 'data:queued') {
       await Future.delayed(Duration(seconds: 2),
-              () async =>
-          status = await _atClient.notifyStatus(notificationId));
+          () async => status = await _atClient.notifyStatus(notificationId));
     }
     return status;
   }
@@ -247,8 +233,7 @@ class NotificationServiceImpl
         _atClient.getCurrentAtSign()) {
       // actions for previous atSign
       _logger.finer(
-          'stopping notification listeners for ${_atClient
-              .getCurrentAtSign()}');
+          'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
       stopAllSubscriptions();
     }
   }

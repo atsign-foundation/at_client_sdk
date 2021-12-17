@@ -1,3 +1,5 @@
+## 3.0.7
+- Uptake at_persistence_secondary_server changes
 ## 3.0.6
 - Uptake AtKey validations
 ## 3.0.5
