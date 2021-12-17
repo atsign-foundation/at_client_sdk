@@ -53,6 +53,11 @@ jobs:
           file: at_client/coverage.lcov
           flags: unit_tests
 
+      # Install dependencies in at_functional_test
+      - name: Install dependencies in at_functional_test
+        working-directory: at_functional_test
+        run: dart pub get
+
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
