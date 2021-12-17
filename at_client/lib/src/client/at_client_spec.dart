@@ -352,6 +352,7 @@ abstract class AtClient {
   ///   var operation=OperationEnum.update
   ///   notify(key, value, operation);
   /// ```
+  @Deprecated("Use NotificationService")
   Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation);
 
   ///Returns the status of the notification

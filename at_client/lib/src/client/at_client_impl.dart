@@ -618,50 +618,12 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
-    var notifyKey = atKey.key;
-    var metadata = atKey.metadata;
-    var sharedWith = atKey.sharedWith;
-    if (metadata != null && metadata.namespaceAware) {
-      notifyKey = _getKeyWithNamespace(atKey.key!);
-    }
-    sharedWith = AtUtils.formatAtSign(sharedWith);
-    var builder = NotifyVerbBuilder()
-      ..atKey = notifyKey
-      ..sharedBy = currentAtSign
-      ..sharedWith = sharedWith
-      ..value = value
-      ..operation = operation
-      ..messageType = messageType
-      ..priority = priority
-      ..strategy = strategy
-      ..latestN = latestN
-      ..notifier = notifier!;
-    if (sharedWith != null && sharedWith != currentAtSign) {
-      try {
-        builder.value =
-            await _encryptionService!.encrypt(atKey.key, value, sharedWith);
-      } on KeyNotFoundException catch (e) {
-        var errorCode = AtClientExceptionUtil.getErrorCode(e);
-        return Future.error(AtClientException(errorCode, e.message));
-      }
-    } else {
-      builder.value =
-          await _encryptionService!.encryptForSelf(atKey.key, value);
-    }
-    if (metadata != null) {
-      builder.ttl = metadata.ttl;
-      builder.ttb = metadata.ttb;
-      builder.ttr = metadata.ttr;
-      builder.ccd = metadata.ccd;
-      builder.isPublic = metadata.isPublic!;
-    }
-    if (notifyKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-
-    var notifyResult = await getRemoteSecondary()?.executeVerb(builder);
-    return notifyResult != null;
+    final notificationParams =
+        NotificationParams.forUpdate(atKey, value: value);
+    await AtClientManager.getInstance()
+        .notificationService
+        .notify(notificationParams);
+    return true;
   }
 
   @override
@@ -671,9 +633,12 @@ class AtClientImpl implements AtClient {
     var sharedWithList = jsonDecode(atKey.sharedWith!);
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
-      var result =
-          await notify(atKey, value, operation, isDedicated: isDedicated);
-      returnMap.putIfAbsent(sharedWith, () => result);
+      final notificationParams =
+          NotificationParams.forUpdate(atKey, value: value);
+      await AtClientManager.getInstance()
+          .notificationService
+          .notify(notificationParams);
+      returnMap.putIfAbsent(sharedWith, () => true);
     }
     return jsonEncode(returnMap);
   }
