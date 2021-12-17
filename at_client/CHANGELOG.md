@@ -1,3 +1,7 @@
+## 3.0.7
+- Uptake at_persistence_secondary_server changes
+- Resolve dart analyzer issues
+- Run dart formatter
 ## 3.0.6
 - Uptake AtKey validations
 ## 3.0.5

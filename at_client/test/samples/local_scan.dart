@@ -9,7 +9,7 @@ void main() async {
         .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
 
     var result = await atClientManager.atClient.getKeys();
-    for(var key in result){
+    for (var key in result) {
       print(key.toString());
     }
   } on Exception catch (e, trace) {

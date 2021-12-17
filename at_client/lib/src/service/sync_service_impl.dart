@@ -6,7 +6,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -233,8 +232,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncResult.lastSyncedOn = DateTime.now().toUtc();
       syncResult.syncStatus = SyncStatus.success;
     } on Exception catch (e) {
-      syncResult.atClientException = AtClientException(
-          atClientErrorCodes['SyncException'], e.toString());
+      syncResult.atClientException =
+          AtClientException(atClientErrorCodes['SyncException'], e.toString());
       syncResult.syncStatus = SyncStatus.failure;
     }
     return syncResult;

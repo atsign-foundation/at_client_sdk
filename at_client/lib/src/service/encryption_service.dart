@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -32,7 +30,7 @@ class EncryptionService {
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
-    var sharedKey;
+    String? sharedKey;
     try {
       sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     } on KeyNotFoundException {
@@ -68,7 +66,8 @@ class EncryptionService {
     try {
       result = await localSecondary!.executeVerb(lookupEncryptionSharedKey);
     } on KeyNotFoundException {
-      logger.finer('$sharedWith:$AT_ENCRYPTION_SHARED_KEY@$currentAtSign not found in local secondary. Fetching from cloud secondary');
+      logger.finer(
+          '$sharedWith:$AT_ENCRYPTION_SHARED_KEY@$currentAtSign not found in local secondary. Fetching from cloud secondary');
     }
 
     //3. Create the encryptedSharedKey if
@@ -345,7 +344,7 @@ class EncryptionService {
     return base64Encode(dataSignature);
   }
 
-  @deprecated
+  @Deprecated('Not in use')
   Future<void> encryptUnencryptedData() async {
     var atClient = await (AtClientImpl.getClient(currentAtSign));
     if (atClient == null) {
@@ -398,7 +397,7 @@ class EncryptionService {
   /// Throws [KeyNotFoundException] if sharedWith atSign publicKey is not found.
   Future<String?> _getSharedWithPublicKey(String sharedWithUser) async {
     //a local lookup the cached public key of sharedWith atsign.
-    var sharedWithPublicKey;
+    String? sharedWithPublicKey;
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
       ..atKey = 'publickey.$sharedWithUser'
       ..sharedBy = currentAtSign;
@@ -433,12 +432,11 @@ class EncryptionService {
       ..sharedBy = currentAtSign
       ..value = sharedWithPublicKey;
     await localSecondary!.executeVerb(sharedWithPublicKeyBuilder, sync: true);
-
     return sharedWithPublicKey;
   }
 
   Future<String?> _getEncryptedSharedKey(String sharedBy) async {
-    var encryptedSharedKey;
+    String? encryptedSharedKey;
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
       ..isCached = true
       ..sharedBy = sharedBy
@@ -459,7 +457,7 @@ class EncryptionService {
       encryptedSharedKey =
           await remoteSecondary!.executeAndParse(sharedKeyLookUpBuilder);
     }
-    if ((encryptedSharedKey != null) && (encryptedSharedKey.isNotEmpty)) {
+    if (encryptedSharedKey.isNotEmpty) {
       encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
     }
     return encryptedSharedKey;
