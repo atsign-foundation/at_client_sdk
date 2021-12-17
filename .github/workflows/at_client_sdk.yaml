@@ -111,5 +111,5 @@ jobs:
 
       # stop docker containers
       - name: stop docker containers
-        working-directory: at_functional_test
+        working-directory: at_functional_test/test
         run: docker-compose down
