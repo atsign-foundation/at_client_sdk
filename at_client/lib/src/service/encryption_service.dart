@@ -113,10 +113,13 @@ class EncryptionService {
     return encryptedValue;
   }
 
+  /// Returns the decrypted value for the given encrypted value.
+  /// Throws [IllegalArgumentException] if encrypted value is null.
+  /// Throws [KeyNotFoundException] if encryption keys are not found.
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     sharedBy = sharedBy.replaceFirst('@', '');
     var encryptedSharedKey;
@@ -142,12 +145,12 @@ class EncryptionService {
 
   ///Returns `decrypted value` on successful decryption.
   /// Used for local lookup @bob:phone@alice
+  /// Throws [IllegalArgumentException] if encrypted value is null.
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      logger.severe('Decryption failed. Encrypted value is null');
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
     var currentAtSignPrivateKey =
@@ -193,13 +196,14 @@ class EncryptionService {
     }
   }
 
-  /// returns decrypted value
+  /// Returns decrypted value
   /// Used for local lookup @alice:phone@alice
+  /// Throws [IllegalArgumentException] if encrypted value is null.
   Future<String?> decryptForSelf(
       String? encryptedValue, bool isEncrypted) async {
     if (encryptedValue == null || encryptedValue == 'null') {
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     if (!isEncrypted) {
       logger.info(
