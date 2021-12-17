@@ -53,7 +53,7 @@ class SyncIsolateManager {
         switch (operation) {
           case 'get_commit_id':
             // Send stats verb to get latest server commit id.
-            var commitId;
+            int? commitId;
             var builder = StatsVerbBuilder()..statIds = '3';
             var result = await remoteSecondary.executeVerb(builder);
             result = result.replaceAll('data: ', '');

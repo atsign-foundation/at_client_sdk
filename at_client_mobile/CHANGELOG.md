@@ -1,3 +1,7 @@
+## 3.1.3
+- at_client version change
+- at_lookup version change
+- at_commons and at_utils version change
 ## 3.1.2
 - **FIX**: Added check to use flutter_keychain only on mobile platforms
 ## 3.1.1

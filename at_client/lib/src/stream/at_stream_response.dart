@@ -10,4 +10,4 @@ class AtStreamResponse {
   String? errorMessage;
 }
 
-enum AtStreamStatus { ACK, NO_ACK, COMPLETE, ERROR }
+enum AtStreamStatus { ack, noAck, complete, error }

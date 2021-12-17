@@ -4,16 +4,13 @@ import 'dart:io';
 
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -27,12 +24,8 @@ import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_commons/src/exception/at_exceptions.dart';
-import 'package:at_commons/src/keystore/at_key.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:at_persistence_secondary_server/src/utils/object_util.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
@@ -58,7 +51,7 @@ class AtClientImpl implements AtClient {
 
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
   /// and the client preference.
-  @deprecated
+  @Deprecated("Use AtClientManger to get instance of atClient")
   static Future<AtClient?> getClient(String? currentAtSign) async {
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
@@ -68,7 +61,7 @@ class AtClientImpl implements AtClient {
     return null;
   }
 
-  @deprecated
+  @Deprecated("Use [create]")
 
   /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
@@ -158,7 +151,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @deprecated
+  @Deprecated("Use SyncManager.sync")
   SyncManager? getSyncManager() {
     return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
   }
@@ -209,7 +202,7 @@ class AtClientImpl implements AtClient {
       bool isPublic = false,
       bool isCached = false,
       bool namespaceAware = true}) async {
-    var keyWithNamespace;
+    String keyWithNamespace;
     if (namespaceAware) {
       keyWithNamespace = _getKeyWithNamespace(key);
     } else {
@@ -233,8 +226,8 @@ class AtClientImpl implements AtClient {
       bool isCached = false,
       bool namespaceAware = true,
       String? operation}) async {
-    var builder;
-    var keyWithNamespace;
+    dynamic builder;
+    String keyWithNamespace;
     if (namespaceAware) {
       keyWithNamespace = _getKeyWithNamespace(key);
     } else {
@@ -252,7 +245,7 @@ class AtClientImpl implements AtClient {
         return null;
       }
       encryptedResult = _formatResult(encryptedResult);
-      var encryptedResultMap = jsonDecode(encryptedResult!);
+      var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
       if (operation == UPDATE_META) {
         return encryptedResultMap;
       }
@@ -262,6 +255,9 @@ class AtClientImpl implements AtClient {
           var decryptedValue = await _encryptionService!
               .decrypt(encryptedResultMap['data'], sharedBy);
           encryptedResultMap['data'] = decryptedValue;
+        } on IllegalArgumentException {
+          _logger.severe(
+              'Decryption failed. encryption value is null for $keyWithNamespace');
         } on Error catch (e) {
           _logger.severe(
               'decryption error for command ${builder.buildCommand()}: $e');
@@ -270,8 +266,14 @@ class AtClientImpl implements AtClient {
         //resultant value is encrypted. Decrypting to original value.
         var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
         isEncrypted ??= false;
-        var decryptedValue = await _encryptionService!
-            .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+        String? decryptedValue;
+        try {
+          decryptedValue = await _encryptionService!
+              .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+        } on IllegalArgumentException {
+          _logger.severe(
+              'Decryption failed. encryption value is null for $keyWithNamespace');
+        }
         encryptedResultMap['data'] = decryptedValue;
       }
       return encryptedResultMap;
@@ -286,8 +288,8 @@ class AtClientImpl implements AtClient {
         var remoteSecondary = getRemoteSecondary();
         var result = await remoteSecondary!.executeVerb(builder);
 
-        result = _formatResult(result)!;
-        return jsonDecode(result);
+        result = _formatResult(result);
+        return JsonUtils.decodeJson(result);
       } else {
         builder = LookupVerbBuilder()
           ..atKey = keyWithNamespace
@@ -301,17 +303,19 @@ class AtClientImpl implements AtClient {
         if (encryptedResult == 'data:null') {
           return null;
         }
-        encryptedResult = _formatResult(encryptedResult)!;
-        var encryptedResultMap = jsonDecode(encryptedResult);
+        encryptedResult = _formatResult(encryptedResult);
+        var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
         if (operation == UPDATE_ALL) {
-          var decryptedValue;
+          String decryptedValue = '';
           try {
             decryptedValue = await _encryptionService!
                 .decrypt(encryptedResultMap['data'], sharedBy);
+          } on IllegalArgumentException {
+            _logger.severe(
+                'Decryption failed. encrypted value is null for $keyWithNamespace');
           } on KeyNotFoundException catch (e) {
             var errorCode = AtClientExceptionUtil.getErrorCode(e);
-            return Future.error(AtClientException(errorCode,
-                AtClientExceptionUtil.getErrorDescription(errorCode)));
+            return Future.error(AtClientException(errorCode, e.message));
           }
           encryptedResultMap['data'] = decryptedValue;
         }
@@ -336,7 +340,7 @@ class AtClientImpl implements AtClient {
         }
         // If encrypted result is metadata decryption is not needed.
         encryptedResult = _formatResult(encryptedResult);
-        var encryptedResultMap = jsonDecode(encryptedResult!);
+        var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
         if (operation == UPDATE_ALL) {
           try {
             var decryptedValue = await _encryptionService!.decryptLocal(
@@ -374,15 +378,21 @@ class AtClientImpl implements AtClient {
       return null;
     }
     result = _formatResult(result);
-    var encryptedResultMap = jsonDecode(result!);
+    var encryptedResultMap = JsonUtils.decodeJson(result);
     //If operation is update_meta, return metadata.
     if (operation == UPDATE_META) {
       return encryptedResultMap;
     }
     var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
     isEncrypted ??= false;
-    var decryptedValue = await _encryptionService!
-        .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+    String? decryptedValue;
+    try {
+      decryptedValue = await _encryptionService!
+          .decryptForSelf(encryptedResultMap['data'], isEncrypted);
+    } on IllegalArgumentException {
+      _logger.severe(
+          'Decryption failed. encryption value is null for $keyWithNamespace');
+    }
     encryptedResultMap['data'] = decryptedValue;
     return encryptedResultMap;
   }
@@ -469,7 +479,7 @@ class AtClientImpl implements AtClient {
         isDedicated: isDedicated);
     var result = <AtKey>[];
     if (getKeysResult.isNotEmpty) {
-      getKeysResult.forEach((key) {
+      for (var key in getKeysResult) {
         try {
           result.add(AtKey.fromString(key));
         } on InvalidSyntaxException {
@@ -478,7 +488,7 @@ class AtClientImpl implements AtClient {
           _logger.severe(
               'Exception occured: ${e.toString()}. Unable to form key $key');
         }
-      });
+      }
     }
     return result;
   }
@@ -537,10 +547,10 @@ class AtClientImpl implements AtClient {
         try {
           builder.value =
               await _encryptionService!.encrypt(key, value, sharedWith);
+          builder.isEncrypted = true;
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+          return Future.error(AtClientException(errorCode, e.message));
         }
       } else if (!builder.isPublic &&
           !builder.atKey.toString().startsWith('_')) {
@@ -571,7 +581,7 @@ class AtClientImpl implements AtClient {
       }
     }
 
-    var putResult;
+    String? putResult;
     try {
       if (builder.dataSignature != null) {
         builder.isJson = true;
@@ -703,7 +713,7 @@ class AtClientImpl implements AtClient {
       return VALUE;
     }
     // Verifies if any of the args are not null
-    var isMetadataNotNull = ObjectsUtil.isAnyNotNull(
+    var isMetadataNotNull = AtClientUtil.isAnyNotNull(
         a1: data!.ttl,
         a2: data.ttb,
         a3: data.ttr,
@@ -721,12 +731,12 @@ class AtClientImpl implements AtClient {
     return null;
   }
 
-  String? _formatResult(String? commandResult) {
+  String _formatResult(String? commandResult) {
     var result = commandResult;
     if (result != null) {
       result = result.replaceFirst('data:', '');
     }
-    return result;
+    return result ??= '';
   }
 
   Metadata? _prepareMetadata(
@@ -794,19 +804,20 @@ class AtClientImpl implements AtClient {
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
       if (streamResult != null && streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
-        streamResponse.status = AtStreamStatus.COMPLETE;
+        streamResponse.status = AtStreamStatus.complete;
       }
     } else if (result != null && result.startsWith('error:')) {
       result = result.replaceAll('error:', '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
-      streamResponse.status = AtStreamStatus.ERROR;
+      streamResponse.status = AtStreamStatus.error;
     } else {
-      streamResponse.status = AtStreamStatus.NO_ACK;
+      streamResponse.status = AtStreamStatus.noAck;
     }
     return streamResponse;
   }
 
+  @override
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -834,9 +845,9 @@ class AtClientImpl implements AtClient {
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns) async {
     var encryptionKey = _encryptionService!.generateFileEncryptionKey();
-    var key = TextConstants.FILE_TRANSFER_KEY + Uuid().v4();
+    var key = TextConstants.fileTransferKey + Uuid().v4();
     var fileStatus = await _uploadFiles(key, files, encryptionKey);
-    var fileUrl = TextConstants.FILEBIN_URL + 'archive/' + key + '/zip';
+    var fileUrl = TextConstants.fileBinURL + 'archive/' + key + '/zip';
     return shareFiles(
         sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
   }
@@ -860,6 +871,8 @@ class AtClientImpl implements AtClient {
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
           ..metadata!.ttr = -1
+          // file transfer key will be deleted after 30 days
+          ..metadata!.ttl = 2592000000
           ..sharedBy = currentAtSign;
 
         var notificationResult =
@@ -946,10 +959,14 @@ class AtClientImpl implements AtClient {
       ..key = transferId
       ..sharedBy = sharedByAtSign;
     var result = await get(atKey);
-    late var fileTransferObject;
+    FileTransferObject fileTransferObject;
     try {
+      if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
+        _logger.severe("FileTransferObject is null");
+        throw AtClientException("AT0014", "FileTransferObject is null");
+      }
       fileTransferObject =
-          FileTransferObject.fromJson(jsonDecode(result.value));
+          FileTransferObject.fromJson(jsonDecode(result.value))!;
     } on Exception catch (e) {
       throw Exception('json decode exception in download file ${e.toString()}');
     }
@@ -979,7 +996,7 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  @deprecated
+  @Deprecated("Use EncryptionService")
   Future<void> encryptUnEncryptedData() async {
     await _encryptionService!.encryptUnencryptedData();
   }
@@ -999,8 +1016,8 @@ class AtClientImpl implements AtClient {
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
-      throw AtClientException(at_client_error_codes['AtClientException'],
-          'No network availability');
+      throw AtClientException(
+          atClientErrorCodes['AtClientException'], 'No network availability');
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
@@ -1051,8 +1068,7 @@ class AtClientImpl implements AtClient {
               notificationParams.atKey.sharedWith!);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(
-              errorCode, AtClientExceptionUtil.getErrorDescription(errorCode)));
+          return Future.error(AtClientException(errorCode, e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
