@@ -5,7 +5,7 @@ import 'package:at_client/at_client.dart';
 
 import 'test_util.dart';
 
-var atClient;
+AtClient? atClient;
 
 void main() async {
   try {

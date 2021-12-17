@@ -9,18 +9,18 @@ var retryCount = 1;
 
 void main() {
   var atsign = '@sitaram🛠';
-  var atsign_port = 25017;
-  var root_server = 'vip.ve.atsign.zone';
+  var atsignPort = 25017;
+  var rootServer = 'vip.ve.atsign.zone';
 
   SecureSocket _secureSocket;
 
   test('checking for test environment readiness', () async {
     await Future.delayed(Duration(seconds: 10));
-    _secureSocket = await secure_socket_connection(root_server, atsign_port);
+    _secureSocket = await secureSocketConnection(rootServer, atsignPort);
     print('connection established');
-    socket_listener(_secureSocket);
-    var response;
-    while (response == null || response == 'data:null\n') {
+    socketListener(_secureSocket);
+    String response = '';
+    while (response.isEmpty || response == 'data:null\n') {
       _secureSocket.write('lookup:signing_publickey$atsign\n');
       response = await read();
       print('waiting for signing public key response : $response');

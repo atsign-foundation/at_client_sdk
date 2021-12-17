@@ -4,8 +4,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
-import 'at_demo_credentials.dart' as demo_credentials;
-import 'set_encryption_keys.dart';
+import '../../at_client/test/functional_test/at_demo_credentials.dart' as demo_credentials;
+import '../../at_client/test/functional_test/set_encryption_keys.dart';
 
 void main() {
   test('put method - create a key sharing to other atsign', () async {
@@ -18,19 +18,14 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
-    var locationKey = AtKey()
-      ..key = 'location'
+    var phoneKey = AtKey()
+      ..key = 'phone'
       ..sharedWith = '@bob🛠';
-    var value = 'USA';
-    // put locationKey using dedicated connection
-    var putResult = await atClient.put(locationKey, value, isDedicated: true);
+    var value = '+1 100 200 300';
+    var putResult = await atClient.put(phoneKey, value);
     expect(putResult, true);
-    // get locationKey value using dedicated connection
-    var getResult = await atClient.get(locationKey, isDedicated: true);
+    var getResult = await atClient.get(phoneKey);
     expect(getResult.value, value);
-    // delete locationKey using dedicated connection
-    var deleteResult = await atClient.delete(locationKey, isDedicated: true);
-    expect(deleteResult, true);
   });
   tearDown(() async => await tearDownFunc());
 }

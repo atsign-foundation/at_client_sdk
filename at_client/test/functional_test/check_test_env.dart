@@ -10,18 +10,18 @@ var retryCount = 1;
 
 void main() {
   var atsign = '@sitaram🛠';
-  var atsign_port = 25017;
-  var root_server = 'vip.ve.atsign.zone';
+  var atsignPort = 25017;
+  var rootServer = 'vip.ve.atsign.zone';
 
   SecureSocket _secureSocket;
 
   test('checking for test environment readiness', () async {
     await Future.delayed(Duration(seconds: 10));
-    _secureSocket = await secure_socket_connection(root_server, atsign_port);
+    _secureSocket = await secureSocketConnection(rootServer, atsignPort);
     print('connection established');
-    socket_listener(_secureSocket);
-    var response;
-    while (response == null || response == 'data:null\n') {
+    socketListener(_secureSocket);
+    String response = '';
+    while (response.isEmpty || response == 'data:null\n') {
       _secureSocket.write('lookup:publickey$atsign\n');
       response = await read();
       print('waiting for signing public key response : $response');
@@ -31,8 +31,8 @@ void main() {
   }, timeout: Timeout(Duration(minutes: 5)));
 }
 
-Future<SecureSocket> secure_socket_connection(host, port) async {
-  var socket;
+Future<SecureSocket> secureSocketConnection(host, port) async {
+  dynamic socket;
   while (true) {
     try {
       socket = await SecureSocket.connect(host, port);
@@ -49,7 +49,7 @@ Future<SecureSocket> secure_socket_connection(host, port) async {
 }
 
 /// Socket Listener
-void socket_listener(SecureSocket secureSocket) {
+void socketListener(SecureSocket secureSocket) {
   secureSocket.listen(_messageHandler);
 }
 
@@ -70,7 +70,7 @@ void _messageHandler(data) {
 }
 
 Future<String> read({int maxWaitMilliSeconds = 5000}) async {
-  var result;
+  String result = '';
   //wait maxWaitMilliSeconds seconds for response from remote socket
   var loopCount = (maxWaitMilliSeconds / 50).round();
   for (var i = 0; i < loopCount; i++) {

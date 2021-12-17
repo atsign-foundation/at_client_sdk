@@ -14,5 +14,5 @@ class AtClientException implements Exception {
 
 class AtKeyException extends AtClientException {
   AtKeyException(message)
-      : super(at_client_error_codes['AtKeyException'], message);
+      : super(atClientErrorCodes['AtKeyException'], message);
 }
