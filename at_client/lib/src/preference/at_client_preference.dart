@@ -63,6 +63,7 @@ enum SyncStrategy {
   /// Sync local keys immediately to secondary server for update and delete commands.
   immediate,
   onDemand,
+
   /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].
   scheduled
 }

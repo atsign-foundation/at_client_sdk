@@ -30,7 +30,7 @@ class EncryptionService {
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
-    var sharedKey;
+    String? sharedKey;
     try {
       sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     } on KeyNotFoundException {
@@ -66,7 +66,8 @@ class EncryptionService {
     try {
       result = await localSecondary!.executeVerb(lookupEncryptionSharedKey);
     } on KeyNotFoundException {
-      logger.finer('$sharedWith:$AT_ENCRYPTION_SHARED_KEY@$currentAtSign not found in local secondary. Fetching from cloud secondary');
+      logger.finer(
+          '$sharedWith:$AT_ENCRYPTION_SHARED_KEY@$currentAtSign not found in local secondary. Fetching from cloud secondary');
     }
 
     //3. Create the encryptedSharedKey if
@@ -111,10 +112,13 @@ class EncryptionService {
     return encryptedValue;
   }
 
+  /// Returns the decrypted value for the given encrypted value.
+  /// Throws [IllegalArgumentException] if encrypted value is null.
+  /// Throws [KeyNotFoundException] if encryption keys are not found.
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     sharedBy = sharedBy.replaceFirst('@', '');
     var encryptedSharedKey;
@@ -140,12 +144,12 @@ class EncryptionService {
 
   ///Returns `decrypted value` on successful decryption.
   /// Used for local lookup @bob:phone@alice
+  /// Throws [IllegalArgumentException] if encrypted value is null.
   Future<String?> decryptLocal(String? encryptedValue, String? currentAtSign,
       String sharedWithUser) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      logger.severe('Decryption failed. Encrypted value is null');
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
     var currentAtSignPrivateKey =
@@ -191,13 +195,14 @@ class EncryptionService {
     }
   }
 
-  /// returns decrypted value
+  /// Returns decrypted value
   /// Used for local lookup @alice:phone@alice
+  /// Throws [IllegalArgumentException] if encrypted value is null.
   Future<String?> decryptForSelf(
       String? encryptedValue, bool isEncrypted) async {
     if (encryptedValue == null || encryptedValue == 'null') {
-      throw AtClientException(
-          'AT0014', 'Decryption failed. Encrypted value is null');
+      throw IllegalArgumentException(
+          'Decryption failed. Encrypted value is null');
     }
     if (!isEncrypted) {
       logger.info(
@@ -339,7 +344,7 @@ class EncryptionService {
     return base64Encode(dataSignature);
   }
 
-  @deprecated
+  @Deprecated('Not in use')
   Future<void> encryptUnencryptedData() async {
     var atClient = await (AtClientImpl.getClient(currentAtSign));
     if (atClient == null) {
@@ -392,7 +397,7 @@ class EncryptionService {
   /// Throws [KeyNotFoundException] if sharedWith atSign publicKey is not found.
   Future<String?> _getSharedWithPublicKey(String sharedWithUser) async {
     //a local lookup the cached public key of sharedWith atsign.
-    var sharedWithPublicKey;
+    String? sharedWithPublicKey;
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
       ..atKey = 'publickey.$sharedWithUser'
       ..sharedBy = currentAtSign;
@@ -427,12 +432,11 @@ class EncryptionService {
       ..sharedBy = currentAtSign
       ..value = sharedWithPublicKey;
     await localSecondary!.executeVerb(sharedWithPublicKeyBuilder, sync: true);
-
     return sharedWithPublicKey;
   }
 
   Future<String?> _getEncryptedSharedKey(String sharedBy) async {
-    var encryptedSharedKey;
+    String? encryptedSharedKey;
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
       ..isCached = true
       ..sharedBy = sharedBy
@@ -453,7 +457,7 @@ class EncryptionService {
       encryptedSharedKey =
           await remoteSecondary!.executeAndParse(sharedKeyLookUpBuilder);
     }
-    if ((encryptedSharedKey != null) && (encryptedSharedKey.isNotEmpty)) {
+    if (encryptedSharedKey.isNotEmpty) {
       encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
     }
     return encryptedSharedKey;

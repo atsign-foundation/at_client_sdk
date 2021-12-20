@@ -12,4 +12,24 @@ linter:
     - await_only_futures
 
 analyzer:
+#   exclude:
+#     - path/to/excluded/files/**
 
+dart_code_metrics:
+  anti-patterns:
+    - long-method
+    - long-parameter-list
+  metrics:
+    cyclomatic-complexity: 20
+    maximum-nesting-level: 5
+    number-of-parameters: 4
+    source-lines-of-code: 50
+  metrics-exclude:
+    - test/**
+  rules:
+    - no-boolean-literal-compare
+    - no-empty-block
+    - prefer-conditional-expressions
+    - no-equal-then-else
+#    - newline-before-return
+#    - prefer-trailing-comma
