@@ -6,7 +6,8 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
-import '../../at_client/test/functional_test/at_demo_credentials.dart' as demo_credentials;
+import '../../at_client/test/functional_test/at_demo_credentials.dart'
+    as demo_credentials;
 import '../../at_client/test/functional_test/set_encryption_keys.dart';
 
 void main() {
@@ -118,6 +119,24 @@ void main() {
         NotificationParams.forText('phone', '@bob🛠'),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
+  });
+
+  test('notify - test deprecated method using notificationservice', () async {
+    var atsign = '@alice🛠';
+    var preference = getAlicePreference(atsign);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
+    // To setup encryption keys
+    await setEncryptionKeys(atsign, preference);
+    // phone.me@alice🛠
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠';
+    var value = '+1 100 200 300';
+    final atClient = atClientManager.atClient;
+    final notifyResult =
+        await atClient.notify(phoneKey, value, OperationEnum.update);
+    expect(notifyResult, true);
   });
   tearDown(() async => await tearDownFunc());
 }
