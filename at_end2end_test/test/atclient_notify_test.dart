@@ -141,17 +141,16 @@ void main() {
   });
   test('notifyall - test deprecated method using notificationservice',
       () async {
-    var aliceAtsign = '@alice🛠';
-    var colinAtSign = '@colin🛠';
-    final alicePreference = getPreference(aliceAtsign);
-    final colinPreference = getPreference(colinAtSign);
+    final aliceAtSign = '@alice🛠';
+    final bobAtSign = '@bob🛠';
+    final colinAtSign = '@colin🛠';
+    final alicePreference = getPreference(aliceAtSign);
     final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(aliceAtsign, 'me', alicePreference);
+        .setCurrentAtSign(aliceAtSign, 'me', alicePreference);
     // To setup encryption keys
-    await setEncryptionKeys(aliceAtsign, alicePreference);
-    await setEncryptionKeys(colinAtSign, colinPreference);
+    await setEncryptionKeys(aliceAtSign, alicePreference);
     // phone.me@alice🛠
-    var shareWithList = []..add(aliceAtsign)..add(colinAtSign);
+    var shareWithList = []..add(bobAtSign)..add(colinAtSign);
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = jsonEncode(shareWithList);
@@ -159,7 +158,7 @@ void main() {
     final atClient = atClientManager.atClient;
     final notifyResult =
         await atClient.notifyAll(phoneKey, value, OperationEnum.update);
-    expect(jsonDecode(notifyResult)[aliceAtsign], true);
+    expect(jsonDecode(notifyResult)[bobAtSign], true);
     expect(jsonDecode(notifyResult)[colinAtSign], true);
   });
   tearDown(() async => await tearDownFunc());
