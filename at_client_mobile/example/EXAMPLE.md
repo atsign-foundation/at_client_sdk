@@ -1,6 +1,9 @@
-## Example
 
-Checkout our example at [example tab](https://pub.dev/packages/at_client/example) or in [at_client git repository](https://github.com/atsign-foundation/at_client_sdk/tree/trunk/at_client/example).
+<!-- 
+Checkout our example at [example tab](https://pub.dev/packages/at_client/example) or in [at_client git repository](https://github.com/atsign-foundation/at_client_sdk/tree/trunk/at_client/example). -->
+<img width=250px src="https://atsign.dev/assets/img/@platform_logo_grey.svg?sanitize=true">
+
+# at_client_mobile Example
 
 In this example, Let us see how to use `get()`, `put()`, and `delete()` methods in real-time applications.
 
