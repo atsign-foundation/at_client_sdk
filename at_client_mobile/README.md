@@ -88,10 +88,12 @@ for (String atsign in atSignsList) {
 ```
 
 - Get `AtClientService` instance to manage your atsigns.
+> `OnboardingWidgetService` is used to onboard your atsigns. Ckeck out the [at_onboarding_flutter](https://pub.dev/packages/at_onboarding_flutter) for more details.
 
 ```dart
 Map<String?, AtClientService> atClientServiceMap = {};
 
+/// Onboarding widget
 OnboardingWidgetService().onboarding(
     fistTimeAuthNextScreen: FirstTimeScreen(),
     nextScreen: null,
