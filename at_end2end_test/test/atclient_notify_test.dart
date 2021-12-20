@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
@@ -13,7 +14,7 @@ import '../../at_client/test/functional_test/set_encryption_keys.dart';
 void main() {
   test('notify updating of a key to sharedWith atSign - using await', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -37,7 +38,7 @@ void main() {
   test('notify updating of a key to sharedWith atSign - using callback',
       () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -54,7 +55,7 @@ void main() {
 
   test('notify deletion of a key to sharedWith atSign', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -74,7 +75,7 @@ void main() {
 
   test('notify deletion of a key to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -91,7 +92,7 @@ void main() {
 
   test('notify text of to sharedWith atSign', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -109,7 +110,7 @@ void main() {
 
   test('notify text of to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -123,7 +124,7 @@ void main() {
 
   test('notify - test deprecated method using notificationservice', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     // To setup encryption keys
@@ -137,6 +138,29 @@ void main() {
     final notifyResult =
         await atClient.notify(phoneKey, value, OperationEnum.update);
     expect(notifyResult, true);
+  });
+  test('notifyall - test deprecated method using notificationservice',
+      () async {
+    var aliceAtsign = '@alice🛠';
+    var colinAtSign = '@colin🛠';
+    final alicePreference = getPreference(aliceAtsign);
+    final colinPreference = getPreference(colinAtSign);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(aliceAtsign, 'me', alicePreference);
+    // To setup encryption keys
+    await setEncryptionKeys(aliceAtsign, alicePreference);
+    await setEncryptionKeys(colinAtSign, colinPreference);
+    // phone.me@alice🛠
+    var shareWithList = []..add(aliceAtsign)..add(colinAtSign);
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = jsonEncode(shareWithList);
+    var value = '+1 100 200 300';
+    final atClient = atClientManager.atClient;
+    final notifyResult =
+        await atClient.notifyAll(phoneKey, value, OperationEnum.update);
+    expect(jsonDecode(notifyResult)[aliceAtsign], true);
+    expect(jsonDecode(notifyResult)[colinAtSign], true);
   });
   tearDown(() async => await tearDownFunc());
 }
@@ -155,7 +179,7 @@ Future<void> tearDownFunc() async {
   }
 }
 
-AtClientPreference getAlicePreference(String atsign) {
+AtClientPreference getPreference(String atsign) {
   var preference = AtClientPreference();
   preference.hiveStoragePath = 'test/hive/client';
   preference.commitLogPath = 'test/hive/client/commit';
