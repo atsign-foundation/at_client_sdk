@@ -121,3 +121,7 @@ atClientServiceMap.remove(atsign);
 bool isOnboarded = atClientServiceMap.containsKey(atsign);
 print(isOnboarded); // Prints true if onboarded.
 ```
+
+## Example
+
+We have a good example with explanation in the [at_client_mobile](https://pub.dev/packages/at_client_mobile/example) package.

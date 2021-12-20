@@ -128,3 +128,7 @@ ConnectivityListener().subscribe().listen((isConnected) {
 
 AtClient has many more methods that are exposed. Please refer to the [atsign docs](https://atsign.dev/docs/overview/) for more details.
 
+
+## Example
+
+We have a good example with explanation in the [at_client_mobile](https://pub.dev/packages/at_client_mobile/example) package.
