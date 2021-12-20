@@ -37,25 +37,6 @@ jobs:
         working-directory: at_client
         run: dart analyze
 
-      - name: Add entry to hosts file
-        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
-
-      # Start docker container to run functional tests and unit tests
-      - name: Start docker instance
-        working-directory: at_client/test
-        run: docker-compose up -d
-
-      - name: Check for docker container readiness
-        working-directory: at_client
-        run: dart run test/functional_test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
-
-      - name: Check test environment readiness
-        working-directory: at_client
-        run: dart run test/functional_test/check_test_env.dart
-
       # Run unit tests
       - name: Run unit tests, with code coverage measurement
         working-directory: at_client
@@ -72,21 +53,45 @@ jobs:
           file: at_client/coverage.lcov
           flags: unit_tests
 
-      # Run end2end tests
-      - name: Run end2end tests
-        working-directory: at_end2end_test
+      # Install dependencies in at_functional_test
+      - name: Install dependencies in at_functional_test
+        working-directory: at_functional_test
+        run: dart pub get
+
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      # Start docker container to run functional tests
+      - name: Start docker instance
+        working-directory: at_functional_test/test
+        run: docker-compose up -d
+
+      - name: Check for docker container readiness
+        working-directory: at_functional_test
+        run: dart run test/check_docker_readiness.dart
+
+      - name: Run PKAM
+        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+
+      - name: Check test environment readiness
+        working-directory: at_functional_test
+        run: dart run test/check_test_env.dart
+
+      # Run functional tests
+      - name: Run functional tests
+        working-directory: at_functional_test
         run: dart test --concurrency=1 --coverage="coverage"
 
       - name: Convert coverage to LCOV format
-        working-directory: at_end2end_test
+        working-directory: at_functional_test
         run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2.1.0
         with:
           token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-          file: at_end2end_test/coverage.lcov
-          flags: end2end_tests
+          file: at_functional_test/coverage.lcov
+          flags: functional_tests
 
       # Adding flutter to path
       - name: Installing Flutter
@@ -106,5 +111,5 @@ jobs:
 
       # stop docker containers
       - name: stop docker containers
-        working-directory: at_client/test
+        working-directory: at_functional_test/test
         run: docker-compose down

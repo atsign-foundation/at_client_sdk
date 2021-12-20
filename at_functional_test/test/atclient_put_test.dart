@@ -4,8 +4,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
-import '../../at_client/test/functional_test/at_demo_credentials.dart' as demo_credentials;
-import '../../at_client/test/functional_test/set_encryption_keys.dart';
+import 'at_demo_credentials.dart' as demo_credentials;
+import 'set_encryption_keys.dart';
 
 void main() {
   test('put method - create a key sharing to other atsign', () async {
