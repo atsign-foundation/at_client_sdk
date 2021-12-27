@@ -102,4 +102,8 @@ class ClientSdkService {
     atsign = null;
     Navigator.pop(context);
   }
+
+  Future<void> sync(Function callBack) async {
+    atClientInstance.syncService.sync(onDone: callBack);
+  }
 }

@@ -1,4 +1,4 @@
-import 'package:demo/sdk_service.dart';
+import 'package:demo/src/services/sdk.service.dart';
 import 'package:flutter/material.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -11,8 +11,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Set of strings
+  Set<String> _selectedStrings = <String>{};
   final ClientSdkService _clientSdkService = ClientSdkService.getInstance();
-  String? atSign, _key, _deleteKey, _value, _lookupKey, _lookupValue;
+  String? atSign,
+      _key,
+      _deleteKey,
+      _value,
+      _lookupKey,
+      _lookupValue,
+      notifyAtSign;
   List<String?> _scanItems = <String?>[];
   bool _isUpdateLoading = false,
       _isScanLoading = false,
@@ -168,6 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }).toList(),
                         onChanged: (String? value) {
+                          if(value != null){
+                            _selectedStrings.add(value);
+                          }
                           setState(() {
                             _lookupKey = value;
                             _lookupTextFieldController?.text = value!;

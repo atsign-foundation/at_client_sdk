@@ -390,7 +390,7 @@ Card
               backgroundColor: Theme.of(context).primaryColor,
             ),
             onPressed: () async {
-              // Get the List of AtKeys
+              // To get the List of AtKeys, call the getAtKeys function.
               List<AtKey> response =
                   await _clientSdkService.getAtKeys(
                 sharedBy: atSign,
@@ -487,12 +487,16 @@ Card
               backgroundColor: Theme.of(context).primaryColor,
             ),
             onPressed: () async {
+              // This lookup key depends on the above look up drop down
+              // Handle it, if it is null.
               if (_lookupKey == null) {
                 setState(() => _lookupValue = 'The key is empty.');
               } else {
+                // Else fetch necessary data from the AtKey
                 AtKey lookup = AtKey();
                 lookup.key = _lookupKey;
                 lookup.sharedWith = atSign;
+                // Call the get function to get the value of the key.
                 String? response =
                     await _clientSdkService.get(lookup);
                 setState(() => _lookupValue = response);
@@ -510,11 +514,15 @@ Card
   ```dart
   // ClientSDKService class
   Future<void> logout(BuildContext context) async {
+    // Get the current atsign and Detele it from the key chain
     String? atsign = atClientInstance.atClient.getCurrentAtSign();
     await _keyChainManager.deleteAtSignFromKeychain(atsign!);
+    // Reset the values of necessary variables to initial state.
     atClientServiceInstance = null;
     atClientServiceMap = <String?, AtClientService>{};
     atsign = null;
+    // Pop out the current screen.
+    // Pop only works on the topmost screen.(If you have used push).
     Navigator.pop(context);  
   }
   ```
@@ -525,6 +533,7 @@ Card
     title: const Text('Dashboard'),
     actions: [
       IconButton(
+        // Call the logout function
         onPressed: () => _clientSdkService.logout(context),
         icon: const Icon(Icons.logout),
       ),
