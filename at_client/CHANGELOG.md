@@ -1,5 +1,5 @@
 ## 3.0.8
-- updated readme and documentation improvements
+- Updated readme and documentation improvements
 ## 3.0.7
 - Uptake at_persistence_secondary_server changes
 - Resolve dart analyzer issues
