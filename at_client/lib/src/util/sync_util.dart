@@ -98,4 +98,13 @@ class SyncUtil {
     }
     return false;
   }
+
+  static bool isSyncRequired(String key) {
+    if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        key.startsWith(AT_PKAM_PUBLIC_KEY) ||
+        key.startsWith(AT_ENCRYPTION_PRIVATE_KEY)) {
+      return false;
+    }
+    return true;
+  }
 }

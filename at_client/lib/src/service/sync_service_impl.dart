@@ -322,7 +322,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     switch (entry.operation) {
       case CommitOp.UPDATE:
         var key = entry.atKey;
-        var value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
+        var value = await _atClient.getLocalSecondary().keyStore!.get(key);
         command = 'update:$key ${value?.data}';
         break;
       case CommitOp.DELETE:
@@ -332,7 +332,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       case CommitOp.UPDATE_META:
         var key = entry.atKey;
         var metaData =
-            await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
+            await _atClient.getLocalSecondary().keyStore!.getMeta(key);
         if (metaData != null) {
           key = '$key$_metadataToString(metaData)';
         }
@@ -340,9 +340,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         break;
       case CommitOp.UPDATE_ALL:
         var key = entry.atKey;
-        var value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
+        var value = await _atClient.getLocalSecondary().keyStore!.get(key);
         var metaData =
-            await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
+            await _atClient.getLocalSecondary().keyStore!.getMeta(key);
         var keyGen = '';
         if (metaData != null) {
           keyGen = _metadataToString(metaData);
@@ -443,7 +443,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       case '#':
       case '*':
         var builder = UpdateVerbBuilder()
-          ..atKey = serverCommitEntry['atKey']
+          ..atKey = (AtKey()..key=serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
@@ -484,26 +484,27 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _setMetaData(builder, serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
-      if (metaData[AT_TTL] != null) builder.ttl = int.parse(metaData[AT_TTL]);
-      if (metaData[AT_TTB] != null) builder.ttb = int.parse(metaData[AT_TTB]);
-      if (metaData[AT_TTR] != null) builder.ttr = int.parse(metaData[AT_TTR]);
+      builder.atKey.metadata = Metadata();
+      if (metaData[AT_TTL] != null) builder.atKey.metadata.ttl = int.parse(metaData[AT_TTL]);
+      if (metaData[AT_TTB] != null) builder.atKey.metadata.ttb = int.parse(metaData[AT_TTB]);
+      if (metaData[AT_TTR] != null) builder.atKey.metadata.ttr = int.parse(metaData[AT_TTR]);
       if (metaData[CCD] != null) {
         (metaData[CCD].toLowerCase() == 'true')
-            ? builder.ccd = true
-            : builder.ccd = false;
+            ? builder.atKey.metadata.ccd = true
+            : builder.atKey.metadata.ccd = false;
       }
       if (metaData[PUBLIC_DATA_SIGNATURE] != null) {
-        builder.dataSignature = metaData[PUBLIC_DATA_SIGNATURE];
+        builder.atKey.metadata.dataSignature = metaData[PUBLIC_DATA_SIGNATURE];
       }
       if (metaData[IS_BINARY] != null) {
         (metaData[IS_BINARY].toLowerCase() == 'true')
-            ? builder.isBinary = true
-            : builder.isBinary = false;
+            ? builder.atKey.metadata.isBinary = true
+            : builder.atKey.metadata.isBinary = false;
       }
       if (metaData[IS_ENCRYPTED] != null) {
         (metaData[IS_ENCRYPTED].toLowerCase() == 'true')
-            ? builder.isEncrypted = true
-            : builder.isEncrypted = false;
+            ? builder.atKey.metadata.isEncrypted = true
+            : builder.atKey.metadata.isEncrypted = false;
       }
     }
   }
@@ -511,7 +512,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<void> _pullToLocal(
       VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
     var verbResult =
-        await _atClient.getLocalSecondary()!.executeVerb(builder, sync: false);
+        await _atClient.getLocalSecondary().executeVerb(builder, sync: false);
     if (verbResult == null) {
       return;
     }

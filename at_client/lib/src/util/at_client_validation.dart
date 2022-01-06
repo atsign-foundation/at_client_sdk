@@ -2,8 +2,22 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtClientValidation {
-  static void validateKey(String? key) {
-    if (key == null || key.isEmpty) {
+  static void validatePutRequest(AtKey atKey) {
+    // validates the key
+    validateKey(atKey.key);
+    // validates the metadata
+    validateMetadata(atKey.metadata);
+    // verifies if the sharedWith atSign exists.
+    if (atKey.sharedWith != null) {
+      isAtSignExists(
+          atKey.sharedWith!,
+          AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
+          AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
+    }
+  }
+
+  static void validateKey(String key) {
+    if (key.isEmpty) {
       throw AtKeyException('Key cannot be null or empty');
     }
     // Key cannot contain @
@@ -11,6 +25,8 @@ class AtClientValidation {
       throw AtKeyException('Key cannot contain @');
     }
     // Key cannot contain whitespaces
+    // Non visible white spaces and unicodes for white spaces.
+    // :,,
     if (key.contains(' ')) {
       throw AtKeyException('Key cannot contain whitespaces');
     }
@@ -28,10 +44,10 @@ class AtClientValidation {
           'Invalid TTL value: ${metadata.ttl}. TTL value cannot be less than 0');
     }
     // validate TTB
-    if (metadata.ttb != null && metadata.ttb! < 0) {
-      throw AtKeyException(
-          'Invalid TTB value: ${metadata.ttb}. TTB value cannot be less than 0');
-    }
+    // if (metadata.ttb != null && metadata.ttb! < 0) {
+    //   throw AtKeyException(
+    //       'Invalid TTB value: ${metadata.ttb}. TTB value cannot be less than 0');
+    // }
     //validate TTR
     if (metadata.ttr != null && metadata.ttr! < -1) {
       throw AtKeyException(
@@ -43,6 +59,7 @@ class AtClientValidation {
   /// Throws [InvalidAtSignException] if atSign does not exist.
   static void isAtSignExists(
       String atSign, String rootDomain, int rootPort) async {
+    atSign = atSign.trim();
     if (atSign.isEmpty) {
       throw AtKeyException('@sign cannot be empty');
     }

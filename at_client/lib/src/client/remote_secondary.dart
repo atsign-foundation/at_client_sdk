@@ -20,7 +20,7 @@ class RemoteSecondary implements Secondary {
 
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey}) {
-    _atSign = AtUtils.formatAtSign(atSign)!;
+    _atSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     privateKey ??= preference.privateKey;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,

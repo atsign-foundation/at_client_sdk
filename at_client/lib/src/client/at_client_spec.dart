@@ -17,9 +17,9 @@ abstract class AtClient {
   SyncManager? getSyncManager();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.
-  RemoteSecondary? getRemoteSecondary();
+  RemoteSecondary getRemoteSecondary();
 
-  LocalSecondary? getLocalSecondary();
+  LocalSecondary getLocalSecondary();
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
@@ -62,7 +62,7 @@ abstract class AtClient {
   ///    put(key, '+1 999 9999');
   /// ```
   /// Starting version 3.0.0 [isDedicated] is deprecated
-  Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
+  Future<bool> put(AtKey key, dynamic value);
 
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
@@ -438,7 +438,7 @@ abstract class AtClient {
       List<FileStatus> fileStatus,
       {DateTime? date});
 
-  String? getCurrentAtSign();
+  String getCurrentAtSign();
 
-  EncryptionService? get encryptionService;
+  EncryptionService get encryptionService;
 }
