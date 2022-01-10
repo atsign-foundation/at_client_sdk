@@ -32,7 +32,7 @@ class NotificationServiceImpl
     }
     final notificationService = NotificationServiceImpl._(atClient);
     await notificationService._init();
-    _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
+    _notificationServiceMap[atClient.getCurrentAtSign()] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
@@ -66,7 +66,7 @@ class NotificationServiceImpl
     _monitor = Monitor(
         _internalNotificationCallback,
         _onMonitorError,
-        _atClient.getCurrentAtSign()!,
+        _atClient.getCurrentAtSign(),
         _atClient.getPreferences()!,
         MonitorPreference()..keepAlive = true,
         _monitorRetry);

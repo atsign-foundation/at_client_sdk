@@ -49,13 +49,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     final syncService = SyncServiceImpl._(atClient);
     await syncService._statsServiceListener();
     syncService._scheduleSyncRun();
-    _syncServiceMap[atClient.getCurrentAtSign()!] = syncService;
+    _syncServiceMap[atClient.getCurrentAtSign()] = syncService;
     return _syncServiceMap[atClient.getCurrentAtSign()]!;
   }
 
   SyncServiceImpl._(this._atClient) {
     _remoteSecondary = RemoteSecondary(
-        _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+        _atClient.getCurrentAtSign(), _atClient.getPreferences()!);
     AtClientManager.getInstance().listenToAtSignChange(this);
   }
 
@@ -212,13 +212,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.finer('Sync in progress');
       var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
           _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
+          atSign: _atClient.getCurrentAtSign());
       // Get lastSyncedLocalSeq to get the list of uncommitted entries.
       var lastSyncedLocalSeq =
           lastSyncedEntry != null ? lastSyncedEntry.key : -1;
       var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
           lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
+          atSign: _atClient.getCurrentAtSign());
       var localCommitId = await _getLocalCommitId();
       if (serverCommitId > localCommitId) {
         _logger.finer('syncing to local');
@@ -387,14 +387,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var serverCommitId = await _getServerCommitId();
     var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        atSign: _atClient.getCurrentAtSign());
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     _logger.finest(
         'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
     var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
     var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
         lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        atSign: _atClient.getCurrentAtSign());
     return SyncUtil.isInSync(
         unCommittedEntries, serverCommitId, lastSyncedCommitId);
   }
@@ -415,7 +415,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // Get lastSynced local commit id.
     var lastSyncEntry = await SyncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        atSign: _atClient.getCurrentAtSign());
     int localCommitId;
     // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
     // Else set to -1.
@@ -434,7 +434,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');
     }
-    return jsonDecode(verbResult!);
+    return jsonDecode(verbResult);
   }
 
   Future<void> _syncLocal(serverCommitEntry) async {
@@ -518,7 +518,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     var sequenceNumber = int.parse(verbResult.split(':')[1]);
     var commitEntry = await (SyncUtil.getCommitEntry(
-        sequenceNumber, _atClient.getCurrentAtSign()!));
+        sequenceNumber, _atClient.getCurrentAtSign()));
     if (commitEntry == null) {
       return;
     }
@@ -526,7 +526,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _logger.finest(
         '*** updating commitId to local ${serverCommitEntry['commitId']}');
     await SyncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
-        _atClient.getCurrentAtSign()!);
+        _atClient.getCurrentAtSign());
   }
 
   @override

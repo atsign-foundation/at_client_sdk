@@ -42,8 +42,8 @@ class RemoteSecondary implements Secondary {
     return verbResult;
   }
 
-  Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
-    String? verbResult;
+  Future<String> executeCommand(String atCommand, {bool auth = false}) async {
+    String verbResult;
     verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
     return verbResult;
   }

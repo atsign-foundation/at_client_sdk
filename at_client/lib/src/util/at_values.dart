@@ -1,10 +1,44 @@
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/exception/at_client_error_codes.dart';
-import 'package:at_client/src/exception/at_client_exception_util.dart';
+import 'package:at_client/src/decryption_service/decryption_manager.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/encryption_service/signin_public_data.dart';
 import 'package:at_commons/at_commons.dart';
 
+/// Class responsible for transforming the request and response.
+/// Encodes and encrypts the request.
+/// Decodes and decrypts the response.
 class AtValues {
+  ///Accepts the [AtKey] and value and transforms the value based on type of [AtKey]
+  /// If value is binary, encodes the value
+  /// If AtKey is public, sign's data and with encryptionPrivateKey and places the
+  /// signed data into [AtKey.metadata.dataSignature]
+  /// If AtKey is not public, encrypts the value and returns the encrypted value.
+  static Future<String> transformRequest(AtKey atKey, dynamic value) async {
+    // Encode the value, if the value is of binary data.
+    if (atKey.metadata!.isBinary) {
+      value = Base2e15.encode(value);
+    }
+
+    // If key is public, Sign in the data.
+    if (atKey is PublicKey || atKey.metadata!.isPublic) {
+      atKey.metadata!.dataSignature = await SignInPublicData.signInData(
+          value,
+          await AtClientManager.getInstance()
+              .atClient
+              .getLocalSecondary()
+              .getEncryptionPrivateKey());
+      return value;
+    }
+
+    var encryptionService = AtKeyEncryptionManager.get(
+        atKey, AtClientManager.getInstance().atClient.getCurrentAtSign());
+    var encryptedValue =
+        await encryptionService.encrypt(atKey, value) as String;
+    atKey.metadata!.isEncrypted = true;
+    return encryptedValue;
+  }
+
   /// Decodes the binary data and decrypts the encrypted data and returns the
   /// [AtValue]
   /// NOTE: Use metadata from [AtValue]
@@ -12,103 +46,13 @@ class AtValues {
     if (atValue.metadata != null && atValue.metadata!.isBinary) {
       atValue.value = Base2e15.decode(atValue.value);
     }
+    // Setting isEncrypted from atValue
+    // because, user populated metadata will have false by default.
+    atKey.metadata!.isEncrypted = atValue.metadata!.isEncrypted;
 
-    if ((atValue.metadata != null && atValue.metadata!.isEncrypted) &&
-        AtClientManager.getInstance().atClient.getCurrentAtSign() !=
-            atKey.sharedBy) {
-      atValue.value = await AtClientManager.getInstance()
-          .atClient
-          .encryptionService
-          .decrypt(atValue.value, atKey.sharedBy!);
-      return atValue;
-    }
-
-    // for llookup
-    // @alice:phone@bob
-    // @alice:phone@alice
-    // phone@alice
-    if ((atValue.metadata != null && atValue.metadata!.isEncrypted) &&
-        AtClientManager.getInstance().atClient.getCurrentAtSign() ==
-            atKey.sharedBy) {
-      atValue.value = await AtClientManager.getInstance()
-          .atClient
-          .encryptionService
-          .decryptLocal(
-              atValue.value,
-              AtClientManager.getInstance().atClient.getCurrentAtSign(),
-              atKey.sharedWith!);
-    }
-
-    // for private keys
-    //_phone@alice
-    if ((atValue.metadata != null && atValue.metadata!.isEncrypted) &&
-        AtClientManager.getInstance().atClient.getCurrentAtSign() ==
-            atKey.sharedWith) {
-      atValue.value = await AtClientManager.getInstance()
-          .atClient
-          .encryptionService
-          .decryptForSelf(atValue.value, atKey.metadata!.isEncrypted);
-    }
-
+    var decryptionService = AtKeyDecryptionManager.get(
+        atKey, AtClientManager.getInstance().atClient.getCurrentAtSign());
+    decryptionService.decrypt(atKey, atValue.value);
     return atValue;
-  }
-
-  static Future<String> transformRequest(AtKey atKey, dynamic value) async {
-    // Encode the value, if the value is of binary data.
-    if (atKey.metadata!.isBinary) {
-      value = Base2e15.encode(value);
-    }
-    // If sharedWith atSign is not equal to currentAtSign, encrypt the data.
-    if (atKey.sharedWith != null &&
-        atKey.sharedWith !=
-            AtClientManager.getInstance().atClient.getCurrentAtSign()) {
-      try {
-        value = await AtClientManager.getInstance()
-            .atClient
-            .encryptionService
-            .encrypt(atKey.key, value, atKey.sharedWith!);
-        atKey.metadata!.isEncrypted = true;
-        return value;
-      } on KeyNotFoundException catch (e) {
-        var errorCode = AtClientExceptionUtil.getErrorCode(e);
-        return Future.error(AtClientException(errorCode, e.message));
-      }
-    }
-    // If the key is private key, perform the self encryption.
-    // @sitram:phone@sitaram
-    // _phone@sitaram
-    if (!atKey.metadata!.isPublic && !atKey.key.startsWith('_')) {
-      value = await AtClientManager.getInstance()
-          .atClient
-          .encryptionService
-          .encryptForSelf(atKey.key, value);
-      atKey.metadata!.isEncrypted = true;
-      return value;
-    }
-    // If the key is public, sign the public data with private encryption key
-    // verify the
-    if (atKey.metadata!.isPublic) {
-      try {
-        var encryptionPrivateKey = await AtClientManager.getInstance()
-            .atClient
-            .getLocalSecondary()
-            .getEncryptionPrivateKey();
-        // If encryptionPrivateKey is not found, throw error.
-        if (encryptionPrivateKey.isEmpty) {
-          return Future.error(AtClientException(
-              atClientErrorCodes['AtClientException'],
-              'Failed signing the public data. Encryption private key not found'));
-        }
-        atKey.metadata!.dataSignature = AtClientManager.getInstance()
-            .atClient
-            .encryptionService
-            .signPublicData(encryptionPrivateKey, value);
-      } on Exception catch (e) {
-        return Future.error(AtClientException(
-            atClientErrorCodes['AtClientException'],
-            'Exception trying to sign public data:${e.toString()}'));
-      }
-    }
-    return value;
   }
 }

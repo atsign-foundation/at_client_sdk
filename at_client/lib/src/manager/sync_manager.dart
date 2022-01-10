@@ -312,7 +312,7 @@ class SyncManager {
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');
     }
-    return jsonDecode(verbResult!);
+    return jsonDecode(verbResult);
   }
 
   Future<void> _syncLocal(serverCommitEntry) async {
