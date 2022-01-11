@@ -222,20 +222,8 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<Metadata?> getMeta(AtKey atKey, {bool isDedicated = false}) async {
-    // var isPublic = atKey.metadata?.isPublic;
-    // var namespaceAware = atKey.metadata?.namespaceAware;
-    // var isCached = atKey.metadata?.isCached;
-    // var getResult = await _get(atKey.key,
-    //     sharedWith: atKey.sharedWith,
-    //     sharedBy: atKey.sharedBy,
-    //     isPublic: isPublic,
-    //     isCached: isCached,
-    //     namespaceAware: namespaceAware,
-    //     operation: UPDATE_META);
-    // if (getResult == null || getResult == 'null') {
-    //   return null;
-    // }
-    // return _prepareMetadata(getResult, isPublic);
+    AtValue atValue = await get(atKey);
+    return atValue.metadata;
   }
 
   @override
