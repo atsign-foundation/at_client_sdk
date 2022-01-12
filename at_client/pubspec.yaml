@@ -9,7 +9,6 @@ environment:
   sdk: '>=2.12.0 <3.0.0'
 
 dependencies:
-  path: ^1.8.0
   hive: ^2.0.4
   crypton: ^2.0.1
   encrypt: ^5.0.0
@@ -30,32 +29,32 @@ dependencies:
   at_commons: ^3.0.2
   at_utils: ^3.0.2
 
-#dependency_overrides:
-#  at_persistence_spec:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_persistence/at_persistence_spec
-#      ref: trunk
-#  at_utils:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_utils
-#      ref: trunk
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-#  at_persistence_secondary_server:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_secondary/at_persistence_secondary_server
-#      ref: trunk
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: trunk
+dependency_overrides:
+  #  at_persistence_spec:
+  #    git:
+  #      url: https://github.com/atsign-foundation/at_server.git
+  #      path: at_persistence/at_persistence_spec
+  #      ref: trunk
+  at_utils:
+      git:
+        url: https://github.com/atsign-foundation/at_tools.git
+        path: at_utils
+        ref: refactor_atkey
+  at_commons:
+      git:
+        url: https://github.com/atsign-foundation/at_tools.git
+        path: at_commons
+        ref: refactor_atkey
+  #  at_persistence_secondary_server:
+  #    git:
+  #      url: https://github.com/atsign-foundation/at_server.git
+  #      path: at_secondary/at_persistence_secondary_server
+  #      ref: trunk
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: at_lookup
+      ref: refactor_verbbuilders
 
 dev_dependencies:
   test: ^1.17.2
