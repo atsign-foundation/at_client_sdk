@@ -113,9 +113,7 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _init() async {
-    if (_preference.isLocalStoreRequired) {
-      _localSecondary = LocalSecondary(this);
-    }
+    _localSecondary = LocalSecondary(this);
     _remoteSecondary = RemoteSecondary(currentAtSign, _preference,
         privateKey: _preference.privateKey);
     _encryptionService = EncryptionService();
@@ -292,7 +290,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> put(AtKey atKey, dynamic value) async {
+  Future<bool> put(AtKey atKey, dynamic value,{bool isDedicated = false}) async {
     // SetNamespace to the key
     KeyUtil.setNamespace(atKey, preference);
     // Perform atKey validations.

@@ -15,6 +15,7 @@ class AtClientPreference {
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
+  @Deprecated("LocalStoreRequired is true always")
   bool isLocalStoreRequired = false;
 
   /// Shared secret of the atSign
