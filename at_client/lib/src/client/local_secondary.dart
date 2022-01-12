@@ -129,9 +129,7 @@ class LocalSecondary implements Secondary {
       if (builder.atKey.sharedWith != null) {
         llookupKey += '${AtUtils.formatAtSign(builder.atKey.sharedWith!)}:';
       }
-      if (builder.atKey != null) {
-        llookupKey += builder.atKey.key;
-      }
+      llookupKey += builder.atKey.key;
       if (builder.atKey.namespace != null &&
           builder.atKey.namespace!.isNotEmpty &&
           builder.atKey.metadata!.namespaceAware) {

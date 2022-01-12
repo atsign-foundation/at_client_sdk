@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
+
 import 'test_util.dart';
 
 void main() async {
@@ -10,7 +12,7 @@ void main() async {
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
     var result = await atClient
-        .getRemoteSecondary()!
+        .getRemoteSecondary()
         .executeCommand('lookup:email@bob\n', auth: true);
     print(result);
   } on Exception catch (e, trace) {

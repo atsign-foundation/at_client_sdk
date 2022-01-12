@@ -1,55 +1,9 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
-import 'package:at_client/src/client/verb_builder_manager.dart';
-
-import 'samples/test_util.dart';
 
 void main() {
-  group('A group of tests to verify getSecondary Instance', () {
-    setUp(() async {
-      final atSign = '@alice';
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, 'wavi', TestUtil.getMuraliPreference());
-    });
-    test('A local lookup returns local secondary instance', () async {
-      var builder = LLookupVerbBuilder();
-      var secondary = SecondaryManager.getSecondary(builder);
-      expect(secondary, isA<LocalSecondary>());
-    });
-
-    test('A lookup returns remote secondary instance', () async {
-      var builder = LookupVerbBuilder();
-      var secondary = SecondaryManager.getSecondary(builder);
-      expect(secondary, isA<RemoteSecondary>());
-    });
-
-    test('A public key lookup returns remote secondary instance', () async {
-      var builder = PLookupVerbBuilder();
-      var secondary = SecondaryManager.getSecondary(builder);
-      expect(secondary, isA<RemoteSecondary>());
-    });
-
-    test('A public key update returns local secondary instance', () async {
-      var builder = UpdateVerbBuilder();
-      var secondary = SecondaryManager.getSecondary(builder);
-      expect(secondary, isA<LocalSecondary>());
-    });
-
-    test('A share key notify returns remote secondary instance', () async {
-      var builder = NotifyVerbBuilder();
-      var secondary = SecondaryManager.getSecondary(builder);
-      expect(secondary, isA<RemoteSecondary>());
-    });
-
-    test('Test to verify the stats key returns remote secondary', () async {
-      var builder = StatsVerbBuilder();
-      var secondary = SecondaryManager.getSecondary(builder);
-      expect(secondary, isA<RemoteSecondary>());
-    });
-  });
-
   group('A group of tests to verify legacy AtKey', () {
     // Current atSign is bob
     // bob looking for a key shared by alice

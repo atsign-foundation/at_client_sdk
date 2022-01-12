@@ -56,8 +56,7 @@ class EncryptionService {
     } else {
       isSharedKeyAvailable = true;
       sharedKey = sharedKey.replaceFirst('data:', '');
-      sharedKey =
-          EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+      sharedKey = EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey);
     }
     //2. Verify if encryptedSharedKey for sharedWith atSign is available.
     var lookupEncryptionSharedKey = LLookupVerbBuilder()
@@ -77,7 +76,7 @@ class EncryptionService {
     // a. encryptedSharedKey not available (or)
     // b. If the sharedKey is changed.
     if (result == null || result == 'data:null' || !isSharedKeyAvailable) {
-      var sharedWithPublicKey;
+      String? sharedWithPublicKey;
       try {
         sharedWithPublicKey = await _getSharedWithPublicKey(sharedWithUser);
       } on Exception {
@@ -85,7 +84,7 @@ class EncryptionService {
       }
       //Encrypt shared key with public key of sharedWith atsign.
       var encryptedSharedKey =
-          EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
+          EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey!);
       // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atsign to cache the encryptedSharedKey.
       var updateSharedKeyBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -101,7 +100,7 @@ class EncryptionService {
     if (!isSharedKeyAvailable) {
       // Encrypt the sharedKey with currentAtSign Public key and store it.
       var encryptedSharedKeyForCurrentAtSign =
-          EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey!);
+          EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey);
 
       var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -126,21 +125,21 @@ class EncryptionService {
           'Decryption failed. Encrypted value is null');
     }
     sharedBy = sharedBy.replaceFirst('@', '');
-    var encryptedSharedKey;
+    String? encryptedSharedKey;
     //1. Get encrypted shared key
     encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);
-    if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
+    if (encryptedSharedKey == 'null') {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
 
     //2. decrypt shared key using private key
     var currentAtSignPrivateKey =
         await (localSecondary!.getEncryptionPrivateKey());
-    if (currentAtSignPrivateKey == null) {
+    if (currentAtSignPrivateKey.isEmpty) {
       throw KeyNotFoundException('encryption private not found');
     }
     var sharedKey =
-        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
+        EncryptionUtil.decryptKey(encryptedSharedKey!, currentAtSignPrivateKey);
 
     //3. decrypt value using shared key
     var decryptedValue = EncryptionUtil.decryptValue(encryptedValue, sharedKey);
@@ -164,14 +163,14 @@ class EncryptionService {
         ..key = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
         ..sharedBy = currentAtSign);
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
-    if (sharedKey == null) {
+    if (sharedKey.isEmpty) {
       logger.severe('Decryption failed. SharedKey is null');
       throw AtClientException('AT0014', 'Decryption failed. SharedKey is null');
     }
     //trying to llookup a value without shared key. throw exception or return null}
     sharedKey = sharedKey.replaceFirst('data:', '');
     var decryptedSharedKey =
-        EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+        EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey);
     var decryptedValue =
         EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey);
 
@@ -256,8 +255,7 @@ class EncryptionService {
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
       sharedKey = sharedKey.replaceFirst('data:', '');
-      sharedKey =
-          EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+      sharedKey = EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey);
     }
     //2. Lookup public key of sharedWith atsign
     var plookupBuilder = PLookupVerbBuilder()
@@ -283,7 +281,7 @@ class EncryptionService {
     await localSecondary!.executeVerb(updateSharedKeyBuilder, sync: true);
 
     //4. Store the shared key for future retrieval
-    if (currentAtSignPublicKey == null) {
+    if (currentAtSignPublicKey.isEmpty) {
       throw KeyNotFoundException('encryption public key not found');
     }
     var encryptedSharedKeyForCurrentAtSign =
@@ -364,40 +362,42 @@ class EncryptionService {
       return;
     }
     var selfKeys = await atClient.getAtKeys(sharedBy: currentAtSign);
-    selfKeys.forEach((atKey) async {
-      var key = atKey.key;
-      if (!(key.startsWith(AT_PKAM_PRIVATE_KEY) ||
-          key.startsWith(AT_PKAM_PUBLIC_KEY) ||
-          key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
-          key.startsWith(AT_SIGNING_PRIVATE_KEY) ||
-          key.startsWith(AT_ENCRYPTION_SHARED_KEY) ||
-          key.startsWith('_'))) {
-        var sharedWith = atKey.sharedWith;
-        var isPublic = false;
-        var isCached = false;
-        if (atKey.metadata != null) {
-          isPublic = atKey.metadata!.isPublic;
-          isCached = atKey.metadata!.isCached;
-        }
-        if (!isPublic && !isCached) {
-          if (sharedWith == null || sharedWith == currentAtSign) {
-            var atValue = await atClient.get(atKey);
-            var metadata =
-                (atValue.metadata != null) ? atValue.metadata! : Metadata();
-            var isEncrypted =
-                (metadata.isEncrypted != null) ? metadata.isEncrypted : false;
-            if (!isEncrypted) {
-              var value = atValue.value;
-              metadata.isEncrypted = true;
-              metadata.isBinary =
-                  (metadata.isBinary != null) ? metadata.isBinary : false;
-              atKey.metadata = metadata;
-              await atClient.put(atKey, value);
-            }
-          }
-        }
-      }
-    });
+    await Future.forEach(selfKeys, (atKey) => () {});
+    Future.forEach(
+        selfKeys,
+        (AtKey atKey) => () async {
+              var key = atKey.key;
+              if (!(key.startsWith(AT_PKAM_PRIVATE_KEY) ||
+                  key.startsWith(AT_PKAM_PUBLIC_KEY) ||
+                  key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
+                  key.startsWith(AT_SIGNING_PRIVATE_KEY) ||
+                  key.startsWith(AT_ENCRYPTION_SHARED_KEY) ||
+                  key.startsWith('_'))) {
+                var sharedWith = atKey.sharedWith;
+                var isPublic = false;
+                var isCached = false;
+                if (atKey.metadata != null) {
+                  isPublic = atKey.metadata!.isPublic;
+                  isCached = atKey.metadata!.isCached;
+                }
+                if (!isPublic && !isCached) {
+                  if (sharedWith == null || sharedWith == currentAtSign) {
+                    var atValue = await atClient.get(atKey);
+                    var metadata = (atValue.metadata != null)
+                        ? atValue.metadata!
+                        : Metadata();
+                    var isEncrypted = metadata.isEncrypted;
+                    if (!isEncrypted) {
+                      var value = atValue.value;
+                      metadata.isEncrypted = true;
+                      metadata.isBinary = metadata.isBinary;
+                      atKey.metadata = metadata;
+                      await atClient.put(atKey, value);
+                    }
+                  }
+                }
+              }
+            });
     await atClient.getSyncManager()!.sync();
   }
 
@@ -492,7 +492,7 @@ class EncryptionService {
     //2. decrypt shared key using private key
     var currentAtSignPrivateKey =
         await (localSecondary!.getEncryptionPrivateKey());
-    if (currentAtSignPrivateKey == null) {
+    if (currentAtSignPrivateKey.isEmpty) {
       throw KeyNotFoundException('private encryption key not found');
     }
     var sharedKey =

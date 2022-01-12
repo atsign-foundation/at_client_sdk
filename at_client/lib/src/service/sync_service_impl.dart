@@ -263,7 +263,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
             await SyncUtil.updateCommitEntry(
-                commitEntry, commitId, _atClient.getCurrentAtSign()!);
+                commitEntry, commitId, _atClient.getCurrentAtSign());
           } on Exception catch (e) {
             _logger.severe(
                 'exception while updating commit entry for entry:$entry ${e.toString()}');
@@ -431,7 +431,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     command += '\n';
     var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('batch result:$verbResult');
-    if (verbResult != null) {
+    if (verbResult.isNotEmpty) {
       verbResult = verbResult.replaceFirst('data:', '');
     }
     return jsonDecode(verbResult);
@@ -513,7 +513,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
     var verbResult =
         await _atClient.getLocalSecondary().executeVerb(builder, sync: false);
-    if (verbResult == null) {
+    if (verbResult.isEmpty) {
       return;
     }
     var sequenceNumber = int.parse(verbResult.split(':')[1]);

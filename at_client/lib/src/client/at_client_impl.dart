@@ -217,7 +217,7 @@ class AtClientImpl implements AtClient {
       ..atKey = keyWithNamespace
       ..sharedBy = sharedBy;
     var deleteResult = await getSecondary().executeVerb(builder, sync: true);
-    return deleteResult != null;
+    return deleteResult.isNotEmpty;
   }
 
   @override
@@ -240,7 +240,7 @@ class AtClientImpl implements AtClient {
     var scanResult = await getSecondary().executeVerb(builder);
     scanResult = _formatResult(scanResult);
     var result = [];
-    if (scanResult != null && scanResult.isNotEmpty) {
+    if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
     return result as FutureOr<List<String>>;
@@ -306,7 +306,7 @@ class AtClientImpl implements AtClient {
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder..value = value,
             sync: SyncUtil.isSyncRequired(atKey.key));
-    return putResponse != null;
+    return putResponse.isNotEmpty;
   }
 
   @override
@@ -378,7 +378,6 @@ class AtClientImpl implements AtClient {
     if (metadata!.namespaceAware) {
       updateKey = _getKeyWithNamespace(atKey.key);
     }
-    var sharedWith = atKey.sharedWith;
     var builder = UpdateVerbBuilder()
       ..atKey = atKey
       ..operation = UPDATE_META;
@@ -390,7 +389,7 @@ class AtClientImpl implements AtClient {
 
     var updateMetaResult =
         await getSecondary().executeVerb(builder, sync: isSyncRequired);
-    return updateMetaResult != null;
+    return updateMetaResult.isNotEmpty;
   }
 
   String _getKeyWithNamespace(String key) {
@@ -432,44 +431,6 @@ class AtClientImpl implements AtClient {
     return result ??= '';
   }
 
-  Metadata? _prepareMetadata(Map<String, dynamic>? metadataMap, AtKey atKey) {
-    if (metadataMap == null) {
-      return null;
-    }
-    var metadata = Metadata();
-    metadata.expiresAt =
-        (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
-            ? DateTime.parse(metadataMap['expiresAt'])
-            : null;
-    metadata.availableAt = (metadataMap['availableAt'] != null &&
-            metadataMap['availableAt'] != 'null')
-        ? DateTime.parse(metadataMap['availableAt'])
-        : null;
-    metadata.refreshAt =
-        (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
-            ? DateTime.parse(metadataMap[REFRESH_AT])
-            : null;
-    metadata.createdAt =
-        (metadataMap[CREATED_AT] != null && metadataMap[CREATED_AT] != 'null')
-            ? DateTime.parse(metadataMap[CREATED_AT])
-            : null;
-    metadata.updatedAt =
-        (metadataMap[UPDATED_AT] != null && metadataMap[UPDATED_AT] != 'null')
-            ? DateTime.parse(metadataMap[UPDATED_AT])
-            : null;
-    metadata.ttr = metadataMap[AT_TTR];
-    metadata.ttl = metadataMap[AT_TTL];
-    metadata.ttb = metadataMap[AT_TTB];
-    metadata.ccd = metadataMap[CCD];
-    metadata.isBinary = metadataMap[IS_BINARY];
-    metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
-    metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
-    if (atKey.key.contains('public:')) {
-      metadata.isPublic = true;
-    }
-    return metadata;
-  }
-
   @override
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
@@ -487,18 +448,18 @@ class AtClientImpl implements AtClient {
     var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
-    if (result != null && result.startsWith('stream:ack')) {
+    if (result.isNotEmpty && result.startsWith('stream:ack')) {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
-      if (streamResult != null && streamResult.startsWith('stream:done')) {
+      if (streamResult.isNotEmpty && streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;
       }
-    } else if (result != null && result.startsWith('error:')) {
+    } else if (result.isNotEmpty && result.startsWith('error:')) {
       result = result.replaceAll('error:', '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];

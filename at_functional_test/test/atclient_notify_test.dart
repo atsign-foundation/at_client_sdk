@@ -134,8 +134,8 @@ void main() {
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
-    final notifyResult =
-        await atClient.notify(phoneKey, value, OperationEnum.update);
+    final notifyResult = await atClient
+        .notifyChange(NotificationParams.forUpdate(phoneKey, value: value));
     expect(notifyResult, true);
   });
   test('notifyall - test deprecated method using notificationservice',
@@ -149,15 +149,15 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(aliceAtSign, alicePreference);
     // phone.me@alice🛠
-    var shareWithList = []..add(bobAtSign)..add(colinAtSign);
+    var shareWithList = [bobAtSign, colinAtSign];
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = jsonEncode(shareWithList);
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
-    final notifyResult =
-        await atClient.notifyAll(phoneKey, value, OperationEnum.update);
-    expect(jsonDecode(notifyResult)[bobAtSign], true);
+    final notifyResult = await atClient
+        .notifyChange(NotificationParams.forUpdate(phoneKey, value: value));
+    expect(jsonDecode(notifyResult!)[bobAtSign], true);
     expect(jsonDecode(notifyResult)[colinAtSign], true);
   });
   tearDown(() async => await tearDownFunc());

@@ -16,7 +16,7 @@ void main() {
     // Adding 10 keys to remote secondary
     for (var i = 0; i < 30; i++) {
       var putResult = await atClient
-          .getRemoteSecondary()!
+          .getRemoteSecondary()
           .executeCommand('update:$atsign:key$i$atsign value$i\n', auth: true);
       expect(putResult, startsWith('data:'));
       print('putResult $putResult');
@@ -38,7 +38,7 @@ void main() {
     // Adding 10 keys to remote secondary
     for (var i = 0; i < 30; i++) {
       var putResult = await atClient
-          .getRemoteSecondary()!
+          .getRemoteSecondary()
           .executeCommand('update:$atsign:key$i$atsign value$i\n', auth: true);
       expect(putResult, startsWith('data:'));
       print('putResult $putResult');

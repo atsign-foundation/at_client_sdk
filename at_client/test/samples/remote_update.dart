@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+
 import 'test_util.dart';
 
 void main() async {
@@ -9,7 +10,7 @@ void main() async {
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
     var result = await atClient
-        .getRemoteSecondary()!
+        .getRemoteSecondary()
         .executeCommand('update:location@alice india\n', auth: true);
     print(result);
   } on Exception catch (e, trace) {

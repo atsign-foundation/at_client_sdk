@@ -38,7 +38,7 @@ class LocalKeyDecryption implements AtKeyDecryption {
     }
     sharedKey = sharedKey.replaceFirst('data:', '');
     var decryptedSharedKey =
-        EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+        EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey);
     return EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey);
   }
 }

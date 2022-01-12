@@ -44,10 +44,10 @@ class AtClientValidation {
           'Invalid TTL value: ${metadata.ttl}. TTL value cannot be less than 0');
     }
     // validate TTB
-    // if (metadata.ttb != null && metadata.ttb! < 0) {
-    //   throw AtKeyException(
-    //       'Invalid TTB value: ${metadata.ttb}. TTB value cannot be less than 0');
-    // }
+    if (metadata.ttb != null && metadata.ttb! < 0) {
+      throw AtKeyException(
+          'Invalid TTB value: ${metadata.ttb}. TTB value cannot be less than 0');
+    }
     //validate TTR
     if (metadata.ttr != null && metadata.ttr! < -1) {
       throw AtKeyException(
