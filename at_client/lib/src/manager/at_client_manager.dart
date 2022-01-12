@@ -17,7 +17,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 /// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
 /// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
 class AtClientManager {
-  String _atSign = '';
+  late String _atSign;
   AtClient? _previousAtClient;
   late AtClient _currentAtClient;
 
@@ -30,9 +30,12 @@ class AtClientManager {
 
   AtClientManager._internal();
 
+  @deprecated
   factory AtClientManager.getInstance() {
     return _singleton;
   }
+
+  AtClientManager(_atSign);
 
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference) async {
@@ -40,14 +43,15 @@ class AtClientManager {
         _previousAtClient?.getCurrentAtSign() == atSign) {
       return this;
     }
-    _atSign = atSign;
-    _currentAtClient =
-        await AtClientImpl.create(_atSign, namespace, preference);
+    final atClientManager = AtClientManager(_atSign);
+    _currentAtClient = await AtClientImpl.create(
+        atClientManager, _atSign, namespace, preference);
     final switchAtSignEvent =
         SwitchAtSignEvent(_previousAtClient, _currentAtClient);
     notificationService =
         await NotificationServiceImpl.create(_currentAtClient);
-    syncService = await SyncServiceImpl.create(_currentAtClient);
+    syncService =
+        await SyncServiceImpl.create(atClientManager, _currentAtClient);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
     return this;

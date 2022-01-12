@@ -42,21 +42,26 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   final _logger = AtSignLogger('SyncService');
 
-  static Future<SyncService> create(AtClient atClient) async {
+  late AtClientManager _atClientManager;
+
+  static Future<SyncService> create(
+      AtClientManager atClientManager, AtClient atClient) async {
     if (_syncServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _syncServiceMap[atClient.getCurrentAtSign()]!;
     }
-    final syncService = SyncServiceImpl._(atClient);
+    final syncService = SyncServiceImpl._(atClientManager, atClient);
     await syncService._statsServiceListener();
     syncService._scheduleSyncRun();
     _syncServiceMap[atClient.getCurrentAtSign()!] = syncService;
     return _syncServiceMap[atClient.getCurrentAtSign()]!;
   }
 
-  SyncServiceImpl._(this._atClient) {
+  SyncServiceImpl._(AtClientManager atClientManager, AtClient atClient) {
+    _atClientManager = atClientManager;
+    _atClient = atClient;
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
-    AtClientManager.getInstance().listenToAtSignChange(this);
+    _atClientManager.listenToAtSignChange(this);
   }
 
   void _scheduleSyncRun() {
