@@ -48,11 +48,14 @@ class AtValues {
     }
     // Setting isEncrypted from atValue
     // because, user populated metadata will have false by default.
-    atKey.metadata!.isEncrypted = atValue.metadata!.isEncrypted;
+    atKey.metadata?.isEncrypted = atValue.metadata!.isEncrypted;
 
-    var decryptionService = AtKeyDecryptionManager.get(
-        atKey, AtClientManager.getInstance().atClient.getCurrentAtSign());
-    decryptionService.decrypt(atKey, atValue.value);
+    if (atKey.metadata!.isEncrypted) {
+      var decryptionService = AtKeyDecryptionManager.get(
+          atKey, AtClientManager.getInstance().atClient.getCurrentAtSign());
+      atValue.value =
+          await decryptionService.decrypt(atKey, atValue.value) as String;
+    }
     return atValue;
   }
 }

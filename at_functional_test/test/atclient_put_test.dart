@@ -29,50 +29,52 @@ void main() {
     var value = '+1 100 200 300';
     var putResult = await atClient.put(phoneKey, value);
     expect(putResult, true);
-    var getResult = await atClient.get(phoneKey);
+    var getPhoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠';
+    var getResult = await atClient.get(getPhoneKey);
     expect(getResult.value, value);
   });
 
   test('put method - create a key with AtKey static factory - public',
       () async {
-    var publicKey = AtKey.public('location',namespace: 'wavi').build();
+    var publicKey = AtKey.public('location', namespace: 'wavi').build();
     var value = 'USA';
     var putResult = await atClient.put(publicKey, value);
     expect(putResult, true);
-    var getResult = await atClient.get(publicKey);
+    var getPublicKey = AtKey.public('location', namespace: 'wavi').build();
+    var getResult = await atClient.get(getPublicKey);
     expect(getResult.value, value);
-  });
+  }, timeout: Timeout(Duration(minutes: 10)));
 
   test('put method - create a sharedWith key with AtKey static factory',
       () async {
-    var sharedWithKey =
-        (AtKey.shared('phone', namespace:'wavi')..sharedWith('@bob🛠')).build();
+    var sharedWithKey = (AtKey.shared('phone', namespace: 'wavi')
+          ..sharedWith('@bob🛠'))
+        .build();
     var value = '+1 100 200 300';
     var putResult = await atClient.put(sharedWithKey, value);
     expect(putResult, true);
-    var getResult = await atClient.get(sharedWithKey);
+    var getSharedWithKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠'
+      ..namespace = 'wavi';
+    var getResult = await atClient.get(getSharedWithKey);
     expect(getResult.value, value);
   });
 
   test('put method - create a self key with AtKey static factory', () async {
-    var sharedWithKey = AtKey.self('phone', namespace: 'wavi').build();
+    var selfKey = AtKey.self('phone', namespace: 'wavi').build();
     var value = '+1 100 200 300';
-    var putResult = await atClient.put(sharedWithKey, value);
+    var putResult = await atClient.put(selfKey, value);
     expect(putResult, true);
-    var getResult = await atClient.get(sharedWithKey);
+    var getSelfKey = AtKey()
+      ..key = 'phone'
+      ..namespace = 'wavi';
+    var getResult = await atClient.get(getSelfKey);
     expect(getResult.value, value);
-  });
+  },timeout: Timeout(Duration(minutes: 10)));
 
-  test('put method - create a public key with image AtKey static factory',
-      () async {
-    var sharedWithKey =
-        AtKey.public('profilepic', namespace: 'wavi').build();
-    var value = getdata('/home/sitaram/Pictures/aadhar.png');
-    var putResult = await atClient.put(sharedWithKey, value);
-    expect(putResult, true);
-    var getResult = await atClient.get(sharedWithKey);
-    expect(getResult.value, value);
-  });
   tearDown(() async => await tearDownFunc());
 }
 

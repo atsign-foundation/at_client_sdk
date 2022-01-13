@@ -20,6 +20,7 @@ Future<void> setEncryptionKeys(
 
     // set encryption public key. should be synced
     metadata.isPublic = true;
+    metadata.namespaceAware = false;
     var atKey = AtKey()
       ..key = 'publickey'
       ..metadata = metadata;

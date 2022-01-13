@@ -16,7 +16,6 @@ void main() {
     var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
@@ -25,8 +24,7 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    var notification = await NotificationServiceImpl.create(atClient);
-    var result = await notification
+    var result = await AtClientManager.getInstance().notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(result.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
@@ -121,7 +119,7 @@ void main() {
     await Future.delayed(Duration(seconds: 10));
   });
 
-  test('notify - test deprecated method using notificationservice', () async {
+  test('notify - test deprecated method using notification service', () async {
     var atsign = '@alice🛠';
     var preference = getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
@@ -134,10 +132,10 @@ void main() {
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
-    final notifyResult = await atClient
-        .notifyChange(NotificationParams.forUpdate(phoneKey, value: value));
+    final notifyResult =
+        await atClient.notify(phoneKey, value, OperationEnum.update);
     expect(notifyResult, true);
-  });
+  },timeout: Timeout(Duration(minutes: 10)));
   test('notifyall - test deprecated method using notificationservice',
       () async {
     final aliceAtSign = '@alice🛠';
@@ -155,9 +153,9 @@ void main() {
       ..sharedWith = jsonEncode(shareWithList);
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
-    final notifyResult = await atClient
-        .notifyChange(NotificationParams.forUpdate(phoneKey, value: value));
-    expect(jsonDecode(notifyResult!)[bobAtSign], true);
+    final notifyResult =
+        await atClient.notifyAll(phoneKey, value, OperationEnum.update);
+    expect(jsonDecode(notifyResult)[bobAtSign], true);
     expect(jsonDecode(notifyResult)[colinAtSign], true);
   });
   tearDown(() async => await tearDownFunc());

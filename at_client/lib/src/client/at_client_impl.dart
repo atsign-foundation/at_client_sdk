@@ -273,11 +273,11 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
-    // Set namespace
-    KeyUtil.setNamespace(atKey, preference);
     // If sharedBy is null, default it to currentAtSign.
     atKey.sharedBy ??= currentAtSign;
     atKey.metadata ??= Metadata();
+    // Set namespace
+    KeyUtil.setNamespace(atKey, preference);
     // Get the verb builder for AtKey instance
     var verbBuilder = LookUpBuilderManager.get(atKey, currentAtSign);
     // Execute the verb.
@@ -286,18 +286,18 @@ class AtClientImpl implements AtClient {
     // Construct atValue from the getResponse
     var atValue = AtClientUtil.prepareAtValue(getResponse, atKey);
     // Decode and decrypt the value
-    return AtValues.transformResponse(atValue, atKey);
+    return await AtValues.transformResponse(atValue, atKey);
   }
 
   @override
   Future<bool> put(AtKey atKey, dynamic value,{bool isDedicated = false}) async {
-    // SetNamespace to the key
-    KeyUtil.setNamespace(atKey, preference);
     // Perform atKey validations.
     AtClientValidation.validatePutRequest(atKey);
     // Construct verb builder.
     UpdateVerbBuilder verbBuilder =
         UpdateBuilderManager.prepareUpdateVerbBuilder(atKey);
+    // SetNamespace to the key
+    KeyUtil.setNamespace(atKey, preference);
     // Encode and encrypt the value.
     value = await AtValues.transformRequest(atKey, value);
     // Execute the verb builder

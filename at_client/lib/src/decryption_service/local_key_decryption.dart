@@ -14,7 +14,7 @@ class LocalKeyDecryption implements AtKeyDecryption {
   final _logger = AtSignLogger('SelfKeyDecryption');
 
   @override
-  Future<String?> decrypt(AtKey atKey, dynamic encryptedValue) async {
+  Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
       throw IllegalArgumentException(
           'Decryption failed. Encrypted value is null');
