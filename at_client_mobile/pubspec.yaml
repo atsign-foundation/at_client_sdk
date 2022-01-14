@@ -12,8 +12,9 @@ dependencies:
   path: ^1.8.0
   flutter:
     sdk: flutter
-  flutter_keychain: ^2.1.0
-  biometric_storage: ^3.0.1
+#  flutter_keychain: ^2.1.0
+  flutter_secure_storage: ^5.0.2
+#  biometric_storage: ^3.0.1
   hive: ^2.0.4
   crypton: ^2.0.3
   at_client: ^3.0.12
