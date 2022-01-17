@@ -42,6 +42,7 @@ class AtClientManager {
         _previousAtClient?.getCurrentAtSign() == atSign) {
       return this;
     }
+    _atSign = atSign;
     _currentAtClient = await AtClientImpl.create(_atSign, namespace, preference,
         atClientManager: this);
     final switchAtSignEvent =
