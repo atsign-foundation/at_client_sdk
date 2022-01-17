@@ -44,8 +44,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   late AtClientManager _atClientManager;
 
-  static Future<SyncService> create(
-      AtClientManager atClientManager, AtClient atClient) async {
+  static Future<SyncService> create(AtClient atClient,
+      {required AtClientManager atClientManager}) async {
     if (_syncServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _syncServiceMap[atClient.getCurrentAtSign()]!;
     }

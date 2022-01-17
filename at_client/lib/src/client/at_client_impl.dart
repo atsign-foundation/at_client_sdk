@@ -46,7 +46,7 @@ class AtClientImpl implements AtClient {
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
-  late AtClientManager _atClientManager;
+  AtClientManager? _atClientManager;
 
   final _logger = AtSignLogger('AtClientImpl');
   static final Map _atClientInstanceMap = <String, AtClient>{};
@@ -64,6 +64,7 @@ class AtClientImpl implements AtClient {
   }
 
   @Deprecated("Use [create]")
+
   /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
       AtClientPreference preferences) async {
@@ -89,10 +90,8 @@ class AtClientImpl implements AtClient {
   }
 
   static Future<AtClient> create(
-      AtClientManager atClientManager,
-      String currentAtSign,
-      String? namespace,
-      AtClientPreference preferences) async {
+      String currentAtSign, String? namespace, AtClientPreference preferences,
+      {AtClientManager? atClientManager}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
@@ -101,6 +100,7 @@ class AtClientImpl implements AtClient {
       var storageManager = StorageManager(preferences);
       await storageManager.init(currentAtSign, preferences.keyStoreSecret);
     }
+    atClientManager ??= AtClientManager.getInstance();
     var atClientImpl =
         AtClientImpl._(currentAtSign, namespace, preferences, atClientManager);
     await atClientImpl._init();
@@ -605,7 +605,7 @@ class AtClientImpl implements AtClient {
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
     final notifyResult =
-        await _atClientManager.notificationService.notify(notificationParams);
+        await _atClientManager!.notificationService.notify(notificationParams);
     return notifyResult.notificationStatusEnum ==
         NotificationStatusEnum.delivered;
   }
@@ -619,8 +619,8 @@ class AtClientImpl implements AtClient {
       atKey.sharedWith = sharedWith;
       final notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
-      final notifyResult =
-          await _atClientManager.notificationService.notify(notificationParams);
+      final notifyResult = await _atClientManager!.notificationService
+          .notify(notificationParams);
       returnMap.putIfAbsent(
           sharedWith,
           () => (notifyResult.notificationStatusEnum ==
@@ -862,7 +862,7 @@ class AtClientImpl implements AtClient {
           ..sharedBy = currentAtSign;
 
         var notificationResult =
-            await _atClientManager.notificationService.notify(
+            await _atClientManager!.notificationService.notify(
           NotificationParams.forUpdate(
             atKey,
             value: jsonEncode(fileTransferObject.toJson()),
