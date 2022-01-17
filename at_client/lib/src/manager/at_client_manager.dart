@@ -30,7 +30,6 @@ class AtClientManager {
 
   AtClientManager._internal();
 
-  @deprecated
   factory AtClientManager.getInstance() {
     return _singleton;
   }
