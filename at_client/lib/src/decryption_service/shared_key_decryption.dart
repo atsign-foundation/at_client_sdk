@@ -39,13 +39,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
 
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
     String encryptedSharedKey = '';
-    var metadata = Metadata()..isCached = true;
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = AT_ENCRYPTION_SHARED_KEY
-        ..sharedWith = AtClientManager.getInstance().atClient.getCurrentAtSign()
-        ..sharedBy = atKey.sharedBy
-        ..metadata = metadata);
+      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..sharedWith = AtClientManager.getInstance().atClient.getCurrentAtSign()
+      ..sharedBy = atKey.sharedBy
+      ..isCached = true;
     try {
       encryptedSharedKey = await AtClientManager.getInstance()
           .atClient
@@ -55,11 +53,10 @@ class SharedKeyDecryption implements AtKeyDecryption {
       _logger.finer(
           '${atKey.sharedBy}:${localLookupSharedKeyBuilder.atKey}@${atKey.sharedWith} not found in local secondary. Fetching from cloud secondary');
     }
-    if (encryptedSharedKey == 'data:null') {
+    if (encryptedSharedKey.isEmpty || encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = (AtKey()
-          ..key = AT_ENCRYPTION_SHARED_KEY
-          ..sharedBy = atKey.sharedBy)
+        ..atKey = AT_ENCRYPTION_SHARED_KEY
+        ..sharedBy = atKey.sharedBy
         ..auth = true;
       encryptedSharedKey = await AtClientManager.getInstance()
           .atClient

@@ -443,7 +443,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       case '#':
       case '*':
         var builder = UpdateVerbBuilder()
-          ..atKey = (AtKey()..key=serverCommitEntry['atKey'])
+          ..atKey = serverCommitEntry['atKey']
           ..value = serverCommitEntry['value'];
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
@@ -485,9 +485,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
       builder.atKey.metadata = Metadata();
-      if (metaData[AT_TTL] != null) builder.atKey.metadata.ttl = int.parse(metaData[AT_TTL]);
-      if (metaData[AT_TTB] != null) builder.atKey.metadata.ttb = int.parse(metaData[AT_TTB]);
-      if (metaData[AT_TTR] != null) builder.atKey.metadata.ttr = int.parse(metaData[AT_TTR]);
+      if (metaData[AT_TTL] != null) {
+        builder.atKey.metadata.ttl = int.parse(metaData[AT_TTL]);
+      }
+      if (metaData[AT_TTB] != null) {
+        builder.atKey.metadata.ttb = int.parse(metaData[AT_TTB]);
+      }
+      if (metaData[AT_TTR] != null) {
+        builder.atKey.metadata.ttr = int.parse(metaData[AT_TTR]);
+      }
       if (metaData[CCD] != null) {
         (metaData[CCD].toLowerCase() == 'true')
             ? builder.atKey.metadata.ccd = true

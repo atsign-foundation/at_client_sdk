@@ -24,7 +24,8 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    var result = await AtClientManager.getInstance().notificationService
+    var result = await AtClientManager.getInstance()
+        .notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(result.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
@@ -135,7 +136,7 @@ void main() {
     final notifyResult =
         await atClient.notify(phoneKey, value, OperationEnum.update);
     expect(notifyResult, true);
-  },timeout: Timeout(Duration(minutes: 10)));
+  }, timeout: Timeout(Duration(minutes: 10)));
   test('notifyall - test deprecated method using notificationservice',
       () async {
     final aliceAtSign = '@alice🛠';

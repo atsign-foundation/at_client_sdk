@@ -1,3 +1,4 @@
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
@@ -13,7 +14,8 @@ class LookUpBuilderManager {
             atKey.metadata!.isPublic &&
             !atKey.metadata!.isCached)) {
       return PLookupVerbBuilder()
-        ..atkey = atKey
+        ..atKey = atKey.key
+        ..sharedBy = atKey.sharedBy
         ..operation = 'all';
     }
     // If sharedBy is not equal to currentAtSign and isCached is false, return LookupVerbHandler
@@ -22,12 +24,21 @@ class LookUpBuilderManager {
             !atKey.metadata!.isCached &&
             !atKey.metadata!.isPublic)) {
       return LookupVerbBuilder()
-        ..atKey = atKey
+        ..atKey = atKey.key
+        ..sharedBy = atKey.sharedBy
         ..auth = true
         ..operation = 'all';
     }
     return LLookupVerbBuilder()
-      ..atKey = atKey
+      ..atKey = atKey.key
+      ..sharedBy = atKey.sharedBy
+      ..sharedWith = atKey.sharedWith
+      ..isPublic = (atKey.metadata != null && atKey.metadata?.isPublic != null)
+          ? atKey.metadata!.isPublic
+          : false
+      ..isCached = (atKey.metadata != null && atKey.metadata?.isCached != null)
+          ? atKey.metadata!.isCached
+          : false
       ..operation = 'all';
   }
 }
@@ -50,7 +61,19 @@ class UpdateBuilderManager {
     if (AtKey is HiddenKey || atKey.metadata!.isHidden) {
       atKey.key = '_' + atKey.key;
     }
-    var verbBuilder = UpdateVerbBuilder()..atKey = atKey;
+    var verbBuilder = UpdateVerbBuilder()
+      ..atKey = atKey.key
+      ..sharedBy = atKey.sharedBy
+      ..sharedWith = atKey.sharedWith;
+    if (atKey.metadata != null) {
+      verbBuilder.isPublic = atKey.metadata!.isPublic;
+      verbBuilder.isBinary = atKey.metadata?.isBinary;
+      verbBuilder.isEncrypted = atKey.metadata?.isEncrypted;
+      verbBuilder.ttl = atKey.metadata?.ttl;
+      verbBuilder.ttb = atKey.metadata?.ttb;
+      verbBuilder.ttr = atKey.metadata?.ttr;
+      verbBuilder.ccd = atKey.metadata?.ccd;
+    }
     return verbBuilder;
   }
 }

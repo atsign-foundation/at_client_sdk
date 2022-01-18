@@ -70,42 +70,44 @@ class LocalSecondary implements Secondary {
         case UPDATE_META:
           var metadata = Metadata();
           metadata
-            ..ttl = builder.atKey.metadata!.ttl
-            ..ttb = builder.atKey.metadata!.ttb
-            ..ttr = builder.atKey.metadata!.ttr
-            ..ccd = builder.atKey.metadata!.ccd
-            ..isBinary = builder.atKey.metadata!.isBinary
-            ..isEncrypted = builder.atKey.metadata!.isEncrypted;
+            ..ttl = builder.ttl
+            ..ttb = builder.ttb
+            ..ttr = builder.ttr
+            ..ccd = builder.ccd
+            ..isBinary = (builder.isBinary != null) ? builder.isBinary! : false
+            ..isEncrypted =
+                (builder.isEncrypted != null) ? builder.isEncrypted! : false;
           var atMetadata = AtMetadataAdapter(metadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          if (builder.atKey.metadata != null &&
-              builder.atKey.metadata!.dataSignature != null) {
+          if (builder.dataSignature != null) {
             var metadata = Metadata();
             metadata
-              ..ttl = builder.atKey.metadata?.ttl
-              ..ttb = builder.atKey.metadata?.ttb
-              ..ttr = builder.atKey.metadata?.ttr
-              ..ccd = builder.atKey.metadata?.ccd
-              ..isBinary = builder.atKey.metadata!.isBinary
-              ..isEncrypted = builder.atKey.metadata!.isEncrypted
-              ..dataSignature = builder.atKey.metadata!.dataSignature;
+              ..ttl = builder.ttl
+              ..ttb = builder.ttb
+              ..ttr = builder.ttr
+              ..ccd = builder.ccd
+              ..isBinary =
+                  (builder.isBinary != null) ? builder.isBinary! : false
+              ..isEncrypted =
+                  (builder.isEncrypted != null) ? builder.isEncrypted! : false
+              ..dataSignature = builder.dataSignature;
             var atMetadata = AtMetadataAdapter(metadata);
             updateResult =
                 await keyStore!.putAll(updateKey, atData, atMetadata);
             break;
           }
-          // #TODO replace below call with putAll.
+          // TODO replace below call with putAll.
           updateResult = await keyStore!.put(updateKey, atData,
-              time_to_live: builder.atKey.metadata?.ttl,
-              time_to_born: builder.atKey.metadata?.ttb,
-              time_to_refresh: builder.atKey.metadata?.ttr,
-              isCascade: builder.atKey.metadata?.ccd,
-              isBinary: builder.atKey.metadata?.isBinary,
-              isEncrypted: builder.atKey.metadata?.isEncrypted);
+              time_to_live: builder.ttl,
+              time_to_born: builder.ttb,
+              time_to_refresh: builder.ttr,
+              isCascade: builder.ccd,
+              isBinary: builder.isBinary,
+              isEncrypted: builder.isEncrypted);
           break;
       }
       return 'data:$updateResult';
@@ -118,20 +120,19 @@ class LocalSecondary implements Secondary {
   Future<String> _llookup(LLookupVerbBuilder builder) async {
     try {
       var llookupKey = '';
-      if (builder.atKey.metadata != null) {
-        if (builder.atKey.metadata!.isPublic) {
-          llookupKey += 'public:';
-        }
-        if (builder.atKey.metadata!.isCached) {
-          llookupKey += 'cached:';
-        }
+      if (builder.isPublic) {
+        llookupKey += 'public:';
       }
-      if (builder.atKey.sharedWith != null) {
-        llookupKey += '${AtUtils.formatAtSign(builder.atKey.sharedWith!)}:';
+      if (builder.isCached) {
+        llookupKey += 'cached:';
       }
-      llookupKey += builder.atKey.key;
-      if (builder.atKey.sharedBy != null) {
-        llookupKey += AtUtils.formatAtSign(builder.atKey.sharedBy);
+
+      if (builder.sharedWith != null) {
+        llookupKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
+      }
+      llookupKey += builder.atKey!;
+      if (builder.sharedBy != null) {
+        llookupKey += AtUtils.formatAtSign(builder.sharedBy);
       }
       var llookupMeta = await keyStore!.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);

@@ -73,7 +73,7 @@ void main() {
       ..namespace = 'wavi';
     var getResult = await atClient.get(getSelfKey);
     expect(getResult.value, value);
-  },timeout: Timeout(Duration(minutes: 10)));
+  }, timeout: Timeout(Duration(minutes: 10)));
 
   tearDown(() async => await tearDownFunc());
 }

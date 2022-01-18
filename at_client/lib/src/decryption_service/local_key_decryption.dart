@@ -24,10 +24,9 @@ class LocalKeyDecryption implements AtKeyDecryption {
         .getLocalSecondary()
         .getEncryptionPrivateKey();
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key =
-            '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
-        ..sharedBy = AtClientManager.getInstance().atClient.getCurrentAtSign());
+      ..atKey =
+          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
+      ..sharedBy = AtClientManager.getInstance().atClient.getCurrentAtSign();
     var sharedKey = await AtClientManager.getInstance()
         .atClient
         .getLocalSecondary()

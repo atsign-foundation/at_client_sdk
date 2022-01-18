@@ -14,17 +14,17 @@ void main() {
 
     test('A test to verify atKey with @ throws error', () {
       expect(
-              () => AtClientValidation.validateKey('phone@wavi'),
+          () => AtClientValidation.validateKey('phone@wavi'),
           throwsA(predicate((dynamic e) =>
-          e is AtKeyException &&
+              e is AtKeyException &&
               e.errorMessage == 'Key cannot contain @')));
     });
 
     test('A test to verify atKey with space throws error', () {
       expect(
-              () => AtClientValidation.validateKey(''),
+          () => AtClientValidation.validateKey(''),
           throwsA(predicate((dynamic e) =>
-          e is AtKeyException &&
+              e is AtKeyException &&
               e.errorMessage == 'Key cannot be null or empty')));
     });
   });

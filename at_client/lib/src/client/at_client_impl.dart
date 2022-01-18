@@ -290,7 +290,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> put(AtKey atKey, dynamic value,{bool isDedicated = false}) async {
+  Future<bool> put(AtKey atKey, dynamic value,
+      {bool isDedicated = false}) async {
     // Perform atKey validations.
     AtClientValidation.validatePutRequest(atKey);
     // Construct verb builder.
@@ -376,8 +377,19 @@ class AtClientImpl implements AtClient {
     if (metadata!.namespaceAware) {
       updateKey = _getKeyWithNamespace(atKey.key);
     }
-    var builder = UpdateVerbBuilder()
-      ..atKey = atKey
+    var sharedWith = atKey.sharedWith;
+    var builder = UpdateVerbBuilder();
+    builder
+      ..atKey = updateKey
+      ..sharedBy = currentAtSign
+      ..sharedWith = sharedWith
+      ..ttl = metadata.ttl
+      ..ttb = metadata.ttb
+      ..ttr = metadata.ttr
+      ..ccd = metadata.ccd
+      ..isBinary = metadata.isBinary
+      ..isEncrypted = metadata.isEncrypted
+      ..dataSignature = metadata.dataSignature
       ..operation = UPDATE_META;
 
     var isSyncRequired = true;

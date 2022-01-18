@@ -12,15 +12,15 @@ import 'package:crypton/crypton.dart';
 class AtClientUtil {
   static String buildKey(UpdateVerbBuilder builder) {
     var updateKey = '';
-    if (builder.atKey.metadata != null && builder.atKey.metadata!.isPublic) {
+    if (builder.isPublic) {
       updateKey += 'public:';
     }
-    if (builder.atKey.sharedWith != null) {
-      updateKey += '${AtUtils.formatAtSign(builder.atKey.sharedWith!)}:';
+    if (builder.sharedWith != null) {
+      updateKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
     }
-    updateKey += builder.atKey.key;
-    if (builder.atKey.sharedBy != null) {
-      updateKey += AtUtils.formatAtSign(builder.atKey.sharedBy!);
+    updateKey += builder.atKey!;
+    if (builder.sharedBy != null) {
+      updateKey += AtUtils.formatAtSign(builder.sharedBy!);
     }
     return updateKey;
   }

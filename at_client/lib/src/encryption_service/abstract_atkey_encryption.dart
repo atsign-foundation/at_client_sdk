@@ -48,10 +48,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<String> _getSharedKey(AtKey atKey) async {
     // Get/Generate AES key for sharedWith atSign
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key =
-            '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
-        ..sharedBy = atKey.sharedBy);
+      ..atKey =
+          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
+      ..sharedBy = atKey.sharedBy;
 
     String sharedKey = '';
     // Fetch AES key in the local secondary.
@@ -95,10 +94,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     //2. Verify if encryptedSharedKey for sharedWith atSign is available.
     String encryptedSharedKey = '';
     var lookupEncryptionSharedKey = LLookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = AT_ENCRYPTION_SHARED_KEY
-        ..sharedWith = atKey.sharedWith
-        ..sharedBy = atKey.sharedBy);
+      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..sharedWith = atKey.sharedWith
+      ..sharedBy = atKey.sharedBy;
 
     try {
       encryptedSharedKey = await AtClientManager.getInstance()
@@ -119,9 +117,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     //a local lookup the cached public key of sharedWith atsign.
     String sharedWithPublicKey = '';
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
-        ..sharedBy = atKey.sharedBy);
+      ..atKey = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
+      ..sharedBy = atKey.sharedBy;
     try {
       sharedWithPublicKey = await AtClientManager.getInstance()
           .atClient
@@ -137,9 +134,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
     //b Lookup public key of sharedWith atSign in cloud secondary
     var plookupBuilder = PLookupVerbBuilder()
-      ..atkey = (AtKey()
-        ..key = 'publickey'
-        ..sharedBy = atKey.sharedWith?.replaceAll('@', ''));
+      ..atKey = 'publickey'
+      ..sharedBy = atKey.sharedWith?.replaceAll('@', '');
 
     sharedWithPublicKey = await AtClientManager.getInstance()
         .atClient
@@ -153,9 +149,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
     //Cache the sharedWithPublicKey and return public key of sharedWith atSign
     var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
-        ..sharedBy = atKey.sharedBy)
+      ..atKey = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
+      ..sharedBy = atKey.sharedBy
       ..value = sharedWithPublicKey;
     await AtClientManager.getInstance()
         .atClient
@@ -175,10 +170,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
             .getEncryptionPublicKey(atKey.sharedBy!));
 
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key =
-            '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
-        ..sharedBy = atKey.sharedBy)
+      ..atKey =
+          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
+      ..sharedBy = atKey.sharedBy
       ..value = encryptedSharedKeyForCurrentAtSign;
     await AtClientManager.getInstance()
         .atClient
@@ -191,11 +185,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<void> _notifyEncryptedSharedKey(
       AtKey atKey, String encryptedSharedKey) async {
     var updateSharedKeyBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..sharedWith = atKey.sharedWith
-        ..sharedBy = atKey.sharedBy
-        ..key = AT_ENCRYPTION_SHARED_KEY
-        ..metadata = (Metadata()..ttr = 3888000))
+      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..sharedWith = atKey.sharedWith
+      ..sharedBy = atKey.sharedBy
+      ..ttr = 3888000
       ..value = encryptedSharedKey;
     await AtClientManager.getInstance()
         .atClient
