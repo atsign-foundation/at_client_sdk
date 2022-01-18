@@ -300,13 +300,15 @@ class AtClientImpl implements AtClient {
       {bool isDedicated = false}) async {
     // Perform atKey validations.
     AtClientValidation.validatePutRequest(atKey);
-    // Construct verb builder.
-    UpdateVerbBuilder verbBuilder =
-        UpdateBuilderManager.prepareUpdateVerbBuilder(atKey);
+    // Prepare AtKey.
+    KeyUtil.prepareAtKey(atKey);
     // SetNamespace to the key
     KeyUtil.setNamespace(atKey, preference);
     // Encode and encrypt the value.
     value = await AtValues.transformRequest(atKey, value);
+    // Construct verb builder.
+    UpdateVerbBuilder verbBuilder =
+        UpdateBuilderManager.prepareUpdateVerbBuilder(atKey);
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder..value = value,
