@@ -1,3 +1,6 @@
+## 3.1.4
+- updated readme and  doc changes
+- added example app
 ## 3.1.3
 - at_client version change
 - at_lookup version change
