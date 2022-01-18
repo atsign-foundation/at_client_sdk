@@ -60,7 +60,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _atClientManager = atClientManager;
     _atClient = atClient;
     _remoteSecondary = RemoteSecondary(
-        _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+        _atClient.getCurrentAtSign(), _atClient.getPreferences()!);
     _atClientManager.listenToAtSignChange(this);
   }
 

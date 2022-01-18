@@ -93,7 +93,7 @@ class AtClientImpl implements AtClient {
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
       {AtClientManager? atClientManager}) async {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
+    currentAtSign = AtUtils.formatAtSign(currentAtSign);
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
     }
