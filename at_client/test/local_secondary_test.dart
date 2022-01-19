@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
@@ -81,6 +82,11 @@ void main() {
       await localSecondary.putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
       expect(await localSecondary.getEncryptionSelfKey(), selfEncryptionKey);
     });
+    try {
+      tearDown(() async => await tearDownFunc(storageDir));
+    } on Exception catch (e) {
+      print('error in tear down:${e.toString()}');
+    }
   });
   group('A group of local secondary execute verb tests', () {
     test('test update verb builder', () async {
@@ -95,7 +101,7 @@ void main() {
       final verbBuilder = UpdateVerbBuilder()
         ..isPublic = true
         ..value = 'alice@gmail.com'
-        ..atKey = 'phone'
+        ..atKey = 'email'
         ..sharedBy = '@alice';
       final executeResult =
           await localSecondary.executeVerb(verbBuilder, sync: false);
@@ -114,15 +120,68 @@ void main() {
       final verbBuilder = UpdateVerbBuilder()
         ..isPublic = true
         ..value = 'alice@gmail.com'
-        ..atKey = 'phone'
+        ..atKey = 'email'
         ..sharedBy = atSign;
       await localSecondary.executeVerb(verbBuilder, sync: false);
       final llookupVerbBuilder = LLookupVerbBuilder()
-        ..atKey = 'public:phone'
+        ..atKey = 'public:email'
         ..sharedBy = atSign;
       final llookupResult =
           await localSecondary.executeVerb(llookupVerbBuilder, sync: false);
-      expect(llookupResult, 'alice@gmail.com');
+      expect(llookupResult, 'data:alice@gmail.com');
+    });
+    test('test delete verb builder', () async {
+      final atSign = '@alice';
+      final atClientManager = AtClientManager(atSign);
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive';
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atClientManager: atClientManager);
+      final localSecondary = LocalSecondary(atClient);
+      final verbBuilder = UpdateVerbBuilder()
+        ..isPublic = true
+        ..value = 'alice@gmail.com'
+        ..atKey = 'email'
+        ..sharedBy = atSign;
+      await localSecondary.executeVerb(verbBuilder, sync: false);
+      final deleteVerbBuilder = DeleteVerbBuilder()
+        ..atKey = 'public:email'
+        ..sharedBy = atSign;
+      await localSecondary.executeVerb(deleteVerbBuilder, sync: false);
+      final llookupVerbBuilder = LLookupVerbBuilder()
+        ..atKey = 'public:email'
+        ..sharedBy = atSign;
+      expect(localSecondary.executeVerb(llookupVerbBuilder, sync: false),
+          throwsA(isA<KeyNotFoundException>()));
+    });
+    test('test scan verb builder', () async {
+      final atSign = '@alice';
+      final atClientManager = AtClientManager(atSign);
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive';
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atClientManager: atClientManager);
+      final localSecondary = LocalSecondary(atClient);
+      final verbBuilder_1 = UpdateVerbBuilder()
+        ..isPublic = true
+        ..value = 'alice@gmail.com'
+        ..atKey = 'email'
+        ..sharedBy = atSign;
+      await localSecondary.executeVerb(verbBuilder_1, sync: false);
+      final verbBuilder_2 = UpdateVerbBuilder()
+        ..value = '+101-202-303'
+        ..atKey = 'phone'
+        ..sharedBy = atSign;
+      await localSecondary.executeVerb(verbBuilder_2, sync: false);
+      final scanVerbBuilder = ScanVerbBuilder();
+      final scanResult =
+          await localSecondary.executeVerb(scanVerbBuilder, sync: false);
+      final scanJson = jsonDecode(scanResult!);
+      print(scanJson);
+      expect(scanJson.contains('phone@alice'), true);
+      expect(scanJson.contains('public:email@alice'), true);
     });
   });
   try {
@@ -142,6 +201,7 @@ Future<void> setUpFunc(storageDir) async {
 }
 
 Future<void> tearDownFunc(storageDir) async {
+  print('***local sec tearDown');
   var isExists = await Directory(storageDir).exists();
   if (isExists) {
     Directory(storageDir).deleteSync(recursive: true);
