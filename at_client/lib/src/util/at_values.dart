@@ -43,7 +43,9 @@ class AtValues {
   /// [AtValue]
   /// NOTE: Use metadata from [AtValue]
   static Future<AtValue> transformResponse(AtValue atValue, AtKey atKey) async {
-    if (atValue.metadata != null && atValue.metadata!.isBinary!) {
+    if (atValue.metadata != null &&
+        atValue.metadata!.isBinary != null &&
+        atValue.metadata!.isBinary!) {
       atValue.value = Base2e15.decode(atValue.value);
     }
     // Setting isEncrypted from atValue

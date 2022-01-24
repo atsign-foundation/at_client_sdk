@@ -284,6 +284,8 @@ class AtClientImpl implements AtClient {
     atKey.metadata ??= Metadata();
     // Set namespace
     KeyUtil.setNamespace(atKey, preference);
+    //prepare atkey
+    KeyUtil.prepareAtKey(atKey);
     // Get the verb builder for AtKey instance
     var verbBuilder = LookUpBuilderManager.get(atKey, currentAtSign);
     // Execute the verb.
@@ -295,7 +297,7 @@ class AtClientImpl implements AtClient {
       return atValue;
     }
     // Decode and decrypt the value
-    return await AtValues.transformResponse(atValue, atKey);
+    return AtValues.transformResponse(atValue, atKey);
   }
 
   @override

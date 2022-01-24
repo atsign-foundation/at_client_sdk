@@ -48,6 +48,7 @@ class KeyUtil {
     }
     atKey.sharedBy ??=
         AtClientManager.getInstance().atClient.getCurrentAtSign();
+    atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
     // For the PKAM private keys, sharedBy is set to null.
     if (atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
         atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
