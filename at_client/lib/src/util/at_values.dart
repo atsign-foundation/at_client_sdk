@@ -50,7 +50,7 @@ class AtValues {
     // because, user populated metadata will have false by default.
     atKey.metadata?.isEncrypted = atValue.metadata!.isEncrypted;
 
-    if (atKey.metadata!.isEncrypted!) {
+    if (atKey.metadata!.isEncrypted != null && atKey.metadata!.isEncrypted!) {
       var decryptionService = AtKeyDecryptionManager.get(
           atKey, AtClientManager.getInstance().atClient.getCurrentAtSign()!);
       atValue.value =

@@ -11,21 +11,11 @@ dependencies:
     path: ../at_client
 
 dependency_overrides:
-  at_utils:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_utils
-      ref: refactor_atkey
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
       ref: refactor_atkey
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: at_lookup
-      ref: refactor_verbbuilders
 dev_dependencies:
   path: ^1.8.0
   test: ^1.17.2

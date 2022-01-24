@@ -29,7 +29,7 @@ class KeyUtil {
     }
     if (atClientPreference.namespace != null &&
         atClientPreference.namespace!.isNotEmpty) {
-      atKey.key = '${atKey.key}.${atKey.namespace!}';
+      atKey.key = '${atKey.key}.${atClientPreference.namespace!}';
     }
   }
 
