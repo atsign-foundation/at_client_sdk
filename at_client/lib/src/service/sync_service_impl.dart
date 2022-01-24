@@ -489,33 +489,26 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _setMetaData(builder, serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
-      builder.atKey.metadata = Metadata();
-      if (metaData[AT_TTL] != null) {
-        builder.atKey.metadata.ttl = int.parse(metaData[AT_TTL]);
-      }
-      if (metaData[AT_TTB] != null) {
-        builder.atKey.metadata.ttb = int.parse(metaData[AT_TTB]);
-      }
-      if (metaData[AT_TTR] != null) {
-        builder.atKey.metadata.ttr = int.parse(metaData[AT_TTR]);
-      }
+      if (metaData[AT_TTL] != null) builder.ttl = int.parse(metaData[AT_TTL]);
+      if (metaData[AT_TTB] != null) builder.ttb = int.parse(metaData[AT_TTB]);
+      if (metaData[AT_TTR] != null) builder.ttr = int.parse(metaData[AT_TTR]);
       if (metaData[CCD] != null) {
         (metaData[CCD].toLowerCase() == 'true')
-            ? builder.atKey.metadata.ccd = true
-            : builder.atKey.metadata.ccd = false;
+            ? builder.ccd = true
+            : builder.ccd = false;
       }
       if (metaData[PUBLIC_DATA_SIGNATURE] != null) {
-        builder.atKey.metadata.dataSignature = metaData[PUBLIC_DATA_SIGNATURE];
+        builder.dataSignature = metaData[PUBLIC_DATA_SIGNATURE];
       }
       if (metaData[IS_BINARY] != null) {
         (metaData[IS_BINARY].toLowerCase() == 'true')
-            ? builder.atKey.metadata.isBinary = true
-            : builder.atKey.metadata.isBinary = false;
+            ? builder.isBinary = true
+            : builder.isBinary = false;
       }
       if (metaData[IS_ENCRYPTED] != null) {
         (metaData[IS_ENCRYPTED].toLowerCase() == 'true')
-            ? builder.atKey.metadata.isEncrypted = true
-            : builder.atKey.metadata.isEncrypted = false;
+            ? builder.isEncrypted = true
+            : builder.isEncrypted = false;
       }
     }
   }
