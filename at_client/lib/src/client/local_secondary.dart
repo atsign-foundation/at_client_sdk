@@ -132,7 +132,7 @@ class LocalSecondary implements Secondary {
       }
       llookupKey += builder.atKey!;
       if (builder.sharedBy != null) {
-        llookupKey += AtUtils.formatAtSign(builder.sharedBy);
+        llookupKey += AtUtils.formatAtSign(builder.sharedBy)!;
       }
       var llookupMeta = await keyStore!.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
@@ -262,7 +262,7 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> getEncryptionPublicKey(String atSign) async {
-    atSign = AtUtils.formatAtSign(atSign);
+    atSign = AtUtils.formatAtSign(atSign)!;
     var privateKeyData =
         await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
     return privateKeyData?.data;

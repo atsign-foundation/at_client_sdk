@@ -20,7 +20,7 @@ class AtClientUtil {
     }
     updateKey += builder.atKey!;
     if (builder.sharedBy != null) {
-      updateKey += AtUtils.formatAtSign(builder.sharedBy!);
+      updateKey += AtUtils.formatAtSign(builder.sharedBy!)!;
     }
     return updateKey;
   }

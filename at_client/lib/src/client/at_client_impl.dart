@@ -69,7 +69,7 @@ class AtClientImpl implements AtClient {
   /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
       AtClientPreference preferences) async {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign);
+    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return;
     }
@@ -85,7 +85,7 @@ class AtClientImpl implements AtClient {
   @Deprecated("Use [create]")
   AtClientImpl(
       String _atSign, String? namespace, AtClientPreference preference) {
-    currentAtSign = AtUtils.formatAtSign(_atSign);
+    currentAtSign = AtUtils.formatAtSign(_atSign)!;
     _preference = preference;
     _namespace = namespace;
   }
@@ -93,7 +93,7 @@ class AtClientImpl implements AtClient {
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
       {AtClientManager? atClientManager}) async {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign);
+    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (_atClientInstanceMap.containsKey(currentAtSign)) {
       return _atClientInstanceMap[currentAtSign];
     }
@@ -111,7 +111,7 @@ class AtClientImpl implements AtClient {
 
   AtClientImpl._(String _atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager) {
-    currentAtSign = AtUtils.formatAtSign(_atSign);
+    currentAtSign = AtUtils.formatAtSign(_atSign)!;
     _preference = preference;
     _preference.namespace = namespace;
     _namespace = namespace;
