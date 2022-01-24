@@ -12,7 +12,7 @@ void main() async {
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
     var result = await atClient
-        .getRemoteSecondary()
+        .getRemoteSecondary()!
         .executeCommand('plookup:publickey@bob\n', auth: true);
     print(result);
   } on Exception catch (e, trace) {

@@ -31,7 +31,7 @@ void main() {
         'NotificationStatusEnum.delivered');
     expect(result.atKey.key, 'phone');
     expect(result.atKey.sharedWith, phoneKey.sharedWith);
-  });
+  }, timeout: Timeout(Duration(minutes: 1)));
 
   test('notify updating of a key to sharedWith atSign - using callback',
       () async {
@@ -49,7 +49,7 @@ void main() {
     var value = '+1 100 200 300';
     await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
-  });
+  }, timeout: Timeout(Duration(minutes: 1)));
 
   test('notify deletion of a key to sharedWith atSign', () async {
     var atsign = '@alice🛠';

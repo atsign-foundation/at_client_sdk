@@ -73,6 +73,9 @@ class AtClientUtil {
   /// populated [AtValue] as a response.
   static AtValue prepareAtValue(String response, AtKey atKey) {
     var parsedResponse = DefaultResponseParser().parse(response);
+    if (parsedResponse.response == 'null') {
+      return AtValue()..value = 'null';
+    }
     var decodedResponse = JsonUtils.decodeJson(parsedResponse.response);
     //Construct atValue
     var atValue = AtValue()
@@ -114,7 +117,7 @@ class AtClientUtil {
     metadata.isBinary = metadataMap[IS_BINARY];
     metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
-    if (atKey.key.contains('public:')) {
+    if (atKey.key!.contains('public:')) {
       metadata.isPublic = true;
     }
     return metadata;

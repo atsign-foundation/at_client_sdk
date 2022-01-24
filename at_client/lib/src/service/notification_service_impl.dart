@@ -32,7 +32,7 @@ class NotificationServiceImpl
     }
     final notificationService = NotificationServiceImpl._(atClient);
     await notificationService._init();
-    _notificationServiceMap[atClient.getCurrentAtSign()] = notificationService;
+    _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
@@ -66,7 +66,7 @@ class NotificationServiceImpl
     _monitor = Monitor(
         _internalNotificationCallback,
         _onMonitorError,
-        _atClient.getCurrentAtSign(),
+        _atClient.getCurrentAtSign()!,
         _atClient.getPreferences()!,
         MonitorPreference()..keepAlive = true,
         _monitorRetry);
@@ -78,7 +78,7 @@ class NotificationServiceImpl
 
   Future<int?> _getLastNotificationTime() async {
     var atKey = AtKey()..key = notificationIdKey;
-    if (_atClient.getLocalSecondary().keyStore!.isKeyExists(atKey.key)) {
+    if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(atKey.key!)) {
       final atValue = await _atClient.get(atKey);
       if (atValue.value != null) {
         _logger.finer('json from hive: ${atValue.value}');

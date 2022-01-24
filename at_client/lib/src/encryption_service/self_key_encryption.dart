@@ -38,7 +38,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
   Future<String> _getSelfEncryptionKey() async {
     var selfEncryptionKey = await AtClientManager.getInstance()
         .atClient
-        .getLocalSecondary()
+        .getLocalSecondary()!
         .getEncryptionSelfKey();
     return selfEncryptionKey;
   }

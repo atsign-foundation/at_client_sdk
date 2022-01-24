@@ -29,8 +29,8 @@ class LocalSecondary implements Secondary {
   /// set to true then data is synced from local to remote.
   /// if [sync] is set to false, no sync operation is done.
   @override
-  Future<String> executeVerb(VerbBuilder builder, {sync}) async {
-    String verbResult = '';
+  Future<String?> executeVerb(VerbBuilder builder, {sync}) async {
+    String? verbResult = '';
 
     try {
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
@@ -174,14 +174,14 @@ class LocalSecondary implements Secondary {
     }
   }
 
-  Future<String> _scan(ScanVerbBuilder builder) async {
+  Future<String?> _scan(ScanVerbBuilder builder) async {
     try {
       // Call to remote secondary sever and performs an outbound scan to retrieve values from sharedBy secondary
       // shared with current atSign
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
         return await RemoteSecondary(
-                _atClient.getCurrentAtSign(), _atClient.getPreferences()!,
+                _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
                 privateKey: _atClient.getPreferences()!.privateKey)
             .executeCommand(command, auth: true);
       }

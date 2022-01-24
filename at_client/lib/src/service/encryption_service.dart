@@ -158,7 +158,7 @@ class EncryptionService {
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
-    if (sharedKey.isEmpty) {
+    if (sharedKey!.isEmpty) {
       logger.severe('Decryption failed. SharedKey is null');
       throw AtClientException('AT0014', 'Decryption failed. SharedKey is null');
     }
@@ -355,7 +355,7 @@ class EncryptionService {
         selfKeys,
         (AtKey atKey) => () async {
               var key = atKey.key;
-              if (!(key.startsWith(AT_PKAM_PRIVATE_KEY) ||
+              if (!(key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
                   key.startsWith(AT_PKAM_PUBLIC_KEY) ||
                   key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
                   key.startsWith(AT_SIGNING_PRIVATE_KEY) ||
@@ -365,7 +365,7 @@ class EncryptionService {
                 var isPublic = false;
                 var isCached = false;
                 if (atKey.metadata != null) {
-                  isPublic = atKey.metadata!.isPublic;
+                  isPublic = atKey.metadata!.isPublic!;
                   isCached = atKey.metadata!.isCached;
                 }
                 if (!isPublic && !isCached) {
@@ -375,7 +375,7 @@ class EncryptionService {
                         ? atValue.metadata!
                         : Metadata();
                     var isEncrypted = metadata.isEncrypted;
-                    if (!isEncrypted) {
+                    if (!isEncrypted!) {
                       var value = atValue.value;
                       metadata.isEncrypted = true;
                       metadata.isBinary = metadata.isBinary;

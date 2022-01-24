@@ -309,7 +309,7 @@ class SyncManager {
     var verbResult =
         await _remoteSecondary!.executeCommand(command, auth: true);
     logger.finer('batch result:$verbResult');
-    if (verbResult.isNotEmpty) {
+    if (verbResult!.isNotEmpty) {
       verbResult = verbResult.replaceFirst('data:', '');
     }
     return jsonDecode(verbResult);
@@ -364,7 +364,7 @@ class SyncManager {
   Future<void> _pullToLocal(
       VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
     var verbResult = await _localSecondary!.executeVerb(builder, sync: false);
-    if (verbResult.isEmpty) {
+    if (verbResult!.isEmpty) {
       return;
     }
     var sequenceNumber = int.parse(verbResult.split(':')[1]);

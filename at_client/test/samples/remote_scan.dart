@@ -13,7 +13,7 @@ void main() async {
     var atClient = atClientManager.atClient;
     // auth scan
     var authScanResult = await atClient
-        .getRemoteSecondary()
+        .getRemoteSecondary()!
         .executeCommand('scan\n', auth: true);
     print(authScanResult);
   } on Exception catch (e, trace) {

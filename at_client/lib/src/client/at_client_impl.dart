@@ -193,7 +193,7 @@ class AtClientImpl implements AtClient {
     var isPublic = atKey.metadata?.isPublic;
     var isCached = atKey.metadata?.isCached;
     var isNamespaceAware = atKey.metadata?.namespaceAware;
-    return _delete(atKey.key,
+    return _delete(atKey.key!,
         sharedWith: atKey.sharedWith,
         sharedBy: atKey.sharedBy,
         isPublic: (isPublic != null) ? isPublic : false,
@@ -221,7 +221,7 @@ class AtClientImpl implements AtClient {
       ..atKey = keyWithNamespace
       ..sharedBy = sharedBy;
     var deleteResult = await getSecondary().executeVerb(builder, sync: true);
-    return deleteResult.isNotEmpty;
+    return deleteResult!.isNotEmpty;
   }
 
   @override
@@ -290,7 +290,10 @@ class AtClientImpl implements AtClient {
     var getResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder);
     // Construct atValue from the getResponse
-    var atValue = AtClientUtil.prepareAtValue(getResponse, atKey);
+    var atValue = AtClientUtil.prepareAtValue(getResponse!, atKey);
+    if (atValue.value == 'null') {
+      return atValue;
+    }
     // Decode and decrypt the value
     return await AtValues.transformResponse(atValue, atKey);
   }
@@ -312,8 +315,8 @@ class AtClientImpl implements AtClient {
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder..value = value,
-            sync: SyncUtil.isSyncRequired(atKey.key));
-    return putResponse.isNotEmpty;
+            sync: SyncUtil.isSyncRequired(atKey.key!));
+    return putResponse!.isNotEmpty;
   }
 
   @override
@@ -381,7 +384,7 @@ class AtClientImpl implements AtClient {
     var updateKey = atKey.key;
     var metadata = atKey.metadata;
     if (metadata!.namespaceAware) {
-      updateKey = _getKeyWithNamespace(atKey.key);
+      updateKey = _getKeyWithNamespace(atKey.key!);
     }
     var sharedWith = atKey.sharedWith;
     var builder = UpdateVerbBuilder();
@@ -399,13 +402,13 @@ class AtClientImpl implements AtClient {
       ..operation = UPDATE_META;
 
     var isSyncRequired = true;
-    if (SyncUtil.shouldSkipSync(updateKey)) {
+    if (SyncUtil.shouldSkipSync(updateKey!)) {
       isSyncRequired = false;
     }
 
     var updateMetaResult =
         await getSecondary().executeVerb(builder, sync: isSyncRequired);
-    return updateMetaResult.isNotEmpty;
+    return updateMetaResult!.isNotEmpty;
   }
 
   String _getKeyWithNamespace(String key) {
@@ -464,14 +467,14 @@ class AtClientImpl implements AtClient {
     var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
-    if (result.isNotEmpty && result.startsWith('stream:ack')) {
+    if (result!.isNotEmpty && result.startsWith('stream:ack')) {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
-      if (streamResult.isNotEmpty && streamResult.startsWith('stream:done')) {
+      if (streamResult!.isNotEmpty && streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;
       }
@@ -700,7 +703,7 @@ class AtClientImpl implements AtClient {
     // For messageType is text, text may contains spaces but key should not have spaces
     // Hence do not validate the key.
     if (notificationParams.messageType != MessageTypeEnum.text) {
-      AtClientValidation.validateKey(notificationParams.atKey.key);
+      AtClientValidation.validateKey(notificationParams.atKey.key!);
     }
     // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
@@ -708,7 +711,7 @@ class AtClientImpl implements AtClient {
     if (notificationParams.atKey.metadata != null &&
         notificationParams.atKey.metadata!.namespaceAware) {
       notificationParams.atKey.key =
-          _getKeyWithNamespace(notificationParams.atKey.key);
+          _getKeyWithNamespace(notificationParams.atKey.key!);
     }
     notificationParams.atKey.sharedBy ??= currentAtSign;
 
@@ -753,11 +756,11 @@ class AtClientImpl implements AtClient {
     builder.ttr = notificationParams.atKey.metadata?.ttr;
     builder.ccd = notificationParams.atKey.metadata?.ccd;
     builder.isPublic = (notificationParams.atKey.metadata != null)
-        ? notificationParams.atKey.metadata!.isPublic
+        ? notificationParams.atKey.metadata!.isPublic!
         : false;
 
-    if (notificationParams.atKey.key.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notificationParams.atKey.key.startsWith(AT_PKAM_PUBLIC_KEY)) {
+    if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
       builder.sharedBy = null;
     }
     return await getRemoteSecondary().executeVerb(builder);

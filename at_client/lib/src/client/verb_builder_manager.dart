@@ -10,7 +10,7 @@ class LookUpBuilderManager {
     // If isPublic is true in metadata, the key is a public key, return PLookupVerbHandler.
     if (atKey.sharedBy != currentAtSign &&
         (atKey.metadata != null &&
-            atKey.metadata!.isPublic &&
+            atKey.metadata!.isPublic! &&
             !atKey.metadata!.isCached)) {
       return PLookupVerbBuilder()
         ..atKey = atKey.key
@@ -21,7 +21,7 @@ class LookUpBuilderManager {
     if (atKey.sharedBy != currentAtSign &&
         (atKey.metadata != null &&
             !atKey.metadata!.isCached &&
-            !atKey.metadata!.isPublic)) {
+            !atKey.metadata!.isPublic!)) {
       return LookupVerbBuilder()
         ..atKey = atKey.key
         ..sharedBy = atKey.sharedBy
@@ -33,7 +33,7 @@ class LookUpBuilderManager {
       ..sharedBy = atKey.sharedBy
       ..sharedWith = atKey.sharedWith
       ..isPublic = (atKey.metadata != null && atKey.metadata?.isPublic != null)
-          ? atKey.metadata!.isPublic
+          ? atKey.metadata!.isPublic!
           : false
       ..isCached = (atKey.metadata != null && atKey.metadata?.isCached != null)
           ? atKey.metadata!.isCached
@@ -49,7 +49,7 @@ class UpdateBuilderManager {
       ..sharedBy = atKey.sharedBy
       ..sharedWith = atKey.sharedWith;
     if (atKey.metadata != null) {
-      verbBuilder.isPublic = atKey.metadata!.isPublic;
+      verbBuilder.isPublic = atKey.metadata!.isPublic!;
       verbBuilder.isBinary = atKey.metadata?.isBinary;
       verbBuilder.isEncrypted = atKey.metadata?.isEncrypted;
       verbBuilder.ttl = atKey.metadata?.ttl;
@@ -67,8 +67,8 @@ class SecondaryManager {
         verbBuilder is PLookupVerbBuilder ||
         verbBuilder is NotifyVerbBuilder ||
         verbBuilder is StatsVerbBuilder) {
-      return AtClientManager.getInstance().atClient.getRemoteSecondary();
+      return AtClientManager.getInstance().atClient.getRemoteSecondary()!;
     }
-    return AtClientManager.getInstance().atClient.getLocalSecondary();
+    return AtClientManager.getInstance().atClient.getLocalSecondary()!;
   }
 }

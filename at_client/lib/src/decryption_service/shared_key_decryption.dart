@@ -24,7 +24,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
     }
     var currentAtSignPrivateKey = await (AtClientManager.getInstance()
         .atClient
-        .getLocalSecondary()
+        .getLocalSecondary()!
         .getEncryptionPrivateKey());
     if (currentAtSignPrivateKey.isEmpty) {
       throw KeyNotFoundException('encryption private not found');
@@ -38,7 +38,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
   }
 
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
-    String encryptedSharedKey = '';
+    String? encryptedSharedKey = '';
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
       ..atKey = AT_ENCRYPTION_SHARED_KEY
       ..sharedWith = AtClientManager.getInstance().atClient.getCurrentAtSign()
@@ -47,20 +47,22 @@ class SharedKeyDecryption implements AtKeyDecryption {
     try {
       encryptedSharedKey = await AtClientManager.getInstance()
           .atClient
-          .getLocalSecondary()
+          .getLocalSecondary()!
           .executeVerb(localLookupSharedKeyBuilder);
     } on KeyNotFoundException {
       _logger.finer(
           '${atKey.sharedBy}:${localLookupSharedKeyBuilder.atKey}@${atKey.sharedWith} not found in local secondary. Fetching from cloud secondary');
     }
-    if (encryptedSharedKey.isEmpty || encryptedSharedKey == 'data:null') {
+    if (encryptedSharedKey == null ||
+        encryptedSharedKey.isEmpty ||
+        encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
         ..atKey = AT_ENCRYPTION_SHARED_KEY
         ..sharedBy = atKey.sharedBy
         ..auth = true;
       encryptedSharedKey = await AtClientManager.getInstance()
           .atClient
-          .getRemoteSecondary()
+          .getRemoteSecondary()!
           .executeAndParse(sharedKeyLookUpBuilder);
     }
     if (encryptedSharedKey.isNotEmpty) {

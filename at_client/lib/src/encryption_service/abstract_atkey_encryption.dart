@@ -52,12 +52,12 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
           '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
       ..sharedBy = atKey.sharedBy;
 
-    String sharedKey = '';
+    String? sharedKey = '';
     // Fetch AES key in the local secondary.
     try {
       sharedKey = await AtClientManager.getInstance()
           .atClient
-          .getLocalSecondary()
+          .getLocalSecondary()!
           .executeVerb(llookupVerbBuilder);
     } on KeyNotFoundException {
       _logger.finer(
@@ -65,10 +65,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
     // If sharedKey is not found in localSecondary, fetch from remote secondary.
     try {
-      if (sharedKey.isEmpty || sharedKey == 'data:null') {
+      if (sharedKey == null || sharedKey.isEmpty || sharedKey == 'data:null') {
         sharedKey = await AtClientManager.getInstance()
             .atClient
-            .getRemoteSecondary()
+            .getRemoteSecondary()!
             .executeVerb(llookupVerbBuilder);
       }
     } on AtLookUpException {
@@ -76,13 +76,13 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
           '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
     }
     // If sharedKey is found, decrypt the shared key and return.
-    if (sharedKey.isNotEmpty && sharedKey != 'data:null') {
-      sharedKey = sharedKey.replaceFirst('data:', '');
+    if (sharedKey == null || sharedKey.isNotEmpty && sharedKey != 'data:null') {
+      sharedKey = sharedKey!.replaceFirst('data:', '');
       sharedKey = EncryptionUtil.decryptKey(
           sharedKey,
           await AtClientManager.getInstance()
               .atClient
-              .getLocalSecondary()
+              .getLocalSecondary()!
               .getEncryptionPrivateKey());
     }
     return sharedKey;
@@ -99,10 +99,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..sharedBy = atKey.sharedBy;
 
     try {
-      encryptedSharedKey = await AtClientManager.getInstance()
+      encryptedSharedKey = (await AtClientManager.getInstance()
           .atClient
-          .getLocalSecondary()
-          .executeVerb(lookupEncryptionSharedKey);
+          .getLocalSecondary()!
+          .executeVerb(lookupEncryptionSharedKey))!;
     } on KeyNotFoundException {
       _logger.finer(
           '${atKey.sharedWith}:$AT_ENCRYPTION_SHARED_KEY@${atKey.sharedBy} not found in local secondary. Fetching from cloud secondary');
@@ -120,10 +120,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..atKey = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
       ..sharedBy = atKey.sharedBy;
     try {
-      sharedWithPublicKey = await AtClientManager.getInstance()
+      sharedWithPublicKey = (await AtClientManager.getInstance()
           .atClient
-          .getLocalSecondary()
-          .executeVerb(cachedPublicKeyBuilder);
+          .getLocalSecondary()!
+          .executeVerb(cachedPublicKeyBuilder))!;
     } on KeyNotFoundException {
       _logger.finer(
           '${cachedPublicKeyBuilder.atKey}@${atKey.sharedBy} not found in local secondary. Fetching from cloud secondary');
@@ -139,7 +139,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
     sharedWithPublicKey = await AtClientManager.getInstance()
         .atClient
-        .getRemoteSecondary()
+        .getRemoteSecondary()!
         .executeAndParse(plookupBuilder);
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
@@ -154,7 +154,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..value = sharedWithPublicKey;
     await AtClientManager.getInstance()
         .atClient
-        .getLocalSecondary()
+        .getLocalSecondary()!
         .executeVerb(sharedWithPublicKeyBuilder, sync: true);
     return sharedWithPublicKey;
   }
@@ -166,7 +166,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         sharedKey,
         await AtClientManager.getInstance()
             .atClient
-            .getLocalSecondary()
+            .getLocalSecondary()!
             .getEncryptionPublicKey(atKey.sharedBy!));
 
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
@@ -176,7 +176,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..value = encryptedSharedKeyForCurrentAtSign;
     await AtClientManager.getInstance()
         .atClient
-        .getLocalSecondary()
+        .getLocalSecondary()!
         .executeVerb(updateSharedKeyForCurrentAtSignBuilder, sync: true);
   }
 
@@ -192,7 +192,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..value = encryptedSharedKey;
     await AtClientManager.getInstance()
         .atClient
-        .getLocalSecondary()
+        .getLocalSecondary()!
         .executeVerb(updateSharedKeyBuilder, sync: true);
   }
 }

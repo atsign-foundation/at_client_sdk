@@ -34,7 +34,7 @@ void main() {
       ..sharedWith = '@bob🛠';
     var getResult = await atClient.get(getPhoneKey);
     expect(getResult.value, value);
-  });
+  },timeout: Timeout(Duration(minutes: 20)));
 
   test('put method - create a key with AtKey static factory - public',
       () async {

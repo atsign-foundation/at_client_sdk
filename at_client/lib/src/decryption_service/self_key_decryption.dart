@@ -16,7 +16,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
       throw IllegalArgumentException(
           'Decryption failed. Encrypted value is null');
     }
-    if (!atKey.metadata!.isEncrypted) {
+    if (!atKey.metadata!.isEncrypted!) {
       _logger.info(
           'isEncrypted is set to false, Returning the original value without decrypting');
       return encryptedValue;
@@ -24,7 +24,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
     try {
       var selfEncryptionKey = await AtClientManager.getInstance()
           .atClient
-          .getLocalSecondary()
+          .getLocalSecondary()!
           .getEncryptionSelfKey();
       if (selfEncryptionKey.isEmpty || selfEncryptionKey == 'data:null') {
         throw KeyNotFoundException(

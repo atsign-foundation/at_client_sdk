@@ -4,7 +4,7 @@ import 'package:at_commons/at_commons.dart';
 class AtClientValidation {
   static void validatePutRequest(AtKey atKey) {
     // validates the key
-    validateKey(atKey.key);
+    validateKey(atKey.key!);
     // validates the metadata
     validateMetadata(atKey.metadata);
     // verifies if the sharedWith atSign exists.

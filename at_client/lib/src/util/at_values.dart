@@ -16,23 +16,23 @@ class AtValues {
   /// If AtKey is not public, encrypts the value and returns the encrypted value.
   static Future<String> transformRequest(AtKey atKey, dynamic value) async {
     // Encode the value, if the value is of binary data.
-    if (atKey.metadata!.isBinary) {
+    if (atKey.metadata!.isBinary!) {
       value = Base2e15.encode(value);
     }
 
     // If key is public, Sign in the data.
-    if (atKey is PublicKey || atKey.metadata!.isPublic) {
+    if (atKey is PublicKey || atKey.metadata!.isPublic!) {
       atKey.metadata!.dataSignature = await SignInPublicData.signInData(
           value,
           await AtClientManager.getInstance()
               .atClient
-              .getLocalSecondary()
+              .getLocalSecondary()!
               .getEncryptionPrivateKey());
       return value;
     }
 
     var encryptionService = AtKeyEncryptionManager.get(
-        atKey, AtClientManager.getInstance().atClient.getCurrentAtSign());
+        atKey, AtClientManager.getInstance().atClient.getCurrentAtSign()!);
     var encryptedValue =
         await encryptionService.encrypt(atKey, value) as String;
     atKey.metadata!.isEncrypted = true;
@@ -43,16 +43,16 @@ class AtValues {
   /// [AtValue]
   /// NOTE: Use metadata from [AtValue]
   static Future<AtValue> transformResponse(AtValue atValue, AtKey atKey) async {
-    if (atValue.metadata != null && atValue.metadata!.isBinary) {
+    if (atValue.metadata != null && atValue.metadata!.isBinary!) {
       atValue.value = Base2e15.decode(atValue.value);
     }
     // Setting isEncrypted from atValue
     // because, user populated metadata will have false by default.
     atKey.metadata?.isEncrypted = atValue.metadata!.isEncrypted;
 
-    if (atKey.metadata!.isEncrypted) {
+    if (atKey.metadata!.isEncrypted!) {
       var decryptionService = AtKeyDecryptionManager.get(
-          atKey, AtClientManager.getInstance().atClient.getCurrentAtSign());
+          atKey, AtClientManager.getInstance().atClient.getCurrentAtSign()!);
       atValue.value =
           await decryptionService.decrypt(atKey, atValue.value) as String;
     }

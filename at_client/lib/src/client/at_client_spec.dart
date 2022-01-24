@@ -17,9 +17,9 @@ abstract class AtClient {
   SyncManager? getSyncManager();
 
   /// Returns a singleton instance of [RemoteSecondary] to communicate with user's secondary server.
-  RemoteSecondary getRemoteSecondary();
+  RemoteSecondary? getRemoteSecondary();
 
-  LocalSecondary getLocalSecondary();
+  LocalSecondary? getLocalSecondary();
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
@@ -438,7 +438,7 @@ abstract class AtClient {
       List<FileStatus> fileStatus,
       {DateTime? date});
 
-  String getCurrentAtSign();
+  String? getCurrentAtSign();
 
-  EncryptionService get encryptionService;
+  EncryptionService? get encryptionService;
 }

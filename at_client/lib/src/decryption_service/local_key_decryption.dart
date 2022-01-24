@@ -21,7 +21,7 @@ class LocalKeyDecryption implements AtKeyDecryption {
     }
     var currentAtSignPrivateKey = await AtClientManager.getInstance()
         .atClient
-        .getLocalSecondary()
+        .getLocalSecondary()!
         .getEncryptionPrivateKey();
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey =
@@ -29,9 +29,9 @@ class LocalKeyDecryption implements AtKeyDecryption {
       ..sharedBy = AtClientManager.getInstance().atClient.getCurrentAtSign();
     var sharedKey = await AtClientManager.getInstance()
         .atClient
-        .getLocalSecondary()
+        .getLocalSecondary()!
         .executeVerb(llookupVerbBuilder);
-    if (sharedKey.isEmpty) {
+    if (sharedKey == null || sharedKey.isEmpty) {
       _logger.severe('Decryption failed. SharedKey is null');
       throw AtClientException('AT0014', 'Decryption failed. SharedKey is null');
     }
