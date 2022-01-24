@@ -34,18 +34,18 @@ import 'package:uuid/uuid.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
-  late AtClientPreference _preference;
+  AtClientPreference? _preference;
 
-  AtClientPreference get preference => _preference;
-  late String currentAtSign;
+  AtClientPreference? get preference => _preference;
+  String? currentAtSign;
   String? _namespace;
-  late LocalSecondary _localSecondary;
-  late RemoteSecondary _remoteSecondary;
+  LocalSecondary? _localSecondary;
+  RemoteSecondary? _remoteSecondary;
 
-  late EncryptionService _encryptionService;
+  EncryptionService? _encryptionService;
 
   @override
-  EncryptionService get encryptionService => _encryptionService;
+  EncryptionService? get encryptionService => _encryptionService;
 
   AtClientManager? _atClientManager;
 
@@ -85,7 +85,7 @@ class AtClientImpl implements AtClient {
   @Deprecated("Use [create]")
   AtClientImpl(
       String _atSign, String? namespace, AtClientPreference preference) {
-    currentAtSign = AtUtils.formatAtSign(_atSign)!;
+    currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
     _namespace = namespace;
   }
@@ -111,28 +111,28 @@ class AtClientImpl implements AtClient {
 
   AtClientImpl._(String _atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager) {
-    currentAtSign = AtUtils.formatAtSign(_atSign)!;
+    currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
-    _preference.namespace = namespace;
+    _preference!.namespace = namespace;
     _namespace = namespace;
     _atClientManager = atClientManager;
   }
 
   Future<void> _init() async {
     _localSecondary = LocalSecondary(this);
-    _remoteSecondary = RemoteSecondary(currentAtSign, _preference,
-        privateKey: _preference.privateKey);
+    _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
+        privateKey: _preference!.privateKey);
     _encryptionService = EncryptionService();
-    _encryptionService.remoteSecondary = _remoteSecondary;
-    _encryptionService.currentAtSign = currentAtSign;
-    _encryptionService.localSecondary = _localSecondary;
+    _encryptionService!.remoteSecondary = _remoteSecondary;
+    _encryptionService!.currentAtSign = currentAtSign;
+    _encryptionService!.localSecondary = _localSecondary;
   }
 
   Secondary getSecondary() {
-    if (_preference.isLocalStoreRequired) {
-      return _localSecondary;
+    if (_preference!.isLocalStoreRequired) {
+      return _localSecondary!;
     }
-    return _remoteSecondary;
+    return _remoteSecondary!;
   }
 
   @override
@@ -142,17 +142,17 @@ class AtClientImpl implements AtClient {
     if (regex != null) {
       monitorVerbBuilder.regex = regex;
     }
-    await _remoteSecondary.monitor(
+    await _remoteSecondary!.monitor(
         monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
   }
 
   @override
-  LocalSecondary getLocalSecondary() {
+  LocalSecondary? getLocalSecondary() {
     return _localSecondary;
   }
 
   @override
-  RemoteSecondary getRemoteSecondary() {
+  RemoteSecondary? getRemoteSecondary() {
     return _remoteSecondary;
   }
 
@@ -170,20 +170,20 @@ class AtClientImpl implements AtClient {
   Future<bool> persistPrivateKey(String privateKey) async {
     var atData = AtData();
     atData.data = privateKey.toString();
-    await _localSecondary.keyStore!.put(AT_PKAM_PRIVATE_KEY, atData);
+    await _localSecondary!.keyStore!.put(AT_PKAM_PRIVATE_KEY, atData);
     return true;
   }
 
   Future<bool> persistPublicKey(String publicKey) async {
     var atData = AtData();
     atData.data = publicKey.toString();
-    await getLocalSecondary().keyStore!.put(AT_PKAM_PUBLIC_KEY, atData);
+    await getLocalSecondary()!.keyStore!.put(AT_PKAM_PUBLIC_KEY, atData);
     return true;
   }
 
   Future<String?> getPrivateKey(String atSign) async {
     var privateKeyData =
-        await getLocalSecondary().keyStore!.get(AT_PKAM_PRIVATE_KEY);
+        await getLocalSecondary()!.keyStore!.get(AT_PKAM_PRIVATE_KEY);
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
@@ -244,7 +244,7 @@ class AtClientImpl implements AtClient {
     var scanResult = await getSecondary().executeVerb(builder);
     scanResult = _formatResult(scanResult);
     var result = [];
-    if (scanResult.isNotEmpty) {
+    if (scanResult != null && scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
     return result as FutureOr<List<String>>;
@@ -283,11 +283,11 @@ class AtClientImpl implements AtClient {
     atKey.sharedBy ??= currentAtSign;
     atKey.metadata ??= Metadata();
     // Set namespace
-    KeyUtil.setNamespace(atKey, preference);
+    KeyUtil.setNamespace(atKey, preference!);
     //prepare atkey
     KeyUtil.prepareAtKey(atKey);
     // Get the verb builder for AtKey instance
-    var verbBuilder = LookUpBuilderManager.get(atKey, currentAtSign);
+    var verbBuilder = LookUpBuilderManager.get(atKey, currentAtSign!);
     // Execute the verb.
     var getResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder);
@@ -308,7 +308,7 @@ class AtClientImpl implements AtClient {
     // Prepare AtKey.
     KeyUtil.prepareAtKey(atKey);
     // SetNamespace to the key
-    KeyUtil.setNamespace(atKey, preference);
+    KeyUtil.setNamespace(atKey, preference!);
     // Encode and encrypt the value.
     value = await AtValues.transformRequest(atKey, value);
     // Construct verb builder.
@@ -359,7 +359,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<String> notifyStatus(String notificationId) async {
     var builder = NotifyStatusVerbBuilder()..notificationId = notificationId;
-    var notifyStatus = await getRemoteSecondary().executeVerb(builder);
+    var notifyStatus = await getRemoteSecondary()!.executeVerb(builder);
     return notifyStatus;
   }
 
@@ -374,7 +374,7 @@ class AtClientImpl implements AtClient {
         ..fromDate = fromDate
         ..toDate = toDate
         ..regex = regex;
-      var notifyList = await getRemoteSecondary().executeVerb(builder);
+      var notifyList = await getRemoteSecondary()!.executeVerb(builder);
       return notifyList;
     } on AtLookUpException catch (e) {
       throw AtClientException(e.errorCode, e.errorMessage);
@@ -384,8 +384,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> putMeta(AtKey atKey) async {
     var updateKey = atKey.key;
-    var metadata = atKey.metadata;
-    if (metadata!.namespaceAware) {
+    var metadata = atKey.metadata!;
+    if (metadata.namespaceAware) {
       updateKey = _getKeyWithNamespace(atKey.key!);
     }
     var sharedWith = atKey.sharedWith;
@@ -410,7 +410,7 @@ class AtClientImpl implements AtClient {
 
     var updateMetaResult =
         await getSecondary().executeVerb(builder, sync: isSyncRequired);
-    return updateMetaResult!.isNotEmpty;
+    return updateMetaResult != null;
   }
 
   String _getKeyWithNamespace(String key) {
@@ -462,25 +462,25 @@ class AtClientImpl implements AtClient {
     var fileName = basename(filePath);
     fileName = base64.encode(utf8.encode(fileName));
     var encryptedData =
-        await _encryptionService.encryptStream(data, sharedWith);
+        await _encryptionService!.encryptStream(data, sharedWith);
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(currentAtSign, _preference);
+    var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
-    if (result!.isNotEmpty && result.startsWith('stream:ack')) {
+    if (result != null && result.startsWith('stream:ack')) {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
-          .read(maxWaitMilliSeconds: _preference.outboundConnectionTimeout);
-      if (streamResult!.isNotEmpty && streamResult.startsWith('stream:done')) {
+          .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+      if (streamResult != null && streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;
       }
-    } else if (result.isNotEmpty && result.startsWith('error:')) {
+    } else if (result != null && result.startsWith('error:')) {
       result = result.replaceAll('error:', '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
@@ -507,7 +507,7 @@ class AtClientImpl implements AtClient {
     var notification = AtStreamNotification()
       ..streamId = streamId
       ..fileName = fileName
-      ..currentAtSign = currentAtSign
+      ..currentAtSign = currentAtSign!
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
     _logger.info('Sending ack for stream notification:$notification');
@@ -518,7 +518,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns) async {
-    var encryptionKey = _encryptionService.generateFileEncryptionKey();
+    var encryptionKey = _encryptionService!.generateFileEncryptionKey();
     var key = TextConstants.fileTransferKey + Uuid().v4();
     var fileStatus = await _uploadFiles(key, files, encryptionKey);
     var fileUrl = TextConstants.fileBinURL + 'archive/' + key + '/zip';
@@ -544,9 +544,9 @@ class AtClientImpl implements AtClient {
           ..key = key
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
-          ..metadata?.ttr = -1
+          ..metadata!.ttr = -1
           // file transfer key will be deleted after 30 days
-          ..metadata?.ttl = 2592000000
+          ..metadata!.ttl = 2592000000
           ..sharedBy = currentAtSign;
 
         var notificationResult =
@@ -582,7 +582,7 @@ class AtClientImpl implements AtClient {
         size: await file.length(),
       );
       try {
-        var encryptedFile = _encryptionService.encryptFile(
+        var encryptedFile = _encryptionService!.encryptFile(
           file.readAsBytesSync(),
           encryptionKey,
         );
@@ -599,9 +599,9 @@ class AtClientImpl implements AtClient {
         }
 
         // storing sent files in a a directory.
-        if (preference.downloadPath != null) {
+        if (preference?.downloadPath != null) {
           var sentFilesDirectory =
-              await Directory(preference.downloadPath! + '/sent-files')
+              await Directory(preference!.downloadPath! + '/sent-files')
                   .create();
           await File(file.path)
               .copy(sentFilesDirectory.path + '/${fileStatus.fileName}');
@@ -625,7 +625,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath}) async {
-    downloadPath ??= preference.downloadPath;
+    downloadPath ??= preference!.downloadPath;
     if (downloadPath == null) {
       throw Exception('downloadPath not found');
     }
@@ -653,7 +653,7 @@ class AtClientImpl implements AtClient {
     var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
-        var decryptedFile = _encryptionService.decryptFile(
+        var decryptedFile = _encryptionService!.decryptFile(
             File(encryptedFile.path).readAsBytesSync(),
             fileTransferObject.fileEncryptionKey);
         var downloadedFile =
@@ -672,11 +672,11 @@ class AtClientImpl implements AtClient {
 
   @Deprecated("Use EncryptionService")
   Future<void> encryptUnEncryptedData() async {
-    await _encryptionService.encryptUnencryptedData();
+    await _encryptionService!.encryptUnencryptedData();
   }
 
   @override
-  String getCurrentAtSign() {
+  String? getCurrentAtSign() {
     return currentAtSign;
   }
 
@@ -697,7 +697,7 @@ class AtClientImpl implements AtClient {
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
     AtClientValidation.isAtSignExists(notificationParams.atKey.sharedWith!,
-        _preference.rootDomain, _preference.rootPort);
+        _preference!.rootDomain, _preference!.rootPort);
     // validate sharedBy atSign
     notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
@@ -736,7 +736,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          builder.value = await _encryptionService.encrypt(
+          builder.value = await _encryptionService!.encrypt(
               notificationParams.atKey.key,
               notificationParams.value!,
               notificationParams.atKey.sharedWith!);
@@ -748,23 +748,22 @@ class AtClientImpl implements AtClient {
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
-        builder.value = await _encryptionService.encryptForSelf(
+        builder.value = await _encryptionService!.encryptForSelf(
             notificationParams.atKey.key, notificationParams.value!);
       }
     }
-
-    builder.ttl = notificationParams.atKey.metadata?.ttl;
-    builder.ttb = notificationParams.atKey.metadata?.ttb;
-    builder.ttr = notificationParams.atKey.metadata?.ttr;
-    builder.ccd = notificationParams.atKey.metadata?.ccd;
-    builder.isPublic = (notificationParams.atKey.metadata != null)
-        ? notificationParams.atKey.metadata!.isPublic!
-        : false;
-
+    // If metadata is not null, add metadata to notify builder object.
+    if (notificationParams.atKey.metadata != null) {
+      builder.ttl = notificationParams.atKey.metadata!.ttl;
+      builder.ttb = notificationParams.atKey.metadata!.ttb;
+      builder.ttr = notificationParams.atKey.metadata!.ttr;
+      builder.ccd = notificationParams.atKey.metadata!.ccd;
+      builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
+    }
     if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
         notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
       builder.sharedBy = null;
     }
-    return await getRemoteSecondary().executeVerb(builder);
+    return await getRemoteSecondary()?.executeVerb(builder);
   }
 }
