@@ -2,7 +2,7 @@ import 'package:at_commons/at_commons.dart';
 
 ///The abstract class for [AtKeyDecryption]
 abstract class AtKeyDecryption {
-  /// Returns the decrypted value for the given encrypted value.
+  /// Returns the decrypted value for given encrypted value.
   ///
   /// Throws [IllegalArgumentException] if encrypted value is null.
   ///
