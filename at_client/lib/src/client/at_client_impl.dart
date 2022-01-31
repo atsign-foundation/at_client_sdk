@@ -409,6 +409,7 @@ class AtClientImpl implements AtClient {
     var namespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
+    atKey.sharedBy ??= currentAtSign;
     var getResult = await _get(atKey.key!,
         sharedWith: AtUtils.formatAtSign(atKey.sharedWith),
         sharedBy: AtUtils.formatAtSign(atKey.sharedBy),
@@ -527,7 +528,8 @@ class AtClientImpl implements AtClient {
       }
     }
     if (value != null) {
-      if (sharedWith != null && sharedWith != currentAtSign) {
+      if ((sharedWith != null && sharedWith.isNotEmpty) &&
+          sharedWith != currentAtSign) {
         try {
           builder.value =
               await _encryptionService!.encrypt(key, value, sharedWith);
