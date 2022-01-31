@@ -4,7 +4,7 @@ import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/response/response.dart';
 
 class NotificationResponseParser extends DefaultResponseParser {
-  List<AtNotification> getAtNotifications(Response response) {
+  List<AtNotification> getAtNotifications(AtResponse response) {
     final notificationList = <AtNotification>[];
     if (response.isError) {
       return [];

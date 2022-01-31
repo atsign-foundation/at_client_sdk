@@ -52,4 +52,18 @@ class AtClientValidation {
       throw AtKeyException('$atSign does not exist');
     }
   }
+
+  static void validateAtKey(AtKey atKey) {
+    // validates the atKey
+    validateKey(atKey.key);
+    // validates the metadata
+    validateMetadata(atKey.metadata);
+    // verifies if the sharedWith atSign exists.
+    if (atKey.sharedWith != null) {
+      isAtSignExists(
+          atKey.sharedWith!,
+          AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
+          AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
+    }
+  }
 }
