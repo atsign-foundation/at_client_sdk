@@ -13,8 +13,9 @@ class GetRequestTransformer implements Transformer<AtKey, VerbBuilder> {
     // Set the default metadata if not already set.
     atKey.metadata ??= Metadata();
     // Set sharedBy to currentAtSign if not set.
-    atKey.sharedBy ??= AtUtils.formatAtSign(
-        AtClientManager.getInstance().atClient.getCurrentAtSign()!);
+    atKey.sharedBy ??=
+        AtClientManager.getInstance().atClient.getCurrentAtSign();
+    atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
     // Get the verb builder for the given atKey
     VerbBuilder verbBuilder = LookUpBuilderManager.get(
         atKey, AtClientManager.getInstance().atClient.getCurrentAtSign()!);
