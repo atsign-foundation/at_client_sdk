@@ -26,7 +26,8 @@ class GetResponseTransformer
     // parse metadata
     if (decodedResponse['metaData'] != null) {
       atValue.metadata = AtClientUtil.prepareMetadata(
-          decodedResponse['metaData'], tuple.one.key!.startsWith('public:'));
+          decodedResponse['metaData'],
+          decodedResponse['key'].startsWith('public:'));
     }
 
     // If data is binary, decode the data
