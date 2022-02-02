@@ -33,6 +33,11 @@ class EncryptionService {
     String? sharedKey;
     try {
       sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
+      if (sharedKey != null &&
+          sharedKey.isNotEmpty &&
+          sharedKey != 'data:null') {
+        isSharedKeyAvailable = true;
+      }
     } on KeyNotFoundException {
       logger.finer(
           '${llookupVerbBuilder.atKey}$currentAtSign not found in local secondary. Fetching from cloud secondary.');
@@ -52,7 +57,6 @@ class EncryptionService {
       logger.finer('Generated a AES Key for $sharedWithUser');
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
-      isSharedKeyAvailable = true;
       sharedKey = sharedKey.replaceFirst('data:', '');
       sharedKey =
           EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);

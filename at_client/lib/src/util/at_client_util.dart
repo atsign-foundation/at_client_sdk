@@ -13,7 +13,7 @@ class AtClientUtil {
     if (builder.isPublic) {
       updateKey += 'public:';
     }
-    if (builder.sharedWith != null) {
+    if (builder.sharedWith != null && builder.sharedWith!.isNotEmpty) {
       updateKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
     }
     updateKey += builder.atKey!;
