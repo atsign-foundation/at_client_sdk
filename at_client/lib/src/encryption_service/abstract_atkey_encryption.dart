@@ -2,6 +2,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -18,21 +19,19 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     // Get AES Key from the local storage
     _sharedKey = await _getSharedKey(atKey);
-    // Get encryptedSharedKey
-    var encryptedSharedKey = await _getEncryptedSharedKey(atKey);
 
-    // If encryptionSharedKey is empty or sharedKey is empty, then -
+    // If sharedKey is empty, then -
     // Generate a new sharedKey
     // Encrypt the sharedKey with sharedWith public key
     // Notify the encryptedSharedKey with sharedWith user
     // Store the sharedKey for future use.
-    if (encryptedSharedKey.isEmpty || _sharedKey.isEmpty) {
+    if (_sharedKey.isEmpty) {
       // Generate sharedKey
       _sharedKey = EncryptionUtil.generateAESKey();
       // Get SharedWith encryption public key
       var sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
       //Encrypt shared key with public key of sharedWith atSign.
-      encryptedSharedKey =
+      var encryptedSharedKey =
           EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
       // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atSign
       // to cache the encryptedSharedKey.
@@ -46,74 +45,60 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// If not found, fetches in the remote secondary
   /// If found, returns the decrypted sharedKey.
   Future<String> _getSharedKey(AtKey atKey) async {
-    // Get/Generate AES key for sharedWith atSign
+    String? key = '';
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey =
           '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
       ..sharedBy = atKey.sharedBy;
-
-    String? sharedKey = '';
-    // Fetch AES key in the local secondary.
     try {
-      sharedKey = await AtClientManager.getInstance()
-          .atClient
-          .getLocalSecondary()!
-          .executeVerb(llookupVerbBuilder);
+      key = await _getCachedSharedKey(llookupVerbBuilder);
     } on KeyNotFoundException {
       _logger.finer(
-          '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in local secondary. Fetching from cloud secondary.');
+          '${atKey.key}${atKey.sharedBy} not found in local secondary. Fetching from cloud secondary.');
     }
     // If sharedKey is not found in localSecondary, fetch from remote secondary.
     try {
-      if (sharedKey == null || sharedKey.isEmpty || sharedKey == 'data:null') {
-        sharedKey = await AtClientManager.getInstance()
-            .atClient
-            .getRemoteSecondary()!
-            .executeVerb(llookupVerbBuilder);
+      if (key == null || key.isEmpty || key == 'data:null') {
+        key = await _getSharedKeyFromRemote(llookupVerbBuilder);
       }
     } on AtLookUpException {
       _logger.finer(
           '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
     }
     // If sharedKey is found, decrypt the shared key and return.
-    if (sharedKey == null || sharedKey.isNotEmpty && sharedKey != 'data:null') {
-      sharedKey = sharedKey!.replaceFirst('data:', '');
+    if (key != null && key.isNotEmpty && key != 'data:null') {
+      key = DefaultResponseParser().parse(key).response;
       var encryptionPrivateKey = await AtClientManager.getInstance()
           .atClient
           .getLocalSecondary()!
           .getEncryptionPrivateKey();
-      sharedKey = EncryptionUtil.decryptKey(sharedKey, encryptionPrivateKey!);
+      return EncryptionUtil.decryptKey(key, encryptionPrivateKey!);
     }
-    return sharedKey;
+    return key!;
   }
 
-  /// Fetches for the encrypted sharedKey in the local secondary,
-  /// If found, returns the encrypted SharedKey
-  Future<String> _getEncryptedSharedKey(AtKey atKey) async {
-    //2. Verify if encryptedSharedKey for sharedWith atSign is available.
-    String encryptedSharedKey = '';
-    var lookupEncryptionSharedKey = LLookupVerbBuilder()
-      ..atKey = AT_ENCRYPTION_SHARED_KEY
-      ..sharedWith = atKey.sharedWith
-      ..sharedBy = atKey.sharedBy;
+  ///Get cached shared key from local storage
+  Future<String?> _getCachedSharedKey(
+      LLookupVerbBuilder llookupVerbBuilder) async {
+    return await AtClientManager.getInstance()
+        .atClient
+        .getLocalSecondary()!
+        .executeVerb(llookupVerbBuilder);
+  }
 
-    try {
-      encryptedSharedKey = (await AtClientManager.getInstance()
-          .atClient
-          .getLocalSecondary()!
-          .executeVerb(lookupEncryptionSharedKey))!;
-    } on KeyNotFoundException {
-      _logger.finer(
-          '${atKey.sharedWith}:$AT_ENCRYPTION_SHARED_KEY@${atKey.sharedBy} not found in local secondary. Fetching from cloud secondary');
-    }
-    // Return empty string
-    return encryptedSharedKey;
+  /// Get shared key from cloud secondary
+  Future<String> _getSharedKeyFromRemote(
+      LLookupVerbBuilder llookupVerbBuilder) async {
+    return await AtClientManager.getInstance()
+        .atClient
+        .getRemoteSecondary()!
+        .executeVerb(llookupVerbBuilder);
   }
 
   /// Returns sharedWith atSign publicKey.
   /// Throws [KeyNotFoundException] if sharedWith atSign publicKey is not found.
   Future<String> _getSharedWithPublicKey(AtKey atKey) async {
-    //a local lookup the cached public key of sharedWith atsign.
+    //local lookup the cached public key of sharedWith atsign.
     String sharedWithPublicKey = '';
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
       ..atKey = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
@@ -131,7 +116,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       return sharedWithPublicKey.replaceAll('data:', '');
     }
 
-    //b Lookup public key of sharedWith atSign in cloud secondary
+    // Lookup public key of sharedWith atSign in cloud secondary
     var plookupBuilder = PLookupVerbBuilder()
       ..atKey = 'publickey'
       ..sharedBy = atKey.sharedWith?.replaceAll('@', '');
