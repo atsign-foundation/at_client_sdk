@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtClientValidation {
@@ -53,13 +54,14 @@ class AtClientValidation {
     }
   }
 
-  static void validateAtKey(AtKey atKey) {
+  /// Validates the atKey.
+  static Future<void> validateAtKey(AtKey atKey) async {
     // validates the atKey
     validateKey(atKey.key);
     // validates the metadata
     validateMetadata(atKey.metadata);
     // verifies if the sharedWith atSign exists.
-    if (atKey.sharedWith != null) {
+    if (atKey.sharedWith != null && await NetworkUtil.isNetworkAvailable()) {
       isAtSignExists(
           atKey.sharedWith!,
           AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,

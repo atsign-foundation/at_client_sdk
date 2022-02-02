@@ -67,6 +67,9 @@ String _getKeyWithNameSpace(AtKey atKey) {
   return atKey.key!;
 }
 
+/// Returns the instance of [Secondary] server.
+///
+/// Basing the verb, the appropriate instance of secondary server is returned.
 class SecondaryManager {
   static Secondary getSecondary(VerbBuilder verbBuilder) {
     if (verbBuilder is LookupVerbBuilder ||

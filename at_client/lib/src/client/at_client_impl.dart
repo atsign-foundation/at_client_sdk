@@ -231,7 +231,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
     // validate the get request.
-    AtClientValidation.validateAtKey(atKey);
+    await AtClientValidation.validateAtKey(atKey);
     // Get the verb builder for the atKey
     var verbBuilder = GetRequestTransformer().transform(atKey);
     // Execute the verb.
