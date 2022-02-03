@@ -235,6 +235,7 @@ class NotificationServiceImpl
       _logger.finer(
           'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
       stopAllSubscriptions();
+      _notificationServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }
 }
