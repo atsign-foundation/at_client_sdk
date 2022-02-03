@@ -1,3 +1,8 @@
+## 3.0.9
+- Uptake at_persistence_secondary_server changes
+- Refactor decryption service
+- Introduce request response transformers
+- Refactor get method to use request response transformers
 ## 3.0.8
 - Updated readme and documentation improvements
 ## 3.0.7
