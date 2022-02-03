@@ -7,8 +7,8 @@ class DefaultResponseParser implements ResponseParser {
   /// @param responseString - response coming from secondary server
   /// @returns Response
   @override
-  Response parse(String responseString) {
-    var response = Response();
+  AtResponse parse(String responseString) {
+    var response = AtResponse();
     // if responseString starts with data: will call parseSuccessResponse
     if (responseString.startsWith('data:')) {
       parseSuccessResponse(responseString, response);
@@ -25,7 +25,7 @@ class DefaultResponseParser implements ResponseParser {
   /// @param responseString - response coming from secondary server
   /// @param response - Response object from parse method
   /// @returns void
-  void parseSuccessResponse(String responseString, Response response) {
+  void parseSuccessResponse(String responseString, AtResponse response) {
     response.response = responseString.replaceFirst('data:', '');
   }
 
@@ -35,7 +35,7 @@ class DefaultResponseParser implements ResponseParser {
   /// @param responseString - response coming from secondary server
   /// @param response - Response object from parse method
   /// @returns void
-  void parseFailureResponse(String responseString, Response response) {
+  void parseFailureResponse(String responseString, AtResponse response) {
     // Remove error: from responseString
     responseString = responseString.replaceFirst('error:', '');
     // Set isError to true

@@ -1,10 +1,10 @@
-class Response {
+class AtResponse {
   late String response;
   bool isError = false;
   String? errorCode;
   String? errorDescription;
 
-  Response fromJson(Map<String, dynamic> json) {
+  AtResponse fromJson(Map<String, dynamic> json) {
     response = json['response'];
     isError = json['isError'];
     errorCode = json['errorCode'];

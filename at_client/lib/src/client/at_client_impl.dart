@@ -5,12 +5,12 @@ import 'dart:io';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
-import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -18,6 +18,8 @@ import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
+import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -112,6 +114,7 @@ class AtClientImpl implements AtClient {
       AtClientPreference preference, AtClientManager atClientManager) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
+    _preference?.namespace ??= namespace;
     _namespace = namespace;
     _atClientManager = atClientManager;
   }
@@ -225,232 +228,33 @@ class AtClientImpl implements AtClient {
     return deleteResult != null;
   }
 
-  Future<dynamic> _get(String key,
-      {String? sharedWith,
-      String? sharedBy,
-      bool? isPublic = false,
-      bool isCached = false,
-      bool namespaceAware = true,
-      String? operation}) async {
-    dynamic builder;
-    String keyWithNamespace;
-    if (namespaceAware) {
-      keyWithNamespace = _getKeyWithNamespace(key);
-    } else {
-      keyWithNamespace = key;
-    }
-    if (sharedBy != null && isCached && !isPublic!) {
-      builder = LLookupVerbBuilder()
-        ..atKey = keyWithNamespace
-        ..sharedBy = sharedBy
-        ..isCached = isCached
-        ..sharedWith = currentAtSign
-        ..operation = operation;
-      var encryptedResult = await getSecondary().executeVerb(builder);
-      if (encryptedResult == 'data:null') {
-        return null;
-      }
-      encryptedResult = _formatResult(encryptedResult);
-      var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
-      if (operation == UPDATE_META) {
-        return encryptedResultMap;
-      }
-      if (sharedBy != currentAtSign && operation == UPDATE_ALL) {
-        //resultant value is encrypted. Decrypting to original value.
-        try {
-          var decryptedValue = await _encryptionService!
-              .decrypt(encryptedResultMap['data'], sharedBy);
-          encryptedResultMap['data'] = decryptedValue;
-        } on IllegalArgumentException {
-          _logger.severe(
-              'Decryption failed. encryption value is null for $keyWithNamespace');
-        } on Error catch (e) {
-          _logger.severe(
-              'decryption error for command ${builder.buildCommand()}: $e');
-        }
-      } else {
-        //resultant value is encrypted. Decrypting to original value.
-        var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
-        isEncrypted ??= false;
-        String? decryptedValue;
-        try {
-          decryptedValue = await _encryptionService!
-              .decryptForSelf(encryptedResultMap['data'], isEncrypted);
-        } on IllegalArgumentException {
-          _logger.severe(
-              'Decryption failed. encryption value is null for $keyWithNamespace');
-        }
-        encryptedResultMap['data'] = decryptedValue;
-      }
-      return encryptedResultMap;
-    } else if (sharedBy != null && sharedBy != currentAtSign && !isCached) {
-      if (isPublic!) {
-        builder = PLookupVerbBuilder()
-          ..atKey = keyWithNamespace
-          ..sharedBy = sharedBy;
-        if (operation != null) {
-          builder.operation = operation;
-        }
-        var remoteSecondary = getRemoteSecondary();
-        var result = await remoteSecondary!.executeVerb(builder);
-
-        result = _formatResult(result);
-        return JsonUtils.decodeJson(result);
-      } else {
-        builder = LookupVerbBuilder()
-          ..atKey = keyWithNamespace
-          ..sharedBy = sharedBy
-          ..auth = true;
-        if (operation != null) {
-          builder.operation = operation;
-        }
-        var encryptedResult = await getRemoteSecondary()!.executeVerb(builder);
-        // If lookup response from remote secondary is 'data:null'.
-        if (encryptedResult == 'data:null') {
-          return null;
-        }
-        encryptedResult = _formatResult(encryptedResult);
-        var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
-        if (operation == UPDATE_ALL) {
-          String decryptedValue = '';
-          try {
-            decryptedValue = await _encryptionService!
-                .decrypt(encryptedResultMap['data'], sharedBy);
-          } on IllegalArgumentException {
-            _logger.severe(
-                'Decryption failed. encrypted value is null for $keyWithNamespace');
-          } on KeyNotFoundException catch (e) {
-            var errorCode = AtClientExceptionUtil.getErrorCode(e);
-            return Future.error(AtClientException(errorCode, e.message));
-          }
-          encryptedResultMap['data'] = decryptedValue;
-        }
-        return encryptedResultMap;
-      }
-      // plookup and lookup can be executed only on remote
-    } else if (sharedWith != null) {
-      sharedWith = AtUtils.formatAtSign(sharedWith);
-      builder = LLookupVerbBuilder()
-        ..isCached = isCached
-        ..isPublic = isPublic!
-        ..sharedWith = sharedWith
-        ..atKey = keyWithNamespace
-        ..sharedBy = currentAtSign;
-      if (operation != null) {
-        builder.operation = operation;
-      }
-      if (sharedWith != currentAtSign) {
-        var encryptedResult = await getSecondary().executeVerb(builder);
-        if (encryptedResult != null && encryptedResult == 'data:null') {
-          return null;
-        }
-        // If encrypted result is metadata decryption is not needed.
-        encryptedResult = _formatResult(encryptedResult);
-        var encryptedResultMap = JsonUtils.decodeJson(encryptedResult);
-        if (operation == UPDATE_ALL) {
-          try {
-            var decryptedValue = await _encryptionService!.decryptLocal(
-                encryptedResultMap['data'], currentAtSign, sharedWith!);
-            encryptedResultMap['data'] = decryptedValue;
-          } on Exception catch (e) {
-            _logger.severe(
-                'decryption exception for command ${builder.buildCommand()}: ${e.toString}');
-          } on Error catch (e) {
-            _logger.severe(
-                'decryption error for command ${builder.buildCommand()}: $e');
-          }
-        }
-        return encryptedResultMap;
-      }
-    } else if (isPublic!) {
-      builder = LLookupVerbBuilder()
-        ..isCached = isCached
-        ..atKey = 'public:' + keyWithNamespace;
-      builder.sharedBy = sharedBy ?? currentAtSign;
-    } else {
-      builder = LLookupVerbBuilder()..atKey = keyWithNamespace;
-      if (keyWithNamespace.startsWith(AT_PKAM_PRIVATE_KEY) ||
-          keyWithNamespace.startsWith(AT_PKAM_PUBLIC_KEY)) {
-        builder.sharedBy = null;
-      } else {
-        builder.sharedBy = currentAtSign;
-      }
-    }
-    if (operation != null) {
-      builder.operation = operation;
-    }
-    var result = await getSecondary().executeVerb(builder);
-    if (result == null || result == 'data:null') {
-      return null;
-    }
-    result = _formatResult(result);
-    var encryptedResultMap = JsonUtils.decodeJson(result);
-    //If operation is update_meta, return metadata.
-    if (operation == UPDATE_META) {
-      return encryptedResultMap;
-    }
-    var isEncrypted = encryptedResultMap['metaData']['isEncrypted'];
-    isEncrypted ??= false;
-    String? decryptedValue;
-    try {
-      decryptedValue = await _encryptionService!
-          .decryptForSelf(encryptedResultMap['data'], isEncrypted);
-    } on IllegalArgumentException {
-      _logger.severe(
-          'Decryption failed. encryption value is null for $keyWithNamespace');
-    }
-    encryptedResultMap['data'] = decryptedValue;
-    return encryptedResultMap;
-  }
-
   @override
   Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
-    var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic : false;
-    var namespaceAware =
-        atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
-    var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
-    atKey.sharedBy ??= currentAtSign;
-    var getResult = await _get(atKey.key!,
-        sharedWith: AtUtils.formatAtSign(atKey.sharedWith),
-        sharedBy: AtUtils.formatAtSign(atKey.sharedBy),
-        isPublic: isPublic,
-        isCached: isCached,
-        namespaceAware: namespaceAware,
-        operation: UPDATE_ALL);
-
-    var atValue = AtValue();
-    if (getResult == null || getResult == 'null' || getResult['data'] == null) {
-      return atValue;
+    // validate the get request.
+    await AtClientValidation.validateAtKey(atKey);
+    // Get the verb builder for the atKey
+    var verbBuilder = GetRequestTransformer().transform(atKey);
+    // Execute the verb.
+    var getResponse = await SecondaryManager.getSecondary(verbBuilder)
+        .executeVerb(verbBuilder);
+    // Return empty value if getResponse is null.
+    if (getResponse == null ||
+        getResponse.isEmpty ||
+        getResponse == 'data:null') {
+      return AtValue();
     }
-    if (atKey.metadata != null && atKey.metadata!.isBinary!) {
-      atValue.value = Base2e15.decode(getResult['data']);
-    } else {
-      atValue.value = getResult['data'];
-      if (atValue.value is String) {
-        atValue.value = VerbUtil.getFormattedValue(atValue.value);
-      }
-    }
-    atValue.metadata = _prepareMetadata(getResult['metaData'], isPublic);
-    return atValue;
+    // Send AtKey and AtResponse to transform the response to AtValue.
+    var getResponseTuple = Tuple<AtKey, String>()
+      ..one = atKey
+      ..two = (getResponse);
+    // Transform the response and return
+    return GetResponseTransformer().transform(getResponseTuple);
   }
 
   @override
   Future<Metadata?> getMeta(AtKey atKey, {bool isDedicated = false}) async {
-    var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic : false;
-    var namespaceAware =
-        atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
-    var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
-    var getResult = await _get(atKey.key!,
-        sharedWith: atKey.sharedWith,
-        sharedBy: atKey.sharedBy,
-        isPublic: isPublic,
-        isCached: isCached,
-        namespaceAware: namespaceAware,
-        operation: UPDATE_META);
-    if (getResult == null || getResult == 'null') {
-      return null;
-    }
-    return _prepareMetadata(getResult, isPublic);
+    var atValue = await get(atKey);
+    return atValue.metadata;
   }
 
   @override
@@ -725,45 +529,6 @@ class AtClientImpl implements AtClient {
       result = result.replaceFirst('data:', '');
     }
     return result ??= '';
-  }
-
-  Metadata? _prepareMetadata(
-      Map<String, dynamic>? metadataMap, bool? isPublic) {
-    if (metadataMap == null) {
-      return null;
-    }
-    var metadata = Metadata();
-    metadata.expiresAt =
-        (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
-            ? DateTime.parse(metadataMap['expiresAt'])
-            : null;
-    metadata.availableAt = (metadataMap['availableAt'] != null &&
-            metadataMap['availableAt'] != 'null')
-        ? DateTime.parse(metadataMap['availableAt'])
-        : null;
-    metadata.refreshAt =
-        (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
-            ? DateTime.parse(metadataMap[REFRESH_AT])
-            : null;
-    metadata.createdAt =
-        (metadataMap[CREATED_AT] != null && metadataMap[CREATED_AT] != 'null')
-            ? DateTime.parse(metadataMap[CREATED_AT])
-            : null;
-    metadata.updatedAt =
-        (metadataMap[UPDATED_AT] != null && metadataMap[UPDATED_AT] != 'null')
-            ? DateTime.parse(metadataMap[UPDATED_AT])
-            : null;
-    metadata.ttr = metadataMap[AT_TTR];
-    metadata.ttl = metadataMap[AT_TTL];
-    metadata.ttb = metadataMap[AT_TTB];
-    metadata.ccd = metadataMap[CCD];
-    metadata.isBinary = metadataMap[IS_BINARY];
-    metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
-    metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
-    if (isPublic!) {
-      metadata.isPublic = isPublic;
-    }
-    return metadata;
   }
 
   @override

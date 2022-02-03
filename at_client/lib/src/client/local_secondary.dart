@@ -120,6 +120,9 @@ class LocalSecondary implements Secondary {
       if (builder.isCached) {
         llookupKey += 'cached:';
       }
+      if(builder.isPublic){
+        llookupKey += 'public:';
+      }
       if (builder.sharedWith != null) {
         llookupKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
       }
