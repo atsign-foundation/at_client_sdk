@@ -13,7 +13,7 @@ class AtClientUtil {
     if (builder.isPublic) {
       updateKey += 'public:';
     }
-    if (builder.sharedWith != null) {
+    if (builder.sharedWith != null && builder.sharedWith!.isNotEmpty) {
       updateKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
     }
     updateKey += builder.atKey!;
@@ -51,4 +51,63 @@ class AtClientUtil {
         key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
     return base64Encode(signature);
   }
+
+  static bool isAnyNotNull(
+      {dynamic a1,
+      dynamic a2,
+      dynamic a3,
+      dynamic a4,
+      dynamic a5,
+      dynamic a6}) {
+    return ((a1 != null) ||
+            (a2 != null) ||
+            (a3 != null) ||
+            (a4 != null) ||
+            (a5 != null)) ||
+        (a6 != null);
+  }
+
+  static Metadata? prepareMetadata(
+      Map<String, dynamic>? metadataMap, bool? isPublic) {
+    if (metadataMap == null) {
+      return null;
+    }
+    var metadata = Metadata();
+    metadata.expiresAt =
+        (metadataMap['expiresAt'] != null && metadataMap['expiresAt'] != 'null')
+            ? DateTime.parse(metadataMap['expiresAt'])
+            : null;
+    metadata.availableAt = (metadataMap['availableAt'] != null &&
+            metadataMap['availableAt'] != 'null')
+        ? DateTime.parse(metadataMap['availableAt'])
+        : null;
+    metadata.refreshAt =
+        (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
+            ? DateTime.parse(metadataMap[REFRESH_AT])
+            : null;
+    metadata.createdAt =
+        (metadataMap[CREATED_AT] != null && metadataMap[CREATED_AT] != 'null')
+            ? DateTime.parse(metadataMap[CREATED_AT])
+            : null;
+    metadata.updatedAt =
+        (metadataMap[UPDATED_AT] != null && metadataMap[UPDATED_AT] != 'null')
+            ? DateTime.parse(metadataMap[UPDATED_AT])
+            : null;
+    metadata.ttr = metadataMap[AT_TTR];
+    metadata.ttl = metadataMap[AT_TTL];
+    metadata.ttb = metadataMap[AT_TTB];
+    metadata.ccd = metadataMap[CCD];
+    metadata.isBinary = metadataMap[IS_BINARY];
+    metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
+    metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
+    if (isPublic!) {
+      metadata.isPublic = isPublic;
+    }
+    return metadata;
+  }
+}
+
+class Tuple<T1, T2> {
+  late T1 one;
+  late T2 two;
 }

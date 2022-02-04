@@ -4,9 +4,8 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_isolate_manager.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -17,7 +16,7 @@ import 'package:at_utils/at_logger.dart';
 import 'package:cron/cron.dart';
 
 /// [Deprecate] Use [SyncService]
-@deprecated
+@Deprecated("Use SyncService.Sync")
 class SyncManager {
   var logger = AtSignLogger('SyncManager');
 
@@ -44,12 +43,12 @@ class SyncManager {
     this._localSecondary = _localSecondary;
     this._remoteSecondary = RemoteSecondary(atSign, _preference!,
         privateKey: _preference!.privateKey);
-    if (preference.syncStrategy == SyncStrategy.SCHEDULED && !_isScheduled) {
+    if (preference.syncStrategy == SyncStrategy.scheduled && !_isScheduled) {
       _scheduleSyncTask();
     }
   }
 
-  @deprecated
+  @Deprecated("Use SyncService.isInSync")
   Future<bool> isInSync() async {
     var serverCommitId = await SyncUtil.getLatestServerCommitId(
         _remoteSecondary!, _preference!.syncRegex);
@@ -69,7 +68,7 @@ class SyncManager {
   /// Optionally isStream when set to true, initiates the sync process via streams which facilitates in
   /// syncing large data without [BufferOverFlowException].
   /// [Deprecated] Use [SyncService]
-  @deprecated
+  @Deprecated("Use SyncService.sync")
   Future<void> sync({bool appInit = false, String? regex}) async {
     //initially isSyncInProgress and pendingSyncExists are false.
     //If a new sync triggered while previous sync isInprogress,then pendingSyncExists set to true and returns.
@@ -129,7 +128,7 @@ class SyncManager {
           var syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
           if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
             syncResponse = syncResponse.replaceFirst('data:', '');
-            var syncResponseJson = jsonDecode(syncResponse);
+            var syncResponseJson = JsonUtils.decodeJson(syncResponse);
             // Iterates over each commit
             await Future.forEach(syncResponseJson,
                 (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
@@ -195,8 +194,8 @@ class SyncManager {
         SyncIsolateManager.executeRemoteCommandIsolate,
         commitIdReceivePort.sendPort);
     var syncDone = false;
-    var syncSendPort;
-    var pushedCount;
+    dynamic syncSendPort;
+    dynamic pushedCount;
     commitIdReceivePort.listen((message) async {
       if (syncSendPort == null && message is SendPort) {
         //1. Request to isolate to get latest server commit id from server
@@ -243,7 +242,7 @@ class SyncManager {
               for (var entry in unCommittedEntries) {
                 var command = await _getCommand(entry);
                 logger.info('command:$command');
-                var builder;
+                dynamic builder;
                 switch (entry.operation) {
                   case CommitOp.UPDATE:
                     builder = UpdateVerbBuilder.getBuilder(command);
@@ -281,10 +280,10 @@ class SyncManager {
           case 'push_to_remote_result':
             // 3.2 Update/delete verb commit id response from server. Update server commit id in local commit log.
             var serverCommitId = message['operation_commit_id'];
-            var entry_key = message['entry_key'];
-            var entry = SyncUtil.getEntry(entry_key, _atSign!);
+            dynamic entryKey = message['entry_key'];
+            var entry = SyncUtil.getEntry(entryKey, _atSign!);
             logger.info(
-                'received remote push result: $entry_key $entry $entry_key');
+                'received remote push result: $entryKey $entry $entryKey');
             await SyncUtil.updateCommitEntry(
                 entry, int.parse(serverCommitId), _atSign!);
             pushedCount--;
@@ -397,7 +396,7 @@ class SyncManager {
   }
 
   Future<String> _getCommand(CommitEntry entry) async {
-    late var command;
+    late String command;
     // ignore: missing_enum_constant_in_switch
     switch (entry.operation) {
       case CommitOp.UPDATE:

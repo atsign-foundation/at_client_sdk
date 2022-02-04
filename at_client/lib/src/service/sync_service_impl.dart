@@ -6,8 +6,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -42,21 +42,26 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   final _logger = AtSignLogger('SyncService');
 
-  static Future<SyncService> create(AtClient atClient) async {
+  late AtClientManager _atClientManager;
+
+  static Future<SyncService> create(AtClient atClient,
+      {required AtClientManager atClientManager}) async {
     if (_syncServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _syncServiceMap[atClient.getCurrentAtSign()]!;
     }
-    final syncService = SyncServiceImpl._(atClient);
+    final syncService = SyncServiceImpl._(atClientManager, atClient);
     await syncService._statsServiceListener();
     syncService._scheduleSyncRun();
     _syncServiceMap[atClient.getCurrentAtSign()!] = syncService;
     return _syncServiceMap[atClient.getCurrentAtSign()]!;
   }
 
-  SyncServiceImpl._(this._atClient) {
+  SyncServiceImpl._(AtClientManager atClientManager, AtClient atClient) {
+    _atClientManager = atClientManager;
+    _atClient = atClient;
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
-    AtClientManager.getInstance().listenToAtSignChange(this);
+    _atClientManager.listenToAtSignChange(this);
   }
 
   void _scheduleSyncRun() {
@@ -232,8 +237,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncResult.lastSyncedOn = DateTime.now().toUtc();
       syncResult.syncStatus = SyncStatus.success;
     } on Exception catch (e) {
-      syncResult.atClientException = AtClientException(
-          at_client_error_codes['SyncException'], e.toString());
+      syncResult.atClientException =
+          AtClientException(atClientErrorCodes['SyncException'], e.toString());
       syncResult.syncStatus = SyncStatus.failure;
     }
     return syncResult;
@@ -289,8 +294,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var syncResponse = DefaultResponseParser()
           .parse(await _remoteSecondary.executeVerb(syncBuilder));
 
-      var syncResponseJson = jsonDecode(syncResponse.response);
-      _logger.finest('** syncResponse ${syncResponseJson}');
+      var syncResponseJson = JsonUtils.decodeJson(syncResponse.response);
+      _logger.finest('** syncResponse $syncResponseJson');
       // Iterates over each commit
       await Future.forEach(syncResponseJson,
           (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
@@ -317,7 +322,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   Future<String> _getCommand(CommitEntry entry) async {
-    late var command;
+    late String command;
     // ignore: missing_enum_constant_in_switch
     switch (entry.operation) {
       case CommitOp.UPDATE:
@@ -416,11 +421,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var lastSyncEntry = await SyncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
         atSign: _atClient.getCurrentAtSign()!);
-    var localCommitId;
+    int localCommitId;
     // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
     // Else set to -1.
-    (lastSyncEntry != null)
-        ? localCommitId = lastSyncEntry.commitId
+    (lastSyncEntry != null && lastSyncEntry.commitId != null)
+        ? localCommitId = lastSyncEntry.commitId!
         : localCommitId = -1;
     return localCommitId;
   }
@@ -550,7 +555,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
 ///Class to represent sync response.
 class SyncResult {
-  SyncStatus syncStatus = SyncStatus.not_started;
+  SyncStatus syncStatus = SyncStatus.notStarted;
   AtClientException? atClientException;
   DateTime? lastSyncedOn;
   bool dataChange = true;
@@ -562,7 +567,7 @@ class SyncResult {
 }
 
 ///Enum to represent the sync status
-enum SyncStatus { not_started, success, failure }
+enum SyncStatus { notStarted, success, failure }
 
 enum SyncRequestSource { app, system }
 

@@ -1,3 +1,16 @@
+## 3.0.9
+- Uptake at_persistence_secondary_server changes
+- Refactor decryption service
+- Introduce request response transformers
+- Refactor get method to use request response transformers
+## 3.0.8
+- Updated readme and documentation improvements
+## 3.0.7
+- Uptake at_persistence_secondary_server changes
+- Resolve dart analyzer issues
+- Run dart formatter
+## 3.0.6
+- Uptake AtKey validations
 ## 3.0.5
 - Uptake at_persistence_secondary_server changes
 ## 3.0.4

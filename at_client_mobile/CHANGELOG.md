@@ -1,3 +1,18 @@
+## 3.1.4
+- updated readme and  doc changes
+- added example app
+## 3.1.3
+- at_client version change
+- at_lookup version change
+- at_commons and at_utils version change
+## 3.1.2
+- **FIX**: Added check to use flutter_keychain only on mobile platforms
+## 3.1.1
+- at_client version change
+## 3.1.0
+- moved keys storage from flutter_keychain to biometric_storage
+- updated package dependencies
+- updated documentation
 ## 3.0.3
 - at_client version change
 ## 3.0.2

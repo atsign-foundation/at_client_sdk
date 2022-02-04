@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
+
 import 'test_util.dart';
 
 void main() async {
@@ -9,10 +11,10 @@ void main() async {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
-    var stats_result = await atClient
+    var statsResult = await atClient
         .getRemoteSecondary()!
         .executeCommand('stats\n', auth: true);
-    print(stats_result);
+    print(statsResult);
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

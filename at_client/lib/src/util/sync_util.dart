@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -9,6 +9,7 @@ import 'package:at_utils/at_logger.dart';
 
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
+
   static Future<CommitEntry?> getCommitEntry(
       int sequenceNumber, String atSign) async {
     var commitLogInstance =
@@ -29,7 +30,7 @@ class SyncUtil {
     var commitLogInstance =
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
 
-    var lastEntry;
+    CommitEntry? lastEntry;
     if (regex != null) {
       lastEntry = await commitLogInstance!.lastSyncedEntryWithRegex(regex);
     } else {
@@ -75,14 +76,14 @@ class SyncUtil {
 
   static Future<int?> getLatestServerCommitId(
       RemoteSecondary remoteSecondary, String? regex) async {
-    var commitId;
+    int? commitId;
     var builder = StatsVerbBuilder()..statIds = '3';
     if (regex != null && regex != 'null' && regex.isNotEmpty) {
       builder.regex = regex;
     }
     var result = await remoteSecondary.executeVerb(builder);
     result = result.replaceAll('data: ', '');
-    var statsJson = jsonDecode(result);
+    var statsJson = JsonUtils.decodeJson(result);
     if (statsJson[0]['value'] != 'null') {
       commitId = int.parse(statsJson[0]['value']);
     }
