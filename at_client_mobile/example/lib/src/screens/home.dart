@@ -176,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }).toList(),
                         onChanged: (String? value) {
-                          if(value != null){
+                          if (value != null) {
                             _selectedStrings.add(value);
                           }
                           setState(() {
