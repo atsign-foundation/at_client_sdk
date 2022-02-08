@@ -43,6 +43,7 @@ class NotificationServiceImpl
   Future<void> _init() async {
     _logger.finer('notification init starting monitor');
     await _startMonitor();
+    _logger.finer('monitor status: ${_monitor?.getStatus()}');
     if (_connectivityListener == null) {
       _connectivityListener = ConnectivityListener();
       _connectivityListener!.subscribe().listen((isConnected) {
@@ -237,5 +238,14 @@ class NotificationServiceImpl
       stopAllSubscriptions();
       _notificationServiceMap.remove(_atClient.getCurrentAtSign());
     }
+  }
+
+  MonitorStatus? getMonitorStatus() {
+    if (_monitor == null) {
+      _logger.severe('monitor not initialised');
+      return null;
+    }
+    _logger.finer('monitor status: ${_monitor!.getStatus()}');
+    return _monitor!.getStatus();
   }
 }
