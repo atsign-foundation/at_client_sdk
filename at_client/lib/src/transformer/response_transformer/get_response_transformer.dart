@@ -37,7 +37,7 @@ class GetResponseTransformer
 
     // For public and cached public keys, data is not encrypted.
     // Decrypt the data, for other keys
-    if (!(decodedResponse['key'].startsWith('public:')) ||
+    if (!(decodedResponse['key'].startsWith('public:')) &&
         !(decodedResponse['key'].startsWith('cached:public:'))) {
       var decryptionService = AtKeyDecryptionManager.get(tuple.one,
           AtClientManager.getInstance().atClient.getCurrentAtSign()!);
