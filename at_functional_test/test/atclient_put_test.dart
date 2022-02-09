@@ -107,6 +107,48 @@ void main() {
     var getResult = await atClient.get(phoneKey);
     expect(getResult.value, value);
   });
+
+  test('put method - create a public key with binary data', () async {
+    var atsign = '@alice🛠';
+    var preference = getAlicePreference(atsign);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    atClientManager.syncService.sync();
+    // To setup encryption keys
+    await setEncryptionKeys(atsign, preference);
+    // phone.me@alice🛠
+    var phoneKey = AtKey()
+      ..key = 'image'
+      ..metadata = (Metadata()
+        ..isBinary = true
+        ..isPublic = true);
+    var value = _getBinaryData("/test/testData/dev.png");
+    var putResult = await atClient.put(phoneKey, value);
+    expect(putResult, true);
+    var getResult = await atClient.get(phoneKey);
+    expect(getResult.value, value);
+  });
+
+  test('put method - create a public key', () async {
+    var atsign = '@alice🛠';
+    var preference = getAlicePreference(atsign);
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'me', preference);
+    var atClient = atClientManager.atClient;
+    atClientManager.syncService.sync();
+    // To setup encryption keys
+    await setEncryptionKeys(atsign, preference);
+    // phone.me@alice🛠
+    var phoneKey = AtKey()
+      ..key = 'city'
+      ..metadata = (Metadata()..isPublic = true);
+    var value = 'copenhagen';
+    var putResult = await atClient.put(phoneKey, value);
+    expect(putResult, true);
+    var getResult = await atClient.get(phoneKey);
+    expect(getResult.value, value);
+  });
   tearDown(() async => await tearDownFunc());
 }
 

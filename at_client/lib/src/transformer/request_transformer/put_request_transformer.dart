@@ -1,5 +1,6 @@
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_commons/at_builders.dart';
@@ -10,7 +11,7 @@ import 'package:at_utils/at_utils.dart';
 class PutRequestTransformer
     extends Transformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   @override
-  UpdateVerbBuilder transform(Tuple<AtKey, dynamic> tuple) {
+  Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple) async {
     // Set the default metadata if not already set.
     tuple.one.metadata ??= Metadata();
     // Set sharedBy to currentAtSign if not set.
@@ -39,14 +40,20 @@ class PutRequestTransformer
     } else {
       updateVerbBuilder.value = tuple.two;
     }
-
+    //Encrypt the data for non public keys
+    if (!tuple.one.metadata!.isPublic!) {
+      var encryptionService = AtKeyEncryptionManager.get(tuple.one,
+          AtClientManager.getInstance().atClient.getCurrentAtSign()!);
+      updateVerbBuilder.value =
+          await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
+    }
     return updateVerbBuilder;
   }
 
   /// Populated [UpdateVerbBuilder] for the given [AtKey]
   UpdateVerbBuilder _populateUpdateVerbBuilder(AtKey atKey) {
     UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey = atKey.key
+      ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
       ..sharedWith = AtUtils.formatAtSign(atKey.sharedWith)
       ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
       ..isPublic =
