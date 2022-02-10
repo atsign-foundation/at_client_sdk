@@ -92,8 +92,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Listens on stats notification sent by the cloud secondary server
   Future<void> _statsServiceListener() async {
-    _statsNotificationListener = await NotificationServiceImpl.create(_atClient)
-        as NotificationServiceImpl;
+    _statsNotificationListener = await NotificationServiceImpl.create(_atClient,
+        atClientManager: _atClientManager) as NotificationServiceImpl;
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
     _statsNotificationListener
@@ -543,6 +543,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'stopping stats notificationlistener for ${_atClient.getCurrentAtSign()}');
       _statsNotificationListener.stopAllSubscriptions();
       _cron.close();
+      _logger.finer(
+          'removing from _syncServiceMap: ${_atClient.getCurrentAtSign()}');
       _syncServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }
