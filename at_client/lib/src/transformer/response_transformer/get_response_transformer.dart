@@ -30,21 +30,21 @@ class GetResponseTransformer
           decodedResponse['key'].startsWith('public:'));
     }
 
-    // If data is binary, decode the data
-    if (atValue.metadata != null &&
-        atValue.metadata!.isBinary != null &&
-        atValue.metadata!.isBinary!) {
-      atValue.value = Base2e15.decode(atValue.value);
-    }
-
-    // If data is encrypted, decrypt the data
-    if (atValue.metadata != null &&
-        atValue.metadata!.isEncrypted != null &&
-        atValue.metadata!.isEncrypted!) {
+    // For public and cached public keys, data is not encrypted.
+    // Decrypt the data, for other keys
+    if (!(decodedResponse['key'].startsWith('public:')) &&
+        !(decodedResponse['key'].startsWith('cached:public:'))) {
       var decryptionService = AtKeyDecryptionManager.get(tuple.one,
           AtClientManager.getInstance().atClient.getCurrentAtSign()!);
       atValue.value =
           await decryptionService.decrypt(tuple.one, atValue.value) as String;
+    }
+
+    // After decrypting the data, if data is binary, decode the data
+    if (atValue.metadata != null &&
+        atValue.metadata!.isBinary != null &&
+        atValue.metadata!.isBinary!) {
+      atValue.value = Base2e15.decode(atValue.value);
     }
     return atValue;
   }
