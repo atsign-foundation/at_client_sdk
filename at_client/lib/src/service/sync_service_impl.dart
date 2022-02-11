@@ -127,13 +127,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   Future<void> _processSyncRequests() async {
+    final syncProgress = SyncProgress()..syncStatus = SyncStatus.started;
+    syncProgress.startedAt = DateTime.now().toUtc();
     _logger.finest('in _processSyncRequests');
     if (_syncInProgress) {
       _logger.finer('**** another sync in progress');
+      syncProgress.message = 'another sync in progress';
+      _informSyncProgress(syncProgress);
       return;
     }
     if (!await NetworkUtil.isNetworkAvailable()) {
       _logger.finer('skipping sync due to network unavailability');
+      syncProgress.syncStatus = SyncStatus.failure;
+      syncProgress.message = 'network unavailable';
+      _informSyncProgress(syncProgress);
       return;
     }
     if (_syncRequests.isEmpty ||
@@ -157,6 +164,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ..dataChange = false;
         _syncComplete(syncRequest);
         _syncInProgress = false;
+        syncProgress.syncStatus = SyncStatus.success;
+        _informSyncProgress(syncProgress);
         return;
       }
     } on AtLookUpException catch (e) {
@@ -166,23 +175,31 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           AtClientException(e.errorCode, e.errorMessage);
       _syncError(syncRequest);
       _syncInProgress = false;
+      syncProgress.syncStatus = SyncStatus.failure;
+      _informSyncProgress(syncProgress);
       return;
     }
     _syncInProgress = true;
     final serverCommitId = await _getServerCommitId();
     await _sync(serverCommitId, syncRequest);
     _syncComplete(syncRequest);
-    _updateProgress(SyncStatus.success, serverCommitId: serverCommitId);
+    syncProgress.syncStatus = SyncStatus.success;
+    _informSyncProgress(syncProgress, serverCommitId: serverCommitId);
     _syncInProgress = false;
   }
 
-  void _updateProgress(SyncStatus status, {int? serverCommitId}) {
+  void _informSyncProgress(SyncProgress syncProgress, {int? serverCommitId}) {
     for (var listener in _syncProgressListeners) {
-      final syncProgress = SyncProgress()..syncStatus = status;
       if (serverCommitId == -1) {
         syncProgress.isInitialSync = true;
       }
-      listener.onSync(syncProgress);
+      try {
+        syncProgress.completedAt = DateTime.now().toUtc();
+        listener.onSync(syncProgress);
+      } on Exception catch (e) {
+        _logger.severe(
+            'unable to inform sync progress to listener $listener. Exception ${e.toString()}');
+      }
     }
   }
 
