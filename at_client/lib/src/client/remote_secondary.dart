@@ -31,9 +31,13 @@ class RemoteSecondary implements Secondary {
   /// Optionally [privateKey] is passed for verb builders which require authentication.
   @override
   Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
-    String verbResult;
-    verbResult = await atLookUp.executeVerb(builder);
-    return verbResult;
+    try {
+      String verbResult;
+      verbResult = await atLookUp.executeVerb(builder);
+      return verbResult;
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    }
   }
 
   Future<String> executeAndParse(VerbBuilder builder, {sync = false}) async {
