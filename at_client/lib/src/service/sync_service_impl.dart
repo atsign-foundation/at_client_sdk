@@ -122,7 +122,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _syncProgressListeners.add(listener);
   }
 
-  void removerProgressListener(SyncProgressListener listener) {
+  void removeProgressListener(SyncProgressListener listener) {
     _syncProgressListeners.remove(listener);
   }
 
