@@ -181,9 +181,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     _syncInProgress = true;
     final serverCommitId = await _getServerCommitId();
-    await _sync(serverCommitId, syncRequest);
+    final syncResult = await _sync(serverCommitId, syncRequest);
     _syncComplete(syncRequest);
-    syncProgress.syncStatus = SyncStatus.success;
+    syncProgress.syncStatus = syncResult.syncStatus;
     _informSyncProgress(syncProgress, serverCommitId: serverCommitId);
     _syncInProgress = false;
   }
