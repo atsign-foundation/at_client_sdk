@@ -25,7 +25,7 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    var notification = await NotificationServiceImpl.create(atClient);
+    var notification = await NotificationServiceImpl.create(atClient, atClientManager: atClientManager);
     var result = await notification
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(result.notificationStatusEnum.toString(),
@@ -98,7 +98,7 @@ void main() {
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
-    var notification = await NotificationServiceImpl.create(atClient);
+    var notification = await NotificationServiceImpl.create(atClient, atClientManager: atClientManager);
     var notificationResult = await notification
         .notify(NotificationParams.forText('Hello', '@bob🛠'));
     expect(notificationResult.notificationStatusEnum.toString(),

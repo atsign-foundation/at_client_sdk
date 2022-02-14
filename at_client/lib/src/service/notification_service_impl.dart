@@ -25,30 +25,38 @@ class NotificationServiceImpl
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
   dynamic _lastMonitorRetried;
+  late AtClientManager _atClientManager;
 
-  static Future<NotificationService> create(AtClient atClient) async {
+  static Future<NotificationService> create(AtClient atClient,
+      {required AtClientManager atClientManager}) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
-    final notificationService = NotificationServiceImpl._(atClient);
+    final notificationService =
+        NotificationServiceImpl._(atClientManager, atClient);
     await notificationService._init();
     _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
-  NotificationServiceImpl._(AtClient atClient) {
+  NotificationServiceImpl._(
+      AtClientManager atClientManager, AtClient atClient) {
+    _atClientManager = atClientManager;
     _atClient = atClient;
+    _atClientManager.listenToAtSignChange(this);
   }
 
   Future<void> _init() async {
-    _logger.finer('notification init starting monitor');
+    _logger.finer('${_atClient.getCurrentAtSign()} notification service init');
     await _startMonitor();
-    _logger.finer('monitor status: ${_monitor?.getStatus()}');
+    _logger.finer(
+        '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
     if (_connectivityListener == null) {
       _connectivityListener = ConnectivityListener();
       _connectivityListener!.subscribe().listen((isConnected) {
         if (isConnected) {
-          _logger.finer('starting monitor through connectivity listener event');
+          _logger.finer(
+              '${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
           _startMonitor();
         } else {
           _logger.finer('lost network connectivity');
@@ -134,7 +142,8 @@ class NotificationServiceImpl
       return;
     }
     if (_isMonitorPaused) {
-      _logger.finer('monitor is paused. not retrying');
+      _logger.finer(
+          '${_atClient.getCurrentAtSign()} monitor is paused. not retrying');
       return;
     }
     _lastMonitorRetried = DateTime.now().toUtc();
@@ -236,16 +245,19 @@ class NotificationServiceImpl
       _logger.finer(
           'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
       stopAllSubscriptions();
+      _logger.finer(
+          'removing from _notificationServiceMap: ${_atClient.getCurrentAtSign()}');
       _notificationServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }
 
   MonitorStatus? getMonitorStatus() {
     if (_monitor == null) {
-      _logger.severe('monitor not initialised');
+      _logger.severe('${_atClient.getCurrentAtSign()} monitor not initialised');
       return null;
     }
-    _logger.finer('monitor status: ${_monitor!.getStatus()}');
+    _logger.finer(
+        '${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
     return _monitor!.getStatus();
   }
 }
