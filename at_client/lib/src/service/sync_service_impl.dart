@@ -33,7 +33,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
-  final List<SyncProgressListener> _syncProgressListeners = [];
+  final Set<SyncProgressListener> _syncProgressListeners = HashSet();
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
   static final Map<String, SyncService> _syncServiceMap = {};
