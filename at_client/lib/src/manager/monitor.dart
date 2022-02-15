@@ -17,6 +17,11 @@ import 'package:crypton/crypton.dart';
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
 ///
+
+enum MonitorStatus { notStarted, started, stopped, errored }
+
+final _logger = AtSignLogger('Monitor');
+
 class Monitor {
   // Regex on with what the monitor is started
   String? _regex;
@@ -33,8 +38,6 @@ class Monitor {
   // Status on the monitor
   MonitorStatus status = MonitorStatus.notStarted;
 
-  final _logger = AtSignLogger('Monitor');
-
   bool _keepAlive = false;
 
   late String _atSign;
@@ -49,9 +52,13 @@ class Monitor {
 
   OutboundConnection? _monitorConnection;
 
-  RemoteSecondary? _remoteSecondary;
+  late RemoteSecondary _remoteSecondary;
 
   final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
+
+  late MonitorConnectivityChecker _monitorConnectivityChecker;
+
+  late MonitorOutboundConnectionFactory _monitorOutboundConnectionFactory;
 
   ///
   /// Creates a [Monitor] object.
@@ -92,7 +99,12 @@ class Monitor {
       String atSign,
       AtClientPreference preference,
       MonitorPreference monitorPreference,
-      Function retryCallBack) {
+      Function retryCallBack,
+      {
+        RemoteSecondary? remoteSecondary,
+        MonitorConnectivityChecker? monitorConnectivityChecker,
+        MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory
+      }) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -100,8 +112,10 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
-    _remoteSecondary ??= RemoteSecondary(atSign, preference);
+    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference);
     _retryCallBack = retryCallBack;
+    _monitorConnectivityChecker = monitorConnectivityChecker ?? MonitorConnectivityChecker();
+    _monitorOutboundConnectionFactory = monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -124,6 +138,7 @@ class Monitor {
     }
     try {
       await _checkConnectivity();
+
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
@@ -143,67 +158,56 @@ class Monitor {
           'monitor started for $_atSign with last notification time: $_lastNotificationTime');
 
       return;
-    } on Exception catch (e) {
+    } on Exception catch (e, s) {
+      print (s.toString());
       _handleError(e);
     }
   }
 
   Future<void> _authenticateConnection() async {
-    await _monitorConnection!.write('from:$_atSign\n');
+    var fromVerbRequest = 'from:$_atSign\n';
+    _logger.shout("authenticate sending $fromVerbRequest");
+    await _monitorConnection!.write(fromVerbRequest);
+    _logger.shout("authenticate sent $fromVerbRequest");
     var fromResponse = await _getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
     }
-    _logger.finer(
+    _logger.shout(
         'Authenticating the monitor connection: from result:$fromResponse');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature =
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
-    _logger.finer('Authenticating the monitor connection: pkam:$signature');
+    _logger.shout('Authenticating the monitor connection: pkam:$signature');
     await _monitorConnection!.write('pkam:$signature\n');
+    _logger.shout("Waiting for PKAM response");
     var pkamResponse = await _getQueueResponse();
+    _logger.shout("Received PKAM response: $pkamResponse");
     if (!pkamResponse.contains('success')) {
       throw UnAuthenticatedException(
           'Monitor connection authentication failed');
     }
-    _logger.finer('Monitor connection authentication successful');
+    _logger.shout('Monitor connection authentication successful');
   }
 
-  Future<OutboundConnection> _createNewConnection(
-      String toAtSign, String rootDomain, int rootPort) async {
-    //1. find secondary url for atsign from lookup library
-    var secondaryUrl =
-        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
+  Future<OutboundConnection> _createNewConnection(String toAtSign, String rootDomain, int rootPort) async {
+    //1. look up the secondary url for this atsign
+    var secondaryUrl = await _remoteSecondary.findSecondaryUrl();
     if (secondaryUrl == null) {
       throw Exception('Secondary url not found');
     }
-    var secondaryInfo = _getSecondaryInfo(secondaryUrl);
-    var host = secondaryInfo[0];
-    var port = secondaryInfo[1];
 
     //2. create a connection to secondary server
-    var secureSocket = await SecureSocket.connect(host, int.parse(port));
-    OutboundConnection _monitorConnection =
-        OutboundConnectionImpl(secureSocket);
-    return _monitorConnection;
-  }
-
-  List<String> _getSecondaryInfo(String url) {
-    var result = <String>[];
-    if (url.contains(':')) {
-      var arr = url.split(':');
-      result.add(arr[0]);
-      result.add(arr[1]);
-    }
-    return result;
+    var outboundConnection = await _monitorOutboundConnectionFactory.createConnection(secondaryUrl);
+    return outboundConnection;
   }
 
   ///Returns the response of the monitor verb queue.
   Future<String> _getQueueResponse() async {
     dynamic monitorResponse;
-    //waits for 30 seconds
-    for (var i = 0; i < 6000; i++) {
+    //waits for 1 seconds
+    for (var i = 0; i < 10000; i++) {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
@@ -268,19 +272,15 @@ class Monitor {
   }
 
   Future<void> _checkConnectivity() async {
-    if (!(await NetworkUtil.isNetworkAvailable())) {
-      throw AtConnectException('Internet connection unavailable to sync');
-    }
-    if (!(await _remoteSecondary!.isAvailable())) {
-      throw AtConnectException('Secondary server is unavailable');
-    }
-    return;
+    await _monitorConnectivityChecker.checkConnectivity(_remoteSecondary);
   }
 
   /// Handles messages on the inbound client's connection and calls the verb executor
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
   Future<void> _messageHandler(data) async {
+    _logger.shout("_messageHandler received data");
+
     String result;
     if (!_buffer.isOverFlow(data)) {
       // skip @ prompt. byte code for @ is 64
@@ -311,4 +311,38 @@ class Monitor {
   }
 }
 
-enum MonitorStatus { notStarted, started, stopped, errored }
+class MonitorConnectivityChecker {
+  Future<void> checkConnectivity(RemoteSecondary? remoteSecondary) async {
+    if (remoteSecondary == null) {
+      throw AtConnectException('No remoteSecondary for which to check connectivity');
+    }
+    if (!(await NetworkUtil.isNetworkAvailable())) {
+      throw AtConnectException('Internet connection unavailable to sync');
+    }
+    if (!(await remoteSecondary!.isAvailable())) {
+      throw AtConnectException('Secondary server is unavailable');
+    }
+    return;
+  }
+}
+
+class MonitorOutboundConnectionFactory {
+  Future<OutboundConnection> createConnection(String secondaryUrl) async {
+    var secondaryInfo = _getSecondaryInfo(secondaryUrl);
+    var host = secondaryInfo[0];
+    var port = secondaryInfo[1];
+
+    var secureSocket = await SecureSocket.connect(host, int.parse(port));
+    return OutboundConnectionImpl(secureSocket);
+  }
+
+  List<String> _getSecondaryInfo(String url) {
+    var result = <String>[];
+    if (url.contains(':')) {
+      var arr = url.split(':');
+      result.add(arr[0]);
+      result.add(arr[1]);
+    }
+    return result;
+  }
+}
