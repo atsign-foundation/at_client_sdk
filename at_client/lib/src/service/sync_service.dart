@@ -38,4 +38,7 @@ abstract class SyncService {
 
   /// Adds a listener that is notified about [SyncProgress]
   void addProgressListener(SyncProgressListener listener);
+
+  /// Removes a sync progress listener
+  void removeProgressListener(SyncProgressListener listener);
 }

@@ -118,10 +118,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     });
   }
 
+  @override
   void addProgressListener(SyncProgressListener listener) {
     _syncProgressListeners.add(listener);
   }
 
+  @override
   void removeProgressListener(SyncProgressListener listener) {
     _syncProgressListeners.remove(listener);
   }
