@@ -170,25 +170,26 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _informSyncProgress(syncProgress);
         return;
       }
-    } on AtLookUpException catch (e) {
+
+      _syncInProgress = true;
+      final serverCommitId = await _getServerCommitId();
+      final localCommitId = await _getLocalCommitId();
+      final syncResult = await _sync(serverCommitId, syncRequest);
+      _syncComplete(syncRequest);
+      syncProgress.syncStatus = syncResult.syncStatus;
+      _informSyncProgress(syncProgress, localCommitId: localCommitId);
+      _syncInProgress = false;
+    } on Exception catch (e) {
       _logger.severe(
-          'Atlookup exception for sync ${syncRequest.id}. Reason ${e.toString()}');
+          'Exception in sync ${syncRequest.id}. Reason ${e.toString()}');
       syncRequest.result!.atClientException =
-          AtClientException(e.errorCode, e.errorMessage);
+          AtClientException(atClientErrorCodes['SyncException'], e.toString());
       _syncError(syncRequest);
       _syncInProgress = false;
       syncProgress.syncStatus = SyncStatus.failure;
       _informSyncProgress(syncProgress);
-      return;
     }
-    _syncInProgress = true;
-    final serverCommitId = await _getServerCommitId();
-    final localCommitId = await _getLocalCommitId();
-    final syncResult = await _sync(serverCommitId, syncRequest);
-    _syncComplete(syncRequest);
-    syncProgress.syncStatus = syncResult.syncStatus;
-    _informSyncProgress(syncProgress, localCommitId: localCommitId);
-    _syncInProgress = false;
+    return;
   }
 
   void _informSyncProgress(SyncProgress syncProgress, {int? localCommitId}) {
@@ -256,34 +257,28 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   Future<SyncResult> _sync(int serverCommitId, SyncRequest syncRequest) async {
     var syncResult = syncRequest.result!;
-    try {
-      _logger.finer('Sync in progress');
-      var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
-          _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
-      // Get lastSyncedLocalSeq to get the list of uncommitted entries.
-      var lastSyncedLocalSeq =
-          lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-      var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
-          lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
-      var localCommitId = await _getLocalCommitId();
-      if (serverCommitId > localCommitId) {
-        _logger.finer('syncing to local');
-        await _syncFromServer(serverCommitId, localCommitId);
-      }
-      if (unCommittedEntries.isNotEmpty) {
-        _logger.finer(
-            'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
-        await _syncToRemote(unCommittedEntries);
-      }
-      syncResult.lastSyncedOn = DateTime.now().toUtc();
-      syncResult.syncStatus = SyncStatus.success;
-    } on Exception catch (e) {
-      syncResult.atClientException =
-          AtClientException(atClientErrorCodes['SyncException'], e.toString());
-      syncResult.syncStatus = SyncStatus.failure;
+    _logger.finer('Sync in progress');
+    var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
+        _atClient.getPreferences()!.syncRegex,
+        atSign: _atClient.getCurrentAtSign()!);
+    // Get lastSyncedLocalSeq to get the list of uncommitted entries.
+    var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
+    var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
+        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
+        atSign: _atClient.getCurrentAtSign()!);
+    var localCommitId = await _getLocalCommitId();
+    if (serverCommitId > localCommitId) {
+      _logger.finer('syncing to local');
+      await _syncFromServer(serverCommitId, localCommitId);
     }
+    if (unCommittedEntries.isNotEmpty) {
+      _logger.finer(
+          'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
+      await _syncToRemote(unCommittedEntries);
+    }
+    syncResult.lastSyncedOn = DateTime.now().toUtc();
+    syncResult.syncStatus = SyncStatus.success;
+
     return syncResult;
   }
 
