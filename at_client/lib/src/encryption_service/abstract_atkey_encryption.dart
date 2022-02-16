@@ -5,7 +5,6 @@ import 'package:at_client/src/encryption_service/stream_encryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
@@ -68,7 +67,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       if (key == null || key.isEmpty || key == 'data:null') {
         key = await _getSharedKeyFromRemote(atKey);
       }
-    } on AtLookUpException {
+    } on AtClientException {
       AtSignLogger('AbstractAtKeyEncryption').finer(
           '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
     }

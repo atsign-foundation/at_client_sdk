@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 
@@ -47,7 +46,7 @@ class EncryptionService {
       if (sharedKey == null || sharedKey == 'data:null') {
         sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
       }
-    } on AtLookUpException {
+    } on AtClientException {
       logger.finer(
           '${llookupVerbBuilder.atKey}$currentAtSign not found in remote secondary. Generating a new shared key');
     }
@@ -78,6 +77,7 @@ class EncryptionService {
     // a. encryptedSharedKey not available (or)
     // b. If the sharedKey is changed.
     if (result == null || result == 'data:null' || !isSharedKeyAvailable) {
+      // ignore: prefer_typing_uninitialized_variables
       var sharedWithPublicKey;
       try {
         sharedWithPublicKey = await _getSharedWithPublicKey(sharedWithUser);
@@ -125,6 +125,7 @@ class EncryptionService {
           'Decryption failed. Encrypted value is null');
     }
     sharedBy = sharedBy.replaceFirst('@', '');
+    // ignore: prefer_typing_uninitialized_variables
     var encryptedSharedKey;
     //1. Get encrypted shared key
     encryptedSharedKey = await _getEncryptedSharedKey(sharedBy);

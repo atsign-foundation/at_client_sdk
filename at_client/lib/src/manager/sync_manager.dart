@@ -125,7 +125,14 @@ class SyncManager {
           var syncBuilder = SyncVerbBuilder()
             ..commitId = lastSyncedCommitId
             ..regex = regex;
-          var syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
+          // ignore: prefer_typing_uninitialized_variables
+          var syncResponse;
+          try {
+            syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
+          } on AtClientException catch (e) {
+            logger.severe(
+                'Exception occurred in processing sync command ${e.errorCode} - ${e.errorMessage}');
+          }
           if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
             syncResponse = syncResponse.replaceFirst('data:', '');
             var syncResponseJson = JsonUtils.decodeJson(syncResponse);

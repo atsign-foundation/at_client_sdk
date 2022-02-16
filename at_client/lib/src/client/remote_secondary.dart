@@ -41,8 +41,15 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String> executeAndParse(VerbBuilder builder, {sync = false}) async {
-    var verbResult = await executeVerb(builder);
-    verbResult = verbResult.replaceFirst('data:', '');
+    // ignore: prefer_typing_uninitialized_variables
+    var verbResult;
+    try {
+      verbResult = await executeVerb(builder);
+      verbResult = verbResult.replaceFirst('data:', '');
+    } on AtClientException catch (e) {
+      logger.severe(
+          'Exception occurred in processing the verb ${e.errorCode} - ${e.errorMessage}');
+    }
     return verbResult;
   }
 
