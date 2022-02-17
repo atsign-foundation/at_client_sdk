@@ -33,6 +33,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
+
+  /// static because once listeners are added, they should be agnostic to switch atsign event
   static final Set<SyncProgressListener> _syncProgressListeners = HashSet();
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
@@ -199,7 +201,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       try {
         syncProgress.completedAt = DateTime.now().toUtc();
-        listener.onSyncEvent(syncProgress);
+        listener.onSyncProgressEvent(syncProgress);
       } on Exception catch (e) {
         _logger.severe(
             'unable to inform sync progress to listener $listener. Exception ${e.toString()}');
