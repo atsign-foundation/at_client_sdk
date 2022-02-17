@@ -7,10 +7,11 @@ class SyncProgress {
   DateTime? startedAt;
   DateTime? completedAt;
   String? message;
+  String? atSign;
 
   @override
   String toString() {
-    return 'SyncProgress{syncStatus: $syncStatus, isInitialSync: $isInitialSync, startedAt: $startedAt, completedAt: $completedAt, message: $message}';
+    return 'SyncProgress{atSign: $atSign, syncStatus: $syncStatus, isInitialSync: $isInitialSync, startedAt: $startedAt, completedAt: $completedAt, message: $message}';
   }
 // other params
 

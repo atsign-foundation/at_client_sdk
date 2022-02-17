@@ -201,6 +201,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       try {
         syncProgress.completedAt = DateTime.now().toUtc();
+        syncProgress.atSign = _atClient.getCurrentAtSign();
         listener.onSyncProgressEvent(syncProgress);
       } on Exception catch (e) {
         _logger.severe(
