@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:test/test.dart';
 
@@ -10,24 +11,22 @@ void main() {
     });
 
     test('test error response', () {
-      var response =
-          DefaultResponseParser().parse('error:AT-1234:Test Exception');
-      expect(response.isError, true);
-      expect(response.errorCode, 'AT-1234');
-      expect(response.errorDescription, 'Test Exception');
+      expect(
+          () => DefaultResponseParser().parse('error:AT1234-Test Exception'),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException && e.errorMessage == 'Test Exception')));
     });
 
-    test('test error response with error code only', () {
-      var response = DefaultResponseParser().parse('error:AT-1234');
-      expect(response.isError, true);
-      expect(response.errorCode, 'AT-1234');
-      expect(response.errorDescription, '');
+    test('test errors with unexpected response', () {
+      expect(
+          () => DefaultResponseParser().parse('error:Unexpected response found'),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException && e.errorCode == 'AT0014')));
     });
 
     test('test error response without error code', () {
-      var response = DefaultResponseParser().parse('error:Exception');
-      expect(response.isError, true);
-      expect(response.errorDescription, 'Exception');
+      expect(() => DefaultResponseParser().parse('error:Exception'),
+          throwsA(predicate((dynamic e) => e is AtClientException)));
     });
 
     test('test random response string', () {

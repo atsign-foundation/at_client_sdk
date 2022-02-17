@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/response/response_parser.dart';
 
@@ -42,12 +43,12 @@ class DefaultResponseParser implements ResponseParser {
     response.isError = true;
     // Find out whether error code exists or not
     if (responseString.isNotEmpty && responseString.startsWith('AT')) {
-      response.errorCode = (responseString.split(':')[0]);
-      response.errorDescription = (responseString.split(':').length > 1)
-          ? responseString.split(':')[1]
-          : '';
+      response.errorCode = (responseString.split('-')[0]);
+      response.errorDescription = responseString.split('-')[1];
+      throw AtClientException(response.errorCode, response.errorDescription);
     } else {
       response.errorDescription = responseString;
+      throw AtClientException('AT0014', response.errorDescription);
     }
   }
 }

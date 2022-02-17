@@ -35,7 +35,6 @@ class LocalSecondary implements Secondary {
     try {
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         //1. if local and server are out of sync, first sync before updating current key-value
-
         //2 . update/delete to local store
         if (builder is UpdateVerbBuilder) {
           verbResult = await _update(builder);
@@ -52,12 +51,10 @@ class LocalSecondary implements Secondary {
       } else if (builder is ScanVerbBuilder) {
         verbResult = await _scan(builder);
       }
-    } on Exception catch (e) {
-      if (e is AtLookUpException) {
-        return Future.error(AtClientException(e.errorCode, e.errorMessage));
-      } else {
-        rethrow;
-      }
+    } on AtLookUpException catch (e) {
+      // Catches AtLookupException and
+      // converts to AtClientException. rethrows any other exception.
+      throw (AtClientException(e.errorCode, e.errorMessage));
     }
     return verbResult;
   }
@@ -120,7 +117,7 @@ class LocalSecondary implements Secondary {
       if (builder.isCached) {
         llookupKey += 'cached:';
       }
-      if(builder.isPublic){
+      if (builder.isPublic) {
         llookupKey += 'public:';
       }
       if (builder.sharedWith != null) {

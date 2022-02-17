@@ -291,8 +291,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         ..limit = _atClient.getPreferences()!.syncPageLimit
         ..isPaginated = true;
       _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
-      var syncResponse = DefaultResponseParser()
-          .parse(await _remoteSecondary.executeVerb(syncBuilder));
+      // ignore: prefer_typing_uninitialized_variables
+      var syncVerbResult;
+      try {
+        syncVerbResult = await _remoteSecondary.executeVerb(syncBuilder);
+      } on AtClientException catch (e) {
+        _logger.severe(
+            'Exception occurred in process sync verb ${e.errorCode} - ${e.errorMessage}');
+      }
+      var syncResponse = DefaultResponseParser().parse(syncVerbResult);
 
       var syncResponseJson = JsonUtils.decodeJson(syncResponse.response);
       _logger.finest('** syncResponse $syncResponseJson');
