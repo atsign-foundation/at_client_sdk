@@ -48,7 +48,7 @@ class AtClientManager {
     final switchAtSignEvent =
         SwitchAtSignEvent(_previousAtClient, _currentAtClient);
     notificationService =
-        await NotificationServiceImpl.create(_currentAtClient);
+        await NotificationServiceImpl.create(_currentAtClient, atClientManager: this);
     syncService =
         await SyncServiceImpl.create(_currentAtClient, atClientManager: this);
     _previousAtClient = _currentAtClient;

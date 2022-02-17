@@ -207,7 +207,10 @@ class LocalSecondary implements Secondary {
     }
   }
 
+  /// Verifies if the key is active, If key is active, return true; else false.
   bool _isActiveKey(AtMetaData? atMetaData) {
+    // The legacy keys will not have metadata.
+    // Returning true if metadata is null
     if (atMetaData == null) return true;
     var ttb = atMetaData.availableAt;
     var ttl = atMetaData.expiresAt;

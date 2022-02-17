@@ -3,11 +3,9 @@ import 'dart:async';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
-import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Class responsible for transforming the Get response
@@ -41,9 +39,11 @@ class GetResponseTransformer
     }
 
     // After decrypting the data, if data is binary, decode the data
-    if (atValue.metadata != null &&
-        atValue.metadata!.isBinary != null &&
-        atValue.metadata!.isBinary!) {
+    // For cached keys, isBinary is not on server-side. Hence getting
+    // isBinary from AtKey.
+    if (tuple.one.metadata != null &&
+        tuple.one.metadata!.isBinary != null &&
+        tuple.one.metadata!.isBinary!) {
       atValue.value = Base2e15.decode(atValue.value);
     }
     return atValue;
