@@ -199,7 +199,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       try {
         syncProgress.completedAt = DateTime.now().toUtc();
-        listener.onSync(syncProgress);
+        listener.onSyncEvent(syncProgress);
       } on Exception catch (e) {
         _logger.severe(
             'unable to inform sync progress to listener $listener. Exception ${e.toString()}');

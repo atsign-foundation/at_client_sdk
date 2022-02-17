@@ -40,7 +40,7 @@ AtClientPreference getPreference(String atsign) {
 
 class MySyncProgressListener extends SyncProgressListener {
   @override
-  void onSync(SyncProgress syncProgress) {
+  void onSyncEvent(SyncProgress syncProgress) {
     print('received sync progress: $syncProgress');
     expect(syncProgress.syncStatus, SyncStatus.success);
   }
