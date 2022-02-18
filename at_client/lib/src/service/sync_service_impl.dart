@@ -423,10 +423,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Throws [AtClientException] if cloud secondary is not reachable
   @override
   Future<bool> isInSync() async {
-    if (_syncInProgress) {
-      _logger.finest('*** isInSync..sync in progress');
-      return true;
-    }
     late RemoteSecondary remoteSecondary;
     try {
       remoteSecondary = RemoteSecondary(
