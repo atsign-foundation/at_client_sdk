@@ -11,3 +11,5 @@ export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/encryption_util.dart';
+export 'package:at_client/src/service/sync/sync_result.dart';
+export 'package:at_client/src/service/sync/sync_status.dart';
