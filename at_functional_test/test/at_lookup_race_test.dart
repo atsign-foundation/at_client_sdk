@@ -44,7 +44,6 @@ void main() {
 
     bool syncComplete = false;
     void onSyncDone(syncResult) {
-      logger.shout("******* HELLO!!!!! ********");
       logger.info("syncResult.syncStatus: ${syncResult.syncStatus}");
       logger.info("syncResult.lastSyncedOn ${syncResult.lastSyncedOn}");
       syncComplete = true;
