@@ -1,3 +1,9 @@
+## 3.0.10
+- Uptake at_persistence_secondary_server changes
+- Uptake at_lookup changes for AtTimeoutException
+- Handle error responses from server
+- Refactor put method to use request and response transformers
+- Provide callback for sync progress
 ## 3.0.9
 - Uptake at_persistence_secondary_server changes
 - Refactor decryption service
