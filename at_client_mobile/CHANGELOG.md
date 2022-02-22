@@ -1,3 +1,7 @@
+## 3.1.6
+- at_client version change for refactoring put and get methods
+- at_lookup version change implementing AtTimeoutException
+- at_commons and at_utils version change for AtTimeoutException
 ## 3.1.5
 - at_client version change
 - at_lookup version change
