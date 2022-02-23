@@ -1,3 +1,6 @@
+## 3.0.11
+- at_lookup version upgrade for outbound listener bug fix
+- added functional test to verify outbound listener bug fix
 ## 3.0.10
 - Uptake at_persistence_secondary_server changes
 - Uptake at_lookup changes for AtTimeoutException
