@@ -26,9 +26,9 @@ import 'package:cron/cron.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
-  static const _syncRequestThreshold = 3,
-      _syncRequestTriggerInSeconds = 3,
-      _syncRunIntervalSeconds = 5,
+  static late int _syncRequestThreshold,
+      _syncRequestTriggerInSeconds,
+      _syncRunIntervalSeconds,
       _queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
@@ -67,6 +67,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _atClient = atClient;
     _remoteSecondary = RemoteSecondary(
         _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+    _syncRequestThreshold = _atClient.getPreferences()!.syncRequestThreshold;
+    _syncRequestTriggerInSeconds = _atClient.getPreferences()!.syncRequestTriggerInSeconds;
+    _syncRunIntervalSeconds = _atClient.getPreferences()!.syncRunIntervalSeconds;
     _atClientManager.listenToAtSignChange(this);
   }
 

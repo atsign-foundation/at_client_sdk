@@ -56,6 +56,13 @@ class AtClientPreference {
 
   /// The number of keys to pull from cloud secondary to local secondary in a single call.
   int syncPageLimit = 10;
+
+  /// Minimum number of sync requests required to perform sync
+  int syncRequestThreshold = 3;
+
+  int syncRequestTriggerInSeconds = 3;
+
+  int  syncRunIntervalSeconds = 5;
 }
 
 @Deprecated("Use SyncService")
