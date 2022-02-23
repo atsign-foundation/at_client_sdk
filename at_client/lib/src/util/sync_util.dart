@@ -86,8 +86,9 @@ class SyncUtil {
     var result;
     try {
       result = await remoteSecondary.executeVerb(builder);
-    } on AtClientException catch (e){
-      logger.severe('Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
+    } on AtClientException catch (e) {
+      logger.severe(
+          'Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
     }
     result = result.replaceAll('data: ', '');
     var statsJson = JsonUtils.decodeJson(result);
