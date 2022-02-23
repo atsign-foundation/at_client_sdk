@@ -56,8 +56,8 @@ void main() {
     final locationFuture =
         atClient.getRemoteSecondary()!.executeVerb(locationLookupVerbBuilder);
     phoneFuture.then((value) => expect(value, 'data:+1 1111'));
-    emailFuture.then((value) => expect(value, 'alice@gmail.com'));
-    locationFuture.then((value) => expect(value, 'newyork'));
+    emailFuture.then((value) => expect(value, 'data:alice@gmail.com'));
+    locationFuture.then((value) => expect(value, 'data:newyork'));
   });
 }
 
