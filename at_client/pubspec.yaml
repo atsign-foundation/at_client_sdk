@@ -30,7 +30,12 @@ dependencies:
   at_commons: ^3.0.5
   at_utils: ^3.0.6
 
-#dependency_overrides:
+dependency_overrides:
+  at_lookup:
+      git:
+        url: https://github.com/atsign-foundation/at_libraries.git
+        path: at_lookup
+        ref: outbound_listener_fix
 #  at_persistence_spec:
 #    git:
 #      url: https://github.com/atsign-foundation/at_server.git
