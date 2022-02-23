@@ -35,7 +35,6 @@ abstract class SyncService {
   /// Returns true if sync is in-progress; else false.
   bool get isSyncInProgress;
 
-
   /// Adds a listener that is notified about [SyncProgress]
   void addProgressListener(SyncProgressListener listener);
 

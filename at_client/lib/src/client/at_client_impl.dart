@@ -314,7 +314,8 @@ class AtClientImpl implements AtClient {
       ..one = atKey
       ..two = value;
     // Transform put request
-    UpdateVerbBuilder verbBuilder = await PutRequestTransformer().transform(tuple);
+    UpdateVerbBuilder verbBuilder =
+        await PutRequestTransformer().transform(tuple);
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSkipSync(atKey.key!));
