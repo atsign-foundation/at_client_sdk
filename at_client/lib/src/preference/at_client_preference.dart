@@ -15,7 +15,9 @@ class AtClientPreference {
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
-  bool isLocalStoreRequired = false;
+  //setting this is false is causing an exception.
+  // At the moment to instantiate AtClient, localSecondary is required
+  bool isLocalStoreRequired = true;
 
   /// Shared secret of the atSign
   String? cramSecret;
@@ -58,10 +60,15 @@ class AtClientPreference {
   int syncPageLimit = 10;
 
   /// Minimum number of sync requests required to perform sync
+  /// Value needs to be in the range [1,5]
   int syncRequestThreshold = 3;
 
+  /// Maximum time a sync request can stay in the queue
+  /// value needs to be in the range [1,5]
   int syncRequestTriggerInSeconds = 3;
 
+  ///Interval to run sync operation
+  /// value needs to be in the range [1,5]
   int  syncRunIntervalSeconds = 5;
 }
 
