@@ -318,7 +318,7 @@ class AtClientImpl implements AtClient {
         await PutRequestTransformer().transform(tuple);
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
-        .executeVerb(verbBuilder, sync: SyncUtil.shouldSkipSync(atKey.key!));
+        .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
     // If putResponse is null or empty, update failed, return false.
     if (putResponse == null || putResponse.isEmpty) {
       return false;
@@ -408,13 +408,8 @@ class AtClientImpl implements AtClient {
       ..dataSignature = metadata.dataSignature
       ..operation = UPDATE_META;
 
-    var isSyncRequired = true;
-    if (SyncUtil.shouldSkipSync(updateKey!)) {
-      isSyncRequired = false;
-    }
-
     var updateMetaResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
+        await getSecondary().executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
     return updateMetaResult != null;
   }
 
