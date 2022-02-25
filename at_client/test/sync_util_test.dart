@@ -5,28 +5,30 @@ import 'package:test/test.dart';
 
 void main() {
   group('A group of sync util tests', () {
+    // The PKAM Private keys should not be sync'ed to server
     test('sync util check pkam private key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_PKAM_PRIVATE_KEY);
-      expect(isSyncRequired, true);
+      var shouldSync = SyncUtil.shouldSync(AT_PKAM_PRIVATE_KEY);
+      expect(shouldSync, false);
     });
+    // The PKAM Public keys should not be sync'ed to server
     test('sync util check pkam public key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_PKAM_PUBLIC_KEY);
-      expect(isSyncRequired, true);
+      var shouldSync = SyncUtil.shouldSync(AT_PKAM_PUBLIC_KEY);
+      expect(shouldSync, false);
     });
-
+    // The encryption private keys should not be sync'ed to server
     test('sync util check encryption private key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_ENCRYPTION_PRIVATE_KEY);
-      expect(isSyncRequired, true);
+      var shouldSync = SyncUtil.shouldSync(AT_ENCRYPTION_PRIVATE_KEY);
+      expect(shouldSync, false);
     });
-
+    // The encryption public key should be sync'ed to server
     test('sync util check encryption private key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_ENCRYPTION_PUBLIC_KEY);
-      expect(isSyncRequired, false);
+      var shouldSync = SyncUtil.shouldSync(AT_ENCRYPTION_PUBLIC_KEY);
+      expect(shouldSync, true);
     });
 
     test('sync util check normal key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync('phone@bob');
-      expect(isSyncRequired, false);
+      var shouldSync = SyncUtil.shouldSync('phone@bob');
+      expect(shouldSync, true);
     });
 
     test('test in sync - no commits on local and server', () {

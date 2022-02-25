@@ -5,13 +5,13 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
-import 'at_demo_credentials.dart' as demo_credentials;
 import 'set_encryption_keys.dart';
+import 'test_utils.dart';
 
 void main() {
   test('put method - create a key sharing to other atSign', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -31,7 +31,7 @@ void main() {
 
   test('put method - create a public key', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -51,7 +51,7 @@ void main() {
 
   test('put method - create a self key with sharedWith populated', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -72,7 +72,7 @@ void main() {
   test('put method - create a self key with sharedWith not populated',
       () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -90,7 +90,7 @@ void main() {
 
   test('put method - create a key with binary data', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -110,7 +110,7 @@ void main() {
 
   test('put method - create a public key with binary data', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -132,7 +132,7 @@ void main() {
 
   test('put method - create a public key', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -163,14 +163,4 @@ Uint8List _getBinaryData(dynamic filePath) {
   var dir = Directory.current.path;
   var pathToFile = '$dir$filePath';
   return File(pathToFile).readAsBytesSync();
-}
-
-AtClientPreference getAlicePreference(String atsign) {
-  var preference = AtClientPreference();
-  preference.hiveStoragePath = 'test/hive/client';
-  preference.commitLogPath = 'test/hive/client/commit';
-  preference.isLocalStoreRequired = true;
-  preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
-  preference.rootDomain = 'vip.ve.atsign.zone';
-  return preference;
 }

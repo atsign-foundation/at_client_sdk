@@ -98,12 +98,16 @@ class SyncUtil {
     return commitId;
   }
 
-  static bool shouldSkipSync(String key) {
+  /// Returns true for the keys that has to be sync'ed to the server
+  /// Else returns false.
+  ///
+  /// The PKAM keys and Encryption Private key should not be sync'ed to remote secondary
+  static bool shouldSync(String key) {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
         key.startsWith(AT_ENCRYPTION_PRIVATE_KEY)) {
-      return true;
+      return false;
     }
-    return false;
+    return true;
   }
 }
