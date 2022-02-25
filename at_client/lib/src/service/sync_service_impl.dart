@@ -214,7 +214,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// queue is returned.
   SyncRequest _getSyncRequest() {
     return _syncRequests.firstWhere(
-        (syncRequest) => syncRequest.requestSource == SyncRequestSource.app,
+        (syncRequest) => syncRequest.requestSource == SyncRequestSource.app && syncRequest.onDone != null,
         orElse: () => _syncRequests.removeFirst());
   }
 
@@ -226,10 +226,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
+    _logger.info('Inside syncComplete  ${syncRequest.requestSource}  : ${syncRequest.onDone}');
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
         syncRequest.requestSource == SyncRequestSource.app) {
+      _logger.info('Sending result to onDone callback');
       syncRequest.onDone!(syncRequest.result);
     } else if (onDone != null) {
       onDone!(syncRequest.result);
