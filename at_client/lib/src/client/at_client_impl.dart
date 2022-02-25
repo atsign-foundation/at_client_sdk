@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
@@ -10,6 +11,7 @@ import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -308,21 +310,83 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    // Perform atKey validations.
-    await AtClientValidation.validateAtKey(atKey);
+    // If value type is other than String and List<int> throw Exception
+    if (value is! String && value is! List<int>) {
+      throw AtClientException('AT0014',
+          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
+    }
+    // If length of value exceeds maxDataSize, throw AtClientException
+    if (value.length > preference!.maxDataSize) {
+      throw AtClientException('AT0005', 'BufferOverFlowException');
+    }
+    // If key is cached, throw exception
+    if (atKey.metadata != null && atKey.metadata!.isCached) {
+      throw AtClientException('AT0014', 'User cannot create a cached key');
+    }
+    // If namespace is not set on key and in preferences, throw exception
+    if ((atKey.namespace == null || atKey.namespace!.isEmpty) &&
+        (preference!.namespace == null || preference!.namespace!.isEmpty)) {
+      throw AtClientException('AT0014', 'namespace is mandatory');
+    }
+    AtResponse atResponse = AtResponse();
+    if (value is String) {
+      atResponse = await putText(atKey, value);
+    }
+    if (value is List<int>) {
+      atResponse = await putBinary(atKey, value);
+    }
+    return atResponse.response.isNotEmpty;
+  }
+
+  /// put's the text data into the keystore
+  Future<AtResponse> putText(AtKey atKey, String value) async {
+    // Set the default metadata if not already set.
+    atKey.metadata ??= Metadata();
+    // Setting metadata.isBinary to false for putText
+    atKey.metadata!.isBinary = false;
+    // Set sharedBy to currentAtSign if not set.
+    if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
+      atKey.sharedBy =
+          AtClientManager.getInstance().atClient.getCurrentAtSign();
+      atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
+    }
+    if (atKey.metadata!.namespaceAware) {
+      atKey.namespace ??= preference?.namespace;
+    }
+    // validate the atKey
+    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
+    // KeyShare validation
+    AtKeyValidators.get().validate(
+        atKey.toString(),
+        ValidationContext()
+          ..atSign = currentAtSign
+          ..validateOwnership = true);
+
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
     // Transform put request
-    UpdateVerbBuilder verbBuilder = await PutRequestTransformer().transform(tuple);
+    UpdateVerbBuilder verbBuilder =
+        await PutRequestTransformer().transform(tuple);
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
-        .executeVerb(verbBuilder, sync: SyncUtil.shouldSkipSync(atKey.key!));
-    // If putResponse is null or empty, update failed, return false.
+        .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
+    // If putResponse is null or empty, return empty response
     if (putResponse == null || putResponse.isEmpty) {
-      return false;
+      return AtResponse()..response = '';
     }
-    return PutResponseTransformer().transform(putResponse);
+    return await PutResponseTransformer().transform(putResponse);
+  }
+
+  /// put's the binary data(e.g. images, files etc) into the keystore
+  Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
+    // Set the default metadata if not already set.
+    atKey.metadata ??= Metadata();
+    // Setting metadata.isBinary to false for putText
+    atKey.metadata!.isBinary = true;
+    // Base2e15.encode method converts the List<int> type to String.
+    // Delegate the call to putText method.
+    return await putText(atKey, Base2e15.encode(value));
   }
 
   @override
@@ -408,7 +472,7 @@ class AtClientImpl implements AtClient {
       ..operation = UPDATE_META;
 
     var isSyncRequired = true;
-    if (SyncUtil.shouldSkipSync(updateKey!)) {
+    if (SyncUtil.shouldSync(updateKey!)) {
       isSyncRequired = false;
     }
 
@@ -691,6 +755,14 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<String?> notifyChange(NotificationParams notificationParams) async {
+    // Validate the AtKey.
+    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
+    // KeyShare validation
+    AtKeyValidators.get().validate(
+        notificationParams.atKey.toString(),
+        ValidationContext()
+          ..atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()
+          ..validateOwnership = true);
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {

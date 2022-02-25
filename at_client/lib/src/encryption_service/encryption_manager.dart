@@ -11,7 +11,11 @@ class AtKeyEncryptionManager {
     // If atKey is sharedKey, return sharedKeyEncryption
     // Eg. @bob:phone.wavi@alice. and @bob is not the currentAtSign.
     // else returns SelfKeyEncryption.
-    if (atKey is SharedKey ||
+    // Setting the below condition in or clause as well to support concrete AtKey class.
+    // atKey.sharedWith != null && atKey.sharedWith != currentAtSign
+    if ((atKey is SharedKey &&
+            atKey.sharedWith != null &&
+            atKey.sharedWith != currentAtSign) ||
         atKey.sharedWith != null && atKey.sharedWith != currentAtSign) {
       return SharedKeyEncryption();
     }

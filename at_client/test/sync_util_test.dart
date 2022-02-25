@@ -6,26 +6,26 @@ import 'package:test/test.dart';
 void main() {
   group('A group of sync util tests', () {
     test('sync util check pkam private key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_PKAM_PRIVATE_KEY);
+      var isSyncRequired = SyncUtil.shouldSync(AT_PKAM_PRIVATE_KEY);
       expect(isSyncRequired, true);
     });
     test('sync util check pkam public key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_PKAM_PUBLIC_KEY);
+      var isSyncRequired = SyncUtil.shouldSync(AT_PKAM_PUBLIC_KEY);
       expect(isSyncRequired, true);
     });
 
     test('sync util check encryption private key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_ENCRYPTION_PRIVATE_KEY);
+      var isSyncRequired = SyncUtil.shouldSync(AT_ENCRYPTION_PRIVATE_KEY);
       expect(isSyncRequired, true);
     });
 
     test('sync util check encryption private key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync(AT_ENCRYPTION_PUBLIC_KEY);
+      var isSyncRequired = SyncUtil.shouldSync(AT_ENCRYPTION_PUBLIC_KEY);
       expect(isSyncRequired, false);
     });
 
     test('sync util check normal key sync skip', () {
-      var isSyncRequired = SyncUtil.shouldSkipSync('phone@bob');
+      var isSyncRequired = SyncUtil.shouldSync('phone@bob');
       expect(isSyncRequired, false);
     });
 

@@ -97,12 +97,12 @@ class SyncUtil {
     return commitId;
   }
 
-  static bool shouldSkipSync(String key) {
+  static bool shouldSync(String key) {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
         key.startsWith(AT_ENCRYPTION_PRIVATE_KEY)) {
-      return true;
+      return false;
     }
-    return false;
+    return true;
   }
 }
