@@ -214,7 +214,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// queue is returned.
   SyncRequest _getSyncRequest() {
     return _syncRequests.firstWhere(
-        (syncRequest) => syncRequest.requestSource == SyncRequestSource.app,
+        (syncRequest) =>
+            syncRequest.requestSource == SyncRequestSource.app &&
+            syncRequest.onDone != null,
         orElse: () => _syncRequests.removeFirst());
   }
 
