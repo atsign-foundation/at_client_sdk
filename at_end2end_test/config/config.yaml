@@ -1,0 +1,9 @@
+# The @Protocol root server configuration
+root_server:
+  # The url to connect to root server
+  url: 'root.atsign.wtf'
+
+# cicd atSign details
+atSign:
+  firstAtSign: '@cicd1'
+  secondAtSign: '@cicd2'
