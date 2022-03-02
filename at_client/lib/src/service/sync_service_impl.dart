@@ -364,7 +364,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var batchId = 1;
     for (var entry in uncommittedEntries) {
       var command = await _getCommand(entry);
-      command = command.replaceAll('cached:', '');
       command = VerbUtil.replaceNewline(command);
       var batchRequest = BatchRequest(batchId, command);
       _logger.finer('batchId:$batchId key:${entry.atKey}');
