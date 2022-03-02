@@ -423,6 +423,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.isEncrypted != null) {
       metadataStr += ':isEncrypted:${metadata.isEncrypted}';
     }
+    if (metadata.sharedKeyEnc != null) {
+      metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
+    }
+    if (metadata.pubKeyCS != null) {
+      metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
+    }
     return metadataStr;
   }
 
