@@ -35,7 +35,7 @@ class StreamNotificationHandler {
     var bytesReceived = 0;
     var firstByteSkipped = false;
     var sharedKey =
-        await encryptionService!.getSharedKey(streamNotification.senderAtSign);
+        await encryptionService!.getSharedKeyForDecryption(streamNotification.senderAtSign);
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt

@@ -11,8 +11,6 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
-import 'package:at_client/src/service/sync/sync_result.dart';
-import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
