@@ -18,40 +18,8 @@ class EncryptionService {
   var logger = AtSignLogger('EncryptionService');
 
   Future<String> encrypt(String? key, String value, String sharedWith) async {
-    // Encrypt value using sharedKey
-    bool isSharedKeyInLocal = false;
-    var sharedKey = await _getSharedKeyFromLocalForEncryption(sharedWith);
-    if (sharedKey != null && sharedKey.isNotEmpty && sharedKey != 'data:null') {
-      isSharedKeyInLocal = true;
-    }
-    // If sharedKey is not found in localSecondary, search in remote secondary.
-    if (!isSharedKeyInLocal) {
-      try {
-        sharedKey = await _getSharedKeyFromRemoteForEncryption(sharedWith);
-      } on AtClientException {
-        logger.finer(
-            'shared key for $sharedWith not found in remote secondary. Generating a new shared key');
-      }
-    }
-
-    if (sharedKey == null || sharedKey == 'data:null') {
-      logger.finer('Generated a new AES Key for $sharedWith');
-      sharedKey = EncryptionUtil.generateAESKey();
-    } else {
-      sharedKey = sharedKey.replaceFirst('data:', '');
-      var currentAtSignPrivateKey =
-          await localSecondary!.getEncryptionPrivateKey();
-      sharedKey =
-          EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
-    }
-
-    // e.g save @bob:shared_key@alice
-    await _saveSharedKey(sharedWith, sharedKey);
-    // e.g save shared_key.bob@alice
-    if (!isSharedKeyInLocal) {
-      await _saveSharedKeyInLocal(sharedKey, sharedWith);
-    }
-    return EncryptionUtil.encryptValue(value, sharedKey);
+    return EncryptionUtil.encryptValue(
+        value, await _getAESKeyForEncryption(sharedWith));
   }
 
   /// Returns the decrypted value for the given encrypted value.
@@ -157,10 +125,53 @@ class EncryptionService {
   }
 
   Future<List<int>> encryptStream(List<int> value, String sharedWith) async {
-    // #TODO implement
-//    return EncryptionUtil.encryptBytes(
-//        value, await _getSharedKeyForEncryption(sharedWith));
-    return [];
+    return EncryptionUtil.encryptBytes(
+        value, await _getAESKeyForEncryption(sharedWith));
+  }
+
+  Future<String> _getAESKeyForEncryption(String sharedWith) async {
+    bool isSharedKeyInLocal = false;
+    var sharedKey = await _getSharedKeyFromLocalForEncryption(sharedWith);
+    if (sharedKey != null && sharedKey.isNotEmpty && sharedKey != 'data:null') {
+      isSharedKeyInLocal = true;
+    }
+    // If sharedKey is not found in localSecondary, search in remote secondary.
+    if (!isSharedKeyInLocal) {
+      try {
+        sharedKey = await _getSharedKeyFromRemoteForEncryption(sharedWith);
+      } on AtClientException {
+        logger.finer(
+            'shared key for $sharedWith not found in remote secondary. Generating a new shared key');
+      }
+    }
+    // If sharedKey is not found in localSecondary, search in remote secondary.
+    if (!isSharedKeyInLocal) {
+      try {
+        sharedKey = await _getSharedKeyFromRemoteForEncryption(sharedWith);
+      } on AtClientException {
+        logger.finer(
+            'shared key for $sharedWith not found in remote secondary. Generating a new shared key');
+      }
+    }
+
+    if (sharedKey == null || sharedKey == 'data:null') {
+      logger.finer('Generated a new AES Key for $sharedWith');
+      sharedKey = EncryptionUtil.generateAESKey();
+    } else {
+      sharedKey = sharedKey.replaceFirst('data:', '');
+      var currentAtSignPrivateKey =
+          await localSecondary!.getEncryptionPrivateKey();
+      sharedKey =
+          EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+    }
+
+    // e.g save @bob:shared_key@alice
+    await _saveSharedKey(sharedWith, sharedKey);
+    // e.g save shared_key.bob@alice
+    if (!isSharedKeyInLocal) {
+      await _saveSharedKeyInLocal(sharedKey, sharedWith);
+    }
+    return sharedKey;
   }
 
   List<int> decryptStream(List<int> encryptedValue, String sharedKey) {
