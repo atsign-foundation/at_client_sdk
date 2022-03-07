@@ -11,8 +11,6 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
-import 'package:at_client/src/service/sync/sync_result.dart';
-import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -337,17 +335,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         ..limit = _atClient.getPreferences()!.syncPageLimit
         ..isPaginated = true;
       _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
-      // ignore: prefer_typing_uninitialized_variables
-      var syncVerbResult;
-      try {
-        syncVerbResult = await _remoteSecondary.executeVerb(syncBuilder);
-      } on AtClientException catch (e) {
-        _logger.severe(
-            'Exception occurred in process sync verb ${e.errorCode} - ${e.errorMessage}');
-      }
-      var syncResponse = DefaultResponseParser().parse(syncVerbResult);
-
-      var syncResponseJson = JsonUtils.decodeJson(syncResponse.response);
+      var syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
+          .parse(await _remoteSecondary.executeVerb(syncBuilder))
+          .response);
       _logger.finest('** syncResponse $syncResponseJson');
       // Iterates over each commit
       await Future.forEach(syncResponseJson,
@@ -624,7 +614,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // actions for previous atSign
       _syncRequests.clear();
       _logger.finer(
-          'stopping stats notificationlistener for ${_atClient.getCurrentAtSign()}');
+          'stopping stats notification listener for ${_atClient.getCurrentAtSign()}');
       _statsNotificationListener.stopAllSubscriptions();
       _cron.close();
       _logger.finer(
