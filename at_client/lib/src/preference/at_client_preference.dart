@@ -17,7 +17,7 @@ class AtClientPreference {
   /// Specify whether local store is required
   //setting this is false is causing an exception.
   // At the moment to instantiate AtClient, localSecondary is required
-  bool isLocalStoreRequired = true;
+  bool isLocalStoreRequired = false;
 
   /// Shared secret of the atSign
   String? cramSecret;
