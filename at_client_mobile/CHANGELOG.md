@@ -1,3 +1,6 @@
+## 3.1.9
+- at_client version change for sync deletion of cached keys to cloud secondary 
+- at_lookup version change for increase in outbound connection timeout
 ## 3.1.8
 - at_client version change for automatic sync trigger 
 ## 3.1.7
