@@ -1,17 +1,17 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:http/http.dart' as http;
 import 'package:archive/archive_io.dart';
-import 'package:http/http.dart';
 
 class FileTransferService {
   Future<dynamic> uploadToFileBin(
       List<int> file, String container, String fileName) async {
     try {
       var response = await http.post(
-        Uri.parse(TextConstants.FILEBIN_URL + '$container/' + fileName),
+        Uri.parse(TextConstants.fileBinURL + '$container/' + fileName),
         body: file,
       );
       return response;

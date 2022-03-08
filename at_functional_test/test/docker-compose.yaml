@@ -1,0 +1,11 @@
+version: '2'
+services:
+  virtualenv:
+    image: atsigncompany/virtualenv:dev_env
+    ports:
+      - "127.0.0.1:6379:6379"
+      - "64:64"
+      - "127.0.0.1:9001:9001"
+      - "25000-25017:25000-25017"
+    extra_hosts:
+      - "vip.ve.atsign.zone:127.0.0.1"

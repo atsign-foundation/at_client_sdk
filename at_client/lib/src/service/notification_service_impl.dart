@@ -4,11 +4,9 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/connectivity_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
-import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
@@ -17,7 +15,7 @@ import 'package:at_utils/at_logger.dart';
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
   Map<String, StreamController> streamListeners = {};
-  final EMPTY_REGEX = '';
+  final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationId';
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
@@ -26,30 +24,39 @@ class NotificationServiceImpl
   late AtClient _atClient;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
-  var _lastMonitorRetried;
+  dynamic _lastMonitorRetried;
+  late AtClientManager _atClientManager;
 
-  static Future<NotificationService> create(AtClient atClient) async {
+  static Future<NotificationService> create(AtClient atClient,
+      {required AtClientManager atClientManager}) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
-    final notificationService = NotificationServiceImpl._(atClient);
+    final notificationService =
+        NotificationServiceImpl._(atClientManager, atClient);
     await notificationService._init();
     _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
-  NotificationServiceImpl._(AtClient atClient) {
+  NotificationServiceImpl._(
+      AtClientManager atClientManager, AtClient atClient) {
+    _atClientManager = atClientManager;
     _atClient = atClient;
+    _atClientManager.listenToAtSignChange(this);
   }
 
   Future<void> _init() async {
-    _logger.finer('notification init starting monitor');
+    _logger.finer('${_atClient.getCurrentAtSign()} notification service init');
     await _startMonitor();
+    _logger.finer(
+        '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
     if (_connectivityListener == null) {
       _connectivityListener = ConnectivityListener();
       _connectivityListener!.subscribe().listen((isConnected) {
         if (isConnected) {
-          _logger.finer('starting monitor through connectivity listener event');
+          _logger.finer(
+              '${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
           _startMonitor();
         } else {
           _logger.finer('lost network connectivity');
@@ -59,7 +66,7 @@ class NotificationServiceImpl
   }
 
   Future<void> _startMonitor() async {
-    if (_monitor != null && _monitor!.status == MonitorStatus.Started) {
+    if (_monitor != null && _monitor!.status == MonitorStatus.started) {
       _logger.finer(
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
@@ -73,16 +80,19 @@ class NotificationServiceImpl
         MonitorPreference()..keepAlive = true,
         _monitorRetry);
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
-    if (_monitor!.status == MonitorStatus.Started) {
+    if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
     }
   }
 
   Future<int?> _getLastNotificationTime() async {
-    final atValue = await _atClient.get(AtKey()..key = notificationIdKey);
-    if (atValue.value != null) {
-      _logger.finer('json from hive: ${atValue.value}');
-      return jsonDecode(atValue.value)['epochMillis'];
+    var atKey = AtKey()..key = notificationIdKey;
+    if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(atKey.key!)) {
+      final atValue = await _atClient.get(atKey);
+      if (atValue.value != null) {
+        _logger.finer('json from hive: ${atValue.value}');
+        return jsonDecode(atValue.value)['epochMillis'];
+      }
     }
     return null;
   }
@@ -103,14 +113,14 @@ class NotificationServiceImpl
       final notificationParser = NotificationResponseParser();
       final atNotifications = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
-      atNotifications.forEach((atNotification) async {
+      for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
           await _atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
         streamListeners.forEach((regex, streamController) {
-          if (regex != EMPTY_REGEX) {
+          if (regex != emptyRegex) {
             if (regex.allMatches(atNotification.key).isNotEmpty) {
               streamController.add(atNotification);
             }
@@ -118,7 +128,7 @@ class NotificationServiceImpl
             streamController.add(atNotification);
           }
         });
-      });
+      }
     } on Exception catch (e) {
       _logger.severe(
           'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
@@ -132,7 +142,8 @@ class NotificationServiceImpl
       return;
     }
     if (_isMonitorPaused) {
-      _logger.finer('monitor is paused. not retrying');
+      _logger.finer(
+          '${_atClient.getCurrentAtSign()} monitor is paused. not retrying');
       return;
     }
     _lastMonitorRetried = DateTime.now().toUtc();
@@ -152,7 +163,7 @@ class NotificationServiceImpl
       {Function? onSuccess, Function? onError}) async {
     var notificationResult = NotificationResult()
       ..atKey = notificationParams.atKey;
-    var notificationId;
+    dynamic notificationId;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       // Returns the notificationId.
@@ -204,9 +215,9 @@ class NotificationServiceImpl
   /// Queries the status of the notification
   /// Takes the notificationId as input as returns the status of the notification
   Future<String> _getFinalNotificationStatus(String notificationId) async {
-    var status;
+    String status = '';
     // For every 2 seconds, queries the status of the notification
-    while (status == null || status == 'data:queued') {
+    while (status.isEmpty || status == 'data:queued') {
       await Future.delayed(Duration(seconds: 2),
           () async => status = await _atClient.notifyStatus(notificationId));
     }
@@ -215,7 +226,7 @@ class NotificationServiceImpl
 
   @override
   Stream<AtNotification> subscribe({String? regex}) {
-    regex ??= EMPTY_REGEX;
+    regex ??= emptyRegex;
     if (streamListeners.containsKey(regex)) {
       _logger.finer('subscription already exists');
       return streamListeners[regex]!.stream as Stream<AtNotification>;
@@ -234,6 +245,19 @@ class NotificationServiceImpl
       _logger.finer(
           'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
       stopAllSubscriptions();
+      _logger.finer(
+          'removing from _notificationServiceMap: ${_atClient.getCurrentAtSign()}');
+      _notificationServiceMap.remove(_atClient.getCurrentAtSign());
     }
+  }
+
+  MonitorStatus? getMonitorStatus() {
+    if (_monitor == null) {
+      _logger.severe('${_atClient.getCurrentAtSign()} monitor not initialised');
+      return null;
+    }
+    _logger.finer(
+        '${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
+    return _monitor!.getStatus();
   }
 }

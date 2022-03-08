@@ -3,11 +3,8 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/connection/outbound_connection.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 
@@ -17,7 +14,7 @@ class RemoteSecondary implements Secondary {
 
   late String _atSign;
 
-  late var _preference;
+  late AtClientPreference _preference;
 
   late AtLookupImpl atLookUp;
 
@@ -34,19 +31,30 @@ class RemoteSecondary implements Secondary {
   /// Optionally [privateKey] is passed for verb builders which require authentication.
   @override
   Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
-    var verbResult;
-    verbResult = await atLookUp.executeVerb(builder);
-    return verbResult;
+    try {
+      String verbResult;
+      verbResult = await atLookUp.executeVerb(builder);
+      return verbResult;
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    }
   }
 
   Future<String> executeAndParse(VerbBuilder builder, {sync = false}) async {
-    var verbResult = await executeVerb(builder);
-    verbResult = verbResult.replaceFirst('data:', '');
+    // ignore: prefer_typing_uninitialized_variables
+    var verbResult;
+    try {
+      verbResult = await executeVerb(builder);
+      verbResult = verbResult.replaceFirst('data:', '');
+    } on AtClientException catch (e) {
+      logger.severe(
+          'Exception occurred in processing the verb ${e.errorCode} - ${e.errorMessage}');
+    }
     return verbResult;
   }
 
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
-    var verbResult;
+    String? verbResult;
     verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
     return verbResult;
   }
@@ -64,7 +72,7 @@ class RemoteSecondary implements Secondary {
 
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to
   /// secondary server
-  Future<bool> authenticate_cram(var secret) async {
+  Future<bool> authenticateCram(var secret) async {
     var authResult = await atLookUp.authenticate_cram(secret);
     return authResult;
   }
@@ -98,7 +106,7 @@ class RemoteSecondary implements Secondary {
       var host = secondaryInfo[0];
       var port = secondaryInfo[1];
       var internetAddress = await InternetAddress.lookup(host);
-      //#TODO getting first ip for now. explore best solution
+      //TODO getting first ip for now. explore best solution
       var addressCheckOptions =
           AddressCheckOptions(internetAddress[0], port: int.parse(port));
       return (await InternetConnectionChecker()

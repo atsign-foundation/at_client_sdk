@@ -1,3 +1,33 @@
+## 3.1.9
+- at_client version change for sync deletion of cached keys to cloud secondary 
+- at_lookup version change for increase in outbound connection timeout
+## 3.1.8
+- at_client version change for automatic sync trigger 
+## 3.1.7
+- at_client and at_lookup version change for outbound listener bug fix
+## 3.1.6
+- at_client version change for refactoring put and get methods
+- at_lookup version change implementing AtTimeoutException
+- at_commons and at_utils version change for AtTimeoutException
+## 3.1.5
+- at_client version change
+- at_lookup version change
+- at_commons and at_utils version change
+## 3.1.4
+- updated readme and  doc changes
+- added example app
+## 3.1.3
+- at_client version change
+- at_lookup version change
+- at_commons and at_utils version change
+## 3.1.2
+- **FIX**: Added check to use flutter_keychain only on mobile platforms
+## 3.1.1
+- at_client version change
+## 3.1.0
+- moved keys storage from flutter_keychain to biometric_storage
+- updated package dependencies
+- updated documentation
 ## 3.0.3
 - at_client version change
 ## 3.0.2

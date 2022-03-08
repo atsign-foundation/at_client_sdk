@@ -1,3 +1,30 @@
+## 3.0.13
+- Sync deleted cached keys to cloud secondary
+- at_lookup version upgrade for increase in outbound connection timeout
+## 3.0.12
+- Fix automatic sync not working
+## 3.0.11
+- at_lookup version upgrade for outbound listener bug fix
+- added functional test to verify outbound listener bug fix
+## 3.0.10
+- Uptake at_persistence_secondary_server changes
+- Uptake at_lookup changes for AtTimeoutException
+- Handle error responses from server
+- Refactor put method to use request and response transformers
+- Provide callback for sync progress
+## 3.0.9
+- Uptake at_persistence_secondary_server changes
+- Refactor decryption service
+- Introduce request response transformers
+- Refactor get method to use request response transformers
+## 3.0.8
+- Updated readme and documentation improvements
+## 3.0.7
+- Uptake at_persistence_secondary_server changes
+- Resolve dart analyzer issues
+- Run dart formatter
+## 3.0.6
+- Uptake AtKey validations
 ## 3.0.5
 - Uptake at_persistence_secondary_server changes
 ## 3.0.4

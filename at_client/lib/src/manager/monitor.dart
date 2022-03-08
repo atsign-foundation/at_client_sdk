@@ -31,7 +31,7 @@ class Monitor {
   final _monitorVerbResponseQueue = Queue();
 
   // Status on the monitor
-  MonitorStatus status = MonitorStatus.NotStarted;
+  MonitorStatus status = MonitorStatus.notStarted;
 
   final _logger = AtSignLogger('Monitor');
 
@@ -111,7 +111,7 @@ class Monitor {
   /// Calling start on monitor that is not started or erred will be started again.
   /// Calling [Monitor#getStatus] would return the status of the [Monitor]
   Future<void> start({int? lastNotificationTime}) async {
-    if (status == MonitorStatus.Started) {
+    if (status == MonitorStatus.started) {
       // Monitor already started
       _logger.finer('Monitor is already running');
       return;
@@ -130,7 +130,7 @@ class Monitor {
       _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
         _logger.finer('monitor done');
         _monitorConnection!.getSocket().destroy();
-        status = MonitorStatus.Stopped;
+        status = MonitorStatus.stopped;
         _retryCallBack();
       }, onError: (error) {
         _logger.severe('error in monitor $error');
@@ -138,7 +138,7 @@ class Monitor {
       });
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
-      status = MonitorStatus.Started;
+      status = MonitorStatus.started;
       _logger.finer(
           'monitor started for $_atSign with last notification time: $_lastNotificationTime');
 
@@ -201,7 +201,7 @@ class Monitor {
 
   ///Returns the response of the monitor verb queue.
   Future<String> _getQueueResponse() async {
-    var monitorResponse;
+    dynamic monitorResponse;
     //waits for 30 seconds
     for (var i = 0; i < 6000; i++) {
       if (_monitorVerbResponseQueue.isNotEmpty) {
@@ -233,7 +233,7 @@ class Monitor {
 
   /// Stops the monitor. Call [Monitor#start] to start it again.
   void stop() {
-    status = MonitorStatus.Stopped;
+    status = MonitorStatus.stopped;
     if (_monitorConnection != null) {
       _monitorConnection!.close();
     }
@@ -245,6 +245,7 @@ class Monitor {
   }
 
   void _handleResponse(String response, Function callback) {
+    _logger.finer('received response on monitor: $response');
     if (response.toString().startsWith('notification')) {
       callback(response);
     } else {
@@ -254,7 +255,7 @@ class Monitor {
 
   void _handleError(e) {
     _monitorConnection?.close();
-    status = MonitorStatus.Errored;
+    status = MonitorStatus.errored;
     // Pass monitor and error
     // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
@@ -310,4 +311,4 @@ class Monitor {
   }
 }
 
-enum MonitorStatus { NotStarted, Started, Stopped, Errored }
+enum MonitorStatus { notStarted, started, stopped, errored }

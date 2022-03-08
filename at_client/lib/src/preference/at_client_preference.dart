@@ -11,7 +11,7 @@ class AtClientPreference {
 
   /// Syncing strategy of the client [SyncStrategy]
   /// [Deprecated] Use [SyncService]
-  @deprecated
+  @Deprecated("Use [SyncService]")
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
@@ -29,8 +29,8 @@ class AtClientPreference {
   /// Secret key to encrypt keystore data
   List<int>? keyStoreSecret;
 
-  /// Domain of the root server. Defaults to root.atsign.wtf
-  String rootDomain = 'root.atsign.wtf';
+  /// Domain of the root server. Defaults to root.atsign.org
+  String rootDomain = 'root.atsign.org';
 
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
@@ -61,12 +61,12 @@ class AtClientPreference {
   int fileEncryptionChunkSize = 4096;
 }
 
-@deprecated
+@Deprecated("Use SyncService")
 enum SyncStrategy {
   /// Sync local keys immediately to secondary server for update and delete commands.
-  IMMEDIATE,
-  ONDEMAND,
+  immediate,
+  onDemand,
 
   /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].
-  SCHEDULED
+  scheduled
 }

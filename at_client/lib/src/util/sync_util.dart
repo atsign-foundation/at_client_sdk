@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -9,6 +10,7 @@ import 'package:at_utils/at_logger.dart';
 
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
+
   static Future<CommitEntry?> getCommitEntry(
       int sequenceNumber, String atSign) async {
     var commitLogInstance =
@@ -29,7 +31,7 @@ class SyncUtil {
     var commitLogInstance =
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
 
-    var lastEntry;
+    CommitEntry? lastEntry;
     if (regex != null) {
       lastEntry = await commitLogInstance!.lastSyncedEntryWithRegex(regex);
     } else {
@@ -75,26 +77,37 @@ class SyncUtil {
 
   static Future<int?> getLatestServerCommitId(
       RemoteSecondary remoteSecondary, String? regex) async {
-    var commitId;
+    int? commitId;
     var builder = StatsVerbBuilder()..statIds = '3';
     if (regex != null && regex != 'null' && regex.isNotEmpty) {
       builder.regex = regex;
     }
-    var result = await remoteSecondary.executeVerb(builder);
+    // ignore: prefer_typing_uninitialized_variables
+    var result;
+    try {
+      result = await remoteSecondary.executeVerb(builder);
+    } on AtClientException catch (e) {
+      logger.severe(
+          'Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
+    }
     result = result.replaceAll('data: ', '');
-    var statsJson = jsonDecode(result);
+    var statsJson = JsonUtils.decodeJson(result);
     if (statsJson[0]['value'] != 'null') {
       commitId = int.parse(statsJson[0]['value']);
     }
     return commitId;
   }
 
-  static bool shouldSkipSync(String key) {
+  /// Returns true for the keys that has to be sync'ed to the server
+  /// Else returns false.
+  ///
+  /// The PKAM keys and Encryption Private key should not be sync'ed to remote secondary
+  static bool shouldSync(String key) {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
         key.startsWith(AT_ENCRYPTION_PRIVATE_KEY)) {
-      return true;
+      return false;
     }
-    return false;
+    return true;
   }
 }

@@ -1,4 +1,3 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_commons/at_builders.dart';
@@ -6,8 +5,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
-
-import 'keychain_manager.dart';
 
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(
@@ -49,8 +46,8 @@ class AtClientAuthenticator implements AtClientAuth {
         await _keyChainManager.getValue(atSign, keychainPKAMPublicKey);
     var privateKey = atClientPreference.privateKey ??=
         await _keyChainManager.getValue(atSign, keychainPKAMPrivateKey);
-    var encryptionPrivateKey = await _keyChainManager.getValue(
-        atSign, keychainEncryptionPrivateKey);
+    var encryptionPrivateKey =
+        await _keyChainManager.getValue(atSign, keychainEncryptionPrivateKey);
 
     // If cram secret is null, perform cram authentication
     if (atClientPreference.cramSecret != null) {
@@ -100,9 +97,7 @@ class AtClientAuthenticator implements AtClientAuth {
           logger
               .finer('generating encryption key pair and self encryption key');
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
-          await _keyChainManager.putValue(
-              atSign,
-              keychainEncryptionPrivateKey,
+          await _keyChainManager.putValue(atSign, keychainEncryptionPrivateKey,
               encryptionKeyPair.privateKey.toString());
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
           await _keyChainManager.putValue(

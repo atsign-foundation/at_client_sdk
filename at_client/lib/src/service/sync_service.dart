@@ -1,3 +1,6 @@
+import 'package:at_client/src/listener/sync_progress_listener.dart';
+import 'package:at_client/src/service/sync/sync_status.dart';
+
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
   ///
@@ -31,4 +34,10 @@ abstract class SyncService {
 
   /// Returns true if sync is in-progress; else false.
   bool get isSyncInProgress;
+
+  /// Adds a listener that is notified about [SyncProgress]
+  void addProgressListener(SyncProgressListener listener);
+
+  /// Removes a sync progress listener
+  void removeProgressListener(SyncProgressListener listener);
 }
