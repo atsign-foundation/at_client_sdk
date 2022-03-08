@@ -4,7 +4,6 @@ import 'package:archive/archive_io.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:http/http.dart' as http;
-import 'package:archive/archive_io.dart';
 
 class FileTransferService {
   Future<dynamic> uploadToFileBin(
@@ -24,7 +23,7 @@ class FileTransferService {
       File file, String container, String fileName) async {
     try {
       var postUri =
-          Uri.parse(TextConstants.FILEBIN_URL + '$container/' + fileName);
+          Uri.parse(TextConstants.fileBinURL + '$container/' + fileName);
       final streamedRequest = http.StreamedRequest('POST', postUri);
 
       streamedRequest.contentLength = await file.length();
@@ -34,7 +33,7 @@ class FileTransferService {
         streamedRequest.sink.close();
       });
 
-      StreamedResponse response = await streamedRequest.send();
+      http.StreamedResponse response = await streamedRequest.send();
       return response;
     } catch (e) {
       rethrow;

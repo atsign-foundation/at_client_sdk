@@ -8,13 +8,13 @@ class AESEncrypter extends Converter<List<int>, List<int>> {
   const AESEncrypter(this._encryptionKey);
 
   @override
-  List<int> convert(List<int> data) {
+  List<int> convert(List<int> input) {
     var aesKey = AES(Key.fromBase64(_encryptionKey), padding: null);
 
     var initializationVector = IV.fromLength(16);
     var aesEncrypter = Encrypter(aesKey);
     var encryptedValue =
-        aesEncrypter.encryptBytes(data, iv: initializationVector);
+        aesEncrypter.encryptBytes(input, iv: initializationVector);
     return encryptedValue.bytes;
   }
 
@@ -29,11 +29,11 @@ class AESDecrypter extends Converter<List<int>, List<int>> {
   const AESDecrypter(this._encryptionKey);
 
   @override
-  List<int> convert(List<int> data) {
+  List<int> convert(List<int> input) {
     var aesKey = AES(Key.fromBase64(_encryptionKey), padding: null);
     var decrypter = Encrypter(aesKey);
     var iv2 = IV.fromLength(16);
-    return decrypter.decryptBytes(Encrypted(data as Uint8List), iv: iv2);
+    return decrypter.decryptBytes(Encrypted(input as Uint8List), iv: iv2);
   }
 
   @override
@@ -43,17 +43,17 @@ class AESDecrypter extends Converter<List<int>, List<int>> {
 }
 
 class AESCodec extends Codec<List<int>, List<int>> {
-  final _key;
+  final String _key;
   const AESCodec(this._key);
 
   @override
-  List<int> encode(List<int> data) {
-    return AESEncrypter(_key).convert(data);
+  List<int> encode(List<int> input) {
+    return AESEncrypter(_key).convert(input);
   }
 
   @override
-  List<int> decode(List<int> data) {
-    return AESDecrypter(_key).convert(data);
+  List<int> decode(List<int> encoded) {
+    return AESDecrypter(_key).convert(encoded);
   }
 
   @override
@@ -63,13 +63,13 @@ class AESCodec extends Codec<List<int>, List<int>> {
 }
 
 class AESEncryptionSink extends ByteConversionSink {
-  final _converter;
+  final Converter _converter;
   final Sink<List<int>> _outSink;
   AESEncryptionSink(key, this._outSink) : _converter = AESEncrypter(key);
 
   @override
-  void add(List<int> data) {
-    _outSink.add(_converter.convert(data));
+  void add(List<int> chunk) {
+    _outSink.add(_converter.convert(chunk));
   }
 
   @override
@@ -85,13 +85,13 @@ class AESEncryptionSink extends ByteConversionSink {
 }
 
 class AESDecryptionSink extends ChunkedConversionSink<List<int>> {
-  final _converter;
+  final Converter _converter;
   final Sink<List<int>> _outSink;
   AESDecryptionSink(key, this._outSink) : _converter = AESDecrypter(key);
 
   @override
-  void add(List<int> data) {
-    _outSink.add(_converter.convert(data));
+  void add(List<int> chunk) {
+    _outSink.add(_converter.convert(chunk));
   }
 
   @override

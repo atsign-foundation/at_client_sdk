@@ -30,7 +30,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
@@ -272,7 +271,7 @@ class AtClientImpl implements AtClient {
     var scanResult = await getSecondary().executeVerb(builder);
     scanResult = _formatResult(scanResult);
     var result = [];
-    if (scanResult != null && scanResult.isNotEmpty) {
+    if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
     return result as FutureOr<List<String>>;
@@ -476,7 +475,7 @@ class AtClientImpl implements AtClient {
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
-      if (streamResult != null && streamResult.startsWith('stream:done')) {
+      if (streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;
       }
