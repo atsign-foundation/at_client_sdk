@@ -38,7 +38,9 @@ dependencies:
   at_client: ^3.0.22
 
 
-#dependency_overrides:
+dependency_overrides:
+  at_client_mobile:
+    path: ../../at_client_mobile
 #  at_client:
 #    git:
 #      url: https://github.com/atsign-foundation/at_client_sdk.git

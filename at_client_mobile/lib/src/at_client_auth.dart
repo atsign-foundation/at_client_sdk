@@ -1,9 +1,10 @@
 import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+
+import 'atsign_key.dart';
 
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(
@@ -41,12 +42,13 @@ class AtClientAuthenticator implements AtClientAuth {
     var atLookupInitialAuth = AtLookupImpl(
         atSign, atClientPreference.rootDomain, atClientPreference.rootPort);
     // get existing keys from keychain
-    var publicKey =
-        await _keyChainManager.getValue(atSign, keychainPKAMPublicKey);
-    var privateKey = atClientPreference.privateKey ??=
-        await _keyChainManager.getValue(atSign, keychainPKAMPrivateKey);
-    var encryptionPrivateKey =
-        await _keyChainManager.getValue(atSign, keychainEncryptionPrivateKey);
+    final atsign = await _keyChainManager.getAtsign(name: atSign);
+    var publicKey = atsign?.pkamPublicKey;
+        // await _keyChainManager.getValue(atSign, keychainPKAMPublicKey);
+    var privateKey = atClientPreference.privateKey ??= atsign?.pkamPrivateKey;
+        // await _keyChainManager.getValue(atSign, keychainPKAMPrivateKey);
+    var encryptionPrivateKey =  atsign?.encryptionPublicKey;
+        // await _keyChainManager.getValue(atSign, keychainEncryptionPrivateKey);
 
     // If cram secret is null, perform cram authentication
     if (atClientPreference.cramSecret != null) {
@@ -96,14 +98,21 @@ class AtClientAuthenticator implements AtClientAuth {
           logger
               .finer('generating encryption key pair and self encryption key');
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
-          await _keyChainManager.putValue(atSign, keychainEncryptionPrivateKey,
-              encryptionKeyPair.privateKey.toString());
+          final atSignItem = await _keyChainManager.getAtsign(name: atSign) ?? AtsignKey(name: atSign);
+          // await _keyChainManager.putValue(atSign, keychainEncryptionPrivateKey,
+          //     encryptionKeyPair.privateKey.toString());
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
-          await _keyChainManager.putValue(
-              atSign, keychainEncryptionPublicKey, encryptionPubKey);
+          // await _keyChainManager.putValue(
+          //     atSign, keychainEncryptionPublicKey, encryptionPubKey);
           var selfEncryptionKey = EncryptionUtil.generateAESKey();
-          await _keyChainManager.putValue(
-              atSign, keychainSelfEncryptionKey, selfEncryptionKey);
+          // await _keyChainManager.putValue(
+          //     atSign, keychainSelfEncryptionKey, selfEncryptionKey);
+          atSignItem.copyWith(
+            encryptionPrivateKey: encryptionKeyPair.privateKey.toString(),
+            encryptionPublicKey: encryptionPubKey,
+            selfEncryptionKey: selfEncryptionKey,
+          );
+          await _keyChainManager.storeAtSign(atSign: atSignItem);
         }
         var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
         var deleteResponse =
