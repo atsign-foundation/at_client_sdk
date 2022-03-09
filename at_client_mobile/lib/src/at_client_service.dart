@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:core';
 
 import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+
+import 'atsign_key.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
@@ -195,19 +196,37 @@ class AtClientService {
     var encryptionPublicKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
         decryptKey);
-    await _keyChainManager.putValue(
-        atsign, keychainEncryptionPublicKey, encryptionPublicKey);
+    // await _keyChainManager.putValue(
+    //     atsign, keychainEncryptionPublicKey, encryptionPublicKey);
 
     var encryptionPrivateKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
         decryptKey);
-    await _keyChainManager.putValue(
-        atsign, keychainEncryptionPrivateKey, encryptionPrivateKey);
-    await _keyChainManager.putValue(
-        atsign, keychainSelfEncryptionKey, decryptKey);
+    // await _keyChainManager.putValue(
+    //     atsign, keychainEncryptionPrivateKey, encryptionPrivateKey);
+    // await _keyChainManager.putValue(
+    //     atsign, keychainSelfEncryptionKey, decryptKey);
+
+    var atSignItem = await _keyChainManager.readAtsign(name: atsign) ??
+        AtsignKey(name: atsign);
+    atSignItem = atSignItem.copyWith(
+      encryptionPrivateKey: encryptionPrivateKey,
+      encryptionPublicKey: encryptionPublicKey,
+      selfEncryptionKey: decryptKey,
+    );
+    await _keyChainManager.storeAtSign(atSign: atSignItem);
+
     // Add atsign to the keychain.
     await _keyChainManager.storeCredentialToKeychain(atsign,
         privateKey: pkamPrivateKey, publicKey: pkamPublicKey);
+  }
+
+  Future<bool?> isUsingSharedStorage() async {
+    return _keyChainManager.isUsingSharedStorage();
+  }
+
+  Future<void> config({required bool useSharedStorage}) async {
+    await _keyChainManager.initialSetup(useSharedStorage: useSharedStorage);
   }
 
   ///Returns `true` on successfully completing onboarding.
@@ -250,8 +269,10 @@ class AtClientService {
   ///Returns [OnboardingStatus] of the atsign by checking it with remote server.
   Future<OnboardingStatus> getKeyRestorePolicy(String atSign) async {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
+    // var localEncryptionPublicKey =
+    //     await _keyChainManager.getValue(atSign, keychainEncryptionPublicKey);
     var localEncryptionPublicKey =
-        await _keyChainManager.getValue(atSign, keychainEncryptionPublicKey);
+        await _keyChainManager.getEncryptionPublicKey(atSign);
     if (_isNullOrEmpty(localEncryptionPublicKey) &&
             _isNullOrEmpty(serverEncryptionPublicKey) ||
         (_isNullOrEmpty(serverEncryptionPublicKey) &&
@@ -359,7 +380,8 @@ class KeychainUtil {
   }
 
   static Future<String?> getAESKey(String atsign) async {
-    return await _keyChainManager.getValue(atsign, keychainSelfEncryptionKey);
+    // return await _keyChainManager.getValue(atsign, keychainSelfEncryptionKey);
+    return (await _keyChainManager.readAtsign(name: atsign))?.selfEncryptionKey;
   }
 
   static Future<String?> getSelfEncryptionKey(String atSign) async {
@@ -367,6 +389,7 @@ class KeychainUtil {
   }
 
   static Future<String?> getAtSign() async {
+    await _keyChainManager.initialSetup(useSharedStorage: false);
     return await _keyChainManager.getAtSign();
   }
 
@@ -375,11 +398,11 @@ class KeychainUtil {
   }
 
   static Future<void> resetAtSignFromKeychain(String atsign) async {
-    return await _keyChainManager.resetAtSignFromKeychain(atsign);
+    await _keyChainManager.resetAtSignFromKeychain(atsign: atsign);
   }
 
   static Future<void> deleteAtSignFromKeychain(String atsign) async {
-    return await _keyChainManager.deleteAtSignFromKeychain(atsign);
+    await _keyChainManager.deleteAtSignFromKeychain(atsign);
   }
 
   static Future<bool> makeAtSignPrimary(String atsign) async {

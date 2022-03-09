@@ -12,6 +12,7 @@ class LoginScreen extends StatefulWidget {
   static const String id = 'LoginScreen';
 
   const LoginScreen({Key? key}) : super(key: key);
+
   @override
   _LoginScreen createState() => _LoginScreen();
 }
@@ -22,6 +23,7 @@ class _LoginScreen extends State<LoginScreen> {
   String? atSign;
   ClientSdkService clientSDKInstance = ClientSdkService.getInstance();
   AtClientPreference? atClientPreference;
+
   // final AtSignLogger _logger = AtSignLogger('Plugin example app');
   Future<void> call() async {
     await clientSDKInstance
@@ -50,28 +52,84 @@ class _LoginScreen extends State<LoginScreen> {
             Center(
               child: TextButton(
                 onPressed: () async {
-                  Onboarding(
+                  // Onboarding(
+                  //   context: context,
+                  //   atClientPreference: atClientPreference!,
+                  //   domain: AtEnv.rootDomain,
+                  //   appColor: Theme.of(context).primaryColor,
+                  //   onboard:
+                  //       (Map<String?, AtClientService> value, String? atsign) {
+                  //     atSign = atsign;
+                  //     clientSDKInstance.atsign = atsign!;
+                  //     clientSDKInstance.atClientServiceMap = value;
+                  //     clientSDKInstance.atClientServiceInstance = value[atsign];
+                  //     _logger.finer('Successfully onboarded $atsign');
+                  //   },
+                  //   onError: (Object? error) {
+                  //     // _logger.severe('Onboarding throws $error error');
+                  //   },
+                  //   nextScreen: const HomeScreen(),
+                  //   appAPIKey: AtEnv.appApiKey,
+                  //   rootEnvironment: AtEnv.rootEnvironment,
+                  // );
+                  final result = await AtOnboarding.onboard(
                     context: context,
-                    atClientPreference: atClientPreference!,
-                    domain: AtEnv.rootDomain,
-                    appColor: Theme.of(context).primaryColor,
-                    onboard:
-                        (Map<String?, AtClientService> value, String? atsign) {
-                      atSign = atsign;
-                      clientSDKInstance.atsign = atsign!;
-                      clientSDKInstance.atClientServiceMap = value;
-                      clientSDKInstance.atClientServiceInstance = value[atsign];
-                      _logger.finer('Successfully onboarded $atsign');
-                    },
-                    onError: (Object? error) {
-                      // _logger.severe('Onboarding throws $error error');
-                    },
-                    nextScreen: const HomeScreen(),
-                    appAPIKey: AtEnv.appApiKey,
-                    rootEnvironment: AtEnv.rootEnvironment,
+                    config: AtOnboardingConfig(
+                      atClientPreference: atClientPreference!,
+                      domain: AtEnv.rootDomain,
+                      rootEnvironment: AtEnv.rootEnvironment,
+                      appAPIKey: AtEnv.appApiKey,
+                    ),
                   );
+                  switch (result) {
+                    case AtOnboardingResult.success:
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const HomeScreen()));
+                      break;
+                    case AtOnboardingResult.error:
+                    // TODO: Handle this case.
+                      break;
+                    case AtOnboardingResult.cancel:
+                    // TODO: Handle this case.
+                      break;
+                  }
                 },
                 child: const Text('Onboard'),
+              ),
+            ),
+            const SizedBox(
+              height: 10,
+            ),
+            Center(
+              child: TextButton(
+                onPressed: () async {
+                  final result = await AtOnboarding.start(
+                    context: context,
+                    config: AtOnboardingConfig(
+                      atClientPreference: atClientPreference!,
+                      domain: AtEnv.rootDomain,
+                      rootEnvironment: AtEnv.rootEnvironment,
+                      appAPIKey: AtEnv.appApiKey,
+                    ),
+                  );
+                  switch (result) {
+                    case AtOnboardingResult.success:
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const HomeScreen()));
+                      break;
+                    case AtOnboardingResult.error:
+                      // TODO: Handle this case.
+                      break;
+                    case AtOnboardingResult.cancel:
+                      // TODO: Handle this case.
+                      break;
+                  }
+                },
+                child: const Text('Add another'),
               ),
             ),
             const SizedBox(
