@@ -12,6 +12,7 @@ dependencies:
   path: ^1.8.0
   flutter:
     sdk: flutter
+  package_info_plus: ^1.4.0
   flutter_keychain: ^2.1.0
   biometric_storage: ^3.0.1
   hive: ^2.0.4

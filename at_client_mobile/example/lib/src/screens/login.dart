@@ -12,6 +12,7 @@ class LoginScreen extends StatefulWidget {
   static const String id = 'LoginScreen';
 
   const LoginScreen({Key? key}) : super(key: key);
+
   @override
   _LoginScreen createState() => _LoginScreen();
 }
@@ -22,6 +23,7 @@ class _LoginScreen extends State<LoginScreen> {
   String? atSign;
   ClientSdkService clientSDKInstance = ClientSdkService.getInstance();
   AtClientPreference? atClientPreference;
+
   // final AtSignLogger _logger = AtSignLogger('Plugin example app');
   Future<void> call() async {
     await clientSDKInstance
@@ -72,6 +74,34 @@ class _LoginScreen extends State<LoginScreen> {
                   );
                 },
                 child: const Text('Onboard'),
+              ),
+            ),
+            const SizedBox(
+              height: 10,
+            ),
+            Center(
+              child: TextButton(
+                onPressed: () async {
+                  Onboarding(
+                    context: context,
+                    atsign: '',
+                    // This domain parameter is optional.
+                    domain: AtEnv.rootDomain,
+                    atClientPreference: atClientPreference!,
+                    appColor: const Color.fromARGB(255, 240, 94, 62),
+                    onboard: (value, atsign) {
+                      _logger.finer('Successfully onboarded $atsign');
+                    },
+                    onError: (Object? error) {
+                      _logger.severe('Onboarding throws $error error');
+                    },
+                    rootEnvironment: RootEnvironment.Staging,
+                    // API Key is mandatory for production environment.
+                    // appAPIKey: YOUR_API_KEY_HERE
+                    nextScreen: const HomeScreen(),
+                  );
+                },
+                child: const Text('Add another'),
               ),
             ),
             const SizedBox(
