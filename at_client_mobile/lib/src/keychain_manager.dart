@@ -11,6 +11,7 @@ import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 const String _kDefaultKeystoreAccount = '@atsigns';
+const int _kDataSchemeVersion = 1;
 
 /// Service to manage keychain entries. This includes saving the
 /// encryption keys and secret to keychain
@@ -25,157 +26,154 @@ class KeyChainManager {
     return _singleton;
   }
 
-  Future<BiometricStorageFile> _getStorage() async {
-    String packageName = '';
-    try {
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      packageName = packageInfo.packageName;
-    } catch (e, s) {
-      _logger.warning('Get PackageInfo', e, s);
-    }
-    return BiometricStorage().getStorage(
-      '$_kDefaultKeystoreAccount:$packageName',
-      options: StorageFileInitOptions(
-        authenticationRequired: false,
-      ),
-    );
-  }
-
   /// Function to group all keys saved in old version app to new data
   Future<void> migrateKeychainData() async {
     //Check if contain new key format
-    final atsigns = await getAtsigns();
-    //Read old key
-    final List<AtsignKey> newAtSignKeys = [];
-    try {
-      Map<String, dynamic>? keysFromBiometric;
-      Map<String, dynamic>? keysFromKeychain;
-      try {
-        final data =
-            await (await BiometricStorage().getStorage('@atsign')).read();
-        keysFromBiometric = jsonDecode(data ?? '');
-      } catch (e, s) {
-        _logger.warning('Read keys from BiometricStorage', e, s);
-      }
-      try {
-        final data = await FlutterKeychain.get(key: '@atsign');
-        keysFromKeychain = jsonDecode(data ?? '');
-      } catch (e, s) {
-        _logger.warning('Read keys from FlutterKeychain', e, s);
-      }
-      if ((keysFromBiometric ?? <String, dynamic>{}).isNotEmpty) {
-        for (var entry in keysFromBiometric!.entries) {
-          final key = entry.key;
-          final value = entry.value;
-          final String? pkamPublicKey = await (await BiometricStorage()
-                  .getStorage('$key:_pkam_public_key'))
-              .read();
-          final String? pkamPrivateKey = await (await BiometricStorage()
-                  .getStorage('$key:_pkam_private_key'))
-              .read();
-          final String? encryptionPublicKey = await (await BiometricStorage()
-                  .getStorage('$key:_encryption_public_key'))
-              .read();
-          final String? encryptionPrivateKey = await (await BiometricStorage()
-                  .getStorage('$key:_encryption_private_key'))
-              .read();
-          final String? selfEncryptionKey =
-              await (await BiometricStorage().getStorage('$key:_aesKey'))
-                  .read();
-          final String? hiveSecret =
-              await (await BiometricStorage().getStorage('$key:_hive_secret'))
-                  .read();
-          final String? secret =
-              await (await BiometricStorage().getStorage('$key:_secret'))
-                  .read();
-          final newAtSignKey = AtsignKey(
-            name: key,
-            isDefault: value as bool,
-            pkamPublicKey: pkamPublicKey,
-            pkamPrivateKey: pkamPrivateKey,
-            encryptionPublicKey: encryptionPublicKey,
-            encryptionPrivateKey: encryptionPrivateKey,
-            selfEncryptionKey: selfEncryptionKey,
-            hiveSecret: hiveSecret,
-            secret: secret,
-          );
-          newAtSignKeys.add(newAtSignKey);
-        }
-      } else if ((keysFromKeychain ?? <String, dynamic>{}).isNotEmpty) {
-        //Read data and migrate from 'FlutterKeychain'
-        for (var entry in keysFromKeychain!.entries) {
-          final key = entry.key;
-          final value = entry.value;
-          final String? pkamPublicKey =
-              await FlutterKeychain.get(key: '$key:_pkam_public_key');
-          final String? pkamPrivateKey =
-              await FlutterKeychain.get(key: '$key:_pkam_private_key');
-          final String? encryptionPublicKey =
-              await FlutterKeychain.get(key: '$key:_encryption_public_key');
-          final String? encryptionPrivateKey =
-              await FlutterKeychain.get(key: '$key:_encryption_private_key');
-          final String? selfEncryptionKey =
-              await FlutterKeychain.get(key: '$key:_aesKey');
-          final String? hiveSecret =
-              await FlutterKeychain.get(key: '$key:_hive_secret');
-          final String? secret = await FlutterKeychain.get(key: '$key:_secret');
-          final newAtSignKey = AtsignKey(
-            name: key,
-            isDefault: value,
-            pkamPublicKey: pkamPublicKey,
-            pkamPrivateKey: pkamPrivateKey,
-            encryptionPublicKey: encryptionPublicKey,
-            encryptionPrivateKey: encryptionPrivateKey,
-            selfEncryptionKey: selfEncryptionKey,
-            hiveSecret: hiveSecret,
-            secret: secret,
-          );
-          newAtSignKeys.add(newAtSignKey);
-        }
-      }
-      //Copy to new data if need
-      if (atsigns.isEmpty && newAtSignKeys.isNotEmpty) {
-        for (var key in newAtSignKeys) {
-          await storeAtSign(atSign: key);
-        }
-      }
-      //Todo: don't remove old data in keychain because still have some apps using old package
-      // if ((keysFromBiometric ?? '').isNotEmpty) {
-      //   //Read data and migrate 'BiometricStorage'
-      //   final keys = jsonDecode(keysFromBiometric!) as Map<String, bool>;
-      //   keys.forEach((key, value) async {
-      //     await (await BiometricStorage().getStorage('$key:_pkam_public_key'))
-      //         .delete();
-      //     await (await BiometricStorage().getStorage('$key:_pkam_private_key'))
-      //         .delete();
-      //     await (await BiometricStorage()
-      //             .getStorage('$key:_encryption_public_key'))
-      //         .delete();
-      //     await (await BiometricStorage()
-      //             .getStorage('$key:_encryption_private_key'))
-      //         .delete();
-      //     await (await BiometricStorage().getStorage('$key:_aesKey')).delete();
-      //     await (await BiometricStorage().getStorage('$key:_hive_secret'))
-      //         .delete();
-      //     await (await BiometricStorage().getStorage('$key:_secret')).delete();
-      //   });
-      //   await (await BiometricStorage().getStorage('@atsign')).delete();
-      // } else if ((keysFromKeychain ?? '').isNotEmpty) {
-      //   final keys = jsonDecode(keysFromBiometric!) as Map<String, bool>;
-      //   keys.forEach((key, value) async {
-      //     await FlutterKeychain.remove(key: '$key:_pkam_public_key');
-      //     await FlutterKeychain.remove(key: '$key:_pkam_private_key');
-      //     await FlutterKeychain.remove(key: '$key:_encryption_public_key');
-      //     await FlutterKeychain.remove(key: '$key:_encryption_private_key');
-      //     await FlutterKeychain.remove(key: '$key:_aesKey');
-      //     await FlutterKeychain.remove(key: '$key:_hive_secret');
-      //     await FlutterKeychain.remove(key: '$key:_secret');
-      //   });
-      //   await FlutterKeychain.remove(key: '@atsign');
-      // }
-    } catch (e, s) {
-      _logger.warning('Migrate Keychain Data', e, s);
+    final clientData = await _getAtClientData();
+    final schemaVersion = clientData?.config?.schemaVersion ?? 0;
+    if (schemaVersion == _kDataSchemeVersion) {
+      //No need migrate
+      return;
     }
+    AtClientData migratedData = AtClientData(
+      config: AtClientDataConfig(schemaVersion: _kDataSchemeVersion),
+      keys: [],
+    );
+    //Migrate data from version 0 => 1
+    if (schemaVersion < 1) {
+      //Read old key
+      final List<AtsignKey> newAtSignKeys = [];
+      try {
+        Map<String, dynamic>? keysFromBiometric;
+        Map<String, dynamic>? keysFromKeychain;
+        try {
+          final data =
+              await (await BiometricStorage().getStorage('@atsign')).read();
+          keysFromBiometric = jsonDecode(data ?? '');
+        } catch (e, s) {
+          _logger.warning('Read keys from BiometricStorage', e, s);
+        }
+        try {
+          final data = await FlutterKeychain.get(key: '@atsign');
+          keysFromKeychain = jsonDecode(data ?? '');
+        } catch (e, s) {
+          _logger.warning('Read keys from FlutterKeychain', e, s);
+        }
+        if ((keysFromBiometric ?? <String, dynamic>{}).isNotEmpty) {
+          for (var entry in keysFromBiometric!.entries) {
+            final key = entry.key;
+            final value = entry.value;
+            final String? pkamPublicKey = await (await BiometricStorage()
+                    .getStorage('$key:_pkam_public_key'))
+                .read();
+            final String? pkamPrivateKey = await (await BiometricStorage()
+                    .getStorage('$key:_pkam_private_key'))
+                .read();
+            final String? encryptionPublicKey = await (await BiometricStorage()
+                    .getStorage('$key:_encryption_public_key'))
+                .read();
+            final String? encryptionPrivateKey = await (await BiometricStorage()
+                    .getStorage('$key:_encryption_private_key'))
+                .read();
+            final String? selfEncryptionKey =
+                await (await BiometricStorage().getStorage('$key:_aesKey'))
+                    .read();
+            final String? hiveSecret =
+                await (await BiometricStorage().getStorage('$key:_hive_secret'))
+                    .read();
+            final String? secret =
+                await (await BiometricStorage().getStorage('$key:_secret'))
+                    .read();
+            final newAtSignKey = AtsignKey(
+              name: key,
+              isDefault: value as bool,
+              pkamPublicKey: pkamPublicKey,
+              pkamPrivateKey: pkamPrivateKey,
+              encryptionPublicKey: encryptionPublicKey,
+              encryptionPrivateKey: encryptionPrivateKey,
+              selfEncryptionKey: selfEncryptionKey,
+              hiveSecret: hiveSecret,
+              secret: secret,
+            );
+            newAtSignKeys.add(newAtSignKey);
+          }
+        } else if ((keysFromKeychain ?? <String, dynamic>{}).isNotEmpty) {
+          //Read data and migrate from 'FlutterKeychain'
+          for (var entry in keysFromKeychain!.entries) {
+            final key = entry.key;
+            final value = entry.value;
+            final String? pkamPublicKey =
+                await FlutterKeychain.get(key: '$key:_pkam_public_key');
+            final String? pkamPrivateKey =
+                await FlutterKeychain.get(key: '$key:_pkam_private_key');
+            final String? encryptionPublicKey =
+                await FlutterKeychain.get(key: '$key:_encryption_public_key');
+            final String? encryptionPrivateKey =
+                await FlutterKeychain.get(key: '$key:_encryption_private_key');
+            final String? selfEncryptionKey =
+                await FlutterKeychain.get(key: '$key:_aesKey');
+            final String? hiveSecret =
+                await FlutterKeychain.get(key: '$key:_hive_secret');
+            final String? secret =
+                await FlutterKeychain.get(key: '$key:_secret');
+            final newAtSignKey = AtsignKey(
+              name: key,
+              isDefault: value,
+              pkamPublicKey: pkamPublicKey,
+              pkamPrivateKey: pkamPrivateKey,
+              encryptionPublicKey: encryptionPublicKey,
+              encryptionPrivateKey: encryptionPrivateKey,
+              selfEncryptionKey: selfEncryptionKey,
+              hiveSecret: hiveSecret,
+              secret: secret,
+            );
+            newAtSignKeys.add(newAtSignKey);
+          }
+        }
+        migratedData = migratedData.copyWith(keys: newAtSignKeys);
+        //Todo: don't remove old data in keychain because still have some apps using old package
+        // if ((keysFromBiometric ?? '').isNotEmpty) {
+        //   //Read data and migrate 'BiometricStorage'
+        //   final keys = jsonDecode(keysFromBiometric!) as Map<String, bool>;
+        //   keys.forEach((key, value) async {
+        //     await (await BiometricStorage().getStorage('$key:_pkam_public_key'))
+        //         .delete();
+        //     await (await BiometricStorage().getStorage('$key:_pkam_private_key'))
+        //         .delete();
+        //     await (await BiometricStorage()
+        //             .getStorage('$key:_encryption_public_key'))
+        //         .delete();
+        //     await (await BiometricStorage()
+        //             .getStorage('$key:_encryption_private_key'))
+        //         .delete();
+        //     await (await BiometricStorage().getStorage('$key:_aesKey')).delete();
+        //     await (await BiometricStorage().getStorage('$key:_hive_secret'))
+        //         .delete();
+        //     await (await BiometricStorage().getStorage('$key:_secret')).delete();
+        //   });
+        //   await (await BiometricStorage().getStorage('@atsign')).delete();
+        // } else if ((keysFromKeychain ?? '').isNotEmpty) {
+        //   final keys = jsonDecode(keysFromBiometric!) as Map<String, bool>;
+        //   keys.forEach((key, value) async {
+        //     await FlutterKeychain.remove(key: '$key:_pkam_public_key');
+        //     await FlutterKeychain.remove(key: '$key:_pkam_private_key');
+        //     await FlutterKeychain.remove(key: '$key:_encryption_public_key');
+        //     await FlutterKeychain.remove(key: '$key:_encryption_private_key');
+        //     await FlutterKeychain.remove(key: '$key:_aesKey');
+        //     await FlutterKeychain.remove(key: '$key:_hive_secret');
+        //     await FlutterKeychain.remove(key: '$key:_secret');
+        //   });
+        //   await FlutterKeychain.remove(key: '@atsign');
+        // }
+      } catch (e, s) {
+        _logger.warning('Migrate Keychain Data', e, s);
+      }
+    }
+    //Migrate data from version 1 => 2
+    if (schemaVersion < 2) {
+      //For next update data structure
+    }
+    await _saveAtClientData(data: migratedData);
   }
 
   /// Function to get atsign's key with name
@@ -186,28 +184,14 @@ class KeyChainManager {
 
   /// Function to get all atsign item in keychain
   Future<List<AtsignKey>> getAtsigns() async {
-    try {
-      final store = await _getStorage();
-      final value = await store.read();
-      final mapList = jsonDecode(value ?? '{}');
-      if (mapList is List) {
-        return mapList.map<AtsignKey>((value) {
-          if (value is Map<String, dynamic>) {
-            return AtsignKey.fromJson(value);
-          } else {
-            return AtsignKey(name: 'unknown');
-          }
-        }).toList();
-      }
-    } catch (e, s) {
-      _logger.info('getAtsigns', e, s);
-    }
-    return [];
+    final data = await _getAtClientData();
+    return data?.keys ?? [];
   }
 
   /// Function to add new atsign to keychain
   Future<void> storeAtSign({required AtsignKey atSign}) async {
-    final atSigns = await getAtsigns();
+    final atClientData = await _getAtClientData();
+    final atSigns = atClientData?.keys ?? [];
     //If have no account => make this account is default
     if (atSigns.isEmpty) {
       atSign = atSign.copyWith(isDefault: true);
@@ -215,22 +199,6 @@ class KeyChainManager {
     atSigns.removeWhere((element) => element.name == atSign.name);
     atSigns.add(atSign);
     await _saveAtsigns(atsigns: atSigns);
-  }
-
-  /// Function to save atsigns
-  Future<void> _saveAtsigns({required List<AtsignKey> atsigns}) async {
-    //If have 1 account => make first account is default
-    if (atsigns.length == 1) {
-      atsigns[0] = atsigns[0].copyWith(isDefault: true);
-    }
-    try {
-      final store = await _getStorage();
-      final value = atsigns.map((e) => e.toJson()).toList();
-      final mapList = jsonEncode(value);
-      await store.write(mapList);
-    } catch (e, s) {
-      _logger.info('saveAtsigns', e, s);
-    }
   }
 
   /// Function to get hive secret from keychain
@@ -414,16 +382,6 @@ class KeyChainManager {
   }
 
   /// Function to get Map of atsigns from keychain
-  Future<Map<String, bool?>> _getAtSignMap() async {
-    final atsigns = await getAtsigns();
-    final result = <String, bool?>{};
-    for (var element in atsigns) {
-      result[element.name] = element.isDefault;
-    }
-    return result;
-  }
-
-  /// Function to get Map of atsigns from keychain
   Future<Map<String, bool?>> getAtsignsWithStatus() async {
     return await _getAtSignMap();
   }
@@ -456,8 +414,70 @@ class KeyChainManager {
     await _saveAtsigns(atsigns: atsigns);
   }
 
-  /// Function to clear all entries from keychain
-  Future<void> clearKeychainEntries() async {
-    await _saveAtsigns(atsigns: []);
+  Future<BiometricStorageFile> _getStorage() async {
+    String packageName = '';
+    try {
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      packageName = packageInfo.packageName;
+    } catch (e, s) {
+      _logger.warning('Get PackageInfo', e, s);
+    }
+    return BiometricStorage().getStorage(
+      '$_kDefaultKeystoreAccount:$packageName',
+      options: StorageFileInitOptions(
+        authenticationRequired: false,
+      ),
+    );
+  }
+
+  /// Function to get at client data
+  Future<AtClientData?> _getAtClientData() async {
+    try {
+      final store = await _getStorage();
+      final value = await store.read();
+      final json = jsonDecode(value ?? '{}');
+      if (json is Map<String, dynamic>) {
+        return AtClientData.fromJson(json);
+      }
+    } catch (e, s) {
+      _logger.info('_getAtClientData', e, s);
+    }
+    return null;
+  }
+
+  /// Function to save client data
+  Future<void> _saveAtClientData({required AtClientData data}) async {
+    try {
+      final store = await _getStorage();
+      final mapList = jsonEncode(data.toJson());
+      await store.write(mapList);
+    } catch (e, s) {
+      _logger.info('_saveClientData', e, s);
+    }
+  }
+
+  /// Function to save atsigns. It will replace all old keys with new keys passed by param
+  Future<void> _saveAtsigns({required List<AtsignKey> atsigns}) async {
+    var atClientData = await _getAtClientData() ??
+        AtClientData(
+          config: AtClientDataConfig(schemaVersion: _kDataSchemeVersion),
+          keys: [],
+        );
+    //If have 1 account => make first account is default
+    if (atsigns.length == 1) {
+      atsigns[0] = atsigns[0].copyWith(isDefault: true);
+    }
+    atClientData = atClientData.copyWith(keys: atsigns);
+    _saveAtClientData(data: atClientData);
+  }
+
+  /// Function to get Map of atsigns from keychain
+  Future<Map<String, bool?>> _getAtSignMap() async {
+    final atsigns = await getAtsigns();
+    final result = <String, bool?>{};
+    for (var element in atsigns) {
+      result[element.name] = element.isDefault;
+    }
+    return result;
   }
 }
