@@ -79,3 +79,66 @@ class AtsignKey {
     );
   }
 }
+
+class AtClientData {
+  AtClientDataConfig? config;
+  List<AtsignKey> keys;
+
+  AtClientData({
+    this.config,
+    this.keys = const [],
+  });
+
+  AtClientData copyWith({
+    AtClientDataConfig? config,
+    List<AtsignKey>? keys,
+  }) {
+    return AtClientData(
+      config: config ?? this.config,
+      keys: keys ?? this.keys,
+    );
+  }
+
+  factory AtClientData.fromJson(Map<String, dynamic> json) => AtClientData(
+        config: json['config'] == null
+            ? null
+            : AtClientDataConfig.fromJson(
+                json['config'] as Map<String, dynamic>),
+        keys: (json['keys'] as List<dynamic>?)
+                ?.map((e) => AtsignKey.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'config': config,
+        'keys': keys,
+      };
+}
+
+class AtClientDataConfig {
+  final int schemaVersion;
+
+  const AtClientDataConfig({
+    this.schemaVersion = 1,
+  });
+
+  factory AtClientDataConfig.defaultConfig() => AtClientDataConfig();
+
+  AtClientDataConfig copyWith({
+    int? schemaVersion,
+  }) {
+    return AtClientDataConfig(
+      schemaVersion: schemaVersion ?? this.schemaVersion,
+    );
+  }
+
+  factory AtClientDataConfig.fromJson(Map<String, dynamic> json) =>
+      AtClientDataConfig(
+        schemaVersion: json['schemaVersion'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'schemaVersion': schemaVersion,
+      };
+}
