@@ -33,7 +33,9 @@ class NotificationResponseParser extends DefaultResponseParser {
 
         var decryptedValue =
             await decryptionService.decrypt(atKey, atNotification.value);
-        atNotification.value = decryptedValue.toString().trim();
+        if (atNotification.value != null && atNotification.value!.isNotEmpty) {
+          atNotification.value = decryptedValue.toString().trim();
+        }
       } on Exception catch (e) {
         _logger.severe('unable to decrypt notification value: ${e.toString()}');
       }
