@@ -14,7 +14,7 @@ class LookUpBuilderManager {
             atKey.metadata!.isPublic! &&
             !atKey.metadata!.isCached)) {
       return PLookupVerbBuilder()
-        ..atKey = _getKeyWithNameSpace(atKey)
+        ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..operation = 'all';
     }
@@ -24,13 +24,13 @@ class LookUpBuilderManager {
             !atKey.metadata!.isCached &&
             !atKey.metadata!.isPublic!)) {
       return LookupVerbBuilder()
-        ..atKey = _getKeyWithNameSpace(atKey)
+        ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..auth = true
         ..operation = 'all';
     }
     return LLookupVerbBuilder()
-      ..atKey = _getKeyWithNameSpace(atKey)
+      ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
       ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
       ..sharedWith = AtUtils.formatAtSign(atKey.sharedWith)
       ..isPublic = (atKey.metadata != null && atKey.metadata?.isPublic != null)
@@ -41,30 +41,6 @@ class LookUpBuilderManager {
           : false
       ..operation = 'all';
   }
-}
-
-/// Accepts [AtKey] and returns [AtKey.key] with namespace appended
-/// Appends namespace if [atKey.metadata.namespaceAware] is set to true,
-/// else namespace is not appended
-String _getKeyWithNameSpace(AtKey atKey) {
-  // Do not append namespace for encryption keys.
-  if (!(atKey.metadata!.namespaceAware)) {
-    return atKey.key!;
-  }
-  //Do not append namespace if already appended
-  if (atKey.key?.substring(atKey.key!.lastIndexOf('.') + 1) ==
-      AtClientManager.getInstance().atClient.getPreferences()?.namespace) {
-    return atKey.key!;
-  }
-  // If key does not have any namespace, append the namespace to the key.
-  if (atKey.namespace != null && atKey.namespace!.isNotEmpty) {
-    return '${atKey.key}.${atKey.namespace!}';
-  }
-  if (AtClientManager.getInstance().atClient.getPreferences()!.namespace !=
-      null) {
-    return '${atKey.key}.${AtClientManager.getInstance().atClient.getPreferences()!.namespace}';
-  }
-  return atKey.key!;
 }
 
 /// Returns the instance of [Secondary] server.

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
@@ -19,7 +18,9 @@ import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
+import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
+import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -29,7 +30,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
@@ -271,7 +271,7 @@ class AtClientImpl implements AtClient {
     var scanResult = await getSecondary().executeVerb(builder);
     scanResult = _formatResult(scanResult);
     var result = [];
-    if (scanResult != null && scanResult.isNotEmpty) {
+    if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
     return result as FutureOr<List<String>>;
@@ -304,100 +304,25 @@ class AtClientImpl implements AtClient {
     return result;
   }
 
-  Future<bool> _put(String key, dynamic value,
-      {String? sharedWith, Metadata? metadata}) async {
-    var updateKey = key;
-    if (metadata == null || metadata.namespaceAware) {
-      updateKey = _getKeyWithNamespace(key);
-    }
-    var operation = getOperation(value, metadata);
-    sharedWith = AtUtils.formatAtSign(sharedWith);
-    var builder = UpdateVerbBuilder()
-      ..atKey = updateKey
-      ..sharedBy = currentAtSign
-      ..sharedWith = sharedWith
-      ..value = value
-      ..operation = operation;
-
-    if (metadata != null) {
-      builder.ttl = metadata.ttl;
-      builder.ttb = metadata.ttb;
-      builder.ttr = metadata.ttr;
-      builder.ccd = metadata.ccd;
-      builder.isBinary = metadata.isBinary;
-      builder.isEncrypted = metadata.isEncrypted;
-      builder.isPublic = metadata.isPublic!;
-      if (metadata.isHidden) {
-        builder.atKey = '_' + updateKey;
-      }
-    }
-    if (value != null) {
-      if ((sharedWith != null && sharedWith.isNotEmpty) &&
-          sharedWith != currentAtSign) {
-        try {
-          builder.value =
-              await _encryptionService!.encrypt(key, value, sharedWith);
-          builder.isEncrypted = true;
-        } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(errorCode, e.message));
-        }
-      } else if (!builder.isPublic &&
-          !builder.atKey.toString().startsWith('_')) {
-        builder.value = await _encryptionService!.encryptForSelf(key, value);
-        builder.isEncrypted = true;
-      }
-    }
-    var isSyncRequired = true;
-    if (updateKey.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        updateKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-    if (SyncUtil.shouldSkipSync(updateKey)) {
-      isSyncRequired = false;
-    }
-    //sign public data with private encryption key
-    if (metadata != null && metadata.isPublic!) {
-      try {
-        var encryptionPrivateKey =
-            await _localSecondary!.getEncryptionPrivateKey();
-        if (encryptionPrivateKey != null) {
-          _logger.finer('signing public data for key:$key');
-          builder.dataSignature =
-              _encryptionService!.signPublicData(encryptionPrivateKey, value);
-        }
-      } on Exception catch (e) {
-        _logger.severe('Exception trying to sign public data:${e.toString()}');
-      }
-    }
-
-    String? putResult;
-    try {
-      if (builder.dataSignature != null) {
-        builder.isJson = true;
-      }
-      putResult =
-          await getSecondary().executeVerb(builder, sync: isSyncRequired);
-    } on AtClientException catch (e) {
-      _logger.severe(
-          'error code: ${e.errorCode} error message: ${e.errorMessage}');
-    } on Exception catch (e) {
-      _logger.severe('error in put: ${e.toString()}');
-    }
-    return putResult != null;
-  }
-
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    if (atKey.metadata != null && atKey.metadata!.isBinary!) {
-      if (value != null && value.length > _preference!.maxDataSize) {
-        throw AtClientException('AT0005', 'BufferOverFlowException');
-      }
-      value = Base2e15.encode(value);
+    // Perform atKey validations.
+    await AtClientValidation.validateAtKey(atKey);
+    var tuple = Tuple<AtKey, dynamic>()
+      ..one = atKey
+      ..two = value;
+    // Transform put request
+    UpdateVerbBuilder verbBuilder =
+        await PutRequestTransformer().transform(tuple);
+    // Execute the verb builder
+    var putResponse = await SecondaryManager.getSecondary(verbBuilder)
+        .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
+    // If putResponse is null or empty, update failed, return false.
+    if (putResponse == null || putResponse.isEmpty) {
+      return false;
     }
-    return _put(atKey.key!, value,
-        sharedWith: atKey.sharedWith, metadata: atKey.metadata);
+    return PutResponseTransformer().transform(putResponse);
   }
 
   @override
@@ -482,13 +407,8 @@ class AtClientImpl implements AtClient {
       ..dataSignature = metadata.dataSignature
       ..operation = UPDATE_META;
 
-    var isSyncRequired = true;
-    if (SyncUtil.shouldSkipSync(updateKey!)) {
-      isSyncRequired = false;
-    }
-
-    var updateMetaResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
+    var updateMetaResult = await getSecondary()
+        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
     return updateMetaResult != null;
   }
 
@@ -555,7 +475,7 @@ class AtClientImpl implements AtClient {
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
-      if (streamResult != null && streamResult.startsWith('stream:done')) {
+      if (streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;
       }

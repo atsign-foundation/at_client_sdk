@@ -245,6 +245,7 @@ class Monitor {
   }
 
   void _handleResponse(String response, Function callback) {
+    _logger.finer('received response on monitor: $response');
     if (response.toString().startsWith('notification')) {
       callback(response);
     } else {

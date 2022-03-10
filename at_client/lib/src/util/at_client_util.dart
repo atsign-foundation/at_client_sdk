@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -104,6 +105,30 @@ class AtClientUtil {
       metadata.isPublic = isPublic;
     }
     return metadata;
+  }
+
+  /// Accepts [AtKey] and returns [AtKey.key] with namespace appended
+  /// Appends namespace if [atKey.metadata.namespaceAware] is set to true,
+  /// else namespace is not appended
+  static String getKeyWithNameSpace(AtKey atKey) {
+    // Do not append namespace for encryption keys.
+    if (!(atKey.metadata!.namespaceAware)) {
+      return atKey.key!;
+    }
+    //Do not append namespace if already appended
+    if (atKey.key?.substring(atKey.key!.lastIndexOf('.') + 1) ==
+        AtClientManager.getInstance().atClient.getPreferences()?.namespace) {
+      return atKey.key!;
+    }
+    // If key does not have any namespace, append the namespace to the key.
+    if (atKey.namespace != null && atKey.namespace!.isNotEmpty) {
+      return '${atKey.key}.${atKey.namespace!}';
+    }
+    if (AtClientManager.getInstance().atClient.getPreferences()!.namespace !=
+        null) {
+      return '${atKey.key}.${AtClientManager.getInstance().atClient.getPreferences()!.namespace}';
+    }
+    return atKey.key!;
   }
 }
 

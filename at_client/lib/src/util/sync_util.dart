@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -81,7 +81,14 @@ class SyncUtil {
     if (regex != null && regex != 'null' && regex.isNotEmpty) {
       builder.regex = regex;
     }
-    var result = await remoteSecondary.executeVerb(builder);
+    // ignore: prefer_typing_uninitialized_variables
+    var result;
+    try {
+      result = await remoteSecondary.executeVerb(builder);
+    } on AtClientException catch (e) {
+      logger.severe(
+          'Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
+    }
     result = result.replaceAll('data: ', '');
     var statsJson = JsonUtils.decodeJson(result);
     if (statsJson[0]['value'] != 'null') {
@@ -90,12 +97,16 @@ class SyncUtil {
     return commitId;
   }
 
-  static bool shouldSkipSync(String key) {
+  /// Returns true for the keys that has to be sync'ed to the server
+  /// Else returns false.
+  ///
+  /// The PKAM keys and Encryption Private key should not be sync'ed to remote secondary
+  static bool shouldSync(String key) {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
         key.startsWith(AT_ENCRYPTION_PRIVATE_KEY)) {
-      return true;
+      return false;
     }
-    return false;
+    return true;
   }
 }
