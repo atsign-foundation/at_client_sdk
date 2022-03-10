@@ -1,13 +1,14 @@
+import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/response/response.dart';
-import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 class NotificationResponseParser extends DefaultResponseParser {
   final _logger = AtSignLogger('NotificationResponseParser');
-  List<AtNotification> getAtNotifications(AtResponse response) async {
+  Future<List<AtNotification>> getAtNotifications(AtResponse response) async {
     final notificationList = <AtNotification>[];
     if (response.isError) {
       return [];
@@ -23,9 +24,16 @@ class NotificationResponseParser extends DefaultResponseParser {
       final atNotification =
           AtNotification.fromJson(JsonUtils.decodeJson(notification));
       try {
-        atNotification.value = await EncryptionService()
-            .decrypt(atNotification.value!, atNotification.from);
-        atNotification.isValueEncrypted = false;
+        var atKey = AtKey()
+          ..key = atNotification.key
+          ..sharedBy = atNotification.from
+          ..sharedWith = atNotification.to;
+        var decryptionService =
+            AtKeyDecryptionManager.get(atKey, atNotification.to);
+
+        var decryptedValue =
+            await decryptionService.decrypt(atKey, atNotification.value);
+        atNotification.value = decryptedValue.toString().trim();
       } on Exception catch (e) {
         _logger.severe('unable to decrypt notification value: ${e.toString()}');
       }

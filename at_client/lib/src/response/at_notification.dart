@@ -6,7 +6,6 @@ class AtNotification {
   late int epochMillis;
   String? value;
   String? operation;
-  bool isValueEncrypted = true;
 
   AtNotification(this.id, this.key, this.from, this.to, this.epochMillis,
       {this.value, this.operation});
@@ -25,8 +24,7 @@ class AtNotification {
       'to': to,
       'epochMillis': epochMillis,
       'value': value,
-      'operation': operation,
-      'isValueEncrypted': isValueEncrypted
+      'operation': operation
     };
   }
 
@@ -41,6 +39,6 @@ class AtNotification {
 
   @override
   String toString() {
-    return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation, isValueEncrypted: $isValueEncrypted}';
+    return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation}';
   }
 }
