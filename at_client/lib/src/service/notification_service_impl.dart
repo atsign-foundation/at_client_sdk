@@ -111,7 +111,7 @@ class NotificationServiceImpl
   void _internalNotificationCallback(String notificationJSON) async {
     try {
       final notificationParser = NotificationResponseParser();
-      final atNotifications = notificationParser
+      final atNotifications = await notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
