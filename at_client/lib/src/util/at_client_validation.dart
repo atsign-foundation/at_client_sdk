@@ -42,7 +42,7 @@ class AtClientValidation {
 
   /// Verify if the atSign exists in root server.
   /// Throws [InvalidAtSignException] if atSign does not exist.
-  static void isAtSignExists(
+  static Future<void> isAtSignExists(
       String atSign, String rootDomain, int rootPort) async {
     if (atSign.isEmpty) {
       throw AtKeyException('@sign cannot be empty');
@@ -62,10 +62,39 @@ class AtClientValidation {
     validateMetadata(atKey.metadata);
     // verifies if the sharedWith atSign exists.
     if (atKey.sharedWith != null && await NetworkUtil.isNetworkAvailable()) {
-      isAtSignExists(
+      await isAtSignExists(
           atKey.sharedWith!,
           AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
           AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
+    }
+  }
+
+  /// Performs the validations on the PutRequest
+  static void validatePutRequest(AtKey atKey, dynamic value) {
+    // If value type is other than String and List<int> throw Exception
+    if (value is! String && value is! List<int>) {
+      throw AtClientException('AT0014',
+          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
+    }
+    // If length of value exceeds maxDataSize, throw AtClientException
+    if (value.length >
+        AtClientManager.getInstance().atClient.getPreferences()!.maxDataSize) {
+      throw AtClientException('AT0005', 'BufferOverFlowException');
+    }
+    // If key is cached, throw exception
+    if (atKey.metadata != null && atKey.metadata!.isCached) {
+      throw AtClientException('AT0014', 'User cannot create a cached key');
+    }
+    // If namespace is not set on key and in preferences, throw exception
+    if ((atKey.namespace == null || atKey.namespace!.isEmpty) &&
+        (AtClientManager.getInstance().atClient.getPreferences()!.namespace ==
+                null ||
+            AtClientManager.getInstance()
+                .atClient
+                .getPreferences()!
+                .namespace!
+                .isEmpty)) {
+      throw AtClientException('AT0014', 'namespace is mandatory');
     }
   }
 }

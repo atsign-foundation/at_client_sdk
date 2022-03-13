@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -63,6 +64,42 @@ abstract class AtClient {
   /// ```
   /// Starting version 3.0.0 [isDedicated] is deprecated
   Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
+
+  /// Used to store the textual data into the keystore.
+  /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
+  /// has to be shared with another atSign.
+  /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
+  /// phone.persona@alice where 'persona' is the namespace.
+  /// ```
+  /// update:phone@alice +1 999 9999
+  ///   var key = AtKey.self('phone', namespace: 'wavi').build();
+  ///   putText(key,'+1 999 9999');
+  /// update:public:phone@alice +1 999 9999
+  ///   var key = AtKey.public('location', namespace: 'wavi').build();
+  ///   put(key,'+1 999 9999');
+  /// update:@bob:phone@alice +1 999 9999
+  ///    var key = (AtKey.shared('phone', namespace: 'wavi')
+  ///             ..sharedWith('@bob'))
+  ///           .build();
+  ///   put(key,'+1 999 9999');
+  /// update:@alice:phone.persona@alice +1 999 9999
+  ///   var key = AtKey()..key='phone'
+  ///             ..sharedWith='@alice'
+  ///   put(key, '+1 999 9999');
+  /// update:@alice:phone@alice +1 999 9999
+  ///   var metaData = Metadata()..namespaceAware=false
+  ///   var key = AtKey()..key='phone'
+  ///            sharedWith='@alice'
+  ///   put(key, '+1 999 9999');
+  /// update:@bob:phone.persona@alice +1 999 9999
+  ///   var key = AtKey()..key='phone'
+  ///             sharedWith='@bob'
+  ///    put(key, '+1 999 9999');
+  /// ```
+  Future<AtResponse> putText(AtKey atKey, String value);
+
+  /// Used to store the binary data into the keystore. For example: images, files etc.
+  Future<AtResponse> putBinary(AtKey atKey, List<int> value);
 
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as

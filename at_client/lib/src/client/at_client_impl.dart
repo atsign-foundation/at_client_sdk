@@ -310,24 +310,6 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    // If value type is other than String and List<int> throw Exception
-    if (value is! String && value is! List<int>) {
-      throw AtClientException('AT0014',
-          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
-    }
-    // If length of value exceeds maxDataSize, throw AtClientException
-    if (value.length > preference!.maxDataSize) {
-      throw AtClientException('AT0005', 'BufferOverFlowException');
-    }
-    // If key is cached, throw exception
-    if (atKey.metadata != null && atKey.metadata!.isCached) {
-      throw AtClientException('AT0014', 'User cannot create a cached key');
-    }
-    // If namespace is not set on key and in preferences, throw exception
-    if ((atKey.namespace == null || atKey.namespace!.isEmpty) &&
-        (preference!.namespace == null || preference!.namespace!.isEmpty)) {
-      throw AtClientException('AT0014', 'namespace is mandatory');
-    }
     AtResponse atResponse = AtResponse();
     if (value is String) {
       atResponse = await putText(atKey, value);
@@ -339,7 +321,10 @@ class AtClientImpl implements AtClient {
   }
 
   /// put's the text data into the keystore
+  @override
   Future<AtResponse> putText(AtKey atKey, String value) async {
+    // Performs the put request validations.
+    AtClientValidation.validatePutRequest(atKey, value);
     // Set the default metadata if not already set.
     atKey.metadata ??= Metadata();
     // Setting metadata.isBinary to false for putText
@@ -356,11 +341,16 @@ class AtClientImpl implements AtClient {
     // validate the atKey
     // Setting the validateOwnership to true to perform KeyOwnerShip validation and
     // KeyShare validation
-    AtKeyValidators.get().validate(
+    var validationResult = AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
           ..atSign = currentAtSign
           ..validateOwnership = true);
+    // If the validationResult.isValid is false, validation of AtKey failed.
+    // throw AtClientException with failure reason.
+    if (!validationResult.isValid) {
+      throw AtClientException('AT0014', validationResult.failureReason);
+    }
 
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
@@ -379,6 +369,7 @@ class AtClientImpl implements AtClient {
   }
 
   /// put's the binary data(e.g. images, files etc) into the keystore
+  @override
   Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
     // Set the default metadata if not already set.
     atKey.metadata ??= Metadata();
@@ -397,6 +388,11 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
+    AtKeyValidators.get().validate(
+        atKey.toString(),
+        ValidationContext()
+          ..atSign = currentAtSign
+          ..validateOwnership = true);
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
     final notifyResult =
@@ -471,13 +467,8 @@ class AtClientImpl implements AtClient {
       ..dataSignature = metadata.dataSignature
       ..operation = UPDATE_META;
 
-    var isSyncRequired = true;
-    if (SyncUtil.shouldSync(updateKey!)) {
-      isSyncRequired = false;
-    }
-
-    var updateMetaResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
+    var updateMetaResult = await getSecondary()
+        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
     return updateMetaResult != null;
   }
 
@@ -755,14 +746,6 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<String?> notifyChange(NotificationParams notificationParams) async {
-    // Validate the AtKey.
-    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
-    // KeyShare validation
-    AtKeyValidators.get().validate(
-        notificationParams.atKey.toString(),
-        ValidationContext()
-          ..atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()
-          ..validateOwnership = true);
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
@@ -772,16 +755,29 @@ class AtClientImpl implements AtClient {
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    AtClientValidation.isAtSignExists(notificationParams.atKey.sharedWith!,
-        _preference!.rootDomain, _preference!.rootPort);
+    await AtClientValidation.isAtSignExists(
+        notificationParams.atKey.sharedWith!,
+        _preference!.rootDomain,
+        _preference!.rootPort);
     // validate sharedBy atSign
-    notificationParams.atKey.sharedBy ??= getCurrentAtSign();
+    if (notificationParams.atKey.sharedBy == null ||
+        notificationParams.atKey.sharedBy!.isEmpty) {
+      notificationParams.atKey.sharedBy = getCurrentAtSign();
+    }
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
     // For messageType is text, text may contains spaces but key should not have spaces
     // Hence do not validate the key.
     if (notificationParams.messageType != MessageTypeEnum.text) {
       AtClientValidation.validateKey(notificationParams.atKey.key);
+      ValidationResult validationResult = AtKeyValidators.get().validate(
+          notificationParams.atKey.toString(),
+          ValidationContext()
+            ..atSign = currentAtSign
+            ..validateOwnership = true);
+      if (!validationResult.isValid) {
+        throw AtClientException('AT0014', validationResult.failureReason);
+      }
     }
     // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);

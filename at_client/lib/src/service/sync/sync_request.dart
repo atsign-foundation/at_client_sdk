@@ -1,4 +1,3 @@
-
 import 'package:at_client/src/service/sync/sync_result.dart';
 import 'package:uuid/uuid.dart';
 

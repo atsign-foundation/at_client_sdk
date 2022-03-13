@@ -86,8 +86,9 @@ class SyncUtil {
     var result;
     try {
       result = await remoteSecondary.executeVerb(builder);
-    } on AtClientException catch (e){
-      logger.severe('Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
+    } on AtClientException catch (e) {
+      logger.severe(
+          'Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
     }
     result = result.replaceAll('data: ', '');
     var statsJson = JsonUtils.decodeJson(result);
@@ -97,6 +98,10 @@ class SyncUtil {
     return commitId;
   }
 
+  /// Returns true for the keys that has to be sync'ed to the server
+  /// Else returns false.
+  ///
+  /// The PKAM keys and Encryption Private key should not be sync'ed to remote secondary
   static bool shouldSync(String key) {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
