@@ -19,8 +19,25 @@ class SharedKeyDecryption implements AtKeyDecryption {
       throw IllegalArgumentException(
           'Decryption failed. Encrypted value is null');
     }
-    String encryptedSharedKey = await _getEncryptedSharedKey(atKey);
-    if (encryptedSharedKey.isEmpty || encryptedSharedKey == 'null') {
+    String? encryptedSharedKey;
+    if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
+      encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
+      final atClient = AtClientManager.getInstance().atClient;
+      final currentAtSignPublicKey = await atClient
+          .getLocalSecondary()!
+          .getEncryptionPublicKey(atClient.getCurrentAtSign()!);
+      if (currentAtSignPublicKey != null &&
+          atKey.metadata!.pubKeyCS !=
+              EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
+        throw AtClientException(error_codes['AtClientException'],
+            'Public key has changed. Cannot decrypt shared data- ${atKey.key}');
+      }
+    } else {
+      encryptedSharedKey = await _getEncryptedSharedKey(atKey);
+    }
+    if (encryptedSharedKey == null ||
+        encryptedSharedKey.isEmpty ||
+        encryptedSharedKey == 'null') {
       throw KeyNotFoundException('shared encryption key not found');
     }
     var currentAtSignPrivateKey = await (AtClientManager.getInstance()
