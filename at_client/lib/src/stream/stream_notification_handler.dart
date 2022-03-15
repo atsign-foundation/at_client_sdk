@@ -27,8 +27,9 @@ class StreamNotificationHandler {
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
     var socket = await SecureSocket.connect(host, int.parse(port));
-    var f = File(
-        '${preference!.downloadPath}/encrypted_${streamNotification.fileName}');
+    var f = File((preference!.downloadPath ?? '') +
+        Platform.pathSeparator +
+        'encrypted_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive $streamId\n';
     socket.write(command);
@@ -54,8 +55,9 @@ class StreamNotificationHandler {
         var startTime = DateTime.now();
         var decryptedBytes =
             encryptionService!.decryptStream(f.readAsBytesSync(), sharedKey);
-        var decryptedFile =
-            File('${preference!.downloadPath}/${streamNotification.fileName}');
+        var decryptedFile = File((preference!.downloadPath ?? '') +
+            Platform.pathSeparator +
+            streamNotification.fileName);
         decryptedFile.writeAsBytesSync(decryptedBytes);
         f.deleteSync(); // delete encrypted file
         var endTime = DateTime.now();
