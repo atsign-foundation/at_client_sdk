@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:test/test.dart';
@@ -9,103 +10,173 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
-  var atSign1, atSign2;
-  AtClientManager? atSign1AtClientManager, atSign2AtClientManager;
+  var currentAtSign, sharedWithAtSign;
+  AtClientManager? currentAtSignClientManager, sharedWithAtSignClientManager;
+  var namespace = 'wavi';
 
-  setUp(() async {
-    atSign1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atSign2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    atSign1AtClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign1, 'me', TestUtils.getPreference(atSign1));
-    //await TestUtils.setEncryptionKeys(atSign1);
+  setUpAll(() async {
+    currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+
+    // Create atClient instance for currentAtSign
+    currentAtSignClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(
+            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    // Set Encryption Keys for currentAtSign
+    //await TestUtils.setEncryptionKeys(currentAtSign);
     var isSyncInProgress = true;
-    atSign1AtClientManager?.syncService.sync(onDone: (syncResult) {
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 10));
     }
-
-    atSign2AtClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign2, 'me', TestUtils.getPreference(atSign2));
-    //await TestUtils.setEncryptionKeys(atSign2);
+    // Create atClient instance for atSign2
+    sharedWithAtSignClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(sharedWithAtSign, namespace,
+            TestUtils.getPreference(sharedWithAtSign));
+    // Set Encryption Keys for sharedWithAtSign
+    //await TestUtils.setEncryptionKeys(sharedWithAtSign);
     isSyncInProgress = true;
-    atSign2AtClientManager?.syncService.sync(onDone: (syncResult) {
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 10));
     }
   });
-  test('Share a key to @atSign2 and lookup from @atSign2', () async {
+
+  /// The purpose of this test verify the following:
+  /// 1. Put method
+  /// 2. Sync to cloud secondary
+  /// 3. Get method - lookup verb
+  test('Share a key to sharedWith atSign and lookup from sharedWith atSign',
+      () async {
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = atSign2;
+      ..sharedWith = sharedWithAtSign
+      ..metadata = (Metadata()..ttl = 120000);
     var lastNumber = Random().nextInt(10);
     // Appending a random number as a last number to generate a new phone number
     // for each run.
     var value = '+1 100 200 30$lastNumber';
-    await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign1, 'me', TestUtils.getPreference(atSign1));
-    var putResult = await atSign1AtClientManager?.atClient.put(phoneKey, value);
+    // Setting currentAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var putResult =
+        await currentAtSignClientManager?.atClient.put(phoneKey, value);
     expect(putResult, true);
     var isSyncInProgress = true;
-    atSign1AtClientManager?.syncService.sync(onDone: (syncResult) {
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign2, 'me', TestUtils.getPreference(atSign2));
-    var getResult = await atSign2AtClientManager?.atClient.get(AtKey()
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
       ..key = 'phone'
-      ..sharedBy = atSign1);
+      ..sharedBy = currentAtSign);
     expect(getResult?.value, value);
+    expect(getResult?.metadata?.sharedKeyEnc != null, true);
+    expect(getResult?.metadata?.pubKeyCS != null, true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 1)));
+  }, timeout: Timeout(Duration(seconds: 90)));
 
-  test('Create a key to @atSign2 with ttr and verify @atSign2 has a cached_key',
+  /// The purpose of this test verify the following:
+  /// 1. Put method with caching of key
+  /// 2. Sync to cloud secondary
+  /// 3. Cached key sync to local secondary on the receiver atSign.
+  test(
+      'Create a key to sharedWith atSign with ttr and verify sharedWith atSign has a cached_key',
       () async {
-    await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign1, 'me', TestUtils.getPreference(atSign1));
+    // Setting currentAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     var verificationKey = AtKey()
-      ..key = 'verificationNumber'
-      ..sharedWith = atSign2
+      ..key = 'verificationnumber'
+      ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()
         ..ttr = 1000
         ..ccd = true
         ..ttl = 300000);
     var value = '0873';
     var putResult =
-        await atSign1AtClientManager?.atClient.put(verificationKey, value);
+        await currentAtSignClientManager?.atClient.put(verificationKey, value);
     expect(putResult, true);
     var isSyncInProgress = true;
-    atSign1AtClientManager?.syncService.sync(onDone: (syncResult) {
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign2, 'me', TestUtils.getPreference(atSign2));
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     isSyncInProgress = true;
-    atSign2AtClientManager?.syncService.sync(onDone: (syncResult) {
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    var getResult =
-        await atSign2AtClientManager?.atClient.getKeys();
+    var getResult = await sharedWithAtSignClientManager?.atClient.getKeys(
+        regex:
+            'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
     print(getResult);
-    expect(getResult?.contains('cached:$atSign2:verificationnumber.me$atSign1'), true);
+    expect(
+        getResult?.contains(
+            'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign'),
+        true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 20)));
+  }, timeout: Timeout(Duration(minutes: 2)));
 
-  tearDown(() async {
+  /// The purpose of this test verify the following:
+  /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
+  /// The encrypted value does not have new metadata but decrypt value successfully.
+  test(
+      'verify backward compatibility for sharedKey and checksum in metadata for sharedkey',
+      () async {
+    currentAtSignClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(
+            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var locationKey = AtKey()
+      ..key = 'location'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..metadata = (Metadata()..ttl = 120000);
+    var value = 'New Jersey';
+    var encryptionService =
+        AtKeyEncryptionManager.get(locationKey, currentAtSign);
+    var encryptedValue = await encryptionService.encrypt(locationKey, value);
+    var result = await currentAtSignClientManager?.atClient
+        .getRemoteSecondary()!
+        .executeCommand(
+            'update:$sharedWithAtSign:location.$namespace$currentAtSign $encryptedValue\n',
+            auth: true);
+    expect(result != null, true);
+    var isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 10));
+    }
+    sharedWithAtSignClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(sharedWithAtSign, namespace,
+            TestUtils.getPreference(sharedWithAtSign));
+    var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
+      ..key = 'location'
+      ..sharedBy = currentAtSign);
+    expect(getResult?.value, value);
+  }, timeout: Timeout(Duration(minutes: 2)));
+
+  tearDownAll(() async {
     var isExists = await Directory('test/hive').exists();
     if (isExists) {
       Directory('test/hive/').deleteSync(recursive: true);
