@@ -1,10 +1,18 @@
 import 'package:at_client/at_client.dart';
+<<<<<<< HEAD
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
+=======
+import 'package:at_commons/at_commons.dart';
+import 'package:at_end2end_test/config/config_util.dart';
+import 'package:test/test.dart';
+import 'test_utils.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
+>>>>>>> d80b5c00c2c90a4ddfbbbf2577940189139091af
 
 void main() {
   var atSign1, atSign2;
