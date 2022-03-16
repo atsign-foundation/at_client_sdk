@@ -23,7 +23,7 @@ void main() {
         .setCurrentAtSign(
             currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     // Set Encryption Keys for currentAtSign
-    //await TestUtils.setEncryptionKeys(currentAtSign);
+    await TestUtils.setEncryptionKeys(currentAtSign);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -36,7 +36,7 @@ void main() {
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestUtils.getPreference(sharedWithAtSign));
     // Set Encryption Keys for sharedWithAtSign
-    //await TestUtils.setEncryptionKeys(sharedWithAtSign);
+    await TestUtils.setEncryptionKeys(sharedWithAtSign);
     isSyncInProgress = true;
     sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -84,7 +84,7 @@ void main() {
     expect(getResult?.metadata?.pubKeyCS != null, true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(seconds: 90)));
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   /// The purpose of this test verify the following:
   /// 1. Put method with caching of key
@@ -134,7 +134,7 @@ void main() {
         true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 2)));
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   /// The purpose of this test verify the following:
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
@@ -149,7 +149,7 @@ void main() {
       ..key = 'location'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign
-      ..metadata = (Metadata()..ttl = 120000);
+      ..metadata = Metadata();
     var value = 'New Jersey';
     var encryptionService =
         AtKeyEncryptionManager.get(locationKey, currentAtSign);
@@ -157,7 +157,7 @@ void main() {
     var result = await currentAtSignClientManager?.atClient
         .getRemoteSecondary()!
         .executeCommand(
-            'update:$sharedWithAtSign:location.$namespace$currentAtSign $encryptedValue\n',
+            'update:ttl:300000$sharedWithAtSign:location.$namespace$currentAtSign $encryptedValue\n',
             auth: true);
     expect(result != null, true);
     var isSyncInProgress = true;
@@ -174,7 +174,7 @@ void main() {
       ..key = 'location'
       ..sharedBy = currentAtSign);
     expect(getResult?.value, value);
-  }, timeout: Timeout(Duration(minutes: 2)));
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   tearDownAll(() async {
     var isExists = await Directory('test/hive').exists();
