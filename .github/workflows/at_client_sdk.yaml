@@ -114,14 +114,15 @@ jobs:
         working-directory: at_functional_test/test
         run: docker-compose down
 
+  # The Job runs end2end tests
   end2end_tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
       - uses: dart-lang/setup-dart@v1.3
-          with:
-            sdk: stable
+        with:
+          sdk: stable
 
       - name: Install dependencies in at_client
         working-directory: at_client
