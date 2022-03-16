@@ -428,11 +428,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.isEncrypted != null) {
       metadataStr += ':isEncrypted:${metadata.isEncrypted}';
     }
-    if (metadata.sharedKeyEnc != null) {
-      metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
-    }
-    if (metadata.pubKeyCS != null) {
-      metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
+    try {
+      if (metadata?.sharedKeyEnc != null) {
+        metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
+      }
+      if (metadata?.pubKeyCS != null) {
+        metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
+      }
+    } on NoSuchMethodError {
+      // ignore for uncommitted entries added before shared key metadata version.
+      _logger.finest(
+          'fields does not exist for the entries added before shared key metadata version');
     }
     return metadataStr;
   }

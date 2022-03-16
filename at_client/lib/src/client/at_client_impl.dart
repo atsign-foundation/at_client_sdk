@@ -409,7 +409,7 @@ class AtClientImpl implements AtClient {
       ..operation = UPDATE_META;
 
     var isSyncRequired = true;
-    if (SyncUtil.shouldSkipSync(updateKey!)) {
+    if (SyncUtil.shouldSync(updateKey!)) {
       isSyncRequired = false;
     }
 
