@@ -7,13 +7,13 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
-import 'at_demo_credentials.dart' as demo_credentials;
 import 'set_encryption_keys.dart';
+import 'test_utils.dart';
 
 void main() {
   test('notify updating of a key to sharedWith atSign - using await', () async {
     var atsign = '@alice🛠';
-    var preference = getPreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
@@ -25,7 +25,8 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
     var value = '+1 100 200 300';
-    var notification = await NotificationServiceImpl.create(atClient, atClientManager: atClientManager);
+    var notification = await NotificationServiceImpl.create(atClient,
+        atClientManager: atClientManager);
     var result = await notification
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(result.notificationStatusEnum.toString(),
@@ -37,7 +38,7 @@ void main() {
   test('notify updating of a key to sharedWith atSign - using callback',
       () async {
     var atsign = '@alice🛠';
-    var preference = getPreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -54,7 +55,7 @@ void main() {
 
   test('notify deletion of a key to sharedWith atSign', () async {
     var atsign = '@alice🛠';
-    var preference = getPreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -74,7 +75,7 @@ void main() {
 
   test('notify deletion of a key to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
-    var preference = getPreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -91,14 +92,15 @@ void main() {
 
   test('notify text of to sharedWith atSign', () async {
     var atsign = '@alice🛠';
-    var preference = getPreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
-    var notification = await NotificationServiceImpl.create(atClient, atClientManager: atClientManager);
+    var notification = await NotificationServiceImpl.create(atClient,
+        atClientManager: atClientManager);
     var notificationResult = await notification
         .notify(NotificationParams.forText('Hello', '@bob🛠'));
     expect(notificationResult.notificationStatusEnum.toString(),
@@ -109,7 +111,7 @@ void main() {
 
   test('notify text of to sharedWith atSign - callback', () async {
     var atsign = '@alice🛠';
-    var preference = getPreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     atClientManager.syncService.sync();
@@ -123,7 +125,7 @@ void main() {
 
   test('notify - test deprecated method using notificationservice', () async {
     var atsign = '@alice🛠';
-    var preference = getPreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     // To setup encryption keys
@@ -143,13 +145,15 @@ void main() {
     final aliceAtSign = '@alice🛠';
     final bobAtSign = '@bob🛠';
     final colinAtSign = '@colin🛠';
-    final alicePreference = getPreference(aliceAtSign);
+    final alicePreference = TestUtils.getPreference(aliceAtSign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(aliceAtSign, 'me', alicePreference);
     // To setup encryption keys
     await setEncryptionKeys(aliceAtSign, alicePreference);
     // phone.me@alice🛠
-    var shareWithList = []..add(bobAtSign)..add(colinAtSign);
+    var shareWithList = []
+      ..add(bobAtSign)
+      ..add(colinAtSign);
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = jsonEncode(shareWithList);
@@ -175,14 +179,4 @@ Future<void> tearDownFunc() async {
   if (isExists) {
     Directory('test/hive').deleteSync(recursive: true);
   }
-}
-
-AtClientPreference getPreference(String atsign) {
-  var preference = AtClientPreference();
-  preference.hiveStoragePath = 'test/hive/client';
-  preference.commitLogPath = 'test/hive/client/commit';
-  preference.isLocalStoreRequired = true;
-  preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
-  preference.rootDomain = 'vip.ve.atsign.zone';
-  return preference;
 }

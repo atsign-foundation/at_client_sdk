@@ -1,15 +1,15 @@
 import 'package:at_client/at_client.dart';
-import 'package:test/test.dart';
-import 'package:at_commons/src/verb/update_verb_builder.dart';
 import 'package:at_commons/src/verb/llookup_verb_builder.dart';
+import 'package:at_commons/src/verb/update_verb_builder.dart';
+import 'package:test/test.dart';
 
-import 'at_demo_credentials.dart' as demo_credentials;
 import 'set_encryption_keys.dart';
+import 'test_utils.dart';
 
 void main() {
   test('sequence of put and get results', () async {
     var atsign = '@alice🛠';
-    var preference = getAlicePreference(atsign);
+    var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
@@ -59,14 +59,4 @@ void main() {
     emailFuture.then((value) => expect(value, 'data:alice@gmail.com'));
     locationFuture.then((value) => expect(value, 'data:newyork'));
   });
-}
-
-AtClientPreference getAlicePreference(String atsign) {
-  var preference = AtClientPreference();
-  preference.hiveStoragePath = 'test/hive/client';
-  preference.commitLogPath = 'test/hive/client/commit';
-  preference.isLocalStoreRequired = true;
-  preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
-  preference.rootDomain = 'vip.ve.atsign.zone';
-  return preference;
 }

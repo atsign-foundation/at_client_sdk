@@ -212,7 +212,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// queue is returned.
   SyncRequest _getSyncRequest() {
     return _syncRequests.firstWhere(
-        (syncRequest) => syncRequest.requestSource == SyncRequestSource.app,
+        (syncRequest) =>
+            syncRequest.requestSource == SyncRequestSource.app &&
+            syncRequest.onDone != null,
         orElse: () => _syncRequests.removeFirst());
   }
 
@@ -224,10 +226,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
+    _logger.info(
+        'Inside syncComplete  ${syncRequest.requestSource}  : ${syncRequest.onDone}');
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
         syncRequest.requestSource == SyncRequestSource.app) {
+      _logger.info('Sending result to onDone callback');
       syncRequest.onDone!(syncRequest.result);
     } else if (onDone != null) {
       onDone!(syncRequest.result);
@@ -330,17 +335,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         ..limit = _atClient.getPreferences()!.syncPageLimit
         ..isPaginated = true;
       _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
-      // ignore: prefer_typing_uninitialized_variables
-      var syncVerbResult;
-      try {
-        syncVerbResult = await _remoteSecondary.executeVerb(syncBuilder);
-      } on AtClientException catch (e) {
-        _logger.severe(
-            'Exception occurred in process sync verb ${e.errorCode} - ${e.errorMessage}');
-      }
-      var syncResponse = DefaultResponseParser().parse(syncVerbResult);
-
-      var syncResponseJson = JsonUtils.decodeJson(syncResponse.response);
+      var syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
+          .parse(await _remoteSecondary.executeVerb(syncBuilder))
+          .response);
       _logger.finest('** syncResponse $syncResponseJson');
       // Iterates over each commit
       await Future.forEach(syncResponseJson,
@@ -357,7 +354,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var batchId = 1;
     for (var entry in uncommittedEntries) {
       var command = await _getCommand(entry);
-      command = command.replaceAll('cached:', '');
       command = VerbUtil.replaceNewline(command);
       var batchRequest = BatchRequest(batchId, command);
       _logger.finer('batchId:$batchId key:${entry.atKey}');
@@ -624,7 +620,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // actions for previous atSign
       _syncRequests.clear();
       _logger.finer(
-          'stopping stats notificationlistener for ${_atClient.getCurrentAtSign()}');
+          'stopping stats notification listener for ${_atClient.getCurrentAtSign()}');
       _statsNotificationListener.stopAllSubscriptions();
       _cron.close();
       _logger.finer(

@@ -19,7 +19,8 @@ void main() {
 
     test('test errors with unexpected response', () {
       expect(
-          () => DefaultResponseParser().parse('error:Unexpected response found'),
+          () =>
+              DefaultResponseParser().parse('error:Unexpected response found'),
           throwsA(predicate((dynamic e) =>
               e is AtClientException && e.errorCode == 'AT0014')));
     });

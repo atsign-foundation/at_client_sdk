@@ -1,3 +1,8 @@
+## 3.0.13
+- Sync deleted cached keys to cloud secondary
+- at_lookup version upgrade for increase in outbound connection timeout
+## 3.0.12
+- Fix automatic sync not working
 ## 3.0.11
 - at_lookup version upgrade for outbound listener bug fix
 - added functional test to verify outbound listener bug fix
