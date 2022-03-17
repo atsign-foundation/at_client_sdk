@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
@@ -7,6 +8,8 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:async/async.dart';
+import 'package:at_client/src/converters/encryption/aes_converter.dart';
 
 class EncryptionService {
   RemoteSecondary? remoteSecondary;
@@ -477,5 +480,52 @@ class EncryptionService {
     var encryptedValue =
         EncryptionUtil.decryptBytes(fileContent, decryptionKey);
     return encryptedValue;
+  }
+
+  Future<File> encryptFileInChunks(
+      File inputFile, String fileEncryptionKey, int chunkSize) async {
+    var chunkedStream = ChunkedStreamReader(inputFile.openRead());
+    final length = inputFile.lengthSync();
+    var readBytes = 0;
+    final fileName = inputFile.uri.pathSegments.last;
+    final encryptedFile = File(
+        '${inputFile.parent.path}${Platform.pathSeparator}encrypted_$fileName');
+    try {
+      while (readBytes < length) {
+        final actualBytes = await chunkedStream.readBytes(chunkSize);
+        final encryptedBytes =
+            AESCodec(fileEncryptionKey).encoder.convert(actualBytes);
+        encryptedFile.writeAsBytesSync(encryptedBytes, mode: FileMode.append);
+        readBytes += chunkSize;
+      }
+    } on Exception catch (e, trace) {
+      print(e);
+      print(trace);
+    }
+    return encryptedFile;
+  }
+
+  Future<File> decryptFileInChunks(
+      File encryptedFile, String fileDecryptionKey, int chunkSize) async {
+    var chunkedStream = ChunkedStreamReader(encryptedFile.openRead());
+    var startTime = DateTime.now();
+    final length = encryptedFile.lengthSync();
+    final fileName = encryptedFile.uri.pathSegments.last;
+    var readBytes = 0;
+    final decryptedFile = File(
+        '${encryptedFile.parent.path}${Platform.pathSeparator}decrypted_$fileName');
+    try {
+      while (readBytes < length) {
+        final actualBytes = await chunkedStream.readBytes(chunkSize);
+        final decryptedBytes =
+            AESCodec(fileDecryptionKey).decoder.convert(actualBytes);
+        decryptedFile.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
+        readBytes += chunkSize;
+      }
+    } on Exception catch (e, trace) {
+      print(e);
+      print(trace);
+    }
+    return decryptedFile;
   }
 }

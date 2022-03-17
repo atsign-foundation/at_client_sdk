@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:test/test.dart';
 
 import 'test_util.dart';

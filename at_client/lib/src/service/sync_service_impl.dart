@@ -419,17 +419,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.isEncrypted != null) {
       metadataStr += ':isEncrypted:${metadata.isEncrypted}';
     }
+    // The older key entries will not have metadata.sharedKeyEncrypted and metadata.pubKeyChecksum
+    // Hence handling the NoSuchMethodError.
     try {
-      if (metadata?.sharedKeyEnc != null) {
+      if (metadata.sharedKeyEnc != null) {
         metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
       }
-      if (metadata?.pubKeyCS != null) {
+      if (metadata.pubKeyCS != null) {
         metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
       }
     } on NoSuchMethodError {
-      // ignore for uncommitted entries added before shared key metadata version.
-      _logger.finest(
-          'fields does not exist for the entries added before shared key metadata version');
+      // ignore for uncommitted entries added before shared key metadata version
+      _logger.finest('The entry is created with the older metadata');
     }
     return metadataStr;
   }
@@ -595,6 +596,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         (metaData[IS_ENCRYPTED].toLowerCase() == 'true')
             ? builder.isEncrypted = true
             : builder.isEncrypted = false;
+      }
+      if (metaData[SHARED_KEY_ENCRYPTED] != null) {
+        builder.sharedKeyEncrypted = metaData[SHARED_KEY_ENCRYPTED];
+      }
+      if (metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM] != null) {
+        builder.pubKeyChecksum = metaData[SHARED_KEY_ENCRYPTED];
       }
     }
   }
