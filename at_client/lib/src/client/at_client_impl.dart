@@ -647,7 +647,7 @@ class AtClientImpl implements AtClient {
     }
     var downloadedFiles = <File>[];
     var fileDownloadReponse = await FileTransferService()
-        .downloadFromFileBin(fileTransferObject, downloadPath);
+        .downloadFromFileBinUsingStream(fileTransferObject, downloadPath);
     if (fileDownloadReponse.isError) {
       throw Exception('download fail');
     }

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -63,6 +65,66 @@ class FileTransferService {
     } catch (e) {
       print('error in downloading file: $e');
       return FileDownloadResponse(isError: true, errorMsg: e.toString());
+    }
+  }
+
+  Future downloadFromFileBinUsingStream(
+      FileTransferObject fileTransferObject, String downloadPath) async {
+    final Completer<FileDownloadResponse> completer =
+        Completer<FileDownloadResponse>();
+    try {
+      var httpClient = http.Client();
+      var request = http.Request('GET', Uri.parse(fileTransferObject.fileUrl));
+      var response = httpClient.send(request);
+
+      List<List<int>> chunks = [];
+      int downloaded = 0;
+      late StreamSubscription downloadSubscription;
+
+      downloadSubscription =
+          response.asStream().listen((http.StreamedResponse r) {
+        r.stream.listen((List<int> chunk) {
+          chunks.add(chunk);
+          downloaded += chunk.length;
+        }, onDone: () async {
+          ///using [downloaded] as contentlength here.
+          final Uint8List bytes = Uint8List(downloaded);
+
+          int offset = 0;
+          for (List<int> chunk in chunks) {
+            bytes.setRange(offset, offset + chunk.length, chunk);
+            offset += chunk.length;
+          }
+
+          downloadSubscription.cancel();
+
+          var archive = ZipDecoder().decodeBytes(bytes);
+          var tempDirectory =
+              await Directory(downloadPath).createTemp('encrypted-files');
+          for (var file in archive) {
+            var unzippedFile = file.content as List<int>;
+            var encryptedFile =
+                File(tempDirectory.path + Platform.pathSeparator + file.name);
+            encryptedFile.writeAsBytesSync(unzippedFile);
+          }
+
+          completer.complete(
+            FileDownloadResponse(filePath: tempDirectory.path),
+          );
+        }, onError: () {
+          completer.complete(
+            FileDownloadResponse(
+                isError: true, errorMsg: 'Fail to download file.'),
+          );
+        });
+      });
+
+      return completer.future;
+    } catch (e) {
+      print('error in downloading file: $e');
+      completer.complete(
+        FileDownloadResponse(isError: true, errorMsg: e.toString()),
+      );
     }
   }
 }
