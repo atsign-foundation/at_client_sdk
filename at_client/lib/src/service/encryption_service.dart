@@ -488,7 +488,8 @@ class EncryptionService {
     final length = inputFile.lengthSync();
     var readBytes = 0;
     final fileName = inputFile.uri.pathSegments.last;
-    final encryptedFile = File('${inputFile.parent.path}/encrypted_$fileName');
+    final encryptedFile = File(
+        '${inputFile.parent.path}${Platform.pathSeparator}encrypted_$fileName');
     try {
       while (readBytes < length) {
         final actualBytes = await chunkedStream.readBytes(chunkSize);
@@ -511,8 +512,8 @@ class EncryptionService {
     final length = encryptedFile.lengthSync();
     final fileName = encryptedFile.uri.pathSegments.last;
     var readBytes = 0;
-    final decryptedFile =
-        File('${encryptedFile.parent.path}/decrypted_$fileName');
+    final decryptedFile = File(
+        '${encryptedFile.parent.path}${Platform.pathSeparator}decrypted_$fileName');
     try {
       while (readBytes < length) {
         final actualBytes = await chunkedStream.readBytes(chunkSize);
