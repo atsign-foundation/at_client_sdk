@@ -135,7 +135,7 @@ jobs:
 
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
-        run: echo "${{secrets.CICD_DATA_DART}}" > at_end2end_test/test/at_credentials.dart
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
 
       # Run end-to-end test
       - name: End to end test

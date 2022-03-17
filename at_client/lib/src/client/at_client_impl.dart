@@ -407,13 +407,8 @@ class AtClientImpl implements AtClient {
       ..dataSignature = metadata.dataSignature
       ..operation = UPDATE_META;
 
-    var isSyncRequired = true;
-    if (SyncUtil.shouldSync(updateKey!)) {
-      isSyncRequired = false;
-    }
-
-    var updateMetaResult =
-        await getSecondary().executeVerb(builder, sync: isSyncRequired);
+    var updateMetaResult = await getSecondary()
+        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
     return updateMetaResult != null;
   }
 
