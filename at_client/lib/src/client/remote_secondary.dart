@@ -79,6 +79,7 @@ class RemoteSecondary implements Secondary {
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
   Future<String?> sync(int? lastSyncedId, {String? regex}) async {
+    lastSyncedId ??= -1;
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = lastSyncedId
       ..regex = regex
