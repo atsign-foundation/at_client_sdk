@@ -54,7 +54,8 @@ class FileTransferService {
           await Directory(downloadPath).createTemp('encrypted-files');
       for (var file in archive) {
         var unzippedFile = file.content as List<int>;
-        var encryptedFile = File(tempDirectory.path + '/' + file.name);
+        var encryptedFile =
+            File(tempDirectory.path + Platform.pathSeparator + file.name);
         encryptedFile.writeAsBytesSync(unzippedFile);
       }
 

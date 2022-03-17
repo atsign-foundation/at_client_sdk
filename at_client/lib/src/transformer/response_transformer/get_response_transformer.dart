@@ -23,9 +23,10 @@ class GetResponseTransformer
     atValue.value = decodedResponse['data'];
     // parse metadata
     if (decodedResponse['metaData'] != null) {
-      atValue.metadata = AtClientUtil.prepareMetadata(
-          decodedResponse['metaData'],
+      final metadata = AtClientUtil.prepareMetadata(decodedResponse['metaData'],
           decodedResponse['key'].startsWith('public:'));
+      atValue.metadata = metadata;
+      tuple.one.metadata = metadata;
     }
 
     // For public and cached public keys, data is not encrypted.
