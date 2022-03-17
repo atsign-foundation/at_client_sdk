@@ -577,7 +577,7 @@ class AtClientImpl implements AtClient {
     var fileStatuses = <FileStatus>[];
     for (var file in files) {
       var fileStatus = FileStatus(
-        fileName: file.path.split('/').last,
+        fileName: file.path.split(Platform.pathSeparator).last,
         isUploaded: false,
         size: await file.length(),
       );
@@ -600,11 +600,13 @@ class AtClientImpl implements AtClient {
 
         // storing sent files in a a directory.
         if (preference?.downloadPath != null) {
-          var sentFilesDirectory =
-              await Directory(preference!.downloadPath! + '/sent-files')
-                  .create();
-          await File(file.path)
-              .copy(sentFilesDirectory.path + '/${fileStatus.fileName}');
+          var sentFilesDirectory = await Directory(preference!.downloadPath! +
+                  Platform.pathSeparator +
+                  'sent-files')
+              .create();
+          await File(file.path).copy(sentFilesDirectory.path +
+              Platform.pathSeparator +
+              (fileStatus.fileName ?? ''));
         }
       } on Exception catch (e) {
         fileStatus.error = e.toString();
@@ -656,8 +658,9 @@ class AtClientImpl implements AtClient {
         var decryptedFile = _encryptionService!.decryptFile(
             File(encryptedFile.path).readAsBytesSync(),
             fileTransferObject.fileEncryptionKey);
-        var downloadedFile =
-            File(downloadPath + '/' + encryptedFile.path.split('/').last);
+        var downloadedFile = File(downloadPath +
+            Platform.pathSeparator +
+            encryptedFile.path.split(Platform.pathSeparator).last);
         downloadedFile.writeAsBytesSync(decryptedFile);
         downloadedFiles.add(downloadedFile);
       }
