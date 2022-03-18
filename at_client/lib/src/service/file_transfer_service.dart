@@ -42,7 +42,7 @@ class FileTransferService {
     }
   }
 
-  Future<FileDownloadResponse> downloadFromFileBin(
+  Future<FileDownloadResponse> downloadFilebinContainerZip(
       FileTransferObject fileTransferObject, String downloadPath) async {
     try {
       var response = await http.get(Uri.parse(fileTransferObject.fileUrl));
@@ -68,63 +68,92 @@ class FileTransferService {
     }
   }
 
-  Future downloadFromFileBinUsingStream(
+  Future downloadAllFiles(
       FileTransferObject fileTransferObject, String downloadPath) async {
     final Completer<FileDownloadResponse> completer =
         Completer<FileDownloadResponse>();
+    var tempDirectory =
+        await Directory(downloadPath).createTemp('encrypted-files');
+    var fileDownloadResponse =
+        FileDownloadResponse(isError: false, filePath: tempDirectory.path);
+
     try {
-      var httpClient = http.Client();
-      var request = http.Request('GET', Uri.parse(fileTransferObject.fileUrl));
-      var response = httpClient.send(request);
+      String filebinContainer = fileTransferObject.fileUrl;
+      filebinContainer = filebinContainer.replaceFirst('/archive', '');
+      filebinContainer = filebinContainer.replaceFirst('/zip', '');
 
-      List<List<int>> chunks = [];
-      int downloaded = 0;
-      late StreamSubscription downloadSubscription;
+      for (int i = 0; i < fileTransferObject.fileStatus.length; i++) {
+        String fileName = fileTransferObject.fileStatus[i].fileName!;
+        String fileUrl = filebinContainer + Platform.pathSeparator + fileName;
+        var downloadResponse =
+            await downloadIndividualFile(fileUrl, tempDirectory.path, fileName);
+        if (downloadResponse.isError) {
+          fileDownloadResponse = FileDownloadResponse(
+              isError: true,
+              filePath: tempDirectory.path,
+              errorMsg: 'Failed to download file.');
+        }
+      }
 
+      completer.complete(fileDownloadResponse);
+      return completer.future;
+    } catch (e) {
+      completer.complete(
+        FileDownloadResponse(
+            isError: true, errorMsg: 'Failed to download file.'),
+      );
+    }
+    return completer.future;
+  }
+
+  Future downloadIndividualFile(
+      String fileUrl, String tempPath, String fileName) async {
+    final Completer<FileDownloadResponse> completer =
+        Completer<FileDownloadResponse>();
+    var httpClient = http.Client();
+    http.Request request;
+    late Future<http.StreamedResponse> response;
+
+    try {
+      request = http.Request('GET', Uri.parse(fileUrl));
+      response = httpClient.send(request);
+    } catch (e) {
+      throw ('Failed to fetch file details.');
+    }
+
+    late StreamSubscription downloadSubscription;
+    File file = File(tempPath + Platform.pathSeparator + fileName);
+    int downloaded = 0;
+
+    try {
       downloadSubscription =
           response.asStream().listen((http.StreamedResponse r) {
-        r.stream.listen((List<int> chunk) {
-          chunks.add(chunk);
-          downloaded += chunk.length;
-        }, onDone: () async {
-          ///using [downloaded] as contentlength here.
-          final Uint8List bytes = Uint8List(downloaded);
-
-          int offset = 0;
-          for (List<int> chunk in chunks) {
-            bytes.setRange(offset, offset + chunk.length, chunk);
-            offset += chunk.length;
-          }
-
-          downloadSubscription.cancel();
-
-          var archive = ZipDecoder().decodeBytes(bytes);
-          var tempDirectory =
-              await Directory(downloadPath).createTemp('encrypted-files');
-          for (var file in archive) {
-            var unzippedFile = file.content as List<int>;
-            var encryptedFile =
-                File(tempDirectory.path + Platform.pathSeparator + file.name);
-            encryptedFile.writeAsBytesSync(unzippedFile);
-          }
-
-          completer.complete(
-            FileDownloadResponse(filePath: tempDirectory.path),
-          );
-        }, onError: () {
-          completer.complete(
-            FileDownloadResponse(
-                isError: true, errorMsg: 'Fail to download file.'),
-          );
-        });
+        r.stream.listen(
+          (List<int> chunk) {
+            file.writeAsBytesSync(chunk, mode: FileMode.append);
+            downloaded += chunk.length;
+            if (r.contentLength != null) {
+              // print('percentage: ${(downloaded / r.contentLength!)}');
+            }
+          },
+          onDone: () async {
+            downloadSubscription.cancel();
+            completer.complete(
+              FileDownloadResponse(filePath: file.path),
+            );
+          },
+        );
       });
 
       return completer.future;
     } catch (e) {
-      print('error in downloading file: $e');
+      downloadSubscription.cancel();
       completer.complete(
-        FileDownloadResponse(isError: true, errorMsg: e.toString()),
+        FileDownloadResponse(
+            isError: true, errorMsg: 'Failed to download file.'),
       );
     }
+
+    return completer.future;
   }
 }
