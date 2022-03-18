@@ -70,6 +70,13 @@ jobs:
         working-directory: at_functional_test
         run: dart run test/check_docker_readiness.dart
 
+      - name: Run PKAM
+        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+
+      - name: Check test environment readiness
+        working-directory: at_functional_test
+        run: dart run test/check_test_env.dart
+
       # Run functional tests
       - name: Run functional tests
         working-directory: at_functional_test

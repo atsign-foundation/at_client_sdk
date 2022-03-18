@@ -11,10 +11,11 @@ void main() {
   late AtClient atClient;
   var sharedWithAtSign = '@bob🛠';
   var currentAtSign = '@alice🛠';
+  var namespace = 'wavi';
   setUpAll(() async {
     var preference = getPreference(currentAtSign);
     atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, 'wavi', preference);
+        .setCurrentAtSign(currentAtSign, namespace, preference);
     atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(currentAtSign, preference);
@@ -42,9 +43,9 @@ void main() {
     var encryptionService = AtKeyEncryptionManager.get(phoneKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(phoneKey, value);
     var result = await atClient.getRemoteSecondary()!.executeCommand(
-        'update:sharedKeyEnc:${phoneKey.metadata?.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata?.pubKeyCS}:${phoneKey.sharedWith}:location.me$currentAtSign $encryptedValue\n',
+        'update:sharedKeyEnc:${phoneKey.metadata?.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata?.pubKeyCS}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
         auth: true);
-    expect(result, 'data:success');
+    expect(result != null, true);
     var isSyncInProgress = true;
     atClientManager.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
