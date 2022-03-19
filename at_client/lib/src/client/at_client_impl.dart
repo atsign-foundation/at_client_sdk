@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -574,6 +575,7 @@ class AtClientImpl implements AtClient {
   Future<List<FileStatus>> _uploadFiles(
       String transferId, List<File> files, String encryptionKey) async {
     var fileStatuses = <FileStatus>[];
+
     for (var file in files) {
       var fileStatus = FileStatus(
         fileName: file.path.split(Platform.pathSeparator).last,
@@ -581,14 +583,20 @@ class AtClientImpl implements AtClient {
         size: await file.length(),
       );
       try {
-        final encryptedFile = await _encryptionService!.encryptFileInChunks(
-            file, encryptionKey, _preference!.fileEncryptionChunkSize);
+        final encryptedFile = await encryptFile(
+          file,
+          encryptionKey,
+          _preference!.fileEncryptionChunkSize,
+        );
+
+        print('file upload started: ${DateTime.now()}');
         var response =
             await FileTransferService().uploadToFileBinWithStreamedRequest(
           encryptedFile,
           transferId,
           fileStatus.fileName!,
         );
+        print('upload completed: ${DateTime.now()}');
         encryptedFile.deleteSync();
         if (response != null && response.statusCode == 201) {
           final responseStr = await response.stream.bytesToString();
@@ -613,6 +621,43 @@ class AtClientImpl implements AtClient {
       fileStatuses.add(fileStatus);
     }
     return fileStatuses;
+  }
+
+  Future<File> encryptFile(
+      File file, String encryptionKey, int fileEncryptionChunkSize) {
+    final Completer<File> completer = Completer<File>();
+    var receiverPort = ReceivePort();
+
+    Isolate.spawn(encryptFileInIsolate, {
+      'sendPort': receiverPort.sendPort,
+      'file': file,
+      'encryptionKey': encryptionKey,
+      'fileEncryptionChunkSize': _preference!.fileEncryptionChunkSize,
+    });
+
+    receiverPort.listen((encryptedFile) {
+      completer.complete(encryptedFile);
+    });
+
+    return completer.future;
+  }
+
+  Future<File> decryptFile(
+      File file, String encryptionKey, int fileEncryptionChunkSize) async {
+    final Completer<File> completer = Completer<File>();
+    var receiverPort = ReceivePort();
+
+    Isolate.spawn(decryptFileInIsolate, {
+      'sendPort': receiverPort.sendPort,
+      'file': file,
+      'encryptionKey': encryptionKey,
+      'fileEncryptionChunkSize': _preference!.fileEncryptionChunkSize,
+    });
+
+    receiverPort.listen((encryptedFile) {
+      completer.complete(encryptedFile);
+    });
+    return completer.future;
   }
 
   @override
@@ -654,7 +699,7 @@ class AtClientImpl implements AtClient {
     var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
-        var decryptedFile = await _encryptionService!.decryptFileInChunks(
+        var decryptedFile = await decryptFile(
             File(encryptedFile.path),
             fileTransferObject.fileEncryptionKey,
             _preference!.fileEncryptionChunkSize);
@@ -670,8 +715,7 @@ class AtClientImpl implements AtClient {
       Directory(fileDownloadReponse.filePath!).deleteSync(recursive: true);
       return downloadedFiles;
     } catch (e) {
-      print('error in downloadFile: $e');
-      return [];
+      throw Exception('Error in saving file');
     }
   }
 
@@ -771,4 +815,22 @@ class AtClientImpl implements AtClient {
     }
     return await getRemoteSecondary()?.executeVerb(builder);
   }
+}
+
+void encryptFileInIsolate(Map params) async {
+  final encryptedFile = await EncryptionService().encryptFileInChunks(
+      params['file'],
+      params['encryptionKey'],
+      params['fileEncryptionChunkSize']);
+  params['sendPort'].send(encryptedFile);
+}
+
+void decryptFileInIsolate(Map params) async {
+  final decryptedFile = await EncryptionService().decryptFileInChunks(
+    params['file'],
+    params['encryptionKey'],
+    params['fileEncryptionChunkSize'],
+  );
+
+  params['sendPort'].send(decryptedFile);
 }
