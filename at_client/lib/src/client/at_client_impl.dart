@@ -545,8 +545,8 @@ class AtClientImpl implements AtClient {
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
           ..metadata!.ttr = -1
-          // file transfer key will be deleted after 30 days
-          ..metadata!.ttl = 2592000000
+          // file transfer key will be deleted after 15 days
+          ..metadata!.ttl = 1296000000 // 1000 * 60 * 60 * 24 * 15
           ..sharedBy = currentAtSign;
 
         var notificationResult =

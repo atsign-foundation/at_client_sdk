@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:archive/archive_io.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/util/constants.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:http/http.dart' as http;
 
 class FileTransferService {
+  final _logger = AtSignLogger('FileTransferService');
+
   Future<dynamic> uploadToFileBin(
       List<int> file, String container, String fileName) async {
     try {
@@ -63,7 +64,7 @@ class FileTransferService {
 
       return FileDownloadResponse(filePath: tempDirectory.path);
     } catch (e) {
-      print('error in downloading file: $e');
+      _logger.severe('error in downloading file: $e');
       return FileDownloadResponse(isError: true, errorMsg: e.toString());
     }
   }
@@ -132,9 +133,9 @@ class FileTransferService {
           (List<int> chunk) {
             file.writeAsBytesSync(chunk, mode: FileMode.append);
             downloaded += chunk.length;
-            if (r.contentLength != null) {
-              // print('percentage: ${(downloaded / r.contentLength!)}');
-            }
+            // if (r.contentLength != null) {
+            // print('percentage: ${(downloaded / r.contentLength!)}');
+            // }
           },
           onDone: () async {
             downloadSubscription.cancel();
