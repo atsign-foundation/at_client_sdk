@@ -589,14 +589,13 @@ class AtClientImpl implements AtClient {
           _preference!.fileEncryptionChunkSize,
         );
 
-        print('file upload started: ${DateTime.now()}');
         var response =
             await FileTransferService().uploadToFileBinWithStreamedRequest(
           encryptedFile,
           transferId,
           fileStatus.fileName!,
         );
-        print('upload completed: ${DateTime.now()}');
+
         encryptedFile.deleteSync();
         if (response != null && response.statusCode == 201) {
           final responseStr = await response.stream.bytesToString();
