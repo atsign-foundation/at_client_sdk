@@ -23,9 +23,10 @@ class SharedKeyDecryption implements AtKeyDecryption {
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
       encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
       final atClient = AtClientManager.getInstance().atClient;
-      final currentAtSignPublicKey = await atClient
-          .getLocalSecondary()!
-          .getEncryptionPublicKey(atClient.getCurrentAtSign()!);
+      final currentAtSignPublicKey = (await atClient
+              .getLocalSecondary()!
+              .getEncryptionPublicKey(atClient.getCurrentAtSign()!))
+          ?.trim();
       if (currentAtSignPublicKey != null &&
           atKey.metadata!.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
