@@ -14,7 +14,7 @@ on:
       - trunk
 
 jobs:
-  build:
+  unit_test:
     runs-on: ubuntu-latest
 
     steps:
@@ -113,3 +113,31 @@ jobs:
       - name: stop docker containers
         working-directory: at_functional_test/test
         run: docker-compose down
+
+  # The Job runs end2end tests
+  end2end_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: dart-lang/setup-dart@v1.3
+        with:
+          sdk: stable
+
+      - name: Install dependencies in at_client
+        working-directory: at_client
+        run: dart pub get
+
+      # Install dependencies in at_end2end_test
+      - name: Install dependencies in at_end2end_test
+        working-directory: at_end2end_test
+        run: dart pub get
+
+      # Populate at_credentials.dart from CICD_DATA_DART secret
+      - name: Get CICD keys into place
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
+
+      # Run end-to-end test
+      - name: End to end test
+        working-directory: at_end2end_test
+        run: dart test --concurrency=1
