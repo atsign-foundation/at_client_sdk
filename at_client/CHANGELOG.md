@@ -1,3 +1,6 @@
+## 3.0.14
+- Support for shared key and public key checksum in metadata
+- Chunk based encryption/decryption for files up to 1GB
 ## 3.0.13
 - Sync deleted cached keys to cloud secondary
 - at_lookup version upgrade for increase in outbound connection timeout
