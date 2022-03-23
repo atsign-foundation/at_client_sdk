@@ -733,7 +733,6 @@ class AtClientImpl implements AtClient {
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
       ..notifier = notificationParams.notifier;
-
     // If value is not null, encrypt the value
     if (notificationParams.value != null &&
         notificationParams.value!.isNotEmpty) {
@@ -744,7 +743,7 @@ class AtClientImpl implements AtClient {
         try {
           final atKeyEncryption = AtKeyEncryptionManager.get(
               notificationParams.atKey, currentAtSign!);
-          atKeyEncryption.encrypt(
+          builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
@@ -757,7 +756,7 @@ class AtClientImpl implements AtClient {
         try {
           final atKeyEncryption = AtKeyEncryptionManager.get(
               notificationParams.atKey, currentAtSign!);
-          atKeyEncryption.encrypt(
+          builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
