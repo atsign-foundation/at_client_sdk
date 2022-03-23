@@ -415,21 +415,25 @@ abstract class AtClient {
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
+  @Deprecated("Should be implemented on app side")
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns);
 
   /// Downloads the list of files for a given [transferId] shared by [sharedByAtSign]
   /// Optionally you can pass [downloadPath] to download the files.
+  @Deprecated("Should be implemented on app side")
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath});
 
   /// re uploads file in [fileTransferObject.fileUrl]
   /// returns list of [FileStatus] which contains upload status of each file.
+  @Deprecated("Should be implemented on app side")
   Future<List<FileStatus>> reuploadFiles(
       List<File> files, FileTransferObject fileTransferObject);
 
   /// re sends file notifications to [sharedWithAtSigns]
   /// returns [Map<String, FileTransferObject>] which contains transfer status for each atsign.
+  @Deprecated("Should be implemented on app side")
   Future<Map<String, FileTransferObject>> shareFiles(
       List<String> sharedWithAtSigns,
       String key,
