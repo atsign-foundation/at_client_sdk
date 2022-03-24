@@ -7,6 +7,7 @@ import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
@@ -162,12 +163,12 @@ class NotificationServiceImpl
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {Function? onSuccess, Function? onError}) async {
     var notificationResult = NotificationResult()
+      ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
-    dynamic notificationId;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       // Returns the notificationId.
-      notificationId = await _atClient.notifyChange(notificationParams);
+      await _atClient.notifyChange(notificationParams);
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
@@ -183,11 +184,9 @@ class NotificationServiceImpl
       return notificationResult;
     }
     var notificationParser = NotificationResponseParser();
-    notificationResult.notificationID =
-        notificationParser.parse(notificationId).response;
     // Gets the notification status and parse the response.
-    var notificationStatus = notificationParser.parse(
-        await _getFinalNotificationStatus(notificationResult.notificationID!));
+    var notificationStatus = notificationParser
+        .parse(await _getFinalNotificationStatus(notificationParams.id));
     switch (notificationStatus.response) {
       case 'delivered':
         notificationResult.notificationStatusEnum =
@@ -259,5 +258,48 @@ class NotificationServiceImpl
     _logger.finer(
         '${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
     return _monitor!.getStatus();
+  }
+
+  @override
+  Future<NotificationResult> getStatus(String notificationId) async {
+    var status = await _atClient.notifyStatus(notificationId);
+    var atResponse = DefaultResponseParser().parse(status);
+    NotificationResult notificationResult;
+    // If the Notification Response is error, set the notification status to undelivered
+    if (atResponse.isError) {
+      return NotificationResult()
+        ..notificationID = notificationId
+        ..notificationStatusEnum = NotificationStatusEnum.undelivered
+        ..atClientException = AtClientException(
+            atResponse.errorCode, atResponse.errorDescription);
+    }
+
+    notificationResult = NotificationResult()
+      ..notificationID = notificationId
+      ..notificationStatusEnum =
+          _getNotificationStatusEnum(atResponse.response);
+    return notificationResult;
+  }
+
+  /// Returns the NotificationStatusEnum for the given string of notificationStatus
+  NotificationStatusEnum _getNotificationStatusEnum(String notificationStatus) {
+    switch (notificationStatus.toLowerCase()) {
+      case 'delivered':
+        return NotificationStatusEnum.delivered;
+      case 'undelivered':
+        return NotificationStatusEnum.undelivered;
+      case 'acks':
+        return NotificationStatusEnum.ackS;
+      case 'ackr':
+        return NotificationStatusEnum.ackR;
+      case 'queued':
+        return NotificationStatusEnum.queued;
+      case 'attemptedtodeliver':
+        return NotificationStatusEnum.attemptedToDeliver;
+      case 'unavailable':
+        return NotificationStatusEnum.unavailable;
+      default:
+        return NotificationStatusEnum.unavailable;
+    }
   }
 }

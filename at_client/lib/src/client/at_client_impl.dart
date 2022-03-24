@@ -723,6 +723,7 @@ class AtClientImpl implements AtClient {
     notificationParams.atKey.sharedBy ??= currentAtSign;
 
     var builder = NotifyVerbBuilder()
+      ..id = notificationParams.id
       ..atKey = notificationParams.atKey.key
       ..sharedBy = notificationParams.atKey.sharedBy
       ..sharedWith = notificationParams.atKey.sharedWith
