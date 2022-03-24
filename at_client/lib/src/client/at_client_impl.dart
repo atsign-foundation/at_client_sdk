@@ -773,6 +773,9 @@ class AtClientImpl implements AtClient {
       builder.ttr = notificationParams.atKey.metadata!.ttr;
       builder.ccd = notificationParams.atKey.metadata!.ccd;
       builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
+      builder.sharedKeyEncrypted =
+          notificationParams.atKey.metadata!.sharedKeyEnc;
+      builder.pubKeyChecksum = notificationParams.atKey.metadata!.pubKeyCS;
     }
     if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
         notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
