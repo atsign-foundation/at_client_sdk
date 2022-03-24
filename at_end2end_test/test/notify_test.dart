@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -48,11 +49,12 @@ void main() {
   test(
       'Notify a key with value to sharedWith atSign and listen for notification from sharedWith atSign',
       () async {
-    var phoneKey = AtKey()
-      ..key = 'phone'
-      ..sharedWith = sharedWithAtSign
-      ..metadata = (Metadata()..ttr = 60000000);
     var lastNumber = Random().nextInt(50);
+    var phoneKey = AtKey()
+      ..key = 'phone_$lastNumber'
+      ..sharedWith = sharedWithAtSign
+      ..metadata = (Metadata()..ttr = 60000);
+
     // Appending a random number as a last number to generate a new phone number
     // for each run.
     var value = '+1 100 200 30$lastNumber';
@@ -68,14 +70,17 @@ void main() {
     // Setting sharedWithAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    AtClientManager.getInstance()
-        .notificationService
-        .subscribe(regex: '.wavi')
-        .listen((event) {
-      print('got notification');
-      print(event);
-    });
-  }, timeout: Timeout(Duration(minutes: 5)));
+    var notificationListResult = await AtClientManager.getInstance()
+        .atClient
+        .notifyList(regex: 'phone_$lastNumber');
+    expect(notificationListResult, isNotEmpty);
+    notificationListResult = notificationListResult.replaceFirst('data:', '');
+    final notificationListJson = jsonDecode(notificationListResult);
+    print(notificationListJson);
+    expect(notificationListJson[0]['from'], currentAtSign);
+    expect(notificationListJson[0]['to'], sharedWithAtSign);
+    expect(notificationListJson[0]['value'], isNotEmpty);
+  });
 
   tearDownAll(() async {
     var isExists = await Directory('test/hive').exists();
