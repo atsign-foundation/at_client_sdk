@@ -24,10 +24,10 @@ dependencies:
   internet_connection_checker: ^0.0.1+2
   at_persistence_spec: ^2.0.5
   at_persistence_secondary_server: ^3.0.19
-  at_lookup: ^3.0.12
+  at_lookup: ^3.0.14
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.7
+  at_commons: ^3.0.9
   at_utils: ^3.0.6
 
 #dependency_overrides:
