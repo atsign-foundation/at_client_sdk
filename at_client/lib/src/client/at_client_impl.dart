@@ -733,6 +733,8 @@ class AtClientImpl implements AtClient {
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
       ..notifier = notificationParams.notifier;
+    // if no metadata is set by the app, init empty metadata
+    notificationParams.atKey.metadata ??= Metadata();
     // If value is not null, encrypt the value
     if (notificationParams.value != null &&
         notificationParams.value!.isNotEmpty) {
