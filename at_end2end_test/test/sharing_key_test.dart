@@ -17,7 +17,6 @@ void main() {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-
     // Create atClient instance for currentAtSign
     currentAtSignClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(
@@ -52,11 +51,12 @@ void main() {
   /// 3. Get method - lookup verb
   test('Share a key to sharedWith atSign and lookup from sharedWith atSign',
       () async {
+    var lastNumber = Random().nextInt(50);
     var phoneKey = AtKey()
-      ..key = 'phone'
+      ..key = 'phone_$lastNumber'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()..ttl = 120000);
-    var lastNumber = Random().nextInt(10);
+
     // Appending a random number as a last number to generate a new phone number
     // for each run.
     var value = '+1 100 200 30$lastNumber';
@@ -77,7 +77,7 @@ void main() {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
-      ..key = 'phone'
+      ..key = 'phone_$lastNumber'
       ..sharedBy = currentAtSign);
     expect(getResult?.value, value);
     expect(getResult?.metadata?.sharedKeyEnc != null, true);
