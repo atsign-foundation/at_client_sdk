@@ -1,3 +1,5 @@
+## 3.1.10
+- at_client version upgrade for chunk based encryption
 ## 3.1.9
 - at_client version change for sync deletion of cached keys to cloud secondary 
 - at_lookup version change for increase in outbound connection timeout
