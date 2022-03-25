@@ -72,36 +72,28 @@ class LocalSecondary implements Secondary {
             ..ttr = builder.ttr
             ..ccd = builder.ccd
             ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted;
+            ..isEncrypted = builder.isEncrypted
+            ..sharedKeyEnc = builder.sharedKeyEncrypted
+            ..pubKeyCS = builder.pubKeyChecksum;
           var atMetadata = AtMetadataAdapter(metadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          if (builder.dataSignature != null) {
-            var metadata = Metadata();
-            metadata
-              ..ttl = builder.ttl
-              ..ttb = builder.ttb
-              ..ttr = builder.ttr
-              ..ccd = builder.ccd
-              ..isBinary = builder.isBinary
-              ..isEncrypted = builder.isEncrypted
-              ..dataSignature = builder.dataSignature;
-            var atMetadata = AtMetadataAdapter(metadata);
-            updateResult =
-                await keyStore!.putAll(updateKey, atData, atMetadata);
-            break;
-          }
-          // #TODO replace below call with putAll.
-          updateResult = await keyStore!.put(updateKey, atData,
-              time_to_live: builder.ttl,
-              time_to_born: builder.ttb,
-              time_to_refresh: builder.ttr,
-              isCascade: builder.ccd,
-              isBinary: builder.isBinary,
-              isEncrypted: builder.isEncrypted);
+          var metadata = Metadata();
+          metadata
+            ..ttl = builder.ttl
+            ..ttb = builder.ttb
+            ..ttr = builder.ttr
+            ..ccd = builder.ccd
+            ..isBinary = builder.isBinary
+            ..isEncrypted = builder.isEncrypted
+            ..dataSignature = builder.dataSignature
+            ..sharedKeyEnc = builder.sharedKeyEncrypted
+            ..pubKeyCS = builder.pubKeyChecksum;
+          var atMetadata = AtMetadataAdapter(metadata);
+          updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
       return 'data:$updateResult';

@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 
 class EncryptionUtil {
   static String generateAESKey() {
@@ -49,5 +51,9 @@ class EncryptionUtil {
     var iv2 = IV.fromLength(16);
     return decrypter.decryptBytes(Encrypted(encryptedValue as Uint8List),
         iv: iv2);
+  }
+
+  static String md5CheckSum(String data) {
+      return md5.convert(utf8.encode(data)).toString();
   }
 }
