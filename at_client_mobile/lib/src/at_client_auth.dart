@@ -42,7 +42,7 @@ class AtClientAuthenticator implements AtClientAuth {
     var atLookupInitialAuth = AtLookupImpl(
         atSign, atClientPreference.rootDomain, atClientPreference.rootPort);
     // get existing keys from keychain
-    final atsign = await _keyChainManager.getAtsign(name: atSign);
+    final atsign = await _keyChainManager.readAtsign(name: atSign);
     var publicKey = atsign?.pkamPublicKey;
         // await _keyChainManager.getValue(atSign, keychainPKAMPublicKey);
     var privateKey = atClientPreference.privateKey ??= atsign?.pkamPrivateKey;
@@ -98,7 +98,7 @@ class AtClientAuthenticator implements AtClientAuth {
           logger
               .finer('generating encryption key pair and self encryption key');
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
-          final atSignItem = await _keyChainManager.getAtsign(name: atSign) ?? AtsignKey(name: atSign);
+          final atSignItem = await _keyChainManager.readAtsign(name: atSign) ?? AtsignKey(name: atSign);
           // await _keyChainManager.putValue(atSign, keychainEncryptionPrivateKey,
           //     encryptionKeyPair.privateKey.toString());
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();

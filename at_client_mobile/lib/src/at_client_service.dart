@@ -208,7 +208,8 @@ class AtClientService {
     // await _keyChainManager.putValue(
     //     atsign, keychainSelfEncryptionKey, decryptKey);
 
-    var atSignItem = await _keyChainManager.getAtsign(name: atsign) ?? AtsignKey(name: atsign);
+    var atSignItem = await _keyChainManager.readAtsign(name: atsign) ??
+        AtsignKey(name: atsign);
     atSignItem = atSignItem.copyWith(
       encryptionPrivateKey: encryptionPrivateKey,
       encryptionPublicKey: encryptionPublicKey,
@@ -374,7 +375,7 @@ class KeychainUtil {
 
   static Future<String?> getAESKey(String atsign) async {
     // return await _keyChainManager.getValue(atsign, keychainSelfEncryptionKey);
-    return (await _keyChainManager.getAtsign(name: atsign))?.selfEncryptionKey;
+    return (await _keyChainManager.readAtsign(name: atsign))?.selfEncryptionKey;
   }
 
   static Future<String?> getSelfEncryptionKey(String atSign) async {
@@ -391,11 +392,11 @@ class KeychainUtil {
   }
 
   static Future<void> resetAtSignFromKeychain(String atsign) async {
-    return await _keyChainManager.resetAtSignFromKeychain(atsign);
+    await _keyChainManager.resetAtSignFromKeychain(atsign: atsign);
   }
 
   static Future<void> deleteAtSignFromKeychain(String atsign) async {
-    return await _keyChainManager.deleteAtSignFromKeychain(atsign);
+    await _keyChainManager.deleteAtSignFromKeychain(atsign);
   }
 
   static Future<bool> makeAtSignPrimary(String atsign) async {
