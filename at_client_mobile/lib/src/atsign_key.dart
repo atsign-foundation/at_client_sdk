@@ -1,7 +1,6 @@
 ///Save atsign key
 /// https://docs.google.com/document/d/1JAXNrGr6J30m1xTWD4t7z2eQRo6O7icEOprJh1KKNas/edit?hl=en&forcehl=1#
 class AtsignKey {
-  final bool isDefault;
   final String name;
   final String? pkamPublicKey;
   final String? pkamPrivateKey;
@@ -12,7 +11,6 @@ class AtsignKey {
   final String? secret;
 
   AtsignKey({
-    this.isDefault = false,
     required this.name,
     this.pkamPrivateKey,
     this.pkamPublicKey,
@@ -24,7 +22,6 @@ class AtsignKey {
   });
 
   factory AtsignKey.fromJson(Map<String, dynamic> json) => AtsignKey(
-        isDefault: json["isDefault"] is bool ? json["isDefault"] : false,
         name: json["name"] is String ? json["name"] : "",
         pkamPrivateKey:
             json["pkamPrivateKey"] is String ? json["pkamPrivateKey"] : null,
@@ -44,7 +41,6 @@ class AtsignKey {
       );
 
   Map<String, dynamic> toJson() => {
-        "isDefault": isDefault,
         "name": name,
         "pkamPrivateKey": pkamPrivateKey,
         "pkamPublicKey": pkamPublicKey,
@@ -67,7 +63,6 @@ class AtsignKey {
     String? secret,
   }) {
     return AtsignKey(
-      isDefault: isDefault ?? this.isDefault,
       name: name ?? this.name,
       pkamPublicKey: pkamPublicKey ?? this.pkamPublicKey,
       pkamPrivateKey: pkamPrivateKey ?? this.pkamPrivateKey,
@@ -83,19 +78,23 @@ class AtsignKey {
 class AtClientData {
   AtClientDataConfig? config;
   List<AtsignKey> keys;
+  String? defaultAtsign;
 
   AtClientData({
     this.config,
     this.keys = const [],
+    this.defaultAtsign,
   });
 
   AtClientData copyWith({
     AtClientDataConfig? config,
     List<AtsignKey>? keys,
+    String? defaultAtsign,
   }) {
     return AtClientData(
       config: config ?? this.config,
       keys: keys ?? this.keys,
+      defaultAtsign: defaultAtsign ?? this.defaultAtsign,
     );
   }
 
@@ -108,6 +107,7 @@ class AtClientData {
                 ?.map((e) => AtsignKey.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             [],
+        defaultAtsign: json['defaultAtsign'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -117,28 +117,34 @@ class AtClientData {
 }
 
 class AtClientDataConfig {
-  final int schemaVersion;
+  final int? schemaVersion;
+  final bool? useSharedStorage; //Share atsign account between apps
 
   const AtClientDataConfig({
-    this.schemaVersion = 1,
+    this.schemaVersion,
+    this.useSharedStorage = false,
   });
 
   factory AtClientDataConfig.defaultConfig() => AtClientDataConfig();
 
-  AtClientDataConfig copyWith({
-    int? schemaVersion,
-  }) {
-    return AtClientDataConfig(
-      schemaVersion: schemaVersion ?? this.schemaVersion,
-    );
-  }
-
   factory AtClientDataConfig.fromJson(Map<String, dynamic> json) =>
       AtClientDataConfig(
         schemaVersion: json['schemaVersion'] as int,
+        useSharedStorage: json['useSharedAtsign'] as bool,
       );
 
   Map<String, dynamic> toJson() => {
         'schemaVersion': schemaVersion,
+        'useSharedAtsign': useSharedStorage,
       };
+
+  AtClientDataConfig copyWith({
+    int? schemaVersion,
+    bool? useSharedStorage,
+  }) {
+    return AtClientDataConfig(
+      schemaVersion: schemaVersion ?? this.schemaVersion,
+      useSharedStorage: useSharedStorage ?? this.useSharedStorage,
+    );
+  }
 }
