@@ -222,13 +222,20 @@ class AtClientService {
         privateKey: pkamPrivateKey, publicKey: pkamPublicKey);
   }
 
+  Future<bool?> isUsingSharedStorage() async {
+    return _keyChainManager.isUsingSharedStorage();
+  }
+
+  Future<void> config({required bool useSharedStorage}) async {
+    await _keyChainManager.initialSetup(useSharedStorage: useSharedStorage);
+  }
+
   ///Returns `true` on successfully completing onboarding.
   /// Throws [OnboardingStatus.atSignNotFound] exception if atsign not found.
   /// Throws [OnboardingStatus.privateKeyNotFound] exception if privatekey not found.
   Future<bool> onboard(
       {required AtClientPreference atClientPreference, String? atsign}) async {
     _atClientAuthenticator = AtClientAuthenticator();
-    await _keyChainManager.migrateKeychainData();
     if (atsign == null || atsign == '') {
       atsign = await _keyChainManager.getAtSign();
     } else {
@@ -383,7 +390,7 @@ class KeychainUtil {
   }
 
   static Future<String?> getAtSign() async {
-    await _keyChainManager.migrateKeychainData();
+    await _keyChainManager.initialSetup(useSharedStorage: false);
     return await _keyChainManager.getAtSign();
   }
 

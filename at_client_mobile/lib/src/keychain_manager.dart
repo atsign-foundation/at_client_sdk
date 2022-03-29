@@ -51,64 +51,67 @@ class KeyChainManager {
   }
 
   /// Initial setup
-  Future<void> initialSetup({bool useSharedStorage = false}) async {
-    final data = await readAtClientData(useSharedStorage: useSharedStorage);
+  Future<void> initialSetup({required bool useSharedStorage}) async {
     //Bring all key to internal and save in single key if need.
-    await migrateKeychainData();
+    await _migrateKeychainData();
     //
-    if (data == null) {
-      /// First time install app
-      if (useSharedStorage) {
-      } else {}
+    if (useSharedStorage) {
+      enableUsingSharedStorage();
     } else {
-      if (useSharedStorage) {
-        //If use shared atsing =>
-      } else {
-        migrateKeychainData(useSharedStorage: useSharedStorage);
+      disableUsingSharedStorage();
+    }
+  }
+
+  /// Change atsign data to internal store
+  Future<bool> disableUsingSharedStorage() async {
+    final data = await readAtClientData(useSharedStorage: false);
+    if (data != null) {
+      if (data.config?.useSharedStorage == false) {
+        return false;
       }
+      final newConfig = data.config?.copyWith(useSharedStorage: false);
+      final newData = data.copyWith(config: newConfig);
+      _saveAtClientData(data: newData, useSharedStorage: false);
+      final sharedAtsigns =
+          (await readAtClientData(useSharedStorage: true))?.keys ?? [];
+      for (var element in sharedAtsigns) {
+        storeAtSign(atSign: element);
+      }
+      return true;
     }
+    return false;
   }
 
   /// Change atsign data to internal store
-  Future<bool> disableSharingAtsign() async {
+  Future<bool> enableUsingSharedStorage() async {
     final data = await readAtClientData(useSharedStorage: false);
-    switch (data?.config?.useSharedStorage) {
-      case true:
-        //Todo: bring data to internal store
-        return true;
-      case false:
-        return true;
-      default:
-        return false;
+    if (data != null) {
+      final newConfig = data.config?.copyWith(useSharedStorage: true);
+      final newData = data.copyWith(config: newConfig);
+      _saveAtClientData(data: newData, useSharedStorage: false);
+      for (var element in data.keys ?? []) {
+        storeAtSign(atSign: element);
+      }
+      return true;
     }
-  }
-
-  /// Change atsign data to internal store
-  Future<bool> enableSharingAtsign() async {
-    final data = await readAtClientData(useSharedStorage: false);
-    switch (data?.config?.useSharedStorage) {
-      case true:
-        return true;
-      case false:
-        //Todo: bring data to internal store
-        return true;
-      default:
-        return false;
-    }
+    return false;
   }
 
   /// Function to group all keys saved in old version app to new data
-  Future<void> migrateKeychainData({bool useSharedStorage = false}) async {
+  Future<void> _migrateKeychainData() async {
     //Check if contain new key format
-    final clientData =
-        await readAtClientData(useSharedStorage: useSharedStorage);
+    final clientData = await readAtClientData(useSharedStorage: false);
     final schemaVersion = clientData?.config?.schemaVersion ?? 0;
+    final useSharedStorage = clientData?.config?.useSharedStorage;
     if (schemaVersion == _kDataSchemeVersion) {
       //No need migrate
       return;
     }
     AtClientData migratedData = AtClientData(
-      config: AtClientDataConfig(schemaVersion: _kDataSchemeVersion),
+      config: AtClientDataConfig(
+        schemaVersion: _kDataSchemeVersion,
+        useSharedStorage: useSharedStorage,
+      ),
       keys: [],
     );
     //Migrate data from version 0 => 1
@@ -135,6 +138,9 @@ class KeyChainManager {
           for (var entry in keysFromBiometric!.entries) {
             final key = entry.key;
             final value = entry.value;
+            if (value == true) {
+              migratedData.defaultAtsign = key;
+            }
             final String? pkamPublicKey = await (await BiometricStorage()
                     .getStorage('$key:_pkam_public_key'))
                 .read();
@@ -243,8 +249,7 @@ class KeyChainManager {
     if (schemaVersion < 2) {
       //For next update data structure
     }
-    await _saveAtClientData(
-        data: migratedData, useSharedStorage: useSharedStorage);
+    await _saveAtClientData(data: migratedData, useSharedStorage: false);
   }
 
   /// Function to get atsign's key with name
