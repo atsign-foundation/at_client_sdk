@@ -52,7 +52,6 @@ class AtsignKey {
       };
 
   AtsignKey copyWith({
-    bool? isDefault,
     String? name,
     String? pkamPublicKey,
     String? pkamPrivateKey,
@@ -122,15 +121,17 @@ class AtClientDataConfig {
 
   const AtClientDataConfig({
     this.schemaVersion,
-    this.useSharedStorage = false,
+    this.useSharedStorage,
   });
 
   factory AtClientDataConfig.defaultConfig() => AtClientDataConfig();
 
   factory AtClientDataConfig.fromJson(Map<String, dynamic> json) =>
       AtClientDataConfig(
-        schemaVersion: json['schemaVersion'] as int,
-        useSharedStorage: json['useSharedAtsign'] as bool,
+        schemaVersion:
+            json['schemaVersion'] is int ? json['schemaVersion'] : null,
+        useSharedStorage:
+            json['useSharedAtsign'] is bool ? json['useSharedAtsign'] : null,
       );
 
   Map<String, dynamic> toJson() => {

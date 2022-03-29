@@ -37,6 +37,7 @@ class KeyChainManager {
       }
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
+      print(s);
     }
     return null;
   }
@@ -56,9 +57,22 @@ class KeyChainManager {
     await _migrateKeychainData();
     //
     if (useSharedStorage) {
-      enableUsingSharedStorage();
+      //Init shared storage if it not exiting
+      final data = await readAtClientData(useSharedStorage: true);
+      if (data == null) {
+        _saveAtClientData(
+          data: AtClientData(
+            config: AtClientDataConfig(
+              schemaVersion: _kDataSchemeVersion,
+            ),
+            keys: [],
+          ),
+          useSharedStorage: useSharedStorage,
+        );
+      }
+      await enableUsingSharedStorage();
     } else {
-      disableUsingSharedStorage();
+      await disableUsingSharedStorage();
     }
   }
 
@@ -70,29 +84,43 @@ class KeyChainManager {
         return false;
       }
       final newConfig = data.config?.copyWith(useSharedStorage: false);
-      final newData = data.copyWith(config: newConfig);
-      _saveAtClientData(data: newData, useSharedStorage: false);
+      var newData = data.copyWith(config: newConfig);
+      await _saveAtClientData(data: newData, useSharedStorage: false);
       final sharedAtsigns =
           (await readAtClientData(useSharedStorage: true))?.keys ?? [];
-      for (var element in sharedAtsigns) {
-        storeAtSign(atSign: element);
-      }
-      return true;
+      final result = await storeAtSigns(atSigns: sharedAtsigns);
+      return result;
     }
     return false;
   }
 
   /// Change atsign data to internal store
   Future<bool> enableUsingSharedStorage() async {
+    //Init shared storage if it not exiting
+    final sharedData = await readAtClientData(useSharedStorage: true);
+    if (sharedData == null) {
+      await _saveAtClientData(
+        data: AtClientData(
+          config: AtClientDataConfig(
+            schemaVersion: _kDataSchemeVersion,
+          ),
+          keys: [],
+        ),
+        useSharedStorage: true,
+      );
+    }
+    //
     final data = await readAtClientData(useSharedStorage: false);
     if (data != null) {
       final newConfig = data.config?.copyWith(useSharedStorage: true);
-      final newData = data.copyWith(config: newConfig);
-      _saveAtClientData(data: newData, useSharedStorage: false);
-      for (var element in data.keys ?? []) {
-        storeAtSign(atSign: element);
+      var newData = data.copyWith(config: newConfig);
+      await _saveAtClientData(data: newData, useSharedStorage: false);
+      final result = await storeAtSigns(atSigns: data.keys);
+      if (result) {
+        newData = newData.copyWith(keys: []);
+        await _saveAtClientData(data: newData, useSharedStorage: false);
       }
-      return true;
+      return result;
     }
     return false;
   }
@@ -102,7 +130,7 @@ class KeyChainManager {
     //Check if contain new key format
     final clientData = await readAtClientData(useSharedStorage: false);
     final schemaVersion = clientData?.config?.schemaVersion ?? 0;
-    final useSharedStorage = clientData?.config?.useSharedStorage;
+    final useSharedStorage = clientData?.config?.useSharedStorage ?? false;
     if (schemaVersion == _kDataSchemeVersion) {
       //No need migrate
       return;
@@ -179,6 +207,9 @@ class KeyChainManager {
           for (var entry in keysFromKeychain!.entries) {
             final key = entry.key;
             final value = entry.value;
+            if (value == true) {
+              migratedData.defaultAtsign = key;
+            }
             final String? pkamPublicKey =
                 await FlutterKeychain.get(key: '$key:_pkam_public_key');
             final String? pkamPrivateKey =
@@ -266,7 +297,7 @@ class KeyChainManager {
     return data?.keys ?? [];
   }
 
-  /// Function to add new atsign to keychain
+  /// Function to add a new atsign to keychain
   Future<bool> storeAtSign({required AtsignKey atSign}) async {
     final internalAtClientData =
         await readAtClientData(useSharedStorage: false);
@@ -276,14 +307,34 @@ class KeyChainManager {
         await readAtClientData(useSharedStorage: useSharedStorage);
     if (atClientData != null) {
       final atSigns = atClientData.keys;
-      //If have no account => make this account is default
-      if (atSigns.isEmpty) {
-        atSign = atSign.copyWith(isDefault: true);
-      }
       atSigns.removeWhere((element) => element.name == atSign.name);
       atSigns.add(atSign);
       await _saveAtClientData(
           data: atClientData, useSharedStorage: useSharedStorage);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /// Function to add new atsigns to keychain
+  Future<bool> storeAtSigns({required List<AtsignKey> atSigns}) async {
+    final internalAtClientData =
+        await readAtClientData(useSharedStorage: false);
+    final useSharedStorage =
+        internalAtClientData?.config?.useSharedStorage ?? false;
+    final atClientData =
+        await readAtClientData(useSharedStorage: useSharedStorage);
+    if (atClientData != null) {
+      final oldAtSigns = atClientData.keys;
+      //If have no account => make this account is default
+      for (var atsign in atSigns) {
+        oldAtSigns.removeWhere((element) => element.name == atsign.name);
+        oldAtSigns.add(atsign);
+      }
+      final newAtClientData = atClientData.copyWith(keys: oldAtSigns);
+      await _saveAtClientData(
+          data: newAtClientData, useSharedStorage: useSharedStorage);
       return true;
     } else {
       return false;
@@ -471,7 +522,27 @@ class KeyChainManager {
   /// Function to get default atsigns name from keychain
   Future<String?> getAtSign() async {
     final atClientData = await readAtClientData(useSharedStorage: false);
-    return atClientData?.defaultAtsign;
+    final defaultAtsign = atClientData?.defaultAtsign;
+    if (atClientData?.config?.useSharedStorage == false) {
+      final atsignKeys =
+          (await readAtClientData(useSharedStorage: false))?.keys ?? [];
+      for (var element in atsignKeys) {
+        if (element.name == defaultAtsign) {
+          return element.name;
+        }
+      }
+      if (atsignKeys.isNotEmpty) return atsignKeys.first.name;
+    } else if (atClientData?.config?.useSharedStorage == true) {
+      final atsignKeys =
+          (await readAtClientData(useSharedStorage: true))?.keys ?? [];
+      for (var element in atsignKeys) {
+        if (element.name == defaultAtsign) {
+          return element.name;
+        }
+      }
+      if (atsignKeys.isNotEmpty) return atsignKeys.first.name;
+    }
+    return null;
   }
 
   /// Function to get Map of atsigns from keychain
@@ -540,7 +611,7 @@ class KeyChainManager {
   }
 
   /// Function to save client data
-  Future<void> _saveAtClientData({
+  Future<bool> _saveAtClientData({
     required AtClientData data,
     required bool useSharedStorage,
   }) async {
@@ -548,8 +619,10 @@ class KeyChainManager {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
       final mapList = jsonEncode(data.toJson());
       await store.write(mapList);
+      return true;
     } catch (e, s) {
       _logger.info('_saveClientData', e, s);
+      return false;
     }
   }
 
