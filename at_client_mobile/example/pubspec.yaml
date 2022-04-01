@@ -41,6 +41,11 @@ dependencies:
 dependency_overrides:
   at_client_mobile:
     path: ../../at_client_mobile
+  at_onboarding_flutter:
+    git:
+      url: https://github.com/atsign-foundation/at_widgets.git
+      path: at_onboarding_flutter
+      ref: feature/on-boarding-3.0
 #  at_client:
 #    git:
 #      url: https://github.com/atsign-foundation/at_client_sdk.git
