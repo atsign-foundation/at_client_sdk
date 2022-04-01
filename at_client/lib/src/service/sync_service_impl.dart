@@ -601,7 +601,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         builder.sharedKeyEncrypted = metaData[SHARED_KEY_ENCRYPTED];
       }
       if (metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM] != null) {
-        builder.pubKeyChecksum = metaData[SHARED_KEY_ENCRYPTED];
+        builder.pubKeyChecksum = metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
       }
     }
   }
