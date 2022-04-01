@@ -21,28 +21,17 @@ class SelfKeyDecryption implements AtKeyDecryption {
           'Decryption failed. Encrypted value is null');
     }
 
-    try {
-      var selfEncryptionKey = await AtClientManager.getInstance()
-          .atClient
-          .getLocalSecondary()!
-          .getEncryptionSelfKey();
-      if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
-          selfEncryptionKey == 'data:null') {
-        throw KeyNotFoundException(
-            'Decryption failed. SelfEncryptionKey not found');
-      }
-
-      return EncryptionUtil.decryptValue(encryptedValue,
-          DefaultResponseParser().parse(selfEncryptionKey).response);
-      // Catch any exception or error and rethrow as AtKeyException.
-    } on Exception catch (e, trace) {
-      _logger
-          .severe('Exception while decrypting value: ${e.toString()} $trace');
-      throw AtKeyException(e.toString());
-    } on Error catch (e, trace) {
-      // Catching error since underlying decryption library may throw Error e.g corrupt pad block
-      _logger.severe('Error while decrypting value: ${e.toString()} $trace');
-      throw AtKeyException(e.toString());
+    var selfEncryptionKey = await AtClientManager.getInstance()
+        .atClient
+        .getLocalSecondary()!
+        .getEncryptionSelfKey();
+    if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
+        selfEncryptionKey == 'data:null') {
+      throw KeyNotFoundException(
+          'Decryption failed. SelfEncryptionKey not found');
     }
+
+    return EncryptionUtil.decryptValue(encryptedValue,
+        DefaultResponseParser().parse(selfEncryptionKey).response);
   }
 }

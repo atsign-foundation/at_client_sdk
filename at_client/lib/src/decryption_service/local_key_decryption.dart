@@ -24,17 +24,6 @@ class LocalKeyDecryption implements AtKeyDecryption {
       _logger.severe('Decryption failed. SharedKey is null');
       throw KeyNotFoundException('Decryption failed. SharedKey is null');
     }
-    try {
-      return EncryptionUtil.decryptValue(encryptedValue, sharedKey);
-      // Catch any exception or error and rethrow as AtKeyException.
-    } on Exception catch (e, trace) {
-      _logger
-          .severe('Exception while decrypting value: ${e.toString()} $trace');
-      throw AtKeyException(e.toString());
-    } on Error catch (e, trace) {
-      // Catching error since underlying decryption library may throw Error e.g corrupt pad block
-      _logger.severe('Error while decrypting value: ${e.toString()} $trace');
-      throw AtKeyException(e.toString());
-    }
+    return EncryptionUtil.decryptValue(encryptedValue, sharedKey);
   }
 }
