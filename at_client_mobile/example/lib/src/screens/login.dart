@@ -52,26 +52,49 @@ class _LoginScreen extends State<LoginScreen> {
             Center(
               child: TextButton(
                 onPressed: () async {
-                  Onboarding(
+                  // Onboarding(
+                  //   context: context,
+                  //   atClientPreference: atClientPreference!,
+                  //   domain: AtEnv.rootDomain,
+                  //   appColor: Theme.of(context).primaryColor,
+                  //   onboard:
+                  //       (Map<String?, AtClientService> value, String? atsign) {
+                  //     atSign = atsign;
+                  //     clientSDKInstance.atsign = atsign!;
+                  //     clientSDKInstance.atClientServiceMap = value;
+                  //     clientSDKInstance.atClientServiceInstance = value[atsign];
+                  //     _logger.finer('Successfully onboarded $atsign');
+                  //   },
+                  //   onError: (Object? error) {
+                  //     // _logger.severe('Onboarding throws $error error');
+                  //   },
+                  //   nextScreen: const HomeScreen(),
+                  //   appAPIKey: AtEnv.appApiKey,
+                  //   rootEnvironment: AtEnv.rootEnvironment,
+                  // );
+                  final result = await AtOnboarding.onboard(
                     context: context,
-                    atClientPreference: atClientPreference!,
-                    domain: AtEnv.rootDomain,
-                    appColor: Theme.of(context).primaryColor,
-                    onboard:
-                        (Map<String?, AtClientService> value, String? atsign) {
-                      atSign = atsign;
-                      clientSDKInstance.atsign = atsign!;
-                      clientSDKInstance.atClientServiceMap = value;
-                      clientSDKInstance.atClientServiceInstance = value[atsign];
-                      _logger.finer('Successfully onboarded $atsign');
-                    },
-                    onError: (Object? error) {
-                      // _logger.severe('Onboarding throws $error error');
-                    },
-                    nextScreen: const HomeScreen(),
-                    appAPIKey: AtEnv.appApiKey,
-                    rootEnvironment: AtEnv.rootEnvironment,
+                    config: AtOnboardingConfig(
+                      atClientPreference: atClientPreference!,
+                      domain: AtEnv.rootDomain,
+                      rootEnvironment: AtEnv.rootEnvironment,
+                      appAPIKey: AtEnv.appApiKey,
+                    ),
                   );
+                  switch (result) {
+                    case AtOnboardingResult.success:
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const HomeScreen()));
+                      break;
+                    case AtOnboardingResult.error:
+                    // TODO: Handle this case.
+                      break;
+                    case AtOnboardingResult.cancel:
+                    // TODO: Handle this case.
+                      break;
+                  }
                 },
                 child: const Text('Onboard'),
               ),
@@ -82,24 +105,29 @@ class _LoginScreen extends State<LoginScreen> {
             Center(
               child: TextButton(
                 onPressed: () async {
-                  Onboarding(
+                  final result = await AtOnboarding.start(
                     context: context,
-                    atsign: '',
-                    // This domain parameter is optional.
-                    domain: AtEnv.rootDomain,
-                    atClientPreference: atClientPreference!,
-                    appColor: const Color.fromARGB(255, 240, 94, 62),
-                    onboard: (value, atsign) {
-                      _logger.finer('Successfully onboarded $atsign');
-                    },
-                    onError: (Object? error) {
-                      _logger.severe('Onboarding throws $error error');
-                    },
-                    rootEnvironment: RootEnvironment.Staging,
-                    // API Key is mandatory for production environment.
-                    // appAPIKey: YOUR_API_KEY_HERE
-                    nextScreen: const HomeScreen(),
+                    config: AtOnboardingConfig(
+                      atClientPreference: atClientPreference!,
+                      domain: AtEnv.rootDomain,
+                      rootEnvironment: AtEnv.rootEnvironment,
+                      appAPIKey: AtEnv.appApiKey,
+                    ),
                   );
+                  switch (result) {
+                    case AtOnboardingResult.success:
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const HomeScreen()));
+                      break;
+                    case AtOnboardingResult.error:
+                      // TODO: Handle this case.
+                      break;
+                    case AtOnboardingResult.cancel:
+                      // TODO: Handle this case.
+                      break;
+                  }
                 },
                 child: const Text('Add another'),
               ),
