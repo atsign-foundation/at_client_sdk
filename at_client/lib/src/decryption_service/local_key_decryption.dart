@@ -9,7 +9,7 @@ import 'package:at_utils/at_logger.dart';
 /// CurrentAtSign: @bob
 /// llookup:@alice:phone@bob
 class LocalKeyDecryption implements AtKeyDecryption {
-  final _logger = AtSignLogger('SelfKeyDecryption');
+  final _logger = AtSignLogger('LocalKeyDecryption');
 
   @override
   Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {
@@ -24,6 +24,14 @@ class LocalKeyDecryption implements AtKeyDecryption {
       _logger.severe('Decryption failed. SharedKey is null');
       throw KeyNotFoundException('Decryption failed. SharedKey is null');
     }
-    return EncryptionUtil.decryptValue(encryptedValue, sharedKey);
+    try {
+      return EncryptionUtil.decryptValue(encryptedValue, sharedKey);
+    } on Exception catch (e) {
+      _logger.severe('Exception while decrypting value: ${e.toString()}');
+      rethrow;
+    } on Error catch (e) {
+      _logger.severe('Error while decrypting value: ${e.toString()}');
+      rethrow;
+    }
   }
 }

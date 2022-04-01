@@ -48,8 +48,18 @@ class SharedKeyDecryption implements AtKeyDecryption {
     if (currentAtSignPrivateKey == null || currentAtSignPrivateKey.isEmpty) {
       throw KeyNotFoundException('encryption private not found');
     }
-    return EncryptionUtil.decryptValue(encryptedValue,
-        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey));
+    try {
+      return EncryptionUtil.decryptValue(
+          encryptedValue,
+          EncryptionUtil.decryptKey(
+              encryptedSharedKey, currentAtSignPrivateKey));
+    } on Exception catch (e) {
+      _logger.severe('Exception while decrypting value: ${e.toString()}');
+      rethrow;
+    } on Error catch (e) {
+      _logger.severe('Error while decrypting value: ${e.toString()}');
+      rethrow;
+    }
   }
 
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {

@@ -34,8 +34,12 @@ class SelfKeyDecryption implements AtKeyDecryption {
 
       return EncryptionUtil.decryptValue(encryptedValue,
           DefaultResponseParser().parse(selfEncryptionKey).response);
+    } on Exception catch (e) {
+      _logger.severe('Exception while decrypting value: ${e.toString()}');
+      rethrow;
     } on Error catch (e) {
       _logger.severe('Error while decrypting value: ${e.toString()}');
+      rethrow;
     }
   }
 }
