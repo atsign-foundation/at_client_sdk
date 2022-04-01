@@ -1,3 +1,5 @@
+## 3.0.15
+- Fix public key checksum in metadata does not sync to local.
 ## 3.0.14
 - Support for shared key and public key checksum in metadata
 - Chunk based encryption/decryption for files up to 1GB
