@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
@@ -35,8 +36,8 @@ class StreamNotificationHandler {
     socket.write(command);
     var bytesReceived = 0;
     var firstByteSkipped = false;
-    var sharedKey =
-        await encryptionService!.getSharedKeyForDecryption(streamNotification.senderAtSign);
+    var sharedKey = await encryptionService!
+        .getSharedKeyForDecryption(streamNotification.senderAtSign);
     socket.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
