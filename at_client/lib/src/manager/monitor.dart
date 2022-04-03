@@ -93,18 +93,11 @@ class Monitor {
   /// This is expressed as EPOCH time milliseconds.
   /// When [retry] is true
   ////
-  Monitor(
-      Function onResponse,
-      Function onError,
-      String atSign,
-      AtClientPreference preference,
-      MonitorPreference monitorPreference,
+  Monitor(Function onResponse, Function onError, String atSign, AtClientPreference preference, MonitorPreference monitorPreference,
       Function retryCallBack,
-      {
-        RemoteSecondary? remoteSecondary,
-        MonitorConnectivityChecker? monitorConnectivityChecker,
-        MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory
-      }) {
+      {RemoteSecondary? remoteSecondary,
+      MonitorConnectivityChecker? monitorConnectivityChecker,
+      MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory}) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -132,16 +125,14 @@ class Monitor {
     }
     // This enables start method to be called with lastNotificationTime on the same instance of Monitor
     if (lastNotificationTime != null) {
-      _logger.finer(
-          'starting monitor for $_atSign with lastnotificationTime: $lastNotificationTime');
+      _logger.finer('starting monitor for $_atSign with lastnotificationTime: $lastNotificationTime');
       _lastNotificationTime = lastNotificationTime;
     }
     try {
       await _checkConnectivity();
 
       //1. Get a new outbound connection dedicated to monitor verb.
-      _monitorConnection = await _createNewConnection(
-          _atSign, _preference.rootDomain, _preference.rootPort);
+      _monitorConnection = await _createNewConnection(_atSign, _preference.rootDomain, _preference.rootPort);
       _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
         _logger.finer('monitor done');
         _monitorConnection!.getSocket().destroy();
@@ -154,41 +145,38 @@ class Monitor {
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.started;
-      _logger.finer(
-          'monitor started for $_atSign with last notification time: $_lastNotificationTime');
+      _logger.finer('monitor started for $_atSign with last notification time: $_lastNotificationTime');
 
       return;
     } on Exception catch (e, s) {
-      print (s.toString());
+      print(s.toString());
       _handleError(e);
     }
   }
 
   Future<void> _authenticateConnection() async {
     var fromVerbRequest = 'from:$_atSign\n';
-    _logger.shout("authenticate sending $fromVerbRequest");
+    _logger.info("_authenticateConnection sending $fromVerbRequest");
     await _monitorConnection!.write(fromVerbRequest);
-    _logger.shout("authenticate sent $fromVerbRequest");
+
     var fromResponse = await _getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
     }
-    _logger.shout(
-        'Authenticating the monitor connection: from result:$fromResponse');
+
+    _logger.info("_authenticateConnection: fromResponse: $fromResponse");
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
-    var sha256signature =
-        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+    var sha256signature = key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
-    _logger.shout('Authenticating the monitor connection: pkam:$signature');
+
+    _logger.info('_authenticateConnection: sending pkam');
     await _monitorConnection!.write('pkam:$signature\n');
-    _logger.shout("Waiting for PKAM response");
+
     var pkamResponse = await _getQueueResponse();
-    _logger.shout("Received PKAM response: $pkamResponse");
     if (!pkamResponse.contains('success')) {
-      throw UnAuthenticatedException(
-          'Monitor connection authentication failed');
+      throw UnAuthenticatedException('_authenticateConnection failed');
     }
-    _logger.shout('Monitor connection authentication successful');
+    _logger.info('_authenticateConnection: successful');
   }
 
   Future<OutboundConnection> _createNewConnection(String toAtSign, String rootDomain, int rootPort) async {
@@ -211,8 +199,7 @@ class Monitor {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
-        monitorResponse = _defaultResponseParser
-            .parse(_monitorVerbResponseQueue.removeFirst());
+        monitorResponse = _defaultResponseParser.parse(_monitorVerbResponseQueue.removeFirst());
         break;
       }
       await Future.delayed(Duration(milliseconds: 5));
@@ -279,7 +266,7 @@ class Monitor {
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
   Future<void> _messageHandler(data) async {
-    _logger.shout("_messageHandler received data");
+    _logger.finest("_messageHandler received data");
 
     String result;
     if (!_buffer.isOverFlow(data)) {
@@ -319,7 +306,7 @@ class MonitorConnectivityChecker {
     if (!(await NetworkUtil.isNetworkAvailable())) {
       throw AtConnectException('Internet connection unavailable to sync');
     }
-    if (!(await remoteSecondary!.isAvailable())) {
+    if (!(await remoteSecondary.isAvailable())) {
       throw AtConnectException('Secondary server is unavailable');
     }
     return;
