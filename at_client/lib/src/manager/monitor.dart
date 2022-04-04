@@ -17,11 +17,6 @@ import 'package:crypton/crypton.dart';
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
 ///
-
-enum MonitorStatus { notStarted, started, stopped, errored }
-
-final _logger = AtSignLogger('Monitor');
-
 class Monitor {
   // Regex on with what the monitor is started
   String? _regex;
@@ -37,6 +32,8 @@ class Monitor {
 
   // Status on the monitor
   MonitorStatus status = MonitorStatus.notStarted;
+
+  final _logger = AtSignLogger('Monitor');
 
   bool _keepAlive = false;
 
@@ -93,7 +90,12 @@ class Monitor {
   /// This is expressed as EPOCH time milliseconds.
   /// When [retry] is true
   ////
-  Monitor(Function onResponse, Function onError, String atSign, AtClientPreference preference, MonitorPreference monitorPreference,
+  Monitor(
+      Function onResponse,
+      Function onError,
+      String atSign,
+      AtClientPreference preference,
+      MonitorPreference monitorPreference,
       Function retryCallBack,
       {RemoteSecondary? remoteSecondary,
       MonitorConnectivityChecker? monitorConnectivityChecker,
@@ -148,8 +150,7 @@ class Monitor {
       _logger.finer('monitor started for $_atSign with last notification time: $_lastNotificationTime');
 
       return;
-    } on Exception catch (e, s) {
-      print(s.toString());
+    } on Exception catch (e) {
       _handleError(e);
     }
   }
@@ -194,8 +195,8 @@ class Monitor {
   ///Returns the response of the monitor verb queue.
   Future<String> _getQueueResponse() async {
     dynamic monitorResponse;
-    //waits for 1 seconds
-    for (var i = 0; i < 10000; i++) {
+    //waits for 30 seconds
+    for (var i = 0; i < 6000; i++) {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
@@ -298,11 +299,10 @@ class Monitor {
   }
 }
 
+enum MonitorStatus { notStarted, started, stopped, errored }
+
 class MonitorConnectivityChecker {
-  Future<void> checkConnectivity(RemoteSecondary? remoteSecondary) async {
-    if (remoteSecondary == null) {
-      throw AtConnectException('No remoteSecondary for which to check connectivity');
-    }
+  Future<void> checkConnectivity(RemoteSecondary remoteSecondary) async {
     if (!(await NetworkUtil.isNetworkAvailable())) {
       throw AtConnectException('Internet connection unavailable to sync');
     }
