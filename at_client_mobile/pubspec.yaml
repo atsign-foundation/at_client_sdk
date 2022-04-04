@@ -16,7 +16,7 @@ dependencies:
   biometric_storage: ^3.0.1
   hive: ^2.0.4
   crypton: ^2.0.3
-  at_client: 3.0.14
+  at_client: 3.0.15
   at_lookup: 3.0.14
   at_commons: 3.0.9
   at_utils: ^3.0.6
