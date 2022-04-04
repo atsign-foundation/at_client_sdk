@@ -1,3 +1,5 @@
+## 3.1.11
+- at_client version upgrade for public key checksum in metadata does not sync to local
 ## 3.1.10
 - at_client version upgrade for chunk based encryption
 ## 3.1.9
