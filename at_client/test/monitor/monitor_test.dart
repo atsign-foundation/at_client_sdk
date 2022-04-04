@@ -27,7 +27,7 @@ void main() {
   MonitorConnectivityChecker monitorConnectivityChecker = MockMonitorConnectivityChecker();
   RemoteSecondary remoteSecondary = MockRemoteSecondary();
 
-  SecureSocket mockSocket = MockSecureSocket();
+  SecureSocket socket = MockSecureSocket();
   late Function(dynamic data) socketOnDataFn;
   late Function() socketOnDoneFn;
   late Function(Exception e) socketOnErrorFn;
@@ -44,14 +44,14 @@ void main() {
 
   group('Monitor start tests', () {
     setUp(() {
-      when(() => monitorConnectivityChecker.checkConnectivity(any())).thenAnswer((_) async {
+      when(() => monitorConnectivityChecker.checkConnectivity(remoteSecondary)).thenAnswer((_) async {
         print('mock check connectivity - OK');
       });
       when(() => remoteSecondary.isAvailable()).thenAnswer((_) async => true);
       when(() => remoteSecondary.findSecondaryUrl()).thenAnswer((_) async => fakeSecondaryUrl);
-      when(() => outboundConnection.getSocket()).thenAnswer((_) => mockSocket);
+      when(() => outboundConnection.getSocket()).thenAnswer((_) => socket);
       when(() => monitorOutboundConnectionFactory.createConnection(fakeSecondaryUrl)).thenAnswer((_) async => outboundConnection);
-      when(() => mockSocket.listen(any(), onError: any(named: "onError"), onDone: any(named: "onDone")))
+      when(() => socket.listen(any(), onError: any(named: "onError"), onDone: any(named: "onDone")))
           .thenAnswer((Invocation invocation) {
         socketOnDataFn = invocation.positionalArguments[0];
         socketOnDoneFn = invocation.namedArguments[#onDone];
@@ -71,7 +71,7 @@ void main() {
     tearDown(() {
       reset(monitorConnectivityChecker);
       reset(remoteSecondary);
-      reset(mockSocket);
+      reset(socket);
       reset(outboundConnection);
       reset(monitorOutboundConnectionFactory);
     });
