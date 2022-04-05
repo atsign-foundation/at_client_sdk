@@ -156,28 +156,25 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
-    var fromVerbRequest = 'from:$_atSign\n';
-    _logger.info("_authenticateConnection sending $fromVerbRequest");
-    await _monitorConnection!.write(fromVerbRequest);
-
+    await _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await _getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
     }
-
-    _logger.info("_authenticateConnection: fromResponse: $fromResponse");
+    _logger.finer(
+        'Authenticating the monitor connection: from result:$fromResponse');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature = key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
-
-    _logger.info('_authenticateConnection: sending pkam');
+    _logger.finer('Authenticating the monitor connection: pkam:$signature');
     await _monitorConnection!.write('pkam:$signature\n');
 
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
-      throw UnAuthenticatedException('_authenticateConnection failed');
+      throw UnAuthenticatedException(
+          'Monitor connection authentication failed');
     }
-    _logger.info('_authenticateConnection: successful');
+    _logger.finer('Monitor connection authentication successful');
   }
 
   Future<OutboundConnection> _createNewConnection(String toAtSign, String rootDomain, int rootPort) async {
