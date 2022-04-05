@@ -27,11 +27,12 @@ class MockMonitorOutboundConnectionFactory extends Mock implements MonitorOutbou
 /// So while, right now, the tests are all passing despite sharing their mock objects, at some point
 /// we will add a test where that assumption doesn't hold any more, and the tests will start failing
 void main() {
-  RemoteSecondary remoteSecondary = MockRemoteSecondary();
-  MonitorOutboundConnectionFactory monitorOutboundConnectionFactory = MockMonitorOutboundConnectionFactory();
-  MonitorConnectivityChecker monitorConnectivityChecker = MockMonitorConnectivityChecker();
-  OutboundConnection outboundConnection = MockOutboundConnection();
-  SecureSocket socket = MockSecureSocket();
+  RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+  MonitorOutboundConnectionFactory mockMonitorOutboundConnectionFactory = MockMonitorOutboundConnectionFactory();
+  MonitorConnectivityChecker mockMonitorConnectivityChecker = MockMonitorConnectivityChecker();
+  OutboundConnection mockOutboundConnection = MockOutboundConnection();
+  SecureSocket mockSocket = MockSecureSocket();
+
   late Function(dynamic data) socketOnDataFn;
   late Function() socketOnDoneFn;
   late Function(Exception e) socketOnErrorFn;
@@ -45,20 +46,20 @@ void main() {
 
   group('Monitor start tests', () {
     setUp(() {
-      reset(monitorConnectivityChecker);
-      reset(remoteSecondary);
-      reset(socket);
-      reset(outboundConnection);
-      reset(monitorOutboundConnectionFactory);
+      reset(mockMonitorConnectivityChecker);
+      reset(mockRemoteSecondary);
+      reset(mockSocket);
+      reset(mockOutboundConnection);
+      reset(mockMonitorOutboundConnectionFactory);
 
-      when(() => monitorConnectivityChecker.checkConnectivity(remoteSecondary)).thenAnswer((_) async {
+      when(() => mockMonitorConnectivityChecker.checkConnectivity(mockRemoteSecondary)).thenAnswer((_) async {
         print('mock check connectivity - OK');
       });
-      when(() => remoteSecondary.isAvailable()).thenAnswer((_) async => true);
-      when(() => remoteSecondary.findSecondaryUrl()).thenAnswer((_) async => fakeSecondaryUrl);
-      when(() => outboundConnection.getSocket()).thenAnswer((_) => socket);
-      when(() => monitorOutboundConnectionFactory.createConnection(fakeSecondaryUrl)).thenAnswer((_) async => outboundConnection);
-      when(() => socket.listen(any(), onError: any(named: "onError"), onDone: any(named: "onDone")))
+      when(() => mockRemoteSecondary.isAvailable()).thenAnswer((_) async => true);
+      when(() => mockRemoteSecondary.findSecondaryUrl()).thenAnswer((_) async => fakeSecondaryUrl);
+      when(() => mockOutboundConnection.getSocket()).thenAnswer((_) => mockSocket);
+      when(() => mockMonitorOutboundConnectionFactory.createConnection(fakeSecondaryUrl)).thenAnswer((_) async => mockOutboundConnection);
+      when(() => mockSocket.listen(any(), onError: any(named: "onError"), onDone: any(named: "onDone")))
           .thenAnswer((Invocation invocation) {
         socketOnDataFn = invocation.positionalArguments[0];
         socketOnDoneFn = invocation.namedArguments[#onDone];
@@ -67,13 +68,13 @@ void main() {
         return MockStreamSubscription<Uint8List>();
       });
 
-      when(() => outboundConnection.write('from:$atSign\n')).thenAnswer((Invocation invocation) async {
+      when(() => mockOutboundConnection.write('from:$atSign\n')).thenAnswer((Invocation invocation) async {
         socketOnDataFn("server challenge\n".codeUnits); // actual challenge is different, of course, but not important for unit tests
       });
-      when(() => outboundConnection.write(any(that: startsWith('pkam:')))).thenAnswer((Invocation invocation) async {
+      when(() => mockOutboundConnection.write(any(that: startsWith('pkam:')))).thenAnswer((Invocation invocation) async {
         socketOnDataFn("success\n".codeUnits);
       });
-      when(() => outboundConnection.write(any(that: startsWith('monitor')))).thenAnswer((Invocation invocation) async {});
+      when(() => mockOutboundConnection.write(any(that: startsWith('monitor')))).thenAnswer((Invocation invocation) async {});
     });
 
     /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.
@@ -82,14 +83,14 @@ void main() {
     test('Monitor start, secondary OK, NULL lastNotificationTime', () async {
       Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
           MonitorPreference(), () => print('onRetry called'),
-          monitorConnectivityChecker: monitorConnectivityChecker,
-          remoteSecondary: remoteSecondary,
-          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory);
 
       Future<void> monitorStartFuture = monitor.start(lastNotificationTime: null);
       await monitorStartFuture;
 
-      final writesToSocket = verify(() => outboundConnection.write(captureAny())).captured;
+      final writesToSocket = verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
       // We've created a monitor with a null lastNotificationTime - expect the command sent to the server to be simply 'monitor\n'
       expect(writesToSocket.last, 'monitor\n');
@@ -102,19 +103,70 @@ void main() {
     test('Monitor start, secondary OK, with a real lastNotificationTime', () async {
       Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
           MonitorPreference(), () => print('onRetry called'),
-          monitorConnectivityChecker: monitorConnectivityChecker,
-          remoteSecondary: remoteSecondary,
-          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory);
 
       int lastNotificationTime = DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
       Future<void> monitorStartFuture = monitor.start(lastNotificationTime: lastNotificationTime);
       await monitorStartFuture;
 
-      final writesToSocket = verify(() => outboundConnection.write(captureAny())).captured;
+      final writesToSocket = verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
       // We've created a monitor with a real lastNotificationTime
       expect(writesToSocket.last, 'monitor:$lastNotificationTime\n');
       expect(monitor.status, MonitorStatus.started);
     });
+
+    test('Monitor start, secondary not available', () async {
+      when(() => mockMonitorConnectivityChecker.checkConnectivity(mockRemoteSecondary)).thenAnswer((_) async {
+        throw Exception('No No No');
+      });
+
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory);
+
+      Future<void> monitorStartFuture = monitor.start();
+      await monitorStartFuture;
+      expect(monitor.status, MonitorStatus.errored);
+    });
+
+    test('Monitor start, secondary OK, socket error', () async {
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory);
+
+      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: null);
+      await monitorStartFuture;
+      expect(monitor.status, MonitorStatus.started);
+
+      when(() => mockOutboundConnection.close()).thenAnswer((_) async => {});
+      socketOnErrorFn(Exception('Bad stuff has happened.'));
+      expect(monitor.status, MonitorStatus.errored);
+
+    });
+
+    test('Monitor start, secondary OK, socket closed', () async {
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory);
+
+      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: null);
+      await monitorStartFuture;
+      expect(monitor.status, MonitorStatus.started);
+
+      when(() => mockOutboundConnection.close()).thenAnswer((_) async => {});
+      socketOnDoneFn();
+      expect(monitor.status, MonitorStatus.stopped);
+
+    });
+
   });
 }
