@@ -23,7 +23,7 @@ class MockOutboundConnection extends Mock implements OutboundConnection {}
 
 class MockMonitorOutboundConnectionFactory extends Mock implements MonitorOutboundConnectionFactory {}
 
-§/// Note: The test code here prioritizes brevity over isolation, therefore you need to run the tests with --concurrency=1
+/// Note: The test code here prioritizes brevity over isolation, therefore you need to run the tests with --concurrency=1
 void main() {
   RemoteSecondary remoteSecondary = MockRemoteSecondary();
   MonitorOutboundConnectionFactory monitorOutboundConnectionFactory = MockMonitorOutboundConnectionFactory();
@@ -80,7 +80,7 @@ void main() {
     /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.
     /// Start the monitor with a NULL last notification time
     /// Check that the monitor has started and has written the correct things to the socket
-    test('Monitor start, NULL lastNotificationTime', () async {
+    test('Monitor start, secondary OK, NULL lastNotificationTime', () async {
       Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
           MonitorPreference(), () => print('onRetry called'),
           monitorConnectivityChecker: monitorConnectivityChecker,
@@ -100,7 +100,7 @@ void main() {
     /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.
     /// Start the monitor with a REAL last notification time
     /// Check that the monitor has started and has written the correct things to the socket
-    test('Monitor start, with a real lastNotificationTime', () async {
+    test('Monitor start, secondary OK, with a real lastNotificationTime', () async {
       Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
           MonitorPreference(), () => print('onRetry called'),
           monitorConnectivityChecker: monitorConnectivityChecker,
@@ -117,6 +117,57 @@ void main() {
       expect(writesToSocket.length, 3);
       expect(writesToSocket.last, 'monitor:$lastNotificationTime\n');
       expect(monitor.status, MonitorStatus.started);
+    });
+
+    test('Monitor start, secondary not reachable', () async {
+      when(() => monitorConnectivityChecker.checkConnectivity(remoteSecondary)).thenThrow(Exception('Secondary is not reachable'));
+
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: monitorConnectivityChecker,
+          remoteSecondary: remoteSecondary,
+          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
+
+      Future<void> monitorStartFuture = monitor.start();
+      await monitorStartFuture;
+
+      expect(monitor.status, MonitorStatus.errored);
+    });
+
+    test('Monitor start, secondary OK, then socket error', () async {
+      when(() => outboundConnection.close()).thenAnswer((_) async {});
+
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: monitorConnectivityChecker,
+          remoteSecondary: remoteSecondary,
+          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
+
+      int lastNotificationTime = DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
+      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: lastNotificationTime);
+      await monitorStartFuture;
+
+      expect(monitor.status, MonitorStatus.started);
+
+      socketOnErrorFn(Exception('Simulated socket error'));
+      expect(monitor.status, MonitorStatus.errored);
+    });
+
+    test('Monitor start, secondary OK, then socket closed', () async {
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: monitorConnectivityChecker,
+          remoteSecondary: remoteSecondary,
+          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
+
+      int lastNotificationTime = DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
+      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: lastNotificationTime);
+      await monitorStartFuture;
+
+      expect(monitor.status, MonitorStatus.started);
+
+      socketOnDoneFn();
+      expect(monitor.status, MonitorStatus.stopped);
     });
   });
 }
