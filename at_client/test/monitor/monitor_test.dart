@@ -27,12 +27,11 @@ class MockMonitorOutboundConnectionFactory extends Mock implements MonitorOutbou
 /// So while, right now, the tests are all passing despite sharing their mock objects, at some point
 /// we will add a test where that assumption doesn't hold any more, and the tests will start failing
 void main() {
-  RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-  MonitorOutboundConnectionFactory mockMonitorOutboundConnectionFactory = MockMonitorOutboundConnectionFactory();
-  MonitorConnectivityChecker mockMonitorConnectivityChecker = MockMonitorConnectivityChecker();
-  OutboundConnection mockOutboundConnection = MockOutboundConnection();
-  SecureSocket mockSocket = MockSecureSocket();
-
+  RemoteSecondary remoteSecondary = MockRemoteSecondary();
+  MonitorOutboundConnectionFactory monitorOutboundConnectionFactory = MockMonitorOutboundConnectionFactory();
+  MonitorConnectivityChecker monitorConnectivityChecker = MockMonitorConnectivityChecker();
+  OutboundConnection outboundConnection = MockOutboundConnection();
+  SecureSocket socket = MockSecureSocket();
   late Function(dynamic data) socketOnDataFn;
   late Function() socketOnDoneFn;
   late Function(Exception e) socketOnErrorFn;
