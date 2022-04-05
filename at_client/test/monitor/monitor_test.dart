@@ -23,7 +23,9 @@ class MockOutboundConnection extends Mock implements OutboundConnection {}
 
 class MockMonitorOutboundConnectionFactory extends Mock implements MonitorOutboundConnectionFactory {}
 
-/// Note: The test code here prioritizes brevity over isolation, therefore you need to run the tests with --concurrency=1
+/// Note: The test code here prioritizes brevity over isolation
+/// So while, right now, the tests are all passing despite sharing their mock objects, at some point
+/// we will add a test where that assumption doesn't hold any more, and the tests will start failing
 void main() {
   RemoteSecondary remoteSecondary = MockRemoteSecondary();
   MonitorOutboundConnectionFactory monitorOutboundConnectionFactory = MockMonitorOutboundConnectionFactory();
@@ -31,9 +33,7 @@ void main() {
   OutboundConnection outboundConnection = MockOutboundConnection();
   SecureSocket socket = MockSecureSocket();
   late Function(dynamic data) socketOnDataFn;
-  // ignore: unused_local_variable
   late Function() socketOnDoneFn;
-  // ignore: unused_local_variable
   late Function(Exception e) socketOnErrorFn;
 
   var atSign = '@monitor_test';
@@ -45,6 +45,12 @@ void main() {
 
   group('Monitor start tests', () {
     setUp(() {
+      reset(monitorConnectivityChecker);
+      reset(remoteSecondary);
+      reset(socket);
+      reset(outboundConnection);
+      reset(monitorOutboundConnectionFactory);
+
       when(() => monitorConnectivityChecker.checkConnectivity(remoteSecondary)).thenAnswer((_) async {
         print('mock check connectivity - OK');
       });
@@ -69,13 +75,6 @@ void main() {
       });
       when(() => outboundConnection.write(any(that: startsWith('monitor')))).thenAnswer((Invocation invocation) async {});
     });
-    tearDown(() {
-      reset(monitorConnectivityChecker);
-      reset(remoteSecondary);
-      reset(socket);
-      reset(outboundConnection);
-      reset(monitorOutboundConnectionFactory);
-    });
 
     /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.
     /// Start the monitor with a NULL last notification time
@@ -90,9 +89,9 @@ void main() {
       Future<void> monitorStartFuture = monitor.start(lastNotificationTime: null);
       await monitorStartFuture;
 
-      // We're going to create a monitor with a null lastNotificationTime - expect the command sent to the server to be simply 'monitor\n'
       final writesToSocket = verify(() => outboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
+      // We've created a monitor with a null lastNotificationTime - expect the command sent to the server to be simply 'monitor\n'
       expect(writesToSocket.last, 'monitor\n');
       expect(monitor.status, MonitorStatus.started);
     });
@@ -111,63 +110,11 @@ void main() {
       Future<void> monitorStartFuture = monitor.start(lastNotificationTime: lastNotificationTime);
       await monitorStartFuture;
 
-      // We're going to create a monitor with a real lastNotificationTime - this time we're
-      // going to capture what was written to socket and compare it with what's expected
       final writesToSocket = verify(() => outboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
+      // We've created a monitor with a real lastNotificationTime
       expect(writesToSocket.last, 'monitor:$lastNotificationTime\n');
       expect(monitor.status, MonitorStatus.started);
-    });
-
-    test('Monitor start, secondary not reachable', () async {
-      when(() => monitorConnectivityChecker.checkConnectivity(remoteSecondary)).thenThrow(Exception('Secondary is not reachable'));
-
-      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
-          MonitorPreference(), () => print('onRetry called'),
-          monitorConnectivityChecker: monitorConnectivityChecker,
-          remoteSecondary: remoteSecondary,
-          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
-
-      Future<void> monitorStartFuture = monitor.start();
-      await monitorStartFuture;
-
-      expect(monitor.status, MonitorStatus.errored);
-    });
-
-    test('Monitor start, secondary OK, then socket error', () async {
-      when(() => outboundConnection.close()).thenAnswer((_) async {});
-
-      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
-          MonitorPreference(), () => print('onRetry called'),
-          monitorConnectivityChecker: monitorConnectivityChecker,
-          remoteSecondary: remoteSecondary,
-          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
-
-      int lastNotificationTime = DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
-      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: lastNotificationTime);
-      await monitorStartFuture;
-
-      expect(monitor.status, MonitorStatus.started);
-
-      socketOnErrorFn(Exception('Simulated socket error'));
-      expect(monitor.status, MonitorStatus.errored);
-    });
-
-    test('Monitor start, secondary OK, then socket closed', () async {
-      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
-          MonitorPreference(), () => print('onRetry called'),
-          monitorConnectivityChecker: monitorConnectivityChecker,
-          remoteSecondary: remoteSecondary,
-          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
-
-      int lastNotificationTime = DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
-      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: lastNotificationTime);
-      await monitorStartFuture;
-
-      expect(monitor.status, MonitorStatus.started);
-
-      socketOnDoneFn();
-      expect(monitor.status, MonitorStatus.stopped);
     });
   });
 }
