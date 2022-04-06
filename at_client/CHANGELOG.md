@@ -1,3 +1,7 @@
+## 3.0.16
+- Decrypt notification value in SDK
+- Support for shared key and public key checksum in notify
+- Deprecated methods related to filebin
 ## 3.0.15
 - Fix public key checksum in metadata does not sync to local.
 ## 3.0.14
