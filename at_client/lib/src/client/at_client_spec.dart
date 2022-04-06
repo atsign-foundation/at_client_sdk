@@ -436,6 +436,8 @@ abstract class AtClient {
 
   /// re sends file notifications to [sharedWithAtSigns]
   /// returns [Map<String, FileTransferObject>] which contains transfer status for each atsign.
+  @Deprecated(
+      'Method will be removed from SDK since method is moved to app layer')
   Future<Map<String, FileTransferObject>> shareFiles(
       List<String> sharedWithAtSigns,
       String key,
