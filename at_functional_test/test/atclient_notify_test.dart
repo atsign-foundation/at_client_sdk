@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
+import 'package:at_utils/at_logger.dart';
 
 void main() {
   test('notify updating of a key to sharedWith atSign - using await', () async {
@@ -163,6 +164,44 @@ void main() {
         await atClient.notifyAll(phoneKey, value, OperationEnum.update);
     expect(jsonDecode(notifyResult)[bobAtSign], true);
     expect(jsonDecode(notifyResult)[colinAtSign], true);
+  });
+
+  test('notify check value decryption on receiver', () async {
+    AtSignLogger.root_level = 'finest';
+    var atsign = '@alice🛠';
+    var preference = TestUtils.getPreference(atsign);
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClient = atClientManager.atClient;
+    // To setup encryption keys
+    await setEncryptionKeys(atsign, preference);
+    // phone.me@alice🛠
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠';
+    var value = '+1 100 200 300';
+    var notification = await NotificationServiceImpl.create(atClient,
+        atClientManager: atClientManager);
+    await notification
+        .notify(NotificationParams.forUpdate(phoneKey, value: value));
+//    expect(result.notificationStatusEnum.toString(),
+//        'NotificationStatusEnum.delivered');
+//    expect(result.atKey.key, 'phone');
+//    expect(result.atKey.sharedWith, phoneKey.sharedWith);
+    atsign = '@bob🛠';
+    preference = TestUtils.getPreference(atsign);
+    atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atsign, 'wavi', preference);
+    atClient = atClientManager.atClient;
+    await NotificationServiceImpl.create(atClient,
+        atClientManager: atClientManager);
+    atClientManager.notificationService
+        .subscribe(regex: 'phone')
+        .listen((event) {
+      print('got receiver notification');
+      print(event);
+    });
+    Future.delayed(Duration(seconds: 10));
   });
   tearDown(() async => await tearDownFunc());
 }
