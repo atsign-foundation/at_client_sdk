@@ -415,16 +415,22 @@ abstract class AtClient {
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
+  @Deprecated(
+      'Method will be removed from SDK since method is moved to app layer')
   Future<Map<String, FileTransferObject>> uploadFile(
       List<File> files, List<String> sharedWithAtSigns);
 
   /// Downloads the list of files for a given [transferId] shared by [sharedByAtSign]
   /// Optionally you can pass [downloadPath] to download the files.
+  @Deprecated(
+      'Method will be removed from SDK since method is moved to app layer')
   Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
       {String? downloadPath});
 
   /// re uploads file in [fileTransferObject.fileUrl]
   /// returns list of [FileStatus] which contains upload status of each file.
+  @Deprecated(
+      'Method will be removed from SDK since method is moved to app layer')
   Future<List<FileStatus>> reuploadFiles(
       List<File> files, FileTransferObject fileTransferObject);
 
