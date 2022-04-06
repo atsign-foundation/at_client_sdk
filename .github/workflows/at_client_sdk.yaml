@@ -47,7 +47,7 @@ jobs:
         run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v2.1.0
+        uses: codecov/codecov-action@v3
         with:
           token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
           file: at_client/coverage.lcov
@@ -87,7 +87,7 @@ jobs:
         run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v2.1.0
+        uses: codecov/codecov-action@v3
         with:
           token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
           file: at_functional_test/coverage.lcov
