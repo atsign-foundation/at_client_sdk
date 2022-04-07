@@ -1,3 +1,6 @@
+## 3.1.12
+- Add keys from keychain to local store on reinstalling the app
+- at_client version upgrade for decrypt notification value in SDK.
 ## 3.1.11
 - at_client version upgrade for public key checksum in metadata does not sync to local
 ## 3.1.10
