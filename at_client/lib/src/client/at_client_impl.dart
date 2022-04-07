@@ -33,6 +33,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:http/http.dart' as http;
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -582,19 +583,32 @@ class AtClientImpl implements AtClient {
         size: await file.length(),
       );
       try {
-        final encryptedFile = await _encryptionService!.encryptFileInChunks(
-            file, encryptionKey, _preference!.fileEncryptionChunkSize);
-        var response =
-            await FileTransferService().uploadToFileBinWithStreamedRequest(
+        // final encryptedFile = await _encryptionService!.encryptFileInChunks(
+        //     file, encryptionKey, _preference!.fileEncryptionChunkSize);
+        // var response =
+        //     await FileTransferService().uploadToFileBinWithStreamedRequest(
+        //   encryptedFile,
+        //   transferId,
+        //   fileStatus.fileName!,
+        // );
+        // encryptedFile.deleteSync();
+        // if (response != null && response.statusCode == 201) {
+        //   final responseStr = await response.stream.bytesToString();
+        //   var responseMap = jsonDecode(responseStr);
+        //   fileStatus.fileName = responseMap['file']['filename'];
+        //   fileStatus.isUploaded = true;
+        // }
+        final encryptedFile = _encryptionService!
+            .encryptFile(file.readAsBytesSync(), encryptionKey);
+        var response = await FileTransferService().uploadToFileBin(
           encryptedFile,
           transferId,
           fileStatus.fileName!,
         );
-        encryptedFile.deleteSync();
-        if (response != null && response.statusCode == 201) {
-          final responseStr = await response.stream.bytesToString();
-          var responseMap = jsonDecode(responseStr);
-          fileStatus.fileName = responseMap['file']['filename'];
+        if (response is http.Response && response.statusCode == 201) {
+          Map fileInfo = jsonDecode(response.body);
+          // changing file name if it's not url friendly
+          fileStatus.fileName = fileInfo['file']['filename'];
           fileStatus.isUploaded = true;
         }
 
@@ -655,17 +669,25 @@ class AtClientImpl implements AtClient {
     var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
-        var decryptedFile = await _encryptionService!.decryptFileInChunks(
-            File(encryptedFile.path),
-            fileTransferObject.fileEncryptionKey,
-            _preference!.fileEncryptionChunkSize);
-        decryptedFile.copySync(downloadPath +
+        // var decryptedFile = await _encryptionService!.decryptFileInChunks(
+        //     File(encryptedFile.path),
+        //     fileTransferObject.fileEncryptionKey,
+        //     _preference!.fileEncryptionChunkSize);
+        // decryptedFile.copySync(downloadPath +
+        //     Platform.pathSeparator +
+        //     encryptedFile.path.split(Platform.pathSeparator).last);
+        // downloadedFiles.add(File(downloadPath +
+        //     Platform.pathSeparator +
+        //     encryptedFile.path.split(Platform.pathSeparator).last));
+        // decryptedFile.deleteSync();
+        var decryptedFile = _encryptionService!.decryptFile(
+            File(encryptedFile.path).readAsBytesSync(),
+            fileTransferObject.fileEncryptionKey);
+        var downloadedFile = File(downloadPath +
             Platform.pathSeparator +
             encryptedFile.path.split(Platform.pathSeparator).last);
-        downloadedFiles.add(File(downloadPath +
-            Platform.pathSeparator +
-            encryptedFile.path.split(Platform.pathSeparator).last));
-        decryptedFile.deleteSync();
+        downloadedFile.writeAsBytesSync(decryptedFile);
+        downloadedFiles.add(downloadedFile);
       }
       // deleting temp directory
       Directory(fileDownloadReponse.filePath!).deleteSync(recursive: true);
