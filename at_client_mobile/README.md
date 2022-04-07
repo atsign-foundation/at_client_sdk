@@ -122,6 +122,21 @@ bool isOnboarded = atClientServiceMap.containsKey(atsign);
 print(isOnboarded); // Prints true if onboarded.
 ```
 
+- Creating the .env file
+
+```yaml
+NAMESPACE = "at_client_demo"
+ROOT_DOMAIN = "root.atsign.org"
+```
+
+- Adding the .env file to pubspec.yaml
+
+```yaml
+flutter:
+  assets: 
+    - .env
+```
+
 ## Example
 
 We have a good example with explanation in the [at_client_mobile](https://pub.dev/packages/at_client_mobile/example) package.
