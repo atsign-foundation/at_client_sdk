@@ -46,24 +46,94 @@ void main() {
     }
   });
 
+  test('notify a key to another atsign and verify the value in the receiver', () async {
+    var lastNumber = Random().nextInt(30);
+    var metadata = Metadata()
+    ..ttr = 864000;
+    var codeKey = AtKey()
+      ..key = 'code'
+      ..sharedWith = sharedWithAtSign
+      ..metadata = metadata;
+    var value = '99 09 $lastNumber';
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    final notificationResult = await currentAtSignClientManager?.notificationService.notify(NotificationParams.forUpdate(codeKey, value: value));
+    expect(notificationResult, isNotNull);
+    expect(notificationResult!.notificationStatusEnum,
+        NotificationStatusEnum.delivered);
+    expect(notificationResult.atKey.key, 'code.$namespace');
+    expect(notificationResult.atKey.sharedWith, codeKey.sharedWith);
+    var isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    isSyncInProgress = true;
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 10));
+    }
+    var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
+      ..key = 'code.$namespace'
+      ..sharedBy = currentAtSign);
+    print('get result is $getResult');
+    expect( getResult!.value,value);
+    expect(getResult.metadata?.sharedKeyEnc != null, true);
+    expect(getResult.metadata?.pubKeyCS != null, true);
+  }, timeout: Timeout(Duration(seconds: 120)));
+
+  test('notify a text to another atsign and verify the value in the receiver', () async {
+    var textToShare = 'Hello';
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    final notificationResult = await currentAtSignClientManager?.notificationService.notify(NotificationParams.forText(textToShare, sharedWithAtSign));
+    expect(notificationResult, isNotNull);
+    expect(notificationResult!.notificationStatusEnum,
+        NotificationStatusEnum.delivered);
+    expect(notificationResult.atKey.key, textToShare);
+    var isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    isSyncInProgress = true;
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 10));
+    }
+    var notifyListResult = await sharedWithAtSignClientManager?.atClient.notifyList(regex: 'Hello');
+    assert(notifyListResult!.contains('"key":"$sharedWithAtSign:$textToShare"'));
+  }, timeout: Timeout(Duration(seconds: 120)));
+  
+ 
   test(
-      'Notify a key with value to sharedWith atSign and listen for notification from sharedWith atSign',
+      'Notify a delete key with value to sharedWith atSign and listen for notification from sharedWith atSign',
       () async {
     var lastNumber = Random().nextInt(50);
     var phoneKey = AtKey()
       ..key = 'phone_$lastNumber'
-      ..sharedWith = sharedWithAtSign
-      ..metadata = (Metadata()..ttr = 60000);
+      ..sharedWith = sharedWithAtSign;
 
-    // Appending a random number as a last number to generate a new phone number
-    // for each run.
-    var value = '+1 100 200 30$lastNumber';
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     final notificationResult = await currentAtSignClientManager
         ?.notificationService
-        .notify(NotificationParams.forUpdate(phoneKey, value: value));
+        .notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult, isNotNull);
     expect(notificationResult!.notificationStatusEnum,
         NotificationStatusEnum.delivered);
@@ -79,7 +149,7 @@ void main() {
     print(notificationListJson);
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
-    expect(notificationListJson[0]['value'], isNotEmpty);
+    expect(notificationListJson[0]['operation'], 'delete');
   });
 
   tearDownAll(() async {

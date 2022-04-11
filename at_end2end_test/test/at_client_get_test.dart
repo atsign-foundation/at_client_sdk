@@ -22,7 +22,7 @@ void main() {
         .setCurrentAtSign(
             currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     // Set Encryption Keys for currentAtSign
-    // await TestUtils.setEncryptionKeys(currentAtSign);
+    await TestUtils.setEncryptionKeys(currentAtSign);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -35,7 +35,7 @@ void main() {
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestUtils.getPreference(sharedWithAtSign));
     // Set Encryption Keys for sharedWithAtSign
-    // await TestUtils.setEncryptionKeys(sharedWithAtSign);
+    await TestUtils.setEncryptionKeys(sharedWithAtSign);
     isSyncInProgress = true;
     sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -85,6 +85,7 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
+    /// lookup of a public key
     var metadata = Metadata()
     ..isPublic = true;
     var getResult = await sharedWithAtSignClientManager?.atClient.get(
@@ -110,8 +111,186 @@ void main() {
     expect(getCachedResult?.value, value);
   }, timeout: Timeout(Duration(minutes: 5)));
 
-  
+  test('Create a private key and lookup from different atSign',
+      () async {
+    var lastNumber = Random().nextInt(50);
+    var authCodeKey = AtKey()
+      ..key = 'auth-code_$lastNumber'
+      ..sharedWith = sharedWithAtSign
+      ..metadata = (Metadata() ..ttr = 864000);
 
+    // Appending a random number as a last number to generate a new auth-code number
+    // for each run.
+    var value = 'QR345R$lastNumber';
+    // Setting currentAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var putResult =
+        await currentAtSignClientManager?.atClient.put(authCodeKey, value);
+    expect(putResult, true);
+    var getResultCurrentAtsign = await currentAtSignClientManager?.atClient.get(authCodeKey);
+    expect(getResultCurrentAtsign?.value, value);
+    var isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    await Future.delayed(Duration(seconds: 1));
+    var metadata = Metadata()
+    ..isCached= true;
+    var getResultSharedWithAtsign = await sharedWithAtSignClientManager?.atClient.get(AtKey() 
+      ..key = 'auth-code_$lastNumber' 
+      ..namespace = 'wavi'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..metadata = metadata);
+    expect(getResultSharedWithAtsign?.value, value);
+    expect(getResultSharedWithAtsign?.metadata!.pubKeyCS, getResultCurrentAtsign?.metadata!.pubKeyCS);
+    expect(getResultSharedWithAtsign?.metadata!.sharedKeyEnc, getResultCurrentAtsign?.metadata!.sharedKeyEnc);
+    // verifying pubKeyCS and sharedKeyEnc is same in both sender and receiver
+    expect(getResultCurrentAtsign?.metadata!.pubKeyCS, equals(getResultSharedWithAtsign?.metadata!.pubKeyCS));
+    expect(getResultCurrentAtsign?.metadata!.sharedKeyEnc, equals(getResultSharedWithAtsign?.metadata!.sharedKeyEnc));
+  }, timeout: Timeout(Duration(minutes: 2)));
+
+  test('Create a private key with ttl and lookup from different atSign',
+      () async {
+    var lastNumber = Random().nextInt(50);
+    var tempCodeKey = AtKey()
+      ..key = 'tempCode$lastNumber'
+      ..sharedWith = sharedWithAtSign
+      ..metadata = (Metadata() 
+      ..ttl = 3000
+      ..ttr = 864000);
+
+    // Appending a random number as a last number to generate a new temp-code number
+    // for each run.
+    var value = 'EEE09$lastNumber';
+    // Setting currentAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var putResult =
+        await currentAtSignClientManager?.atClient.put(tempCodeKey, value);
+    expect(putResult, true);
+    var getResultCurrentAtsign = await currentAtSignClientManager?.atClient.get(tempCodeKey);
+    expect(getResultCurrentAtsign?.value, value);
+    var isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    /// fetching value before the ttl time 
+    var metadata = Metadata()
+    ..isCached= true;
+    var getKey = AtKey() 
+      ..key = 'tempCode$lastNumber' 
+      ..namespace = 'wavi'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..metadata = metadata;
+    var getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
+    expect(getResult?.value, value);
+    expect(getResult?.metadata!.pubKeyCS, getResultCurrentAtsign?.metadata!.pubKeyCS);
+    expect(getResult?.metadata!.sharedKeyEnc, getResultCurrentAtsign?.metadata!.sharedKeyEnc);
+    // looking up after ttl time
+    isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
+    expect(getResult?.value, null);
+  }, timeout: Timeout(Duration(minutes: 2)));
+  
+  test('Create a private key with ttb and lookup from different atSign',
+      () async {
+    var lastNumber = Random().nextInt(50);
+    var passCodeKey = AtKey()
+      ..key = 'passCode$lastNumber'
+      ..sharedWith = sharedWithAtSign
+      ..metadata = (Metadata() 
+      ..ttb = 1000
+      ..ttr = 864000);
+
+    // Appending a random number as a last number to generate a new temp-code number
+    // for each run.
+    var value = '89023$lastNumber';
+    // Setting currentAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var putResult =
+        await currentAtSignClientManager?.atClient.put(passCodeKey, value);
+    expect(putResult, true);
+  //  wait till the ttb time is reached
+    await Future.delayed(Duration(seconds: 1));
+    var getResultCurrentAtsign = await currentAtSignClientManager?.atClient.get(passCodeKey);
+    expect(getResultCurrentAtsign?.value, value);
+    var isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    /// fetching value before the ttb time 
+    var metadata = Metadata()
+    ..isCached= true;
+    var getKey = AtKey() 
+      ..key = 'passCode$lastNumber' 
+      ..namespace = 'wavi'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..metadata = metadata;
+    var getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
+    expect(getResult?.value, null);
+    // looking up after ttl time
+    isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
+    expect(getResult?.value, value);
+     expect(getResult?.metadata!.pubKeyCS, getResultCurrentAtsign?.metadata!.pubKeyCS);
+    expect(getResult?.metadata!.sharedKeyEnc, getResultCurrentAtsign?.metadata!.sharedKeyEnc);
+  }, timeout: Timeout(Duration(minutes: 2)));
 }
 
 Future<void> tearDownFunc() async {
