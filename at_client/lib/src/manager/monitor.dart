@@ -154,7 +154,8 @@ class Monitor {
       await _checkConnectivity();
 
       //1. Get a new outbound connection dedicated to monitor verb.
-      _monitorConnection = await _createNewConnection(_atSign, _preference.rootDomain, _preference.rootPort);
+      _monitorConnection = await _createNewConnection(
+          _atSign, _preference.rootDomain, _preference.rootPort);
       _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
         _logger.info('socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
         _callCloseStopAndRetry();
