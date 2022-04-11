@@ -147,7 +147,7 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    await Future.delayed(Duration(seconds: 1));
+    await Future.delayed(Duration(seconds: 3));
     var metadata = Metadata()
     ..isCached= true;
     var getResultSharedWithAtsign = await sharedWithAtSignClientManager?.atClient.get(AtKey() 
