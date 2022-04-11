@@ -87,8 +87,10 @@ class NotificationServiceImpl
   }
 
   Future<int?> _getLastNotificationTime() async {
-    var atKey = AtKey()..key = notificationIdKey;
-    if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(atKey.key!)) {
+    var lastNotificationKeyStr =
+        '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
+    var atKey = AtKey.fromString(lastNotificationKeyStr);
+    if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(lastNotificationKeyStr)) {
       final atValue = await _atClient.get(atKey);
       if (atValue.value != null) {
         _logger.finer('json from hive: ${atValue.value}');
