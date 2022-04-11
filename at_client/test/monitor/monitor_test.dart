@@ -168,5 +168,131 @@ void main() {
 
     });
 
+    test('Monitor heartbeat sending regularly', () async {
+      int heartbeatIntervalMillis = 500;
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory,
+          heartbeatInterval:Duration(milliseconds: heartbeatIntervalMillis));
+
+      int numHeartbeatsSent = 0;
+      when(() => mockOutboundConnection.write("noop:0\n")).thenAnswer((Invocation invocation) async {
+        numHeartbeatsSent++;
+        sleep(Duration(milliseconds: 1));
+        socketOnDataFn("@ok\n".codeUnits);
+      });
+
+      when(() => mockOutboundConnection.close()).thenAnswer((_) async => {});
+
+      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: null);
+      await monitorStartFuture;
+      expect(monitor.status, MonitorStatus.started);
+
+      // First off, let's verify that no heartbeat has yet been sent
+      expect(monitor.lastHeartbeatSentTime, 0);
+      // We expect the first heartbeat to be sent heartbeatIntervalMillis from now
+      await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis));
+      // the lastHeartbeatSentTime should be very recent
+      int now = DateTime.now().millisecondsSinceEpoch;
+
+      expect((now - monitor.lastHeartbeatSentTime) < 15, true);
+      // and we should only have sent one heartbeat so far
+      expect(numHeartbeatsSent, 1);
+      // and the monitor status is still 'started'
+      expect(monitor.status, MonitorStatus.started);
+
+      // Now let's wait long enough for 5 heartbeats to be sent, check they have all been sent,
+      // and check that the monitor status is still 'started'
+      int additionalHeartbeatsToSend = 5;
+      await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis * additionalHeartbeatsToSend + (heartbeatIntervalMillis/3).floor()));
+      int expectedHeartbeatCount = 1 + additionalHeartbeatsToSend;
+      expect (numHeartbeatsSent, expectedHeartbeatCount);
+      expect(monitor.status, MonitorStatus.started);
+
+      // Now let's simulate the socket is calling 'onDone'
+      // Since our retryCallback in this test doesn't do anything, the monitor's status should
+      // go to 'stopped' and the heartbeats should no longer be scheduled.
+      socketOnDoneFn();
+      expect(monitor.status, MonitorStatus.stopped);
+      await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis * 3));
+      expect (numHeartbeatsSent, expectedHeartbeatCount);
+    });
+
+    test('Monitor heartbeat response not received in time', () async {
+      int heartbeatIntervalMillis = 500;
+      Monitor? monitor;
+      // Note that in this test, our retryCallback is doing something real - it's restarting the monitor
+      bool retryCallbackCalled = false;
+      void retryCallback() {
+        retryCallbackCalled = true;
+        print('retryCallback called - will restart the monitor in a second');
+        Future.delayed(Duration(seconds: 1), () {
+          print('restarting the monitor');
+          monitor!.start(lastNotificationTime: null);
+        });
+      }
+
+      monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => retryCallback(),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory,
+          heartbeatInterval: Duration(milliseconds: heartbeatIntervalMillis));
+
+      int numHeartbeatsSent = 0;
+      bool sendHeartbeatResponse = true;
+      when(() => mockOutboundConnection.write("noop:0\n")).thenAnswer((Invocation invocation) async {
+        numHeartbeatsSent++;
+        if (sendHeartbeatResponse) {
+          sleep(Duration(milliseconds: 1));
+          socketOnDataFn("@ok\n".codeUnits);
+        }
+      });
+
+      when(() => mockOutboundConnection.close()).thenAnswer((_) async => {});
+
+      Future<void> monitorStartFuture = monitor.start(lastNotificationTime: null);
+      await monitorStartFuture;
+      expect(monitor.status, MonitorStatus.started);
+
+      // Now let's wait long enough for 5 heartbeats to be sent, check they have all been sent,
+      // and check that the monitor status is still 'started'
+      int additionalHeartbeatsToSend = 5;
+      await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis * additionalHeartbeatsToSend + 50)); // 50 == fudge factor
+      int expectedHeartbeatCount = additionalHeartbeatsToSend;
+      expect (numHeartbeatsSent, expectedHeartbeatCount);
+      expect(monitor.status, MonitorStatus.started);
+
+      // Let's NOT send a response to the next heartbeat(s).
+      sendHeartbeatResponse = false;
+
+      // Let's wait long enough for the heartbeat to be sent
+      await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis.floor()));
+      // Let's check that at least one more heartbeat has indeed been sent
+      expect(numHeartbeatsSent > expectedHeartbeatCount, true);
+      // Now let's wait long enough for the heartbeat response monitor to detect that the socket seems dead
+      await Future.delayed(Duration(milliseconds: (heartbeatIntervalMillis/3).floor() + 50)); // 50 == fudge factor
+      // The Monitor should have set status to stopped
+      expect(monitor.status, MonitorStatus.stopped);
+      // let's start sending responses to heartbeats again
+      sendHeartbeatResponse = true;
+
+      // And the retryCallback should have been called
+      expect(retryCallbackCalled, true);
+      // And the retryCallback will restart the monitor after a second, so the monitor state should be 'started' again
+      await Future.delayed(Duration(seconds: 1));
+      expect(monitor.status, MonitorStatus.started);
+
+      // Finally, let's make sure that heartbeats are happening again, and the monitor is still happy
+      int lastHeartbeatCount = numHeartbeatsSent;
+      additionalHeartbeatsToSend = 5;
+      await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis * additionalHeartbeatsToSend + 50)); // 50 == fudge factor
+      expectedHeartbeatCount = lastHeartbeatCount + additionalHeartbeatsToSend;
+      expect (numHeartbeatsSent >= expectedHeartbeatCount, true);
+      expect(monitor.status, MonitorStatus.started);
+    });
+
   });
 }
