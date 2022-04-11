@@ -62,5 +62,5 @@ dev_dependencies:
   test: ^1.17.2
   at_demo_data: ^0.0.3+1
   coverage: ^1.0.3
-  mockito: ^5.0.7
+  mocktail: ^0.3.0
   dart_code_metrics: ^4.8.1

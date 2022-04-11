@@ -49,9 +49,32 @@ class Monitor {
 
   OutboundConnection? _monitorConnection;
 
-  RemoteSecondary? _remoteSecondary;
+  late RemoteSecondary _remoteSecondary;
 
   final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
+
+  late MonitorConnectivityChecker _monitorConnectivityChecker;
+
+  late MonitorOutboundConnectionFactory _monitorOutboundConnectionFactory;
+
+  static const Duration defaultHeartbeatInterval = Duration(seconds: 10);
+
+  /// The time (milliseconds since epoch) that the last heartbeat message was sent
+  int _lastHeartbeatSentTime = 0;
+  get lastHeartbeatSentTime => _lastHeartbeatSentTime;
+  /// The time (milliseconds since epoch) that the last heartbeat response was received
+  int _lastHeartbeatResponseTime = 0;
+  get lastHeartbeatResponseTime => _lastHeartbeatResponseTime;
+
+  /// Monitor will send heartbeat 'no-op' messages periodically.
+  /// First heartbeat will be sent [heartbeatInterval] after monitor has entered
+  /// [MonitorStatus.started] state, if it is still in the started state.
+  /// Subsequent heartbeats will be sent every [heartbeatInterval] if the monitor
+  /// is still in started state.
+  /// If a heartbeat message doesn't get a response within one third of [heartbeatInterval],
+  /// the monitor will set an errored state, destroy the socket, and call the
+  /// retryCallback
+  late Duration heartbeatInterval;
 
   ///
   /// Creates a [Monitor] object.
@@ -92,7 +115,11 @@ class Monitor {
       String atSign,
       AtClientPreference preference,
       MonitorPreference monitorPreference,
-      Function retryCallBack) {
+      Function retryCallBack,
+      {RemoteSecondary? remoteSecondary,
+        MonitorConnectivityChecker? monitorConnectivityChecker,
+        MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
+        this.heartbeatInterval=defaultHeartbeatInterval}) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -100,8 +127,10 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
-    _remoteSecondary ??= RemoteSecondary(atSign, preference);
+    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference);
     _retryCallBack = retryCallBack;
+    _monitorConnectivityChecker = monitorConnectivityChecker ?? MonitorConnectivityChecker();
+    _monitorOutboundConnectionFactory = monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -118,34 +147,77 @@ class Monitor {
     }
     // This enables start method to be called with lastNotificationTime on the same instance of Monitor
     if (lastNotificationTime != null) {
-      _logger.finer(
-          'starting monitor for $_atSign with lastnotificationTime: $lastNotificationTime');
+      _logger.info('starting monitor for $_atSign with lastNotificationTime: $lastNotificationTime');
       _lastNotificationTime = lastNotificationTime;
     }
     try {
       await _checkConnectivity();
+
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
       _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
-        _logger.finer('monitor done');
-        _monitorConnection!.getSocket().destroy();
-        status = MonitorStatus.stopped;
-        _retryCallBack();
+        _logger.info('socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
+        _callCloseStopAndRetry();
       }, onError: (error) {
-        _logger.severe('error in monitor $error');
+        _logger.warning('socket.listen onError called with: $error');
         _handleError(error);
       });
       await _authenticateConnection();
       await _monitorConnection!.write(_buildMonitorCommand());
       status = MonitorStatus.started;
-      _logger.finer(
-          'monitor started for $_atSign with last notification time: $_lastNotificationTime');
+      _logger.info('monitor started for $_atSign with last notification time: $_lastNotificationTime');
 
+      _scheduleHeartbeat();
       return;
     } on Exception catch (e) {
       _handleError(e);
     }
+  }
+
+  /// Creates a delayed Future for the heartbeat to be sent [heartbeatInterval] from now.
+  /// If the monitor status is not still 'started' when the Future executes, then the
+  /// heartbeat will not be sent.
+  /// If the heartbeat is sent when the Future executes, then
+  /// (1) a delayed Future is created to check, in [heartbeatInterval / 3] from now,
+  /// that a heartbeat response has been received, and
+  /// (2) we call _scheduleHeartbeat() again to schedule the next one to be sent
+  void _scheduleHeartbeat() {
+    if (status != MonitorStatus.started) {
+      _logger.info("status is $status : not scheduling next heartbeat");
+      return;
+    }
+    Future.delayed(heartbeatInterval, () async {
+      if (status != MonitorStatus.started) {
+        _logger.info("status is $status : heartbeat will not be sent");
+      } else {
+        // send heartbeat and save the heartbeat sent time
+        _logger.finest("sending heartbeat");
+        _lastHeartbeatSentTime = DateTime.now().millisecondsSinceEpoch;
+        await _monitorConnection!.write("noop:0\n");
+
+        // schedule a future to check if a timely heartbeat response is received
+        Future.delayed(Duration(milliseconds: (heartbeatInterval.inMilliseconds / 3).floor()), () async {
+          if (_lastHeartbeatResponseTime < _lastHeartbeatSentTime) {
+            _logger.warning('Heartbeat response not received within expected duration. '
+                'Heartbeat was sent at $_lastHeartbeatSentTime, '
+                'it is now ${DateTime.now().millisecondsSinceEpoch}, '
+                'last heartbeat response was received at $_lastHeartbeatResponseTime. '
+                'Will close connection, set status stopped, call retryCallback');
+            _callCloseStopAndRetry();
+          }
+        });
+
+        // schedule the next heartbeat to be sent
+        _scheduleHeartbeat();
+      }
+    });
+  }
+
+  _callCloseStopAndRetry() {
+    _monitorConnection!.close();
+    status = MonitorStatus.stopped;
+    _retryCallBack();
   }
 
   Future<void> _authenticateConnection() async {
@@ -157,11 +229,11 @@ class Monitor {
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
-    var sha256signature =
-        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+    var sha256signature = key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
     _logger.finer('Authenticating the monitor connection: pkam:$signature');
     await _monitorConnection!.write('pkam:$signature\n');
+
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
       throw UnAuthenticatedException(
@@ -170,33 +242,16 @@ class Monitor {
     _logger.finer('Monitor connection authentication successful');
   }
 
-  Future<OutboundConnection> _createNewConnection(
-      String toAtSign, String rootDomain, int rootPort) async {
-    //1. find secondary url for atsign from lookup library
-    var secondaryUrl =
-        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
+  Future<OutboundConnection> _createNewConnection(String toAtSign, String rootDomain, int rootPort) async {
+    //1. look up the secondary url for this atsign
+    var secondaryUrl = await _remoteSecondary.findSecondaryUrl();
     if (secondaryUrl == null) {
       throw Exception('Secondary url not found');
     }
-    var secondaryInfo = _getSecondaryInfo(secondaryUrl);
-    var host = secondaryInfo[0];
-    var port = secondaryInfo[1];
 
     //2. create a connection to secondary server
-    var secureSocket = await SecureSocket.connect(host, int.parse(port));
-    OutboundConnection _monitorConnection =
-        OutboundConnectionImpl(secureSocket);
-    return _monitorConnection;
-  }
-
-  List<String> _getSecondaryInfo(String url) {
-    var result = <String>[];
-    if (url.contains(':')) {
-      var arr = url.split(':');
-      result.add(arr[0]);
-      result.add(arr[1]);
-    }
-    return result;
+    var outboundConnection = await _monitorOutboundConnectionFactory.createConnection(secondaryUrl);
+    return outboundConnection;
   }
 
   ///Returns the response of the monitor verb queue.
@@ -207,8 +262,7 @@ class Monitor {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
-        monitorResponse = _defaultResponseParser
-            .parse(_monitorVerbResponseQueue.removeFirst());
+        monitorResponse = _defaultResponseParser.parse(_monitorVerbResponseQueue.removeFirst());
         break;
       }
       await Future.delayed(Duration(milliseconds: 5));
@@ -248,6 +302,8 @@ class Monitor {
     _logger.finer('received response on monitor: $response');
     if (response.toString().startsWith('notification')) {
       callback(response);
+    } else if (response.toString() == 'ok' || response.toString() == '@ok') {
+      _lastHeartbeatResponseTime = DateTime.now().millisecondsSinceEpoch;
     } else {
       _monitorVerbResponseQueue.add(response);
     }
@@ -260,27 +316,24 @@ class Monitor {
     // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
       // We will use a strategy here
-      _logger.finer('Retrying start monitor due to error');
+      _logger.info('Retrying start monitor due to error');
       _retryCallBack();
     } else {
+      _logger.warning('_keepAlive is false : monitor is errored, and NOT calling retryCallback');
       _onError(e);
     }
   }
 
   Future<void> _checkConnectivity() async {
-    if (!(await NetworkUtil.isNetworkAvailable())) {
-      throw AtConnectException('Internet connection unavailable to sync');
-    }
-    if (!(await _remoteSecondary!.isAvailable())) {
-      throw AtConnectException('Secondary server is unavailable');
-    }
-    return;
+    await _monitorConnectivityChecker.checkConnectivity(_remoteSecondary);
   }
 
   /// Handles messages on the inbound client's connection and calls the verb executor
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
   Future<void> _messageHandler(data) async {
+    _logger.finest("_messageHandler received data");
+
     String result;
     if (!_buffer.isOverFlow(data)) {
       // skip @ prompt. byte code for @ is 64
@@ -312,3 +365,33 @@ class Monitor {
 }
 
 enum MonitorStatus { notStarted, started, stopped, errored }
+
+class MonitorConnectivityChecker {
+  Future<void> checkConnectivity(RemoteSecondary remoteSecondary) async {
+    if (!(await NetworkUtil.isNetworkAvailable())) {
+      throw AtConnectException('Monitor connectivity checker: Internet connection unavailable');
+    }
+    return;
+  }
+}
+
+class MonitorOutboundConnectionFactory {
+  Future<OutboundConnection> createConnection(String secondaryUrl) async {
+    var secondaryInfo = _getSecondaryInfo(secondaryUrl);
+    var host = secondaryInfo[0];
+    var port = secondaryInfo[1];
+
+    var secureSocket = await SecureSocket.connect(host, int.parse(port));
+    return OutboundConnectionImpl(secureSocket);
+  }
+
+  List<String> _getSecondaryInfo(String url) {
+    var result = <String>[];
+    if (url.contains(':')) {
+      var arr = url.split(':');
+      result.add(arr[0]);
+      result.add(arr[1]);
+    }
+    return result;
+  }
+}
