@@ -483,13 +483,22 @@ class EncryptionService {
   }
 
   Future<File> encryptFileInChunks(
-      File inputFile, String fileEncryptionKey, int chunkSize) async {
+      File inputFile, String fileEncryptionKey, int chunkSize,
+      {String? path}) async {
     var chunkedStream = ChunkedStreamReader(inputFile.openRead());
     final length = inputFile.lengthSync();
     var readBytes = 0;
     final fileName = inputFile.uri.pathSegments.last;
-    final encryptedFile = File(
-        '${inputFile.parent.path}${Platform.pathSeparator}encrypted_$fileName');
+    File encryptedFile;
+    if (path != null) {
+      encryptedFile =
+          await File('$path${Platform.pathSeparator}encrypted_$fileName')
+              .create();
+    } else {
+      encryptedFile = await File(
+              '${inputFile.parent.path}${Platform.pathSeparator}encrypted_$fileName')
+          .create();
+    }
     try {
       while (readBytes < length) {
         final actualBytes = await chunkedStream.readBytes(chunkSize);
