@@ -57,8 +57,6 @@ class Monitor {
 
   late MonitorOutboundConnectionFactory _monitorOutboundConnectionFactory;
 
-  static const Duration defaultHeartbeatInterval = Duration(seconds: 10);
-
   bool _closeOpInProgress = false;
 
   /// The time (milliseconds since epoch) that the last heartbeat message was sent
@@ -72,14 +70,16 @@ class Monitor {
   get lastHeartbeatResponseTime => _lastHeartbeatResponseTime;
 
   /// Monitor will send heartbeat 'no-op' messages periodically.
-  /// First heartbeat will be sent [heartbeatInterval] after monitor has entered
+  /// First heartbeat will be sent [_heartbeatInterval] after monitor has entered
   /// [MonitorStatus.started] state, if it is still in the started state.
-  /// Subsequent heartbeats will be sent every [heartbeatInterval] if the monitor
+  /// Subsequent heartbeats will be sent every [_heartbeatInterval] if the monitor
   /// is still in started state.
-  /// If a heartbeat message doesn't get a response within one third of [heartbeatInterval],
+  /// If a heartbeat message doesn't get a response within one third of [_heartbeatInterval],
   /// the monitor will set an errored state, destroy the socket, and call the
   /// retryCallback
-  late Duration heartbeatInterval;
+  late Duration _heartbeatInterval;
+
+  get heartbeatInterval => _heartbeatInterval;
 
   ///
   /// Creates a [Monitor] object.
@@ -124,7 +124,7 @@ class Monitor {
       {RemoteSecondary? remoteSecondary,
       MonitorConnectivityChecker? monitorConnectivityChecker,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-      this.heartbeatInterval = defaultHeartbeatInterval}) {
+      Duration? monitorHeartbeatInterval}) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -138,6 +138,7 @@ class Monitor {
         monitorConnectivityChecker ?? MonitorConnectivityChecker();
     _monitorOutboundConnectionFactory =
         monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
+    _heartbeatInterval = monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -185,7 +186,7 @@ class Monitor {
     }
   }
 
-  /// Creates a delayed Future for the heartbeat to be sent [heartbeatInterval] from now.
+  /// Creates a delayed Future for the heartbeat to be sent [_heartbeatInterval] from now.
   /// If the monitor status is not still 'started' when the Future executes, then the
   /// heartbeat will not be sent.
   /// If the heartbeat is sent when the Future executes, then
@@ -197,30 +198,30 @@ class Monitor {
       _logger.info("status is $status : not scheduling next heartbeat");
       return;
     }
-    Future.delayed(heartbeatInterval, () async {
+    Future.delayed(_heartbeatInterval, () async {
       if (status != MonitorStatus.started) {
         _logger.info("status is $status : heartbeat will not be sent");
       } else {
         // send heartbeat and save the heartbeat sent time
         _logger.finest("sending heartbeat");
         _lastHeartbeatSentTime = DateTime.now().millisecondsSinceEpoch;
-        await _monitorConnection!.write("noop:0\n");
-
         // schedule a future to check if a timely heartbeat response is received
         Future.delayed(
             Duration(
-                milliseconds: (heartbeatInterval.inMilliseconds / 3).floor()),
-            () async {
-          if (_lastHeartbeatResponseTime < _lastHeartbeatSentTime) {
-            _logger.warning(
-                'Heartbeat response not received within expected duration. '
-                'Heartbeat was sent at $_lastHeartbeatSentTime, '
-                'it is now ${DateTime.now().millisecondsSinceEpoch}, '
-                'last heartbeat response was received at $_lastHeartbeatResponseTime. '
-                'Will close connection, set status stopped, call retryCallback');
-            _callCloseStopAndRetry();
-          }
-        });
+                milliseconds: (_heartbeatInterval.inMilliseconds / 3).floor()),
+                () async {
+              if (_lastHeartbeatResponseTime < _lastHeartbeatSentTime) {
+                _logger.warning(
+                    'Heartbeat response not received within expected duration. '
+                        'Heartbeat was sent at $_lastHeartbeatSentTime, '
+                        'it is now ${DateTime.now().millisecondsSinceEpoch}, '
+                        'last heartbeat response was received at $_lastHeartbeatResponseTime. '
+                        'Will close connection, set status stopped, call retryCallback');
+                _callCloseStopAndRetry();
+              }
+            });
+
+        await _monitorConnection!.write("noop:0\n");
 
         // schedule the next heartbeat to be sent
         _scheduleHeartbeat();

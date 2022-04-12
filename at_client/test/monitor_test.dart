@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -43,7 +44,8 @@ void main() {
   AtClientPreference atClientPreference = AtClientPreference();
   atClientPreference.privateKey = fakePrivateKey;
 
-  group('Monitor start tests', () {
+
+  group('Monitor constructor and start tests', () {
     setUp(() {
       reset(mockMonitorConnectivityChecker);
       reset(mockRemoteSecondary);
@@ -74,6 +76,34 @@ void main() {
         socketOnDataFn("success\n".codeUnits);
       });
       when(() => mockOutboundConnection.write(any(that: startsWith('monitor')))).thenAnswer((Invocation invocation) async {});
+    });
+
+    /// create a monitor without passing a heartbeat interval; it should pick it up from
+    /// the AtClientPreference that was passed.
+    test('Monitor gets heartbeatInterval from AtClientPreference', () {
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory);
+
+      expect (monitor.heartbeatInterval, atClientPreference.monitorHeartbeatInterval);
+      expect (monitor.heartbeatInterval == atClientPreference.monitorHeartbeatInterval, true);
+    });
+
+    /// create a monitor and pass a heartbeat interval to constructor
+    test('Monitor gets heartbeatInterval from constructor parameter', () {
+      Duration customHeartbeatInterval = atClientPreference.monitorHeartbeatInterval + Duration(seconds:22);
+
+      Monitor monitor = Monitor((String json) => print('onResponse: $json'), (e) => print('onError: $e'), atSign, atClientPreference,
+          MonitorPreference(), () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory,
+          monitorHeartbeatInterval: customHeartbeatInterval);
+
+      expect (monitor.heartbeatInterval, customHeartbeatInterval);
+      expect (monitor.heartbeatInterval == atClientPreference.monitorHeartbeatInterval, false);
     });
 
     /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.
@@ -174,7 +204,7 @@ void main() {
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory,
-          heartbeatInterval:Duration(milliseconds: heartbeatIntervalMillis));
+          monitorHeartbeatInterval:Duration(milliseconds: heartbeatIntervalMillis));
 
       int numHeartbeatsSent = 0;
       when(() => mockOutboundConnection.write("noop:0\n")).thenAnswer((Invocation invocation) async {
@@ -238,7 +268,7 @@ void main() {
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory,
-          heartbeatInterval: Duration(milliseconds: heartbeatIntervalMillis));
+          monitorHeartbeatInterval: Duration(milliseconds: heartbeatIntervalMillis));
 
       int numHeartbeatsSent = 0;
       bool sendHeartbeatResponse = true;

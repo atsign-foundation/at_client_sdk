@@ -59,6 +59,8 @@ class AtClientPreference {
 
   // Default chunk size for file encryption and decryption
   int fileEncryptionChunkSize = 4096;
+
+  Duration monitorHeartbeatInterval = Duration(seconds: 10);
 }
 
 @Deprecated("Use SyncService")
