@@ -218,8 +218,6 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    // Adding Future.delayed for the key to expire
-    await Future.delayed(Duration(seconds: 2));
     /// fetching value before the ttl time
     var metadata = Metadata()..isCached = true;
     var getKey = AtKey()
@@ -242,6 +240,8 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
+    // Adding Future.delayed for the key to expire
+    await Future.delayed(Duration(seconds: 2));
     getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
     expect(getResult?.value, null);
   }, timeout: Timeout(Duration(minutes: 2)));
