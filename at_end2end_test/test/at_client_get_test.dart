@@ -1,4 +1,3 @@
-
 import 'dart:io';
 import 'dart:math';
 
@@ -8,6 +7,7 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
+
 // ignore: prefer_typing_uninitialized_variables
 void main() {
   var currentAtSign, sharedWithAtSign;
@@ -45,19 +45,18 @@ void main() {
     }
   });
 
-  
   /// The purpose of this test verify the following:
   /// 1. Put method - public key
   /// 2. Sync to cloud secondary
   /// 3. Get method - lookup verb in the same atsign and different atsign
   /// 4. plookup of a key should create a cached key
-  test('Create a public key and lookup from different atSign',
-      () async {
+  test('Create a public key and lookup from different atSign', () async {
     var lastNumber = Random().nextInt(50);
     var phoneKey = AtKey()
       ..key = 'phone_$lastNumber'
-      ..metadata = (Metadata()..ttl = 120000
-      ..isPublic = true);
+      ..metadata = (Metadata()
+        ..ttl = 120000
+        ..isPublic = true);
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
@@ -85,11 +84,11 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
+
     /// lookup of a public key
-    var metadata = Metadata()
-    ..isPublic = true;
-    var getResult = await sharedWithAtSignClientManager?.atClient.get(
-      AtKey() ..key = 'phone_$lastNumber' 
+    var metadata = Metadata()..isPublic = true;
+    var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
+      ..key = 'phone_$lastNumber'
       ..sharedBy = currentAtSign
       ..metadata = metadata);
     expect(getResult?.value, value);
@@ -102,22 +101,27 @@ void main() {
       await Future.delayed(Duration(milliseconds: 5));
     }
     metadata = Metadata()
-    ..isCached = true
-    ..isPublic = true;
-    var getCachedResult = await sharedWithAtSignClientManager?.atClient.get(AtKey() 
-      ..key = 'phone_$lastNumber' 
-      ..sharedBy = currentAtSign
-      ..metadata = metadata);
+      ..isCached = true
+      ..isPublic = true;
+    var getCachedResult =
+        await sharedWithAtSignClientManager?.atClient.get(AtKey()
+          ..key = 'phone_$lastNumber'
+          ..sharedBy = currentAtSign
+          ..metadata = metadata);
     expect(getCachedResult?.value, value);
   }, timeout: Timeout(Duration(minutes: 5)));
 
-  test('Create a private key and lookup from different atSign',
-      () async {
+  /// The purpose of this test verify the following:
+  /// 1. Put method - shared key
+  /// 2. Sync to cloud secondary
+  /// 3. Get method - lookup verb in the same atsign and different atsign
+  /// 4. Verifying the pubkeycs and sharedkeyenc is same in both the atsigns
+  test('Create a private key and lookup from different atSign', () async {
     var lastNumber = Random().nextInt(50);
     var authCodeKey = AtKey()
       ..key = 'auth-code_$lastNumber'
       ..sharedWith = sharedWithAtSign
-      ..metadata = (Metadata() ..ttr = 864000);
+      ..metadata = (Metadata()..ttr = 864000);
 
     // Appending a random number as a last number to generate a new auth-code number
     // for each run.
@@ -128,7 +132,8 @@ void main() {
     var putResult =
         await currentAtSignClientManager?.atClient.put(authCodeKey, value);
     expect(putResult, true);
-    var getResultCurrentAtsign = await currentAtSignClientManager?.atClient.get(authCodeKey);
+    var getResultCurrentAtsign =
+        await currentAtSignClientManager?.atClient.get(authCodeKey);
     expect(getResultCurrentAtsign?.value, value);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
@@ -147,22 +152,32 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    await Future.delayed(Duration(seconds: 3));
-    var metadata = Metadata()
-    ..isCached= true;
-    var getResultSharedWithAtsign = await sharedWithAtSignClientManager?.atClient.get(AtKey() 
-      ..key = 'auth-code_$lastNumber' 
-      ..namespace = 'wavi'
-      ..sharedWith = sharedWithAtSign
-      ..sharedBy = currentAtSign
-      ..metadata = metadata);
+    await Future.delayed(Duration(seconds: 2));
+    var metadata = Metadata()..isCached = true;
+    var getResultSharedWithAtsign =
+        await sharedWithAtSignClientManager?.atClient.get(AtKey()
+          ..key = 'auth-code_$lastNumber'
+          ..namespace = 'wavi'
+          ..sharedWith = sharedWithAtSign
+          ..sharedBy = currentAtSign
+          ..metadata = metadata);
     expect(getResultSharedWithAtsign?.value, value);
-    expect(getResultSharedWithAtsign?.metadata!.pubKeyCS, getResultCurrentAtsign?.metadata!.pubKeyCS);
-    expect(getResultSharedWithAtsign?.metadata!.sharedKeyEnc, getResultCurrentAtsign?.metadata!.sharedKeyEnc);
+    expect(getResultSharedWithAtsign?.metadata!.pubKeyCS,
+        getResultCurrentAtsign?.metadata!.pubKeyCS);
+    expect(getResultSharedWithAtsign?.metadata!.sharedKeyEnc,
+        getResultCurrentAtsign?.metadata!.sharedKeyEnc);
     // verifying pubKeyCS and sharedKeyEnc is same in both sender and receiver
-    expect(getResultCurrentAtsign?.metadata!.pubKeyCS, equals(getResultSharedWithAtsign?.metadata!.pubKeyCS));
-    expect(getResultCurrentAtsign?.metadata!.sharedKeyEnc, equals(getResultSharedWithAtsign?.metadata!.sharedKeyEnc));
+    expect(getResultCurrentAtsign?.metadata!.pubKeyCS,
+        equals(getResultSharedWithAtsign?.metadata!.pubKeyCS));
+    expect(getResultCurrentAtsign?.metadata!.sharedKeyEnc,
+        equals(getResultSharedWithAtsign?.metadata!.sharedKeyEnc));
   }, timeout: Timeout(Duration(minutes: 2)));
+
+  /// The purpose of this test verify the following:
+  /// 1. Put method - private key with ttl
+  /// 2. Sync to cloud secondary
+  /// 3. Get method - lookup verb in the different atsign before the ttl time
+  /// 4. Get method - lookup verb in the different atsign after the ttl time
 
   test('Create a private key with ttl and lookup from different atSign',
       () async {
@@ -170,9 +185,9 @@ void main() {
     var tempCodeKey = AtKey()
       ..key = 'tempCode$lastNumber'
       ..sharedWith = sharedWithAtSign
-      ..metadata = (Metadata() 
-      ..ttl = 3000
-      ..ttr = 864000);
+      ..metadata = (Metadata()
+        ..ttl = 4000
+        ..ttr = 864000);
 
     // Appending a random number as a last number to generate a new temp-code number
     // for each run.
@@ -183,7 +198,8 @@ void main() {
     var putResult =
         await currentAtSignClientManager?.atClient.put(tempCodeKey, value);
     expect(putResult, true);
-    var getResultCurrentAtsign = await currentAtSignClientManager?.atClient.get(tempCodeKey);
+    var getResultCurrentAtsign =
+        await currentAtSignClientManager?.atClient.get(tempCodeKey);
     expect(getResultCurrentAtsign?.value, value);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
@@ -202,20 +218,23 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    /// fetching value before the ttl time 
-    var metadata = Metadata()
-    ..isCached= true;
-    var getKey = AtKey() 
-      ..key = 'tempCode$lastNumber' 
+    // Adding Future.delayed for the key to expire
+    await Future.delayed(Duration(seconds: 2));
+    /// fetching value before the ttl time
+    var metadata = Metadata()..isCached = true;
+    var getKey = AtKey()
+      ..key = 'tempCode$lastNumber'
       ..namespace = 'wavi'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign
       ..metadata = metadata;
     var getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
     expect(getResult?.value, value);
-    expect(getResult?.metadata!.pubKeyCS, getResultCurrentAtsign?.metadata!.pubKeyCS);
-    expect(getResult?.metadata!.sharedKeyEnc, getResultCurrentAtsign?.metadata!.sharedKeyEnc);
-    // looking up after ttl time
+    expect(getResult?.metadata!.pubKeyCS,
+        getResultCurrentAtsign?.metadata!.pubKeyCS);
+    expect(getResult?.metadata!.sharedKeyEnc,
+        getResultCurrentAtsign?.metadata!.sharedKeyEnc);
+    // fetching value after the ttl time
     isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -226,16 +245,21 @@ void main() {
     getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
     expect(getResult?.value, null);
   }, timeout: Timeout(Duration(minutes: 2)));
-  
+
+  /// The purpose of this test verify the following:
+  /// 1. Put method - private key with ttl
+  /// 2. Sync to cloud secondary
+  /// 3. Get method - lookup verb in the different atsign before the ttb time
+  /// 4. Get method - lookup verb in the different atsign after the ttb time
   test('Create a private key with ttb and lookup from different atSign',
       () async {
     var lastNumber = Random().nextInt(50);
     var passCodeKey = AtKey()
       ..key = 'passCode$lastNumber'
       ..sharedWith = sharedWithAtSign
-      ..metadata = (Metadata() 
-      ..ttb = 1000
-      ..ttr = 864000);
+      ..metadata = (Metadata()
+        ..ttb = 2000
+        ..ttr = 864000);
 
     // Appending a random number as a last number to generate a new temp-code number
     // for each run.
@@ -246,9 +270,10 @@ void main() {
     var putResult =
         await currentAtSignClientManager?.atClient.put(passCodeKey, value);
     expect(putResult, true);
-  //  wait till the ttb time is reached
-    await Future.delayed(Duration(seconds: 1));
-    var getResultCurrentAtsign = await currentAtSignClientManager?.atClient.get(passCodeKey);
+    //  wait till the ttb time is reached
+    await Future.delayed(Duration(seconds: 2));
+    var getResultCurrentAtsign =
+        await currentAtSignClientManager?.atClient.get(passCodeKey);
     expect(getResultCurrentAtsign?.value, value);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
@@ -267,11 +292,11 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    /// fetching value before the ttb time 
-    var metadata = Metadata()
-    ..isCached= true;
-    var getKey = AtKey() 
-      ..key = 'passCode$lastNumber' 
+
+    /// fetching value before the ttb time
+    var metadata = Metadata()..isCached = true;
+    var getKey = AtKey()
+      ..key = 'passCode$lastNumber'
       ..namespace = 'wavi'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign
@@ -288,8 +313,10 @@ void main() {
     }
     getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
     expect(getResult?.value, value);
-     expect(getResult?.metadata!.pubKeyCS, getResultCurrentAtsign?.metadata!.pubKeyCS);
-    expect(getResult?.metadata!.sharedKeyEnc, getResultCurrentAtsign?.metadata!.sharedKeyEnc);
+    expect(getResult?.metadata!.pubKeyCS,
+        getResultCurrentAtsign?.metadata!.pubKeyCS);
+    expect(getResult?.metadata!.sharedKeyEnc,
+        getResultCurrentAtsign?.metadata!.sharedKeyEnc);
   }, timeout: Timeout(Duration(minutes: 2)));
 }
 
@@ -299,4 +326,3 @@ Future<void> tearDownFunc() async {
     Directory('test/hive').deleteSync(recursive: true);
   }
 }
-

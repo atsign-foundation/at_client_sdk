@@ -46,10 +46,16 @@ void main() {
     }
   });
 
-  test('notify a key to another atsign and verify the value in the receiver', () async {
+  /// The purpose of this test verify the following:
+  /// 1. notify method - notify a key to other atsign
+  /// 3. Verifying that the notification status is delivered
+  /// 2. Sync to cloud secondary
+  /// 4. Get method - lookup verb in the sharedwith atsign
+  /// 5. Verifying pubkeycs and sharedKeyEnc is not null
+  test('notify a key to another atsign and verify the value in the receiver',
+      () async {
     var lastNumber = Random().nextInt(30);
-    var metadata = Metadata()
-    ..ttr = 864000;
+    var metadata = Metadata()..ttr = 864000;
     var codeKey = AtKey()
       ..key = 'code'
       ..sharedWith = sharedWithAtSign
@@ -57,7 +63,9 @@ void main() {
     var value = '99 09 $lastNumber';
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-    final notificationResult = await currentAtSignClientManager?.notificationService.notify(NotificationParams.forUpdate(codeKey, value: value));
+    final notificationResult = await currentAtSignClientManager
+        ?.notificationService
+        .notify(NotificationParams.forUpdate(codeKey, value: value));
     expect(notificationResult, isNotNull);
     expect(notificationResult!.notificationStatusEnum,
         NotificationStatusEnum.delivered);
@@ -84,16 +92,24 @@ void main() {
       ..key = 'code.$namespace'
       ..sharedBy = currentAtSign);
     print('get result is $getResult');
-    expect( getResult!.value,value);
+    expect(getResult!.value, value);
     expect(getResult.metadata?.sharedKeyEnc != null, true);
     expect(getResult.metadata?.pubKeyCS != null, true);
   }, timeout: Timeout(Duration(seconds: 120)));
 
-  test('notify a text to another atsign and verify the value in the receiver', () async {
+  /// The purpose of this test verify the following:
+  /// 1. notify method - notify a text to other atsign
+  /// 3. Verifying that the notification status is delivered
+  /// 2. Sync to cloud secondary
+  /// 4. notify List - Verifying that the shared text exists in the receiver atsign
+  test('notify a text to another atsign and verify the value in the receiver',
+      () async {
     var textToShare = 'Hello';
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-    final notificationResult = await currentAtSignClientManager?.notificationService.notify(NotificationParams.forText(textToShare, sharedWithAtSign));
+    final notificationResult = await currentAtSignClientManager
+        ?.notificationService
+        .notify(NotificationParams.forText(textToShare, sharedWithAtSign));
     expect(notificationResult, isNotNull);
     expect(notificationResult!.notificationStatusEnum,
         NotificationStatusEnum.delivered);
@@ -115,17 +131,23 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 10));
     }
-    var notifyListResult = await sharedWithAtSignClientManager?.atClient.notifyList(regex: 'Hello');
-    assert(notifyListResult!.contains('"key":"$sharedWithAtSign:$textToShare"'));
+    var notifyListResult = await sharedWithAtSignClientManager?.atClient
+        .notifyList(regex: 'Hello');
+    assert(
+        notifyListResult!.contains('"key":"$sharedWithAtSign:$textToShare"'));
   }, timeout: Timeout(Duration(seconds: 120)));
-  
- 
+
+  /// The purpose of this test verify the following:
+  /// 1. notify method - notify a deletion of key to other atsign
+  /// 3. Verifying that the notification status is delivered
+  /// 2. Sync to cloud secondary
+  /// 4. notify List - Verifying that the delete notification exists in the receiver
   test(
       'Notify a delete key with value to sharedWith atSign and listen for notification from sharedWith atSign',
       () async {
     var lastNumber = Random().nextInt(50);
-    var phoneKey = AtKey()
-      ..key = 'phone_$lastNumber'
+    var delKey = AtKey()
+      ..key = 'delKey$lastNumber'
       ..sharedWith = sharedWithAtSign;
 
     // Setting currentAtSign atClient instance to context.
@@ -133,7 +155,7 @@ void main() {
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     final notificationResult = await currentAtSignClientManager
         ?.notificationService
-        .notify(NotificationParams.forDelete(phoneKey));
+        .notify(NotificationParams.forDelete(delKey));
     expect(notificationResult, isNotNull);
     expect(notificationResult!.notificationStatusEnum,
         NotificationStatusEnum.delivered);
@@ -142,7 +164,7 @@ void main() {
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
-        .notifyList(regex: 'phone_$lastNumber');
+        .notifyList(regex: 'delKey$lastNumber');
     expect(notificationListResult, isNotEmpty);
     notificationListResult = notificationListResult.replaceFirst('data:', '');
     final notificationListJson = jsonDecode(notificationListResult);
