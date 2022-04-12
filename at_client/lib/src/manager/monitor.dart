@@ -302,7 +302,7 @@ class Monitor {
     _logger.finer('received response on monitor: $response');
     if (response.toString().startsWith('notification')) {
       callback(response);
-    } else if (response.toString() == 'ok' || response.toString() == '@ok') {
+    } else if (response.toString() == 'data:ok' || response.toString() == '@ok') {
       _lastHeartbeatResponseTime = DateTime.now().millisecondsSinceEpoch;
     } else {
       _monitorVerbResponseQueue.add(response);
