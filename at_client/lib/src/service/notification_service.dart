@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:uuid/uuid.dart';
 
 abstract class NotificationService {
   /// Gives back stream of notifications from the server to the subscribing client.
@@ -79,10 +80,14 @@ abstract class NotificationService {
 
   /// Stops all subscriptions on the current instance
   void stopAllSubscriptions();
+
+  /// Returns the status of the given notificationId
+  Future<NotificationResult> getStatus(String notificationId);
 }
 
 /// [NotificationParams] represents a notification input params.
 class NotificationParams {
+  late String _id;
   late AtKey _atKey;
   String? _value;
   late OperationEnum _operation;
@@ -91,6 +96,8 @@ class NotificationParams {
   late StrategyEnum _strategy;
   final int _latestN = 1;
   final String _notifier = SYSTEM;
+
+  String get id => _id;
 
   AtKey get atKey => _atKey;
 
@@ -111,6 +118,7 @@ class NotificationParams {
   /// Returns [NotificationParams] to send an update notification.
   static NotificationParams forUpdate(AtKey atKey, {String? value}) {
     return NotificationParams()
+      .._id = Uuid().v4()
       .._atKey = atKey
       .._value = value
       .._operation = OperationEnum.update
@@ -122,6 +130,7 @@ class NotificationParams {
   /// Returns [NotificationParams] to send a delete notification.
   static NotificationParams forDelete(AtKey atKey) {
     return NotificationParams()
+      .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.delete
       .._messageType = MessageTypeEnum.key
@@ -135,6 +144,7 @@ class NotificationParams {
       ..key = text
       ..sharedWith = whomToNotify;
     return NotificationParams()
+      .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.update
       .._messageType = MessageTypeEnum.text
@@ -145,8 +155,8 @@ class NotificationParams {
 
 /// [NotificationResult] encapsulates the notification response
 class NotificationResult {
-  String? notificationID;
-  late AtKey atKey;
+  late String notificationID;
+  AtKey? atKey;
   NotificationStatusEnum notificationStatusEnum =
       NotificationStatusEnum.undelivered;
 
@@ -154,7 +164,7 @@ class NotificationResult {
 
   @override
   String toString() {
-    return 'key: ${atKey.key} sharedWith: ${atKey.sharedWith} status: $notificationStatusEnum';
+    return 'id: $notificationID status: $notificationStatusEnum';
   }
 }
 

@@ -1,3 +1,5 @@
+## 3.0.18
+- Generate Notification id in SDK
 ## 3.0.17
 - Fix self encryption key not found
 - Fix for _getLastNotificationTime method returning null

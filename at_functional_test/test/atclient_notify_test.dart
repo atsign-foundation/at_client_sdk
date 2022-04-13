@@ -1,87 +1,85 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
-import 'package:at_utils/at_logger.dart';
 
 void main() {
-  test('notify updating of a key to sharedWith atSign - using await', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
+  var currentAtSign = '@alice🛠';
+  var sharedWithAtSign = '@bob🛠';
+  late AtClientManager atClientManager;
+  setUpAll(() async {
+    var preference = TestUtils.getPreference(currentAtSign);
+    atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, 'me', preference);
     atClientManager.syncService.sync();
     // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
+    await setEncryptionKeys(currentAtSign, preference);
+  });
+  test('notify updating of a key to sharedWith atSign - using await', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = sharedWithAtSign;
     var value = '+1 100 200 300';
-    var notification = await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
-    var result = await notification
+
+    var result = await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
+    print('NotificationId : ${result.notificationID}');
     expect(result.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
-    expect(result.atKey.key, 'phone');
-    expect(result.atKey.sharedWith, phoneKey.sharedWith);
+    expect(result.atKey?.key, 'phone');
+    expect(result.atKey?.sharedWith, phoneKey.sharedWith);
+  });
+
+   test('notify updating of a key to sharedWith atSign - get status using the notification Id', () async {
+    // phone.me@alice🛠
+    var lastNumber = Random().nextInt(30);
+    var landlineKey = AtKey()
+      ..key = 'landline'
+      ..sharedWith = sharedWithAtSign;
+    var value = '040-238989$lastNumber';
+
+    var result = await atClientManager.notificationService
+        .notify(NotificationParams.forUpdate(landlineKey, value: value));
+    print('NotificationId : ${result.notificationID}');
+    final notificationStatus = await atClientManager.notificationService.getStatus(result.notificationID);
+    print('Notification status is $notificationStatus');
+    expect(notificationStatus.notificationID, result.notificationID);
+    expect(notificationStatus.notificationStatusEnum, NotificationStatusEnum.delivered);
+    expect(result.atKey?.key, 'landline');
+    expect(result.atKey?.sharedWith, landlineKey.sharedWith);
   });
 
   test('notify updating of a key to sharedWith atSign - using callback',
       () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'me', preference);
-    atClientManager.syncService.sync();
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = sharedWithAtSign;
     var value = '+1 100 200 300';
     await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
   });
 
   test('notify deletion of a key to sharedWith atSign', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'me', preference);
-    atClientManager.syncService.sync();
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = sharedWithAtSign;
     var notificationResult = await atClientManager.notificationService
         .notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
-    expect(notificationResult.atKey.key, 'phone');
-    expect(notificationResult.atKey.sharedWith, phoneKey.sharedWith);
+    expect(notificationResult.atKey?.key, 'phone');
+    expect(notificationResult.atKey?.sharedWith, phoneKey.sharedWith);
   });
 
   test('notify deletion of a key to sharedWith atSign - callback', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'me', preference);
-    atClientManager.syncService.sync();
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
@@ -92,32 +90,15 @@ void main() {
   });
 
   test('notify text of to sharedWith atSign', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'me', preference);
-    var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
-    var notification = await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
-    var notificationResult = await notification
-        .notify(NotificationParams.forText('Hello', '@bob🛠'));
+    var notificationResult = await atClientManager.notificationService
+        .notify(NotificationParams.forText('Hello', sharedWithAtSign));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
-    expect(notificationResult.atKey.key, 'Hello');
-    expect(notificationResult.atKey.sharedWith, '@bob🛠');
+    expect(notificationResult.atKey?.key, 'Hello');
+    expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
   });
 
   test('notify text of to sharedWith atSign - callback', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'me', preference);
-    atClientManager.syncService.sync();
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
     await atClientManager.notificationService.notify(
         NotificationParams.forText('phone', '@bob🛠'),
         onSuccess: onSuccessCallback);
@@ -125,16 +106,10 @@ void main() {
   });
 
   test('notify - test deprecated method using notificationservice', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'me', preference);
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = sharedWithAtSign;
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
     final notifyResult =
@@ -143,14 +118,8 @@ void main() {
   });
   test('notifyall - test deprecated method using notificationservice',
       () async {
-    final aliceAtSign = '@alice🛠';
     final bobAtSign = '@bob🛠';
     final colinAtSign = '@colin🛠';
-    final alicePreference = TestUtils.getPreference(aliceAtSign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(aliceAtSign, 'me', alicePreference);
-    // To setup encryption keys
-    await setEncryptionKeys(aliceAtSign, alicePreference);
     // phone.me@alice🛠
     var shareWithList = []
       ..add(bobAtSign)
@@ -165,36 +134,17 @@ void main() {
     expect(jsonDecode(notifyResult)[bobAtSign], true);
     expect(jsonDecode(notifyResult)[colinAtSign], true);
   });
-
   test('notify check value decryption on receiver', () async {
-    AtSignLogger.root_level = 'finest';
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
-    var atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = sharedWithAtSign;
     var value = '+1 100 200 300';
-    var notification = await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
-    await notification
+    await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
-//    expect(result.notificationStatusEnum.toString(),
-//        'NotificationStatusEnum.delivered');
-//    expect(result.atKey.key, 'phone');
-//    expect(result.atKey.sharedWith, phoneKey.sharedWith);
-    atsign = '@bob🛠';
-    preference = TestUtils.getPreference(atsign);
+    var preference = TestUtils.getPreference(sharedWithAtSign);
     atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
-    atClient = atClientManager.atClient;
-    await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
+        .setCurrentAtSign(sharedWithAtSign, 'wavi', preference);
     atClientManager.notificationService
         .subscribe(regex: 'phone')
         .listen((event) {
@@ -203,7 +153,7 @@ void main() {
     });
     Future.delayed(Duration(seconds: 10));
   });
-  tearDown(() async => await tearDownFunc());
+  tearDownAll(() async => await tearDownFunc());
 }
 
 void onSuccessCallback(notificationResult) {
