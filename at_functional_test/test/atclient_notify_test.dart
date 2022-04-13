@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -35,6 +36,25 @@ void main() {
         'NotificationStatusEnum.delivered');
     expect(result.atKey?.key, 'phone');
     expect(result.atKey?.sharedWith, phoneKey.sharedWith);
+  });
+
+   test('notify updating of a key to sharedWith atSign - get status using the notification Id', () async {
+    // phone.me@alice🛠
+    var lastNumber = Random().nextInt(30);
+    var landlineKey = AtKey()
+      ..key = 'landline'
+      ..sharedWith = sharedWithAtSign;
+    var value = '040-238989$lastNumber';
+
+    var result = await atClientManager.notificationService
+        .notify(NotificationParams.forUpdate(landlineKey, value: value));
+    print('NotificationId : ${result.notificationID}');
+    final notificationStatus = await atClientManager.notificationService.getStatus(result.notificationID);
+    print('Notification status is $notificationStatus');
+    expect(notificationStatus.notificationID, result.notificationID);
+    expect(notificationStatus.notificationStatusEnum, NotificationStatusEnum.delivered);
+    expect(result.atKey?.key, 'landline');
+    expect(result.atKey?.sharedWith, landlineKey.sharedWith);
   });
 
   test('notify updating of a key to sharedWith atSign - using callback',
