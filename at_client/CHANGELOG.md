@@ -1,3 +1,20 @@
+## 3.0.17
+- Fix self encryption key not found
+- Fix for _getLastNotificationTime method returning null
+- Added heartbeats to Notifications Monitor to detect and recover from
+  dead socket. Heartbeat interval is customizable via AtClientPreference
+- Fix for os write permission issue: give app option to pass the path where
+  the encrypted file will be saved on disk
+## 3.0.16
+- Decrypt notification value in SDK
+- Support for shared key and public key checksum in notify
+- Deprecated methods related to filebin
+## 3.0.15
+- Fix public key checksum in metadata does not sync to local.
+## 3.0.14
+- Support for shared key and public key checksum in metadata
+- Chunk based encryption/decryption for files up to 1GB
+- Change in pubspec to fetch the exact version of atsign packages
 ## 3.0.13
 - Sync deleted cached keys to cloud secondary
 - at_lookup version upgrade for increase in outbound connection timeout

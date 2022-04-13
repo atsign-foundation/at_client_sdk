@@ -32,6 +32,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_utils.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -733,7 +734,8 @@ class AtClientImpl implements AtClient {
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
       ..notifier = notificationParams.notifier;
-
+    // if no metadata is set by the app, init empty metadata
+    notificationParams.atKey.metadata ??= Metadata();
     // If value is not null, encrypt the value
     if (notificationParams.value != null &&
         notificationParams.value!.isNotEmpty) {
@@ -742,10 +744,10 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          builder.value = await _encryptionService!.encrypt(
-              notificationParams.atKey.key,
-              notificationParams.value!,
-              notificationParams.atKey.sharedWith!);
+          final atKeyEncryption = AtKeyEncryptionManager.get(
+              notificationParams.atKey, currentAtSign!);
+          builder.value = await atKeyEncryption.encrypt(
+              notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(errorCode, e.message));
@@ -754,8 +756,15 @@ class AtClientImpl implements AtClient {
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
-        builder.value = await _encryptionService!.encryptForSelf(
-            notificationParams.atKey.key, notificationParams.value!);
+        try {
+          final atKeyEncryption = AtKeyEncryptionManager.get(
+              notificationParams.atKey, currentAtSign!);
+          builder.value = await atKeyEncryption.encrypt(
+              notificationParams.atKey, notificationParams.value!);
+        } on KeyNotFoundException catch (e) {
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(errorCode, e.message));
+        }
       }
     }
     // If metadata is not null, add metadata to notify builder object.
@@ -765,6 +774,9 @@ class AtClientImpl implements AtClient {
       builder.ttr = notificationParams.atKey.metadata!.ttr;
       builder.ccd = notificationParams.atKey.metadata!.ccd;
       builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
+      builder.sharedKeyEncrypted =
+          notificationParams.atKey.metadata!.sharedKeyEnc;
+      builder.pubKeyChecksum = notificationParams.atKey.metadata!.pubKeyCS;
     }
     if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
         notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {

@@ -6,9 +6,13 @@ import 'package:at_commons/at_commons.dart';
 import 'package:uuid/uuid.dart';
 
 abstract class NotificationService {
-  // Gives back stream of notifications from the server to the subscribing client.
-  // Optionally pass a regex to filter notification keys matching the regex.
-  Stream<AtNotification> subscribe({String? regex});
+  /// Gives back stream of notifications from the server to the subscribing client.
+  ///
+  /// Optionally pass a regex to filter notification keys matching the regex.
+  ///
+  /// Optionally set shouldDecrypt to true to return the original value in the [AtNotification]
+  /// Defaulted to false to preserve the backward compatibility.
+  Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt});
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///
@@ -93,8 +97,6 @@ class NotificationParams {
   final int _latestN = 1;
   final String _notifier = SYSTEM;
 
-  String get id => _id;
-
   AtKey get atKey => _atKey;
 
   String? get value => _value;
@@ -173,3 +175,14 @@ enum NotificationStatusEnum {
   ackS,
   unavailable
 }
+/// The configurations for the Notification listeners
+class NotificationConfig {
+  /// To filter notification keys matching the regex
+  String regex = '';
+
+  /// To enable/disable decrypting of the value in the [AtNotification]
+  /// Defaulted to false to preserve backward compatibility.
+  bool shouldDecrypt = false;
+}
+
+enum NotificationStatusEnum { delivered, undelivered }

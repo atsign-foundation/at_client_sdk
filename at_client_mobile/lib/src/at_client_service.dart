@@ -49,17 +49,34 @@ class AtClientService {
 
   ///Returns `true` on persisting keys into keystore.
   Future<bool> persistKeys(String atSign) async {
-    var pkamPrivateKey = await (KeychainUtil.getPkamPrivateKey(atSign)) ?? '';
+    // Get keys from KeyChain manager
+    String? pkamPrivateKey = await KeychainUtil.getPkamPrivateKey(atSign);
+    String? pkamPublicKey = await KeychainUtil.getPkamPublicKey(atSign);
+    String? encryptPrivateKey =
+        await KeychainUtil.getEncryptionPrivateKey(atSign);
+    String? encryptPublicKey =
+        await KeychainUtil.getEncryptionPublicKey(atSign);
+    String? selfEncryptionKey = await KeychainUtil.getSelfEncryptionKey(atSign);
 
-    var pkamPublicKey = await (KeychainUtil.getPkamPublicKey(atSign)) ?? '';
+    // If the keys are missed, the authentication and encryption/decryption of data
+    // does not work. Hence first throwing exception without going further.
+    if (pkamPrivateKey == null || pkamPrivateKey.isEmpty) {
+      throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND);
+    }
+    if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
+      throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
+    }
+    if (encryptPrivateKey == null || encryptPrivateKey.isEmpty) {
+      throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
+    }
+    if (encryptPublicKey == null || encryptPublicKey.isEmpty) {
+      throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
+    }
+    if (selfEncryptionKey == null || selfEncryptionKey.isEmpty) {
+      throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND);
+    }
 
-    var encryptPrivateKey =
-        await (KeychainUtil.getEncryptionPrivateKey(atSign)) ?? '';
-
-    var encryptPublicKey = await KeychainUtil.getEncryptionPublicKey(atSign);
-
-    var selfEncryptionKey =
-        await (KeychainUtil.getSelfEncryptionKey(atSign)) ?? '';
+    //Store keys into local secondary.
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
@@ -77,12 +94,12 @@ class AtClientService {
     await _atClient!
         .getLocalSecondary()!
         .executeVerb(updateBuilder, sync: true);
-
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
-    var result = await _getKeysFromLocalSecondary(atSign);
 
+    // Verify if keys are added to local storage.
+    var result = await _getKeysFromLocalSecondary(atSign);
     return result;
   }
 
@@ -90,31 +107,32 @@ class AtClientService {
   ///if the details for [atsign] is not found in localsecondary.
   ///Returns `true` on successful fetching of all the details.
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
-    var pkamPublicKey = await _atClient!.getLocalSecondary()!.getPublicKey();
-    if (pkamPublicKey == null) {
+    String? pkamPublicKey =
+        await _atClient!.getLocalSecondary()!.getPublicKey();
+    if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
-    var pkamPrivateKey = await _atClient!.getLocalSecondary()!.getPrivateKey();
-    if (pkamPrivateKey == null) {
+    String? pkamPrivateKey =
+        await _atClient!.getLocalSecondary()!.getPrivateKey();
+    if (pkamPrivateKey == null || pkamPrivateKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND);
     }
-    var encryptPrivateKey =
+    String? encryptPrivateKey =
         await _atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
-    if (encryptPrivateKey == null) {
+    if (encryptPrivateKey == null || encryptPrivateKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
-    var encryptPublicKey =
+    String? encryptPublicKey =
         await _atClient!.getLocalSecondary()!.getEncryptionPublicKey(atsign);
-    if (encryptPublicKey == null) {
+    if (encryptPublicKey == null || encryptPublicKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
-
-    var encryptSelfKey =
+    String? encryptSelfKey =
         await _atClient!.getLocalSecondary()!.getEncryptionSelfKey();
-    if (encryptSelfKey == null) {
+    if (encryptSelfKey == null || encryptSelfKey.isEmpty) {
       throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND);
     }
-    return false;
+    return true;
   }
 
   ///Returns `true` on successfully authenticating [atsign] with [cramSecret]/[privateKey].
@@ -218,6 +236,7 @@ class AtClientService {
     }
     atClientPreference.privateKey = privateKey;
     await _init(atsign, atClientPreference);
+    await persistKeys(atsign);
     var keyRestorePolicyStatus = await getKeyRestorePolicy(atsign);
     if (keyRestorePolicyStatus == OnboardingStatus.ACTIVATE ||
         keyRestorePolicyStatus == OnboardingStatus.RESTORE) {
