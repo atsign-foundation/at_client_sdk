@@ -176,6 +176,7 @@ class NotificationServiceImpl
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {Function? onSuccess, Function? onError}) async {
     var notificationResult = NotificationResult()
+      ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
