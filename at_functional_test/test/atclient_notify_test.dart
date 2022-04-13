@@ -8,7 +8,6 @@ import 'package:test/test.dart';
 
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
-import 'package:at_utils/at_logger.dart';
 
 void main() {
   var currentAtSign = '@alice🛠';
@@ -115,37 +114,17 @@ void main() {
     expect(jsonDecode(notifyResult)[bobAtSign], true);
     expect(jsonDecode(notifyResult)[colinAtSign], true);
   });
-  tearDownAll(() async => await tearDownFunc());
-
   test('notify check value decryption on receiver', () async {
-    AtSignLogger.root_level = 'finest';
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
-    var atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = sharedWithAtSign;
     var value = '+1 100 200 300';
-    var notification = await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
-    await notification
+    await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
-//    expect(result.notificationStatusEnum.toString(),
-//        'NotificationStatusEnum.delivered');
-//    expect(result.atKey.key, 'phone');
-//    expect(result.atKey.sharedWith, phoneKey.sharedWith);
-    atsign = '@bob🛠';
-    preference = TestUtils.getPreference(atsign);
+    var preference = TestUtils.getPreference(sharedWithAtSign);
     atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
-    atClient = atClientManager.atClient;
-    await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
+        .setCurrentAtSign(sharedWithAtSign, 'wavi', preference);
     atClientManager.notificationService
         .subscribe(regex: 'phone')
         .listen((event) {
@@ -154,7 +133,7 @@ void main() {
     });
     Future.delayed(Duration(seconds: 10));
   });
-  tearDown(() async => await tearDownFunc());
+  tearDownAll(() async => await tearDownFunc());
 }
 
 void onSuccessCallback(notificationResult) {

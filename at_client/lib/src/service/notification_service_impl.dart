@@ -91,7 +91,10 @@ class NotificationServiceImpl
     var lastNotificationKeyStr =
         '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
     var atKey = AtKey.fromString(lastNotificationKeyStr);
-    if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(lastNotificationKeyStr)) {
+    if (_atClient
+        .getLocalSecondary()!
+        .keyStore!
+        .isKeyExists(lastNotificationKeyStr)) {
       final atValue = await _atClient.get(atKey);
       if (atValue.value != null) {
         _logger.finer('json from hive: ${atValue.value}');
@@ -174,11 +177,9 @@ class NotificationServiceImpl
       {Function? onSuccess, Function? onError}) async {
     var notificationResult = NotificationResult()
       ..atKey = notificationParams.atKey;
-    dynamic notificationId;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
-      // Returns the notificationId.
-      notificationId = await _atClient.notifyChange(notificationParams);
+      await _atClient.notifyChange(notificationParams);
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
@@ -325,18 +326,8 @@ class NotificationServiceImpl
         return NotificationStatusEnum.delivered;
       case 'undelivered':
         return NotificationStatusEnum.undelivered;
-      case 'acks':
-        return NotificationStatusEnum.ackS;
-      case 'ackr':
-        return NotificationStatusEnum.ackR;
-      case 'queued':
-        return NotificationStatusEnum.queued;
-      case 'attemptedtodeliver':
-        return NotificationStatusEnum.attemptedToDeliver;
-      case 'unavailable':
-        return NotificationStatusEnum.unavailable;
       default:
-        return NotificationStatusEnum.unavailable;
+        return NotificationStatusEnum.undelivered;
     }
   }
 }

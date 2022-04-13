@@ -97,6 +97,8 @@ class NotificationParams {
   final int _latestN = 1;
   final String _notifier = SYSTEM;
 
+  String get id => _id;
+
   AtKey get atKey => _atKey;
 
   String? get value => _value;
@@ -166,15 +168,6 @@ class NotificationResult {
   }
 }
 
-enum NotificationStatusEnum {
-  queued,
-  attemptedToDeliver,
-  delivered,
-  undelivered,
-  ackR,
-  ackS,
-  unavailable
-}
 /// The configurations for the Notification listeners
 class NotificationConfig {
   /// To filter notification keys matching the regex
