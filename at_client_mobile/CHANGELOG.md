@@ -1,3 +1,5 @@
+## 3.1.13
+- at_client version upgrade for generating notification id in SDK
 ## 3.1.12
 - Add keys from keychain to local store on reinstalling the app
 - at_client version upgrade for decrypt notification value in SDK.
