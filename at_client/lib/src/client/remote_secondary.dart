@@ -99,7 +99,8 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> findSecondaryUrl() async {
-    return await AtLookupImpl.findSecondary(_atSign, _preference.rootDomain, _preference.rootPort);
+    var secondaryAddress = await AtClientManager.getInstance().secondaryAddressCache!.getAddress(_atSign);
+    return secondaryAddress.toString();
   }
 
   Future<bool> isAvailable() async {
