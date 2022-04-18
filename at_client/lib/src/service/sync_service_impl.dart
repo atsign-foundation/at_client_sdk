@@ -353,7 +353,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var batchRequests = <BatchRequest>[];
     var batchId = 1;
     for (var entry in uncommittedEntries) {
-      var command = await _getCommand(entry);
+      String command;
+      try {
+        command = await _getCommand(entry);
+      } on KeyNotFoundException {
+        _logger.severe(
+            '${entry.atKey} is not found in keystore. Skipping to entry to sync');
+        continue;
+      }
       command = VerbUtil.replaceNewline(command);
       var batchRequest = BatchRequest(batchId, command);
       _logger.finer('batchId:$batchId key:${entry.atKey}');
