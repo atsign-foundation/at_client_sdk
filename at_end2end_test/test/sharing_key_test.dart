@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:math';
+import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
@@ -51,20 +51,22 @@ void main() {
   /// 3. Get method - lookup verb
   test('Share a key to sharedWith atSign and lookup from sharedWith atSign',
       () async {
-    var lastNumber = Random().nextInt(50);
-    var phoneKey = AtKey()
-      ..key = 'phone_$lastNumber'
+    var uuid = Uuid();
+    // Generate a uuid
+    var randomValue = uuid.v4();
+    var mobileNumberKey = AtKey()
+      ..key = 'mobileNum$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()..ttl = 120000);
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
-    var value = '+1 100 200 30$lastNumber';
+    var value = '+1 100 200 30';
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     var putResult =
-        await currentAtSignClientManager?.atClient.put(phoneKey, value);
+        await currentAtSignClientManager?.atClient.put(mobileNumberKey, value);
     expect(putResult, true);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
@@ -77,7 +79,7 @@ void main() {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
-      ..key = 'phone_$lastNumber'
+      ..key = 'mobileNum$randomValue'
       ..sharedBy = currentAtSign);
     expect(getResult?.value, value);
     expect(getResult?.metadata?.sharedKeyEnc != null, true);
@@ -96,8 +98,11 @@ void main() {
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var uuid = Uuid();
+    // Generate uuid
+    var randomValue = uuid.v4();
     var verificationKey = AtKey()
-      ..key = 'verificationnumber'
+      ..key = 'verificationnumber$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()
         ..ttr = 1000

@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:math';
+import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
@@ -51,21 +51,23 @@ void main() {
   /// 3. Get method - lookup verb in the same atsign and different atsign
   /// 4. plookup of a key should create a cached key
   test('Create a public key and lookup from different atSign', () async {
-    var lastNumber = Random().nextInt(50);
-    var phoneKey = AtKey()
-      ..key = 'phone_$lastNumber'
+    var uuid = Uuid();
+    // Generate a v1 (time-based) id
+    var randomValue = uuid.v4();
+    var usernameKey = AtKey()
+      ..key = 'username$randomValue'
       ..metadata = (Metadata()
         ..ttl = 120000
         ..isPublic = true);
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
-    var value = '+1 100 200 30$lastNumber';
+    var value = 'user123';
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     var putResult =
-        await currentAtSignClientManager?.atClient.put(phoneKey, value);
+        await currentAtSignClientManager?.atClient.put(usernameKey, value);
     expect(putResult, true);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
@@ -88,7 +90,7 @@ void main() {
     /// lookup of a public key
     var metadata = Metadata()..isPublic = true;
     var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
-      ..key = 'phone_$lastNumber'
+      ..key = 'username$randomValue'
       ..sharedBy = currentAtSign
       ..metadata = metadata);
     expect(getResult?.value, value);
@@ -105,7 +107,7 @@ void main() {
       ..isPublic = true;
     var getCachedResult =
         await sharedWithAtSignClientManager?.atClient.get(AtKey()
-          ..key = 'phone_$lastNumber'
+          ..key = 'username$randomValue'
           ..sharedBy = currentAtSign
           ..metadata = metadata);
     expect(getCachedResult?.value, value);
@@ -117,15 +119,17 @@ void main() {
   /// 3. Get method - lookup verb in the same atsign and different atsign
   /// 4. Verifying the pubkeycs and sharedkeyenc is same in both the atsigns
   test('Create a private key and lookup from different atSign', () async {
-    var lastNumber = Random().nextInt(50);
+    var uuid = Uuid();
+    // Generate  uuid
+    var randomValue = uuid.v4();
     var authCodeKey = AtKey()
-      ..key = 'auth-code_$lastNumber'
+      ..key = 'auth-code$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()..ttr = 864000);
 
     // Appending a random number as a last number to generate a new auth-code number
     // for each run.
-    var value = 'QR345R$lastNumber';
+    var value = 'QR345R';
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
@@ -156,7 +160,7 @@ void main() {
     var metadata = Metadata()..isCached = true;
     var getResultSharedWithAtsign =
         await sharedWithAtSignClientManager?.atClient.get(AtKey()
-          ..key = 'auth-code_$lastNumber'
+          ..key = 'auth-code$randomValue'
           ..namespace = 'wavi'
           ..sharedWith = sharedWithAtSign
           ..sharedBy = currentAtSign
@@ -181,9 +185,11 @@ void main() {
 
   test('Create a private key with ttl and lookup from different atSign',
       () async {
-    var lastNumber = Random().nextInt(50);
+    var uuid = Uuid();
+    // Generate  uuid
+    var randomValue = uuid.v4();
     var tempCodeKey = AtKey()
-      ..key = 'tempCode$lastNumber'
+      ..key = 'tempCode$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()
         ..ttl = 4000
@@ -191,7 +197,7 @@ void main() {
 
     // Appending a random number as a last number to generate a new temp-code number
     // for each run.
-    var value = 'EEE09$lastNumber';
+    var value = 'EEE09';
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
@@ -218,10 +224,11 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
+
     /// fetching value before the ttl time
     var metadata = Metadata()..isCached = true;
     var getKey = AtKey()
-      ..key = 'tempCode$lastNumber'
+      ..key = 'tempCode$randomValue'
       ..namespace = 'wavi'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign
@@ -253,9 +260,11 @@ void main() {
   /// 4. Get method - lookup verb in the different atsign after the ttb time
   test('Create a private key with ttb and lookup from different atSign',
       () async {
-    var lastNumber = Random().nextInt(50);
+    var uuid = Uuid();
+    // Generate  uuid
+    var randomValue = uuid.v4();
     var passCodeKey = AtKey()
-      ..key = 'passCode$lastNumber'
+      ..key = 'passCode$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()
         ..ttb = 2000
@@ -263,7 +272,7 @@ void main() {
 
     // Appending a random number as a last number to generate a new temp-code number
     // for each run.
-    var value = '89023$lastNumber';
+    var value = '89023';
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
@@ -296,7 +305,7 @@ void main() {
     /// fetching value before the ttb time
     var metadata = Metadata()..isCached = true;
     var getKey = AtKey()
-      ..key = 'passCode$lastNumber'
+      ..key = 'passCode$randomValue'
       ..namespace = 'wavi'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign

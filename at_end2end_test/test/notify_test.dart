@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
+import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
@@ -54,13 +54,15 @@ void main() {
   /// 5. Verifying pubkeycs and sharedKeyEnc is not null
   test('notify a key to another atsign and verify the value in the receiver',
       () async {
-    var lastNumber = Random().nextInt(30);
+    var uuid = Uuid();
+    // Generate a v1 (time-based) id
+    var randomValue = uuid.v4();
     var metadata = Metadata()..ttr = 864000;
     var codeKey = AtKey()
-      ..key = 'code'
+      ..key = 'loginCode$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = metadata;
-    var value = '99 09 $lastNumber';
+    var value = '021365';
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     final notificationResult = await currentAtSignClientManager
@@ -69,8 +71,8 @@ void main() {
     expect(notificationResult, isNotNull);
     expect(notificationResult!.notificationStatusEnum,
         NotificationStatusEnum.delivered);
-    expect(notificationResult.atKey.key, 'code.$namespace');
-    expect(notificationResult.atKey.sharedWith, codeKey.sharedWith);
+    expect(notificationResult.atKey!.key, 'loginCode$randomValue.$namespace');
+    expect(notificationResult.atKey!.sharedWith, codeKey.sharedWith);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -88,14 +90,26 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 10));
     }
+    // Notify list result in the receiver's atsign
+    var notificationListResult = await AtClientManager.getInstance()
+        .atClient
+        .notifyList(regex: 'loginCode$randomValue');
+    expect(notificationListResult, isNotEmpty);
+    notificationListResult = notificationListResult.replaceFirst('data:', '');
+    final notificationListJson = jsonDecode(notificationListResult);
+    print(notificationListJson);
+    expect(notificationListJson[0]['from'], currentAtSign);
+    expect(notificationListJson[0]['to'], sharedWithAtSign);
+    expect(notificationListJson[0]['value'], isNotEmpty);
     var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
-      ..key = 'code.$namespace'
+      ..key = 'loginCode$randomValue.$namespace'
       ..sharedBy = currentAtSign);
     print('get result is $getResult');
     expect(getResult!.value, value);
     expect(getResult.metadata?.sharedKeyEnc != null, true);
     expect(getResult.metadata?.pubKeyCS != null, true);
-  }, timeout: Timeout(Duration(seconds: 120)));
+    //Setting the timeout to prevent termination of test
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   /// The purpose of this test verify the following:
   /// 1. notify method - notify a text to other atsign
@@ -104,7 +118,10 @@ void main() {
   /// 4. notify List - Verifying that the shared text exists in the receiver atsign
   test('notify a text to another atsign and verify the value in the receiver',
       () async {
-    var textToShare = 'Hello';
+    var uuid = Uuid();
+    // Generate a v1 (time-based) id
+    var randomValue = uuid.v4();
+    var textToShare = 'Hello$randomValue';
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     final notificationResult = await currentAtSignClientManager
@@ -113,7 +130,7 @@ void main() {
     expect(notificationResult, isNotNull);
     expect(notificationResult!.notificationStatusEnum,
         NotificationStatusEnum.delivered);
-    expect(notificationResult.atKey.key, textToShare);
+    expect(notificationResult.atKey!.key, textToShare);
     var isSyncInProgress = true;
     currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -132,10 +149,11 @@ void main() {
       await Future.delayed(Duration(milliseconds: 10));
     }
     var notifyListResult = await sharedWithAtSignClientManager?.atClient
-        .notifyList(regex: 'Hello');
+        .notifyList(regex: textToShare);
     assert(
         notifyListResult!.contains('"key":"$sharedWithAtSign:$textToShare"'));
-  }, timeout: Timeout(Duration(seconds: 120)));
+    //Setting the timeout to prevent termination of test
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   /// The purpose of this test verify the following:
   /// 1. notify method - notify a deletion of key to other atsign
@@ -145,9 +163,11 @@ void main() {
   test(
       'Notify a delete key with value to sharedWith atSign and listen for notification from sharedWith atSign',
       () async {
-    var lastNumber = Random().nextInt(50);
+    var uuid = Uuid();
+    // Generate a uuid
+    var randomValue = uuid.v4();
     var delKey = AtKey()
-      ..key = 'delKey$lastNumber'
+      ..key = 'delKey$randomValue'
       ..sharedWith = sharedWithAtSign;
 
     // Setting currentAtSign atClient instance to context.
@@ -164,7 +184,7 @@ void main() {
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
-        .notifyList(regex: 'delKey$lastNumber');
+        .notifyList(regex: 'delKey$randomValue');
     expect(notificationListResult, isNotEmpty);
     notificationListResult = notificationListResult.replaceFirst('data:', '');
     final notificationListJson = jsonDecode(notificationListResult);
@@ -172,7 +192,8 @@ void main() {
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
     expect(notificationListJson[0]['operation'], 'delete');
-  });
+    //Setting the timeout to prevent termination of test
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   tearDownAll(() async {
     var isExists = await Directory('test/hive').exists();
