@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
+import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
@@ -49,15 +49,17 @@ void main() {
   test(
       'Notify a key with value to sharedWith atSign and listen for notification from sharedWith atSign',
       () async {
-    var lastNumber = Random().nextInt(50);
+    var uuid = Uuid();
+    // Generate  uuid
+    var randomValue = uuid.v4();
     var phoneKey = AtKey()
-      ..key = 'phone_$lastNumber'
+      ..key = 'phone$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()..ttr = 60000);
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
-    var value = '+1 100 200 30$lastNumber';
+    var value = '+1 100 200 30';
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
@@ -72,7 +74,7 @@ void main() {
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
-        .notifyList(regex: 'phone_$lastNumber');
+        .notifyList(regex: 'phone$randomValue');
     expect(notificationListResult, isNotEmpty);
     notificationListResult = notificationListResult.replaceFirst('data:', '');
     final notificationListJson = jsonDecode(notificationListResult);
