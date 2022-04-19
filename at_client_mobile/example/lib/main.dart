@@ -12,8 +12,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AtEnv.load();
   //print(await io.File('.env').exists());
-  assert(await io.File('.env').exists(),
-      'the application needs an env file to build. Please refer to the documentation for more details');
+  // assert(await io.File('.env').exists(),
+  //     'the application needs an env file to build. Please refer to the documentation for more details');
   runApp(const MyApp());
 }
 
