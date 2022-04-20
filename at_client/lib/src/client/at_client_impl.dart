@@ -311,6 +311,9 @@ class AtClientImpl implements AtClient {
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
     AtResponse atResponse = AtResponse();
+    if(value is! String || value is! List<int>){
+      // TODO: Throw AtValueException
+    }
     if (value is String) {
       atResponse = await putText(atKey, value);
     }
@@ -323,12 +326,27 @@ class AtClientImpl implements AtClient {
   /// put's the text data into the keystore
   @override
   Future<AtResponse> putText(AtKey atKey, String value) async {
-    // Performs the put request validations.
-    AtClientValidation.validatePutRequest(atKey, value);
     // Set the default metadata if not already set.
     atKey.metadata ??= Metadata();
     // Setting metadata.isBinary to false for putText
     atKey.metadata!.isBinary = false;
+    return _putInternal(atKey, value);
+  }
+
+  /// put's the binary data(e.g. images, files etc) into the keystore
+  @override
+  Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
+    // Set the default metadata if not already set.
+    atKey.metadata ??= Metadata();
+    // Setting metadata.isBinary to true for putBinary
+    atKey.metadata!.isBinary = true;
+    // Base2e15.encode method converts the List<int> type to String.
+    return _putInternal(atKey, Base2e15.encode(value));
+  }
+
+  Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
+    // Performs the put request validations.
+    AtClientValidation.validatePutRequest(atKey, value);
     // Set sharedBy to currentAtSign if not set.
     if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
       atKey.sharedBy =
@@ -365,19 +383,7 @@ class AtClientImpl implements AtClient {
     if (putResponse == null || putResponse.isEmpty) {
       return AtResponse()..response = '';
     }
-    return await PutResponseTransformer().transform(putResponse);
-  }
-
-  /// put's the binary data(e.g. images, files etc) into the keystore
-  @override
-  Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
-    // Setting metadata.isBinary to false for putText
-    atKey.metadata!.isBinary = true;
-    // Base2e15.encode method converts the List<int> type to String.
-    // Delegate the call to putText method.
-    return await putText(atKey, Base2e15.encode(value));
+    return PutResponseTransformer().transform(putResponse);
   }
 
   @override

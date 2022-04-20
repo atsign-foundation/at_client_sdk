@@ -71,18 +71,15 @@ class AtClientValidation {
 
   /// Performs the validations on the PutRequest
   static void validatePutRequest(AtKey atKey, dynamic value) {
-    // If value type is other than String and List<int> throw Exception
-    if (value is! String && value is! List<int>) {
-      throw AtClientException('AT0014',
-          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
-    }
     // If length of value exceeds maxDataSize, throw AtClientException
     if (value.length >
         AtClientManager.getInstance().atClient.getPreferences()!.maxDataSize) {
+      // TODO Throw AtValueException or BufferOverFlowException
       throw AtClientException('AT0005', 'BufferOverFlowException');
     }
     // If key is cached, throw exception
     if (atKey.metadata != null && atKey.metadata!.isCached) {
+      // TODO Throw AtKeyException
       throw AtClientException('AT0014', 'User cannot create a cached key');
     }
     // If namespace is not set on key and in preferences, throw exception
@@ -94,6 +91,7 @@ class AtClientValidation {
                 .getPreferences()!
                 .namespace!
                 .isEmpty)) {
+      // TODO Throw AtKeyException
       throw AtClientException('AT0014', 'namespace is mandatory');
     }
   }
