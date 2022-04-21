@@ -122,7 +122,7 @@ bool isOnboarded = atClientServiceMap.containsKey(atsign);
 print(isOnboarded); // Prints true if onboarded.
 ```
 
-- Creating the .env file
+- Format of the .env file
 
 ```yaml
 NAMESPACE = "at_client_demo"
