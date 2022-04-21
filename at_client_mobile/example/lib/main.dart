@@ -9,11 +9,7 @@ import 'package:path_provider/path_provider.dart'
 import 'package:at_app_flutter/at_app_flutter.dart' show AtEnv;
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
   await AtEnv.load();
-  //print(await io.File('.env').exists());
-  // assert(await io.File('.env').exists(),
-  //     'the application needs an env file to build. Please refer to the documentation for more details');
   runApp(const MyApp());
 }
 
