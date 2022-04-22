@@ -6,6 +6,7 @@ import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
@@ -34,7 +35,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_utils.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -311,7 +311,8 @@ class AtClientImpl implements AtClient {
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
     AtResponse atResponse = AtResponse();
-    if(value is! String || value is! List<int>){
+    // If the value is neither String nor List<int> throw exception
+    if(value is! String && value is! List<int>){
       // TODO: Throw AtValueException
     }
     if (value is String) {
