@@ -9,7 +9,7 @@ import 'package:at_utils/at_logger.dart';
 /// CurrentAtSign: @bob
 /// llookup:@alice:phone@bob
 class LocalKeyDecryption implements AtKeyDecryption {
-  final _logger = AtSignLogger('SelfKeyDecryption');
+  final _logger = AtSignLogger('LocalKeyDecryption');
 
   @override
   Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {

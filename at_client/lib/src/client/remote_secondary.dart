@@ -78,7 +78,7 @@ class RemoteSecondary implements Secondary {
   }
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
-  Future<String?> sync(int? lastSyncedId, {String? regex}) async {
+  Future<String?> sync(int lastSyncedId, {String? regex}) async {
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = lastSyncedId
       ..regex = regex
@@ -98,24 +98,30 @@ class RemoteSecondary implements Secondary {
     }, restartCallBack: _restartCallBack);
   }
 
+  Future<String?> findSecondaryUrl() async {
+    return await AtLookupImpl.findSecondary(_atSign, _preference.rootDomain, _preference.rootPort);
+  }
+
   Future<bool> isAvailable() async {
     try {
-      var secondaryUrl = await AtLookupImpl.findSecondary(
-          _atSign, _preference.rootDomain, _preference.rootPort);
+      // How often is this method called? Should we consider caching the secondary URL?
+      // If we do cache it then we should clear the cache if the secondary ever becomes unavailable
+      // ... in case the secondary URL changes from foo.example.com:1234 to bar.example.com:4567
+      String? secondaryUrl = await findSecondaryUrl();
+
       var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
       var host = secondaryInfo[0];
       var port = secondaryInfo[1];
       var internetAddress = await InternetAddress.lookup(host);
       //TODO getting first ip for now. explore best solution
       var addressCheckOptions =
-          AddressCheckOptions(internetAddress[0], port: int.parse(port));
-      return (await InternetConnectionChecker()
-              .isHostReachable(addressCheckOptions))
-          .isSuccess;
+      AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      var addressCheckResult = await InternetConnectionChecker().isHostReachable(addressCheckOptions);
+      return addressCheckResult.isSuccess;
     } on Exception catch (e) {
-      logger.severe('Secondary server unavailable ${e.toString}');
+      logger.severe('Secondary server unavailable due to Exception: ${e.toString()}');
     } on Error catch (e) {
-      logger.severe('Secondary server unavailable ${e.toString}');
+      logger.severe('Secondary server unavailable due to Error: ${e.toString()}');
     }
     return false;
   }

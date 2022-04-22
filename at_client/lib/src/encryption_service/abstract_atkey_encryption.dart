@@ -18,7 +18,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     // Get AES Key from the local storage
     _sharedKey = await getSharedKey(atKey);
-
+    late String encryptedSharedKey;
+    // Get SharedWith encryption public key
+    final sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
     // If sharedKey is empty, then -
     // Generate a new sharedKey
     // Encrypt the sharedKey with sharedWith public key
@@ -27,10 +29,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     if (_sharedKey.isEmpty) {
       // Generate sharedKey
       _sharedKey = EncryptionUtil.generateAESKey();
-      // Get SharedWith encryption public key
-      var sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
       //Encrypt shared key with public key of sharedWith atSign.
-      var encryptedSharedKey =
+      encryptedSharedKey =
           EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
       // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atSign
       // to cache the encryptedSharedKey.
@@ -44,7 +44,12 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
               .getLocalSecondary()!
               .getEncryptionPublicKey(atKey.sharedBy!))!);
       _storeSharedKey(atKey, encryptedSharedKeyForCurrentAtSign);
+    } else {
+      encryptedSharedKey =
+          EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
     }
+    atKey.metadata!.sharedKeyEnc = encryptedSharedKey;
+    atKey.metadata!.pubKeyCS = EncryptionUtil.md5CheckSum(sharedWithPublicKey);
   }
 
   /// Fetches the shared key in the local secondary

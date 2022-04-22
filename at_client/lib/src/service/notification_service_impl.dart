@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
@@ -14,7 +16,7 @@ import 'package:at_utils/at_logger.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
-  Map<String, StreamController> streamListeners = {};
+  final Map<NotificationConfig, StreamController> _streamListeners = {};
   final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationId';
   static final Map<String, NotificationService> _notificationServiceMap = {};
@@ -86,8 +88,13 @@ class NotificationServiceImpl
   }
 
   Future<int?> _getLastNotificationTime() async {
-    var atKey = AtKey()..key = notificationIdKey;
-    if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(atKey.key!)) {
+    var lastNotificationKeyStr =
+        '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
+    var atKey = AtKey.fromString(lastNotificationKeyStr);
+    if (_atClient
+        .getLocalSecondary()!
+        .keyStore!
+        .isKeyExists(lastNotificationKeyStr)) {
       final atValue = await _atClient.get(atKey);
       if (atValue.value != null) {
         _logger.finer('json from hive: ${atValue.value}');
@@ -102,16 +109,16 @@ class NotificationServiceImpl
     _isMonitorPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
-    streamListeners.forEach((regex, streamController) {
+    _streamListeners.forEach((regex, streamController) {
       if (!streamController.isClosed) () => streamController.close();
     });
-    streamListeners.clear();
+    _streamListeners.clear();
   }
 
-  void _internalNotificationCallback(String notificationJSON) async {
+  Future<void> _internalNotificationCallback(String notificationJSON) async {
     try {
       final notificationParser = NotificationResponseParser();
-      final atNotifications = notificationParser
+      final atNotifications = await notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
@@ -119,9 +126,16 @@ class NotificationServiceImpl
           await _atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
-        streamListeners.forEach((regex, streamController) {
-          if (regex != emptyRegex) {
-            if (regex.allMatches(atNotification.key).isNotEmpty) {
+        _streamListeners.forEach((notificationConfig, streamController) async {
+          // Decrypt the value in the atNotification object when below criteria is met.
+          if (notificationConfig.shouldDecrypt && atNotification.id != '-1') {
+            atNotification.value =
+                await _getDecryptedNotifications(atNotification);
+          }
+          if (notificationConfig.regex != emptyRegex) {
+            if (notificationConfig.regex
+                .allMatches(atNotification.key)
+                .isNotEmpty) {
               streamController.add(atNotification);
             }
           } else {
@@ -162,12 +176,11 @@ class NotificationServiceImpl
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {Function? onSuccess, Function? onError}) async {
     var notificationResult = NotificationResult()
+      ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
-    dynamic notificationId;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
-      // Returns the notificationId.
-      notificationId = await _atClient.notifyChange(notificationParams);
+      await _atClient.notifyChange(notificationParams);
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
@@ -183,11 +196,9 @@ class NotificationServiceImpl
       return notificationResult;
     }
     var notificationParser = NotificationResponseParser();
-    notificationResult.notificationID =
-        notificationParser.parse(notificationId).response;
     // Gets the notification status and parse the response.
-    var notificationStatus = notificationParser.parse(
-        await _getFinalNotificationStatus(notificationResult.notificationID!));
+    var notificationStatus = notificationParser
+        .parse(await _getFinalNotificationStatus(notificationParams.id));
     switch (notificationStatus.response) {
       case 'delivered':
         notificationResult.notificationStatusEnum =
@@ -225,14 +236,17 @@ class NotificationServiceImpl
   }
 
   @override
-  Stream<AtNotification> subscribe({String? regex}) {
+  Stream<AtNotification> subscribe(
+      {String? regex, bool shouldDecrypt = false}) {
     regex ??= emptyRegex;
-    if (streamListeners.containsKey(regex)) {
+    if (_streamListeners.containsKey(regex)) {
       _logger.finer('subscription already exists');
-      return streamListeners[regex]!.stream as Stream<AtNotification>;
+      return _streamListeners[regex]!.stream as Stream<AtNotification>;
     }
     final _controller = StreamController<AtNotification>.broadcast();
-    streamListeners[regex] = _controller;
+    _streamListeners[NotificationConfig()
+      ..regex = regex
+      ..shouldDecrypt = shouldDecrypt] = _controller;
     _logger.finer('added regex to listener $regex');
     return _controller.stream;
   }
@@ -259,5 +273,62 @@ class NotificationServiceImpl
     _logger.finer(
         '${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
     return _monitor!.getStatus();
+  }
+
+  Future<String?> _getDecryptedNotifications(
+      AtNotification atNotification) async {
+    // If atNotification value is null or empty, returning the same.
+    if (atNotification.value == null || atNotification.value!.isEmpty) {
+      return atNotification.value;
+    }
+    try {
+      var atKey = AtKey()
+        ..key = atNotification.key
+        ..sharedBy = atNotification.from
+        ..sharedWith = atNotification.to;
+      var decryptionService =
+          AtKeyDecryptionManager.get(atKey, atNotification.to);
+      var decryptedValue =
+          await decryptionService.decrypt(atKey, atNotification.value);
+      // Return decrypted value
+      return decryptedValue.toString().trim();
+    } on Exception catch (e) {
+      _logger.severe('unable to decrypt notification value: ${e.toString()}');
+    }
+    // Returning the encrypted value if the decryption fails
+    return atNotification.value!;
+  }
+
+  @override
+  Future<NotificationResult> getStatus(String notificationId) async {
+    var status = await _atClient.notifyStatus(notificationId);
+    var atResponse = DefaultResponseParser().parse(status);
+    NotificationResult notificationResult;
+    // If the Notification Response is error, set the notification status to undelivered
+    if (atResponse.isError) {
+      return NotificationResult()
+        ..notificationID = notificationId
+        ..notificationStatusEnum = NotificationStatusEnum.undelivered
+        ..atClientException = AtClientException(
+            atResponse.errorCode, atResponse.errorDescription);
+    }
+
+    notificationResult = NotificationResult()
+      ..notificationID = notificationId
+      ..notificationStatusEnum =
+          _getNotificationStatusEnum(atResponse.response);
+    return notificationResult;
+  }
+
+  /// Returns the NotificationStatusEnum for the given string of notificationStatus
+  NotificationStatusEnum _getNotificationStatusEnum(String notificationStatus) {
+    switch (notificationStatus.toLowerCase()) {
+      case 'delivered':
+        return NotificationStatusEnum.delivered;
+      case 'undelivered':
+        return NotificationStatusEnum.undelivered;
+      default:
+        return NotificationStatusEnum.undelivered;
+    }
   }
 }

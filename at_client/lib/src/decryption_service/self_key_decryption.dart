@@ -21,21 +21,17 @@ class SelfKeyDecryption implements AtKeyDecryption {
           'Decryption failed. Encrypted value is null');
     }
 
-    try {
-      var selfEncryptionKey = await AtClientManager.getInstance()
-          .atClient
-          .getLocalSecondary()!
-          .getEncryptionSelfKey();
-      if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
-          selfEncryptionKey == 'data:null') {
-        throw KeyNotFoundException(
-            'Decryption failed. SelfEncryptionKey not found');
-      }
-
-      return EncryptionUtil.decryptValue(encryptedValue,
-          DefaultResponseParser().parse(selfEncryptionKey).response);
-    } on Error catch (e) {
-      _logger.severe('Error while decrypting value: ${e.toString()}');
+    var selfEncryptionKey = await AtClientManager.getInstance()
+        .atClient
+        .getLocalSecondary()!
+        .getEncryptionSelfKey();
+    if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
+        selfEncryptionKey == 'data:null') {
+      throw KeyNotFoundException(
+          'Decryption failed. SelfEncryptionKey not found');
     }
+
+    return EncryptionUtil.decryptValue(encryptedValue,
+        DefaultResponseParser().parse(selfEncryptionKey).response);
   }
 }

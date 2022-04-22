@@ -23,9 +23,10 @@ class GetResponseTransformer
     atValue.value = decodedResponse['data'];
     // parse metadata
     if (decodedResponse['metaData'] != null) {
-      atValue.metadata = AtClientUtil.prepareMetadata(
-          decodedResponse['metaData'],
-          decodedResponse['key'].startsWith('public:'));
+      final metadata = AtClientUtil.prepareMetadata(
+          decodedResponse['metaData'], _isKeyPublic(decodedResponse['key']));
+      atValue.metadata = metadata;
+      tuple.one.metadata = metadata;
     }
 
     // For public and cached public keys, data is not encrypted.
@@ -47,5 +48,11 @@ class GetResponseTransformer
       atValue.value = Base2e15.decode(atValue.value);
     }
     return atValue;
+  }
+
+  /// Return true if key is a public key or a cached public key
+  /// Else returns false
+  bool _isKeyPublic(String key) {
+    return key.startsWith('public:') || key.startsWith('cached:public:');
   }
 }

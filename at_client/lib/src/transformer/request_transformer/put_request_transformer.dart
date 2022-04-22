@@ -20,7 +20,10 @@ class PutRequestTransformer
           AtClientManager.getInstance().atClient.getCurrentAtSign()!);
       updateVerbBuilder.value =
           await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
+      updateVerbBuilder.sharedKeyEncrypted = tuple.one.metadata!.sharedKeyEnc;
+      updateVerbBuilder.pubKeyChecksum = tuple.one.metadata!.pubKeyCS;
     }
+
     return updateVerbBuilder;
   }
 
@@ -51,6 +54,7 @@ class PutRequestTransformer
     if (atKey.metadata!.ccd != null) {
       updateVerbBuilder.ccd = atKey.metadata!.ccd;
     }
+    updateVerbBuilder.dataSignature = atKey.metadata!.dataSignature;
     return updateVerbBuilder;
   }
 }

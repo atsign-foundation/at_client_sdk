@@ -2,9 +2,11 @@ import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_utils/at_logger.dart';
 
 class NotificationResponseParser extends DefaultResponseParser {
-  List<AtNotification> getAtNotifications(AtResponse response) {
+  final _logger = AtSignLogger('NotificationResponseParser');
+  Future<List<AtNotification>> getAtNotifications(AtResponse response) async {
     final notificationList = <AtNotification>[];
     if (response.isError) {
       return [];

@@ -32,9 +32,9 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -274,7 +274,7 @@ class AtClientImpl implements AtClient {
     var scanResult = await getSecondary().executeVerb(builder);
     scanResult = _formatResult(scanResult);
     var result = [];
-    if (scanResult != null && scanResult.isNotEmpty) {
+    if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
     return result as FutureOr<List<String>>;
@@ -541,7 +541,7 @@ class AtClientImpl implements AtClient {
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
-      if (streamResult != null && streamResult.startsWith('stream:done')) {
+      if (streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;
       }
@@ -642,34 +642,36 @@ class AtClientImpl implements AtClient {
     var fileStatuses = <FileStatus>[];
     for (var file in files) {
       var fileStatus = FileStatus(
-        fileName: file.path.split('/').last,
+        fileName: file.path.split(Platform.pathSeparator).last,
         isUploaded: false,
         size: await file.length(),
       );
       try {
-        var encryptedFile = _encryptionService!.encryptFile(
-          file.readAsBytesSync(),
-          encryptionKey,
-        );
-        var response = await FileTransferService().uploadToFileBin(
+        final encryptedFile = await _encryptionService!.encryptFileInChunks(
+            file, encryptionKey, _preference!.fileEncryptionChunkSize);
+        var response =
+            await FileTransferService().uploadToFileBinWithStreamedRequest(
           encryptedFile,
           transferId,
           fileStatus.fileName!,
         );
-        if (response is http.Response && response.statusCode == 201) {
-          Map fileInfo = jsonDecode(response.body);
-          // changing file name if it's not url friendly
-          fileStatus.fileName = fileInfo['file']['filename'];
+        encryptedFile.deleteSync();
+        if (response != null && response.statusCode == 201) {
+          final responseStr = await response.stream.bytesToString();
+          var responseMap = jsonDecode(responseStr);
+          fileStatus.fileName = responseMap['file']['filename'];
           fileStatus.isUploaded = true;
         }
 
         // storing sent files in a a directory.
         if (preference?.downloadPath != null) {
-          var sentFilesDirectory =
-              await Directory(preference!.downloadPath! + '/sent-files')
-                  .create();
-          await File(file.path)
-              .copy(sentFilesDirectory.path + '/${fileStatus.fileName}');
+          var sentFilesDirectory = await Directory(preference!.downloadPath! +
+                  Platform.pathSeparator +
+                  'sent-files')
+              .create();
+          await File(file.path).copy(sentFilesDirectory.path +
+              Platform.pathSeparator +
+              (fileStatus.fileName ?? ''));
         }
       } on Exception catch (e) {
         fileStatus.error = e.toString();
@@ -718,13 +720,17 @@ class AtClientImpl implements AtClient {
     var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
-        var decryptedFile = _encryptionService!.decryptFile(
-            File(encryptedFile.path).readAsBytesSync(),
-            fileTransferObject.fileEncryptionKey);
-        var downloadedFile =
-            File(downloadPath + '/' + encryptedFile.path.split('/').last);
-        downloadedFile.writeAsBytesSync(decryptedFile);
-        downloadedFiles.add(downloadedFile);
+        var decryptedFile = await _encryptionService!.decryptFileInChunks(
+            File(encryptedFile.path),
+            fileTransferObject.fileEncryptionKey,
+            _preference!.fileEncryptionChunkSize);
+        decryptedFile.copySync(downloadPath +
+            Platform.pathSeparator +
+            encryptedFile.path.split(Platform.pathSeparator).last);
+        downloadedFiles.add(File(downloadPath +
+            Platform.pathSeparator +
+            encryptedFile.path.split(Platform.pathSeparator).last));
+        decryptedFile.deleteSync();
       }
       // deleting temp directory
       Directory(fileDownloadReponse.filePath!).deleteSync(recursive: true);
@@ -796,6 +802,7 @@ class AtClientImpl implements AtClient {
     notificationParams.atKey.sharedBy ??= currentAtSign;
 
     var builder = NotifyVerbBuilder()
+      ..id = notificationParams.id
       ..atKey = notificationParams.atKey.key
       ..sharedBy = notificationParams.atKey.sharedBy
       ..sharedWith = notificationParams.atKey.sharedWith
@@ -805,7 +812,8 @@ class AtClientImpl implements AtClient {
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
       ..notifier = notificationParams.notifier;
-
+    // if no metadata is set by the app, init empty metadata
+    notificationParams.atKey.metadata ??= Metadata();
     // If value is not null, encrypt the value
     if (notificationParams.value != null &&
         notificationParams.value!.isNotEmpty) {
@@ -814,10 +822,10 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          builder.value = await _encryptionService!.encrypt(
-              notificationParams.atKey.key,
-              notificationParams.value!,
-              notificationParams.atKey.sharedWith!);
+          final atKeyEncryption = AtKeyEncryptionManager.get(
+              notificationParams.atKey, currentAtSign!);
+          builder.value = await atKeyEncryption.encrypt(
+              notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
           var errorCode = AtClientExceptionUtil.getErrorCode(e);
           return Future.error(AtClientException(errorCode, e.message));
@@ -826,8 +834,15 @@ class AtClientImpl implements AtClient {
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
-        builder.value = await _encryptionService!.encryptForSelf(
-            notificationParams.atKey.key, notificationParams.value!);
+        try {
+          final atKeyEncryption = AtKeyEncryptionManager.get(
+              notificationParams.atKey, currentAtSign!);
+          builder.value = await atKeyEncryption.encrypt(
+              notificationParams.atKey, notificationParams.value!);
+        } on KeyNotFoundException catch (e) {
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(errorCode, e.message));
+        }
       }
     }
     // If metadata is not null, add metadata to notify builder object.
@@ -837,6 +852,9 @@ class AtClientImpl implements AtClient {
       builder.ttr = notificationParams.atKey.metadata!.ttr;
       builder.ccd = notificationParams.atKey.metadata!.ccd;
       builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
+      builder.sharedKeyEncrypted =
+          notificationParams.atKey.metadata!.sharedKeyEnc;
+      builder.pubKeyChecksum = notificationParams.atKey.metadata!.pubKeyCS;
     }
     if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
         notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
