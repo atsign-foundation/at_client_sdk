@@ -312,8 +312,10 @@ class AtClientImpl implements AtClient {
       {bool isDedicated = false}) async {
     AtResponse atResponse = AtResponse();
     // If the value is neither String nor List<int> throw exception
-    if(value is! String && value is! List<int>){
+    if (value is! String && value is! List<int>) {
       // TODO: Throw AtValueException
+      throw AtClientException('AT014',
+          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
     }
     if (value is String) {
       atResponse = await putText(atKey, value);
@@ -331,7 +333,7 @@ class AtClientImpl implements AtClient {
     atKey.metadata ??= Metadata();
     // Setting metadata.isBinary to false for putText
     atKey.metadata!.isBinary = false;
-    return _putInternal(atKey, value);
+    return await _putInternal(atKey, value);
   }
 
   /// put's the binary data(e.g. images, files etc) into the keystore
@@ -342,12 +344,12 @@ class AtClientImpl implements AtClient {
     // Setting metadata.isBinary to true for putBinary
     atKey.metadata!.isBinary = true;
     // Base2e15.encode method converts the List<int> type to String.
-    return _putInternal(atKey, Base2e15.encode(value));
+    return await _putInternal(atKey, Base2e15.encode(value));
   }
 
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
     // Performs the put request validations.
-    AtClientValidation.validatePutRequest(atKey, value);
+    AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
     if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
       atKey.sharedBy =

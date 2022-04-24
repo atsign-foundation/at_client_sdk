@@ -70,10 +70,10 @@ class AtClientValidation {
   }
 
   /// Performs the validations on the PutRequest
-  static void validatePutRequest(AtKey atKey, dynamic value) {
+  static void validatePutRequest(
+      AtKey atKey, dynamic value, AtClientPreference atClientPreference) {
     // If length of value exceeds maxDataSize, throw AtClientException
-    if (value.length >
-        AtClientManager.getInstance().atClient.getPreferences()!.maxDataSize) {
+    if (value.length > atClientPreference.maxDataSize) {
       // TODO Throw AtValueException or BufferOverFlowException
       throw AtClientException('AT0005', 'BufferOverFlowException');
     }
@@ -84,13 +84,8 @@ class AtClientValidation {
     }
     // If namespace is not set on key and in preferences, throw exception
     if ((atKey.namespace == null || atKey.namespace!.isEmpty) &&
-        (AtClientManager.getInstance().atClient.getPreferences()!.namespace ==
-                null ||
-            AtClientManager.getInstance()
-                .atClient
-                .getPreferences()!
-                .namespace!
-                .isEmpty)) {
+        (atClientPreference.namespace == null ||
+            atClientPreference.namespace!.isEmpty)) {
       // TODO Throw AtKeyException
       throw AtClientException('AT0014', 'namespace is mandatory');
     }

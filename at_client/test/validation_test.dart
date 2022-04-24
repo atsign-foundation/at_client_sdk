@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -21,15 +22,14 @@ void main() {
     });
 
     test('A test to validate cached key passed to put method', () async {
-      var atClientImpl =
-          await AtClientImpl.create('@bob', 'wavi', AtClientPreference());
       expect(
-          () => atClientImpl.put(
+          () => AtClientValidation.validatePutRequest(
               AtKey()
                 ..key = 'phone'
                 ..sharedWith = '@alice'
                 ..metadata = (Metadata()..isCached = true),
-              '+91 984822334'),
+              '+91 984822334',
+              AtClientPreference()),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
               e.errorMessage == 'User cannot create a cached key')));
