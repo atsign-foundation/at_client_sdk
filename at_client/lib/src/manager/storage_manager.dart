@@ -25,7 +25,6 @@ class StorageManager {
 
   Future<void> _initStorage(
       String currentAtSign, List<int>? keyStoreSecret) async {
-    print('initializing storage');
     var storagePath = preferences!.hiveStoragePath;
     var commitLogPath = preferences!.commitLogPath;
 
