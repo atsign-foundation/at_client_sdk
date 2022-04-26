@@ -294,7 +294,6 @@ class SyncManager {
             await SyncUtil.updateCommitEntry(
                 entry, int.parse(serverCommitId), _atSign!);
             pushedCount--;
-            print('pushedCount:$pushedCount');
             if (pushedCount == 0) syncDone = true;
             break;
         }
@@ -506,7 +505,6 @@ class SyncManager {
       });
       _isScheduled = true;
     } on Exception catch (e) {
-      print('Exception during scheduleSyncTask ${e.toString()}');
     }
   }
 }

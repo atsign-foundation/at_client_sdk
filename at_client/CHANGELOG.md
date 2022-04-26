@@ -1,3 +1,7 @@
+## 3.0.20
+- Remove print statements
+## 3.0.19
+- Update at_commons,at_persistence and at_lookup version to remove print statements
 ## 3.0.18
 - Generate Notification id in SDK
 ## 3.0.17

@@ -508,8 +508,8 @@ class EncryptionService {
         readBytes += chunkSize;
       }
     } on Exception catch (e, trace) {
-      print(e);
-      print(trace);
+      logger.severe(e);
+      logger.severe(trace);
     }
     return encryptedFile;
   }
@@ -532,8 +532,8 @@ class EncryptionService {
         readBytes += chunkSize;
       }
     } on Exception catch (e, trace) {
-      print(e);
-      print(trace);
+      logger.severe(e);
+      logger.severe(trace);
     }
     return decryptedFile;
   }
