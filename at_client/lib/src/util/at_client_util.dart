@@ -24,6 +24,7 @@ class AtClientUtil {
     return updateKey;
   }
 
+  @Deprecated('use RemoteSecondary.findSecondaryUrl')
   static Future<String> findSecondary(
       String toAtSign, String rootDomain, int rootPort) async {
     var secondaryUrl =
