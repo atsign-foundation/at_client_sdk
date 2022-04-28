@@ -3,13 +3,10 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
-class MockAtClientManager extends Mock implements AtClientManager {}
-
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
 
 void main() {
-  AtClientManager mockAtClientManager = MockAtClientManager();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   SecondaryAddress fakeSecondaryAddress =
@@ -19,23 +16,31 @@ void main() {
   String atsign = '@remoteSecondaryTest';
   AtClientPreference atClientPreference = AtClientPreference();
   atClientPreference.privateKey = fakePrivateKey;
+  RemoteSecondary remoteSecondary = RemoteSecondary(atsign, atClientPreference);
 
   group('tests to verify functionality of remote secondary', () {
     setUp(() {
-      reset(mockAtClientManager);
-      when(() => AtClientManager.getInstance()).thenReturn(mockAtClientManager);
-      // when(() => AtClientManager.getInstance().secondaryAddressFinder)
-      //     .thenReturn(mockSecondaryAddressFinder);
-      when(() async => await AtClientManager.getInstance()
+      reset(mockSecondaryAddressFinder);
+      when(() => AtClientManager.getInstance().secondaryAddressFinder)
+          .thenReturn(mockSecondaryAddressFinder);
+      when(() async => await mockSecondaryAddressFinder.findSecondary(atsign))
+          .thenAnswer((_) async => fakeSecondaryAddress);
+      //or
+      when(() => AtClientManager.getInstance()
               .secondaryAddressFinder
               ?.findSecondary(atsign))
-          .thenAnswer((_) async => fakeSecondaryAddress);
+          .thenAnswer((invocation) async => fakeSecondaryAddress);
     });
     test('test findSecondaryUrl', () async {
-      SecondaryAddress? secondaryAddress = await AtClientManager.getInstance()
+      // SecondaryAddress? secondaryAddress = await AtClientManager.getInstance()
+      //     .secondaryAddressFinder
+      //     ?.findSecondary(atsign);
+      // String? secondaryAddress = await remoteSecondary.findSecondaryUrl();
+      // expect(secondaryAddress, fakeSecondaryAddress.toString());
+      var address = await AtClientManager.getInstance()
           .secondaryAddressFinder
           ?.findSecondary(atsign);
-      expect(secondaryAddress, fakeSecondaryAddress);
+      expect(address, fakeSecondaryAddress);
     });
   });
 }
