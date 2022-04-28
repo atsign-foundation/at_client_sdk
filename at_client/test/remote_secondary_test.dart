@@ -16,31 +16,22 @@ void main() {
   String atsign = '@remoteSecondaryTest';
   AtClientPreference atClientPreference = AtClientPreference();
   atClientPreference.privateKey = fakePrivateKey;
-  RemoteSecondary remoteSecondary = RemoteSecondary(atsign, atClientPreference);
 
   group('tests to verify functionality of remote secondary', () {
     setUp(() {
       reset(mockSecondaryAddressFinder);
-      when(() => AtClientManager.getInstance().secondaryAddressFinder)
-          .thenReturn(mockSecondaryAddressFinder);
-      when(() async => await mockSecondaryAddressFinder.findSecondary(atsign))
-          .thenAnswer((_) async => fakeSecondaryAddress);
-      //or
-      when(() => AtClientManager.getInstance()
-              .secondaryAddressFinder
-              ?.findSecondary(atsign))
+      when(() => mockSecondaryAddressFinder.findSecondary(atsign))
           .thenAnswer((invocation) async => fakeSecondaryAddress);
+      AtClientManager.getInstance().secondaryAddressFinder =
+          mockSecondaryAddressFinder;
     });
     test('test findSecondaryUrl', () async {
-      // SecondaryAddress? secondaryAddress = await AtClientManager.getInstance()
-      //     .secondaryAddressFinder
-      //     ?.findSecondary(atsign);
-      // String? secondaryAddress = await remoteSecondary.findSecondaryUrl();
-      // expect(secondaryAddress, fakeSecondaryAddress.toString());
       var address = await AtClientManager.getInstance()
           .secondaryAddressFinder
           ?.findSecondary(atsign);
-      expect(address, fakeSecondaryAddress);
+      expect(address, isNotNull);
+      expect(address!.port, fakeSecondaryAddress.port);
+      expect(address.host, fakeSecondaryAddress.host);
     });
   });
 }
