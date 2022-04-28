@@ -3,15 +3,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_base2e15/at_base2e15.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/exception/at_client_error_codes.dart';
-import 'package:at_client/src/exception/at_client_exception_util.dart';
+import 'package:at_client/src/exception/at_exception_manager.dart';
+import 'package:at_client/src/exception/error_message.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
@@ -24,6 +28,7 @@ import 'package:at_client/src/transformer/request_transformer/get_request_transf
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -233,25 +238,45 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
-    // validate the get request.
-    await AtClientValidation.validateAtKey(atKey);
-    // Get the verb builder for the atKey
-    var verbBuilder = GetRequestTransformer().transform(atKey);
-    // Execute the verb.
-    var getResponse = await SecondaryManager.getSecondary(verbBuilder)
-        .executeVerb(verbBuilder);
-    // Return empty value if getResponse is null.
-    if (getResponse == null ||
-        getResponse.isEmpty ||
-        getResponse == 'data:null') {
-      return AtValue();
+    AtValue atValue = AtValue();
+    try {
+      // validate the get request.
+      await AtClientValidation.validateAtKey(atKey);
+      // Get the verb builder for the atKey
+      var verbBuilder = GetRequestTransformer().transform(atKey);
+      // Execute the verb.
+      var getResponse = await SecondaryManager.getSecondary(verbBuilder)
+          .executeVerb(verbBuilder);
+      // Return empty value if getResponse is null.
+      if (getResponse == null ||
+          getResponse.isEmpty ||
+          getResponse == 'data:null') {
+        return AtValue();
+      }
+      // Send AtKey and AtResponse to transform the response to AtValue.
+      var getResponseTuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two = (getResponse);
+      // Transform the response and return
+      atValue = await GetResponseTransformer().transform(getResponseTuple);
+    } on AtException catch (e) {
+      // If ContextParams is not set on exception, Sets a contextParams
+      e.contextParams ??= ContextParams();
+      // Set key, currentAtSign and sharedWith to contextParams
+      e.contextParams
+        ?..key = atKey.key!
+        ..currentAtSign = atKey.sharedBy!
+        ..receiverAtSign = atKey.sharedWith;
+      // Defaults the intent to localLocalUp.
+      Intent intent = Intent.localLookup;
+      // If the exception scenario is remoteVerb, set the intent to remoteLookup
+      if (e.contextParams?.exceptionScenario ==
+          ExceptionScenario.remoteVerbExecutionFailed) {
+        intent = Intent.remoteLookup;
+      }
+      throw AtExceptionManager.getInstance().createException(intent, e);
     }
-    // Send AtKey and AtResponse to transform the response to AtValue.
-    var getResponseTuple = Tuple<AtKey, String>()
-      ..one = atKey
-      ..two = (getResponse);
-    // Transform the response and return
-    return GetResponseTransformer().transform(getResponseTuple);
+    return atValue;
   }
 
   @override
@@ -311,17 +336,28 @@ class AtClientImpl implements AtClient {
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
     AtResponse atResponse = AtResponse();
-    // If the value is neither String nor List<int> throw exception
-    if (value is! String && value is! List<int>) {
-      // TODO: Throw AtValueException
-      throw AtClientException('AT014',
-          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
-    }
-    if (value is String) {
-      atResponse = await putText(atKey, value);
-    }
-    if (value is List<int>) {
-      atResponse = await putBinary(atKey, value);
+    try {
+      // If the value is neither String nor List<int> throw exception
+      if (value is! String && value is! List<int>) {
+        throw AtValueException(
+            'Invalid value type found ${value.runtimeType}. Expected String or List<int>')
+          ..contextParams = (ContextParams()
+            ..exceptionScenario = ExceptionScenario.invalidValueProvided);
+      }
+      if (value is String) {
+        atResponse = await putText(atKey, value);
+      }
+      if (value is List<int>) {
+        atResponse = await putBinary(atKey, value);
+      }
+    } on AtException catch (e) {
+      e.contextParams ??= ContextParams();
+      e.contextParams
+        ?..key = atKey.key!
+        ..currentAtSign = currentAtSign!
+        ..receiverAtSign = atKey.sharedWith;
+      throw AtExceptionManager.getInstance()
+          .createException(Intent.shareData, e);
     }
     return atResponse.response.isNotEmpty;
   }
@@ -329,27 +365,45 @@ class AtClientImpl implements AtClient {
   /// put's the text data into the keystore
   @override
   Future<AtResponse> putText(AtKey atKey, String value) async {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
-    // Setting metadata.isBinary to false for putText
-    atKey.metadata!.isBinary = false;
-    return await _putInternal(atKey, value);
+    try {
+      // Set the default metadata if not already set.
+      atKey.metadata ??= Metadata();
+      // Setting metadata.isBinary to false for putText
+      atKey.metadata!.isBinary = false;
+      return await _putInternal(atKey, value);
+    } on AtException catch (e) {
+      e.contextParams ??= ContextParams();
+      e.contextParams
+        ?..key = atKey.key!
+        ..currentAtSign = currentAtSign!
+        ..receiverAtSign = atKey.sharedWith;
+      throw AtExceptionManager.getInstance()
+          .createException(Intent.shareData, e);
+    }
   }
 
   /// put's the binary data(e.g. images, files etc) into the keystore
   @override
   Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
-    // Setting metadata.isBinary to true for putBinary
-    atKey.metadata!.isBinary = true;
-    // Base2e15.encode method converts the List<int> type to String.
-    return await _putInternal(atKey, Base2e15.encode(value));
+    try {
+      // Set the default metadata if not already set.
+      atKey.metadata ??= Metadata();
+      // Setting metadata.isBinary to true for putBinary
+      atKey.metadata!.isBinary = true;
+      // Base2e15.encode method converts the List<int> type to String.
+      return await _putInternal(atKey, Base2e15.encode(value));
+    } on AtException catch (e) {
+      e.contextParams ??= ContextParams();
+      e.contextParams
+        ?..key = atKey.key!
+        ..currentAtSign = currentAtSign!
+        ..receiverAtSign = atKey.sharedWith;
+      throw AtExceptionManager.getInstance()
+          .createException(Intent.shareData, e);
+    }
   }
 
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
-    // Performs the put request validations.
-    AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
     if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
       atKey.sharedBy =
@@ -359,6 +413,8 @@ class AtClientImpl implements AtClient {
     if (atKey.metadata!.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
     }
+    // Performs the put request validations.
+    AtClientValidation.validatePutRequest(atKey, value, preference!);
     // validate the atKey
     // Setting the validateOwnership to true to perform KeyOwnerShip validation and
     // KeyShare validation
@@ -370,7 +426,9 @@ class AtClientImpl implements AtClient {
     // If the validationResult.isValid is false, validation of AtKey failed.
     // throw AtClientException with failure reason.
     if (!validationResult.isValid) {
-      throw AtClientException('AT0014', validationResult.failureReason);
+      throw AtKeyException(validationResult.failureReason)
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.invalidKeyFormed);
     }
 
     var tuple = Tuple<AtKey, dynamic>()
@@ -450,7 +508,7 @@ class AtClientImpl implements AtClient {
       var notifyList = await getRemoteSecondary()!.executeVerb(builder);
       return notifyList;
     } on AtLookUpException catch (e) {
-      throw AtClientException(e.errorCode, e.errorMessage);
+      throw AtClientException(e.errorMessage);
     }
   }
 
@@ -707,7 +765,7 @@ class AtClientImpl implements AtClient {
     try {
       if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
         _logger.severe("FileTransferObject is null");
-        throw AtClientException("AT0014", "FileTransferObject is null");
+        throw AtClientException("FileTransferObject is null");
       }
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value))!;
@@ -764,8 +822,9 @@ class AtClientImpl implements AtClient {
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
-      throw AtClientException(
-          atClientErrorCodes['AtClientException'], 'No network availability');
+      throw AtClientException('No network availability')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.noNetworkConnectivity);
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
@@ -791,7 +850,7 @@ class AtClientImpl implements AtClient {
             ..atSign = currentAtSign
             ..validateOwnership = true);
       if (!validationResult.isValid) {
-        throw AtClientException('AT0014', validationResult.failureReason);
+        throw AtClientException(validationResult.failureReason);
       }
     }
     // validate metadata
@@ -830,8 +889,7 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(errorCode, e.message));
+          return Future.error(AtClientException(e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
@@ -843,8 +901,7 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(errorCode, e.message));
+          return Future.error(AtClientException(e.message));
         }
       }
     }

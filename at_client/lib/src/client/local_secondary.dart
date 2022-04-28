@@ -1,7 +1,10 @@
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -54,7 +57,13 @@ class LocalSecondary implements Secondary {
     } on AtLookUpException catch (e) {
       // Catches AtLookupException and
       // converts to AtClientException. rethrows any other exception.
-      throw (AtClientException(e.errorCode, e.errorMessage));
+      throw AtClientException(e.errorMessage)
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.localVerbExecutionFailed);
+    } on AtException catch (e) {
+      throw AtClientException(e.message)
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.localVerbExecutionFailed);
     }
     return verbResult;
   }

@@ -1,14 +1,15 @@
-import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:crypto/crypto.dart';
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart';
-import 'package:crypto/crypto.dart';
-import 'package:at_utils/at_logger.dart';
 
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
+
   static String generateAESKey() {
     var aesKey = AES(Key.fromSecureRandom(32));
     var keyString = aesKey.key.base64;
@@ -31,11 +32,15 @@ class EncryptionUtil {
     } on Exception catch (e, trace) {
       _logger
           .severe('Exception while decrypting value: ${e.toString()} $trace');
-      throw AtKeyException(e.toString());
+      throw AtDecryptionException(e.toString())
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     } on Error catch (e, trace) {
       // Catching error since underlying decryption library may throw Error e.g corrupt pad block
       _logger.severe('Error while decrypting value: ${e.toString()} $trace');
-      throw AtKeyException(e.toString());
+      throw AtDecryptionException(e.toString())
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
   }
 

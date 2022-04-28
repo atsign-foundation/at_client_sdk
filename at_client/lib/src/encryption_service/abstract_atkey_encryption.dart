@@ -1,8 +1,10 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
+import 'package:at_client/src/exception/error_message.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -152,8 +154,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
     if (sharedWithPublicKey.isEmpty || sharedWithPublicKey == 'data:null') {
-      throw KeyNotFoundException(
-          'public key not found. data sharing is forbidden.');
+      throw KeyNotFoundException(ErrorMessage.msgPublicKeyNotFound)
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.keyNotFound);
     }
     //Cache the sharedWithPublicKey and return public key of sharedWith atSign
     var sharedWithPublicKeyBuilder = UpdateVerbBuilder()

@@ -16,8 +16,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
   @override
   Future decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw IllegalArgumentException(
-          'Decryption failed. Encrypted value is null');
+      throw AtDecryptionException('Decryption failed. Encrypted value is null')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
     String? encryptedSharedKey;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
@@ -30,8 +31,10 @@ class SharedKeyDecryption implements AtKeyDecryption {
       if (currentAtSignPublicKey != null &&
           atKey.metadata!.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
-        throw AtClientException(error_codes['AtClientException'],
-            'Public key has changed. Cannot decrypt shared data- ${atKey.key}');
+        throw AtPublicKeyChangeException(
+            'Public key has changed. Cannot decrypt shared data- ${atKey.key}')
+          ..contextParams = (ContextParams()
+            ..exceptionScenario = ExceptionScenario.decryptionFailed);
       }
     } else {
       encryptedSharedKey = await _getEncryptedSharedKey(atKey);
@@ -39,14 +42,18 @@ class SharedKeyDecryption implements AtKeyDecryption {
     if (encryptedSharedKey == null ||
         encryptedSharedKey.isEmpty ||
         encryptedSharedKey == 'null') {
-      throw KeyNotFoundException('shared encryption key not found');
+      throw KeyNotFoundException('shared encryption key not found')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
     var currentAtSignPrivateKey = await (AtClientManager.getInstance()
         .atClient
         .getLocalSecondary()!
         .getEncryptionPrivateKey());
     if (currentAtSignPrivateKey == null || currentAtSignPrivateKey.isEmpty) {
-      throw KeyNotFoundException('encryption private not found');
+      throw KeyNotFoundException('encryption private not found')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
     return EncryptionUtil.decryptValue(encryptedValue,
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey));

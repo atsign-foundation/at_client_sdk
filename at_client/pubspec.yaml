@@ -43,10 +43,7 @@ dependency_overrides:
   #      path: at_utils
   #      ref: trunk
   at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: implement_toString
+    path: ../../at_tools/at_commons
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
