@@ -85,23 +85,5 @@ void main() {
       expect(result, 'lookup data stub');
     });
 
-    test('test isAvailable', () async {
-      InternetAddress internetAddress =
-          InternetAddress('1.2.3.4', type: InternetAddressType.IPv4);
-      AddressCheckOptions fakeAddressCheckOptions =
-          AddressCheckOptions(internetAddress, port: fakeSecondaryAddress.port);
-      List<InternetAddress> fakeInternetAddressList = [internetAddress];
-      when(() => InternetAddress.lookup(fakeSecondaryAddress.host)) //tried any().lookup() which was returning a noSuchMethod error
-          .thenAnswer((_) async => fakeInternetAddressList);
-      when(() => mockInternetConnectionChecker
-              .isHostReachable(fakeAddressCheckOptions))
-          .thenAnswer(
-              (_) async => AddressCheckResult(fakeAddressCheckOptions, true));
-
-      RemoteSecondary remoteSecondary =
-          RemoteSecondary(atsign, atClientPreference);
-      bool result = await remoteSecondary.isAvailable();
-      expect(result, true);
-    });
   });
 }
