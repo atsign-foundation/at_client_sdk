@@ -91,7 +91,7 @@ void main() {
       AddressCheckOptions fakeAddressCheckOptions =
           AddressCheckOptions(internetAddress, port: fakeSecondaryAddress.port);
       List<InternetAddress> fakeInternetAddressList = [internetAddress];
-      when(() => InternetAddress.lookup(fakeSecondaryAddress.host))
+      when(() => InternetAddress.lookup(fakeSecondaryAddress.host)) //tried any().lookup() which was returning a noSuchMethod error
           .thenAnswer((_) async => fakeInternetAddressList);
       when(() => mockInternetConnectionChecker
               .isHostReachable(fakeAddressCheckOptions))
