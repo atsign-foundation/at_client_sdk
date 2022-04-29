@@ -12,10 +12,15 @@ class MockSecondaryAddressFinder extends Mock
 
 class MockAtLookUp extends Mock implements AtLookupImpl {}
 
+class MockInternetConnectionChecker extends Mock
+    implements InternetConnectionChecker {}
+
 void main() {
   AtLookupImpl mockAtLookUp = MockAtLookUp();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
+  InternetConnectionChecker mockInternetConnectionChecker =
+      MockInternetConnectionChecker();
   SecondaryAddress fakeSecondaryAddress =
       SecondaryAddress('fake.secondary.address', 8010);
   String fakePrivateKey =
@@ -28,6 +33,7 @@ void main() {
     setUp(() {
       reset(mockSecondaryAddressFinder);
       reset(mockAtLookUp);
+      reset(mockInternetConnectionChecker);
       when(() => mockSecondaryAddressFinder.findSecondary(atsign))
           .thenAnswer((_) async => fakeSecondaryAddress);
       AtClientManager.getInstance().secondaryAddressFinder =
@@ -80,15 +86,18 @@ void main() {
     });
 
     test('test isAvailable', () async {
-      AddressCheckOptions fakeAddressCheckOptions = AddressCheckOptions(
-          (await InternetAddress.lookup(fakeSecondaryAddress.host))[0],
-          port: fakeSecondaryAddress.port);
-      List<InternetAddress> fakeInternetAddressList = [ ];
-      when(() => any().isHostReachable(fakeAddressCheckOptions)).thenAnswer(
-          (_) async => AddressCheckResult(fakeAddressCheckOptions, true));
-      when(() => any().lookup(fakeSecondaryAddress.host))
+      InternetAddress internetAddress =
+          InternetAddress('1.2.3.4', type: InternetAddressType.IPv4);
+      AddressCheckOptions fakeAddressCheckOptions =
+          AddressCheckOptions(internetAddress, port: fakeSecondaryAddress.port);
+      List<InternetAddress> fakeInternetAddressList = [internetAddress];
+      when(() => InternetAddress.lookup(fakeSecondaryAddress.host))
           .thenAnswer((_) async => fakeInternetAddressList);
-      print(any().lookup(fakeSecondaryAddress.host));
+      when(() => mockInternetConnectionChecker
+              .isHostReachable(fakeAddressCheckOptions))
+          .thenAnswer(
+              (_) async => AddressCheckResult(fakeAddressCheckOptions, true));
+
       RemoteSecondary remoteSecondary =
           RemoteSecondary(atsign, atClientPreference);
       bool result = await remoteSecondary.isAvailable();
