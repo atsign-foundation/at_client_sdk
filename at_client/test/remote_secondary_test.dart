@@ -84,6 +84,5 @@ void main() {
       String result = await remoteSecondary.executeAndParse(lookupVerbBuilder);
       expect(result, 'lookup data stub');
     });
-
   });
 }
