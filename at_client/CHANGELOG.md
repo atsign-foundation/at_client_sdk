@@ -1,3 +1,5 @@
+## 3.0.22
+- Fix for getKeys in local secondary not returning keys
 ## 3.0.21
 - Cache secondary url returned by root server
 ## 3.0.20
