@@ -1,3 +1,5 @@
+## 3.0.21
+- Cache secondary url returned by root server
 ## 3.0.20
 - Remove print statements
 ## 3.0.19
