@@ -1,6 +1,5 @@
-import 'package:at_client/src/exception/at_client_error_codes.dart';
-
-@Deprecated('Moving this to at_commons package')
+@Deprecated(
+    'Moved AtClientException to at_commons package [at_commons/src/exception/at_exceptions.dart]')
 class AtClientException implements Exception {
   String? errorCode;
   String? errorMessage;
@@ -13,8 +12,8 @@ class AtClientException implements Exception {
   }
 }
 
-@Deprecated('Moving this to at_commons package')
+@Deprecated(
+    'Moved AtKeyException to at_commons package [at_commons/src/exception/at_exceptions.dart]')
 class AtKeyException extends AtClientException {
-  AtKeyException(message)
-      : super(atClientErrorCodes['AtKeyException'], message);
+  AtKeyException(message) : super('AT0023', message);
 }
