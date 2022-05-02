@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -48,7 +48,9 @@ class AtClientValidation {
       throw AtKeyException('@sign cannot be empty');
     }
     try {
-      await AtClientManager.getInstance().secondaryAddressFinder!.findSecondary(atSign);
+      await AtClientManager.getInstance()
+          .secondaryAddressFinder!
+          .findSecondary(atSign);
     } on SecondaryNotFoundException {
       rethrow;
     }

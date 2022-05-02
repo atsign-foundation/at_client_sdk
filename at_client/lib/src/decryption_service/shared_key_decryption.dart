@@ -30,7 +30,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
       if (currentAtSignPublicKey != null &&
           atKey.metadata!.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
-        throw AtClientException(error_codes['AtClientException'],
+        throw AtPublicKeyChangeException(
             'Public key has changed. Cannot decrypt shared data- ${atKey.key}');
       }
     } else {
