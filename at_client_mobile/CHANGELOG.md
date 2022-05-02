@@ -1,3 +1,5 @@
+## 3.1.14
+- at_client version upgrade for localSecondary.getKeys not returning empty list
 ## 3.1.13
 - at_client version upgrade for generating notification id in SDK
 ## 3.1.12
