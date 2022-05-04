@@ -13,25 +13,24 @@ class SelfKeyEncryption implements AtKeyEncryption {
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     if (value is! String) {
       throw AtEncryptionException(
-          'Invalid value type found: ${value.runtimeType}. Valid value type is String');
+          'Invalid value type found: ${value.runtimeType}. Valid value type is String')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.invalidValueProvided);
     }
-    try {
-      // Get AES key for current atSign
-      var selfEncryptionKey = await _getSelfEncryptionKey();
-      if (selfEncryptionKey == null ||
-          selfEncryptionKey.isEmpty ||
-          selfEncryptionKey == 'data:null') {
-        throw KeyNotFoundException(
-            'Self encryption key is not set for atSign ${atKey.sharedBy}');
-      }
-      selfEncryptionKey =
-          DefaultResponseParser().parse(selfEncryptionKey).response;
-      // Encrypt value using sharedKey
-      return EncryptionUtil.encryptValue(value, selfEncryptionKey);
-    } on Exception catch (e) {
-      _logger.severe(
-          'Exception while encrypting value for key ${atKey.key}: ${e.toString()}');
+    // Get AES key for current atSign
+    var selfEncryptionKey = await _getSelfEncryptionKey();
+    if (selfEncryptionKey == null ||
+        selfEncryptionKey.isEmpty ||
+        selfEncryptionKey == 'data:null') {
+      throw KeyNotFoundException(
+          'Self encryption key is not set for atSign ${atKey.sharedBy}')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.invalidValueProvided);
     }
+    selfEncryptionKey =
+        DefaultResponseParser().parse(selfEncryptionKey).response;
+    // Encrypt value using sharedKey
+    return EncryptionUtil.encryptValue(value, selfEncryptionKey);
   }
 
   Future<String?> _getSelfEncryptionKey() async {

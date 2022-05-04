@@ -8,6 +8,8 @@ import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/exception/at_exception_manager.dart';
+import 'package:at_client/src/exception/error_message.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
@@ -234,25 +236,45 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
-    // validate the get request.
-    await AtClientValidation.validateAtKey(atKey);
-    // Get the verb builder for the atKey
-    var verbBuilder = GetRequestTransformer().transform(atKey);
-    // Execute the verb.
-    var getResponse = await SecondaryManager.getSecondary(verbBuilder)
-        .executeVerb(verbBuilder);
-    // Return empty value if getResponse is null.
-    if (getResponse == null ||
-        getResponse.isEmpty ||
-        getResponse == 'data:null') {
-      return AtValue();
+    AtValue atValue = AtValue();
+    try {
+      // validate the get request.
+      await AtClientValidation.validateAtKey(atKey);
+      // Get the verb builder for the atKey
+      var verbBuilder = GetRequestTransformer().transform(atKey);
+      // Execute the verb.
+      var getResponse = await SecondaryManager.getSecondary(verbBuilder)
+          .executeVerb(verbBuilder);
+      // Return empty value if getResponse is null.
+      if (getResponse == null ||
+          getResponse.isEmpty ||
+          getResponse == 'data:null') {
+        return AtValue();
+      }
+      // Send AtKey and AtResponse to transform the response to AtValue.
+      var getResponseTuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two = (getResponse);
+      // Transform the response and return
+      atValue = await GetResponseTransformer().transform(getResponseTuple);
+    } on AtException catch (e) {
+      // If ContextParams is not set on exception, Sets a contextParams
+      e.contextParams ??= ContextParams();
+      // Set key, currentAtSign and sharedWith to contextParams
+      e.contextParams
+        ?..key = atKey.key!
+        ..currentAtSign = atKey.sharedBy!
+        ..receiverAtSign = atKey.sharedWith;
+      // Defaults the intent to localLocalUp.
+      Intent intent = Intent.localLookup;
+      // If the exception scenario is remoteVerb, set the intent to remoteLookup
+      if (e.contextParams?.exceptionScenario ==
+          ExceptionScenario.remoteVerbExecutionFailed) {
+        intent = Intent.remoteLookup;
+      }
+      throw AtExceptionManager.getInstance().createException(intent, e);
     }
-    // Send AtKey and AtResponse to transform the response to AtValue.
-    var getResponseTuple = Tuple<AtKey, String>()
-      ..one = atKey
-      ..two = (getResponse);
-    // Transform the response and return
-    return GetResponseTransformer().transform(getResponseTuple);
+    return atValue;
   }
 
   @override

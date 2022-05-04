@@ -17,8 +17,9 @@ class SelfKeyDecryption implements AtKeyDecryption {
     if (encryptedValue == null ||
         encryptedValue.isEmpty ||
         encryptedValue == 'null') {
-      throw IllegalArgumentException(
-          'Decryption failed. Encrypted value is null');
+      throw AtDecryptionException('Decryption failed. Encrypted value is null')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
 
     var selfEncryptionKey = await AtClientManager.getInstance()
@@ -28,9 +29,10 @@ class SelfKeyDecryption implements AtKeyDecryption {
     if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
         selfEncryptionKey == 'data:null') {
       throw KeyNotFoundException(
-          'Decryption failed. SelfEncryptionKey not found');
+          'Decryption failed. SelfEncryptionKey not found')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
-
     return EncryptionUtil.decryptValue(encryptedValue,
         DefaultResponseParser().parse(selfEncryptionKey).response);
   }

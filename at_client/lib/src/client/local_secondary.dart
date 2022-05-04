@@ -57,7 +57,13 @@ class LocalSecondary implements Secondary {
     } on AtLookUpException catch (e) {
       // Catches AtLookupException and
       // converts to AtClientException. rethrows any other exception.
-      throw (AtClientException(e.errorMessage));
+      throw AtClientException(e.errorMessage)
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.localVerbExecutionFailed);
+    } on AtException catch (e) {
+      throw AtClientException(e.message)
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.localVerbExecutionFailed);
     }
     return verbResult;
   }

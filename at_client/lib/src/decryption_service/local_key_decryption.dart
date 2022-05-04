@@ -14,15 +14,19 @@ class LocalKeyDecryption implements AtKeyDecryption {
   @override
   Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw IllegalArgumentException(
-          'Decryption failed. Encrypted value is null');
+      throw AtDecryptionException(
+          'Decryption failed. Encrypted value is null')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
     // Get the shared key.
     var sharedKey = await AbstractAtKeyEncryption.getSharedKey(atKey);
 
     if (sharedKey.isEmpty) {
       _logger.severe('Decryption failed. SharedKey is null');
-      throw KeyNotFoundException('Decryption failed. SharedKey is null');
+      throw KeyNotFoundException('Decryption failed. SharedKey is null')
+        ..contextParams = (ContextParams()
+          ..exceptionScenario = ExceptionScenario.decryptionFailed);
     }
     return EncryptionUtil.decryptValue(encryptedValue, sharedKey);
   }
