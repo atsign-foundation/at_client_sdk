@@ -80,7 +80,7 @@ void main() {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
@@ -96,7 +96,7 @@ void main() {
     expect(getResult?.value, value);
     // looking up of cached key in the [sharedWith] atsign
     isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
@@ -150,7 +150,7 @@ void main() {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
