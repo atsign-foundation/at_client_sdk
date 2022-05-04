@@ -177,8 +177,54 @@ void main() {
         equals(getResultSharedWithAtsign?.metadata!.sharedKeyEnc));
   }, timeout: Timeout(Duration(minutes: 2)));
 
+  // 1) Create a private key
+  // 2) get all the keys using regex
+  test('Create a private key and scan', () async {
+    var uuid = Uuid();
+    // Generate  uuid
+    var randomValue = uuid.v4();
+    var authCodeKey = AtKey()
+      ..key = 'random-number$randomValue'
+      ..sharedWith = sharedWithAtSign
+      ..namespace = 'buzz'
+      ..metadata = (Metadata()..ttr = 864000);
+
+    // Appending a random number as a last number to generate a new auth-code number
+    // for each run.
+    var value = '8918219';
+    // Setting currentAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var putResult =
+        await currentAtSignClientManager?.atClient.put(authCodeKey, value);
+    expect(putResult, true);
+    var getResultCurrentAtsign =
+        await currentAtSignClientManager?.atClient.get(authCodeKey);
+    expect(getResultCurrentAtsign?.value, value);
+    var isSyncInProgress = true;
+    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    isSyncInProgress = true;
+    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 5));
+    }
+    var getKeysResult = await sharedWithAtSignClientManager?.atClient.getAtKeys(
+        regex: 'buzz', sharedWith: sharedWithAtSign, sharedBy: currentAtSign);
+    expect(getKeysResult.toString(), contains('random-number$randomValue'));
+  }, timeout: Timeout(Duration(minutes: 2)));
+
   ///  Commenting the ttl,ttb tests till the sync bug is fixed
-  
+
   /// The purpose of this test verify the following:
   /// 1. Put method - private key with ttl
   /// 2. Sync to cloud secondary
@@ -289,10 +335,9 @@ void main() {
   //     ..sharedBy = currentAtSign
   //     ..sharedWith = sharedWithAtSign;
   //   var getResult = await sharedWithAtSignClientManager?.atClient.get(getKey);
-  //   print('get Result is $getResult');
   //   expect(getResult?.value, null);
   //   //  Wait till the ttb time is reached
-  //   await Future.delayed(Duration(seconds: 5));
+  //   await Future.delayed(Duration(seconds: 2));
   //   isSyncInProgress = true;
   //   sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
   //     isSyncInProgress = false;

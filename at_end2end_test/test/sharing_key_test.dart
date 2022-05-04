@@ -129,7 +129,7 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
-    await Future.delayed(Duration(seconds: 1));
+    await Future.delayed(Duration(seconds: 2));
     var getResult = await sharedWithAtSignClientManager?.atClient.getKeys(
         regex:
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
