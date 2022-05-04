@@ -14,6 +14,16 @@ void main() {
   AtClientManager? currentAtSignClientManager, sharedWithAtSignClientManager;
   var namespace = 'wavi';
 
+  Future<void> refresh(AtClientManager? clientManager) async {
+    var isSyncInProgress = true;
+    clientManager?.syncService.sync(onDone: (syncResult) {
+      isSyncInProgress = false;
+    });
+    while (isSyncInProgress) {
+      await Future.delayed(Duration(milliseconds: 10));
+    }
+  }
+
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
@@ -24,26 +34,14 @@ void main() {
             currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     // Set Encryption Keys for currentAtSign
     await TestUtils.setEncryptionKeys(currentAtSign);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+    await refresh(currentAtSignClientManager);
     // Create atClient instance for atSign2
     sharedWithAtSignClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestUtils.getPreference(sharedWithAtSign));
     // Set Encryption Keys for sharedWithAtSign
     await TestUtils.setEncryptionKeys(sharedWithAtSign);
-    isSyncInProgress = true;
-    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+    await refresh(sharedWithAtSignClientManager);
   });
 
   /// The purpose of this test verify the following:
@@ -73,23 +71,11 @@ void main() {
         NotificationStatusEnum.delivered);
     expect(notificationResult.atKey!.key, 'loginCode$randomValue.$namespace');
     expect(notificationResult.atKey!.sharedWith, codeKey.sharedWith);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 5));
-    }
+    await refresh(currentAtSignClientManager);
     // Setting sharedWithAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    isSyncInProgress = true;
-    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+    await refresh(sharedWithAtSignClientManager);
     // Notify list result in the receiver's atsign
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
@@ -131,23 +117,11 @@ void main() {
     expect(notificationResult!.notificationStatusEnum,
         NotificationStatusEnum.delivered);
     expect(notificationResult.atKey!.key, textToShare);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 5));
-    }
+    await refresh(currentAtSignClientManager);
     // Setting sharedWithAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    isSyncInProgress = true;
-    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+    await refresh(sharedWithAtSignClientManager);
     var notifyListResult = await sharedWithAtSignClientManager?.atClient
         .notifyList(regex: textToShare);
     assert(
