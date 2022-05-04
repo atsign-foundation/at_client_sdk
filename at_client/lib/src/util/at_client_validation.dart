@@ -48,9 +48,9 @@ class AtClientValidation {
       throw AtKeyException('@sign cannot be empty');
     }
     try {
-      await AtClientUtil.findSecondary(atSign, rootDomain, rootPort);
+      await AtClientManager.getInstance().secondaryAddressFinder!.findSecondary(atSign);
     } on SecondaryNotFoundException {
-      throw AtKeyException('$atSign does not exist');
+      rethrow;
     }
   }
 
