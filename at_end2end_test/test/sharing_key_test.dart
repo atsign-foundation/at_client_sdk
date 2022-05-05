@@ -112,7 +112,7 @@ void main() {
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     await refresh(sharedWithAtSignClientManager);
     // adding a wait till the cached key gets created
-    await Future.delayed(Duration(seconds: 2));
+    await Future.delayed(Duration(seconds: 4));
     var getResult = await sharedWithAtSignClientManager?.atClient.getKeys(
         regex:
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
