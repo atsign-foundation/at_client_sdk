@@ -96,7 +96,7 @@ void main() {
     // Generate uuid
     var randomValue = uuid.v4();
     var verificationKey = AtKey()
-      ..key = 'verificationnumber$randomValue'
+      ..key = 'verify-code$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()
         ..ttr = 1000
@@ -116,6 +116,7 @@ void main() {
     var getResult = await sharedWithAtSignClientManager?.atClient.getKeys(
         regex:
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
+    print('get result is $getResult');
     expect(
         getResult?.contains(
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign'),
