@@ -185,7 +185,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     } on Exception catch (e) {
       _logger.severe(
           'Exception in sync ${syncRequest.id}. Reason ${e.toString()}');
-      syncRequest.result!.atClientException = AtClientException(e.toString());
+      syncRequest.result!.atClientException =
+          AtClientException(error_codes['AtClientException'], e.toString());
       _syncError(syncRequest);
       _syncInProgress = false;
       syncProgress.syncStatus = SyncStatus.failure;
@@ -471,7 +472,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           unCommittedEntries, serverCommitId, lastSyncedCommitId);
     } on Exception catch (e) {
       _logger.severe('exception in isInSync ${e.toString()}');
-      throw AtClientException('');
+      throw AtClientException(error_codes['AtClientException'], e.toString());
     } finally {
       remoteSecondary.atLookUp.close();
     }
