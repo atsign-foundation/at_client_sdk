@@ -33,6 +33,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/client/request_params.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -230,11 +231,11 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
+  Future<AtValue> get(AtKey atKey, {bool isDedicated = false, GetRequestParams? getRequestParams}) async {
     // validate the get request.
     await AtClientValidation.validateAtKey(atKey);
     // Get the verb builder for the atKey
-    var verbBuilder = GetRequestTransformer().transform(atKey);
+    var verbBuilder = GetRequestTransformer().transform(atKey, requestParams: getRequestParams);
     // Execute the verb.
     var getResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder);

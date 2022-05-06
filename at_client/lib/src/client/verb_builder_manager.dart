@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/request_params.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -7,27 +8,36 @@ import 'package:at_utils/at_utils.dart';
 /// Class responsible for returning the appropriate [VerbBuilder] for given [AtKey]
 class LookUpBuilderManager {
   ///Returns a [VerbBuilder] for the given AtKey instance
-  static VerbBuilder get(AtKey atKey, String currentAtSign) {
+  static VerbBuilder get(AtKey atKey, String currentAtSign,
+      {GetRequestParams? getRequestParams}) {
     // If isPublic is true in metadata, the key is a public key, return PLookupVerbHandler.
     if (atKey.sharedBy != currentAtSign &&
         (atKey.metadata != null &&
             atKey.metadata!.isPublic! &&
             !atKey.metadata!.isCached)) {
-      return PLookupVerbBuilder()
+      final plookUpVerbBuilder = PLookupVerbBuilder()
         ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..operation = 'all';
+      if (getRequestParams != null && getRequestParams.byPassCache == true) {
+        plookUpVerbBuilder.byPassCache = true;
+      }
+      return plookUpVerbBuilder;
     }
     // If sharedBy is not equal to currentAtSign and isCached is false, return LookupVerbHandler
     if (atKey.sharedBy != currentAtSign &&
         (atKey.metadata != null &&
             !atKey.metadata!.isCached &&
             !atKey.metadata!.isPublic!)) {
-      return LookupVerbBuilder()
+      final lookupVerbBuilder = LookupVerbBuilder()
         ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..auth = true
         ..operation = 'all';
+      if (getRequestParams != null && getRequestParams.byPassCache == true) {
+        lookupVerbBuilder.byPassCache = true;
+      }
+      return lookupVerbBuilder;
     }
     return LLookupVerbBuilder()
       ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
