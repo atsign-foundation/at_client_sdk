@@ -1,6 +1,6 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/response/response_parser.dart';
+import 'package:at_commons/at_commons.dart';
 
 /// The default implementation of [ResponseParser]
 class DefaultResponseParser implements ResponseParser {
@@ -48,7 +48,7 @@ class DefaultResponseParser implements ResponseParser {
       throw AtClientException(response.errorCode, response.errorDescription);
     } else {
       response.errorDescription = responseString;
-      throw AtClientException('AT0014', response.errorDescription);
+      throw AtClientException(response.errorCode, response.errorDescription);
     }
   }
 }
