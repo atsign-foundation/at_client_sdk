@@ -385,7 +385,7 @@ class AtClientImpl implements AtClient {
       var notifyList = await getRemoteSecondary()!.executeVerb(builder);
       return notifyList;
     } on AtLookUpException catch (e) {
-      throw AtClientException(e.errorMessage);
+      throw AtClientException(e.errorCode, e.errorMessage);
     }
   }
 
@@ -642,7 +642,7 @@ class AtClientImpl implements AtClient {
     try {
       if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
         _logger.severe("FileTransferObject is null");
-        throw AtClientException('FileTransferObject is null');
+        throw AtClientException('AT0014', 'FileTransferObject is null');
       }
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value))!;
@@ -699,7 +699,7 @@ class AtClientImpl implements AtClient {
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
-      throw AtClientException('No network availability');
+      throw AtClientException('AT0014', 'No network availability');
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
@@ -751,7 +751,7 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          return Future.error(AtClientException(e.message));
+          return Future.error(AtClientException('AT0014', e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
@@ -763,7 +763,7 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          return Future.error(AtClientException(e.message));
+          return Future.error(AtClientException('AT0014',e.message));
         }
       }
     }

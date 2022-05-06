@@ -39,7 +39,7 @@ class RemoteSecondary implements Secondary {
       verbResult = await atLookUp.executeVerb(builder);
       return verbResult;
     } on AtLookUpException catch (e) {
-      throw AtClientException(e.errorMessage);
+      throw AtClientException(e.errorCode, e.errorMessage);
     }
   }
 

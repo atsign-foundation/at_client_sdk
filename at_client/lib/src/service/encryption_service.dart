@@ -62,7 +62,7 @@ class EncryptionService {
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     if (sharedKey == null) {
       logger.severe('Decryption failed. SharedKey is null');
-      throw AtClientException('Decryption failed. SharedKey is null');
+      throw AtClientException('AT0014','Decryption failed. SharedKey is null');
     }
     //trying to llookup a value without shared key. throw exception or return null}
     sharedKey = sharedKey.replaceFirst('data:', '');

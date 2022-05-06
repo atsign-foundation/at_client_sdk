@@ -187,7 +187,7 @@ class NotificationServiceImpl
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.undelivered;
-      var atClientException = AtClientException('');
+      var atClientException = AtClientException('AT0014', e.toString());
       notificationResult.atClientException = atClientException;
       // Invoke onErrorCallback
       if (onError != null) {
@@ -211,7 +211,8 @@ class NotificationServiceImpl
       case 'undelivered':
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.undelivered;
-        notificationResult.atClientException = AtClientException('');
+        notificationResult.atClientException =
+            AtClientException('AT0014','Unable to connect to secondary server');
         // If onError callback is registered, invoke callback method.
         if (onError != null) {
           onError(notificationResult);
@@ -307,7 +308,8 @@ class NotificationServiceImpl
       return NotificationResult()
         ..notificationID = notificationId
         ..notificationStatusEnum = NotificationStatusEnum.undelivered
-        ..atClientException = AtClientException(atResponse.errorDescription);
+        ..atClientException = AtClientException(
+            atResponse.errorCode, atResponse.errorDescription);
     }
 
     notificationResult = NotificationResult()
