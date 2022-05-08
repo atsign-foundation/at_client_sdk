@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -87,7 +87,7 @@ class SyncUtil {
       result = await remoteSecondary.executeVerb(builder);
     } on AtClientException catch (e) {
       logger.severe(
-          'Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
+          'Exception occurred in processing stats verb ${e.message}');
     }
     result = result.replaceAll('data: ', '');
     var statsJson = JsonUtils.decodeJson(result);

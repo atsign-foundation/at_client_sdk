@@ -20,14 +20,10 @@ class StreamNotificationHandler {
   Future<void> streamAck(AtStreamNotification streamNotification,
       Function streamCompletionCallBack, streamReceiveCallBack) async {
     var streamId = streamNotification.streamId;
-    var secondaryUrl = await AtLookupImpl.findSecondary(
-        streamNotification.senderAtSign,
-        preference!.rootDomain,
-        preference!.rootPort);
-    var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
-    var host = secondaryInfo[0];
-    var port = secondaryInfo[1];
-    var socket = await SecureSocket.connect(host, int.parse(port));
+    final secondaryAddress = await AtClientManager.getInstance().secondaryAddressFinder!.findSecondary(streamNotification.senderAtSign);
+    var host = secondaryAddress.host;
+    var port = secondaryAddress.port;
+    var socket = await SecureSocket.connect(host, port);
     var f = File((preference!.downloadPath ?? '') +
         Platform.pathSeparator +
         'encrypted_${streamNotification.fileName}');

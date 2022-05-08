@@ -25,7 +25,6 @@ class StorageManager {
 
   Future<void> _initStorage(
       String currentAtSign, List<int>? keyStoreSecret) async {
-    print('initializing storage');
     var storagePath = preferences!.hiveStoragePath;
     var commitLogPath = preferences!.commitLogPath;
 
@@ -48,6 +47,7 @@ class StorageManager {
     var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)!
         .getSecondaryKeyStoreManager()!;
+    await hiveKeyStore.init();
     keyStoreManager.keyStore = hiveKeyStore;
     isStorageInitialized = true;
   }

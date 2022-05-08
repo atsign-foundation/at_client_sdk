@@ -1,3 +1,5 @@
+## 3.1.14
+- migrated to latest version of at_client
 ## 3.1.13
 - at_client version upgrade for generating notification id in SDK
 ## 3.1.12

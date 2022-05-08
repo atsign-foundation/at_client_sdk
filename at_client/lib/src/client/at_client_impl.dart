@@ -3,16 +3,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_base2e15/at_base2e15.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/exception/at_client_error_codes.dart';
-import 'package:at_client/src/exception/at_client_exception_util.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
-import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -24,6 +25,7 @@ import 'package:at_client/src/transformer/request_transformer/get_request_transf
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -707,7 +709,7 @@ class AtClientImpl implements AtClient {
     try {
       if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
         _logger.severe("FileTransferObject is null");
-        throw AtClientException("AT0014", "FileTransferObject is null");
+        throw AtClientException(error_codes['AtClientException'], 'FileTransferObject is null');
       }
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value))!;
@@ -764,8 +766,7 @@ class AtClientImpl implements AtClient {
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
-      throw AtClientException(
-          atClientErrorCodes['AtClientException'], 'No network availability');
+      throw AtClientException(error_codes['AtClientException'], 'No network availability');
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
@@ -830,8 +831,7 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(errorCode, e.message));
+          return Future.error(AtClientException(error_codes['AtClientException'], e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
@@ -843,8 +843,7 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(errorCode, e.message));
+          return Future.error(AtClientException(error_codes['AtClientException'],e.message));
         }
       }
     }

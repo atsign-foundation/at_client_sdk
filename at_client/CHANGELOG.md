@@ -1,3 +1,11 @@
+## 3.0.22
+- Fix for getKeys in local secondary not returning keys
+## 3.0.21
+- Cache secondary url returned by root server
+## 3.0.20
+- Remove print statements
+## 3.0.19
+- Update at_commons,at_persistence and at_lookup version to remove print statements
 ## 3.0.18
 - Generate Notification id in SDK
 ## 3.0.17
