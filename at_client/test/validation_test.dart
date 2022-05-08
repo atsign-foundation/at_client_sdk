@@ -1,4 +1,5 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -17,7 +18,7 @@ void main() {
               []),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
-              e.errorMessage ==
+              e.message ==
                   'Invalid value type found List<dynamic>. Expected String or List<int>')));
     });
 
@@ -32,7 +33,7 @@ void main() {
               AtClientPreference()),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
-              e.errorMessage == 'User cannot create a cached key')));
+              e.message == 'User cannot create a cached key')));
     });
   });
 }

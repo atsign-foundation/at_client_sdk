@@ -1,4 +1,5 @@
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_commons.dart';
 
