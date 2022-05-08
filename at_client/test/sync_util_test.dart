@@ -21,7 +21,7 @@ void main() {
       expect(shouldSync, false);
     });
     // The encryption public key should be sync'ed to server
-    test('sync util check encryption private key sync skip', () {
+    test('sync util check encryption public key sync skip', () {
       var shouldSync = SyncUtil.shouldSync(AT_ENCRYPTION_PUBLIC_KEY);
       expect(shouldSync, true);
     });

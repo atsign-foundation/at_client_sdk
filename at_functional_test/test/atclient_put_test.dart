@@ -8,6 +8,8 @@ import 'package:test/test.dart';
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
+/// The tests verify the put and get functionality where key is created using AtKey concrete
+/// class
 void main() {
   test('put method - create a key sharing to other atSign', () async {
     var atsign = '@alice🛠';
@@ -104,9 +106,12 @@ void main() {
     var value = _getBinaryData("/test/testData/dev.png");
     var putResult = await atClient.put(phoneKey, value);
     expect(putResult, true);
-    var getResult = await atClient.get(phoneKey);
+    var getKey = AtKey()
+      ..key = 'image'
+      ..metadata = (Metadata()..isBinary = true);
+    var getResult = await atClient.get(getKey);
     expect(getResult.value, value);
-  });
+  }, timeout: Timeout(Duration(minutes: 10)));
 
   test('put method - create a public key with binary data', () async {
     var atsign = '@alice🛠';
@@ -126,7 +131,12 @@ void main() {
     var value = _getBinaryData("/test/testData/dev.png");
     var putResult = await atClient.put(phoneKey, value);
     expect(putResult, true);
-    var getResult = await atClient.get(phoneKey);
+    var getKey = AtKey()
+      ..key = 'image'
+      ..metadata = (Metadata()
+        ..isBinary = true
+        ..isPublic = true);
+    var getResult = await atClient.get(getKey);
     expect(getResult.value, value);
   });
 
