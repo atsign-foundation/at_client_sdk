@@ -38,8 +38,15 @@ class RemoteSecondary implements Secondary {
       String verbResult;
       verbResult = await atLookUp.executeVerb(builder);
       return verbResult;
+    } on AtException catch (e) {
+      throw e
+        ..stack(AtChainedException(
+            Intent.fetchData, ExceptionScenario.remoteVerbExecutionFailed, e));
     } on AtLookUpException catch (e) {
-      throw AtClientException(e.errorCode, e.errorMessage);
+      var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
+      throw exception
+        ..stack(AtChainedException(Intent.fetchData,
+            ExceptionScenario.remoteVerbExecutionFailed, exception));
     }
   }
 
@@ -56,9 +63,20 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
-    String? verbResult;
-    verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
-    return verbResult;
+    try {
+      String? verbResult;
+      verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
+      return verbResult;
+    } on AtException catch (e) {
+      e.stack(AtChainedException(
+          Intent.fetchData, ExceptionScenario.remoteVerbExecutionFailed, e));
+      rethrow;
+    } on AtLookUpException catch (e) {
+      var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
+      throw exception
+        ..stack(AtChainedException(Intent.fetchData,
+            ExceptionScenario.remoteVerbExecutionFailed, exception));
+    }
   }
 
   void addStreamData(List<int> data) {

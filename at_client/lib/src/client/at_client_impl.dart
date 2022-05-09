@@ -236,25 +236,35 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
-    // validate the get request.
-    await AtClientValidation.validateAtKey(atKey);
-    // Get the verb builder for the atKey
-    var verbBuilder = GetRequestTransformer().transform(atKey);
-    // Execute the verb.
-    var getResponse = await SecondaryManager.getSecondary(verbBuilder)
-        .executeVerb(verbBuilder);
-    // Return empty value if getResponse is null.
-    if (getResponse == null ||
-        getResponse.isEmpty ||
-        getResponse == 'data:null') {
-      return AtValue();
+    Secondary? secondary;
+    try {
+      // validate the get request.
+      await AtClientValidation.validateAtKey(atKey);
+      // Get the verb builder for the atKey
+      var verbBuilder = GetRequestTransformer().transform(atKey);
+      // Execute the verb.
+      secondary = SecondaryManager.getSecondary(verbBuilder);
+      var getResponse = await secondary.executeVerb(verbBuilder);
+      // Return empty value if getResponse is null.
+      if (getResponse == null ||
+          getResponse.isEmpty ||
+          getResponse == 'data:null') {
+        return AtValue();
+      }
+      // Send AtKey and AtResponse to transform the response to AtValue.
+      var getResponseTuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two = (getResponse);
+      // Transform the response and return
+      return GetResponseTransformer().transform(getResponseTuple);
+    } on AtException catch (e) {
+      var exceptionScenario = ExceptionScenario.localVerbExecutionFailed;
+      if (secondary is RemoteSecondary) {
+        exceptionScenario = ExceptionScenario.remoteVerbExecutionFailed;
+      }
+      e.stack(AtChainedException(Intent.fetchData, exceptionScenario, e));
+      throw AtExceptionManager.createException(e);
     }
-    // Send AtKey and AtResponse to transform the response to AtValue.
-    var getResponseTuple = Tuple<AtKey, String>()
-      ..one = atKey
-      ..two = (getResponse);
-    // Transform the response and return
-    return GetResponseTransformer().transform(getResponseTuple);
   }
 
   @override
@@ -710,7 +720,8 @@ class AtClientImpl implements AtClient {
     try {
       if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
         _logger.severe("FileTransferObject is null");
-        throw AtClientException(error_codes['AtClientException'], 'FileTransferObject is null');
+        throw AtClientException(
+            error_codes['AtClientException'], 'FileTransferObject is null');
       }
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value))!;
@@ -767,7 +778,8 @@ class AtClientImpl implements AtClient {
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
-      throw AtClientException(error_codes['AtClientException'], 'No network availability');
+      throw AtClientException(
+          error_codes['AtClientException'], 'No network availability');
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
@@ -832,7 +844,8 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          return Future.error(AtClientException(error_codes['AtClientException'], e.message));
+          return Future.error(
+              AtClientException(error_codes['AtClientException'], e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
@@ -844,7 +857,8 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          return Future.error(AtClientException(error_codes['AtClientException'],e.message));
+          return Future.error(
+              AtClientException(error_codes['AtClientException'], e.message));
         }
       }
     }

@@ -21,7 +21,15 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _sharedKey = await getSharedKey(atKey);
     late String encryptedSharedKey;
     // Get SharedWith encryption public key
-    final sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
+    String sharedWithPublicKey = '';
+    try {
+      sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
+    } on KeyNotFoundException catch (e) {
+      throw AtEncryptionException('Failed to encrypt the data')
+        ..fromException(e)
+        ..stack(AtChainedException(
+            Intent.shareData, ExceptionScenario.encryptionFailed, e));
+    }
     // If sharedKey is empty, then -
     // Generate a new sharedKey
     // Encrypt the sharedKey with sharedWith public key
@@ -73,7 +81,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       if (key == null || key.isEmpty || key == 'data:null') {
         key = await _getSharedKeyFromRemote(atKey);
       }
-    } on AtClientException {
+    } on KeyNotFoundException {
       AtSignLogger('AbstractAtKeyEncryption').finer(
           '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
     }
@@ -146,10 +154,20 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..atKey = 'publickey'
       ..sharedBy = atKey.sharedWith?.replaceAll('@', '');
 
-    sharedWithPublicKey = await AtClientManager.getInstance()
-        .atClient
-        .getRemoteSecondary()!
-        .executeAndParse(plookupBuilder);
+    try {
+      sharedWithPublicKey = await AtClientManager.getInstance()
+          .atClient
+          .getRemoteSecondary()!
+          .executeVerb(plookupBuilder);
+    } on AtException catch (e) {
+      throw KeyNotFoundException(
+          'Failed to fetch public key of ${atKey.sharedWith}')
+        ..fromException(e)
+        ..stack(AtChainedException(
+            Intent.shareData, ExceptionScenario.keyNotFound, e));
+    }
+    sharedWithPublicKey =
+        DefaultResponseParser().parse(sharedWithPublicKey).response;
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
     if (sharedWithPublicKey.isEmpty || sharedWithPublicKey == 'data:null') {

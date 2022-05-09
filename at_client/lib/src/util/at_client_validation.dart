@@ -2,6 +2,7 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
 
 class AtClientValidation {
   static void validateKey(String? key) {
@@ -52,7 +53,12 @@ class AtClientValidation {
       await AtClientManager.getInstance()
           .secondaryAddressFinder!
           .findSecondary(atSign);
-    } on SecondaryNotFoundException {
+    } on RootServerConnectivityException {
+      AtSignLogger('AtClientValidation')
+          .severe('Failed validating the @atSign');
+    } on SecondaryNotFoundException catch (e) {
+      e.stack(AtChainedException(
+          Intent.validateAtSign, ExceptionScenario.atSignDoesNotExist, e));
       rethrow;
     }
   }
@@ -60,7 +66,13 @@ class AtClientValidation {
   /// Validates the atKey.
   static Future<void> validateAtKey(AtKey atKey) async {
     // validates the atKey
-    validateKey(atKey.key);
+    try {
+      validateKey(atKey.key);
+    } on AtKeyException catch (e) {
+      e.stack(AtChainedException(
+          Intent.validateKey, ExceptionScenario.invalidKeyFormed, e.message));
+      rethrow;
+    }
     // validates the metadata
     validateMetadata(atKey.metadata);
     // verifies if the sharedWith atSign exists.

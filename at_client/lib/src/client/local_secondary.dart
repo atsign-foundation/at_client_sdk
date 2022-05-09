@@ -57,7 +57,7 @@ class LocalSecondary implements Secondary {
     } on AtLookUpException catch (e) {
       // Catches AtLookupException and
       // converts to AtClientException. rethrows any other exception.
-      throw (AtClientException(e.errorCode,e.errorMessage));
+      throw (AtClientException(e.errorCode, e.errorMessage));
     }
     return verbResult;
   }
@@ -107,8 +107,8 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {
+    var llookupKey = '';
     try {
-      var llookupKey = '';
       if (builder.isCached) {
         llookupKey += 'cached:';
       }
@@ -134,6 +134,9 @@ class LocalSecondary implements Secondary {
       return 'data:$result';
     } on DataStoreException catch (e) {
       _logger.severe('exception in llookup:${e.toString()}');
+      rethrow;
+    } on KeyNotFoundException catch (e) {
+      e.stack(AtChainedException(Intent.fetchData, ExceptionScenario.keyNotFound, e));
       rethrow;
     }
   }

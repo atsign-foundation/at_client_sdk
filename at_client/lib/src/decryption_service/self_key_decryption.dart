@@ -17,7 +17,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
     if (encryptedValue == null ||
         encryptedValue.isEmpty ||
         encryptedValue == 'null') {
-      throw IllegalArgumentException(
+      throw AtDecryptionException(
           'Decryption failed. Encrypted value is null');
     }
 

@@ -70,7 +70,7 @@ void main() {
       expect(
           () => SharedKeyDecryption().decrypt(AtKey(), ''),
           throwsA(predicate((dynamic e) =>
-              e is IllegalArgumentException &&
+              e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));
     });
 
@@ -80,7 +80,7 @@ void main() {
       expect(
           () => SelfKeyDecryption().decrypt(AtKey(), ''),
           throwsA(predicate((dynamic e) =>
-              e is IllegalArgumentException &&
+              e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));
     });
 
@@ -90,7 +90,7 @@ void main() {
       expect(
           () => LocalKeyDecryption().decrypt(AtKey(), ''),
           throwsA(predicate((dynamic e) =>
-              e is IllegalArgumentException &&
+              e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));
     });
   });

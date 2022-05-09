@@ -36,7 +36,12 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: at_commons
-      ref: trunk
+      ref: exception_handling_changes
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: at_lookup
+      ref: exception_handling_changes
 
 dev_dependencies:
   test: ^1.17.2

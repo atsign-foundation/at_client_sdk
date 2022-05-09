@@ -14,7 +14,7 @@ class LocalKeyDecryption implements AtKeyDecryption {
   @override
   Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw IllegalArgumentException(
+      throw AtDecryptionException(
           'Decryption failed. Encrypted value is null');
     }
     // Get the shared key.
