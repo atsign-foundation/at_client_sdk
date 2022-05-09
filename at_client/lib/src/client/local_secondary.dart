@@ -107,8 +107,8 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {
-    var llookupKey = '';
     try {
+      var llookupKey = '';
       if (builder.isCached) {
         llookupKey += 'cached:';
       }

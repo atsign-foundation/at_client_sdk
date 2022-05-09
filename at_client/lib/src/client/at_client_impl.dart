@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -14,7 +13,6 @@ import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -393,11 +391,11 @@ class AtClientImpl implements AtClient {
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
-    // If putResponse is null or empty, return empty response
+    // If putResponse is null or empty, update failed, return false.
     if (putResponse == null || putResponse.isEmpty) {
-      return AtResponse()..response = '';
+      return false;
     }
-    return PutResponseTransformer().transform(putResponse);
+    return await PutResponseTransformer().transform(putResponse);
   }
 
   @override
@@ -408,11 +406,6 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
-    AtKeyValidators.get().validate(
-        atKey.toString(),
-        ValidationContext()
-          ..atSign = currentAtSign
-          ..validateOwnership = true);
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
     final notifyResult =
@@ -718,8 +711,7 @@ class AtClientImpl implements AtClient {
     try {
       if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
         _logger.severe("FileTransferObject is null");
-        throw AtClientException(
-            error_codes['AtClientException'], 'FileTransferObject is null');
+        throw AtClientException("AT0014", "FileTransferObject is null");
       }
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value))!;
@@ -779,20 +771,15 @@ class AtClientImpl implements AtClient {
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
       throw AtClientException(
-          error_codes['AtClientException'], 'No network availability');
+          atClientErrorCodes['AtClientException'], 'No network availability');
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    await AtClientValidation.isAtSignExists(
-        notificationParams.atKey.sharedWith!,
-        _preference!.rootDomain,
-        _preference!.rootPort);
+    AtClientValidation.isAtSignExists(notificationParams.atKey.sharedWith!,
+        _preference!.rootDomain, _preference!.rootPort);
     // validate sharedBy atSign
-    if (notificationParams.atKey.sharedBy == null ||
-        notificationParams.atKey.sharedBy!.isEmpty) {
-      notificationParams.atKey.sharedBy = getCurrentAtSign();
-    }
+    notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
     // For messageType is text, text may contains spaces but key should not have spaces
@@ -843,8 +830,8 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          return Future.error(
-              AtClientException(error_codes['AtClientException'], e.message));
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(errorCode, e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
@@ -856,8 +843,8 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          return Future.error(
-              AtClientException(error_codes['AtClientException'], e.message));
+          var errorCode = AtClientExceptionUtil.getErrorCode(e);
+          return Future.error(AtClientException(errorCode, e.message));
         }
       }
     }
