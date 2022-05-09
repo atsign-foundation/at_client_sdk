@@ -1,8 +1,9 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -24,10 +25,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     try {
       sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
     } on KeyNotFoundException catch (e) {
-      throw AtEncryptionException('Failed to encrypt the data')
-        ..fromException(e)
-        ..stack(AtChainedException(
-            Intent.shareData, ExceptionScenario.encryptionFailed, e));
+      e.stack(AtChainedException(
+          Intent.shareData, ExceptionScenario.encryptionFailed, e.message));
+      rethrow;
     }
     // If sharedKey is empty, then -
     // Generate a new sharedKey
@@ -153,20 +153,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..atKey = 'publickey'
       ..sharedBy = atKey.sharedWith?.replaceAll('@', '');
 
-    try {
-      sharedWithPublicKey = await AtClientManager.getInstance()
-          .atClient
-          .getRemoteSecondary()!
-          .executeVerb(plookupBuilder);
-    } on AtException catch (e) {
-      throw KeyNotFoundException(
-          'Failed to fetch public key of ${atKey.sharedWith}')
-        ..fromException(e)
-        ..stack(AtChainedException(
-            Intent.shareData, ExceptionScenario.keyNotFound, e));
-    }
-    sharedWithPublicKey =
-        DefaultResponseParser().parse(sharedWithPublicKey).response;
+    sharedWithPublicKey = await AtClientManager.getInstance()
+        .atClient
+        .getRemoteSecondary()!
+        .executeAndParse(plookupBuilder);
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
     if (sharedWithPublicKey.isEmpty || sharedWithPublicKey == 'data:null') {

@@ -17,7 +17,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
   @override
   Future decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw AtDecryptionException('Decryption failed. Encrypted value is null');
+      throw AtDecryptionException('Decryption failed. Encrypted value is null',
+          intent: Intent.decryptData,
+          exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     String? encryptedSharedKey;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
@@ -30,8 +32,10 @@ class SharedKeyDecryption implements AtKeyDecryption {
       if (currentAtSignPublicKey != null &&
           atKey.metadata!.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
-        throw AtClientException(error_codes['AtClientException'],
-            'Public key has changed. Cannot decrypt shared data- ${atKey.key}');
+        throw AtPublicKeyChangeException(
+            'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
+            intent: Intent.fetchEncryptionPublicKey,
+            exceptionScenario: ExceptionScenario.encryptionFailed);
       }
     } else {
       encryptedSharedKey = await _getEncryptedSharedKey(atKey);
@@ -39,14 +43,18 @@ class SharedKeyDecryption implements AtKeyDecryption {
     if (encryptedSharedKey == null ||
         encryptedSharedKey.isEmpty ||
         encryptedSharedKey == 'null') {
-      throw KeyNotFoundException('shared encryption key not found');
+      throw SharedKeyNotFoundException('shared encryption key not found',
+          intent: Intent.fetchEncryptionSharedKey,
+          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
     var currentAtSignPrivateKey = await (AtClientManager.getInstance()
         .atClient
         .getLocalSecondary()!
         .getEncryptionPrivateKey());
     if (currentAtSignPrivateKey == null || currentAtSignPrivateKey.isEmpty) {
-      throw KeyNotFoundException('encryption private not found');
+      throw AtPrivateKeyNotFoundException('Encryption private not found',
+          intent: Intent.fetchEncryptionPrivateKey,
+          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
     return EncryptionUtil.decryptValue(encryptedValue,
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey));
