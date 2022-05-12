@@ -323,7 +323,7 @@ class AtClientImpl implements AtClient {
     if (putResponse == null || putResponse.isEmpty) {
       return false;
     }
-    return PutResponseTransformer().transform(putResponse);
+    return await PutResponseTransformer().transform(putResponse);
   }
 
   @override

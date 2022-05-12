@@ -36,7 +36,7 @@ class RemoteSecondary implements Secondary {
       verbResult = await atLookUp.executeVerb(builder);
       return verbResult;
     } on AtLookUpException catch (e) {
-      throw AtClientException(e.errorMessage);
+      throw AtClientException(e.errorCode, e.errorMessage);
     }
   }
 
@@ -99,7 +99,9 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> findSecondaryUrl() async {
-    var secondaryAddress = await AtClientManager.getInstance().secondaryAddressFinder!.findSecondary(_atSign);
+    var secondaryAddress = await AtClientManager.getInstance()
+        .secondaryAddressFinder!
+        .findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 
@@ -116,13 +118,16 @@ class RemoteSecondary implements Secondary {
       var internetAddress = await InternetAddress.lookup(host);
       //TODO getting first ip for now. explore best solution
       var addressCheckOptions =
-      AddressCheckOptions(internetAddress[0], port: int.parse(port));
-      var addressCheckResult = await InternetConnectionChecker().isHostReachable(addressCheckOptions);
+          AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      var addressCheckResult = await InternetConnectionChecker()
+          .isHostReachable(addressCheckOptions);
       return addressCheckResult.isSuccess;
     } on Exception catch (e) {
-      logger.severe('Secondary server unavailable due to Exception: ${e.toString()}');
+      logger.severe(
+          'Secondary server unavailable due to Exception: ${e.toString()}');
     } on Error catch (e) {
-      logger.severe('Secondary server unavailable due to Error: ${e.toString()}');
+      logger
+          .severe('Secondary server unavailable due to Error: ${e.toString()}');
     }
     return false;
   }
