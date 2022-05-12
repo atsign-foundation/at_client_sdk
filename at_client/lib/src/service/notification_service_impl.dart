@@ -103,7 +103,7 @@ class NotificationServiceImpl
       try {
         atValue = await _atClient.get(atKey);
       } on AtKeyException catch (e) {
-        if (e.errorMessage!.startsWith('FormatException:')) {
+        if (e.message!.startsWith('FormatException:')) {
           print('decryption error');
         }
         String oldData = await _getOldUnencryptedData(atKey);
