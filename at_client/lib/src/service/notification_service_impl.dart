@@ -132,7 +132,7 @@ class NotificationServiceImpl
 
   Future<String> _getOldUnencryptedData(AtKey atKey) async {
     final llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = atKey.key
+      ..atKey = '${atKey.key}.${_atClient.getPreferences()!.namespace}'
       ..sharedBy = atKey.sharedBy;
     print('llookup command: ${llookupVerbBuilder.buildCommand()}');
     var verbResult =
