@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
@@ -13,6 +14,7 @@ import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -97,13 +99,47 @@ class NotificationServiceImpl
         .getLocalSecondary()!
         .keyStore!
         .isKeyExists(lastNotificationKeyStr)) {
-      final atValue = await _atClient.get(atKey);
-      if (atValue.value != null) {
-        _logger.finer('json from hive: ${atValue.value}');
-        return jsonDecode(atValue.value)['epochMillis'];
+      var atValue;
+      try {
+        atValue = await _atClient.get(atKey);
+      } on AtKeyException catch (e) {
+        if (e.errorMessage!.startsWith('FormatException:')) {
+          print('decryption error');
+        }
+        String oldData = await _getOldUnencryptedData(atKey);
+        print('got old data: $oldData');
+//        _updateEncryptedData(oldData, atKey);
       }
+//      if (atValue.value != null) {
+//        _logger.finer('json from hive: ${atValue.value}');
+//        return jsonDecode(atValue.value)['epochMillis'];
+//      }
+      return null;
     }
-    return null;
+  }
+
+  Future<void> _updateEncryptedData(String oldData, AtKey atKey) async {
+    try {
+      final selfEncryptionKey =
+          await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
+      final encryptedData =
+          EncryptionUtil.encryptValue(oldData, selfEncryptionKey!);
+      await _atClient.put(atKey, encryptedData);
+    } on Exception catch (e) {
+      _logger.severe('Exception retrieving old data: ${e.toString}');
+    }
+  }
+
+  Future<String> _getOldUnencryptedData(AtKey atKey) async {
+    final llookupVerbBuilder = LLookupVerbBuilder()
+      ..atKey = atKey.key
+      ..sharedBy = atKey.sharedBy;
+    print('llookup command: ${llookupVerbBuilder.buildCommand()}');
+    var verbResult =
+        await _atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
+    verbResult = verbResult.replaceFirst('data:', '');
+    print('got old data: $verbResult');
+    return verbResult;
   }
 
   @override
@@ -187,7 +223,8 @@ class NotificationServiceImpl
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.undelivered;
-      var atClientException = AtClientException(error_codes['AtClientException'], e.toString());
+      var atClientException =
+          AtClientException(error_codes['AtClientException'], e.toString());
       notificationResult.atClientException = atClientException;
       // Invoke onErrorCallback
       if (onError != null) {
@@ -211,8 +248,9 @@ class NotificationServiceImpl
       case 'undelivered':
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.undelivered;
-        notificationResult.atClientException =
-            AtClientException(error_codes['AtClientException'],'Unable to connect to secondary server');
+        notificationResult.atClientException = AtClientException(
+            error_codes['AtClientException'],
+            'Unable to connect to secondary server');
         // If onError callback is registered, invoke callback method.
         if (onError != null) {
           onError(notificationResult);
