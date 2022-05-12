@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
@@ -39,7 +36,7 @@ class RemoteSecondary implements Secondary {
       verbResult = await atLookUp.executeVerb(builder);
       return verbResult;
     } on AtLookUpException catch (e) {
-      throw AtClientException(e.errorCode, e.errorMessage);
+      throw AtClientException(e.errorMessage);
     }
   }
 
@@ -50,7 +47,8 @@ class RemoteSecondary implements Secondary {
       verbResult = await executeVerb(builder);
       verbResult = verbResult.replaceFirst('data:', '');
     } on AtClientException catch (e) {
-      logger.severe('Exception occurred in processing the verb ${e.message}');
+      logger.severe(
+          'Exception occurred in processing the verb ${e.errorCode} - ${e.errorMessage}');
     }
     return verbResult;
   }
@@ -101,9 +99,7 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> findSecondaryUrl() async {
-    var secondaryAddress = await AtClientManager.getInstance()
-        .secondaryAddressFinder!
-        .findSecondary(_atSign);
+    var secondaryAddress = await AtClientManager.getInstance().secondaryAddressFinder!.findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 
@@ -120,16 +116,13 @@ class RemoteSecondary implements Secondary {
       var internetAddress = await InternetAddress.lookup(host);
       //TODO getting first ip for now. explore best solution
       var addressCheckOptions =
-          AddressCheckOptions(internetAddress[0], port: int.parse(port));
-      var addressCheckResult = await InternetConnectionChecker()
-          .isHostReachable(addressCheckOptions);
+      AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      var addressCheckResult = await InternetConnectionChecker().isHostReachable(addressCheckOptions);
       return addressCheckResult.isSuccess;
     } on Exception catch (e) {
-      logger.severe(
-          'Secondary server unavailable due to Exception: ${e.toString()}');
+      logger.severe('Secondary server unavailable due to Exception: ${e.toString()}');
     } on Error catch (e) {
-      logger
-          .severe('Secondary server unavailable due to Error: ${e.toString()}');
+      logger.severe('Secondary server unavailable due to Error: ${e.toString()}');
     }
     return false;
   }
