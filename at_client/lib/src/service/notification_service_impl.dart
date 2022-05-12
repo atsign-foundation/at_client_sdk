@@ -108,7 +108,8 @@ class NotificationServiceImpl
         }
         String oldData = await _getOldUnencryptedData(atKey);
         print('got old data: $oldData');
-//        _updateEncryptedData(oldData, atKey);
+        _updateEncryptedData(oldData, atKey);
+//        atValue = await _atClient.get(atKey);
       }
 //      if (atValue.value != null) {
 //        _logger.finer('json from hive: ${atValue.value}');
@@ -124,7 +125,11 @@ class NotificationServiceImpl
           await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
       final encryptedData =
           EncryptionUtil.encryptValue(oldData, selfEncryptionKey!);
-      await _atClient.put(atKey, encryptedData);
+      print('encrypted data: $encryptedData');
+      final decryptedData =
+          EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
+      print('decrypted data: $decryptedData');
+//      await _atClient.put(atKey, encryptedData);
     } on Exception catch (e) {
       _logger.severe('Exception retrieving old data: ${e.toString}');
     }
