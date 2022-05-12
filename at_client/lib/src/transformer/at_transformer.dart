@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/src/client/request_params.dart';
+import 'package:at_client/src/client/request_options.dart';
 
 /// Class responsible for Transforming the data.
 abstract class Transformer<T, V> {
@@ -11,6 +11,6 @@ abstract class Transformer<T, V> {
 
 abstract class RequestTransformer<T, V> extends  Transformer<T, V> {
   @override
-  FutureOr<V> transform(T value, {RequestParams? requestParams});
+  FutureOr<V> transform(T value, {RequestOptions? requestOptions});
 }
 

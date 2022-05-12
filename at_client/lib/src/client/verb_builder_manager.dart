@@ -1,5 +1,5 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/request_params.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -9,7 +9,7 @@ import 'package:at_utils/at_utils.dart';
 class LookUpBuilderManager {
   ///Returns a [VerbBuilder] for the given AtKey instance
   static VerbBuilder get(AtKey atKey, String currentAtSign,
-      {GetRequestParams? getRequestParams}) {
+      {GetRequestOptions? getRequestOptions}) {
     // If isPublic is true in metadata, the key is a public key, return PLookupVerbHandler.
     if (atKey.sharedBy != currentAtSign &&
         (atKey.metadata != null &&
@@ -19,7 +19,7 @@ class LookUpBuilderManager {
         ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..operation = 'all';
-      if (getRequestParams != null && getRequestParams.byPassCache == true) {
+      if (getRequestOptions != null && getRequestOptions.byPassCache == true) {
         plookUpVerbBuilder.byPassCache = true;
       }
       return plookUpVerbBuilder;
@@ -34,7 +34,7 @@ class LookUpBuilderManager {
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..auth = true
         ..operation = 'all';
-      if (getRequestParams != null && getRequestParams.byPassCache == true) {
+      if (getRequestOptions != null && getRequestOptions.byPassCache == true) {
         lookupVerbBuilder.byPassCache = true;
       }
       return lookupVerbBuilder;

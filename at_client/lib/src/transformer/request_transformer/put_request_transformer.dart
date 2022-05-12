@@ -1,6 +1,6 @@
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/request_params.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
@@ -13,7 +13,7 @@ class PutRequestTransformer
     extends RequestTransformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   @override
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
-      {RequestParams? requestParams}) async {
+      {RequestOptions? requestOptions}) async {
     // Set the default metadata if not already set.
     tuple.one.metadata ??= Metadata();
     // Set sharedBy to currentAtSign if not set.

@@ -6,7 +6,7 @@ import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_client/src/client/request_params.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -135,7 +135,8 @@ abstract class AtClient {
   ///   get(key);
   /// ```
   /// #TODO remove isDedicated in the next major release
-  Future<AtValue> get(AtKey key, {bool isDedicated = false,GetRequestParams? getRequestParams});
+  Future<AtValue> get(AtKey key,
+      {bool isDedicated = false, GetRequestOptions? getRequestOptions});
 
   /// Gets the metadata of [AtKey.key]
   /// ```
