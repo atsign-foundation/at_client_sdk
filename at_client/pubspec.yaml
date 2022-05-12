@@ -31,12 +31,12 @@ dependencies:
   at_commons: ^3.0.14
   at_utils: ^3.0.9
 
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: trunk
+#dependency_overrides:
+#  at_commons:
+#    git:
+#      url: https://github.com/atsign-foundation/at_tools.git
+#      path: at_commons
+#      ref: trunk
 
 dev_dependencies:
   test: ^1.17.2
