@@ -5,5 +5,9 @@ root_server:
 
 # cicd atSign details
 atSign:
-  firstAtSign: '@cicd1'
-  secondAtSign: '@cicd2'
+  # @ce2e1 is running latest at_secondary_server trunk
+  # @ce2e3 is running the latest canary release
+  # See https://github.com/atsign-foundation/at_client_sdk/issues/447#issuecomment-1075290415 for
+  # full details.
+  firstAtSign: '@ce2e1'
+  secondAtSign: '@ce2e3'
