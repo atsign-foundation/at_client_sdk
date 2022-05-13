@@ -1,9 +1,11 @@
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'package:mocktail/mocktail.dart';
 
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}

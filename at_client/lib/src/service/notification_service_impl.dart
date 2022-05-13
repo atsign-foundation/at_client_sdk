@@ -2,15 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/connectivity_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
-import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -103,47 +99,55 @@ class NotificationServiceImpl
       try {
         atValue = await _atClient.get(atKey);
       } on AtKeyException catch (e) {
-        if (e.message!.startsWith('FormatException:')) {
-          print('decryption error');
+        _logger.finer(
+            'Problem with old notification data which is unencrypted.Attempting to fix');
+        if (e.errorMessage!.startsWith('FormatException:')) {
+          await _fixLatestNotificationCorruptData(atKey, e);
+          atValue = await _atClient.get(atKey);
+          _logger.finer('at value after updating: $atValue');
+        } else {
+          _logger.severe('not decryption issue: ${e.toString()}');
         }
-        String oldData = await _getOldUnencryptedData(atKey);
-        print('got old data: $oldData');
-        _updateEncryptedData(oldData, atKey);
-//        atValue = await _atClient.get(atKey);
       }
-//      if (atValue.value != null) {
-//        _logger.finer('json from hive: ${atValue.value}');
-//        return jsonDecode(atValue.value)['epochMillis'];
-//      }
+      if (atValue.value != null) {
+        _logger.finer('json from hive: ${atValue.value}');
+        return jsonDecode(atValue.value)['epochMillis'];
+      }
       return null;
     }
   }
 
-  Future<void> _updateEncryptedData(String oldData, AtKey atKey) async {
+  Future<void> _fixLatestNotificationCorruptData(
+      AtKey atKey, Exception e) async {
     try {
-      final selfEncryptionKey =
-          await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
-      final encryptedData =
-          EncryptionUtil.encryptValue(oldData, selfEncryptionKey!);
-      print('encrypted data: $encryptedData');
-      final decryptedData =
-          EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
-      print('decrypted data: $decryptedData');
-//      await _atClient.put(atKey, encryptedData);
+      String oldData = await _getOldUnencryptedData(atKey);
+      _logger.finer('unencrypted old data: $oldData');
+      await _updateEncryptedData(oldData, atKey);
     } on Exception catch (e) {
-      _logger.severe('Exception retrieving old data: ${e.toString}');
+      _logger.severe('Exception fixing old data: ${e.toString}');
     }
+  }
+
+  Future<void> _updateEncryptedData(String oldData, AtKey atKey) async {
+    final selfEncryptionKey =
+        await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
+    final encryptedData =
+        EncryptionUtil.encryptValue(oldData, selfEncryptionKey!);
+    _logger.finer('encrypted latest notification data: $encryptedData');
+    final decryptedData =
+        EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
+    _logger.finer('decrypted latest notification data: $decryptedData');
+    await _atClient.put(atKey, encryptedData);
   }
 
   Future<String> _getOldUnencryptedData(AtKey atKey) async {
     final llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = '${atKey.key}.${_atClient.getPreferences()!.namespace}'
       ..sharedBy = atKey.sharedBy;
-    print('llookup command: ${llookupVerbBuilder.buildCommand()}');
     var verbResult =
         await _atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
     verbResult = verbResult.replaceFirst('data:', '');
-    print('got old data: $verbResult');
+    _logger.finer('got data from secondary: $verbResult');
     return verbResult;
   }
 
