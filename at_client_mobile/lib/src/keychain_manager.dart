@@ -646,7 +646,6 @@ class KeyChainManager {
   /// Function to get Map of atsigns from keychain
   Future<Map<String, bool?>> _getAtSignMap() async {
     final atClientData = await readAtClientData(useSharedStorage: false);
-    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
     final atsigns = await readAtsigns();
     final result = <String, bool?>{};
     for (var element in atsigns) {
