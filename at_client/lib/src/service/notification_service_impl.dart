@@ -134,13 +134,14 @@ class NotificationServiceImpl
     final encryptedData =
         EncryptionUtil.encryptValue(oldData, selfEncryptionKey!);
     _logger.finer('encrypted latest notification data: $encryptedData');
-    final decryptedData =
-        EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
-    _logger.finer('decrypted latest notification data: $decryptedData');
+//    final decryptedData =
+//        EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
+//    _logger.finer('decrypted latest notification data: $decryptedData');
     final updateVerbBuilder = UpdateVerbBuilder()
       ..atKey = '$notificationIdKey.${_atClient.getPreferences()!.namespace}'
       ..sharedBy = _atClient.getCurrentAtSign()
-      ..isEncrypted = true;
+      ..isEncrypted = true
+      ..value = encryptedData;
     await _atClient
         .getLocalSecondary()!
         .executeVerb(updateVerbBuilder, sync: false);
