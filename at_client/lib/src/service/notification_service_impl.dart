@@ -106,10 +106,10 @@ class NotificationServiceImpl
           atValue = await _atClient.get(atKey);
           _logger.finer('at value after updating: $atValue');
         } else {
-          _logger.severe('not decryption issue: ${e.toString()}');
+          _logger.severe('not a decryption issue: ${e.toString()}');
         }
       }
-      if (atValue.value != null) {
+      if (atValue != null && atValue.value != null) {
         _logger.finer('json from hive: ${atValue.value}');
         return jsonDecode(atValue.value)['epochMillis'];
       }
@@ -137,7 +137,13 @@ class NotificationServiceImpl
     final decryptedData =
         EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
     _logger.finer('decrypted latest notification data: $decryptedData');
-    await _atClient.put(atKey, encryptedData);
+    final updateVerbBuilder = UpdateVerbBuilder()
+      ..atKey = '$notificationIdKey.${_atClient.getPreferences()!.namespace}'
+      ..sharedBy = _atClient.getCurrentAtSign()
+      ..isEncrypted = true;
+    await _atClient
+        .getLocalSecondary()!
+        .executeVerb(updateVerbBuilder, sync: false);
   }
 
   Future<String> _getOldUnencryptedData(AtKey atKey) async {
