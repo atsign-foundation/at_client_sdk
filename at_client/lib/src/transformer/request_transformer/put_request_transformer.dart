@@ -18,8 +18,15 @@ class PutRequestTransformer
     if (!tuple.one.metadata!.isPublic!) {
       var encryptionService = AtKeyEncryptionManager.get(tuple.one,
           AtClientManager.getInstance().atClient.getCurrentAtSign()!);
-      updateVerbBuilder.value =
-          await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
+      try {
+        updateVerbBuilder.value =
+            await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
+      } on AtException catch (e) {
+        throw AtEncryptionException('Failed to encrypt the data')
+          ..fromException(e)
+          ..stack(AtChainedException(
+              Intent.shareData, ExceptionScenario.encryptionFailed, e));
+      }
       updateVerbBuilder.sharedKeyEncrypted = tuple.one.metadata!.sharedKeyEnc;
       updateVerbBuilder.pubKeyChecksum = tuple.one.metadata!.pubKeyCS;
     }

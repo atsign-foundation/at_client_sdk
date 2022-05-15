@@ -35,8 +35,16 @@ class GetResponseTransformer
         !(decodedResponse['key'].startsWith('cached:public:'))) {
       var decryptionService = AtKeyDecryptionManager.get(tuple.one,
           AtClientManager.getInstance().atClient.getCurrentAtSign()!);
-      atValue.value =
-          await decryptionService.decrypt(tuple.one, atValue.value) as String;
+      try {
+        atValue.value =
+            await decryptionService.decrypt(tuple.one, atValue.value) as String;
+      } on AtException catch (e) {
+        throw AtDecryptionException(
+            'Failed to decrypt the key ${tuple.one.toString()}')
+          ..fromException(e)
+          ..stack(AtChainedException(
+              Intent.fetchData, ExceptionScenario.decryptionFailed, e));
+      }
     }
 
     // After decrypting the data, if data is binary, decode the data

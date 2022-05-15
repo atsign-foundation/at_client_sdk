@@ -256,7 +256,8 @@ class AtClientImpl implements AtClient {
         ..one = atKey
         ..two = (getResponse);
       // Transform the response and return
-      return GetResponseTransformer().transform(getResponseTuple);
+      var atValue = await GetResponseTransformer().transform(getResponseTuple);
+      return atValue;
     } on AtException catch (e) {
       var exceptionScenario = ExceptionScenario.localVerbExecutionFailed;
       if (secondary is RemoteSecondary) {
@@ -326,8 +327,7 @@ class AtClientImpl implements AtClient {
     AtResponse atResponse = AtResponse();
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
-      // TODO: Throw AtValueException
-      throw AtClientException('AT014',
+      throw AtValueException(
           'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
     }
     if (value is String) {
@@ -361,45 +361,51 @@ class AtClientImpl implements AtClient {
   }
 
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
-    // Performs the put request validations.
-    AtClientValidation.validatePutRequest(atKey, value, preference!);
-    // Set sharedBy to currentAtSign if not set.
-    if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
-      atKey.sharedBy =
-          AtClientManager.getInstance().atClient.getCurrentAtSign();
-      atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
-    }
-    if (atKey.metadata!.namespaceAware) {
-      atKey.namespace ??= preference?.namespace;
-    }
-    // validate the atKey
-    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
-    // KeyShare validation
-    var validationResult = AtKeyValidators.get().validate(
-        atKey.toString(),
-        ValidationContext()
-          ..atSign = currentAtSign
-          ..validateOwnership = true);
-    // If the validationResult.isValid is false, validation of AtKey failed.
-    // throw AtClientException with failure reason.
-    if (!validationResult.isValid) {
-      throw AtClientException('AT0014', validationResult.failureReason);
-    }
+    try {
+      // Performs the put request validations.
+      AtClientValidation.validatePutRequest(atKey, value, preference!);
+      // Set sharedBy to currentAtSign if not set.
+      if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
+        atKey.sharedBy =
+            AtClientManager.getInstance().atClient.getCurrentAtSign();
+        atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
+      }
+      if (atKey.metadata!.namespaceAware) {
+        atKey.namespace ??= preference?.namespace;
+      }
+      // validate the atKey
+      // Setting the validateOwnership to true to perform KeyOwnerShip validation and
+      // KeyShare validation
+      var validationResult = AtKeyValidators.get().validate(
+          atKey.toString(),
+          ValidationContext()
+            ..atSign = currentAtSign
+            ..validateOwnership = true);
+      // If the validationResult.isValid is false, validation of AtKey failed.
+      // throw AtClientException with failure reason.
+      if (!validationResult.isValid) {
+        throw AtClientException('AT0014', validationResult.failureReason);
+      }
 
-    var tuple = Tuple<AtKey, dynamic>()
-      ..one = atKey
-      ..two = value;
-    // Transform put request
-    UpdateVerbBuilder verbBuilder =
-        await PutRequestTransformer().transform(tuple);
-    // Execute the verb builder
-    var putResponse = await SecondaryManager.getSecondary(verbBuilder)
-        .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
-    // If putResponse is null or empty, return empty response
-    if (putResponse == null || putResponse.isEmpty) {
-      return AtResponse()..response = '';
+      var tuple = Tuple<AtKey, dynamic>()
+        ..one = atKey
+        ..two = value;
+      // Transform put request
+      UpdateVerbBuilder verbBuilder =
+          await PutRequestTransformer().transform(tuple);
+      // Execute the verb builder
+      var putResponse = await SecondaryManager.getSecondary(verbBuilder)
+          .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
+      // If putResponse is null or empty, return empty response
+      if (putResponse == null || putResponse.isEmpty) {
+        return AtResponse()..response = '';
+      }
+      return PutResponseTransformer().transform(putResponse);
+    } on AtException catch (e) {
+      e.stack(AtChainedException(
+          Intent.shareData, ExceptionScenario.localVerbExecutionFailed, e));
+      throw AtExceptionManager.createException(e);
     }
-    return PutResponseTransformer().transform(putResponse);
   }
 
   @override

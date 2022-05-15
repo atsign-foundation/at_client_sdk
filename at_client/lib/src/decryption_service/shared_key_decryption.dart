@@ -5,6 +5,7 @@ import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 
 /// Class responsible for decrypting the value of shared key's that are not owned
 /// by currentAtSign
@@ -12,7 +13,11 @@ import 'package:at_utils/at_logger.dart';
 /// CurrentAtSign: @bob
 /// lookup:phone@alice
 class SharedKeyDecryption implements AtKeyDecryption {
+  @visibleForTesting
+  var atClient;
   final _logger = AtSignLogger('SharedKeyDecryption');
+
+  SharedKeyDecryption({this.atClient});
 
   @override
   Future decrypt(AtKey atKey, dynamic encryptedValue) async {
@@ -22,7 +27,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
     String? encryptedSharedKey;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
       encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
-      final atClient = AtClientManager.getInstance().atClient;
+      atClient ??= AtClientManager.getInstance().atClient;
       final currentAtSignPublicKey = (await atClient
               .getLocalSecondary()!
               .getEncryptionPublicKey(atClient.getCurrentAtSign()!))
@@ -31,7 +36,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
           atKey.metadata!.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
         throw AtPublicKeyChangeException(
-            'Public key has changed. Cannot decrypt shared data- ${atKey.key}');
+            'Public key has changed. Cannot decrypt shared key: ${atKey.key}');
       }
     } else {
       encryptedSharedKey = await _getEncryptedSharedKey(atKey);
@@ -78,7 +83,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
       encryptedSharedKey = await AtClientManager.getInstance()
           .atClient
           .getRemoteSecondary()!
-          .executeAndParse(sharedKeyLookUpBuilder);
+          .executeVerb(sharedKeyLookUpBuilder);
+      encryptedSharedKey =
+          DefaultResponseParser().parse(encryptedSharedKey).response;
     }
     if (encryptedSharedKey.isNotEmpty) {
       return DefaultResponseParser().parse(encryptedSharedKey).response;
