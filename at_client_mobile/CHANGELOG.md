@@ -1,5 +1,5 @@
 ## 3.1.15
-- - migrated to latest version of at_client - 3.0.23
+- at client version upgrade v3.0.23.
 ## 3.1.14
 - migrated to latest version of at_client
 ## 3.1.13
