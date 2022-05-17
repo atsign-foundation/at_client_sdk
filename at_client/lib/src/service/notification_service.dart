@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_client/src/exception/at_client_exception.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:uuid/uuid.dart';

@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
@@ -47,7 +48,7 @@ void main() {
           () => encryptionService.encrypt(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
-              e.message ==
+              e.errorMessage ==
                   'Invalid value type found: ${value.runtimeType}. Valid value type is String')));
     });
   });

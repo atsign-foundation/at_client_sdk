@@ -1,11 +1,11 @@
-import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:convert';
 
-import 'package:at_commons/at_commons.dart';
-import 'package:at_utils/at_logger.dart';
-import 'package:crypto/crypto.dart';
+import 'package:at_client/at_client.dart';
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart';
+import 'package:crypto/crypto.dart';
+import 'package:at_utils/at_logger.dart';
 
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
