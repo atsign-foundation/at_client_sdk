@@ -18,7 +18,7 @@ class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
   final Map<NotificationConfig, StreamController> _streamListeners = {};
   final emptyRegex = '';
-  static const notificationIdKey = '_latestNotificationId';
+  static const notificationIdKey = '_latestNotificationIdv2';
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
@@ -98,16 +98,9 @@ class NotificationServiceImpl
       var atValue;
       try {
         atValue = await _atClient.get(atKey);
-      } on AtKeyException catch (e) {
-        _logger.finer(
-            'Problem with old notification data which is unencrypted.Attempting to fix');
-        if (e.errorMessage!.startsWith('FormatException:')) {
-          await _fixLatestNotificationCorruptData(atKey, e);
-          atValue = await _atClient.get(atKey);
-          _logger.finer('at value after updating: $atValue');
-        } else {
-          _logger.severe('not a decryption issue: ${e.toString()}');
-        }
+      } on Exception catch (e) {
+        _logger
+            .severe('Exception in getting last notification id: ${e.toString}');
       }
       if (atValue != null && atValue.value != null) {
         _logger.finer('json from hive: ${atValue.value}');
@@ -115,47 +108,6 @@ class NotificationServiceImpl
       }
       return null;
     }
-  }
-
-  Future<void> _fixLatestNotificationCorruptData(
-      AtKey atKey, Exception e) async {
-    try {
-      String oldData = await _getOldUnencryptedData(atKey);
-      _logger.finer('unencrypted old data: $oldData');
-      await _updateEncryptedData(oldData, atKey);
-    } on Exception catch (e) {
-      _logger.severe('Exception fixing old data: ${e.toString}');
-    }
-  }
-
-  Future<void> _updateEncryptedData(String oldData, AtKey atKey) async {
-    final selfEncryptionKey =
-        await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
-    final encryptedData =
-        EncryptionUtil.encryptValue(oldData, selfEncryptionKey!);
-    _logger.finer('encrypted latest notification data: $encryptedData');
-//    final decryptedData =
-//        EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
-//    _logger.finer('decrypted latest notification data: $decryptedData');
-    final updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey = '$notificationIdKey.${_atClient.getPreferences()!.namespace}'
-      ..sharedBy = _atClient.getCurrentAtSign()
-      ..isEncrypted = true
-      ..value = encryptedData;
-    await _atClient
-        .getLocalSecondary()!
-        .executeVerb(updateVerbBuilder, sync: false);
-  }
-
-  Future<String> _getOldUnencryptedData(AtKey atKey) async {
-    final llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = '${atKey.key}.${_atClient.getPreferences()!.namespace}'
-      ..sharedBy = atKey.sharedBy;
-    var verbResult =
-        await _atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
-    verbResult = verbResult.replaceFirst('data:', '');
-    _logger.finer('got data from secondary: $verbResult');
-    return verbResult;
   }
 
   @override
