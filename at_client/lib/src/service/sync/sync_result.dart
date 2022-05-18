@@ -1,5 +1,5 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
-import 'package:at_commons/at_commons.dart';
 
 ///Class to represent sync response.
 class SyncResult {

@@ -4,11 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:async/async.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -62,7 +59,7 @@ class EncryptionService {
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     if (sharedKey == null) {
       logger.severe('Decryption failed. SharedKey is null');
-      throw AtClientException(error_codes['AtClientException'],'Decryption failed. SharedKey is null');
+      throw AtClientException('AT0014','Decryption failed. SharedKey is null');
     }
     //trying to llookup a value without shared key. throw exception or return null}
     sharedKey = sharedKey.replaceFirst('data:', '');

@@ -1,3 +1,5 @@
+## 3.0.23
+- Fix for at_client issue #508 - getLastNotificationTime bug while trying to decrypt old data
 ## 3.0.22
 - Fix for getKeys in local secondary not returning keys
 ## 3.0.21
