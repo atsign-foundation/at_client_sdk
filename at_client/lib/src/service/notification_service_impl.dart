@@ -139,9 +139,8 @@ class NotificationServiceImpl
                 await _getDecryptedNotifications(atNotification);
           }
           if (notificationConfig.regex != emptyRegex) {
-            if (notificationConfig.regex
-                .allMatches(atNotification.key)
-                .isNotEmpty) {
+            if (RegExp(notificationConfig.regex)
+                .hasMatch(atNotification.key)) {
               streamController.add(atNotification);
             }
           } else {
