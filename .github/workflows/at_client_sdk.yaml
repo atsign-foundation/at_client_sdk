@@ -135,6 +135,16 @@ jobs:
         working-directory: at_end2end_test
         run: dart pub get
 
+      # Logs into CICD VMs and runs script to update to the latest secondary image
+      - name: update image on cicd VMs
+        uses: appleboy/ssh-action@v0.1.4
+        with:
+          host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
+          username: ubuntu
+          key: ${{ secrets.CICD_SSH_KEY }}
+          script: |
+            ./update_ce2e_images.sh
+
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
         run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
