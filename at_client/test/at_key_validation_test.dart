@@ -9,7 +9,7 @@ void main() {
           () => AtClientValidation.validateKey('phone wavi'),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.errorMessage == 'Key cannot contain whitespaces')));
+              e.message == 'Key cannot contain whitespaces')));
     });
 
     test('A test to verify atKey with @ throws error', () {
@@ -17,7 +17,7 @@ void main() {
           () => AtClientValidation.validateKey('phone@wavi'),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.errorMessage == 'Key cannot contain @')));
+              e.message == 'Key cannot contain @')));
     });
 
     test('A test to verify atKey with space throws error', () {
@@ -25,7 +25,7 @@ void main() {
           () => AtClientValidation.validateKey(''),
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
-              e.errorMessage == 'Key cannot be null or empty')));
+              e.message == 'Key cannot be null or empty')));
     });
   });
 }

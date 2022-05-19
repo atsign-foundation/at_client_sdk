@@ -4,8 +4,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:async/async.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -59,7 +63,8 @@ class EncryptionService {
     var sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
     if (sharedKey == null) {
       logger.severe('Decryption failed. SharedKey is null');
-      throw AtClientException('AT0014','Decryption failed. SharedKey is null');
+      throw AtClientException(error_codes['AtClientException'],
+          'Decryption failed. SharedKey is null');
     }
     //trying to llookup a value without shared key. throw exception or return null}
     sharedKey = sharedKey.replaceFirst('data:', '');
@@ -200,8 +205,9 @@ class EncryptionService {
       var plookupBuilder = PLookupVerbBuilder()
         ..atKey = 'publickey'
         ..sharedBy = sharedBy;
+      sharedByPublicKey = await remoteSecondary!.executeVerb(plookupBuilder);
       sharedByPublicKey =
-          await remoteSecondary!.executeAndParse(plookupBuilder);
+          DefaultResponseParser().parse(sharedByPublicKey).response;
       //4.b store sharedWith public key for future retrieval
       var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
         ..atKey = 'publickey.$sharedBy'
@@ -303,8 +309,9 @@ class EncryptionService {
     var plookupBuilder = PLookupVerbBuilder()
       ..atKey = 'publickey'
       ..sharedBy = sharedWithUser;
+    sharedWithPublicKey = await remoteSecondary!.executeVerb(plookupBuilder);
     sharedWithPublicKey =
-        await remoteSecondary!.executeAndParse(plookupBuilder);
+        DefaultResponseParser().parse(sharedWithPublicKey).response;
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
     if (sharedWithPublicKey == 'null' || sharedWithPublicKey.isEmpty) {
@@ -430,7 +437,9 @@ class EncryptionService {
         ..sharedBy = sharedBy
         ..auth = true;
       encryptedSharedKey =
-          await remoteSecondary!.executeAndParse(sharedKeyLookUpBuilder);
+          await remoteSecondary!.executeVerb(sharedKeyLookUpBuilder);
+      encryptedSharedKey =
+          DefaultResponseParser().parse(encryptedSharedKey).response;
     }
     if (encryptedSharedKey.isNotEmpty) {
       encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');

@@ -256,7 +256,8 @@ class AtClientImpl implements AtClient {
         ..one = atKey
         ..two = (getResponse);
       // Transform the response and return
-      return GetResponseTransformer().transform(getResponseTuple);
+      var atValue = await GetResponseTransformer().transform(getResponseTuple);
+      return atValue;
     } on AtException catch (e) {
       var exceptionScenario = ExceptionScenario.localVerbExecutionFailed;
       if (secondary is RemoteSecondary) {

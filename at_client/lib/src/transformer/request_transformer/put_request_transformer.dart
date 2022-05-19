@@ -1,8 +1,8 @@
 import 'package:at_base2e15/at_base2e15.dart';
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
@@ -25,7 +25,7 @@ class PutRequestTransformer
     // will be set to false .
     if (tuple.one.metadata!.isBinary!) {
       if (tuple.two is! List<int>) {
-        throw AtClientException(atClientErrorCodes['AtClientException'],
+        throw AtClientException('AT0014',
             'List<int> is expected when isBinary in metadata is set to true');
       }
       if (tuple.two != null &&
