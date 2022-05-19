@@ -2,19 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_base2e15/at_base2e15.dart';
-import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/exception/at_client_exception_util.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -26,7 +22,6 @@ import 'package:at_client/src/transformer/request_transformer/get_request_transf
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
-import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -323,69 +318,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    AtResponse atResponse = AtResponse();
-    // If the value is neither String nor List<int> throw exception
-    if (value is! String && value is! List<int>) {
-      // TODO: Throw AtValueException
-      throw AtClientException('AT014',
-          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
-    }
-    if (value is String) {
-      atResponse = await putText(atKey, value);
-    }
-    if (value is List<int>) {
-      atResponse = await putBinary(atKey, value);
-    }
-    return atResponse.response.isNotEmpty;
-  }
-
-  /// put's the text data into the keystore
-  @override
-  Future<AtResponse> putText(AtKey atKey, String value) async {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
-    // Setting metadata.isBinary to false for putText
-    atKey.metadata!.isBinary = false;
-    return await _putInternal(atKey, value);
-  }
-
-  /// put's the binary data(e.g. images, files etc) into the keystore
-  @override
-  Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
-    // Setting metadata.isBinary to true for putBinary
-    atKey.metadata!.isBinary = true;
-    // Base2e15.encode method converts the List<int> type to String.
-    return await _putInternal(atKey, Base2e15.encode(value));
-  }
-
-  Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
-    // Performs the put request validations.
-    AtClientValidation.validatePutRequest(atKey, value, preference!);
-    // Set sharedBy to currentAtSign if not set.
-    if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
-      atKey.sharedBy =
-          AtClientManager.getInstance().atClient.getCurrentAtSign();
-      atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
-    }
-    if (atKey.metadata!.namespaceAware) {
-      atKey.namespace ??= preference?.namespace;
-    }
-    // validate the atKey
-    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
-    // KeyShare validation
-    var validationResult = AtKeyValidators.get().validate(
-        atKey.toString(),
-        ValidationContext()
-          ..atSign = currentAtSign
-          ..validateOwnership = true);
-    // If the validationResult.isValid is false, validation of AtKey failed.
-    // throw AtClientException with failure reason.
-    if (!validationResult.isValid) {
-      throw AtClientException('AT0014', validationResult.failureReason);
-    }
-
+    // Perform atKey validations.
+    await AtClientValidation.validateAtKey(atKey);
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
@@ -395,11 +329,11 @@ class AtClientImpl implements AtClient {
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
-    // If putResponse is null or empty, return empty response
+    // If putResponse is null or empty, update failed, return false.
     if (putResponse == null || putResponse.isEmpty) {
-      return AtResponse()..response = '';
+      return false;
     }
-    return PutResponseTransformer().transform(putResponse);
+    return await PutResponseTransformer().transform(putResponse);
   }
 
   @override
@@ -410,11 +344,6 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
-    AtKeyValidators.get().validate(
-        atKey.toString(),
-        ValidationContext()
-          ..atSign = currentAtSign
-          ..validateOwnership = true);
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
     final notifyResult =
@@ -722,6 +651,7 @@ class AtClientImpl implements AtClient {
         _logger.severe("FileTransferObject is null");
         throw AtClientException(
             error_codes['AtClientException'], 'FileTransferObject is null');
+
       }
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value))!;
@@ -784,29 +714,16 @@ class AtClientImpl implements AtClient {
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    await AtClientValidation.isAtSignExists(
-        notificationParams.atKey.sharedWith!,
-        _preference!.rootDomain,
-        _preference!.rootPort);
+    AtClientValidation.isAtSignExists(notificationParams.atKey.sharedWith!,
+        _preference!.rootDomain, _preference!.rootPort);
     // validate sharedBy atSign
-    if (notificationParams.atKey.sharedBy == null ||
-        notificationParams.atKey.sharedBy!.isEmpty) {
-      notificationParams.atKey.sharedBy = getCurrentAtSign();
-    }
+    notificationParams.atKey.sharedBy ??= getCurrentAtSign();
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
     // For messageType is text, text may contains spaces but key should not have spaces
     // Hence do not validate the key.
     if (notificationParams.messageType != MessageTypeEnum.text) {
       AtClientValidation.validateKey(notificationParams.atKey.key);
-      ValidationResult validationResult = AtKeyValidators.get().validate(
-          notificationParams.atKey.toString(),
-          ValidationContext()
-            ..atSign = currentAtSign
-            ..validateOwnership = true);
-      if (!validationResult.isValid) {
-        throw AtClientException('AT0014', validationResult.failureReason);
-      }
     }
     // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);

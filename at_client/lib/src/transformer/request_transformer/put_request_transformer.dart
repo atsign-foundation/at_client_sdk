@@ -1,5 +1,7 @@
+import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -10,10 +12,34 @@ class PutRequestTransformer
     extends Transformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   @override
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple) async {
+    // Set the default metadata if not already set.
+    tuple.one.metadata ??= Metadata();
+    // Set sharedBy to currentAtSign if not set.
+    tuple.one.sharedBy ??=
+        AtClientManager.getInstance().atClient.getCurrentAtSign();
+    tuple.one.sharedBy = AtUtils.formatAtSign(tuple.one.sharedBy);
     // Populate the update verb builder
     UpdateVerbBuilder updateVerbBuilder = _populateUpdateVerbBuilder(tuple.one);
-    // Setting value to updateVerbBuilder
-    updateVerbBuilder.value = tuple.two;
+    // If atKey.metadata.isBinary is true, encode the data; else set the value.
+    // By default, in populatedUpdateVerbBuilder,tuple.one.metadata.isBinary
+    // will be set to false .
+    if (tuple.one.metadata!.isBinary!) {
+      if (tuple.two is! List<int>) {
+        throw AtClientException(atClientErrorCodes['AtClientException'],
+            'List<int> is expected when isBinary in metadata is set to true');
+      }
+      if (tuple.two != null &&
+          tuple.two.length >
+              AtClientManager.getInstance()
+                  .atClient
+                  .getPreferences()!
+                  .maxDataSize) {
+        throw AtClientException('AT0005', 'BufferOverFlowException');
+      }
+      updateVerbBuilder.value = _encodeBinaryData(tuple.two);
+    } else {
+      updateVerbBuilder.value = tuple.two;
+    }
     //Encrypt the data for non public keys
     if (!tuple.one.metadata!.isPublic!) {
       var encryptionService = AtKeyEncryptionManager.get(tuple.one,
@@ -56,5 +82,10 @@ class PutRequestTransformer
     }
     updateVerbBuilder.dataSignature = atKey.metadata!.dataSignature;
     return updateVerbBuilder;
+  }
+
+  /// Encode the binary data
+  String _encodeBinaryData(List<int> value) {
+    return Base2e15.encode(value);
   }
 }
