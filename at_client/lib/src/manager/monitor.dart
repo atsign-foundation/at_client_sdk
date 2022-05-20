@@ -252,6 +252,7 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
+    if(_preference.privateKey == null) throw Exception('Private key is null in preference'); // JEREMY
     var key = RSAPrivateKey.fromString(_preference.privateKey!);
     var sha256signature =
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
