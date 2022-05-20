@@ -310,6 +310,17 @@ class AtClientImpl implements AtClient {
       {bool isDedicated = false}) async {
     // Perform atKey validations.
     await AtClientValidation.validateAtKey(atKey);
+    // Set sharedBy to currentAtSign if not set.
+    if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
+      atKey.sharedBy =
+          AtClientManager.getInstance().atClient.getCurrentAtSign();
+      atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
+    }
+    // Set the default metadata if not already set.
+    atKey.metadata ??= Metadata();
+    if (atKey.metadata!.namespaceAware) {
+      atKey.namespace ??= preference?.namespace;
+    }
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
