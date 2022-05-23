@@ -1,11 +1,11 @@
 import 'dart:io';
-import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:test/test.dart';
+import 'package:uuid/uuid.dart';
 
 import 'test_utils.dart';
 
@@ -159,7 +159,7 @@ void main() {
     var result = await currentAtSignClientManager?.atClient
         .getRemoteSecondary()!
         .executeCommand(
-            'update:ttl:300000$sharedWithAtSign:location.$namespace$currentAtSign $encryptedValue\n',
+            'update:ttl:300000:$sharedWithAtSign:location.$namespace$currentAtSign $encryptedValue\n',
             auth: true);
     expect(result != null, true);
     var isSyncInProgress = true;
