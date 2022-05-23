@@ -387,7 +387,6 @@ class AtClientImpl implements AtClient {
     if (!validationResult.isValid) {
       throw AtClientException('AT0014', validationResult.failureReason);
     }
-
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
