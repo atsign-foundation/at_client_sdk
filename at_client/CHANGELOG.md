@@ -1,3 +1,6 @@
+## 3.0.24
+- Update the @platform logo
+- Default the AtKey.sharedBy to currentAtSign
 ## 3.0.23
 - Fix for at_client issue #508 - getLastNotificationTime bug while trying to decrypt old data
 ## 3.0.22
