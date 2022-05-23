@@ -259,10 +259,9 @@ class AtClientImpl implements AtClient {
       var atValue = await GetResponseTransformer().transform(getResponseTuple);
       return atValue;
     } on AtException catch (e) {
-      var exceptionScenario = ExceptionScenario.localVerbExecutionFailed;
-      if (secondary is RemoteSecondary) {
-        exceptionScenario = ExceptionScenario.remoteVerbExecutionFailed;
-      }
+      var exceptionScenario = (secondary is LocalSecondary)
+          ? ExceptionScenario.localVerbExecutionFailed
+          : ExceptionScenario.remoteVerbExecutionFailed;
       e.stack(
           AtChainedException(Intent.fetchData, exceptionScenario, e.message));
       throw AtExceptionManager.createException(e);
@@ -366,10 +365,8 @@ class AtClientImpl implements AtClient {
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
-    if (atKey.sharedBy == null || atKey.sharedBy!.isEmpty) {
-      atKey.sharedBy =
-          AtClientManager.getInstance().atClient.getCurrentAtSign();
-      atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
+    if (AtClientUtil.isNull(atKey.sharedBy)) {
+      atKey.sharedBy = currentAtSign;
     }
     if (atKey.metadata!.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
