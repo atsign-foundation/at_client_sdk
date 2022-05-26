@@ -1,3 +1,5 @@
+## 3.0.25
+- Fix for handling empty sync responses from server. App issue #624
 ## 3.0.24
 - Update the @platform logo
 - Default the AtKey.sharedBy to currentAtSign
