@@ -13,6 +13,8 @@ import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/util/regex_match_util.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -135,9 +137,7 @@ class NotificationServiceImpl
                 await _getDecryptedNotifications(atNotification);
           }
           if (notificationConfig.regex != emptyRegex) {
-            if (notificationConfig.regex
-                .allMatches(atNotification.key)
-                .isNotEmpty) {
+            if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
               streamController.add(atNotification);
             }
           } else {

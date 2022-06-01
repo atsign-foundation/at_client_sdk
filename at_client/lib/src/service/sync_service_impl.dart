@@ -277,7 +277,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         atSign: _atClient.getCurrentAtSign()!);
     var localCommitId = await _getLocalCommitId();
     if (serverCommitId > localCommitId) {
-      _logger.finer('syncing to local');
+      _logger.finer(
+          'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
       await _syncFromServer(serverCommitId, localCommitId);
     }
     if (unCommittedEntries.isNotEmpty) {
@@ -342,9 +343,22 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           .parse(await _remoteSecondary.executeVerb(syncBuilder))
           .response);
       _logger.finest('** syncResponse $syncResponseJson');
+
+      if (syncResponseJson == null || syncResponseJson.isEmpty) {
+        _logger.finer(
+            'sync response is empty: local commitID: $localCommitId server commitID: $serverCommitId');
+        break;
+      }
       // Iterates over each commit
-      await Future.forEach(syncResponseJson,
-          (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
+      for(dynamic serverCommitEntry in syncResponseJson) {
+        try {
+          await _syncLocal(serverCommitEntry);
+        } on Exception catch(e) {
+          _logger.severe('exception syncing entry to local $serverCommitEntry - ${e.toString()}');
+        }
+      }
+      // await Future.forEach(syncResponseJson,
+      //     (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
       _logger.finest('**localCommitId $localCommitId');
