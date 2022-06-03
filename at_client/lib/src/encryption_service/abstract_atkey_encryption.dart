@@ -1,8 +1,9 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -20,7 +21,14 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _sharedKey = await getSharedKey(atKey);
     late String encryptedSharedKey;
     // Get SharedWith encryption public key
-    final sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
+    String sharedWithPublicKey = '';
+    try {
+      sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
+    } on KeyNotFoundException catch (e) {
+      e.stack(AtChainedException(
+          Intent.shareData, ExceptionScenario.encryptionFailed, e.message));
+      rethrow;
+    }
     // If sharedKey is empty, then -
     // Generate a new sharedKey
     // Encrypt the sharedKey with sharedWith public key
@@ -72,7 +80,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       if (key == null || key.isEmpty || key == 'data:null') {
         key = await _getSharedKeyFromRemote(atKey);
       }
-    } on AtClientException {
+    } on KeyNotFoundException {
       AtSignLogger('AbstractAtKeyEncryption').finer(
           '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
     }

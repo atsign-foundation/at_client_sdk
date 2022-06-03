@@ -133,6 +133,13 @@ class AtClientUtil {
     }
     return atKey.key!;
   }
+
+  static bool isNull(dynamic arg1) {
+    if ((arg1 is String?) && (arg1 == null || arg1.isEmpty)) {
+      return true;
+    }
+    return false;
+  }
 }
 
 class Tuple<T1, T2> {

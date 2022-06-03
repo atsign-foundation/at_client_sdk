@@ -31,32 +31,12 @@ dependencies:
   at_commons: ^3.0.14
   at_utils: ^3.0.9
 
-#dependency_overrides:
-#  at_persistence_spec:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_persistence/at_persistence_spec
-#      ref: trunk
-#  at_utils:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_utils
-#      ref: trunk
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: error_handling
-#  at_persistence_secondary_server:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_secondary/at_persistence_secondary_server
-#      ref: trunk
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: findsecondary_bug
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_commons
+      ref: trunk
 
 dev_dependencies:
   test: ^1.17.2
