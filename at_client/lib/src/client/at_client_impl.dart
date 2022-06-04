@@ -256,7 +256,8 @@ class AtClientImpl implements AtClient {
         ..one = atKey
         ..two = (getResponse);
       // Transform the response and return
-      return GetResponseTransformer().transform(getResponseTuple);
+      var atValue = await GetResponseTransformer().transform(getResponseTuple);
+      return atValue;
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
           ? ExceptionScenario.localVerbExecutionFailed
@@ -773,6 +774,8 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<String?> notifyChange(NotificationParams notificationParams) async {
+    String? notifyKey = notificationParams.atKey.key;
+
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
@@ -811,14 +814,13 @@ class AtClientImpl implements AtClient {
     // If namespaceAware is set to true, append nameSpace to key.
     if (notificationParams.atKey.metadata != null &&
         notificationParams.atKey.metadata!.namespaceAware) {
-      notificationParams.atKey.key =
-          _getKeyWithNamespace(notificationParams.atKey.key!);
+      notifyKey = _getKeyWithNamespace(notifyKey!);
     }
     notificationParams.atKey.sharedBy ??= currentAtSign;
 
     var builder = NotifyVerbBuilder()
       ..id = notificationParams.id
-      ..atKey = notificationParams.atKey.key
+      ..atKey = notifyKey
       ..sharedBy = notificationParams.atKey.sharedBy
       ..sharedWith = notificationParams.atKey.sharedWith
       ..operation = notificationParams.operation
@@ -871,8 +873,8 @@ class AtClientImpl implements AtClient {
           notificationParams.atKey.metadata!.sharedKeyEnc;
       builder.pubKeyChecksum = notificationParams.atKey.metadata!.pubKeyCS;
     }
-    if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
+    if (notifyKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
       builder.sharedBy = null;
     }
     return await getRemoteSecondary()?.executeVerb(builder);
