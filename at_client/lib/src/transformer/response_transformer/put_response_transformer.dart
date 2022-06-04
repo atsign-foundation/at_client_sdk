@@ -8,8 +8,6 @@ import 'package:at_client/src/transformer/at_transformer.dart';
 class PutResponseTransformer implements Transformer<String, AtResponse> {
   @override
   FutureOr<AtResponse> transform(String value) {
-    // If the put response is null or empty put failed, return false.
-    // If put response contains the non null response(commitId), return true.
     return DefaultResponseParser().parse(value);
   }
 }

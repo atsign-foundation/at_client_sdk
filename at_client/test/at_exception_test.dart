@@ -2,6 +2,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -34,10 +35,6 @@ void main() {
   var llookupVerbBuilder = LLookupVerbBuilder()
     ..atKey = 'shared_key.sitaram'
     ..sharedBy = '@murali';
-
-  var lookupKey = AtKey()
-    ..key = 'phone'
-    ..sharedBy = '@alice';
 
   setUp(() {
     reset(mockAtLookup);
@@ -90,7 +87,7 @@ void main() {
       expect(
           () => sharedKeyDecryption.decrypt(atKey, '123'),
           throwsA(predicate((dynamic e) =>
-              e is KeyNotFoundException &&
+              e is SharedKeyNotFoundException &&
               e.message == 'shared encryption key not found')));
     });
   });

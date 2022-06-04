@@ -2,19 +2,19 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/listener/sync_progress_listener.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync/sync_result.dart';
-import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -186,7 +186,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.severe(
           'Exception in sync ${syncRequest.id}. Reason ${e.toString()}');
       syncRequest.result!.atClientException =
-          AtClientException(error_codes['AtClientException'], e.toString());
+          AtClientException(atClientErrorCodes['SyncException'], e.toString());
       _syncError(syncRequest);
       _syncInProgress = false;
       syncProgress.syncStatus = SyncStatus.failure;
@@ -248,8 +248,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   void _onError(SyncResult syncResult) {
-    _logger
-        .severe('system sync error ${syncResult.atClientException?.message}');
+    _logger.severe(
+        'system sync error ${syncResult.atClientException?.errorMessage}');
   }
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
@@ -486,7 +486,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           unCommittedEntries, serverCommitId, lastSyncedCommitId);
     } on Exception catch (e) {
       _logger.severe('exception in isInSync ${e.toString()}');
-      throw AtClientException(error_codes['AtClientException'], e.toString());
+      throw AtClientException.message(e.toString());
     } finally {
       remoteSecondary.atLookUp.close();
     }

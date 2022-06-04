@@ -1,4 +1,3 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';

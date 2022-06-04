@@ -107,8 +107,8 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {
+    var llookupKey = '';
     try {
-      var llookupKey = '';
       if (builder.isCached) {
         llookupKey += 'cached:';
       }
@@ -247,7 +247,7 @@ class LocalSecondary implements Secondary {
     return privateKeyData?.data;
   }
 
-  Future<String?> getEncryptionPrivateKey() async {
+  Future<String>? getEncryptionPrivateKey() async {
     var privateKeyData = await keyStore!.get(AT_ENCRYPTION_PRIVATE_KEY);
     return privateKeyData?.data;
   }

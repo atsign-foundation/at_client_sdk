@@ -56,8 +56,10 @@ class RemoteSecondary implements Secondary {
     try {
       verbResult = await executeVerb(builder);
       verbResult = verbResult.replaceFirst('data:', '');
-    } on AtClientException catch (e) {
-      logger.severe('Exception occurred in processing the verb ${e.message}');
+    }on AtException catch (e) {
+      throw e
+        ..stack(AtChainedException(
+            Intent.fetchData, ExceptionScenario.remoteVerbExecutionFailed, e.message));
     }
     return verbResult;
   }

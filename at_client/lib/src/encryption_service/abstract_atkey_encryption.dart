@@ -163,7 +163,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
           'Failed to fetch public key of ${atKey.sharedWith}')
         ..fromException(e)
         ..stack(AtChainedException(
-            Intent.shareData, ExceptionScenario.keyNotFound, e));
+            Intent.shareData, ExceptionScenario.keyNotFound, e.message));
     }
     sharedWithPublicKey =
         DefaultResponseParser().parse(sharedWithPublicKey).response;
