@@ -1,3 +1,4 @@
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -14,7 +15,7 @@ import 'package:meta/meta.dart';
 /// lookup:phone@alice
 class SharedKeyDecryption implements AtKeyDecryption {
   @visibleForTesting
-  var atClient;
+  late AtClient? atClient;
   final _logger = AtSignLogger('SharedKeyDecryption');
 
   SharedKeyDecryption({this.atClient});
@@ -27,12 +28,12 @@ class SharedKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     String? encryptedSharedKey;
+    atClient ??= AtClientManager.getInstance().atClient;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
       encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
-      final atClient = AtClientManager.getInstance().atClient;
       final currentAtSignPublicKey = (await atClient
-              .getLocalSecondary()!
-              .getEncryptionPublicKey(atClient.getCurrentAtSign()!))
+              ?.getLocalSecondary()!
+              .getEncryptionPublicKey(atClient!.getCurrentAtSign()!))
           ?.trim();
       if (currentAtSignPublicKey != null &&
           atKey.metadata!.pubKeyCS !=

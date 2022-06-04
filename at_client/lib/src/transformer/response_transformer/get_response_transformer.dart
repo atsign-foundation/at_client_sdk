@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_commons/at_commons.dart';
 
