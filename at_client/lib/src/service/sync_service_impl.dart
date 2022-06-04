@@ -185,8 +185,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     } on Exception catch (e) {
       _logger.severe(
           'Exception in sync ${syncRequest.id}. Reason ${e.toString()}');
-      syncRequest.result!.atClientException =
-          AtClientException(atClientErrorCodes['SyncException'], e.toString());
+      syncRequest.result!.atClientException = AtClientException.message(e.toString());
       _syncError(syncRequest);
       _syncInProgress = false;
       syncProgress.syncStatus = SyncStatus.failure;
@@ -248,8 +247,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   void _onError(SyncResult syncResult) {
-    _logger.severe(
-        'system sync error ${syncResult.atClientException?.errorMessage}');
+    _logger
+        .severe('system sync error ${syncResult.atClientException?.message}');
   }
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
@@ -350,11 +349,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         break;
       }
       // Iterates over each commit
-      for(dynamic serverCommitEntry in syncResponseJson) {
+      for (dynamic serverCommitEntry in syncResponseJson) {
         try {
           await _syncLocal(serverCommitEntry);
-        } on Exception catch(e) {
-          _logger.severe('exception syncing entry to local $serverCommitEntry - ${e.toString()}');
+        } on Exception catch (e) {
+          _logger.severe(
+              'exception syncing entry to local $serverCommitEntry - ${e.toString()}');
         }
       }
       // await Future.forEach(syncResponseJson,

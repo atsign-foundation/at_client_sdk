@@ -394,9 +394,9 @@ class AtClientImpl implements AtClient {
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
-    // If putResponse is null or empty, update failed, return false.
+    // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
-      return false;
+      return AtResponse()..isError = true;
     }
     return await PutResponseTransformer().transform(putResponse);
   }
