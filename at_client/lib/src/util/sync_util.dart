@@ -93,7 +93,7 @@ class SyncUtil {
     } on Exception catch (e) {
       logger.severe(
           'Exception while getting latest server commit id: ${e.toString()}');
-      throw AtClientException(error_codes['AtClientException'],
+      throw AtClientException.message(
           'Unable to fetch latest server commit id: ${e.toString()}');
     }
     result = result.replaceAll('data: ', '');
