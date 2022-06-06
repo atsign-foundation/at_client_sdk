@@ -93,6 +93,8 @@ class SyncUtil {
           'Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
       rethrow;
     } on Exception catch (e) {
+      logger.severe(
+          'Exception while getting latest server commit id: ${e.toString()}');
       throw AtClientException(atClientErrorCodes['AtClientException'],
           'Unable to fetch latest server commit id: ${e.toString()}');
     }
