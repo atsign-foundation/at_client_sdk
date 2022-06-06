@@ -153,10 +153,20 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..atKey = 'publickey'
       ..sharedBy = atKey.sharedWith?.replaceAll('@', '');
 
-    sharedWithPublicKey = await AtClientManager.getInstance()
-        .atClient
-        .getRemoteSecondary()!
-        .executeAndParse(plookupBuilder);
+    try {
+      sharedWithPublicKey = await AtClientManager.getInstance()
+          .atClient
+          .getRemoteSecondary()!
+          .executeVerb(plookupBuilder);
+    } on AtException catch (e) {
+      throw KeyNotFoundException(
+          'Failed to fetch public key of ${atKey.sharedWith}')
+        ..fromException(e)
+        ..stack(AtChainedException(
+            Intent.shareData, ExceptionScenario.keyNotFound, e.message));
+    }
+    sharedWithPublicKey =
+        DefaultResponseParser().parse(sharedWithPublicKey).response;
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
     if (sharedWithPublicKey.isEmpty || sharedWithPublicKey == 'data:null') {

@@ -104,20 +104,18 @@ class AtClientValidation {
       AtKey atKey, dynamic value, AtClientPreference atClientPreference) {
     // If length of value exceeds maxDataSize, throw AtClientException
     if (value.length > atClientPreference.maxDataSize) {
-      // TODO Throw AtValueException or BufferOverFlowException
-      throw AtClientException('AT0005', 'BufferOverFlowException');
+      throw BufferOverFlowException(
+          'The length of value exceeds the buffer size. Maximum buffer size is ${atClientPreference.maxDataSize} bytes. Found ${value.toString().length} bytes');
     }
     // If key is cached, throw exception
     if (atKey.metadata != null && atKey.metadata!.isCached) {
-      // TODO Throw AtKeyException
-      throw AtClientException('AT0014', 'User cannot create a cached key');
+      throw AtKeyException('User cannot create a cached key');
     }
     // If namespace is not set on key and in preferences, throw exception
     if ((atKey.namespace == null || atKey.namespace!.isEmpty) &&
         (atClientPreference.namespace == null ||
             atClientPreference.namespace!.isEmpty)) {
-      // TODO Throw AtKeyException
-      throw AtClientException('AT0014', 'namespace is mandatory');
+      throw AtKeyException('namespace is mandatory');
     }
   }
 }

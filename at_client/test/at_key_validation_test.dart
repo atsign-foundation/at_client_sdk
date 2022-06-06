@@ -1,6 +1,6 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:test/test.dart';
+import 'package:at_commons/at_commons.dart';
 
 void main() {
   group('A group of test related to validation of atKey', () {

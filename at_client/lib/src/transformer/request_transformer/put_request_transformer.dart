@@ -2,6 +2,7 @@ import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/encryption_service/signin_public_data.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
@@ -10,7 +11,8 @@ import 'package:at_utils/at_utils.dart';
 class PutRequestTransformer
     extends Transformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   @override
-  Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple) async {
+  Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
+      {String? encryptionPrivateKey}) async {
     // Populate the update verb builder
     UpdateVerbBuilder updateVerbBuilder = _populateUpdateVerbBuilder(tuple.one);
     // Setting value to updateVerbBuilder
@@ -30,6 +32,12 @@ class PutRequestTransformer
       }
       updateVerbBuilder.sharedKeyEncrypted = tuple.one.metadata!.sharedKeyEnc;
       updateVerbBuilder.pubKeyChecksum = tuple.one.metadata!.pubKeyCS;
+    } else {
+      if (encryptionPrivateKey == null || encryptionPrivateKey.isEmpty) {
+        throw AtPrivateKeyNotFoundException('Failed to sign the public data');
+      }
+      updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
+          updateVerbBuilder.value, encryptionPrivateKey);
     }
 
     return updateVerbBuilder;

@@ -1,6 +1,8 @@
-import 'package:at_client/at_client.dart';
-import 'package:test/test.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 
+import 'package:test/test.dart';
+import 'package:at_commons/at_commons.dart';
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 

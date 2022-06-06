@@ -7,7 +7,7 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     if (value is! String) {
-      throw AtClientException('AT0014',
+      throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
     await super.encrypt(atKey, value);

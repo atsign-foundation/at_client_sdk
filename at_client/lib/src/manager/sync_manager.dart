@@ -5,8 +5,8 @@ import 'dart:isolate';
 
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
-import 'package:at_client/src/manager/sync_isolate_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/manager/sync_isolate_manager.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -498,7 +498,6 @@ class SyncManager {
   }
 
   void _scheduleSyncTask() {
-    try {
       var cron = Cron();
       cron.schedule(
           Schedule.parse('*/${_preference!.syncIntervalMins} * * * *'),
@@ -506,6 +505,5 @@ class SyncManager {
         await syncWithIsolate();
       });
       _isScheduled = true;
-    } on Exception catch (e) {}
   }
 }

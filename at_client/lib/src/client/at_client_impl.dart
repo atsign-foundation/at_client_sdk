@@ -324,13 +324,12 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    AtResponse atResponse = AtResponse();
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
-      // TODO: Throw AtValueException
-      throw AtClientException('AT014',
+      throw AtValueException(
           'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
     }
+    AtResponse atResponse = AtResponse();
     if (value is String) {
       atResponse = await putText(atKey, value);
     }
@@ -382,22 +381,24 @@ class AtClientImpl implements AtClient {
     // If the validationResult.isValid is false, validation of AtKey failed.
     // throw AtClientException with failure reason.
     if (!validationResult.isValid) {
-      throw AtClientException('AT0014', validationResult.failureReason);
+      throw AtKeyException(validationResult.failureReason);
     }
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
     // Transform put request
-    UpdateVerbBuilder verbBuilder =
-        await PutRequestTransformer().transform(tuple);
+    // Optionally passing encryption private key to sign the public data.
+    UpdateVerbBuilder verbBuilder = await PutRequestTransformer().transform(
+        tuple,
+        encryptionPrivateKey: await _localSecondary?.getEncryptionPrivateKey());
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
-    // If putResponse is null or empty, return empty response
+    // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
-      return AtResponse()..response = '';
+      return AtResponse()..isError = true;
     }
-    return PutResponseTransformer().transform(putResponse);
+    return await PutResponseTransformer().transform(putResponse);
   }
 
   @override

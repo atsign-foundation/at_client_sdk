@@ -1,5 +1,5 @@
-import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
@@ -12,7 +12,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     if (value is! String) {
-      throw AtClientException('AT0014',
+      throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
     try {
