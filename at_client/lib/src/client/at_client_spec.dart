@@ -1,7 +1,10 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -64,6 +67,42 @@ abstract class AtClient {
   /// Starting version 3.0.0 [isDedicated] is deprecated
   Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
 
+  /// Used to store the textual data into the keystore.
+  /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
+  /// has to be shared with another atSign.
+  /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
+  /// phone.persona@alice where 'persona' is the namespace.
+  /// ```
+  /// update:phone@alice +1 999 9999
+  ///   var key = AtKey.self('phone', namespace: 'wavi').build();
+  ///   putText(key,'+1 999 9999');
+  /// update:public:phone@alice +1 999 9999
+  ///   var key = AtKey.public('location', namespace: 'wavi').build();
+  ///   put(key,'+1 999 9999');
+  /// update:@bob:phone@alice +1 999 9999
+  ///    var key = (AtKey.shared('phone', namespace: 'wavi')
+  ///             ..sharedWith('@bob'))
+  ///           .build();
+  ///   put(key,'+1 999 9999');
+  /// update:@alice:phone.persona@alice +1 999 9999
+  ///   var key = AtKey()..key='phone'
+  ///             ..sharedWith='@alice'
+  ///   put(key, '+1 999 9999');
+  /// update:@alice:phone@alice +1 999 9999
+  ///   var metaData = Metadata()..namespaceAware=false
+  ///   var key = AtKey()..key='phone'
+  ///            sharedWith='@alice'
+  ///   put(key, '+1 999 9999');
+  /// update:@bob:phone.persona@alice +1 999 9999
+  ///   var key = AtKey()..key='phone'
+  ///             sharedWith='@bob'
+  ///    put(key, '+1 999 9999');
+  /// ```
+  Future<AtResponse> putText(AtKey atKey, String value);
+
+  /// Used to store the binary data into the keystore. For example: images, files etc.
+  Future<AtResponse> putBinary(AtKey atKey, List<int> value);
+
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
   /// phone.persona@alice where 'persona' is the namespace. If you want to save by ignoring the namespace set [AtKey.metadata.namespaceAware]
@@ -86,7 +125,6 @@ abstract class AtClient {
 
   /// Get the value of [AtKey.key] from user's cloud secondary if [AtKey.sharedBy] is set. Otherwise looks up the key from local secondary.
   /// If the key was stored with public access, set [AtKey.metadata.isPublic] to true. If the key was shared with another atSign set [AtKey.sharedWith]
-  /// [isDedicated] need to be set to true to create a dedicated connection
   /// ```
   /// e.g alice is current atsign
   /// llookup:phone@alice
@@ -133,6 +171,20 @@ abstract class AtClient {
   ///             ..metadata=metaData
   ///   get(key);
   /// ```
+  /// Throws [AtKeyException] for the invalid key formed
+  ///
+  /// Throws [AtDecryptionException] if fails to decrypt the value
+  ///
+  /// Throws [AtPrivateKeyNotFoundException] if the encryption private key is not found to decrypt the value
+  ///
+  /// Throws [AtPublicKeyChangeException] if the encryption public key used encrypt the value
+  /// is different from the current encryption public key(at the time of decryption)
+  ///
+  /// Throws [SharedKeyNotFoundException] if the shared key to decrypt the value is not found
+  ///
+  /// Throws [SelfKeyNotFoundException] if the self encryption key is not found.
+  ///
+  /// Throws [AtClientException] if the cloud secondary is invalid or not reachable
   Future<AtValue> get(AtKey key, {bool isDedicated = false});
 
   /// Gets the metadata of [AtKey.key]

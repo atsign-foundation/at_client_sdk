@@ -1,7 +1,10 @@
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -104,8 +107,8 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {
+    var llookupKey = '';
     try {
-      var llookupKey = '';
       if (builder.isCached) {
         llookupKey += 'cached:';
       }
@@ -131,6 +134,9 @@ class LocalSecondary implements Secondary {
       return 'data:$result';
     } on DataStoreException catch (e) {
       _logger.severe('exception in llookup:${e.toString()}');
+      rethrow;
+    } on KeyNotFoundException catch (e) {
+      e.stack(AtChainedException(Intent.fetchData, ExceptionScenario.keyNotFound, e.message));
       rethrow;
     }
   }

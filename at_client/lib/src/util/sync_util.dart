@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/exception/at_client_error_codes.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -89,13 +87,13 @@ class SyncUtil {
     try {
       result = await remoteSecondary.executeVerb(builder);
     } on AtClientException catch (e) {
-      logger.severe(
-          'Exception occurred in processing stats verb ${e.errorCode} - ${e.errorMessage}');
+      logger
+          .severe('Exception occurred in processing stats verb ${e.toString}');
       rethrow;
     } on Exception catch (e) {
       logger.severe(
           'Exception while getting latest server commit id: ${e.toString()}');
-      throw AtClientException(atClientErrorCodes['AtClientException'],
+      throw AtClientException(error_codes['AtClientException'],
           'Unable to fetch latest server commit id: ${e.toString()}');
     }
     result = result.replaceAll('data: ', '');

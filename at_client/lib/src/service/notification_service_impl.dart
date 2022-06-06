@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
+import 'package:at_client/src/listener/connectivity_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -19,7 +22,7 @@ class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
   final Map<NotificationConfig, StreamController> _streamListeners = {};
   final emptyRegex = '';
-  static const notificationIdKey = '_latestNotificationIdv2';
+  static const notificationIdKey = '_latestNotificationId';
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
@@ -96,19 +99,13 @@ class NotificationServiceImpl
         .getLocalSecondary()!
         .keyStore!
         .isKeyExists(lastNotificationKeyStr)) {
-      var atValue;
-      try {
-        atValue = await _atClient.get(atKey);
-      } on Exception catch (e) {
-        _logger
-            .severe('Exception in getting last notification id: ${e.toString}');
-      }
-      if (atValue != null && atValue.value != null) {
+      final atValue = await _atClient.get(atKey);
+      if (atValue.value != null) {
         _logger.finer('json from hive: ${atValue.value}');
         return jsonDecode(atValue.value)['epochMillis'];
       }
-      return null;
     }
+    return null;
   }
 
   @override
@@ -190,8 +187,7 @@ class NotificationServiceImpl
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.undelivered;
-      var atClientException =
-          AtClientException(error_codes['AtClientException'], e.toString());
+      var atClientException = AtClientException(error_codes['AtClientException'], e.toString());
       notificationResult.atClientException = atClientException;
       // Invoke onErrorCallback
       if (onError != null) {
@@ -215,9 +211,8 @@ class NotificationServiceImpl
       case 'undelivered':
         notificationResult.notificationStatusEnum =
             NotificationStatusEnum.undelivered;
-        notificationResult.atClientException = AtClientException(
-            error_codes['AtClientException'],
-            'Unable to connect to secondary server');
+        notificationResult.atClientException =
+            AtClientException(error_codes['AtClientException'],'Unable to connect to secondary server');
         // If onError callback is registered, invoke callback method.
         if (onError != null) {
           onError(notificationResult);

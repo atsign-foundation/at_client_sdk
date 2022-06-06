@@ -48,7 +48,7 @@ void main() {
           () => encryptionService.encrypt(atKey, value),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
-              e.errorMessage ==
+              e.message ==
                   'Invalid value type found: ${value.runtimeType}. Valid value type is String')));
     });
   });
