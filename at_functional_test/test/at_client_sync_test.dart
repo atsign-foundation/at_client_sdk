@@ -1,4 +1,5 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -9,6 +10,7 @@ import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
+  var syncUtil = SyncUtil();
   test('Verify local changes are synced to server - local ahead', () async {
     var atSign = '@alice🛠';
     var preference = TestUtils.getPreference(atSign);
@@ -65,7 +67,7 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     // Get local commit id before put operation
-    var localEntry = await SyncUtil.getLastSyncedEntry('', atSign: atSign);
+    var localEntry = await syncUtil.getLastSyncedEntry('', atSign: atSign);
     print('localCommitId before put method ${localEntry?.commitId}');
     expect(localEntry?.commitId != null, true);
     // twitter.me@alice🛠
@@ -82,7 +84,7 @@ void main() {
     await Future.delayed(Duration(seconds: 10));
     // Getting server commit id after put
     var localEntryAfterSync =
-        await SyncUtil.getLastSyncedEntry('', atSign: atSign);
+        await syncUtil.getLastSyncedEntry('', atSign: atSign);
     print('localCommitId after put method ${localEntryAfterSync?.commitId}');
     // After sync successful, the localCommitId after put should be greater
     // than localCommitId before put

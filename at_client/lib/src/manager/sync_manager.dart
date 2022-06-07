@@ -36,6 +36,8 @@ class SyncManager {
 
   var _isScheduled = false;
 
+  SyncUtil? syncUtil;
+
   SyncManager(this._atSign);
 
   void init(String atSign, AtClientPreference preference,
@@ -48,18 +50,18 @@ class SyncManager {
     if (preference.syncStrategy == SyncStrategy.scheduled && !_isScheduled) {
       _scheduleSyncTask();
     }
+    syncUtil = SyncUtil();
   }
 
   @Deprecated("Use SyncService.isInSync")
   Future<bool> isInSync() async {
     var serverCommitId = await SyncUtil.getLatestServerCommitId(
         _remoteSecondary!, _preference!.syncRegex);
-    var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
-        _preference!.syncRegex,
-        atSign: _atSign!);
+    var lastSyncedEntry = await syncUtil
+        ?.getLastSyncedEntry(_preference!.syncRegex, atSign: _atSign!);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-    var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
+    var unCommittedEntries = await syncUtil?.getChangesSinceLastCommit(
         lastSyncedLocalSeq, _preference!.syncRegex,
         atSign: _atSign!);
     return SyncUtil.isInSync(
@@ -96,7 +98,7 @@ class SyncManager {
       //once sync process done, it will again set to false.
       isSyncInProgress = true;
       var lastSyncedEntry =
-          await SyncUtil.getLastSyncedEntry(regex, atSign: _atSign!);
+          await syncUtil?.getLastSyncedEntry(regex, atSign: _atSign!);
       var lastSyncedCommitId = lastSyncedEntry?.commitId;
       var serverCommitId =
           await SyncUtil.getLatestServerCommitId(_remoteSecondary!, regex);
@@ -109,7 +111,7 @@ class SyncManager {
         }
         logger.finer('app init: lastSyncedLocalSeq: $lastSyncedLocalSeq');
       }
-      var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
+      var unCommittedEntries = await syncUtil?.getChangesSinceLastCommit(
           lastSyncedLocalSeq, regex,
           atSign: _atSign!);
       // cloud and local are in sync if there is no synced changes in local and commitIDs are equals
@@ -144,14 +146,15 @@ class SyncManager {
           }
           // assigning the lastSynced local commit id.
           var lastSyncedEntry =
-              await SyncUtil.getLastSyncedEntry(regex, atSign: _atSign!);
+              await syncUtil?.getLastSyncedEntry(regex, atSign: _atSign!);
           lastSyncedCommitId = lastSyncedEntry?.commitId;
         }
         return;
       }
 
       // local is ahead. push the changes to secondary server
-      var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
+      var uncommittedEntryBatch =
+          _getUnCommittedEntryBatch(unCommittedEntries!);
       for (var unCommittedEntryList in uncommittedEntryBatch) {
         try {
           var batchRequests = await _getBatchRequests(unCommittedEntryList);
@@ -172,7 +175,8 @@ class SyncManager {
               }
 
               logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
-              await SyncUtil.updateCommitEntry(commitEntry, commitId, _atSign!);
+              await syncUtil?.updateCommitEntry(
+                  commitEntry, commitId, _atSign!);
             } on Exception catch (e) {
               logger.severe(
                   'exception while updating commit entry for entry:$entry ${e.toString()}');
@@ -193,9 +197,8 @@ class SyncManager {
   }
 
   Future<void> syncWithIsolate() async {
-    var lastSyncedEntry = await SyncUtil.getLastSyncedEntry(
-        _preference!.syncRegex,
-        atSign: _atSign!);
+    var lastSyncedEntry = await syncUtil
+        ?.getLastSyncedEntry(_preference!.syncRegex, atSign: _atSign!);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     var commitIdReceivePort = ReceivePort();
     var privateKey = await _localSecondary!.keyStore!.get(AT_PKAM_PRIVATE_KEY);
@@ -225,7 +228,7 @@ class SyncManager {
             var serverCommitId = message['commit_id'];
             var lastSyncedLocalSeq =
                 lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-            var unCommittedEntries = await SyncUtil.getChangesSinceLastCommit(
+            var unCommittedEntries = await syncUtil?.getChangesSinceLastCommit(
                 lastSyncedLocalSeq, _preference!.syncRegex!,
                 atSign: _atSign!);
             if (SyncUtil.isInSync(
@@ -247,7 +250,7 @@ class SyncManager {
             } else {
               //3. local is ahead
               //3.1 For each uncommitted entry send request to isolate to send update/delete to server
-              pushedCount = unCommittedEntries.length;
+              pushedCount = unCommittedEntries!.length;
               for (var entry in unCommittedEntries) {
                 var command = await _getCommand(entry);
                 logger.info('command:$command');
@@ -293,7 +296,7 @@ class SyncManager {
             var entry = SyncUtil.getEntry(entryKey, _atSign!);
             logger.info(
                 'received remote push result: $entryKey $entry $entryKey');
-            await SyncUtil.updateCommitEntry(
+            await syncUtil?.updateCommitEntry(
                 entry, int.parse(serverCommitId), _atSign!);
             pushedCount--;
             if (pushedCount == 0) syncDone = true;
@@ -381,7 +384,7 @@ class SyncManager {
       return;
     }
     commitEntry.operation = operation;
-    await SyncUtil.updateCommitEntry(
+    await syncUtil?.updateCommitEntry(
         commitEntry, serverCommitEntry['commitId'], _atSign!);
   }
 
@@ -396,7 +399,7 @@ class SyncManager {
         return;
       }
       localCommitEntry.operation = operation;
-      await SyncUtil.updateCommitEntry(
+      await syncUtil?.updateCommitEntry(
           localCommitEntry, int.parse(serverCommitId), _atSign!);
     } on SecondaryConnectException {
       logger.severe('Unable to connect to secondary');
@@ -498,12 +501,11 @@ class SyncManager {
   }
 
   void _scheduleSyncTask() {
-      var cron = Cron();
-      cron.schedule(
-          Schedule.parse('*/${_preference!.syncIntervalMins} * * * *'),
-          () async {
-        await syncWithIsolate();
-      });
-      _isScheduled = true;
+    var cron = Cron();
+    cron.schedule(Schedule.parse('*/${_preference!.syncIntervalMins} * * * *'),
+        () async {
+      await syncWithIsolate();
+    });
+    _isScheduled = true;
   }
 }
