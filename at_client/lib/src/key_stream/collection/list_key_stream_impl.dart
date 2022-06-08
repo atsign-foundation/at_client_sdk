@@ -5,7 +5,7 @@ import 'package:meta/meta.dart';
 
 class ListKeyStreamImpl<T> extends KeyStreamIterableBase<T, List<T>> implements ListKeyStream<T> {
   ListKeyStreamImpl({
-    required T Function(AtKey, AtValue) convert,
+    required T? Function(AtKey, AtValue) convert,
     String? regex,
     bool shouldGetKeys = true,
     String? sharedBy,

@@ -4,12 +4,12 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 abstract class SetKeyStream<T> extends Stream<Set<T>> implements KeyStreamMixin<Set<T>> {
   factory SetKeyStream({
+    required T? Function(AtKey key, AtValue value) convert,
     String? regex,
-    required T Function(AtKey key, AtValue value) convert,
-    String Function(AtKey key, AtValue value)? generateRef,
     String? sharedBy,
     String? sharedWith,
     bool shouldGetKeys = true,
+    String Function(AtKey key, AtValue value)? generateRef,
   }) {
     return SetKeyStreamImpl<T>(
       regex: regex,

@@ -4,12 +4,12 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 abstract class IterableKeyStream<T> extends Stream<Iterable<T>> implements KeyStreamMixin<Iterable<T>> {
   factory IterableKeyStream({
+    required T? Function(AtKey key, AtValue value) convert,
     String? regex,
-    required T Function(AtKey key, AtValue value) convert,
-    String Function(AtKey key, AtValue value)? generateRef,
     String? sharedBy,
     String? sharedWith,
     bool shouldGetKeys = true,
+    String Function(AtKey key, AtValue value)? generateRef,
   }) {
     return IterableKeyStreamImpl<T>(
       regex: regex,

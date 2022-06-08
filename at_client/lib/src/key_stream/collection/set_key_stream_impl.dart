@@ -5,7 +5,7 @@ import 'package:meta/meta.dart';
 
 class SetKeyStreamImpl<T> extends KeyStreamIterableBase<T, Set<T>> implements SetKeyStream<T> {
   SetKeyStreamImpl({
-    required T Function(AtKey, AtValue) convert,
+    required T? Function(AtKey, AtValue) convert,
     String? regex,
     bool shouldGetKeys = true,
     String? sharedBy,

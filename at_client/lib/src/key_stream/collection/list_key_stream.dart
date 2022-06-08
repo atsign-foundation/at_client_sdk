@@ -4,12 +4,12 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 abstract class ListKeyStream<T> extends Stream<List<T>> implements KeyStreamMixin<List<T>> {
   factory ListKeyStream({
+    required T? Function(AtKey key, AtValue value) convert,
     String? regex,
-    required T Function(AtKey key, AtValue value) convert,
-    String Function(AtKey key, AtValue value)? generateRef,
     String? sharedBy,
     String? sharedWith,
     bool shouldGetKeys = true,
+    String Function(AtKey key, AtValue value)? generateRef,
   }) {
     return ListKeyStreamImpl<T>(
       regex: regex,

@@ -11,7 +11,7 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
 
   @override
   void handleNotification(AtKey key, AtValue value, String? operation) {
-    T data = convert(key, value);
+    T? data = convert(key, value);
     switch (operation) {
       case 'delete':
       case 'remove':
@@ -21,13 +21,13 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
       case 'update':
       case 'append':
       default:
-        store[_generateRef(key, value)] = data;
+        store[_generateRef(key, value)] = data!;
     }
     controller.add(_castTo(store.values));
   }
 
   KeyStreamIterableBase({
-    required T Function(AtKey, AtValue) convert,
+    required T? Function(AtKey, AtValue) convert,
     String? regex,
     bool shouldGetKeys = true,
     String? sharedBy,

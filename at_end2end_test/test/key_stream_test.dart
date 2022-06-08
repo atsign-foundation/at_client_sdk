@@ -176,7 +176,7 @@ void main() {
         await Future.delayed(Duration(milliseconds: 10));
       }
       var value = streamOut.last;
-      expect(value, uuid);
+      expect(value, randomValue);
       expect(streamOut.length, 1);
     });
 
@@ -242,7 +242,7 @@ void main() {
         await Future.delayed(Duration(milliseconds: 10));
       }
       expect(value.length, 1);
-      expect(value.first, uuid);
+      expect(value.first, randomValue);
       expect(streamOut.length, 1);
     });
 
@@ -308,7 +308,7 @@ void main() {
       }
       var value = streamOut.last;
       expect(value.length, 1);
-      expect(value[key.key], uuid);
+      expect(value[key.key], randomValue);
       expect(streamOut.length, 1);
     });
 
