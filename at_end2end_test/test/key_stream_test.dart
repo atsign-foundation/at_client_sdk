@@ -64,7 +64,10 @@ void main() {
         ..sharedBy = currentAtSign;
     });
 
-    test('init', () {
+    test('init', () async {
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = KeyStreamImpl(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -73,19 +76,19 @@ void main() {
         shouldGetKeys: false,
       );
       expect(keyStream.isPaused, false);
-      expect(keyStream.isEmpty, true);
+      expect(await keyStream.isEmpty, true);
     });
 
     test('handleNotification - update', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
-      var value = await keyStream.last;
+      var value = await keyStream.asBroadcastStream().last;
       expect(value, uuid);
       expect(keyStream.length, 1);
     });
 
     test('handleNotification - delete', () async {
       keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
-      var value = await keyStream.last;
+      var value = await keyStream.asBroadcastStream().last;
       expect(value, null);
       expect(keyStream.length, 2);
     });
@@ -111,7 +114,10 @@ void main() {
         ..sharedBy = currentAtSign;
     });
 
-    test('init', () {
+    test('init', () async {
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = IterableKeyStreamImpl<String>(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -121,12 +127,12 @@ void main() {
       );
       expect(keyStream, isA<KeyStreamIterableBase<String, Iterable<String>>>());
       expect(keyStream.isPaused, false);
-      expect(keyStream.isEmpty, true);
+      expect(await keyStream.isEmpty, true);
     });
 
     test('handleNotification - update', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
-      var value = await keyStream.last;
+      var value = await keyStream.asBroadcastStream().last;
       expect(value.length, 1);
       expect(value.first, uuid);
       expect(keyStream.length, 1);
@@ -134,7 +140,7 @@ void main() {
 
     test('handleNotification - delete', () async {
       keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
-      var value = await keyStream.last;
+      var value = await keyStream.asBroadcastStream().last;
       expect(value.isEmpty, true);
       expect(keyStream.length, 2);
     });
@@ -160,7 +166,10 @@ void main() {
         ..sharedBy = currentAtSign;
     });
 
-    test('init', () {
+    test('init', () async {
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = MapKeyStreamImpl<String, String>(
         regex: namespace + '@',
         convert: (key, value) => MapEntry(key.key!, value.value),
@@ -170,12 +179,12 @@ void main() {
       );
       expect(keyStream, isA<KeyStreamMapBase<String, String, Map<String, String>>>());
       expect(keyStream.isPaused, false);
-      expect(keyStream.isEmpty, true);
+      expect(await keyStream.isEmpty, true);
     });
 
     test('handleNotification - update', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
-      var value = await keyStream.last;
+      var value = await keyStream.asBroadcastStream().last;
       expect(value.length, 1);
       expect(value[key.key], uuid);
       expect(keyStream.length, 1);
@@ -183,7 +192,7 @@ void main() {
 
     test('handleNotification - delete', () async {
       keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
-      var value = await keyStream.last;
+      var value = await keyStream.asBroadcastStream().last;
       expect(value.isEmpty, true);
       expect(keyStream.length, 2);
     });
@@ -217,7 +226,10 @@ void main() {
         ..sharedBy = currentAtSign;
     });
 
-    test('init', () {
+    test('init', () async {
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = KeyStreamImpl<String>(
         regex: keySuffix + '\\.' + namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -227,7 +239,7 @@ void main() {
       );
       expect(keyStream, isA<KeyStreamMixin<String?>>());
       expect(keyStream.isPaused, false);
-      expect(keyStream.isEmpty, true);
+      expect(await keyStream.isEmpty, true);
     });
 
     test('pause notifications', () {
@@ -241,6 +253,8 @@ void main() {
     });
 
     test('getKeys', () async {
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
       await Future.wait([
         currentAtSignClientManager!.atClient.put(key, randomValue),
         currentAtSignClientManager!.atClient.put(key2, randomValue2)
@@ -249,12 +263,12 @@ void main() {
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
-      expect(keyStream.isEmpty, true);
+      expect(await keyStream.isEmpty, true);
       await keyStream.getKeys();
       expect(keyStream.length, 2);
-      var first = await keyStream.first;
-      var last = await keyStream.last;
-      if(first == randomValue) {
+      var first = await keyStream.asBroadcastStream().first;
+      var last = await keyStream.asBroadcastStream().last;
+      if (first == randomValue) {
         expect(last, randomValue2);
       } else {
         expect(first, randomValue2);
@@ -263,15 +277,8 @@ void main() {
     });
 
     test('dispose', () async {
-      // Pause the stream to allow detection of notificationSubscription cancellation
-      keyStream.pause();
-      expect(keyStream.isPaused, true);
-
       await keyStream.dispose();
       expect(keyStream.controller.isClosed, true);
-
-      // When cancelled, the notificationSubscription should no longer be paused
-      expect(keyStream.notificationSubscription.isPaused, false);
     });
   });
 }
