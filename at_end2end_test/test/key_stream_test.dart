@@ -107,12 +107,14 @@ void main() {
         currentAtSignClientManager!.atClient.put(key, randomValue),
         currentAtSignClientManager!.atClient.put(key2, randomValue2)
       ]);
-
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       expect(streamOut.isEmpty, true);
       await keyStream.getKeys();
+      while(streamOut.length < 2) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
       expect(streamOut.length, 2);
       var first = streamOut.first;
       var last = streamOut.last;
@@ -136,6 +138,7 @@ void main() {
     var randomValue;
     var key;
     var streamOut = [];
+    var listening = true;
 
     setUpAll(() async {
       uuid = Uuid();
@@ -154,7 +157,10 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
-      keyStream.listen((data) => streamOut.add(data));
+      keyStream.listen((data) {
+        streamOut.add(data);
+        listening = false;
+      });
     });
 
     test('init', () {
@@ -163,15 +169,23 @@ void main() {
       expect(streamOut.isEmpty, true);
     });
 
-    test('handleNotification - update', () {
+    test('handleNotification - update', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      listening = true;
+      while (listening) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
       var value = streamOut.last;
       expect(value, uuid);
       expect(streamOut.length, 1);
     });
 
-    test('handleNotification - delete', () {
+    test('handleNotification - delete', () async {
       keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      listening = true;
+      while (listening) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
       var value = streamOut.last;
       expect(value, null);
       expect(streamOut.length, 2);
@@ -188,6 +202,7 @@ void main() {
     var randomValue;
     var key;
     var streamOut = [];
+    var listening = true;
 
     setUpAll(() async {
       uuid = Uuid();
@@ -206,7 +221,10 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
-      keyStream.listen((data) => streamOut.add(data));
+      keyStream.listen((data) {
+        streamOut.add(data);
+        listening = false;
+      });
     });
 
     test('init', () {
@@ -216,16 +234,24 @@ void main() {
       expect(streamOut.isEmpty, true);
     });
 
-    test('handleNotification - update', () {
+    test('handleNotification - update', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
       var value = streamOut.last;
+      listening = true;
+      while (listening) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
       expect(value.length, 1);
       expect(value.first, uuid);
       expect(streamOut.length, 1);
     });
 
-    test('handleNotification - delete', () {
+    test('handleNotification - delete', () async {
       keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      listening = true;
+      while (listening) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
       var value = streamOut.last;
       expect(value.isEmpty, true);
       expect(streamOut.length, 2);
@@ -242,6 +268,7 @@ void main() {
     var randomValue;
     var key;
     var streamOut = [];
+    var listening = true;
 
     setUpAll(() async {
       uuid = Uuid();
@@ -260,7 +287,10 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
-      keyStream.listen((data) => streamOut.add(data));
+      keyStream.listen((data) {
+        streamOut.add(data);
+        listening = false;
+      });
     });
 
     test('init', () {
@@ -270,16 +300,24 @@ void main() {
       expect(streamOut.isEmpty, true);
     });
 
-    test('handleNotification - update', () {
+    test('handleNotification - update', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      listening = true;
+      while (listening) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
       var value = streamOut.last;
       expect(value.length, 1);
       expect(value[key.key], uuid);
       expect(streamOut.length, 1);
     });
 
-    test('handleNotification - delete', () {
+    test('handleNotification - delete', () async {
       keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      listening = true;
+      while (listening) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
       var value = streamOut.last;
       expect(value.isEmpty, true);
       expect(streamOut.length, 2);
