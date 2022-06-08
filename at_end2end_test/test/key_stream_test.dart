@@ -170,7 +170,7 @@ void main() {
     });
 
     test('handleNotification - update', () async {
-      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
       listening = true;
       while (listening) {
         await Future.delayed(Duration(milliseconds: 10));
@@ -235,7 +235,7 @@ void main() {
     });
 
     test('handleNotification - update', () async {
-      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
       var value = streamOut.last;
       listening = true;
       while (listening) {
@@ -301,7 +301,7 @@ void main() {
     });
 
     test('handleNotification - update', () async {
-      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
       listening = true;
       while (listening) {
         await Future.delayed(Duration(milliseconds: 10));
