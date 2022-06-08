@@ -50,166 +50,15 @@ void main() {
     }
   });
 
-  group('KeyStream', () {
-    late KeyStreamImpl<String> keyStream;
-    var uuid;
-    var randomValue;
-    var key;
-
-    setUpAll(() {
-      uuid = Uuid();
-      randomValue = uuid.v4();
-      key = AtKey()
-        ..key = randomValue
-        ..sharedWith = sharedWithAtSign
-        ..namespace = namespace
-        ..sharedBy = currentAtSign;
-    });
-
-    test('init', () async {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
-      keyStream = KeyStreamImpl(
-        regex: namespace + '@',
-        convert: (key, value) => value.value ?? '',
-        sharedBy: currentAtSign,
-        sharedWith: sharedWithAtSign,
-        shouldGetKeys: false,
-      );
-      expect(keyStream.isPaused, false);
-      expect(await keyStream.isEmpty, true);
-    });
-
-    test('handleNotification - update', () async {
-      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
-      var value = await keyStream.asBroadcastStream().last;
-      expect(value, uuid);
-      expect(keyStream.length, 1);
-    });
-
-    test('handleNotification - delete', () async {
-      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
-      var value = await keyStream.asBroadcastStream().last;
-      expect(value, null);
-      expect(keyStream.length, 2);
-    });
-
-    tearDownAll(() async {
-      await keyStream.dispose();
-    });
-  });
-
-  group('KeyStreamIterable group', () {
-    late IterableKeyStreamImpl<String> keyStream;
-    var uuid;
-    var randomValue;
-    var key;
-
-    setUpAll(() async {
-      uuid = Uuid();
-      randomValue = uuid.v4();
-      key = AtKey()
-        ..key = randomValue
-        ..sharedWith = sharedWithAtSign
-        ..namespace = namespace
-        ..sharedBy = currentAtSign;
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    });
-
-    test('init', () async {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
-      keyStream = IterableKeyStreamImpl<String>(
-        regex: namespace + '@',
-        convert: (key, value) => value.value ?? '',
-        sharedBy: currentAtSign,
-        sharedWith: sharedWithAtSign,
-        shouldGetKeys: false,
-      );
-      expect(keyStream, isA<KeyStreamIterableBase<String, Iterable<String>>>());
-      expect(keyStream.isPaused, false);
-      expect(await keyStream.isEmpty, true);
-    });
-
-    test('handleNotification - update', () async {
-      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
-      var value = await keyStream.asBroadcastStream().last;
-      expect(value.length, 1);
-      expect(value.first, uuid);
-      expect(keyStream.length, 1);
-    });
-
-    test('handleNotification - delete', () async {
-      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
-      var value = await keyStream.asBroadcastStream().last;
-      expect(value.isEmpty, true);
-      expect(keyStream.length, 2);
-    });
-
-    tearDownAll(() async {
-      await keyStream.dispose();
-    });
-  });
-
-  group('KeyStreamMap group', () {
-    late MapKeyStreamImpl<String, String> keyStream;
-    var uuid;
-    var randomValue;
-    var key;
-
-    setUpAll(() async {
-      uuid = Uuid();
-      randomValue = uuid.v4();
-      key = AtKey()
-        ..key = randomValue
-        ..sharedWith = sharedWithAtSign
-        ..namespace = namespace
-        ..sharedBy = currentAtSign;
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    });
-
-    test('init', () async {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
-      keyStream = MapKeyStreamImpl<String, String>(
-        regex: namespace + '@',
-        convert: (key, value) => MapEntry(key.key!, value.value),
-        sharedBy: currentAtSign,
-        sharedWith: sharedWithAtSign,
-        shouldGetKeys: false,
-      );
-      expect(keyStream, isA<KeyStreamMapBase<String, String, Map<String, String>>>());
-      expect(keyStream.isPaused, false);
-      expect(await keyStream.isEmpty, true);
-    });
-
-    test('handleNotification - update', () async {
-      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
-      var value = await keyStream.asBroadcastStream().last;
-      expect(value.length, 1);
-      expect(value[key.key], uuid);
-      expect(keyStream.length, 1);
-    });
-
-    test('handleNotification - delete', () async {
-      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
-      var value = await keyStream.asBroadcastStream().last;
-      expect(value.isEmpty, true);
-      expect(keyStream.length, 2);
-    });
-
-    tearDownAll(() async {
-      await keyStream.dispose();
-    });
-  });
-
   group('KeyStreamMixin group', () {
     late KeyStreamImpl<String> keyStream;
     var uuid;
     var randomValue, randomValue2;
     var key, key2;
     var keySuffix;
+    var streamOut = [];
 
-    setUpAll(() async {
+    setUpAll(() {
       uuid = Uuid();
       keySuffix = uuid.v4();
       randomValue = uuid.v4();
@@ -224,11 +73,9 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     });
 
-    test('init', () async {
+    test('init', () {
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = KeyStreamImpl<String>(
         regex: keySuffix + '\\.' + namespace + '@',
@@ -237,10 +84,12 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
+      keyStream.listen((data) => streamOut.add(data));
+
       expect(keyStream, isA<KeyStreamMixin<String?>>());
       expect(keyStream.isPaused, false);
-      expect(await keyStream.isEmpty, true);
-    }, timeout: Timeout.factor(1.5));
+      expect(streamOut.isEmpty, true);
+    });
 
     test('pause notifications', () {
       keyStream.pause();
@@ -263,11 +112,11 @@ void main() {
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
-      expect(await keyStream.isEmpty, true);
+      expect(streamOut.isEmpty, true);
       await keyStream.getKeys();
-      expect(keyStream.length, 2);
-      var first = await keyStream.asBroadcastStream().first;
-      var last = await keyStream.asBroadcastStream().last;
+      expect(streamOut.length, 2);
+      var first = streamOut.first;
+      var last = streamOut.last;
       if (first == randomValue) {
         expect(last, randomValue2);
       } else {
@@ -279,6 +128,169 @@ void main() {
     test('dispose', () async {
       await keyStream.dispose();
       expect(keyStream.controller.isClosed, true);
+    });
+  });
+
+  group('KeyStream', () {
+    late KeyStreamImpl<String> keyStream;
+    var uuid;
+    var randomValue;
+    var key;
+    var streamOut = [];
+
+    setUpAll(() async {
+      uuid = Uuid();
+      randomValue = uuid.v4();
+      key = AtKey()
+        ..key = randomValue
+        ..sharedWith = sharedWithAtSign
+        ..namespace = namespace
+        ..sharedBy = currentAtSign;
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    });
+
+    test('init', () {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      keyStream = KeyStreamImpl(
+        regex: namespace + '@',
+        convert: (key, value) => value.value ?? '',
+        sharedBy: currentAtSign,
+        sharedWith: sharedWithAtSign,
+        shouldGetKeys: false,
+      );
+      keyStream.listen((data) => streamOut.add(data));
+
+      expect(keyStream.isPaused, false);
+      expect(streamOut.isEmpty, true);
+    });
+
+    test('handleNotification - update', () {
+      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      var value = streamOut.last;
+      expect(value, uuid);
+      expect(streamOut.length, 1);
+    });
+
+    test('handleNotification - delete', () {
+      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      var value = streamOut.last;
+      expect(value, null);
+      expect(streamOut.length, 2);
+    });
+
+    tearDownAll(() async {
+      await keyStream.dispose();
+    });
+  });
+
+  group('KeyStreamIterable group', () {
+    late IterableKeyStreamImpl<String> keyStream;
+    var uuid;
+    var randomValue;
+    var key;
+    var streamOut = [];
+
+    setUpAll(() async {
+      uuid = Uuid();
+      randomValue = uuid.v4();
+      key = AtKey()
+        ..key = randomValue
+        ..sharedWith = sharedWithAtSign
+        ..namespace = namespace
+        ..sharedBy = currentAtSign;
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    });
+
+    test('init', () {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      keyStream = IterableKeyStreamImpl<String>(
+        regex: namespace + '@',
+        convert: (key, value) => value.value ?? '',
+        sharedBy: currentAtSign,
+        sharedWith: sharedWithAtSign,
+        shouldGetKeys: false,
+      );
+      keyStream.listen((data) => streamOut.add(data));
+
+      expect(keyStream, isA<KeyStreamIterableBase<String, Iterable<String>>>());
+      expect(keyStream.isPaused, false);
+      expect(streamOut.isEmpty, true);
+    });
+
+    test('handleNotification - update', () {
+      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      var value = streamOut.last;
+      expect(value.length, 1);
+      expect(value.first, uuid);
+      expect(streamOut.length, 1);
+    });
+
+    test('handleNotification - delete', () {
+      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      var value = streamOut.last;
+      expect(value.isEmpty, true);
+      expect(streamOut.length, 2);
+    });
+
+    tearDownAll(() async {
+      await keyStream.dispose();
+    });
+  });
+
+  group('KeyStreamMap group', () {
+    late MapKeyStreamImpl<String, String> keyStream;
+    var uuid;
+    var randomValue;
+    var key;
+    var streamOut = [];
+
+    setUpAll(() async {
+      uuid = Uuid();
+      randomValue = uuid.v4();
+      key = AtKey()
+        ..key = randomValue
+        ..sharedWith = sharedWithAtSign
+        ..namespace = namespace
+        ..sharedBy = currentAtSign;
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    });
+
+    test('init', () {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      keyStream = MapKeyStreamImpl<String, String>(
+        regex: namespace + '@',
+        convert: (key, value) => MapEntry(key.key!, value.value),
+        sharedBy: currentAtSign,
+        sharedWith: sharedWithAtSign,
+        shouldGetKeys: false,
+      );
+      keyStream.listen((data) => streamOut.add(data));
+
+      expect(keyStream, isA<KeyStreamMapBase<String, String, Map<String, String>>>());
+      expect(keyStream.isPaused, false);
+      expect(streamOut.isEmpty, true);
+    });
+
+    test('handleNotification - update', () {
+      keyStream.handleNotification(key, AtValue()..value = randomValue + 'value', 'update');
+      var value = streamOut.last;
+      expect(value.length, 1);
+      expect(value[key.key], uuid);
+      expect(streamOut.length, 1);
+    });
+
+    test('handleNotification - delete', () {
+      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      var value = streamOut.last;
+      expect(value.isEmpty, true);
+      expect(streamOut.length, 2);
+    });
+
+    tearDownAll(() async {
+      await keyStream.dispose();
     });
   });
 
