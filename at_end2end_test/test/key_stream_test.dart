@@ -65,8 +65,6 @@ void main() {
     });
 
     test('init', () async {
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = KeyStreamImpl(
         regex: namespace + '@',
@@ -104,7 +102,7 @@ void main() {
     var randomValue;
     var key;
 
-    setUpAll(() {
+    setUpAll(() async {
       uuid = Uuid();
       randomValue = uuid.v4();
       key = AtKey()
@@ -112,11 +110,11 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     });
 
     test('init', () async {
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = IterableKeyStreamImpl<String>(
         regex: namespace + '@',
@@ -156,7 +154,7 @@ void main() {
     var randomValue;
     var key;
 
-    setUpAll(() {
+    setUpAll(() async {
       uuid = Uuid();
       randomValue = uuid.v4();
       key = AtKey()
@@ -164,11 +162,11 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     });
 
     test('init', () async {
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = MapKeyStreamImpl<String, String>(
         regex: namespace + '@',
@@ -209,7 +207,7 @@ void main() {
     var key, key2;
     var keySuffix;
 
-    setUpAll(() {
+    setUpAll(() async {
       uuid = Uuid();
       keySuffix = uuid.v4();
       randomValue = uuid.v4();
@@ -224,11 +222,11 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     });
 
     test('init', () async {
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = KeyStreamImpl<String>(
         regex: keySuffix + '\\.' + namespace + '@',
@@ -240,7 +238,7 @@ void main() {
       expect(keyStream, isA<KeyStreamMixin<String?>>());
       expect(keyStream.isPaused, false);
       expect(await keyStream.isEmpty, true);
-    });
+    }, timeout: Timeout.factor(1.5));
 
     test('pause notifications', () {
       keyStream.pause();
