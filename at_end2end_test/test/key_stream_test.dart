@@ -73,10 +73,6 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
-    });
-
-    test('init', () {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = KeyStreamImpl<String>(
         regex: keySuffix + '\\.' + namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -85,7 +81,10 @@ void main() {
         shouldGetKeys: false,
       );
       keyStream.listen((data) => streamOut.add(data));
+    });
 
+    test('init', () {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       expect(keyStream, isA<KeyStreamMixin<String?>>());
       expect(keyStream.isPaused, false);
       expect(streamOut.isEmpty, true);
@@ -148,10 +147,6 @@ void main() {
         ..sharedBy = currentAtSign;
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    });
-
-    test('init', () {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = KeyStreamImpl(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -160,7 +155,10 @@ void main() {
         shouldGetKeys: false,
       );
       keyStream.listen((data) => streamOut.add(data));
+    });
 
+    test('init', () {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       expect(keyStream.isPaused, false);
       expect(streamOut.isEmpty, true);
     });
@@ -201,10 +199,6 @@ void main() {
         ..sharedBy = currentAtSign;
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    });
-
-    test('init', () {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = IterableKeyStreamImpl<String>(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -213,7 +207,10 @@ void main() {
         shouldGetKeys: false,
       );
       keyStream.listen((data) => streamOut.add(data));
+    });
 
+    test('init', () {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       expect(keyStream, isA<KeyStreamIterableBase<String, Iterable<String>>>());
       expect(keyStream.isPaused, false);
       expect(streamOut.isEmpty, true);
@@ -256,10 +253,6 @@ void main() {
         ..sharedBy = currentAtSign;
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    });
-
-    test('init', () {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       keyStream = MapKeyStreamImpl<String, String>(
         regex: namespace + '@',
         convert: (key, value) => MapEntry(key.key!, value.value),
@@ -268,7 +261,10 @@ void main() {
         shouldGetKeys: false,
       );
       keyStream.listen((data) => streamOut.add(data));
+    });
 
+    test('init', () {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       expect(keyStream, isA<KeyStreamMapBase<String, String, Map<String, String>>>());
       expect(keyStream.isPaused, false);
       expect(streamOut.isEmpty, true);
