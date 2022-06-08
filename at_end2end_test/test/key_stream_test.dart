@@ -124,7 +124,7 @@ void main() {
         expect(first, randomValue2);
         expect(last, randomValue);
       }
-    });
+    }, timeout: Timeout.factor(2));
 
     test('dispose', () async {
       await keyStream.dispose();
@@ -236,11 +236,11 @@ void main() {
 
     test('handleNotification - update', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
-      var value = streamOut.last;
       listening = true;
       while (listening) {
         await Future.delayed(Duration(milliseconds: 10));
       }
+      var value = streamOut.last;
       expect(value.length, 1);
       expect(value.first, randomValue);
       expect(streamOut.length, 1);

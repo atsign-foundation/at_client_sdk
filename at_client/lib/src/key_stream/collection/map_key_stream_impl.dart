@@ -7,7 +7,7 @@ import 'package:meta/meta.dart';
 
 class MapKeyStreamImpl<K, V> extends KeyStreamMapBase<K, V, Map<K, V>> implements MapKeyStream<K, V> {
   MapKeyStreamImpl({
-    required MapEntry<K, V>? Function(AtKey, AtValue) convert,
+    required MapEntry<K, V?>? Function(AtKey, AtValue) convert,
     String? regex,
     bool shouldGetKeys = true,
     String? sharedBy,
