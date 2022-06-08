@@ -11,6 +11,7 @@ import 'package:at_client/src/key_stream/key_stream_map_base.dart';
 import 'package:at_client/src/key_stream/collection/map_key_stream_impl.dart' hide castTo;
 import 'package:at_client/src/key_stream/collection/iterable_key_stream_impl.dart' hide castTo;
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
+import 'package:at_utils/at_logger.dart';
 
 import 'test_utils.dart';
 
@@ -20,6 +21,7 @@ void main() {
   var namespace = 'keyStream';
 
   setUpAll(() async {
+    AtSignLogger.root_level = 'all';
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     // Create atClient instance for currentAtSign
@@ -278,5 +280,9 @@ void main() {
       await keyStream.dispose();
       expect(keyStream.controller.isClosed, true);
     });
+  });
+
+  tearDownAll(() {
+    AtSignLogger.root_level = 'info';
   });
 }

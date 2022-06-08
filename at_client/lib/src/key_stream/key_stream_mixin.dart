@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart' show AtClient, AtClientManager, AtNotification;
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
+import 'package:at_utils/at_logger.dart';
+
 import 'package:meta/meta.dart';
 
 abstract class KeyStreamMixin<T> implements Stream<T> {
   @visibleForTesting
   late StreamSubscription<AtNotification> notificationSubscription;
+
+  static final AtSignLogger _logger = AtSignLogger('KeyStream');
 
   @protected
   @visibleForTesting
@@ -29,6 +33,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   Future<void> _init() async {
+    _logger.finer('init Keystream: $this');
     if (shouldGetKeys) getKeys();
 
     notificationSubscription = AtClientManager.getInstance()
@@ -39,6 +44,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
 
   @visibleForTesting
   Future<void> getKeys() async {
+    _logger.finer('getting keys');
     AtClient atClient = AtClientManager.getInstance().atClient;
     List<AtKey> keys = await atClient.getAtKeys(
       regex: regex,
@@ -48,6 +54,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
 
     for (AtKey key in keys) {
       atClient.get(key).then((AtValue value) {
+        _logger.finest('handleNotification key: $key, value: $value, operation: init');
         handleNotification(key, value, 'init');
       });
     }
@@ -60,6 +67,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
 
     AtClientManager.getInstance().atClient.get(key).then(
       (AtValue value) {
+        _logger.finest('handleNotification key: $key, value: $value, operation: ${event.operation}');
         handleNotification(key, value, event.operation);
       },
     );
@@ -70,14 +78,26 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   //  'update', 'append', 'remove', 'delete', 'init', null
   void handleNotification(AtKey key, AtValue value, String? operation);
 
-  void pause([Future<void>? resumeSignal]) => notificationSubscription.pause(resumeSignal);
+  void pause([Future<void>? resumeSignal]) {
+    _logger.finer('notificationSubscription pause');
+    notificationSubscription.pause(resumeSignal);
+  }
 
-  void resume() => notificationSubscription.resume();
+  void resume() {
+    _logger.finer('notificationSubscription resume');
+    notificationSubscription.resume();
+  }
 
   bool get isPaused => notificationSubscription.isPaused;
 
   Future<void> dispose() async {
+    _logger.finer('dipose KeyStream $this');
     await Future.wait([controller.close(), notificationSubscription.cancel()]);
+  }
+
+  @override
+  String toString() {
+    return 'KeyStream{regex: $regex, sharedBy: $sharedBy, sharedWith: $sharedWith, shouldGetKeys: $shouldGetKeys}';
   }
 
   // Below are overrides for the Stream<T> Interface
