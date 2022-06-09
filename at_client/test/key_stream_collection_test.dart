@@ -14,6 +14,7 @@ void main() {
       for (int i = 0; i < 5; i++) {
         expect(res.contains(i), true);
       }
+      expect(res.hashCode == iter.hashCode, false);
     });
 
     test('ListKeyStream castTo', () {
@@ -22,6 +23,7 @@ void main() {
       for (int i = 0; i < 5; i++) {
         expect(res.contains(i), true);
       }
+      expect(res.hashCode == iter.hashCode, false);
     });
 
     test('SetKeyStream castTo', () {
@@ -30,6 +32,7 @@ void main() {
       for (int i = 0; i < 5; i++) {
         expect(res.contains(i), true);
       }
+      expect(res.hashCode == iter.hashCode, false);
     });
 
     test('MapKeyStream castTo', () {
@@ -38,6 +41,7 @@ void main() {
       for (int i = 0; i < 5; i++) {
         expect(res[i.toString()], i);
       }
+      expect(res.hashCode == iter.hashCode, false);
     });
   });
 }

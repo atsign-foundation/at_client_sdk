@@ -22,4 +22,4 @@ class IterableKeyStreamImpl<T> extends KeyStreamIterableBase<T, Iterable<T>> imp
 }
 
 @visibleForTesting
-Iterable<T> castTo<T>(Iterable<T> values) => values;
+Iterable<T> castTo<T>(Iterable<T> values) => [...values];
