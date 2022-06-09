@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 import 'package:meta/meta.dart';
@@ -6,7 +7,21 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
   @visibleForTesting
   final Map<String, T> store = {};
 
+  /// {@template KeyStreamCastTo}
+  /// 
+  /// The [castTo] function defines how [store.entries] is cast before being added to the Stream.
+  /// 
+  /// {@endtemplate}
   final I Function(Iterable<T> values) _castTo;
+
+  /// {@template KeyStreamGenerateRef}
+  /// 
+  /// The [generateRef] function defines how keys for [store] are created.
+  /// 
+  /// In some cases, [key.key] (default) is not sufficient if you are receiving data from multiple atsigns.
+  /// This function can be declared if you would like to change how the key for the internal store is generated.
+  /// 
+  /// {@endtemplate}
   final String Function(AtKey key, AtValue value) _generateRef;
 
   @override

@@ -3,6 +3,19 @@ import 'package:at_client/src/key_stream/collection/set_key_stream_impl.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 abstract class SetKeyStream<T> extends Stream<Set<T>> implements KeyStreamMixin<Set<T>> {
+  /// Listens to notifications and exposes a Stream of the values stored as a Set.
+  /// 
+  /// {@macro KeyStreamConvert}
+  /// 
+  /// {@macro KeyStreamRegex}
+  /// 
+  /// {@macro KeyStreamSharedBy}
+  /// 
+  /// {@macro KeyStreamSharedBy}
+  /// 
+  /// {@macro KeyStreamShouldGetKeys}
+  /// 
+  /// {@macro KeyStreamGenerateRef}
   factory SetKeyStream({
     required T? Function(AtKey key, AtValue value) convert,
     String? regex,

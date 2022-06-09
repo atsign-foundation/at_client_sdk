@@ -10,37 +10,45 @@ void main() {
     test('IterableKeyStream castTo', () {
       var iter = Iterable<int>.generate(5);
       Iterable<int> res = _iterable.castTo(iter);
+      // Test that castTo contains the correct contents
       expect(res.length, 5);
       for (int i = 0; i < 5; i++) {
         expect(res.contains(i), true);
       }
+      // Ensure the Object reference is different
       expect(res.hashCode == iter.hashCode, false);
     });
 
     test('ListKeyStream castTo', () {
       var iter = Iterable<int>.generate(5);
       List<int> res = _list.castTo(iter);
+      // Test that castTo contains the correct contents
       for (int i = 0; i < 5; i++) {
         expect(res.contains(i), true);
       }
+      // Ensure the Object reference is different
       expect(res.hashCode == iter.hashCode, false);
     });
 
     test('SetKeyStream castTo', () {
       var iter = Iterable<int>.generate(5);
       Set<int> res = _set.castTo(iter);
+      // Test that castTo contains the correct contents
       for (int i = 0; i < 5; i++) {
         expect(res.contains(i), true);
       }
+      // Ensure the Object reference is different
       expect(res.hashCode == iter.hashCode, false);
     });
 
     test('MapKeyStream castTo', () {
       var iter = Iterable<MapEntry<String, int>>.generate(5, (i) => MapEntry(i.toString(), i));
       Map<String, int> res = _map.castTo(iter);
+      // Test that castTo contains the correct contents
       for (int i = 0; i < 5; i++) {
         expect(res[i.toString()], i);
       }
+      // Ensure the Object reference is different
       expect(res.hashCode == iter.hashCode, false);
     });
   });

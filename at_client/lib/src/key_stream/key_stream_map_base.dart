@@ -6,7 +6,10 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I> impl
   @visibleForTesting
   final Map<String, MapEntry<K, V>> store = {};
 
+  /// {@macro KeyStreamCastTo}
   final I Function(Iterable<MapEntry<K, V>> values) _castTo;
+
+  /// {@macro KeyStreamGenerateRef}
   final String Function(AtKey key, AtValue value) _generateRef;
 
   @override
