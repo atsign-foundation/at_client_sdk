@@ -156,7 +156,7 @@ void main() {
 
     test('handleNotification', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
-      print('deleting');
+      await Future.delayed(Duration(milliseconds: 500));
       keyStream.handleNotification(key, AtValue(), 'delete');
       expect(keyStream, emitsInOrder([randomValue, null]));
     });
