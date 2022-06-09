@@ -21,7 +21,6 @@ void main() {
   var namespace = 'keyStream';
 
   setUpAll(() async {
-    AtSignLogger.root_level = 'all';
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     // Create atClient instance for currentAtSign
@@ -260,9 +259,5 @@ void main() {
     tearDownAll(() async {
       await keyStream.dispose();
     });
-  });
-
-  tearDownAll(() {
-    AtSignLogger.root_level = 'info';
   });
 }
