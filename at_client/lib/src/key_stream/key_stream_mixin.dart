@@ -7,20 +7,47 @@ import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
 
 abstract class KeyStreamMixin<T> implements Stream<T> {
+  /// A subscription that listens to notifications.
   @visibleForTesting
   late StreamSubscription<AtNotification> notificationSubscription;
 
   static final AtSignLogger _logger = AtSignLogger('KeyStream');
 
+  /// An internal controller used to manage this Stream interface.
   @protected
   @visibleForTesting
   final StreamController<T> controller = StreamController();
 
-  final Function(AtKey, AtValue) convert;
+  /// {@template KeyStreamConvert}
+  /// [convert] is a required conversion function for converting [AtKey]:[AtValue] pairs from notifications into elements of this Stream or Stream's collection.
+  /// {@endtemplate}
+  final Function(AtKey key, AtValue value) convert;
+
+  /// {@template KeyStreamRegex}
+  /// [regex] is a regex pattern to filter notifications on.
+  /// 
+  /// You can provide [sharedBy] or [sharedWith] as parts of this regex expression, or you can provide them separately.
+  /// {@endtemplate}
   final String? regex;
-  final bool shouldGetKeys;
+  
+  /// {@template KeyStreamSharedBy}
+  /// Use [sharedBy] to filter to only keys that were sent by [sharedBy].
+  /// 
+  /// This value is a single atsign, use regex if you would like to filter on multiple atsigns.
+  /// {@endtemplate}
   final String? sharedBy;
+
+  /// {@template KeyStreamSharedWith}
+  /// Use [sharedWith] to filter to only keys that were sent to [sharedWith].
+  /// 
+  /// This value is a single atsign, use regex if you would like to filter on multiple atsigns.
+  /// {@endtemplate}
   final String? sharedWith;
+
+  /// {@template KeyStreamShouldGetKeys}
+  /// When [shouldGetKeys] is [true] this Stream should be preloaded with keys that match [regex], [sharedBy], and [sharedWith].
+  /// {@endtemplate}
+  final bool shouldGetKeys;
 
   KeyStreamMixin({
     required this.convert,
@@ -29,10 +56,6 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     this.sharedWith,
     this.shouldGetKeys = true,
   }) {
-    _init();
-  }
-
-  Future<void> _init() async {
     _logger.finer('init Keystream: $this');
     if (shouldGetKeys) getKeys();
 
@@ -42,6 +65,9 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
         .listen(_notificationListener);
   }
 
+  /// A function that preloads this Stream with keys that match [regex], [sharedBy], and [sharedWith].
+  /// 
+  /// This calls handleNotification with the 'init' operation.
   @visibleForTesting
   Future<void> getKeys() async {
     _logger.finer('getting keys');
@@ -60,6 +86,9 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     }
   }
 
+  /// Internal notification listener
+  /// 
+  /// Validates the sharedBy and sharedWith values before 
   void _notificationListener(AtNotification event) {
     AtKey key = AtKey.fromString(event.key);
     if (sharedBy != null && sharedBy != event.from) return;
@@ -74,22 +103,109 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   @protected
-  // Possible operations are:
-  //  'update', 'append', 'remove', 'delete', 'init', null
+  /// How to handle notifications received by the internal [notificationSubscription].
+  /// 
+  /// Possible operations are:
+  /// 'update', 'append', 'remove', 'delete', 'init', null
+  /// 
+  /// These operations are the same as [AtNotification], with an additional ['init'] operation
+  /// which is used by [getKeys()] to indicate that this key was preloaded.
   void handleNotification(AtKey key, AtValue value, String? operation);
 
+  /// Requests that the [notificationSubscription] stream pauses events until further notice.
+  ///
+  /// While paused, the subscription will not fire any events.
+  /// If it receives events from its source, they will be buffered until
+  /// the subscription is resumed.
+  /// For non-broadcast streams, the underlying source is usually informed
+  /// about the pause,
+  /// so it can stop generating events until the subscription is resumed.
+  ///
+  /// To avoid buffering events on a broadcast stream, it is better to
+  /// cancel this subscription, and start to listen again when events
+  /// are needed, if the intermediate events are not important.
+  ///
+  /// If [resumeSignal] is provided, the stream subscription will undo the pause
+  /// when the future completes, as if by a call to [resume].
+  /// If the future completes with an error,
+  /// the stream will still resume, but the error will be considered unhandled
+  /// and is passed to [Zone.handleUncaughtError].
+  ///
+  /// A call to [resume] will also undo a pause.
+  ///
+  /// If the subscription is paused more than once, an equal number
+  /// of resumes must be performed to resume the stream.
+  /// Calls to [resume] and the completion of a [resumeSignal] are
+  /// interchangeable - the [pause] which was passed a [resumeSignal] may be
+  /// ended by a call to [resume], and completing the [resumeSignal] may end a
+  /// different [pause].
+  ///
+  /// It is safe to [resume] or complete a [resumeSignal] even when the
+  /// subscription is not paused, and the resume will have no effect.
   void pause([Future<void>? resumeSignal]) {
     _logger.finer('notificationSubscription pause');
     notificationSubscription.pause(resumeSignal);
   }
 
+  /// Resumes the [notificationSubscription] after a pause.
+  ///
+  /// This undoes one previous call to [pause].
+  /// When all previously calls to [pause] have been matched by a calls to
+  /// [resume], possibly through a `resumeSignal` passed to [pause],
+  /// the stream subscription may emit events again.
+  ///
+  /// It is safe to [resume] even when the subscription is not paused, and the
+  /// resume will have no effect.
   void resume() {
     _logger.finer('notificationSubscription resume');
     notificationSubscription.resume();
   }
-
+  /// Whether the [notificationSubscription] is currently paused.
+  ///
+  /// If there have been more calls to [pause] than to [resume] on this
+  /// stream subscription, the subscription is paused, and this getter
+  /// returns `true`.
+  ///
+  /// Returns `false` if the stream can currently emit events, or if
+  /// the subscription has completed or been cancelled.
   bool get isPaused => notificationSubscription.isPaused;
 
+  /// Closes the stream and cancels the notification subscription.
+  ///
+  /// Closes the stream:
+  ///
+  /// No further events can be added to a closed stream.
+  ///
+  /// The returned future is the same future provided by [done].
+  /// It is completed when the stream listeners is done sending events,
+  /// This happens either when the done event has been sent,
+  /// or when the subscriber on a single-subscription stream is canceled.
+  ///
+  /// A broadcast stream controller will send the done event
+  /// even if listeners are paused, so some broadcast events may not have been
+  /// received yet when the returned future completes.
+  ///
+  /// If no one listens to a non-broadcast stream,
+  /// or the listener pauses and never resumes,
+  /// the done event will not be sent and this future will never complete.
+  /// 
+  /// Cancels the notification subscription:
+  ///
+  /// After this call, the subscription no longer receives events.
+  ///
+  /// The stream may need to shut down the source of events and clean up after
+  /// the subscription is canceled.
+  ///
+  /// Returns a future that is completed once the stream has finished
+  /// its cleanup.
+  ///
+  /// Typically, cleanup happens when the stream needs to release resources.
+  /// For example, a stream might need to close an open file (as an asynchronous
+  /// operation). If the listener wants to delete the file after having
+  /// canceled the subscription, it must wait for the cleanup future to complete.
+  ///
+  /// If the cleanup throws, which it really shouldn't, the returned future
+  /// completes with that error.
   Future<void> dispose() async {
     _logger.finer('dipose KeyStream $this');
     await Future.wait([controller.close(), notificationSubscription.cancel()]);
