@@ -57,7 +57,7 @@ void main() {
     var key, key2;
     var keySuffix;
 
-    setUpAll(() {
+    setUpAll(() async {
       uuid = Uuid();
       keySuffix = uuid.v4();
       randomValue = uuid.v4();
@@ -79,6 +79,14 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      await Future.wait([
+        currentAtSignClientManager!.atClient.put(key, randomValue),
+        currentAtSignClientManager!.atClient.put(key2, randomValue2)
+      ]);
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     });
 
     test('init', () {
@@ -98,16 +106,6 @@ void main() {
     });
 
     test('getKeys', () async {
-      setUp(() async {
-        await AtClientManager.getInstance()
-            .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-        await Future.wait([
-          currentAtSignClientManager!.atClient.put(key, randomValue),
-          currentAtSignClientManager!.atClient.put(key2, randomValue2)
-        ]);
-        await AtClientManager.getInstance()
-            .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-      });
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       await keyStream.getKeys();
       expect(keyStream, emitsInAnyOrder([randomValue, randomValue2]));
