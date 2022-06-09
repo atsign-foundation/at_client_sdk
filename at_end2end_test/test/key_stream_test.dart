@@ -57,7 +57,7 @@ void main() {
     var key, key2;
     var keySuffix;
 
-    setUpAll(() async {
+    setUpAll(() {
       uuid = Uuid();
       keySuffix = uuid.v4();
       randomValue = uuid.v4();
@@ -79,14 +79,6 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-      await Future.wait([
-        currentAtSignClientManager!.atClient.put(key, randomValue),
-        currentAtSignClientManager!.atClient.put(key2, randomValue2)
-      ]);
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     });
 
     test('init', () {
@@ -106,10 +98,18 @@ void main() {
     });
 
     test('getKeys', () async {
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      await Future.wait([
+        currentAtSignClientManager!.atClient.put(key, randomValue),
+        currentAtSignClientManager!.atClient.put(key2, randomValue2)
+      ]);
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
       await keyStream.getKeys();
       expect(keyStream, emitsInAnyOrder([randomValue, randomValue2]));
-    }, timeout: Timeout.factor(2));
+    }, timeout: Timeout(Duration(minutes: 5)));
 
     test('dispose', () async {
       await keyStream.dispose();
@@ -195,7 +195,7 @@ void main() {
       expect(
         keyStream,
         emitsInOrder([
-          allOf(TypeMatcher<Iterable>(), contains(randomValue)),
+          allOf(TypeMatcher<Iterable>(), containsAll([randomValue])),
           allOf(TypeMatcher<Iterable>(), isEmpty),
         ]),
       );
