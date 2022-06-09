@@ -23,6 +23,7 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
         store[_generateRef(key, value)] = convert(key, value)! as T;
     }
     print(_castTo(store.values));
+    print(store);
     controller.add(_castTo(store.values));
   }
 

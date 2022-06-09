@@ -156,6 +156,7 @@ void main() {
 
     test('handleNotification', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
+      print('deleting');
       keyStream.handleNotification(key, AtValue(), 'delete');
       expect(keyStream, emitsInOrder([randomValue, null]));
     });
