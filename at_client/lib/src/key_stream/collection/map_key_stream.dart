@@ -5,7 +5,7 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 abstract class MapKeyStream<K, V> extends Stream<Map<K, V>> implements KeyStreamMixin<Map<K, V>> {
   factory MapKeyStream({
-    required MapEntry<K, V?>? Function(AtKey key, AtValue value) convert,
+    required MapEntry<K, V>? Function(AtKey key, AtValue value) convert,
     String? regex,
     String? sharedBy,
     String? sharedWith,

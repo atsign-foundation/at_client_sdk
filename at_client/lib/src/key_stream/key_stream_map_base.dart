@@ -11,7 +11,6 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I> impl
 
   @override
   void handleNotification(AtKey key, AtValue value, String? operation) {
-    MapEntry<K, V?>? data = convert(key, value);
     switch (operation) {
       case 'delete':
       case 'remove':
@@ -21,13 +20,13 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I> impl
       case 'update':
       case 'append':
       default:
-        store[_generateRef(key, value)] = data as MapEntry<K, V>;
+        store[_generateRef(key, value)] = convert(key, value)! as MapEntry<K, V>;
     }
     controller.add(_castTo(store.values));
   }
 
   KeyStreamMapBase({
-    required MapEntry<K, V?>? Function(AtKey, AtValue) convert,
+    required MapEntry<K, V>? Function(AtKey, AtValue) convert,
     String? regex,
     bool shouldGetKeys = true,
     String? sharedBy,
