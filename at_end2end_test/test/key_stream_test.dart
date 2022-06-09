@@ -104,6 +104,13 @@ void main() {
         currentAtSignClientManager!.atClient.put(key, randomValue),
         currentAtSignClientManager!.atClient.put(key2, randomValue2)
       ]);
+      var isSyncInProgress = true;
+      currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+        isSyncInProgress = false;
+      });
+      while (isSyncInProgress) {
+        await Future.delayed(Duration(milliseconds: 5));
+      }
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
