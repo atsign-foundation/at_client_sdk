@@ -61,19 +61,19 @@ void main() {
       uuid = Uuid();
       keySuffix = uuid.v4();
       randomValue = uuid.v4();
+      randomValue2 = uuid.v4();
       key = AtKey()
         ..key = randomValue + keySuffix
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
-      randomValue2 = uuid.v4();
       key2 = AtKey()
         ..key = randomValue2 + keySuffix
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
       keyStream = KeyStreamImpl<String>(
-        regex: keySuffix + '\\.' + namespace + '@',
+        regex: keySuffix + '.' + namespace + '@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
@@ -149,7 +149,7 @@ void main() {
 
     test('handleNotification', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
-      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      keyStream.handleNotification(key, AtValue(), 'delete');
       expect(keyStream, emitsInOrder([randomValue, null]));
     });
 
@@ -191,7 +191,7 @@ void main() {
 
     test('handleNotification', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
-      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      keyStream.handleNotification(key, AtValue(), 'delete');
       expect(
         keyStream,
         emitsInOrder([
@@ -239,11 +239,11 @@ void main() {
 
     test('handleNotification', () async {
       keyStream.handleNotification(key, AtValue()..value = randomValue, 'update');
-      keyStream.handleNotification(AtKey()..key = randomValue, AtValue(), 'delete');
+      keyStream.handleNotification(key, AtValue(), 'delete');
       expect(
         keyStream,
         emitsInOrder([
-          allOf(isMap, containsPair(key, randomValue)),
+          allOf(isMap, containsPair(randomValue, randomValue)),
           allOf(isMap, isEmpty),
         ]),
       );
