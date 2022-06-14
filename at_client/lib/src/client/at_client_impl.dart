@@ -342,29 +342,37 @@ class AtClientImpl implements AtClient {
   /// put's the text data into the keystore
   @override
   Future<AtResponse> putText(AtKey atKey, String value) async {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
-    // Setting metadata.isBinary to false for putText
-    atKey.metadata!.isBinary = false;
-    return await _putInternal(atKey, value);
+    try {
+      // Set the default metadata if not already set.
+      atKey.metadata ??= Metadata();
+      // Setting metadata.isBinary to false for putText
+      atKey.metadata!.isBinary = false;
+      return await _putInternal(atKey, value);
+    } on AtException catch (e) {
+      throw AtExceptionManager.createException(e);
+    }
   }
 
   /// put's the binary data(e.g. images, files etc) into the keystore
   @override
   Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
-    // Setting metadata.isBinary to true for putBinary
-    atKey.metadata!.isBinary = true;
-    // Base2e15.encode method converts the List<int> type to String.
-    return await _putInternal(atKey, Base2e15.encode(value));
+    try {
+      // Set the default metadata if not already set.
+      atKey.metadata ??= Metadata();
+      // Setting metadata.isBinary to true for putBinary
+      atKey.metadata!.isBinary = true;
+      // Base2e15.encode method converts the List<int> type to String.
+      return await _putInternal(atKey, Base2e15.encode(value));
+    } on AtException catch (e) {
+      throw AtExceptionManager.createException(e);
+    }
   }
 
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
-    if (AtClientUtil.isNull(atKey.sharedBy)) {
+    if (atKey.sharedBy.isNull) {
       atKey.sharedBy = currentAtSign;
     }
     if (atKey.metadata!.namespaceAware) {
@@ -386,11 +394,16 @@ class AtClientImpl implements AtClient {
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
+
+    //Get encryptionPrivateKey for public key to signData
+    String? encryptionPrivateKey;
+    if (atKey.metadata!.isPublic != null && atKey.metadata!.isPublic! == true) {
+      encryptionPrivateKey = await _localSecondary?.getEncryptionPrivateKey();
+    }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
-    UpdateVerbBuilder verbBuilder = await PutRequestTransformer().transform(
-        tuple,
-        encryptionPrivateKey: await _localSecondary?.getEncryptionPrivateKey());
+    UpdateVerbBuilder verbBuilder = await PutRequestTransformer()
+        .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));

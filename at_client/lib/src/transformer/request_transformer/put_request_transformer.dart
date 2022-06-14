@@ -25,19 +25,18 @@ class PutRequestTransformer
         updateVerbBuilder.value =
             await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
       } on AtException catch (e) {
-        throw AtEncryptionException('Failed to encrypt the data')
-          ..fromException(e)
-          ..stack(AtChainedException(
-              Intent.shareData, ExceptionScenario.encryptionFailed, e.message));
+        e.stack(AtChainedException(
+            Intent.shareData, ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
+        rethrow;
       }
       updateVerbBuilder.sharedKeyEncrypted = tuple.one.metadata!.sharedKeyEnc;
       updateVerbBuilder.pubKeyChecksum = tuple.one.metadata!.pubKeyCS;
     } else {
-      if (encryptionPrivateKey == null || encryptionPrivateKey.isEmpty) {
+      if (encryptionPrivateKey.isNull) {
         throw AtPrivateKeyNotFoundException('Failed to sign the public data');
       }
       updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
-          updateVerbBuilder.value, encryptionPrivateKey);
+          updateVerbBuilder.value, encryptionPrivateKey!);
     }
 
     return updateVerbBuilder;

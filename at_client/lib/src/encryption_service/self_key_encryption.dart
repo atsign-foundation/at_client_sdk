@@ -1,6 +1,8 @@
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -9,35 +11,45 @@ import 'package:at_utils/at_logger.dart';
 class SelfKeyEncryption implements AtKeyEncryption {
   final _logger = AtSignLogger('SelfKeyEncryption');
 
+  late LocalSecondary? localSecondary;
+
+  SelfKeyEncryption({this.localSecondary});
+
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     if (value is! String) {
+      _logger.severe(
+          'Invalid value type found: ${value.runtimeType}. Valid value type is String');
       throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
-    try {
-      // Get AES key for current atSign
-      var selfEncryptionKey = await _getSelfEncryptionKey();
-      if (selfEncryptionKey == null ||
-          selfEncryptionKey.isEmpty ||
-          selfEncryptionKey == 'data:null') {
-        throw KeyNotFoundException(
-            'Self encryption key is not set for atSign ${atKey.sharedBy}');
-      }
-      selfEncryptionKey =
-          DefaultResponseParser().parse(selfEncryptionKey).response;
-      // Encrypt value using sharedKey
-      return EncryptionUtil.encryptValue(value, selfEncryptionKey);
-    } on Exception catch (e) {
-      _logger.severe(
-          'Exception while encrypting value for key ${atKey.key}: ${e.toString()}');
-    }
+    localSecondary ??=
+        AtClientManager.getInstance().atClient.getLocalSecondary();
+    // Get AES key for current atSign
+    var selfEncryptionKey = await _getSelfEncryptionKey(localSecondary!);
+    selfEncryptionKey =
+        DefaultResponseParser().parse(selfEncryptionKey).response;
+    // Encrypt value using sharedKey
+    return EncryptionUtil.encryptValue(value, selfEncryptionKey);
   }
 
-  Future<String?> _getSelfEncryptionKey() async {
-    return AtClientManager.getInstance()
-        .atClient
-        .getLocalSecondary()!
-        .getEncryptionSelfKey();
+  Future<String> _getSelfEncryptionKey(LocalSecondary localSecondary) async {
+    String? selfEncryptionKey;
+    try {
+      selfEncryptionKey = await localSecondary.getEncryptionSelfKey();
+      if (selfEncryptionKey.isNull) {
+        _logger.severe('Found a null value for self encryption key');
+        throw SelfKeyNotFoundException(
+            'Self encryption key is not set for current atSign',
+            intent: Intent.fetchSelfEncryptionKey,
+            exceptionScenario: ExceptionScenario.encryptionFailed);
+      }
+    } on KeyNotFoundException {
+      throw SelfKeyNotFoundException(
+          'Self encryption key is not set for current atSign',
+          intent: Intent.fetchSelfEncryptionKey,
+          exceptionScenario: ExceptionScenario.encryptionFailed);
+    }
+    return selfEncryptionKey!;
   }
 }

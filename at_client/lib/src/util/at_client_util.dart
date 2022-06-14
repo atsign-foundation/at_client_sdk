@@ -124,25 +124,35 @@ class AtClientUtil {
       return atKey.key!;
     }
     // If key does not have any namespace, append the namespace to the key.
-    if (atKey.namespace != null && atKey.namespace!.isNotEmpty) {
+    if (atKey.namespace.isNotNull) {
       return '${atKey.key}.${atKey.namespace!}';
     }
-    if (AtClientManager.getInstance().atClient.getPreferences()!.namespace !=
-        null) {
+    if (AtClientManager.getInstance()
+        .atClient
+        .getPreferences()!
+        .namespace
+        .isNotNull) {
       return '${atKey.key}.${AtClientManager.getInstance().atClient.getPreferences()!.namespace}';
     }
     return atKey.key!;
-  }
-
-  static bool isNull(dynamic arg1) {
-    if ((arg1 is String?) && (arg1 == null || arg1.isEmpty)) {
-      return true;
-    }
-    return false;
   }
 }
 
 class Tuple<T1, T2> {
   late T1 one;
   late T2 two;
+}
+
+/// Extending the String class to check null and empty.
+extension NullCheck on String? {
+  _isNull() {
+    if (this == null || this!.isEmpty) {
+      return true;
+    }
+    return false;
+  }
+
+  bool get isNull => _isNull();
+
+  bool get isNotNull => !_isNull();
 }
