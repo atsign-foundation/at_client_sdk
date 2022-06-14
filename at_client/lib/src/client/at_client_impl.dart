@@ -241,7 +241,7 @@ class AtClientImpl implements AtClient {
       // validate the get request.
       await AtClientValidation.validateAtKey(atKey);
       // Get the verb builder for the atKey
-      var verbBuilder = GetRequestTransformer().transform(atKey);
+      var verbBuilder = GetRequestTransformer(this).transform(atKey);
       // Execute the verb.
       secondary = SecondaryManager.getSecondary(verbBuilder);
       var getResponse = await secondary.executeVerb(verbBuilder);
@@ -402,7 +402,7 @@ class AtClientImpl implements AtClient {
     }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
-    UpdateVerbBuilder verbBuilder = await PutRequestTransformer()
+    UpdateVerbBuilder verbBuilder = await PutRequestTransformer(this)
         .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
