@@ -1,3 +1,8 @@
+## 3.0.26
+- Uptake AtException hierarchy
+- Introduce exception chaining
+- Fix for Server stuck on old value even though syncing is happening. at_server Issue #721
+- Export notification_service.dart file
 ## 3.0.25
 - Fix for regex issue in notification service. Issue #523
 - Fix for namespace issue in notify method.Issue #527
