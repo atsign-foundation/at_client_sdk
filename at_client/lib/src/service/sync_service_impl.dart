@@ -185,7 +185,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     } on Exception catch (e) {
       _logger.severe(
           'Exception in sync ${syncRequest.id}. Reason ${e.toString()}');
-      syncRequest.result!.atClientException = AtClientException.message(e.toString());
+      syncRequest.result!.atClientException =
+          AtClientException.message(e.toString());
       _syncError(syncRequest);
       _syncInProgress = false;
       syncProgress.syncStatus = SyncStatus.failure;

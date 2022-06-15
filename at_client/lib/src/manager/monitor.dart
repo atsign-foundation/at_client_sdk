@@ -138,7 +138,8 @@ class Monitor {
         monitorConnectivityChecker ?? MonitorConnectivityChecker();
     _monitorOutboundConnectionFactory =
         monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
-    _heartbeatInterval = monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
+    _heartbeatInterval =
+        monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -209,17 +210,17 @@ class Monitor {
         Future.delayed(
             Duration(
                 milliseconds: (_heartbeatInterval.inMilliseconds / 3).floor()),
-                () async {
-              if (_lastHeartbeatResponseTime < _lastHeartbeatSentTime) {
-                _logger.warning(
-                    'Heartbeat response not received within expected duration. '
-                        'Heartbeat was sent at $_lastHeartbeatSentTime, '
-                        'it is now ${DateTime.now().millisecondsSinceEpoch}, '
-                        'last heartbeat response was received at $_lastHeartbeatResponseTime. '
-                        'Will close connection, set status stopped, call retryCallback');
-                _callCloseStopAndRetry();
-              }
-            });
+            () async {
+          if (_lastHeartbeatResponseTime < _lastHeartbeatSentTime) {
+            _logger.warning(
+                'Heartbeat response not received within expected duration. '
+                'Heartbeat was sent at $_lastHeartbeatSentTime, '
+                'it is now ${DateTime.now().millisecondsSinceEpoch}, '
+                'last heartbeat response was received at $_lastHeartbeatResponseTime. '
+                'Will close connection, set status stopped, call retryCallback');
+            _callCloseStopAndRetry();
+          }
+        });
 
         await _monitorConnection!.write("noop:0\n");
 

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
 class StreamNotificationHandler {
@@ -20,7 +19,9 @@ class StreamNotificationHandler {
   Future<void> streamAck(AtStreamNotification streamNotification,
       Function streamCompletionCallBack, streamReceiveCallBack) async {
     var streamId = streamNotification.streamId;
-    final secondaryAddress = await AtClientManager.getInstance().secondaryAddressFinder!.findSecondary(streamNotification.senderAtSign);
+    final secondaryAddress = await AtClientManager.getInstance()
+        .secondaryAddressFinder!
+        .findSecondary(streamNotification.senderAtSign);
     var host = secondaryAddress.host;
     var port = secondaryAddress.port;
     var socket = await SecureSocket.connect(host, port);

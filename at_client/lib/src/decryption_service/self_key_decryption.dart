@@ -9,7 +9,6 @@ import 'package:at_commons/at_commons.dart';
 /// llookup:phone.wavi@bob
 /// llookup:@bob:phone@bob
 class SelfKeyDecryption implements AtKeyDecryption {
-
   @override
   Future<dynamic> decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null ||
