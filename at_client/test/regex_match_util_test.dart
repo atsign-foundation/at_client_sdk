@@ -18,11 +18,11 @@ void main() {
       final regex = 'phone';
       expect(hasRegexMatch(testKey, regex), true);
     });
-    test('test regex match - exact with namespace - backward compatibility', () async {
+    test('test regex match - exact with namespace - backward compatibility',
+        () async {
       final testKey = '@alice:phone.wavi@bob';
       final regex = 'phone.wavi';
       expect(hasRegexMatch(testKey, regex), true);
     });
-    
   });
 }

@@ -16,8 +16,7 @@ void main() {
       expect(
           () => AtClientValidation.validateKey('phone@wavi'),
           throwsA(predicate((dynamic e) =>
-              e is AtKeyException &&
-              e.message == 'Key cannot contain @')));
+              e is AtKeyException && e.message == 'Key cannot contain @')));
     });
 
     test('A test to verify atKey with space throws error', () {
