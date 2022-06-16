@@ -98,7 +98,7 @@ class AtClientAuthenticator implements AtClientAuth {
           logger
               .finer('generating encryption key pair and self encryption key');
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
-          final atSignItem = await _keyChainManager.readAtsign(name: atSign) ?? AtsignKey(name: atSign);
+          var atSignItem = await _keyChainManager.readAtsign(name: atSign) ?? AtsignKey(name: atSign);
           // await _keyChainManager.putValue(atSign, keychainEncryptionPrivateKey,
           //     encryptionKeyPair.privateKey.toString());
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
@@ -107,7 +107,7 @@ class AtClientAuthenticator implements AtClientAuth {
           var selfEncryptionKey = EncryptionUtil.generateAESKey();
           // await _keyChainManager.putValue(
           //     atSign, keychainSelfEncryptionKey, selfEncryptionKey);
-          atSignItem.copyWith(
+          atSignItem = atSignItem.copyWith(
             encryptionPrivateKey: encryptionKeyPair.privateKey.toString(),
             encryptionPublicKey: encryptionPubKey,
             selfEncryptionKey: selfEncryptionKey,

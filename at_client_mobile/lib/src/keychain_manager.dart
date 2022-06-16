@@ -419,6 +419,12 @@ class KeyChainManager {
           pkamPrivateKey: privateKey,
           pkamPublicKey: publicKey,
         );
+      } else {
+        atsigns.add(AtsignKey(name: atSign).copyWith(
+          secret: secret,
+          pkamPrivateKey: privateKey,
+          pkamPublicKey: publicKey,
+        ));
       }
       if (atClientData != null) {
         await _saveAtClientData(
