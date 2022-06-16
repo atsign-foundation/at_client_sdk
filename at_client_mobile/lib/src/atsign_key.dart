@@ -112,6 +112,7 @@ class AtClientData {
   Map<String, dynamic> toJson() => {
         'config': config,
         'keys': keys,
+        'defaultAtsign': defaultAtsign,
       };
 }
 
