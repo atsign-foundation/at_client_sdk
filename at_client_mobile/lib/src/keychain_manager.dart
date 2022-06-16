@@ -286,7 +286,11 @@ class KeyChainManager {
   /// Function to get atsign's key with name
   Future<AtsignKey?> readAtsign({required String name}) async {
     final atSigns = await readAtsigns();
-    return atSigns.firstWhere((element) => element.name == name);
+    if(atSigns.isNotEmpty) {
+      return atSigns.firstWhere((element) => element.name == name);
+    } else {
+      return null;
+    }
   }
 
   /// Function to get all atsign item in keychain
