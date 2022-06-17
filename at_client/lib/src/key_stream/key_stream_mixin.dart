@@ -17,6 +17,9 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
 
   static final AtSignLogger _logger = AtSignLogger('KeyStream');
 
+  @visibleForTesting
+  static bool disposeOnAtsignChange = true;
+
   /// An internal controller used to manage this Stream interface.
   @protected
   @visibleForTesting
@@ -71,7 +74,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
         .subscribe(shouldDecrypt: true, regex: regex)
         .listen(_notificationListener);
 
-    _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
+    if(disposeOnAtsignChange) _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
   }
 
   /// A function that preloads this Stream with keys that match [regex], [sharedBy], and [sharedWith].

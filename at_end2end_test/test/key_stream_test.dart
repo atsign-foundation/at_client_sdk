@@ -77,6 +77,7 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
+      KeyStreamMixin.disposeOnAtsignChange = false;
     });
 
     test('init', () {
@@ -119,6 +120,10 @@ void main() {
     test('dispose', () async {
       await keyStream.dispose();
       expect(keyStream.controller.isClosed, true);
+    });
+
+    tearDownAll(() {
+      KeyStreamMixin.disposeOnAtsignChange = true;
     });
   });
 
@@ -356,6 +361,6 @@ void main() {
       keyStream3.handleNotification(key3, AtValue()..value = randomValue3, 'update');
       expect(keyStream3, emitsInOrder([randomValue3]));
       await keyStream3.dispose();
-    });
+    }, timeout: Timeout(Duration(minutes: 7)));
   });
 }
