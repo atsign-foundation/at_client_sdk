@@ -1,6 +1,6 @@
 <img width=250px src="https://atsign.dev/assets/img/@platform_logo_grey.svg?sanitize=true">
 
-# The @ Foundation Code of Conduct
+# The Atsign Foundation Code of Conduct
 
 Based on
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.0-4baaaa.svg)](code_of_conduct.md)
