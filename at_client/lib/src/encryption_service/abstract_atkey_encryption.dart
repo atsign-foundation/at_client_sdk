@@ -24,7 +24,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     String sharedWithPublicKey = '';
     try {
       sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
-    } on KeyNotFoundException catch (e) {
+    } on AtPublicKeyNotFoundException catch (e) {
       e.stack(AtChainedException(
           Intent.shareData, ExceptionScenario.encryptionFailed, e.message));
       rethrow;
@@ -159,7 +159,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
           .getRemoteSecondary()!
           .executeVerb(plookupBuilder);
     } on AtException catch (e) {
-      throw KeyNotFoundException(
+      throw AtPublicKeyNotFoundException(
           'Failed to fetch public key of ${atKey.sharedWith}')
         ..fromException(e)
         ..stack(AtChainedException(
@@ -170,7 +170,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
     if (sharedWithPublicKey.isEmpty || sharedWithPublicKey == 'data:null') {
-      throw KeyNotFoundException(
+      throw AtPublicKeyNotFoundException(
           'public key not found. data sharing is forbidden.');
     }
     //Cache the sharedWithPublicKey and return public key of sharedWith atSign
