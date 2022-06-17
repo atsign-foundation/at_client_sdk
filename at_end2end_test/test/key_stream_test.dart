@@ -77,7 +77,7 @@ void main() {
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
       );
-      KeyStreamMixin.disposeOnAtsignChange = false;
+      keyStream.disposeOnAtsignChange = false;
     });
 
     test('init', () {
@@ -120,10 +120,6 @@ void main() {
     test('dispose', () async {
       await keyStream.dispose();
       expect(keyStream.controller.isClosed, true);
-    });
-
-    tearDownAll(() {
-      KeyStreamMixin.disposeOnAtsignChange = true;
     });
   });
 
