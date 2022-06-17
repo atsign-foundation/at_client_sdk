@@ -1,3 +1,4 @@
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 import 'package:meta/meta.dart';
@@ -36,6 +37,7 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I> impl
     String? sharedWith,
     String Function(AtKey key, AtValue value)? generateRef,
     I Function(Iterable<MapEntry<K, V>> values)? castTo,
+    AtClientManager? atClientManager,
   })  : _generateRef = generateRef ?? ((key, value) => key.key ?? ''),
         _castTo = castTo ?? ((Iterable<MapEntry<K, V>> values) => values as I),
         super(
@@ -44,5 +46,6 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I> impl
           sharedBy: sharedBy,
           sharedWith: sharedWith,
           shouldGetKeys: shouldGetKeys,
+          atClientManager: atClientManager,
         );
 }

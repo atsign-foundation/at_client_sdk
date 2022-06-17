@@ -50,6 +50,7 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
     String? sharedWith,
     String Function(AtKey key, AtValue value)? generateRef,
     I Function(Iterable<T> values)? castTo,
+    AtClientManager? atClientManager,
   })  : _generateRef = generateRef ?? ((key, value) => key.key ?? ''),
         _castTo = castTo ?? ((Iterable<T> values) => values as I),
         super(
@@ -58,5 +59,6 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
           sharedBy: sharedBy,
           sharedWith: sharedWith,
           shouldGetKeys: shouldGetKeys,
+          atClientManager: atClientManager,
         );
 }

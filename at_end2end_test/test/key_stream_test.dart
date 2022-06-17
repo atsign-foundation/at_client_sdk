@@ -11,7 +11,6 @@ import 'package:at_client/src/key_stream/key_stream_map_base.dart';
 import 'package:at_client/src/key_stream/collection/map_key_stream_impl.dart' hide castTo;
 import 'package:at_client/src/key_stream/collection/iterable_key_stream_impl.dart' hide castTo;
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
-import 'package:at_utils/at_logger.dart';
 
 import 'test_utils.dart';
 
@@ -258,6 +257,105 @@ void main() {
 
     tearDownAll(() async {
       await keyStream.dispose();
+    });
+  });
+
+  group('Switch atsigns group', () {
+    var currentAtSign, sharedWithAtSign;
+    AtClientManager? currentAtSignClientManager, sharedWithAtSignClientManager;
+    var namespace = 'keyStream';
+    late KeyStreamImpl<String> keyStream, keyStream2, keyStream3;
+    var uuid;
+    var randomValue2, randomValue3;
+    var key2, key3;
+     
+
+    setUpAll(() async {
+      uuid = Uuid();
+      randomValue2 = uuid.v4();
+      randomValue3 = uuid.v4();
+      key2 = AtKey()
+        ..key = randomValue2
+        ..sharedWith = currentAtSign
+        ..namespace = namespace
+        ..sharedBy = sharedWithAtSign;
+      key3 = AtKey()
+        ..key = randomValue3
+        ..sharedWith = sharedWithAtSign
+        ..namespace = namespace
+        ..sharedBy = currentAtSign;
+      currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+      sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+      // Create atClient instance for currentAtSign
+      currentAtSignClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      // Set Encryption Keys for currentAtSign
+      await TestUtils.setEncryptionKeys(currentAtSign);
+      var isSyncInProgress = true;
+      currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+        isSyncInProgress = false;
+      });
+      while (isSyncInProgress) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
+      // Create atClient instance for atSign2
+      sharedWithAtSignClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      // Set Encryption Keys for sharedWithAtSign
+      await TestUtils.setEncryptionKeys(sharedWithAtSign);
+      isSyncInProgress = true;
+      sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
+        isSyncInProgress = false;
+      });
+      while (isSyncInProgress) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
+      keyStream = KeyStreamImpl(
+        regex: namespace + '@',
+        convert: (key, value) => value.value ?? '',
+        sharedBy: currentAtSign,
+        sharedWith: sharedWithAtSign,
+        shouldGetKeys: false,
+      );
+    });
+
+    test('', () async {
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      expect(keyStream, isA<KeyStreamMixin<String?>>());
+      expect(keyStream.isPaused, false);
+
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      await Future.delayed(Duration(milliseconds: 1));
+      expect(keyStream.controller.isClosed, true); 
+
+      keyStream2 = KeyStreamImpl(
+        regex: namespace + '@',
+        convert: (key, value) => value.value ?? '',
+        sharedBy: sharedWithAtSign,
+        sharedWith: currentAtSign,
+        shouldGetKeys: false,
+      );
+      keyStream2.handleNotification(key2, AtValue()..value = randomValue2, 'update');
+      expect(keyStream2, emitsInOrder([randomValue2]));
+
+      await AtClientManager.getInstance()
+          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      await Future.delayed(Duration(milliseconds: 1));
+      expect(keyStream2.controller.isClosed, true);
+      expect(keyStream.controller.isClosed, true);
+
+       keyStream3 = KeyStreamImpl(
+        regex: namespace + '@',
+        convert: (key, value) => value.value ?? '',
+        sharedBy: currentAtSign,
+        sharedWith: sharedWithAtSign,
+        shouldGetKeys: false,
+      );
+
+      keyStream3.handleNotification(key3, AtValue()..value = randomValue3, 'update');
+      expect(keyStream3, emitsInOrder([randomValue3]));
+      await keyStream3.dispose();
     });
   });
 }

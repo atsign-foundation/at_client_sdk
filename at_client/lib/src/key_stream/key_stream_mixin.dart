@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart' show AtClient, AtClientManager, AtNotification;
+import 'package:at_client/src/listener/at_sign_change_listener.dart';
+import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_utils/at_logger.dart';
 
@@ -10,6 +12,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// A subscription that listens to notifications.
   @visibleForTesting
   late StreamSubscription<AtNotification> notificationSubscription;
+
+  late AtClientManager _atClientManager;
 
   static final AtSignLogger _logger = AtSignLogger('KeyStream');
 
@@ -55,14 +59,19 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     this.sharedBy,
     this.sharedWith,
     this.shouldGetKeys = true,
+    AtClientManager? atClientManager,
   }) {
     _logger.finer('init Keystream: $this');
+
+    _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
 
-    notificationSubscription = AtClientManager.getInstance()
+    notificationSubscription = _atClientManager
         .notificationService
         .subscribe(shouldDecrypt: true, regex: regex)
         .listen(_notificationListener);
+
+    _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
   }
 
   /// A function that preloads this Stream with keys that match [regex], [sharedBy], and [sharedWith].
@@ -71,7 +80,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   @visibleForTesting
   Future<void> getKeys() async {
     _logger.finer('getting keys');
-    AtClient atClient = AtClientManager.getInstance().atClient;
+    AtClient atClient = _atClientManager.atClient;
     List<AtKey> keys = await atClient.getAtKeys(
       regex: regex,
       sharedBy: sharedBy,
@@ -94,7 +103,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     if (sharedBy != null && sharedBy != event.from) return;
     if (sharedWith != null && sharedWith != event.to) return;
 
-    AtClientManager.getInstance().atClient.get(key).then(
+    _atClientManager.atClient.get(key).then(
       (AtValue value) {
         _logger.finest('handleNotification key: $key, value: $value, operation: ${event.operation}');
         handleNotification(key, value, event.operation);
@@ -207,7 +216,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// If the cleanup throws, which it really shouldn't, the returned future
   /// completes with that error.
   Future<void> dispose() async {
-    _logger.finer('dipose KeyStream $this');
+    _logger.finer('dispose KeyStream $this');
     await Future.wait([controller.close(), notificationSubscription.cancel()]);
   }
 
@@ -393,5 +402,15 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   @override
   Stream<T> where(bool Function(T event) test) {
     return controller.stream.where(test);
+  }
+}
+
+class KeyStreamDisposeListener extends AtSignChangeListener {
+  final KeyStreamMixin _ref;
+  KeyStreamDisposeListener(KeyStreamMixin ref) : _ref = ref;
+
+  @override
+  Future<void> listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) async {
+    await _ref.dispose();
   }
 }
