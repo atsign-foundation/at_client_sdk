@@ -17,9 +17,6 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
 
   static final AtSignLogger _logger = AtSignLogger('KeyStream');
 
-  @visibleForTesting
-  static bool disposeOnAtsignChange = true;
-
   /// An internal controller used to manage this Stream interface.
   @protected
   @visibleForTesting
@@ -55,6 +52,9 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// When [shouldGetKeys] is [true] this Stream should be preloaded with keys that match [regex], [sharedBy], and [sharedWith].
   /// {@endtemplate}
   final bool shouldGetKeys;
+
+  @visibleForTesting
+  bool disposeOnAtsignChange = true;
 
   KeyStreamMixin({
     required this.convert,
@@ -414,6 +414,8 @@ class KeyStreamDisposeListener extends AtSignChangeListener {
 
   @override
   Future<void> listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) async {
-    await _ref.dispose();
+    if(_ref.disposeOnAtsignChange) {
+      await _ref.dispose();
+    }
   }
 }

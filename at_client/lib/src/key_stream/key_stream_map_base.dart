@@ -1,5 +1,4 @@
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 import 'package:meta/meta.dart';
 
