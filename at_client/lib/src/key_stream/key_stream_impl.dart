@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/key_stream.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
@@ -25,11 +26,13 @@ class KeyStreamImpl<T> extends KeyStreamMixin<T?> implements KeyStream<T> {
     bool shouldGetKeys = true,
     String? sharedBy,
     String? sharedWith,
+    AtClientManager? atClientManager,
   }) : super(
           convert: convert,
           regex: regex,
           sharedBy: sharedBy,
           sharedWith: sharedWith,
           shouldGetKeys: shouldGetKeys,
+          atClientManager: atClientManager,
         );
 }

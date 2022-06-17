@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/key_stream_impl.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
@@ -24,6 +25,7 @@ abstract class KeyStream<T> extends Stream<T?> implements KeyStreamMixin<T?> {
     String? sharedBy,
     String? sharedWith,
     bool shouldGetKeys = true,
+    AtClientManager? atClientManager,
   }) {
     return KeyStreamImpl(
       regex: regex,
@@ -31,6 +33,7 @@ abstract class KeyStream<T> extends Stream<T?> implements KeyStreamMixin<T?> {
       sharedBy: sharedBy,
       sharedWith: sharedWith,
       shouldGetKeys: shouldGetKeys,
+      atClientManager: atClientManager,
     );
   }
 
