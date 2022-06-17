@@ -1,4 +1,6 @@
 import 'package:at_client/src/client/verb_builder_manager.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -18,7 +20,8 @@ void main() {
           ..namespaceAware = false
           ..isPublic = true
           ..isCached = true);
-      var builder = LookUpBuilderManager.get(atKey, '@alice');
+      var builder =
+          LookUpBuilderManager.get(atKey, '@alice', AtClientPreference());
       expect(builder, isA<LLookupVerbBuilder>());
     });
 
@@ -33,7 +36,8 @@ void main() {
         ..metadata = (Metadata()
           ..isCached = true
           ..namespaceAware = false);
-      var builder = LookUpBuilderManager.get(atKey, '@alice');
+      var builder =
+          LookUpBuilderManager.get(atKey, '@alice', AtClientPreference());
       expect(builder, isA<LLookupVerbBuilder>());
     });
 
@@ -45,7 +49,8 @@ void main() {
         ..sharedBy = '@alice'
         ..sharedWith = '@alice'
         ..metadata = (Metadata()..namespaceAware = false);
-      var builder = LookUpBuilderManager.get(atKey, '@alice');
+      var builder =
+          LookUpBuilderManager.get(atKey, '@alice', AtClientPreference());
       expect(builder, isA<LLookupVerbBuilder>());
     });
 
@@ -54,7 +59,8 @@ void main() {
         ..key = 'phone'
         ..sharedBy = '@alice'
         ..metadata = (Metadata()..namespaceAware = false);
-      var builder = LookUpBuilderManager.get(atKey, '@alice');
+      var builder =
+          LookUpBuilderManager.get(atKey, '@alice', AtClientPreference());
       expect(builder, isA<LLookupVerbBuilder>());
     });
 
@@ -65,7 +71,8 @@ void main() {
         ..metadata = (Metadata()
           ..isHidden = true
           ..namespaceAware = false);
-      var builder = LookUpBuilderManager.get(atKey, '@alice');
+      var builder =
+          LookUpBuilderManager.get(atKey, '@alice', AtClientPreference());
       expect(builder, isA<LLookupVerbBuilder>());
     });
 
@@ -79,7 +86,8 @@ void main() {
         ..metadata = (Metadata()
           ..isPublic = true
           ..namespaceAware = false);
-      var builder = LookUpBuilderManager.get(atKey, '@bob');
+      var builder =
+          LookUpBuilderManager.get(atKey, '@bob', AtClientPreference());
       expect(builder, isA<PLookupVerbBuilder>());
     });
 
@@ -91,8 +99,45 @@ void main() {
         ..key = 'phone'
         ..sharedBy = '@alice'
         ..metadata = (Metadata()..namespaceAware = false);
-      var builder = LookUpBuilderManager.get(atKey, '@bob');
+      var builder =
+          LookUpBuilderManager.get(atKey, '@bob', AtClientPreference());
       expect(builder, isA<LookupVerbBuilder>());
+    });
+  });
+
+  group('A group of tests to validate appending namespace to key', () {
+    test('A test to verify namespace from AtKey is appended to key', () {
+      String atKey = AtClientUtil.getKeyWithNameSpace(
+          AtKey.self('phone', namespace: 'wavi').build(),
+          (AtClientPreference()));
+      expect(atKey, 'phone.wavi');
+    });
+
+    test('A test to verify namespace from preference is appended to key', () {
+      String atKey = AtClientUtil.getKeyWithNameSpace(
+          AtKey.self('phone').build(),
+          (AtClientPreference()..namespace = 'wavi'));
+      expect(atKey, 'phone.wavi');
+    });
+
+    test(
+        'A test to verify namespace is not appended to key when already present',
+        () {
+      String atKey = AtClientUtil.getKeyWithNameSpace(
+          AtKey.self('phone.wavi').build(), (AtClientPreference()));
+      expect(atKey, 'phone.wavi');
+    });
+
+    test(
+        'A test to verify namespace is not appended when namespaceAware is set to false',
+        () {
+      String atKey = AtClientUtil.getKeyWithNameSpace(
+          AtKey()
+            ..key = 'phone'
+            ..namespace = 'wavi'
+            ..metadata = (Metadata()..namespaceAware = false),
+          (AtClientPreference()));
+      expect(atKey, 'phone');
     });
   });
 }

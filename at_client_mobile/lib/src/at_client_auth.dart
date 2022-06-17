@@ -1,7 +1,6 @@
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/auth_constants.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';

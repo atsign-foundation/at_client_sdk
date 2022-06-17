@@ -65,6 +65,17 @@ abstract class AtClient {
   ///    put(key, '+1 999 9999');
   /// ```
   /// Starting version 3.0.0 [isDedicated] is deprecated
+  /// Throws [AtValueException] if invalid value type is found
+  ///
+  /// Throws [AtKeyException] if invalid key or metadata is found
+  ///
+  /// Throws [AtEncryptionException] if encryption process fails
+  ///
+  /// Throws [SelfKeyNotFoundException] if self encryption key is not found
+  ///
+  /// Throws [AtPrivateKeyNotFoundException] if encryption private key is not found
+  ///
+  /// Throws [AtPublicKeyNotFoundException] if encryption public key is not found
   Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
 
   /// Used to store the textual data into the keystore.

@@ -498,12 +498,11 @@ class SyncManager {
   }
 
   void _scheduleSyncTask() {
-      var cron = Cron();
-      cron.schedule(
-          Schedule.parse('*/${_preference!.syncIntervalMins} * * * *'),
-          () async {
-        await syncWithIsolate();
-      });
-      _isScheduled = true;
+    var cron = Cron();
+    cron.schedule(Schedule.parse('*/${_preference!.syncIntervalMins} * * * *'),
+        () async {
+      await syncWithIsolate();
+    });
+    _isScheduled = true;
   }
 }

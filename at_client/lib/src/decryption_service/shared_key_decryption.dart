@@ -31,10 +31,18 @@ class SharedKeyDecryption implements AtKeyDecryption {
     atClient ??= AtClientManager.getInstance().atClient;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
       encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
-      final currentAtSignPublicKey = (await atClient
-              ?.getLocalSecondary()!
-              .getEncryptionPublicKey(atClient!.getCurrentAtSign()!))
-          ?.trim();
+      String? currentAtSignPublicKey;
+      try {
+        currentAtSignPublicKey = (await atClient
+                ?.getLocalSecondary()!
+                .getEncryptionPublicKey(atClient!.getCurrentAtSign()!))
+            ?.trim();
+      } on KeyNotFoundException {
+        throw AtPublicKeyNotFoundException(
+            'Failed to fetch the current atSign public key - public:publickey${atClient!.getCurrentAtSign()!}',
+            intent: Intent.fetchEncryptionPublicKey,
+            exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
+      }
       if (currentAtSignPublicKey != null &&
           atKey.metadata!.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
@@ -53,10 +61,8 @@ class SharedKeyDecryption implements AtKeyDecryption {
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    var currentAtSignPrivateKey = await (AtClientManager.getInstance()
-        .atClient
-        .getLocalSecondary()!
-        .getEncryptionPrivateKey());
+    var currentAtSignPrivateKey =
+        await (atClient!.getLocalSecondary()!.getEncryptionPrivateKey());
     if (currentAtSignPrivateKey == null || currentAtSignPrivateKey.isEmpty) {
       throw AtPrivateKeyNotFoundException('Encryption private not found',
           intent: Intent.fetchEncryptionPrivateKey,
