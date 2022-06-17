@@ -1,3 +1,5 @@
+## 3.0.27
+- Upgraded to version 3.0.28 of at_persistence_secondary_server
 ## 3.0.26
 - Uptake AtException hierarchy
 - Introduce exception chaining
