@@ -1,5 +1,5 @@
 ## 3.1.18
-- at_client version upgrade to 3.0.27
+- at_client version upgraded to 3.0.27
 ## 3.1.17
 - at_client version upgrade to v3.0.26 for AtException chaining
 - at_commons version upgrade to v3.0.17 for AtException hierarchy 
