@@ -1,0 +1,11 @@
+name: Export label config
+on: 
+  pull_request:
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: EndBug/export-label-config@v1
+        with:
+          raw-result: false
+          add-aliases: false
