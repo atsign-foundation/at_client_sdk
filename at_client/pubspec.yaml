@@ -32,7 +32,7 @@ dependencies:
   at_utils: ^3.0.10
   meta: ^1.7.0
 
-#dependency_overrides:
+dependency_overrides:
 #  at_persistence_spec:
 #    git:
 #      url: https://github.com/atsign-foundation/at_server.git
@@ -43,11 +43,11 @@ dependencies:
 #      url: https://github.com/atsign-foundation/at_tools.git
 #      path: at_utils
 #      ref: trunk
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_commons
+      ref: encrypt_notify_text
 #  at_persistence_secondary_server:
 #    git:
 #      url: https://github.com/atsign-foundation/at_server.git
