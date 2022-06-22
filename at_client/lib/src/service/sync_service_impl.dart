@@ -175,12 +175,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
 
       _syncInProgress = true;
-      final serverCommitId = await _getServerCommitId();
-      final localCommitId = await _getLocalCommitId();
+      int serverCommitId = await _getServerCommitId();
+      final localCommitIdBeforeSync = await _getLocalCommitId();
       final syncResult = await _sync(serverCommitId, syncRequest);
       _syncComplete(syncRequest);
       syncProgress.syncStatus = syncResult.syncStatus;
-      _informSyncProgress(syncProgress, localCommitId: localCommitId);
+      syncProgress.keyInfoList = syncResult.keyInfoList;
+      serverCommitId = await _getServerCommitId();
+      final localCommitId = await _getLocalCommitId();
+      _informSyncProgress(syncProgress,
+          localCommitIdBeforeSync: localCommitIdBeforeSync,
+          localCommitId: localCommitId,
+          serverCommitId: serverCommitId);
       _syncInProgress = false;
     } on Exception catch (e) {
       _logger.severe(
@@ -195,14 +201,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return;
   }
 
-  void _informSyncProgress(SyncProgress syncProgress, {int? localCommitId}) {
+  void _informSyncProgress(SyncProgress syncProgress,
+      {int? localCommitIdBeforeSync, int? localCommitId, int? serverCommitId}) {
     for (var listener in _syncProgressListeners) {
-      if (localCommitId == -1) {
+      if (localCommitIdBeforeSync == -1) {
         syncProgress.isInitialSync = true;
       }
       try {
         syncProgress.completedAt = DateTime.now().toUtc();
         syncProgress.atSign = _atClient.getCurrentAtSign();
+        syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
+        syncProgress.localCommitId = localCommitId;
+        syncProgress.serverCommitId = serverCommitId;
         listener.onSyncProgressEvent(syncProgress);
       } on Exception catch (e) {
         _logger.severe(
@@ -279,12 +289,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (serverCommitId > localCommitId) {
       _logger.finer(
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
-      await _syncFromServer(serverCommitId, localCommitId);
+      final keyInfoList = await _syncFromServer(serverCommitId, localCommitId);
+      syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
       _logger.finer(
           'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
-      await _syncToRemote(unCommittedEntries);
+      final keyInfoList = await _syncToRemote(unCommittedEntries);
+      syncResult.keyInfoList.addAll(keyInfoList);
     }
     syncResult.lastSyncedOn = DateTime.now().toUtc();
     syncResult.syncStatus = SyncStatus.success;
@@ -293,7 +305,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Syncs the local entries to cloud secondary.
-  Future<void> _syncToRemote(List<CommitEntry> unCommittedEntries) async {
+  Future<List<KeyInfo>> _syncToRemote(
+      List<CommitEntry> unCommittedEntries) async {
+    List<KeyInfo> keyInfoList = [];
     var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
     for (var unCommittedEntryList in uncommittedEntryBatch) {
       try {
@@ -317,21 +331,28 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
             await SyncUtil.updateCommitEntry(
                 commitEntry, commitId, _atClient.getCurrentAtSign()!);
+            keyInfoList
+                .add(KeyInfo(commitEntry.atKey, SyncDirection.localToRemote));
           } on Exception catch (e) {
             _logger.severe(
                 'exception while updating commit entry for entry:$entry ${e.toString()}');
+            return keyInfoList;
           }
         }
       } on Exception catch (e) {
         _logger.severe(
             'exception while syncing batch: ${e.toString()} batch commit entries: $unCommittedEntryList');
+        return keyInfoList;
       }
     }
+    return keyInfoList;
   }
 
   /// Syncs the cloud secondary changes to local secondary.
-  Future<void> _syncFromServer(int serverCommitId, int localCommitId) async {
+  Future<List<KeyInfo>> _syncFromServer(
+      int serverCommitId, int localCommitId) async {
     // Iterates until serverCommitId is greater than localCommitId are equal.
+    List<KeyInfo> keyInfoList = [];
     while (serverCommitId > localCommitId) {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
@@ -353,17 +374,19 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       for (dynamic serverCommitEntry in syncResponseJson) {
         try {
           await _syncLocal(serverCommitEntry);
+          keyInfoList.add(
+              KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal));
         } on Exception catch (e) {
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - ${e.toString()}');
+          return keyInfoList;
         }
       }
-      // await Future.forEach(syncResponseJson,
-      //     (dynamic serverCommitEntry) => _syncLocal(serverCommitEntry));
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
       _logger.finest('**localCommitId $localCommitId');
     }
+    return keyInfoList;
   }
 
   Future<List<BatchRequest>> _getBatchRequests(
@@ -671,3 +694,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     this.onDone = onDone;
   }
 }
+
+class KeyInfo {
+  String key;
+  SyncDirection syncDirection;
+  KeyInfo(this.key, this.syncDirection);
+}
+
+enum SyncDirection { localToRemote, remoteToLocal }
