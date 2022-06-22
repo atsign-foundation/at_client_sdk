@@ -1,3 +1,5 @@
+import 'package:at_client/at_client.dart';
+
 class AtNotification {
   late String id;
   late String key;
@@ -6,13 +8,16 @@ class AtNotification {
   late int epochMillis;
   String? value;
   String? operation;
+  String? messageType;
+  bool? isEncrypted;
 
   AtNotification(this.id, this.key, this.from, this.to, this.epochMillis,
+      this.messageType, this.isEncrypted,
       {this.value, this.operation});
 
   factory AtNotification.fromJson(Map<String, dynamic> json) {
-    return AtNotification(
-        json['id'], json['key'], json['from'], json['to'], json['epochMillis'],
+    return AtNotification(json['id'], json['key'], json['from'], json['to'],
+        json['epochMillis'], json['messageType'], json[IS_ENCRYPTED],
         value: json['value'], operation: json['operation']);
   }
 
@@ -24,7 +29,9 @@ class AtNotification {
       'to': to,
       'epochMillis': epochMillis,
       'value': value,
-      'operation': operation
+      'operation': operation,
+      'messageType': messageType,
+      IS_ENCRYPTED: isEncrypted
     };
   }
 

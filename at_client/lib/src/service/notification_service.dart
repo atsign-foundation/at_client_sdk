@@ -138,10 +138,12 @@ class NotificationParams {
   }
 
   /// Returns [NotificationParams] to send a text message to another atSign.
-  static NotificationParams forText(String text, String whomToNotify) {
+  static NotificationParams forText(String text, String whomToNotify,
+      {bool shouldEncrypt = false}) {
     var atKey = AtKey()
       ..key = text
-      ..sharedWith = whomToNotify;
+      ..sharedWith = whomToNotify
+      ..metadata = (Metadata()..isEncrypted = shouldEncrypt);
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey

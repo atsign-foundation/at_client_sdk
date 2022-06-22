@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/listener/connectivity_listener.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
@@ -12,10 +14,14 @@ import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_utils/at_logger.dart';
+import 'package:at_client/src/util/network_util.dart';
+import 'package:at_utils/at_utils.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
@@ -31,23 +37,40 @@ class NotificationServiceImpl
   ConnectivityListener? _connectivityListener;
   dynamic _lastMonitorRetried;
   late AtClientManager _atClientManager;
+  late NetworkConnectivityChecker _networkConnectivityChecker;
+  AtClientValidation atClientValidation = AtClientValidation();
 
   static Future<NotificationService> create(AtClient atClient,
-      {required AtClientManager atClientManager}) async {
+      {required AtClientManager atClientManager,
+      Monitor? monitor,
+      NetworkConnectivityChecker? networkConnectivityChecker}) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
-    final notificationService =
-        NotificationServiceImpl._(atClientManager, atClient);
+    final notificationService = NotificationServiceImpl._(
+        atClientManager, atClient,
+        monitor: monitor,
+        networkConnectivityChecker: networkConnectivityChecker);
     await notificationService._init();
     _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
-  NotificationServiceImpl._(
-      AtClientManager atClientManager, AtClient atClient) {
+  NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
+      {Monitor? monitor,
+      NetworkConnectivityChecker? networkConnectivityChecker}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
+    _monitor = monitor ??
+        Monitor(
+            _internalNotificationCallback,
+            _onMonitorError,
+            _atClient.getCurrentAtSign()!,
+            _atClient.getPreferences()!,
+            MonitorPreference()..keepAlive = true,
+            _monitorRetry);
+    _networkConnectivityChecker =
+        networkConnectivityChecker ?? NetworkConnectivityChecker();
     _atClientManager.listenToAtSignChange(this);
   }
 
@@ -77,13 +100,6 @@ class NotificationServiceImpl
       return;
     }
     final lastNotificationTime = await _getLastNotificationTime();
-    _monitor = Monitor(
-        _internalNotificationCallback,
-        _onMonitorError,
-        _atClient.getCurrentAtSign()!,
-        _atClient.getPreferences()!,
-        MonitorPreference()..keepAlive = true,
-        _monitorRetry);
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
     if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
@@ -134,6 +150,24 @@ class NotificationServiceImpl
         if (atNotification.id != '-1') {
           await _atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
+        }
+        // If messageType is Text and text data is encrypted, decrypt the data
+        if ((atNotification.isEncrypted != null &&
+                atNotification.isEncrypted!) &&
+            (atNotification.messageType != null &&
+                atNotification.messageType == 'MessageType.text')) {
+          var encryptedMessage = atNotification.key.split(':')[1];
+          var decryptedMessage = await SharedKeyDecryption().decrypt(
+              AtKey()
+                ..sharedWith = atNotification.to
+                ..sharedBy = atNotification.from
+                ..key = atNotification.key,
+              encryptedMessage);
+          atNotification.key = '${atNotification.to}:$decryptedMessage';
+          _streamListeners.forEach((notificationConfig, streamController) {
+            streamController.add(atNotification);
+          });
+          return;
         }
         _streamListeners.forEach((notificationConfig, streamController) async {
           // Decrypt the value in the atNotification object when below criteria is met.
@@ -186,15 +220,41 @@ class NotificationServiceImpl
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
     try {
-      // Notifies key to another notificationParams.atKey.sharedWith atsign
-      await _atClient.notifyChange(notificationParams);
-    } on Exception catch (e) {
+      // If network is unavailable, throw AtConnectException
+      if (!(await _networkConnectivityChecker.isNetworkAvailable())) {
+        throw AtConnectException('No network availability');
+      }
+      // If sharedBy atSign is null, default to current atSign.
+      if (notificationParams.atKey.sharedBy.isNull) {
+        notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
+      }
+      // Append '@' if not already set.
+      AtUtils.formatAtSign(notificationParams.atKey.sharedBy!);
+      // validate notification request
+      atClientValidation.validateNotificationRequest(
+          notificationParams, _atClient.getPreferences()!);
+      // Get the EncryptionInstance to encrypt the data.
+      var atKeyEncryption = AtKeyEncryptionManager.get(
+          notificationParams.atKey, _atClient.getCurrentAtSign()!);
+      // Get the NotifyVerbBuilder from NotificationParams
+      var builder = await NotificationRequestTransformer(
+              _atClient.getCurrentAtSign()!,
+              _atClient.getPreferences()!,
+              atKeyEncryption)
+          .transform(notificationParams);
+
+      if (builder.atKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+          builder.atKey!.startsWith(AT_PKAM_PUBLIC_KEY)) {
+        builder.sharedBy = null;
+      }
+      // Run the notify verb on the remote secondary instance.
+      await _atClient.getRemoteSecondary()?.executeVerb(builder);
+    } on AtException catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.undelivered;
-      var atClientException =
-          AtClientException(error_codes['AtClientException'], e.toString());
-      notificationResult.atClientException = atClientException;
+      notificationResult.atClientException =
+          AtExceptionManager.createException(e) as AtClientException;
       // Invoke onErrorCallback
       if (onError != null) {
         onError(notificationResult);
