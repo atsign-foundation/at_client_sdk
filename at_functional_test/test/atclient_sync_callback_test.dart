@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
@@ -24,8 +25,7 @@ void main() {
     for (var i = 0; i < 5; i++) {
       var phoneKey = AtKey()..key = 'phone_$i';
       var value = '$i';
-      var result = await atClient.put(phoneKey, value);
-      print(result);
+      await atClient.put(phoneKey, value);
     }
     await Future.delayed(Duration(seconds: 10));
   });
@@ -36,5 +36,9 @@ class MySyncProgressListener extends SyncProgressListener {
   void onSyncProgressEvent(SyncProgress syncProgress) {
     print('received sync progress: $syncProgress');
     expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
+    expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
   }
 }

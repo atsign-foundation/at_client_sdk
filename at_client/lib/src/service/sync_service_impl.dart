@@ -699,6 +699,11 @@ class KeyInfo {
   String key;
   SyncDirection syncDirection;
   KeyInfo(this.key, this.syncDirection);
+
+  @override
+  String toString() {
+    return 'KeyInfo{key: $key, syncDirection: $syncDirection}';
+  }
 }
 
 enum SyncDirection { localToRemote, remoteToLocal }
