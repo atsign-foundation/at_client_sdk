@@ -279,11 +279,13 @@ class AtClientImpl implements AtClient {
       {String? regex,
       String? sharedBy,
       String? sharedWith,
+      bool showHiddenKeys = false,
       bool isDedicated = false}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
       ..regex = regex
+      ..showHiddenKeys = showHiddenKeys
       ..auth = true;
     var scanResult = await getSecondary().executeVerb(builder);
     scanResult = _formatResult(scanResult);

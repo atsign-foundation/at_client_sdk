@@ -293,7 +293,10 @@ abstract class AtClient {
   ///   getKeys(sharedBy:'@bob');
   ///```
   Future<List<String>> getKeys(
-      {String? regex, String? sharedBy, String? sharedWith});
+      {String? regex,
+      String? sharedBy,
+      String? sharedWith,
+      bool showHiddenKeys = false});
 
   /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
   /// [isDedicated] need to be set to true to create a dedicated connection
