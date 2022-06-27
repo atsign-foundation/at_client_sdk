@@ -3,10 +3,19 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
+import 'package:mocktail/mocktail.dart';
+
+class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
+  @override
+  List<String> getKeys({String? regex}) {
+    return ['public:__location.wavi@alice', '_profilePic.wavi@alice'];
+  }
+}
+
+class MockAtClientImpl extends Mock implements AtClientImpl {}
 
 void main() {
   var storageDir = Directory.current.path + '/test/hive';
@@ -189,6 +198,30 @@ void main() {
   } on Exception catch (e) {
     print('error in tear down:${e.toString()}');
   }
+
+  group('A group of tests to validate getKeys', () {
+    test('A test to validate getKeys when showHidden is set to true', () async {
+      AtClientImpl mockAtClientImpl = MockAtClientImpl();
+      SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
+      LocalSecondary localSecondary = LocalSecondary(mockAtClientImpl);
+      localSecondary.keyStore = mockSecondaryKeyStore;
+      var response = await localSecondary
+          .executeVerb(ScanVerbBuilder()..showHiddenKeys = true);
+      expect(response?.contains('public:__location.wavi@alice'), true);
+      expect(response?.contains('_profilePic.wavi@alice'), true);
+    });
+
+    test('A test to validate getKeys when showHidden is set to true', () async {
+      AtClientImpl mockAtClientImpl = MockAtClientImpl();
+      SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
+      LocalSecondary localSecondary = LocalSecondary(mockAtClientImpl);
+      localSecondary.keyStore = mockSecondaryKeyStore;
+      var response = await localSecondary
+          .executeVerb(ScanVerbBuilder()..showHiddenKeys = false);
+      expect(response?.contains('public:__location.wavi@alice'), false);
+      expect(response?.contains('_profilePic.wavi@alice'), false);
+    });
+  });
 }
 
 Future<void> setUpFunc(storageDir) async {
