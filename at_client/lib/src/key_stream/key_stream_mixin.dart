@@ -29,21 +29,21 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
 
   /// {@template KeyStreamRegex}
   /// [regex] is a regex pattern to filter notifications on.
-  /// 
+  ///
   /// You can provide [sharedBy] or [sharedWith] as parts of this regex expression, or you can provide them separately.
   /// {@endtemplate}
   final String? regex;
-  
+
   /// {@template KeyStreamSharedBy}
   /// Use [sharedBy] to filter to only keys that were sent by [sharedBy].
-  /// 
+  ///
   /// This value is a single atsign, use regex if you would like to filter on multiple atsigns.
   /// {@endtemplate}
   final String? sharedBy;
 
   /// {@template KeyStreamSharedWith}
   /// Use [sharedWith] to filter to only keys that were sent to [sharedWith].
-  /// 
+  ///
   /// This value is a single atsign, use regex if you would like to filter on multiple atsigns.
   /// {@endtemplate}
   final String? sharedWith;
@@ -69,16 +69,14 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
 
-    notificationSubscription = _atClientManager
-        .notificationService
-        .subscribe(shouldDecrypt: true, regex: regex)
-        .listen(_notificationListener);
+    notificationSubscription =
+        _atClientManager.notificationService.subscribe(shouldDecrypt: true, regex: regex).listen(_notificationListener);
 
-    if(disposeOnAtsignChange) _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
+    if (disposeOnAtsignChange) _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
   }
 
   /// A function that preloads this Stream with keys that match [regex], [sharedBy], and [sharedWith].
-  /// 
+  ///
   /// This calls handleNotification with the 'init' operation.
   @visibleForTesting
   Future<void> getKeys() async {
@@ -99,8 +97,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   /// Internal notification listener
-  /// 
-  /// Validates the sharedBy and sharedWith values before 
+  ///
+  /// Validates the sharedBy and sharedWith values before
   void _notificationListener(AtNotification event) {
     AtKey key = AtKey.fromString(event.key);
     if (sharedBy != null && sharedBy != event.from) return;
@@ -115,11 +113,12 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   @protected
+
   /// How to handle notifications received by the internal [notificationSubscription].
-  /// 
+  ///
   /// Possible operations are:
   /// 'update', 'append', 'remove', 'delete', 'init', null
-  /// 
+  ///
   /// These operations are the same as [AtNotification], with an additional ['init'] operation
   /// which is used by [getKeys()] to indicate that this key was preloaded.
   void handleNotification(AtKey key, AtValue value, String? operation);
@@ -172,6 +171,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     _logger.finer('notificationSubscription resume');
     notificationSubscription.resume();
   }
+
   /// Whether the [notificationSubscription] is currently paused.
   ///
   /// If there have been more calls to [pause] than to [resume] on this
@@ -200,7 +200,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// If no one listens to a non-broadcast stream,
   /// or the listener pauses and never resumes,
   /// the done event will not be sent and this future will never complete.
-  /// 
+  ///
   /// Cancels the notification subscription:
   ///
   /// After this call, the subscription no longer receives events.
@@ -414,7 +414,7 @@ class KeyStreamDisposeListener extends AtSignChangeListener {
 
   @override
   Future<void> listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) async {
-    if(_ref.disposeOnAtsignChange) {
+    if (_ref.disposeOnAtsignChange) {
       await _ref.dispose();
     }
   }

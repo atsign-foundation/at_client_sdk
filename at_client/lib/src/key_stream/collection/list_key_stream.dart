@@ -5,17 +5,17 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 abstract class ListKeyStream<T> extends Stream<List<T>> implements KeyStreamMixin<List<T>> {
   /// Listens to notifications and exposes a Stream of the values stored as a List.
-  /// 
+  ///
   /// {@macro KeyStreamConvert}
-  /// 
+  ///
   /// {@macro KeyStreamRegex}
-  /// 
+  ///
   /// {@macro KeyStreamSharedBy}
-  /// 
+  ///
   /// {@macro KeyStreamSharedBy}
-  /// 
+  ///
   /// {@macro KeyStreamShouldGetKeys}
-  /// 
+  ///
   /// {@macro KeyStreamGenerateRef}
   factory ListKeyStream({
     required T? Function(AtKey key, AtValue value) convert,

@@ -5,17 +5,17 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 abstract class IterableKeyStream<T> extends Stream<Iterable<T>> implements KeyStreamMixin<Iterable<T>> {
   /// Listens to notifications and exposes a Stream of the values stored as an Iterable.
-  /// 
+  ///
   /// {@macro KeyStreamConvert}
-  /// 
+  ///
   /// {@macro KeyStreamRegex}
-  /// 
+  ///
   /// {@macro KeyStreamSharedBy}
-  /// 
+  ///
   /// {@macro KeyStreamSharedBy}
-  /// 
+  ///
   /// {@macro KeyStreamShouldGetKeys}
-  /// 
+  ///
   /// {@macro KeyStreamGenerateRef}
   factory IterableKeyStream({
     required T? Function(AtKey key, AtValue value) convert,
