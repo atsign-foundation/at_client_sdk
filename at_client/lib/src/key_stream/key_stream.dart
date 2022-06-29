@@ -9,15 +9,15 @@ export 'collection/collection.dart';
 
 abstract class KeyStream<T> extends Stream<T?> implements KeyStreamMixin<T?> {
   /// Listens to notifications and exposes a Stream of the values.
-  /// 
+  ///
   /// {@macro KeyStreamConvert}
-  /// 
+  ///
   /// {@macro KeyStreamRegex}
-  /// 
+  ///
   /// {@macro KeyStreamSharedBy}
-  /// 
+  ///
   /// {@macro KeyStreamSharedBy}
-  /// 
+  ///
   /// {@macro KeyStreamShouldGetKeys}
   factory KeyStream({
     required T? Function(AtKey key, AtValue value) convert,
@@ -36,5 +36,4 @@ abstract class KeyStream<T> extends Stream<T?> implements KeyStreamMixin<T?> {
       atClientManager: atClientManager,
     );
   }
-
 }

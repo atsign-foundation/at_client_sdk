@@ -7,19 +7,19 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
   final Map<String, T> store = {};
 
   /// {@template KeyStreamCastTo}
-  /// 
+  ///
   /// The [castTo] function defines how [store.entries] is cast before being added to the Stream.
-  /// 
+  ///
   /// {@endtemplate}
   final I Function(Iterable<T> values) _castTo;
 
   /// {@template KeyStreamGenerateRef}
-  /// 
+  ///
   /// The [generateRef] function defines how keys for [store] are created.
-  /// 
+  ///
   /// In some cases, [key.key] (default) is not sufficient if you are receiving data from multiple atsigns.
   /// This function can be declared if you would like to change how the key for the internal store is generated.
-  /// 
+  ///
   /// {@endtemplate}
   final String Function(AtKey key, AtValue value) _generateRef;
 
