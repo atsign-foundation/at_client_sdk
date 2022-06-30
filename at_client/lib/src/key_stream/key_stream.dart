@@ -18,6 +18,21 @@ export 'collection/collection.dart';
 /// stream with available keys that match the [regex], [sharedBy], and [sharedWith] filters. You may also override
 /// the [atClientManager] if necessary.
 /// {@endtemplate}
+///
+/// In addition to [KeyStream], there are collection based versions for [Iterable], [List], [Set], and [Map] represented
+/// by [IterableKeyStream], [ListKeyStream], [SetKeyStream], and [MapKeyStream] respectively.
+///
+/// [KeyStream]s can be used with Flutter's [StreamBuilder]s to achieve seamless data flow from the at_client straight
+/// to the user interface. For example, to get a stream containing all messages from '@alice' to '@bob' in a list:
+///
+/// ```
+/// ListKeyStream stream = ListKeyStream(
+///   convert: (key, value) => value,
+///   regex: r'\.message',
+///   sharedBy: '@alice',
+///   sharedWith: '@bob'
+/// );
+/// ```
 abstract class KeyStream<T> extends Stream<T?> implements KeyStreamMixin<T?> {
   /// Create a [KeyStream] instance
   ///
