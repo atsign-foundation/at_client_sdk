@@ -8,6 +8,18 @@ import 'package:at_utils/at_logger.dart';
 
 import 'package:meta/meta.dart';
 
+/// [KeyStreamMixin] is an abstraction around the notification subsystem which is able to convert notification
+/// subscriptions into streams that are more useful to the developer.
+///
+/// [KeyStreamMixin] provides three filters for values: [regex], [sharedBy], and [sharedWith]. These filters follow the
+/// same behaviours as the rest of the sdk.
+///
+/// [KeyStreamMixin] initializes a [StreamSubscription<AtNotification>] and listens for incoming notifications. When a
+/// notification is received, [KeyStreamMixin] calls atClient.get() on the Key, and calls handleNotification with the
+/// resulting value. [handleNotification] is an abstract function which defines how values get added to the stream.
+/// The operation on handleNotfication is identical to that of [AtNotification.operation] with the exception of the
+/// additional 'init' operation, which is used to identify a key which was initialized with the stream (when
+/// [shouldGetKeys] is true).
 abstract class KeyStreamMixin<T> implements Stream<T> {
   /// A subscription that listens to notifications.
   @visibleForTesting
@@ -23,7 +35,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   final StreamController<T> controller = StreamController();
 
   /// {@template KeyStreamConvert}
-  /// [convert] is a required conversion function for converting [AtKey]:[AtValue] pairs from notifications into elements of this Stream or Stream's collection.
+  /// [convert] is a required conversion function for converting [AtKey]:[AtValue] pairs from notifications into
+  /// elements of this Stream or Stream's collection.
   /// {@endtemplate}
   final Function(AtKey key, AtValue value) convert;
 
@@ -49,7 +62,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   final String? sharedWith;
 
   /// {@template KeyStreamShouldGetKeys}
-  /// When [shouldGetKeys] is [true] this Stream should be preloaded with keys that match [regex], [sharedBy], and [sharedWith].
+  /// When [shouldGetKeys] is [true] this Stream should be preloaded with keys that match [regex], [sharedBy], and
+  /// [sharedWith].
   /// {@endtemplate}
   final bool shouldGetKeys;
 
