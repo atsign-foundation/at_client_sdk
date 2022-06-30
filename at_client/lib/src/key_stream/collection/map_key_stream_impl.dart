@@ -21,6 +21,7 @@ class MapKeyStreamImpl<K, V> extends KeyStreamMapBase<K, V, Map<K, V>> implement
           shouldGetKeys: shouldGetKeys,
           sharedBy: sharedBy,
           sharedWith: sharedWith,
+          generateRef: generateRef,
           castTo: (values) => castTo<K, V>(values),
           atClientManager: atClientManager,
         );

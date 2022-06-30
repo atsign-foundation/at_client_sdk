@@ -19,6 +19,7 @@ class SetKeyStreamImpl<T> extends KeyStreamIterableBase<T, Set<T>> implements Se
           shouldGetKeys: shouldGetKeys,
           sharedBy: sharedBy,
           sharedWith: sharedWith,
+          generateRef: generateRef,
           castTo: (values) => castTo<T>(values),
           atClientManager: atClientManager,
         );

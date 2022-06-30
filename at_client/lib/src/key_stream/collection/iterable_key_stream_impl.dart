@@ -19,6 +19,7 @@ class IterableKeyStreamImpl<T> extends KeyStreamIterableBase<T, Iterable<T>> imp
           shouldGetKeys: shouldGetKeys,
           sharedBy: sharedBy,
           sharedWith: sharedWith,
+          generateRef: generateRef,
           castTo: (values) => castTo<T>(values),
           atClientManager: atClientManager,
         );
