@@ -3,20 +3,24 @@ import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/collection/iterable_key_stream_impl.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
+/// Class to expose a stream of [Iterable<AtKey>] based on the provided query parameters
+///
+/// [IterableKeyStream] exposes a stream of [Iterable]s where each element of the [Iterable] represents data for a
+/// single [AtKey]
+///
+/// {@template IterableKeyStream}
+/// Pass the [convert] callback function to define how an [AtKey] and [AtValue] will converted into elements of the
+/// iterable. To filter [AtKey]s that will be included in the iterable, you may apply a custom [regex] filter, or pass
+/// in [sharedBy] and/or [sharedWith] atSigns. By default [shouldGetKeys] is enabled, which will initially populate the
+/// iterable with available keys that match the [regex], [sharedBy], and [sharedWith] filters. To control how the stream
+/// indexes the keys internally, you may pass a [generateRef] function which takes an [AtKey] and [AtValue] and returns
+/// the associated ref used for indexing (by default this is [AtKey.key]). You may also override the [atClientManager]
+/// if necessary.
+/// {@endtemplate}
 abstract class IterableKeyStream<T> extends Stream<Iterable<T>> implements KeyStreamMixin<Iterable<T>> {
-  /// Listens to notifications and exposes a Stream of the values stored as an Iterable.
+  /// Create an [IterableKeyStream] instance
   ///
-  /// {@macro KeyStreamConvert}
-  ///
-  /// {@macro KeyStreamRegex}
-  ///
-  /// {@macro KeyStreamSharedBy}
-  ///
-  /// {@macro KeyStreamSharedBy}
-  ///
-  /// {@macro KeyStreamShouldGetKeys}
-  ///
-  /// {@macro KeyStreamGenerateRef}
+  /// {@macro IterableKeyStream}
   factory IterableKeyStream({
     required T? Function(AtKey key, AtValue value) convert,
     String? regex,

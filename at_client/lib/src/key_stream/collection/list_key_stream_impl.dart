@@ -19,6 +19,7 @@ class ListKeyStreamImpl<T> extends KeyStreamIterableBase<T, List<T>> implements 
           shouldGetKeys: shouldGetKeys,
           sharedBy: sharedBy,
           sharedWith: sharedWith,
+          generateRef: generateRef,
           castTo: (values) => castTo<T>(values),
           atClientManager: atClientManager,
         );
