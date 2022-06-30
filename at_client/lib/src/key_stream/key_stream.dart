@@ -33,6 +33,17 @@ export 'collection/collection.dart';
 ///   sharedWith: '@bob'
 /// );
 /// ```
+///
+/// When switching atSigns, all KeyStreams will self-dispose to prevent any complications during the development
+/// process. If you would like to dipose of a KeyStream sooner, you may do so using [KeyStream.dipose()].
+/// If your KeyStream was created as state of a [StatefulWidget] it is recommended that you dispose of it in the widget:
+///
+/// ```
+/// @override
+/// void dispose() async {
+///   await stream.dispose();
+///   super.dispose();
+/// }
 abstract class KeyStream<T> extends Stream<T?> implements KeyStreamMixin<T?> {
   /// Create a [KeyStream] instance
   ///
