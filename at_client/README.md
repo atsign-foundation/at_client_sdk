@@ -1,4 +1,4 @@
-<img width=250px src="https://atsign.dev/assets/img/@platform_logo_grey.svg?sanitize=true">
+<img width=250px src="https://atsign.dev/assets/img/atPlatform_logo_gray.svg?sanitize=true">
 
 ## Now for some internet optimism.
 
@@ -8,12 +8,12 @@
 
 ### Introduction
 
-The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the @protocol.
+The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the atProtocol.
 
-SDK that provides the essential methods for building an app using [The @protocol](https://atsign.com). You may also want to look at [at_client_mobile](https://pub.dev/packages/at_client_mobile).
+SDK that provides the essential methods for building an app using [The atProtocol](https://atsign.com). You may also want to look at [at_client_mobile](https://pub.dev/packages/at_client_mobile).
 
 **at_client** package is written in Dart, supports Flutter and follows the
-@platform's decentralized, edge computing model with the following features: 
+atPlatform's decentralized, edge computing model with the following features: 
 - Cryptographic control of data access through personal data stores
 - No application backend needed
 - End to end encryption where only the data owner has the keys
