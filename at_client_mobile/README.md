@@ -73,9 +73,9 @@ print(atSignsWithState); // Prints a map of atsigns with their status.
 
 /// Output:
 /// {
-///   "atSign1": true, // atSign1 is set as primary
-///   "atSign2": false,
-///   "atSign3": false
+///   "@atSign1": true, // atSign1 is set as primary
+///   "@atSign2": false,
+///   "@atSign3": false
 /// }
 ```
 
