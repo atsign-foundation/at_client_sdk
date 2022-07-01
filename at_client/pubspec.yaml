@@ -32,13 +32,6 @@ dependencies:
   at_utils: ^3.0.10
   meta: ^1.7.0
 
-#dependency_overrides:
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-
 dev_dependencies:
   test: ^1.17.2
   at_demo_data: ^0.0.3+1
