@@ -1,4 +1,5 @@
 import 'package:at_client/src/listener/sync_progress_listener.dart';
+import 'package:at_client/src/service/sync/sync_conflict.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
 
 abstract class SyncService {
@@ -40,4 +41,11 @@ abstract class SyncService {
 
   /// Removes a sync progress listener
   void removeProgressListener(SyncProgressListener listener);
+
+  /// sets the [KeyConflictResolver] which determines the action to be taken in case of
+  /// conflict during sync
+  void setKeyConflictResolver(KeyConflictResolver resolver);
+
+  /// removes the [KeyConflictResolver]
+  void removeKeyConflictResolver(KeyConflictResolver resolver);
 }

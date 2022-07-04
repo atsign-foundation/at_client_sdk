@@ -11,6 +11,7 @@ import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync/sync_conflict.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync/sync_result.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -34,6 +35,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
+  KeyConflictResolver? _keyConflictResolver;
 
   /// static because once listeners are added, they should be agnostic to switch atsign event
   static final Set<SyncProgressListener> _syncProgressListeners = HashSet();
@@ -289,7 +291,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (serverCommitId > localCommitId) {
       _logger.finer(
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
-      final keyInfoList = await _syncFromServer(serverCommitId, localCommitId);
+      final keyInfoList = await _syncFromServer(
+          serverCommitId, localCommitId, unCommittedEntries);
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
@@ -349,8 +352,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Syncs the cloud secondary changes to local secondary.
-  Future<List<KeyInfo>> _syncFromServer(
-      int serverCommitId, int localCommitId) async {
+  Future<List<KeyInfo>> _syncFromServer(int serverCommitId, int localCommitId,
+      List<CommitEntry> uncommittedEntries) async {
     // Iterates until serverCommitId is greater than localCommitId are equal.
     List<KeyInfo> keyInfoList = [];
     while (serverCommitId > localCommitId) {
@@ -373,6 +376,16 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
         try {
+          bool conflictExists =
+              _checkConflict(serverCommitEntry, uncommittedEntries);
+          if (conflictExists) {
+            ResolutionContext resolutionContext = ResolutionContext();
+            if (_keyConflictResolver != null) {
+              final resolutionStrategy =
+                  _keyConflictResolver!.resolve(resolutionContext);
+              // action based on resolutionStrategy
+            }
+          }
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal));
@@ -387,6 +400,23 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.finest('**localCommitId $localCommitId');
     }
     return keyInfoList;
+  }
+
+  bool _checkConflict(
+      final serverCommitEntry, List<CommitEntry> uncommittedEntries) {
+    final key = serverCommitEntry['atKey'];
+    bool keyExists = false;
+    bool conflictExists = false;
+    for (CommitEntry entry in uncommittedEntries) {
+      if (key == entry.atKey) {
+        keyExists = true;
+      }
+    }
+    if (keyExists) {
+      // decrypt and compare value
+      // value not equal --> conflictExists = true
+    }
+    return conflictExists;
   }
 
   Future<List<BatchRequest>> _getBatchRequests(
@@ -692,6 +722,16 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @override
   void setOnDone(Function onDone) {
     this.onDone = onDone;
+  }
+
+  @override
+  void removeKeyConflictResolver(KeyConflictResolver resolver) {
+    _keyConflictResolver = null;
+  }
+
+  @override
+  void setKeyConflictResolver(KeyConflictResolver resolver) {
+    _keyConflictResolver = resolver;
   }
 }
 
