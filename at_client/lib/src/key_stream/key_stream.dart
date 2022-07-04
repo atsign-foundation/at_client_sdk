@@ -44,6 +44,7 @@ export 'collection/collection.dart';
 ///   await stream.dispose();
 ///   super.dispose();
 /// }
+/// ```
 abstract class KeyStream<T> extends Stream<T?> implements KeyStreamMixin<T?> {
   /// Create a [KeyStream] instance
   ///
