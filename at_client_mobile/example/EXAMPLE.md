@@ -1,4 +1,4 @@
-<img width=250px src="https://atsign.dev/assets/img/@platform_logo_grey.svg?sanitize=true">
+<img width=250px src="https://atsign.dev/assets/img/atPlatform_logo_gray.svg?sanitize=true">
 
 # at_client_mobile Example
 
@@ -213,7 +213,7 @@ Create a new at_app using [at_app](https://pub.dev/packages/at_app) package.
                   'Successfully onboarded and navigated to FirstAppScreen'),
 
               /// Use the AtClientManager instance to get the current atsign
-              Text('Current @sign: ${atClientManager.atClient.getCurrentAtSign()}'),
+              Text('Current atSign: ${atClientManager.atClient.getCurrentAtSign()}'),
             ],
           ),
         ),

@@ -1,3 +1,10 @@
+## 3.0.29
+- Added additional attributes in SyncProgress for improved sync observability
+## 3.0.28
+- Upgrading dependency at_persistence_secondary_server to version 3.0.29 to sync public hidden keys
+- Upgrade at_commons to 3.0.18 to enable scan to display hidden keys when showHiddenKeys set to true
+## 3.0.27
+- Upgraded dependency at_persistence_secondary_server to version 3.0.28
 ## 3.0.26
 - Uptake AtException hierarchy
 - Introduce exception chaining
