@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
 import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -378,17 +379,25 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
         try {
-          bool conflictExists =
-              await _checkConflict(serverCommitEntry, uncommittedEntries);
-          if (conflictExists) {
-            ResolutionContext resolutionContext = ResolutionContext();
-            if (_keyConflictResolver != null) {
-              final resolutionStrategy =
-                  _keyConflictResolver!.resolve(resolutionContext);
-              // action based on resolutionStrategy
+          var resolutionStrategy;
+          if (_keyConflictResolver != null) {
+            bool conflictExists =
+                await _checkConflict(serverCommitEntry, uncommittedEntries);
+            if (conflictExists) {
+              ResolutionContext resolutionContext = ResolutionContext();
+              resolutionStrategy = await _keyConflictResolver!
+                  .resolve(resolutionContext)
+                  .timeout(Duration(milliseconds: 300),
+                      onTimeout: () => ResolutionStrategy.useRemote);
             }
           }
-          await _syncLocal(serverCommitEntry);
+          if (resolutionStrategy == null ||
+              resolutionStrategy == ResolutionStrategy.useRemote) {
+            await _syncLocal(serverCommitEntry);
+          } else {
+            continue;
+            // TODO analyse whether ignoring server commit entry will suffice
+          }
           keyInfoList.add(
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal));
         } on Exception catch (e) {
@@ -417,7 +426,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (keyExists) {
       final localValue =
           await _atClient.getLocalSecondary()!.keyStore!.get(key);
-      if (atKey is PublicKey) {
+      if (atKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
         if (localValue != serverValue) {
           return true;
@@ -425,13 +434,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       final serverEncryptedValue = serverCommitEntry['value'];
       var serverDecryptedValue;
-      if (atKey is SelfKey) {
-        serverDecryptedValue =
-            SelfKeyDecryption().decrypt(atKey, serverEncryptedValue);
-      } else if (atKey is SharedKey) {
-        serverDecryptedValue =
-            SharedKeyDecryption().decrypt(atKey, serverEncryptedValue);
-      }
+      AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!)
+          .decrypt(atKey, serverEncryptedValue);
       final localDecryptedValue = await _atClient.get(atKey);
       if (localDecryptedValue != serverDecryptedValue) {
         return true;

@@ -23,5 +23,5 @@ class ResolutionContext {
 }
 
 abstract class KeyConflictResolver {
-  ResolutionStrategy resolve(ResolutionContext context);
+  Future<ResolutionStrategy> resolve(ResolutionContext context);
 }
