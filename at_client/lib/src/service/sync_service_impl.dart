@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/src/decryption_service/self_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -377,7 +379,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       for (dynamic serverCommitEntry in syncResponseJson) {
         try {
           bool conflictExists =
-              _checkConflict(serverCommitEntry, uncommittedEntries);
+              await _checkConflict(serverCommitEntry, uncommittedEntries);
           if (conflictExists) {
             ResolutionContext resolutionContext = ResolutionContext();
             if (_keyConflictResolver != null) {
@@ -402,21 +404,40 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return keyInfoList;
   }
 
-  bool _checkConflict(
-      final serverCommitEntry, List<CommitEntry> uncommittedEntries) {
+  Future<bool> _checkConflict(
+      final serverCommitEntry, List<CommitEntry> uncommittedEntries) async {
     final key = serverCommitEntry['atKey'];
+    final atKey = AtKey.fromString(key);
     bool keyExists = false;
-    bool conflictExists = false;
     for (CommitEntry entry in uncommittedEntries) {
       if (key == entry.atKey) {
         keyExists = true;
       }
     }
     if (keyExists) {
-      // decrypt and compare value
-      // value not equal --> conflictExists = true
+      final localValue =
+          await _atClient.getLocalSecondary()!.keyStore!.get(key);
+      if (atKey is PublicKey) {
+        final serverValue = serverCommitEntry['value'];
+        if (localValue != serverValue) {
+          return true;
+        }
+      }
+      final serverEncryptedValue = serverCommitEntry['value'];
+      var serverDecryptedValue;
+      if (atKey is SelfKey) {
+        serverDecryptedValue =
+            SelfKeyDecryption().decrypt(atKey, serverEncryptedValue);
+      } else if (atKey is SharedKey) {
+        serverDecryptedValue =
+            SharedKeyDecryption().decrypt(atKey, serverEncryptedValue);
+      }
+      final localDecryptedValue = await _atClient.get(atKey);
+      if (localDecryptedValue != serverDecryptedValue) {
+        return true;
+      }
     }
-    return conflictExists;
+    return false;
   }
 
   Future<List<BatchRequest>> _getBatchRequests(
