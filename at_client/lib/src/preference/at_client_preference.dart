@@ -61,6 +61,10 @@ class AtClientPreference {
   int fileEncryptionChunkSize = 4096;
 
   Duration monitorHeartbeatInterval = Duration(seconds: 10);
+
+  ///[OptionalParameter] when set to true logs TLS Keys to file.
+  bool decryptPackets = false;
+
 }
 
 @Deprecated("Use SyncService")
