@@ -21,9 +21,15 @@ class GetRequestTransformer implements RequestTransformer<AtKey, VerbBuilder> {
     atKey.sharedBy ??= _atClient.getCurrentAtSign();
     atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
     // Get the verb builder for the given atKey
-    VerbBuilder verbBuilder = LookUpBuilderManager.get(
-        atKey, _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
-        getRequestOptions: requestOptions as GetRequestOptions);
+    VerbBuilder verbBuilder;
+    if (requestOptions != null) {
+      verbBuilder = LookUpBuilderManager.get(
+          atKey, _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
+          getRequestOptions: requestOptions as GetRequestOptions);
+    } else {
+      verbBuilder = LookUpBuilderManager.get(
+          atKey, _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+    }
     return verbBuilder;
   }
 }
