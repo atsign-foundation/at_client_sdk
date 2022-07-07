@@ -2,14 +2,19 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_base2e15/at_base2e15.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/exception/at_client_error_codes.dart';
-import 'package:at_client/src/exception/at_client_exception_util.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -21,6 +26,7 @@ import 'package:at_client/src/transformer/request_transformer/get_request_transf
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -32,8 +38,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_utils.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/client/request_options.dart';
 
 /// Implementation of [AtClient] interface
 class AtClientImpl implements AtClient {
@@ -231,26 +235,37 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtValue> get(AtKey atKey, {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
-    // validate the get request.
-    await AtClientValidation.validateAtKey(atKey);
-    // Get the verb builder for the atKey
-    var verbBuilder = GetRequestTransformer().transform(atKey, requestOptions: getRequestOptions);
-    // Execute the verb.
-    var getResponse = await SecondaryManager.getSecondary(verbBuilder)
-        .executeVerb(verbBuilder);
-    // Return empty value if getResponse is null.
-    if (getResponse == null ||
-        getResponse.isEmpty ||
-        getResponse == 'data:null') {
-      return AtValue();
+  Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
+    Secondary? secondary;
+    try {
+      // validate the get request.
+      await AtClientValidation.validateAtKey(atKey);
+      // Get the verb builder for the atKey
+      var verbBuilder = GetRequestTransformer(this).transform(atKey);
+      // Execute the verb.
+      secondary = SecondaryManager.getSecondary(verbBuilder);
+      var getResponse = await secondary.executeVerb(verbBuilder);
+      // Return empty value if getResponse is null.
+      if (getResponse == null ||
+          getResponse.isEmpty ||
+          getResponse == 'data:null') {
+        return AtValue();
+      }
+      // Send AtKey and AtResponse to transform the response to AtValue.
+      var getResponseTuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two = (getResponse);
+      // Transform the response and return
+      var atValue = await GetResponseTransformer().transform(getResponseTuple);
+      return atValue;
+    } on AtException catch (e) {
+      var exceptionScenario = (secondary is LocalSecondary)
+          ? ExceptionScenario.localVerbExecutionFailed
+          : ExceptionScenario.remoteVerbExecutionFailed;
+      e.stack(
+          AtChainedException(Intent.fetchData, exceptionScenario, e.message));
+      throw AtExceptionManager.createException(e);
     }
-    // Send AtKey and AtResponse to transform the response to AtValue.
-    var getResponseTuple = Tuple<AtKey, String>()
-      ..one = atKey
-      ..two = (getResponse);
-    // Transform the response and return
-    return GetResponseTransformer().transform(getResponseTuple);
   }
 
   @override
@@ -264,11 +279,13 @@ class AtClientImpl implements AtClient {
       {String? regex,
       String? sharedBy,
       String? sharedWith,
+      bool showHiddenKeys = false,
       bool isDedicated = false}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
       ..regex = regex
+      ..showHiddenKeys = showHiddenKeys
       ..auth = true;
     var scanResult = await getSecondary().executeVerb(builder);
     scanResult = _formatResult(scanResult);
@@ -309,22 +326,94 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    // Perform atKey validations.
-    await AtClientValidation.validateAtKey(atKey);
+    // If the value is neither String nor List<int> throw exception
+    if (value is! String && value is! List<int>) {
+      throw AtValueException(
+          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
+    }
+    AtResponse atResponse = AtResponse();
+    if (value is String) {
+      atResponse = await putText(atKey, value);
+    }
+    if (value is List<int>) {
+      atResponse = await putBinary(atKey, value);
+    }
+    return atResponse.response.isNotEmpty;
+  }
+
+  /// put's the text data into the keystore
+  @override
+  Future<AtResponse> putText(AtKey atKey, String value) async {
+    try {
+      // Set the default metadata if not already set.
+      atKey.metadata ??= Metadata();
+      // Setting metadata.isBinary to false for putText
+      atKey.metadata!.isBinary = false;
+      return await _putInternal(atKey, value);
+    } on AtException catch (e) {
+      throw AtExceptionManager.createException(e);
+    }
+  }
+
+  /// put's the binary data(e.g. images, files etc) into the keystore
+  @override
+  Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
+    try {
+      // Set the default metadata if not already set.
+      atKey.metadata ??= Metadata();
+      // Setting metadata.isBinary to true for putBinary
+      atKey.metadata!.isBinary = true;
+      // Base2e15.encode method converts the List<int> type to String.
+      return await _putInternal(atKey, Base2e15.encode(value));
+    } on AtException catch (e) {
+      throw AtExceptionManager.createException(e);
+    }
+  }
+
+  Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
+    // Performs the put request validations.
+    AtClientValidation.validatePutRequest(atKey, value, preference!);
+    // Set sharedBy to currentAtSign if not set.
+    if (atKey.sharedBy.isNull) {
+      atKey.sharedBy = currentAtSign;
+    }
+    if (atKey.metadata!.namespaceAware) {
+      atKey.namespace ??= preference?.namespace;
+    }
+    // validate the atKey
+    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
+    // KeyShare validation
+    var validationResult = AtKeyValidators.get().validate(
+        atKey.toString(),
+        ValidationContext()
+          ..atSign = currentAtSign
+          ..validateOwnership = true);
+    // If the validationResult.isValid is false, validation of AtKey failed.
+    // throw AtClientException with failure reason.
+    if (!validationResult.isValid) {
+      throw AtKeyException(validationResult.failureReason);
+    }
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
+
+    //Get encryptionPrivateKey for public key to signData
+    String? encryptionPrivateKey;
+    if (atKey.metadata!.isPublic != null && atKey.metadata!.isPublic! == true) {
+      encryptionPrivateKey = await _localSecondary?.getEncryptionPrivateKey();
+    }
     // Transform put request
-    UpdateVerbBuilder verbBuilder =
-        await PutRequestTransformer().transform(tuple);
+    // Optionally passing encryption private key to sign the public data.
+    UpdateVerbBuilder verbBuilder = await PutRequestTransformer(this)
+        .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
-    // If putResponse is null or empty, update failed, return false.
+    // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
-      return false;
+      return AtResponse()..isError = true;
     }
-    return PutResponseTransformer().transform(putResponse);
+    return await PutResponseTransformer().transform(putResponse);
   }
 
   @override
@@ -335,6 +424,11 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
+    AtKeyValidators.get().validate(
+        atKey.toString(),
+        ValidationContext()
+          ..atSign = currentAtSign
+          ..validateOwnership = true);
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
     final notifyResult =
@@ -640,7 +734,8 @@ class AtClientImpl implements AtClient {
     try {
       if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
         _logger.severe("FileTransferObject is null");
-        throw AtClientException("AT0014", "FileTransferObject is null");
+        throw AtClientException(
+            error_codes['AtClientException'], 'FileTransferObject is null');
       }
       fileTransferObject =
           FileTransferObject.fromJson(jsonDecode(result.value))!;
@@ -694,39 +789,53 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<String?> notifyChange(NotificationParams notificationParams) async {
+    String? notifyKey = notificationParams.atKey.key;
+
     // Check for internet. Since notify invoke remote secondary directly, network connection
     // is mandatory.
     if (!await NetworkUtil.isNetworkAvailable()) {
       throw AtClientException(
-          atClientErrorCodes['AtClientException'], 'No network availability');
+          error_codes['AtClientException'], 'No network availability');
     }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    AtClientValidation.isAtSignExists(notificationParams.atKey.sharedWith!,
-        _preference!.rootDomain, _preference!.rootPort);
+    await AtClientValidation.isAtSignExists(
+        notificationParams.atKey.sharedWith!,
+        _preference!.rootDomain,
+        _preference!.rootPort);
     // validate sharedBy atSign
-    notificationParams.atKey.sharedBy ??= getCurrentAtSign();
+    if (notificationParams.atKey.sharedBy == null ||
+        notificationParams.atKey.sharedBy!.isEmpty) {
+      notificationParams.atKey.sharedBy = getCurrentAtSign();
+    }
     AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
     // validate atKey
     // For messageType is text, text may contains spaces but key should not have spaces
     // Hence do not validate the key.
     if (notificationParams.messageType != MessageTypeEnum.text) {
       AtClientValidation.validateKey(notificationParams.atKey.key);
+      ValidationResult validationResult = AtKeyValidators.get().validate(
+          notificationParams.atKey.toString(),
+          ValidationContext()
+            ..atSign = currentAtSign
+            ..validateOwnership = true);
+      if (!validationResult.isValid) {
+        throw AtClientException('AT0014', validationResult.failureReason);
+      }
     }
     // validate metadata
     AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
     // If namespaceAware is set to true, append nameSpace to key.
     if (notificationParams.atKey.metadata != null &&
         notificationParams.atKey.metadata!.namespaceAware) {
-      notificationParams.atKey.key =
-          _getKeyWithNamespace(notificationParams.atKey.key!);
+      notifyKey = _getKeyWithNamespace(notifyKey!);
     }
     notificationParams.atKey.sharedBy ??= currentAtSign;
 
     var builder = NotifyVerbBuilder()
       ..id = notificationParams.id
-      ..atKey = notificationParams.atKey.key
+      ..atKey = notifyKey
       ..sharedBy = notificationParams.atKey.sharedBy
       ..sharedWith = notificationParams.atKey.sharedWith
       ..operation = notificationParams.operation
@@ -750,8 +859,8 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(errorCode, e.message));
+          return Future.error(
+              AtClientException(error_codes['AtClientException'], e.message));
         }
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
@@ -763,8 +872,8 @@ class AtClientImpl implements AtClient {
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
-          var errorCode = AtClientExceptionUtil.getErrorCode(e);
-          return Future.error(AtClientException(errorCode, e.message));
+          return Future.error(
+              AtClientException(error_codes['AtClientException'], e.message));
         }
       }
     }
@@ -779,8 +888,8 @@ class AtClientImpl implements AtClient {
           notificationParams.atKey.metadata!.sharedKeyEnc;
       builder.pubKeyChecksum = notificationParams.atKey.metadata!.pubKeyCS;
     }
-    if (notificationParams.atKey.key!.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notificationParams.atKey.key!.startsWith(AT_PKAM_PUBLIC_KEY)) {
+    if (notifyKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
+        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
       builder.sharedBy = null;
     }
     return await getRemoteSecondary()?.executeVerb(builder);

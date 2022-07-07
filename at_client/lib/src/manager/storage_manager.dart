@@ -47,6 +47,7 @@ class StorageManager {
     var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)!
         .getSecondaryKeyStoreManager()!;
+    await hiveKeyStore.init();
     keyStoreManager.keyStore = hiveKeyStore;
     isStorageInitialized = true;
   }

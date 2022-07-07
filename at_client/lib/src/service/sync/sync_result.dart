@@ -1,5 +1,6 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_commons/at_commons.dart';
 
 ///Class to represent sync response.
 class SyncResult {
@@ -7,6 +8,7 @@ class SyncResult {
   AtClientException? atClientException;
   DateTime? lastSyncedOn;
   bool dataChange = true;
+  List<KeyInfo> keyInfoList = [];
 
   @override
   String toString() {

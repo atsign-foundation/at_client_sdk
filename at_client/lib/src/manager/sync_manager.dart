@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/manager/sync_isolate_manager.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -131,7 +133,7 @@ class SyncManager {
             syncResponse = await _remoteSecondary!.executeVerb(syncBuilder);
           } on AtClientException catch (e) {
             logger.severe(
-                'Exception occurred in processing sync command ${e.errorCode} - ${e.errorMessage}');
+                'Exception occurred in processing sync command ${e.message}');
           }
           if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
             syncResponse = syncResponse.replaceFirst('data:', '');
@@ -496,15 +498,11 @@ class SyncManager {
   }
 
   void _scheduleSyncTask() {
-    try {
-      var cron = Cron();
-      cron.schedule(
-          Schedule.parse('*/${_preference!.syncIntervalMins} * * * *'),
-          () async {
-        await syncWithIsolate();
-      });
-      _isScheduled = true;
-    } on Exception catch (e) {
-    }
+    var cron = Cron();
+    cron.schedule(Schedule.parse('*/${_preference!.syncIntervalMins} * * * *'),
+        () async {
+      await syncWithIsolate();
+    });
+    _isScheduled = true;
   }
 }

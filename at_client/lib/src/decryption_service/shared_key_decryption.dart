@@ -1,9 +1,12 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 
 /// Class responsible for decrypting the value of shared key's that are not owned
 /// by currentAtSign
@@ -11,27 +14,42 @@ import 'package:at_utils/at_logger.dart';
 /// CurrentAtSign: @bob
 /// lookup:phone@alice
 class SharedKeyDecryption implements AtKeyDecryption {
+  @visibleForTesting
+  late AtClient? atClient;
   final _logger = AtSignLogger('SharedKeyDecryption');
+
+  SharedKeyDecryption({this.atClient});
 
   @override
   Future decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null || encryptedValue.isEmpty) {
-      throw IllegalArgumentException(
-          'Decryption failed. Encrypted value is null');
+      throw AtDecryptionException('Decryption failed. Encrypted value is null',
+          intent: Intent.decryptData,
+          exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     String? encryptedSharedKey;
+    atClient ??= AtClientManager.getInstance().atClient;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
       encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
-      final atClient = AtClientManager.getInstance().atClient;
-      final currentAtSignPublicKey = (await atClient
-              .getLocalSecondary()!
-              .getEncryptionPublicKey(atClient.getCurrentAtSign()!))
-          ?.trim();
+      String? currentAtSignPublicKey;
+      try {
+        currentAtSignPublicKey = (await atClient
+                ?.getLocalSecondary()!
+                .getEncryptionPublicKey(atClient!.getCurrentAtSign()!))
+            ?.trim();
+      } on KeyNotFoundException {
+        throw AtPublicKeyNotFoundException(
+            'Failed to fetch the current atSign public key - public:publickey${atClient!.getCurrentAtSign()!}',
+            intent: Intent.fetchEncryptionPublicKey,
+            exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
+      }
       if (currentAtSignPublicKey != null &&
           atKey.metadata!.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
-        throw AtClientException(error_codes['AtClientException'],
-            'Public key has changed. Cannot decrypt shared data- ${atKey.key}');
+        throw AtPublicKeyChangeException(
+            'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
+            intent: Intent.fetchEncryptionPublicKey,
+            exceptionScenario: ExceptionScenario.encryptionFailed);
       }
     } else {
       encryptedSharedKey = await _getEncryptedSharedKey(atKey);
@@ -39,14 +57,16 @@ class SharedKeyDecryption implements AtKeyDecryption {
     if (encryptedSharedKey == null ||
         encryptedSharedKey.isEmpty ||
         encryptedSharedKey == 'null') {
-      throw KeyNotFoundException('shared encryption key not found');
+      throw SharedKeyNotFoundException('shared encryption key not found',
+          intent: Intent.fetchEncryptionSharedKey,
+          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    var currentAtSignPrivateKey = await (AtClientManager.getInstance()
-        .atClient
-        .getLocalSecondary()!
-        .getEncryptionPrivateKey());
+    var currentAtSignPrivateKey =
+        await (atClient!.getLocalSecondary()!.getEncryptionPrivateKey());
     if (currentAtSignPrivateKey == null || currentAtSignPrivateKey.isEmpty) {
-      throw KeyNotFoundException('encryption private not found');
+      throw AtPrivateKeyNotFoundException('Encryption private not found',
+          intent: Intent.fetchEncryptionPrivateKey,
+          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
     return EncryptionUtil.decryptValue(encryptedValue,
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey));
@@ -78,7 +98,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
       encryptedSharedKey = await AtClientManager.getInstance()
           .atClient
           .getRemoteSecondary()!
-          .executeAndParse(sharedKeyLookUpBuilder);
+          .executeVerb(sharedKeyLookUpBuilder);
+      encryptedSharedKey =
+          DefaultResponseParser().parse(encryptedSharedKey).response;
     }
     if (encryptedSharedKey.isNotEmpty) {
       return DefaultResponseParser().parse(encryptedSharedKey).response;

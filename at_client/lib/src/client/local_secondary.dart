@@ -1,7 +1,10 @@
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -104,8 +107,8 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {
+    var llookupKey = '';
     try {
-      var llookupKey = '';
       if (builder.isCached) {
         llookupKey += 'cached:';
       }
@@ -131,6 +134,10 @@ class LocalSecondary implements Secondary {
       return 'data:$result';
     } on DataStoreException catch (e) {
       _logger.severe('exception in llookup:${e.toString()}');
+      rethrow;
+    } on KeyNotFoundException catch (e) {
+      e.stack(AtChainedException(
+          Intent.fetchData, ExceptionScenario.keyNotFound, e.message));
       rethrow;
     }
   }
@@ -179,10 +186,7 @@ class LocalSecondary implements Secondary {
         keys.retainWhere(
             (element) => element!.startsWith(builder.sharedWith!) == true);
       }
-      keys.removeWhere((key) =>
-          key.toString().startsWith('privatekey:') ||
-          key.toString().startsWith('private:') ||
-          key.toString().startsWith('public:_'));
+      keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
       var keyString = keys.toString();
       // Apply regex on keyString to remove unnecessary characters and spaces
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
@@ -194,6 +198,20 @@ class LocalSecondary implements Secondary {
       _logger.severe('exception in scan:${e.toString()}');
       rethrow;
     }
+  }
+
+  bool _shouldHideKeys(String key, bool showHiddenKeys) {
+    // If showHidden is set to true, display hidden public keys.
+    // So returning false
+    if ((key.toString().startsWith('public:__') || key.startsWith('_')) &&
+        showHiddenKeys) {
+      return false;
+    }
+    // Do not display keys that starts with 'private:' or 'privatekey:' or public:_
+    return key.toString().startsWith('private:') ||
+        key.toString().startsWith('privatekey:') ||
+        key.toString().startsWith('public:_') ||
+        key.startsWith('_');
   }
 
   /// Verifies if the key is active, If key is active, return true; else false.
@@ -241,7 +259,7 @@ class LocalSecondary implements Secondary {
     return privateKeyData?.data;
   }
 
-  Future<String?> getEncryptionPrivateKey() async {
+  Future<String>? getEncryptionPrivateKey() async {
     var privateKeyData = await keyStore!.get(AT_ENCRYPTION_PRIVATE_KEY);
     return privateKeyData?.data;
   }

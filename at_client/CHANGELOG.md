@@ -1,3 +1,26 @@
+## 3.0.29
+- Added additional attributes in SyncProgress for improved sync observability
+## 3.0.28
+- Upgrading dependency at_persistence_secondary_server to version 3.0.29 to sync public hidden keys
+- Upgrade at_commons to 3.0.18 to enable scan to display hidden keys when showHiddenKeys set to true
+## 3.0.27
+- Upgraded dependency at_persistence_secondary_server to version 3.0.28
+## 3.0.26
+- Uptake AtException hierarchy
+- Introduce exception chaining
+- Fix for Server stuck on old value even though syncing is happening. at_server Issue #721
+- Export notification_service.dart file
+## 3.0.25
+- Fix for regex issue in notification service. Issue #523
+- Fix for namespace issue in notify method.Issue #527
+- Fix for handling empty sync responses from server. App issue #624
+## 3.0.24
+- Update the @platform logo
+- Default the AtKey.sharedBy to currentAtSign
+## 3.0.23
+- Fix for at_client issue #508 - getLastNotificationTime bug while trying to decrypt old data
+## 3.0.22
+- Fix for getKeys in local secondary not returning keys
 ## 3.0.21
 - Cache secondary url returned by root server
 ## 3.0.20

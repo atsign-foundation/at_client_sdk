@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
@@ -35,8 +38,15 @@ class RemoteSecondary implements Secondary {
       String verbResult;
       verbResult = await atLookUp.executeVerb(builder);
       return verbResult;
+    } on AtException catch (e) {
+      throw e
+        ..stack(AtChainedException(Intent.fetchData,
+            ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
-      throw AtClientException(e.errorCode, e.errorMessage);
+      var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
+      throw exception
+        ..stack(AtChainedException(Intent.fetchData,
+            ExceptionScenario.remoteVerbExecutionFailed, exception.message));
     }
   }
 
@@ -46,17 +56,29 @@ class RemoteSecondary implements Secondary {
     try {
       verbResult = await executeVerb(builder);
       verbResult = verbResult.replaceFirst('data:', '');
-    } on AtClientException catch (e) {
-      logger.severe(
-          'Exception occurred in processing the verb ${e.errorCode} - ${e.errorMessage}');
+    } on AtException catch (e) {
+      throw e
+        ..stack(AtChainedException(Intent.fetchData,
+            ExceptionScenario.remoteVerbExecutionFailed, e.message));
     }
     return verbResult;
   }
 
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
-    String? verbResult;
-    verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
-    return verbResult;
+    try {
+      String? verbResult;
+      verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
+      return verbResult;
+    } on AtException catch (e) {
+      e.stack(AtChainedException(Intent.fetchData,
+          ExceptionScenario.remoteVerbExecutionFailed, e.message));
+      rethrow;
+    } on AtLookUpException catch (e) {
+      var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
+      throw exception
+        ..stack(AtChainedException(Intent.fetchData,
+            ExceptionScenario.remoteVerbExecutionFailed, exception.message));
+    }
   }
 
   void addStreamData(List<int> data) {
@@ -99,7 +121,9 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> findSecondaryUrl() async {
-    var secondaryAddress = await AtClientManager.getInstance().secondaryAddressFinder!.findSecondary(_atSign);
+    var secondaryAddress = await AtClientManager.getInstance()
+        .secondaryAddressFinder!
+        .findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 
@@ -116,13 +140,16 @@ class RemoteSecondary implements Secondary {
       var internetAddress = await InternetAddress.lookup(host);
       //TODO getting first ip for now. explore best solution
       var addressCheckOptions =
-      AddressCheckOptions(internetAddress[0], port: int.parse(port));
-      var addressCheckResult = await InternetConnectionChecker().isHostReachable(addressCheckOptions);
+          AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      var addressCheckResult = await InternetConnectionChecker()
+          .isHostReachable(addressCheckOptions);
       return addressCheckResult.isSuccess;
     } on Exception catch (e) {
-      logger.severe('Secondary server unavailable due to Exception: ${e.toString()}');
+      logger.severe(
+          'Secondary server unavailable due to Exception: ${e.toString()}');
     } on Error catch (e) {
-      logger.severe('Secondary server unavailable due to Error: ${e.toString()}');
+      logger
+          .severe('Secondary server unavailable due to Error: ${e.toString()}');
     }
     return false;
   }

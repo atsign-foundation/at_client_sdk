@@ -1,8 +1,9 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -20,7 +21,14 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _sharedKey = await getSharedKey(atKey);
     late String encryptedSharedKey;
     // Get SharedWith encryption public key
-    final sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
+    String sharedWithPublicKey = '';
+    try {
+      sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
+    } on AtPublicKeyNotFoundException catch (e) {
+      e.stack(AtChainedException(
+          Intent.shareData, ExceptionScenario.encryptionFailed, e.message));
+      rethrow;
+    }
     // If sharedKey is empty, then -
     // Generate a new sharedKey
     // Encrypt the sharedKey with sharedWith public key
@@ -72,7 +80,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       if (key == null || key.isEmpty || key == 'data:null') {
         key = await _getSharedKeyFromRemote(atKey);
       }
-    } on AtClientException {
+    } on KeyNotFoundException {
       AtSignLogger('AbstractAtKeyEncryption').finer(
           '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
     }
@@ -145,14 +153,24 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..atKey = 'publickey'
       ..sharedBy = atKey.sharedWith?.replaceAll('@', '');
 
-    sharedWithPublicKey = await AtClientManager.getInstance()
-        .atClient
-        .getRemoteSecondary()!
-        .executeAndParse(plookupBuilder);
+    try {
+      sharedWithPublicKey = await AtClientManager.getInstance()
+          .atClient
+          .getRemoteSecondary()!
+          .executeVerb(plookupBuilder);
+    } on AtException catch (e) {
+      throw AtPublicKeyNotFoundException(
+          'Failed to fetch public key of ${atKey.sharedWith}')
+        ..fromException(e)
+        ..stack(AtChainedException(
+            Intent.shareData, ExceptionScenario.keyNotFound, e.message));
+    }
+    sharedWithPublicKey =
+        DefaultResponseParser().parse(sharedWithPublicKey).response;
 
     // If SharedWith PublicKey is not found throw KeyNotFoundException.
     if (sharedWithPublicKey.isEmpty || sharedWithPublicKey == 'data:null') {
-      throw KeyNotFoundException(
+      throw AtPublicKeyNotFoundException(
           'public key not found. data sharing is forbidden.');
     }
     //Cache the sharedWithPublicKey and return public key of sharedWith atSign

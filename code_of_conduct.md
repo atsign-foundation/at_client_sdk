@@ -1,9 +1,6 @@
+<img width=250px src="https://atsign.dev/assets/img/atPlatform_logo_gray.svg?sanitize=true">
 
-<img src="https://atsign.dev/assets/img/@dev.png?sanitize=true">
-
-### Now for a little internet optimism
-
-# The @ Foundation Code of Conduct
+# The Atsign Foundation Code of Conduct
 
 Based on
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.0-4baaaa.svg)](code_of_conduct.md)

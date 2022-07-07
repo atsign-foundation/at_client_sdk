@@ -1,3 +1,16 @@
+## 3.1.18
+- at_client version upgraded to 3.0.27
+## 3.1.17
+- at_client version upgrade to v3.0.26 for AtException chaining
+- at_commons version upgrade to v3.0.17 for AtException hierarchy 
+## 3.1.16
+- at client version upgrade v3.0.25
+- at lookup version upgrade v3.0.24
+- at commons version upgrade v3.0.16
+## 3.1.15
+- at client version upgrade v3.0.23.
+## 3.1.14
+- migrated to latest version of at_client
 ## 3.1.13
 - at_client version upgrade for generating notification id in SDK
 ## 3.1.12

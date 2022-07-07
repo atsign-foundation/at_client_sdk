@@ -42,16 +42,17 @@ jobs:
         working-directory: at_client
         run: dart test --concurrency=1 --coverage="coverage"
 
-      - name: Convert coverage to LCOV format
-        working-directory: at_client
-        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3.1.0
-        with:
-          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-          file: at_client/coverage.lcov
-          flags: unit_tests
+#     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
+#      - name: Convert coverage to LCOV format
+#        working-directory: at_client
+#        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
+#
+#      - name: Upload coverage to Codecov
+#        uses: codecov/codecov-action@v3.1.0
+#        with:
+#          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
+#          file: at_client/coverage.lcov
+#          flags: unit_tests
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
@@ -82,16 +83,17 @@ jobs:
         working-directory: at_functional_test
         run: dart test --concurrency=1 --coverage="coverage"
 
-      - name: Convert coverage to LCOV format
-        working-directory: at_functional_test
-        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3.1.0
-        with:
-          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-          file: at_functional_test/coverage.lcov
-          flags: functional_tests
+#     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
+#      - name: Convert coverage to LCOV format
+#        working-directory: at_functional_test
+#        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
+#
+#      - name: Upload coverage to Codecov
+#        uses: codecov/codecov-action@v3.1.0
+#        with:
+#          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
+#          file: at_functional_test/coverage.lcov
+#          flags: functional_tests
 
       # Adding flutter to path
       - name: Installing Flutter
@@ -132,6 +134,16 @@ jobs:
       - name: Install dependencies in at_end2end_test
         working-directory: at_end2end_test
         run: dart pub get
+
+      # Logs into CICD VMs and runs script to update to the latest secondary image
+      - name: update image on cicd VMs
+        uses: appleboy/ssh-action@v0.1.4
+        with:
+          host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
+          username: ubuntu
+          key: ${{ secrets.CICD_SSH_KEY }}
+          script: |
+            ./update_ce2e_images.sh
 
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place

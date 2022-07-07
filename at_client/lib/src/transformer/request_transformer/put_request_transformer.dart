@@ -1,9 +1,10 @@
-import 'package:at_base2e15/at_base2e15.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/exception/at_client_error_codes.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/encryption_service/signin_public_data.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
@@ -11,54 +12,48 @@ import 'package:at_utils/at_utils.dart';
 /// Class responsible for transforming the put request from [AtKey] to [VerbBuilder]
 class PutRequestTransformer
     extends RequestTransformer<Tuple<AtKey, dynamic>, VerbBuilder> {
+  late final AtClient _atClient;
+
+  PutRequestTransformer(this._atClient);
+
   @override
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
-      {RequestOptions? requestOptions}) async {
-    // Set the default metadata if not already set.
-    tuple.one.metadata ??= Metadata();
-    // Set sharedBy to currentAtSign if not set.
-    tuple.one.sharedBy ??=
-        AtClientManager.getInstance().atClient.getCurrentAtSign();
-    tuple.one.sharedBy = AtUtils.formatAtSign(tuple.one.sharedBy);
+      {String? encryptionPrivateKey, RequestOptions? requestOptions}) async {
     // Populate the update verb builder
-    UpdateVerbBuilder updateVerbBuilder = _populateUpdateVerbBuilder(tuple.one);
-    // If atKey.metadata.isBinary is true, encode the data; else set the value.
-    // By default, in populatedUpdateVerbBuilder,tuple.one.metadata.isBinary
-    // will be set to false .
-    if (tuple.one.metadata!.isBinary!) {
-      if (tuple.two is! List<int>) {
-        throw AtClientException(atClientErrorCodes['AtClientException'],
-            'List<int> is expected when isBinary in metadata is set to true');
-      }
-      if (tuple.two != null &&
-          tuple.two.length >
-              AtClientManager.getInstance()
-                  .atClient
-                  .getPreferences()!
-                  .maxDataSize) {
-        throw AtClientException('AT0005', 'BufferOverFlowException');
-      }
-      updateVerbBuilder.value = _encodeBinaryData(tuple.two);
-    } else {
-      updateVerbBuilder.value = tuple.two;
-    }
+    UpdateVerbBuilder updateVerbBuilder =
+        _populateUpdateVerbBuilder(tuple.one, _atClient.getPreferences()!);
+    // Setting value to updateVerbBuilder
+    updateVerbBuilder.value = tuple.two;
     //Encrypt the data for non public keys
     if (!tuple.one.metadata!.isPublic!) {
-      var encryptionService = AtKeyEncryptionManager.get(tuple.one,
-          AtClientManager.getInstance().atClient.getCurrentAtSign()!);
-      updateVerbBuilder.value =
-          await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
+      var encryptionService =
+          AtKeyEncryptionManager.get(tuple.one, _atClient.getCurrentAtSign()!);
+      try {
+        updateVerbBuilder.value =
+            await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
+      } on AtException catch (e) {
+        e.stack(AtChainedException(Intent.shareData,
+            ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
+        rethrow;
+      }
       updateVerbBuilder.sharedKeyEncrypted = tuple.one.metadata!.sharedKeyEnc;
       updateVerbBuilder.pubKeyChecksum = tuple.one.metadata!.pubKeyCS;
+    } else {
+      if (encryptionPrivateKey.isNull) {
+        throw AtPrivateKeyNotFoundException('Failed to sign the public data');
+      }
+      updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
+          updateVerbBuilder.value, encryptionPrivateKey!);
     }
 
     return updateVerbBuilder;
   }
 
   /// Populated [UpdateVerbBuilder] for the given [AtKey]
-  UpdateVerbBuilder _populateUpdateVerbBuilder(AtKey atKey) {
+  UpdateVerbBuilder _populateUpdateVerbBuilder(
+      AtKey atKey, AtClientPreference atClientPreference) {
     UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey = AtClientUtil.getKeyWithNameSpace(atKey)
+      ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
       ..sharedWith = AtUtils.formatAtSign(atKey.sharedWith)
       ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
       ..isPublic =
@@ -84,10 +79,5 @@ class PutRequestTransformer
     }
     updateVerbBuilder.dataSignature = atKey.metadata!.dataSignature;
     return updateVerbBuilder;
-  }
-
-  /// Encode the binary data
-  String _encodeBinaryData(List<int> value) {
-    return Base2e15.encode(value);
   }
 }

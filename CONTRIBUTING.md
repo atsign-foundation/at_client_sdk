@@ -1,6 +1,4 @@
-<img src="https://atsign.dev/assets/img/@dev.png?sanitize=true">
-
-### Now for a little internet optimism
+<img width=250px src="https://atsign.dev/assets/img/atPlatform_logo_gray.svg?sanitize=true">
 
 # Contributing guidelines
 

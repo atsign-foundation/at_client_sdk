@@ -17,6 +17,7 @@ Future<void> setEncryptionKeys(
     result = await atClient.getLocalSecondary()!.putValue(
         AT_ENCRYPTION_PRIVATE_KEY,
         demo_credentials.encryptionPrivateKeyMap[atsign]!);
+    print('Setting encryption private key: $result');
 
     // set encryption public key. should be synced
     metadata.isPublic = true;
@@ -25,12 +26,13 @@ Future<void> setEncryptionKeys(
       ..metadata = metadata;
     result = await atClient.put(
         atKey, demo_credentials.encryptionPublicKeyMap[atsign]);
+    print('Setting encryption public key: $result');
 
     // set self encryption key
     await atClient
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, demo_credentials.aesKeyMap[atsign]!);
-    print(result);
+    print('Setting self encryption key: $result');
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);
