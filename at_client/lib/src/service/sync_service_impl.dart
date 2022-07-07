@@ -3,8 +3,6 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/decryption_service/self_key_decryption.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -379,27 +377,27 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
         try {
-          var resolutionStrategy;
+          ResolutionStrategy resolutionStrategy;
+          final keyInfo =
+              KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
           if (_keyConflictResolver != null) {
-            bool conflictExists =
+            ConflictInfo conflictInfo =
                 await _checkConflict(serverCommitEntry, uncommittedEntries);
-            if (conflictExists) {
+            if (conflictInfo.conflictExists) {
               ResolutionContext resolutionContext = ResolutionContext();
               resolutionStrategy = await _keyConflictResolver!
                   .resolve(resolutionContext)
                   .timeout(Duration(milliseconds: 300),
                       onTimeout: () => ResolutionStrategy.useRemote);
+              if (resolutionStrategy == ResolutionStrategy.useLocal) {
+                conflictInfo.resolutionStrategy = ResolutionStrategy.useLocal;
+              }
             }
+            keyInfo.conflictInfo = conflictInfo;
           }
-          if (resolutionStrategy == null ||
-              resolutionStrategy == ResolutionStrategy.useRemote) {
-            await _syncLocal(serverCommitEntry);
-          } else {
-            continue;
-            // TODO analyse whether ignoring server commit entry will suffice
-          }
-          keyInfoList.add(
-              KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal));
+
+          await _syncLocal(serverCommitEntry);
+          keyInfoList.add(keyInfo);
         } on Exception catch (e) {
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - ${e.toString()}');
@@ -413,10 +411,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return keyInfoList;
   }
 
-  Future<bool> _checkConflict(
+  Future<ConflictInfo> _checkConflict(
       final serverCommitEntry, List<CommitEntry> uncommittedEntries) async {
     final key = serverCommitEntry['atKey'];
     final atKey = AtKey.fromString(key);
+    final conflictInfo = ConflictInfo();
     bool keyExists = false;
     for (CommitEntry entry in uncommittedEntries) {
       if (key == entry.atKey) {
@@ -429,7 +428,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (atKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
         if (localValue != serverValue) {
-          return true;
+          conflictInfo.localValue = localValue;
+          conflictInfo.remoteValue = serverValue;
         }
       }
       final serverEncryptedValue = serverCommitEntry['value'];
@@ -438,10 +438,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
               .decrypt(atKey, serverEncryptedValue);
       final localDecryptedValue = await _atClient.get(atKey);
       if (localDecryptedValue != serverDecryptedValue) {
-        return true;
+        conflictInfo.localValue = localDecryptedValue;
+        conflictInfo.remoteValue = serverDecryptedValue;
       }
     }
-    return false;
+    return conflictInfo;
   }
 
   Future<List<BatchRequest>> _getBatchRequests(
@@ -763,6 +764,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 class KeyInfo {
   String key;
   SyncDirection syncDirection;
+  ConflictInfo? conflictInfo;
   KeyInfo(this.key, this.syncDirection);
 
   @override

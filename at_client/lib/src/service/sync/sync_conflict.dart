@@ -25,3 +25,10 @@ class ResolutionContext {
 abstract class KeyConflictResolver {
   Future<ResolutionStrategy> resolve(ResolutionContext context);
 }
+
+class ConflictInfo {
+  dynamic remoteValue;
+  dynamic localValue;
+  bool conflictExists = false;
+  ResolutionStrategy resolutionStrategy = ResolutionStrategy.useRemote;
+}
