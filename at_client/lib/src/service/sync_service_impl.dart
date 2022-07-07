@@ -36,7 +36,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
-  KeyConflictResolver? _keyConflictResolver;
 
   /// static because once listeners are added, they should be agnostic to switch atsign event
   static final Set<SyncProgressListener> _syncProgressListeners = HashSet();
@@ -377,25 +376,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
         try {
-          ResolutionStrategy resolutionStrategy;
           final keyInfo =
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
-          if (_keyConflictResolver != null) {
-            ConflictInfo conflictInfo =
-                await _checkConflict(serverCommitEntry, uncommittedEntries);
-            if (conflictInfo.conflictExists) {
-              ResolutionContext resolutionContext = ResolutionContext();
-              resolutionStrategy = await _keyConflictResolver!
-                  .resolve(resolutionContext)
-                  .timeout(Duration(milliseconds: 300),
-                      onTimeout: () => ResolutionStrategy.useRemote);
-              if (resolutionStrategy == ResolutionStrategy.useLocal) {
-                conflictInfo.resolutionStrategy = ResolutionStrategy.useLocal;
-              }
-            }
-            keyInfo.conflictInfo = conflictInfo;
-          }
-
+          ConflictInfo? conflictInfo =
+              await _checkConflict(serverCommitEntry, uncommittedEntries);
+          keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
         } on Exception catch (e) {
@@ -411,7 +396,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return keyInfoList;
   }
 
-  Future<ConflictInfo> _checkConflict(
+  Future<ConflictInfo?> _checkConflict(
       final serverCommitEntry, List<CommitEntry> uncommittedEntries) async {
     final key = serverCommitEntry['atKey'];
     final atKey = AtKey.fromString(key);
@@ -442,7 +427,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         conflictInfo.remoteValue = serverDecryptedValue;
       }
     }
-    return conflictInfo;
+    return null;
   }
 
   Future<List<BatchRequest>> _getBatchRequests(
@@ -748,16 +733,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @override
   void setOnDone(Function onDone) {
     this.onDone = onDone;
-  }
-
-  @override
-  void removeKeyConflictResolver(KeyConflictResolver resolver) {
-    _keyConflictResolver = null;
-  }
-
-  @override
-  void setKeyConflictResolver(KeyConflictResolver resolver) {
-    _keyConflictResolver = resolver;
   }
 }
 

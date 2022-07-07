@@ -41,11 +41,4 @@ abstract class SyncService {
 
   /// Removes a sync progress listener
   void removeProgressListener(SyncProgressListener listener);
-
-  /// sets the [KeyConflictResolver] which determines the action to be taken in case of
-  /// conflict during sync
-  void setKeyConflictResolver(KeyConflictResolver resolver);
-
-  /// removes the [KeyConflictResolver]
-  void removeKeyConflictResolver(KeyConflictResolver resolver);
 }

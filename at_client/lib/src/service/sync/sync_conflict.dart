@@ -29,6 +29,4 @@ abstract class KeyConflictResolver {
 class ConflictInfo {
   dynamic remoteValue;
   dynamic localValue;
-  bool conflictExists = false;
-  ResolutionStrategy resolutionStrategy = ResolutionStrategy.useRemote;
 }
