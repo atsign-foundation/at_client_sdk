@@ -279,7 +279,7 @@ class Monitor {
 
     //2. create a connection to secondary server
     var outboundConnection =
-        await _monitorOutboundConnectionFactory.createConnection(secondaryUrl, decryptPackets: _preference.decryptPackets);
+        await _monitorOutboundConnectionFactory.createConnection(secondaryUrl, decryptPackets: _preference.decryptPackets, pathToCerts: _preference.pathToCerts, tlsKeysSavePath: _preference.tlsKeysSavePath);
     return outboundConnection;
   }
 
@@ -409,13 +409,12 @@ class MonitorConnectivityChecker {
 }
 
 class MonitorOutboundConnectionFactory {
-  Future<OutboundConnection> createConnection(String secondaryUrl, {decryptPackets = false, pathToCerts, tlsKeysSavePath}) async {
+  Future<OutboundConnection> createConnection(String secondaryUrl, {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
 
-    var secureSocketUtil = SecureSocketUtil(decryptPackets, pathToCerts, tlsKeysSavePath);
-    SecureSocket secureSocket = await secureSocketUtil.createSecureContext(host, int.parse(port));
+    SecureSocket secureSocket = await SecureSocketUtil.createSecureContext(host, port, decryptPackets, pathToCerts, tlsKeysSavePath);
     return OutboundConnectionImpl(secureSocket);
   }
 
