@@ -65,6 +65,12 @@ class AtClientPreference {
   ///[OptionalParameter] when set to true logs TLS Keys to file.
   bool decryptPackets = false;
 
+  ///[OptionalParameter] location where the TLS keys will be saved when [decryptPackets] is set to true
+  String? tlsKeysSavePath;
+
+  ///[OptionalParameter] path to trusted certificates. Required to create security context.
+  String? pathToCerts;
+
 }
 
 @Deprecated("Use SyncService")

@@ -9,10 +9,11 @@ import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+// import 'package:at_lookup/src/util/secure_socket_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+
 
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
@@ -408,12 +409,13 @@ class MonitorConnectivityChecker {
 }
 
 class MonitorOutboundConnectionFactory {
-  Future<OutboundConnection> createConnection(String secondaryUrl, {decryptPackets = false}) async {
+  Future<OutboundConnection> createConnection(String secondaryUrl, {decryptPackets = false, pathToCerts, tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
 
-    var secureSocket = await SecureSocketUtil.createSecureContext(host, int.parse(port), decryptPackets: decryptPackets);
+    var secureSocketUtil = SecureSocketUtil(decryptPackets, pathToCerts, tlsKeysSavePath);
+    SecureSocket secureSocket = await secureSocketUtil.createSecureContext(host, int.parse(port));
     return OutboundConnectionImpl(secureSocket);
   }
 
