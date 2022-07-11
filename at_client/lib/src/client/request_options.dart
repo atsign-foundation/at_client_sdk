@@ -3,5 +3,5 @@ class RequestOptions {}
 
 /// Request params for at client get method
 class GetRequestOptions extends RequestOptions {
-  bool byPassCache = false;
+  bool bypassCache = false;
 }

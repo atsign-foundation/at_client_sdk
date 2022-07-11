@@ -149,7 +149,7 @@ void main() {
         ..metadata = (Metadata()
           ..isPublic = true
           ..namespaceAware = false);
-      final requestOptions = GetRequestOptions()..byPassCache = true;
+      final requestOptions = GetRequestOptions()..bypassCache = true;
       var builder = LookUpBuilderManager.get(
           atKey, '@bob', AtClientPreference(),
           getRequestOptions: requestOptions);
@@ -162,7 +162,7 @@ void main() {
         ..key = 'phone'
         ..sharedBy = '@alice'
         ..metadata = (Metadata()..namespaceAware = false);
-      final requestOptions = GetRequestOptions()..byPassCache = true;
+      final requestOptions = GetRequestOptions()..bypassCache = true;
       var builder = LookUpBuilderManager.get(
           atKey, '@bob', AtClientPreference(),
           getRequestOptions: requestOptions);

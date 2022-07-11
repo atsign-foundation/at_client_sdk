@@ -19,7 +19,7 @@ class LookUpBuilderManager {
         ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..operation = 'all';
-      if (getRequestOptions != null && getRequestOptions.byPassCache == true) {
+      if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
         plookUpVerbBuilder.byPassCache = true;
       }
       return plookUpVerbBuilder;
@@ -34,7 +34,7 @@ class LookUpBuilderManager {
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..auth = true
         ..operation = 'all';
-      if (getRequestOptions != null && getRequestOptions.byPassCache == true) {
+      if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
         lookupVerbBuilder.byPassCache = true;
       }
       return lookupVerbBuilder;

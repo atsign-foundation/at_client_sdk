@@ -28,11 +28,11 @@ dependencies:
   at_lookup: ^3.0.26
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.18
+  at_commons: ^3.0.19
   at_utils: ^3.0.10
   meta: ^1.7.0
 
-dependency_overrides:
+#dependency_overrides:
 #  at_persistence_spec:
 #    git:
 #      url: https://github.com/atsign-foundation/at_server.git
