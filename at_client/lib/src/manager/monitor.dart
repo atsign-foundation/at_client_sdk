@@ -10,10 +10,8 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-// import 'package:at_lookup/src/util/secure_socket_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
-
 
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
@@ -279,7 +277,10 @@ class Monitor {
 
     //2. create a connection to secondary server
     var outboundConnection =
-        await _monitorOutboundConnectionFactory.createConnection(secondaryUrl, decryptPackets: _preference.decryptPackets, pathToCerts: _preference.pathToCerts, tlsKeysSavePath: _preference.tlsKeysSavePath);
+        await _monitorOutboundConnectionFactory.createConnection(secondaryUrl,
+            decryptPackets: _preference.decryptPackets,
+            pathToCerts: _preference.pathToCerts,
+            tlsKeysSavePath: _preference.tlsKeysSavePath);
     return outboundConnection;
   }
 
@@ -409,12 +410,14 @@ class MonitorConnectivityChecker {
 }
 
 class MonitorOutboundConnectionFactory {
-  Future<OutboundConnection> createConnection(String secondaryUrl, {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
+  Future<OutboundConnection> createConnection(String secondaryUrl,
+      {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
 
-    SecureSocket secureSocket = await SecureSocketUtil.createSecureContext(host, port, decryptPackets, pathToCerts, tlsKeysSavePath);
+    SecureSocket secureSocket = await SecureSocketUtil.createSecureSocket(
+        host, port, decryptPackets, pathToCerts, tlsKeysSavePath);
     return OutboundConnectionImpl(secureSocket);
   }
 
