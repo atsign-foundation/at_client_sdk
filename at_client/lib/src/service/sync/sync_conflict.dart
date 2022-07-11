@@ -22,11 +22,12 @@ class ResolutionContext {
   SyncType? syncType;
 }
 
-abstract class KeyConflictResolver {
-  Future<ResolutionStrategy> resolve(ResolutionContext context);
-}
-
 class ConflictInfo {
   dynamic remoteValue;
   dynamic localValue;
+
+  @override
+  String toString() {
+    return 'ConflictInfo{remoteValue: $remoteValue, localValue: $localValue}';
+  }
 }

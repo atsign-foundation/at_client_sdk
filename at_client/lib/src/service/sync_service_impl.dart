@@ -400,6 +400,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverCommitEntry, List<CommitEntry> uncommittedEntries) async {
     final key = serverCommitEntry['atKey'];
     final atKey = AtKey.fromString(key);
+    // temporary fix to add @ to sharedBy. permanent fix should be in AtKey.fromString
+    atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
     final conflictInfo = ConflictInfo();
     bool keyExists = false;
     for (CommitEntry entry in uncommittedEntries) {
@@ -418,14 +420,16 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         }
       }
       final serverEncryptedValue = serverCommitEntry['value'];
+      final decryptionManager = await AtKeyDecryptionManager.get(
+          atKey, _atClient.getCurrentAtSign()!);
       final serverDecryptedValue =
-          await AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!)
-              .decrypt(atKey, serverEncryptedValue);
+          await decryptionManager.decrypt(atKey, serverEncryptedValue);
       final localDecryptedValue = await _atClient.get(atKey);
-      if (localDecryptedValue != serverDecryptedValue) {
-        conflictInfo.localValue = localDecryptedValue;
+      if (localDecryptedValue.value != serverDecryptedValue) {
+        conflictInfo.localValue = localDecryptedValue.value;
         conflictInfo.remoteValue = serverDecryptedValue;
       }
+      return conflictInfo;
     }
     return null;
   }
@@ -744,7 +748,7 @@ class KeyInfo {
 
   @override
   String toString() {
-    return 'KeyInfo{key: $key, syncDirection: $syncDirection}';
+    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo}';
   }
 }
 
