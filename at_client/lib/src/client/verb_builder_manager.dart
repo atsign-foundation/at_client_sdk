@@ -20,7 +20,7 @@ class LookUpBuilderManager {
         ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
         ..operation = 'all';
       if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
-        plookUpVerbBuilder.byPassCache = true;
+        plookUpVerbBuilder.bypassCache = true;
       }
       return plookUpVerbBuilder;
     }
@@ -35,7 +35,7 @@ class LookUpBuilderManager {
         ..auth = true
         ..operation = 'all';
       if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
-        lookupVerbBuilder.byPassCache = true;
+        lookupVerbBuilder.bypassCache = true;
       }
       return lookupVerbBuilder;
     }
