@@ -1,4 +1,5 @@
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
@@ -10,14 +11,14 @@ import 'package:at_utils/at_utils.dart';
 
 /// Class responsible for transforming the put request from [AtKey] to [VerbBuilder]
 class PutRequestTransformer
-    extends Transformer<Tuple<AtKey, dynamic>, VerbBuilder> {
+    extends RequestTransformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   late final AtClient _atClient;
 
   PutRequestTransformer(this._atClient);
 
   @override
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
-      {String? encryptionPrivateKey}) async {
+      {String? encryptionPrivateKey, RequestOptions? requestOptions}) async {
     // Populate the update verb builder
     UpdateVerbBuilder updateVerbBuilder =
         _populateUpdateVerbBuilder(tuple.one, _atClient.getPreferences()!);
