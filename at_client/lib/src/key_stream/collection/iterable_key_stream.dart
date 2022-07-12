@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/collection/iterable_key_stream_impl.dart';
@@ -28,6 +30,7 @@ abstract class IterableKeyStream<T> extends Stream<Iterable<T>> implements KeySt
     String? sharedWith,
     bool shouldGetKeys = true,
     String Function(AtKey key, AtValue value)? generateRef,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   }) {
     return IterableKeyStreamImpl<T>(
@@ -37,6 +40,7 @@ abstract class IterableKeyStream<T> extends Stream<Iterable<T>> implements KeySt
       sharedBy: sharedBy,
       sharedWith: sharedWith,
       shouldGetKeys: shouldGetKeys,
+      onError: onError,
       atClientManager: atClientManager,
     );
   }

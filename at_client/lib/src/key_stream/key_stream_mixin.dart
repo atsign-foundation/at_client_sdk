@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:at_client/at_client.dart' show AtClient, AtClientManager, AtNotification;
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
+import 'package:at_commons/at_commons.dart' show AtException, AtKey, AtValue;
 import 'package:at_utils/at_logger.dart';
 
 import 'package:meta/meta.dart';
@@ -67,6 +67,11 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// {@endtemplate}
   final bool shouldGetKeys;
 
+  /// {@template KeyStreamOnError}
+  /// Callback function when an error occurs in the keystream.
+  /// {@endtemplate}
+  late final FutureOr<void> Function(AtException exception) onError;
+
   @visibleForTesting
   bool disposeOnAtsignChange = true;
 
@@ -76,9 +81,14 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     this.sharedBy,
     this.sharedWith,
     this.shouldGetKeys = true,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   }) {
     _logger.finer('init Keystream: $this');
+
+    onError ??= (AtException e, [StackTrace? s]) {
+      _logger.warning('Error in $this', e, s);
+    } as void Function(Object exception, [StackTrace? stackTrace]);
 
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
@@ -103,10 +113,16 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     );
 
     for (AtKey key in keys) {
-      atClient.get(key).then((AtValue value) {
-        _logger.finest('handleNotification key: $key, value: $value, operation: init');
-        handleNotification(key, value, 'init');
-      });
+      atClient
+          .get(key)
+          .then(
+            // ignore: unnecessary_cast
+            (AtValue value) {
+              _logger.finest('handleNotification key: $key, value: $value, operation: init');
+              handleNotification(key, value, 'init');
+            } as void Function(AtValue),
+          )
+          .catchError(onError as FutureOr<void> Function(Object exception, [StackTrace? stackTrace]));
     }
   }
 
@@ -118,12 +134,16 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     if (sharedBy != null && sharedBy != event.from) return;
     if (sharedWith != null && sharedWith != event.to) return;
 
-    _atClientManager.atClient.get(key).then(
-      (AtValue value) {
-        _logger.finest('handleNotification key: $key, value: $value, operation: ${event.operation}');
-        handleNotification(key, value, event.operation);
-      },
-    );
+    _atClientManager.atClient
+        .get(key)
+        .then(
+          // ignore: unnecessary_cast
+          (AtValue value) {
+            _logger.finest('handleNotification key: $key, value: $value, operation: ${event.operation}');
+            handleNotification(key, value, event.operation);
+          } as void Function(AtValue),
+        )
+        .catchError(onError as FutureOr<void> Function(Object exception, [StackTrace? stackTrace]));
   }
 
   @protected
