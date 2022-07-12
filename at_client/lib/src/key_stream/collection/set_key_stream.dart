@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/collection/set_key_stream_impl.dart';
@@ -27,6 +29,7 @@ abstract class SetKeyStream<T> extends Stream<Set<T>> implements KeyStreamMixin<
     String? sharedWith,
     bool shouldGetKeys = true,
     String Function(AtKey key, AtValue value)? generateRef,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   }) {
     return SetKeyStreamImpl<T>(
@@ -36,6 +39,7 @@ abstract class SetKeyStream<T> extends Stream<Set<T>> implements KeyStreamMixin<
       sharedBy: sharedBy,
       sharedWith: sharedWith,
       shouldGetKeys: shouldGetKeys,
+      onError: onError,
       atClientManager: atClientManager,
     );
   }

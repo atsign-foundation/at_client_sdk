@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
@@ -24,6 +26,7 @@ class KeyStreamImpl<T> extends KeyStreamMixin<T?> implements KeyStream<T> {
     bool shouldGetKeys = true,
     String? sharedBy,
     String? sharedWith,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   }) : super(
           convert: convert,
@@ -31,6 +34,7 @@ class KeyStreamImpl<T> extends KeyStreamMixin<T?> implements KeyStream<T> {
           sharedBy: sharedBy,
           sharedWith: sharedWith,
           shouldGetKeys: shouldGetKeys,
+          onError: onError,
           atClientManager: atClientManager,
         );
 }

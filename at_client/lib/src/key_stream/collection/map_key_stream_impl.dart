@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:core';
 
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -14,6 +15,7 @@ class MapKeyStreamImpl<K, V> extends KeyStreamMapBase<K, V, Map<K, V>> implement
     String? sharedBy,
     String? sharedWith,
     String Function(AtKey key, AtValue value)? generateRef,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   }) : super(
           convert: convert,
@@ -23,6 +25,7 @@ class MapKeyStreamImpl<K, V> extends KeyStreamMapBase<K, V, Map<K, V>> implement
           sharedWith: sharedWith,
           generateRef: generateRef,
           castTo: (values) => castTo<K, V>(values),
+          onError: onError,
           atClientManager: atClientManager,
         );
 }

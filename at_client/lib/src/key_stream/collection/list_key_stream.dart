@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/key_stream/collection/list_key_stream_impl.dart';
@@ -27,6 +29,7 @@ abstract class ListKeyStream<T> extends Stream<List<T>> implements KeyStreamMixi
     String? sharedWith,
     bool shouldGetKeys = true,
     String Function(AtKey key, AtValue value)? generateRef,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   }) {
     return ListKeyStreamImpl<T>(
@@ -36,6 +39,7 @@ abstract class ListKeyStream<T> extends Stream<List<T>> implements KeyStreamMixi
       sharedBy: sharedBy,
       sharedWith: sharedWith,
       shouldGetKeys: shouldGetKeys,
+      onError: onError,
       atClientManager: atClientManager,
     );
   }
