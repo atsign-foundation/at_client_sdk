@@ -102,6 +102,8 @@ void main() {
     expect(getResult?.value, newValue);
     // get Result with byPassCache set to false
     // should return the old value
+    // adding a delay
+    await Future.delayed(Duration(seconds: 2));
     var getResultWithFalse = await sharedWithAtSignClientManager?.atClient.get(getKey, getRequestOptions: GetRequestOptions()..bypassCache = false);
     print('get result with bypass cache false $getResultWithFalse');
     expect(getResultWithFalse?.value, oldValue);
