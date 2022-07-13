@@ -81,14 +81,12 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     this.sharedBy,
     this.sharedWith,
     this.shouldGetKeys = true,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
+    FutureOr<void> Function(Object exception)? onError,
     AtClientManager? atClientManager,
   }) {
     _logger.finer('init Keystream: $this');
 
-    onError ??= (Object e, [StackTrace? s]) {
-      _logger.warning('Error in $this', e, s);
-    };
+    this.onError = onError ?? (Object e, [StackTrace? s]) => _logger.warning('Error in', e, s);
 
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
