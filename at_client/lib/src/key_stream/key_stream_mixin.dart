@@ -70,7 +70,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// {@template KeyStreamOnError}
   /// Callback function when an error occurs in the keystream.
   /// {@endtemplate}
-  late final FutureOr<void> Function(AtException exception) onError;
+  late final FutureOr<void> Function(Object exception) onError;
 
   @visibleForTesting
   bool disposeOnAtsignChange = true;
@@ -86,9 +86,9 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }) {
     _logger.finer('init Keystream: $this');
 
-    onError ??= (AtException e, [StackTrace? s]) {
+    onError ??= (Object e, [StackTrace? s]) {
       _logger.warning('Error in $this', e, s);
-    } as void Function(Object exception, [StackTrace? stackTrace]);
+    };
 
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
@@ -122,7 +122,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
               handleNotification(key, value, 'init');
             } as void Function(AtValue),
           )
-          .catchError(onError as FutureOr<void> Function(Object exception, [StackTrace? stackTrace]));
+          .catchError(onError);
     }
   }
 
@@ -143,7 +143,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
             handleNotification(key, value, event.operation);
           } as void Function(AtValue),
         )
-        .catchError(onError as FutureOr<void> Function(Object exception, [StackTrace? stackTrace]));
+        .catchError(onError);
   }
 
   @protected
