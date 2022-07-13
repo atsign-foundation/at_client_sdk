@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
-import 'package:at_client/src/key_stream/collection/iterable_key_stream_impl.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
+import 'package:at_client/src/key_stream/key_stream_iterable_base.dart';
+import 'package:meta/meta.dart';
 
 /// Class to expose a stream of [Iterable<AtKey>] based on the provided query parameters
 ///
@@ -19,11 +20,12 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 /// the associated ref used for indexing (by default this is [AtKey.key]). You may also override the [atClientManager]
 /// if necessary.
 /// {@endtemplate}
-abstract class IterableKeyStream<T> extends Stream<Iterable<T>> implements KeyStreamMixin<Iterable<T>> {
+class IterableKeyStream<T> extends KeyStreamIterableBase<T, Iterable<T>>
+    implements Stream<Iterable<T>>, KeyStreamMixin<Iterable<T>> {
   /// Create an [IterableKeyStream] instance
   ///
   /// {@macro IterableKeyStream}
-  factory IterableKeyStream({
+  IterableKeyStream({
     required T? Function(AtKey key, AtValue value) convert,
     String? regex,
     String? sharedBy,
@@ -32,16 +34,18 @@ abstract class IterableKeyStream<T> extends Stream<Iterable<T>> implements KeySt
     String Function(AtKey key, AtValue value)? generateRef,
     FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
-  }) {
-    return IterableKeyStreamImpl<T>(
-      regex: regex,
-      convert: convert,
-      generateRef: generateRef,
-      sharedBy: sharedBy,
-      sharedWith: sharedWith,
-      shouldGetKeys: shouldGetKeys,
-      onError: onError,
-      atClientManager: atClientManager,
-    );
-  }
+  }) : super(
+          convert: convert,
+          regex: regex,
+          shouldGetKeys: shouldGetKeys,
+          sharedBy: sharedBy,
+          sharedWith: sharedWith,
+          generateRef: generateRef,
+          castTo: (values) => castTo<T>(values),
+          onError: onError,
+          atClientManager: atClientManager,
+        );
 }
+
+@visibleForTesting
+Iterable<T> castTo<T>(Iterable<T> values) => [...values];

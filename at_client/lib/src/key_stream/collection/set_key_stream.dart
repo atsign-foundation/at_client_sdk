@@ -1,9 +1,10 @@
 import 'dart:async';
 
+import 'package:at_client/src/key_stream/key_stream_iterable_base.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
-import 'package:at_client/src/key_stream/collection/set_key_stream_impl.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
+import 'package:meta/meta.dart';
 
 /// Class to expose a stream of [Set<AtKey>] based on the provided query parameters
 ///
@@ -18,11 +19,12 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 /// the associated ref used for indexing (by default this is [AtKey.key]). You may also override the [atClientManager]
 /// if necessary.
 /// {@endtemplate}
-abstract class SetKeyStream<T> extends Stream<Set<T>> implements KeyStreamMixin<Set<T>> {
+class SetKeyStream<T> extends KeyStreamIterableBase<T, Set<T>>
+    implements Stream<Set<T>>, KeyStreamMixin<Set<T>> {
   /// Create a [SetKeyStream] instance
   ///
   /// {@macro SetKeyStream}
-  factory SetKeyStream({
+  SetKeyStream({
     required T? Function(AtKey key, AtValue value) convert,
     String? regex,
     String? sharedBy,
@@ -31,16 +33,18 @@ abstract class SetKeyStream<T> extends Stream<Set<T>> implements KeyStreamMixin<
     String Function(AtKey key, AtValue value)? generateRef,
     FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
-  }) {
-    return SetKeyStreamImpl<T>(
-      regex: regex,
-      convert: convert,
-      generateRef: generateRef,
-      sharedBy: sharedBy,
-      sharedWith: sharedWith,
-      shouldGetKeys: shouldGetKeys,
-      onError: onError,
-      atClientManager: atClientManager,
-    );
-  }
+  }) : super(
+          convert: convert,
+          regex: regex,
+          shouldGetKeys: shouldGetKeys,
+          sharedBy: sharedBy,
+          sharedWith: sharedWith,
+          generateRef: generateRef,
+          castTo: (values) => castTo<T>(values),
+          onError: onError,
+          atClientManager: atClientManager,
+        );
 }
+
+@visibleForTesting
+Set<T> castTo<T>(Iterable<T> values) => values.toSet();
