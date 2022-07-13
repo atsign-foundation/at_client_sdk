@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
@@ -196,7 +197,8 @@ abstract class AtClient {
   /// Throws [SelfKeyNotFoundException] if the self encryption key is not found.
   ///
   /// Throws [AtClientException] if the cloud secondary is invalid or not reachable
-  Future<AtValue> get(AtKey key, {bool isDedicated = false});
+  Future<AtValue> get(AtKey key,
+      {bool isDedicated = false, GetRequestOptions? getRequestOptions});
 
   /// Gets the metadata of [AtKey.key]
   /// ```
