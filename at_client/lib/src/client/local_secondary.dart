@@ -186,10 +186,7 @@ class LocalSecondary implements Secondary {
         keys.retainWhere(
             (element) => element!.startsWith(builder.sharedWith!) == true);
       }
-      keys.removeWhere((key) =>
-          key.toString().startsWith('privatekey:') ||
-          key.toString().startsWith('private:') ||
-          key.toString().startsWith('public:_'));
+      keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
       var keyString = keys.toString();
       // Apply regex on keyString to remove unnecessary characters and spaces
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
@@ -201,6 +198,20 @@ class LocalSecondary implements Secondary {
       _logger.severe('exception in scan:${e.toString()}');
       rethrow;
     }
+  }
+
+  bool _shouldHideKeys(String key, bool showHiddenKeys) {
+    // If showHidden is set to true, display hidden public keys.
+    // So returning false
+    if ((key.toString().startsWith('public:__') || key.startsWith('_')) &&
+        showHiddenKeys) {
+      return false;
+    }
+    // Do not display keys that starts with 'private:' or 'privatekey:' or public:_
+    return key.toString().startsWith('private:') ||
+        key.toString().startsWith('privatekey:') ||
+        key.toString().startsWith('public:_') ||
+        key.startsWith('_');
   }
 
   /// Verifies if the key is active, If key is active, return true; else false.

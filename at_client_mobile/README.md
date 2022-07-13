@@ -1,4 +1,4 @@
-<img width=250px src="https://atsign.dev/assets/img/@platform_logo_grey.svg?sanitize=true">
+<img width=250px src="https://atsign.dev/assets/img/atPlatform_logo_gray.svg?sanitize=true">
 
 ## Now for some internet optimism.
 
@@ -10,10 +10,10 @@
 
 A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
 
-SDK that provides the essential methods for building an app using [The @protocol](https://atsign.com). You may also want to look at [at_client](https://pub.dev/packages/at_client).
+SDK that provides the essential methods for building an app using [The atProtocol](https://atsign.com). You may also want to look at [at_client](https://pub.dev/packages/at_client).
 
 **at_client_mobile** package is written in Dart, supports Flutter and follows the
-@platform's decentralized, edge computing model with the following features: 
+atPlatform's decentralized, edge computing model with the following features: 
 - Cryptographic control of data access through personal data stores
 - No application backend needed
 - End to end encryption where only the data owner has the keys
@@ -73,9 +73,9 @@ print(atSignsWithState); // Prints a map of atsigns with their status.
 
 /// Output:
 /// {
-///   "@atsign1": true, // @atsign1 is set as primary
-///   "@atsign2": false,
-///   "@atsign3": false
+///   "@atSign1": true, // atSign1 is set as primary
+///   "@atSign2": false,
+///   "@atSign3": false
 /// }
 ```
 
