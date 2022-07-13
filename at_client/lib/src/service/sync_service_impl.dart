@@ -325,7 +325,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             var commitEntry = unCommittedEntryList.elementAt(batchId - 1);
             if (commitId == -1) {
               _logger.severe(
-                  'update/delete for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
+                  '${commitEntry.operation} for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
             }
 
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
@@ -395,6 +395,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var batchId = 1;
     for (var entry in uncommittedEntries) {
       String command;
+      //Skipping the cached keys to sync to cloud secondary.
+      if (entry.atKey!.startsWith('cached:')) {
+        _logger.finer(
+            '${entry.atKey} is skipped. cached keys will not be synced to cloud secondary');
+        continue;
+      }
       try {
         command = await _getCommand(entry);
       } on KeyNotFoundException {
