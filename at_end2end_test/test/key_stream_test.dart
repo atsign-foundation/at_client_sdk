@@ -8,8 +8,6 @@ import 'package:uuid/uuid.dart';
 import 'package:at_client/src/key_stream/key_stream_impl.dart';
 import 'package:at_client/src/key_stream/key_stream_iterable_base.dart';
 import 'package:at_client/src/key_stream/key_stream_map_base.dart';
-import 'package:at_client/src/key_stream/collection/map_key_stream_impl.dart' hide castTo;
-import 'package:at_client/src/key_stream/collection/iterable_key_stream_impl.dart' hide castTo;
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 import 'test_utils.dart';
@@ -166,7 +164,7 @@ void main() {
   });
 
   group('KeyStreamIterable group', () {
-    late IterableKeyStreamImpl<String> keyStream;
+    late IterableKeyStream<String> keyStream;
     var uuid;
     var randomValue;
     var key;
@@ -181,7 +179,7 @@ void main() {
         ..sharedBy = currentAtSign;
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-      keyStream = IterableKeyStreamImpl<String>(
+      keyStream = IterableKeyStream<String>(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
@@ -214,7 +212,7 @@ void main() {
   });
 
   group('KeyStreamMap group', () {
-    late MapKeyStreamImpl<String, String> keyStream;
+    late MapKeyStream<String, String> keyStream;
     var uuid;
     var randomValue;
     var key;
@@ -229,7 +227,7 @@ void main() {
         ..sharedBy = currentAtSign;
       await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-      keyStream = MapKeyStreamImpl<String, String>(
+      keyStream = MapKeyStream<String, String>(
         regex: namespace + '@',
         convert: (key, value) => MapEntry(key.key!, value.value),
         sharedBy: currentAtSign,
@@ -269,7 +267,6 @@ void main() {
     var uuid;
     var randomValue2, randomValue3;
     var key2, key3;
-     
 
     setUpAll(() async {
       uuid = Uuid();
@@ -328,7 +325,7 @@ void main() {
       await AtClientManager.getInstance()
           .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
       await Future.delayed(Duration(milliseconds: 1));
-      expect(keyStream.controller.isClosed, true); 
+      expect(keyStream.controller.isClosed, true);
 
       keyStream2 = KeyStreamImpl(
         regex: namespace + '@',

@@ -1,4 +1,4 @@
-export 'iterable_key_stream.dart';
-export 'list_key_stream.dart';
-export 'map_key_stream.dart';
-export 'set_key_stream.dart';
+export 'iterable_key_stream.dart' hide castTo;
+export 'list_key_stream.dart' hide castTo;
+export 'map_key_stream.dart' hide castTo;
+export 'set_key_stream.dart' hide castTo;
