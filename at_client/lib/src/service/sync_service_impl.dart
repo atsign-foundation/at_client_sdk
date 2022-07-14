@@ -404,7 +404,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // other atsign. The value is not encrypted.
     // The keys starting with publickey. and shared_key. are the reserved keys
     // and do not require actions. Hence skipping from checking conflict resolution.
-    if (key.startsWith('publickey.') || key.startsWith('shared_key.')) {
+    // TODO: Skipping the cached keys for now. Revisit to check if this is fine or not
+    if (key.startsWith('publickey.') || key.startsWith('shared_key.') || key.startsWith('cached:')) {
       _logger.finer('$key found in conflict resolution, returning null');
       return null;
     }
