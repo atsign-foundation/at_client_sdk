@@ -399,6 +399,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<ConflictInfo?> _checkConflict(
       final serverCommitEntry, List<CommitEntry> uncommittedEntries) async {
     final key = serverCommitEntry['atKey'];
+
+    // publickey.<atsign>@<currentatsign> is used to store the public key of
+    // other atsign. The value is not encrypted.
+    // The keys starting with publickey. and shared_key. are the reserved keys
+    // and do not require actions. Hence skipping from checking conflict resolution.
+    if (key.startsWith('publickey.') || key.startsWith('shared_key.')) {
+      _logger.finer('$key found in conflict resolution, returning null');
+      return null;
+    }
     final atKey = AtKey.fromString(key);
     // temporary fix to add @ to sharedBy. permanent fix should be in AtKey.fromString
     atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
@@ -418,10 +427,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           conflictInfo.localValue = localValue;
           conflictInfo.remoteValue = serverValue;
         }
+        return conflictInfo;
       }
       final serverEncryptedValue = serverCommitEntry['value'];
-      final decryptionManager = await AtKeyDecryptionManager.get(
-          atKey, _atClient.getCurrentAtSign()!);
+      final decryptionManager =
+          AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
       final serverDecryptedValue =
           await decryptionManager.decrypt(atKey, serverEncryptedValue);
       final localDecryptedValue = await _atClient.get(atKey);
@@ -744,6 +754,7 @@ class KeyInfo {
   String key;
   SyncDirection syncDirection;
   ConflictInfo? conflictInfo;
+
   KeyInfo(this.key, this.syncDirection);
 
   @override
