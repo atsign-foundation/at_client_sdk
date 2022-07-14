@@ -17,6 +17,12 @@ dependency_overrides:
       path: at_commons
       ref: trunk
 
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: at_lookup
+      ref: sec_socket_util
+
 dev_dependencies:
   test: ^1.17.2
   lints: ^1.0.1
