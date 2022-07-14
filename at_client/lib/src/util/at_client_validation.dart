@@ -107,9 +107,11 @@ class AtClientValidation {
       throw BufferOverFlowException(
           'The length of value exceeds the buffer size. Maximum buffer size is ${atClientPreference.maxDataSize} bytes. Found ${value.toString().length} bytes');
     }
-    // If key is cached, throw exception
-    if (atKey.metadata != null && atKey.metadata!.isCached) {
-      throw AtKeyException('User cannot create a cached key');
+    // If key starts with 'cached:' (or) if the metadata of key has isCached set to true; it represent
+    // a cached key. Prevent client updating the cached key. Hence throw exception.
+    if (atKey.key!.startsWith('$CACHED:') ||
+        (atKey.metadata != null && atKey.metadata!.isCached)) {
+      throw AtKeyException('Cannot create/update a cached key');
     }
     // If namespace is not set on key and in preferences, throw exception
     if ((atKey.namespace == null || atKey.namespace!.isEmpty) &&
