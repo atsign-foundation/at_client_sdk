@@ -31,6 +31,7 @@ import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -235,13 +236,15 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtValue> get(AtKey atKey, {bool isDedicated = false}) async {
+  Future<AtValue> get(AtKey atKey,
+      {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
     Secondary? secondary;
     try {
       // validate the get request.
       await AtClientValidation.validateAtKey(atKey);
       // Get the verb builder for the atKey
-      var verbBuilder = GetRequestTransformer(this).transform(atKey);
+      var verbBuilder = GetRequestTransformer(this)
+          .transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
       secondary = SecondaryManager.getSecondary(verbBuilder);
       var getResponse = await secondary.executeVerb(verbBuilder);

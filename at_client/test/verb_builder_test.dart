@@ -1,3 +1,4 @@
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -138,6 +139,35 @@ void main() {
             ..metadata = (Metadata()..namespaceAware = false),
           (AtClientPreference()));
       expect(atKey, 'phone');
+    });
+  });
+  group('A group of tests to check bypass cache flag', () {
+    test('A test to verify bypass cache flag in plookup verb builder', () {
+      AtKey atKey = AtKey()
+        ..key = 'phone'
+        ..sharedBy = '@alice'
+        ..metadata = (Metadata()
+          ..isPublic = true
+          ..namespaceAware = false);
+      final requestOptions = GetRequestOptions()..bypassCache = true;
+      var builder = LookUpBuilderManager.get(
+          atKey, '@bob', AtClientPreference(),
+          getRequestOptions: requestOptions);
+      expect(builder, isA<PLookupVerbBuilder>());
+      expect(builder.buildCommand(), contains('bypassCache:true'));
+    });
+
+    test('A test to verify bypass cache flag in lookup verb builder', () {
+      AtKey atKey = AtKey()
+        ..key = 'phone'
+        ..sharedBy = '@alice'
+        ..metadata = (Metadata()..namespaceAware = false);
+      final requestOptions = GetRequestOptions()..bypassCache = true;
+      var builder = LookUpBuilderManager.get(
+          atKey, '@bob', AtClientPreference(),
+          getRequestOptions: requestOptions);
+      expect(builder, isA<LookupVerbBuilder>());
+      expect(builder.buildCommand(), contains('bypassCache:true'));
     });
   });
 }
