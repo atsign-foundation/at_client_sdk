@@ -23,7 +23,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:cron/cron.dart';
 
@@ -81,8 +80,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       try {
         await _processSyncRequests();
       } on Exception catch (e, trace) {
+        var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.finest(trace);
-        _logger.severe('exception while running process sync:  $e');
+        _logger.severe('exception while running process sync. Reason:  $cause');
         _syncInProgress = false;
       }
     });
@@ -191,8 +191,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           serverCommitId: serverCommitId);
       _syncInProgress = false;
     } on Exception catch (e) {
-      _logger.severe(
-          'Exception in sync ${syncRequest.id}. Reason ${e.toString()}');
+      var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+      _logger.severe('Exception in sync ${syncRequest.id}. Reason: $cause');
+
       syncRequest.result!.atClientException =
           AtClientException.message(e.toString());
       _syncError(syncRequest);
@@ -217,8 +218,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         syncProgress.serverCommitId = serverCommitId;
         listener.onSyncProgressEvent(syncProgress);
       } on Exception catch (e) {
+        var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.severe(
-            'unable to inform sync progress to listener $listener. Exception ${e.toString()}');
+            'unable to inform sync progress to listener $listener. Reason: $cause');
       }
     }
   }
@@ -337,14 +339,16 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             keyInfoList
                 .add(KeyInfo(commitEntry.atKey, SyncDirection.localToRemote));
           } on Exception catch (e) {
+            var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
             _logger.severe(
-                'exception while updating commit entry for entry:$entry ${e.toString()}');
+                'exception while updating commit entry for entry:$entry Reason: $cause');
             return keyInfoList;
           }
         }
       } on Exception catch (e) {
+        var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.severe(
-            'exception while syncing batch: ${e.toString()} batch commit entries: $unCommittedEntryList');
+            'exception occurred while syncing batch commit entries: $unCommittedEntryList  Reason: $cause');
         return keyInfoList;
       }
     }
@@ -384,8 +388,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
         } on Exception catch (e) {
+          var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
-              'exception syncing entry to local $serverCommitEntry - ${e.toString()}');
+              'exception syncing entry to local $serverCommitEntry - $cause');
           return keyInfoList;
         }
       }
@@ -404,7 +409,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // other atsign. The value is not encrypted.
     // The keys starting with publickey. and shared_key. are the reserved keys
     // and do not require actions. Hence skipping from checking conflict resolution.
-    // TODO: Skipping the cached keys for now. Revisit to check if this is fine or not
     if (key.startsWith('publickey.') || key.startsWith('shared_key.') || key.startsWith('cached:')) {
       _logger.finer('$key found in conflict resolution, returning null');
       return null;
@@ -571,7 +575,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return SyncUtil.isInSync(
           unCommittedEntries, serverCommitId, lastSyncedCommitId);
     } on Exception catch (e) {
-      _logger.severe('exception in isInSync ${e.toString()}');
+      var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+      _logger.severe('exception in isInSync $cause');
       throw AtClientException.message(e.toString());
     } finally {
       remoteSecondary.atLookUp.close();
