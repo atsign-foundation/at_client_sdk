@@ -44,13 +44,22 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       // to cache the encryptedSharedKey.
       await _notifyEncryptedSharedKey(atKey, encryptedSharedKey);
       // Store the sharedKey for future retrieval.
-      // Encrypt the sharedKey with currentAtSignPrivateKey and store it for future use.
+      // Encrypt the sharedKey with currentAtSignPublicKey and store it for future use.
+      String? currentAtSignEncryptionPublicKey;
+      try {
+        currentAtSignEncryptionPublicKey = await AtClientManager.getInstance()
+            .atClient
+            .getLocalSecondary()!
+            .getEncryptionPublicKey(atKey.sharedBy!);
+      } on KeyNotFoundException catch (e) {
+        e.stack(AtChainedException(
+            Intent.fetchEncryptionPublicKey,
+            ExceptionScenario.fetchEncryptionKeys,
+            'Failed to encrypt and store the sharedKey'));
+        rethrow;
+      }
       var encryptedSharedKeyForCurrentAtSign = EncryptionUtil.encryptKey(
-          sharedKey,
-          (await AtClientManager.getInstance()
-              .atClient
-              .getLocalSecondary()!
-              .getEncryptionPublicKey(atKey.sharedBy!))!);
+          sharedKey, currentAtSignEncryptionPublicKey!);
       _storeSharedKey(atKey, encryptedSharedKeyForCurrentAtSign);
     } else {
       encryptedSharedKey =
@@ -87,10 +96,19 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     // If sharedKey is found, decrypt the shared key and return.
     if (key != null && key.isNotEmpty && key != 'data:null') {
       key = DefaultResponseParser().parse(key).response;
-      var encryptionPrivateKey = await AtClientManager.getInstance()
-          .atClient
-          .getLocalSecondary()!
-          .getEncryptionPrivateKey();
+      String? encryptionPrivateKey;
+      try {
+        encryptionPrivateKey = await AtClientManager.getInstance()
+            .atClient
+            .getLocalSecondary()!
+            .getEncryptionPrivateKey();
+      } on KeyNotFoundException catch (e) {
+        e.stack(AtChainedException(
+            Intent.fetchEncryptionPrivateKey,
+            ExceptionScenario.encryptionFailed,
+            'Failed to decrypt the encrypted shared key'));
+        rethrow;
+      }
       return EncryptionUtil.decryptKey(key, encryptionPrivateKey!);
     }
     return key!;
