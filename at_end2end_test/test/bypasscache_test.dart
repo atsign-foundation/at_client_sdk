@@ -108,7 +108,9 @@ void main() {
     print('get result with bypass cache false $getResultWithFalse');
     expect(getResultWithFalse?.value, oldValue);
     //  reset the autoNotify to false
-    configResult = await currentAtSignClientManager?.atClient.getRemoteSecondary()!.executeCommand('config:reset:autoNotify\n', auth: true);
+    configResult = await currentAtSignClientManager?.atClient
+        .getRemoteSecondary()!
+        .executeCommand('config:set:autoNotify=true\n', auth: true);
     expect(configResult, contains('data:ok'));
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
