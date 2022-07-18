@@ -81,7 +81,7 @@ void main() {
     var configResult = await currentAtSignClientManager?.atClient.getRemoteSecondary()!.executeCommand('config:set:autoNotify=false\n', auth: true);
     expect(configResult, contains('data:ok'));
     // adding a delay for 2 seconds till the config value gets updated
-    await Future.delayed(Duration(seconds: 2));
+    await Future.delayed(Duration(seconds: 3));
     // Updating the same key with a new value
     var verificationKeyNew = AtKey()
       ..key = 'verificationnumber'
@@ -103,7 +103,7 @@ void main() {
     // get Result with byPassCache set to false
     // should return the old value
     // adding a delay
-    await Future.delayed(Duration(seconds: 2));
+    await Future.delayed(Duration(seconds: 3));
     var getResultWithFalse = await sharedWithAtSignClientManager?.atClient.get(getKey, getRequestOptions: GetRequestOptions()..bypassCache = false);
     print('get result with bypass cache false $getResultWithFalse');
     expect(getResultWithFalse?.value, oldValue);
