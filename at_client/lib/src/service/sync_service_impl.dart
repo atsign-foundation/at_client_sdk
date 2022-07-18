@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -11,6 +12,7 @@ import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync/sync_conflict.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync/sync_result.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -289,7 +291,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (serverCommitId > localCommitId) {
       _logger.finer(
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
-      final keyInfoList = await _syncFromServer(serverCommitId, localCommitId);
+      final keyInfoList = await _syncFromServer(
+          serverCommitId, localCommitId, unCommittedEntries);
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
@@ -325,7 +328,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             var commitEntry = unCommittedEntryList.elementAt(batchId - 1);
             if (commitId == -1) {
               _logger.severe(
-                  'update/delete for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
+                  '${commitEntry.operation} for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
             }
 
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
@@ -349,8 +352,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Syncs the cloud secondary changes to local secondary.
-  Future<List<KeyInfo>> _syncFromServer(
-      int serverCommitId, int localCommitId) async {
+  Future<List<KeyInfo>> _syncFromServer(int serverCommitId, int localCommitId,
+      List<CommitEntry> uncommittedEntries) async {
     // Iterates until serverCommitId is greater than localCommitId are equal.
     List<KeyInfo> keyInfoList = [];
     while (serverCommitId > localCommitId) {
@@ -373,9 +376,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
         try {
+          final keyInfo =
+              KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
+          ConflictInfo? conflictInfo =
+              await _checkConflict(serverCommitEntry, uncommittedEntries);
+          keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
-          keyInfoList.add(
-              KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal));
+          keyInfoList.add(keyInfo);
         } on Exception catch (e) {
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - ${e.toString()}');
@@ -389,12 +396,67 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return keyInfoList;
   }
 
+  Future<ConflictInfo?> _checkConflict(
+      final serverCommitEntry, List<CommitEntry> uncommittedEntries) async {
+    final key = serverCommitEntry['atKey'];
+
+    // publickey.<atsign>@<currentatsign> is used to store the public key of
+    // other atsign. The value is not encrypted.
+    // The keys starting with publickey. and shared_key. are the reserved keys
+    // and do not require actions. Hence skipping from checking conflict resolution.
+    // TODO: Skipping the cached keys for now. Revisit to check if this is fine or not
+    if (key.startsWith('publickey.') || key.startsWith('shared_key.') || key.startsWith('cached:')) {
+      _logger.finer('$key found in conflict resolution, returning null');
+      return null;
+    }
+    final atKey = AtKey.fromString(key);
+    // temporary fix to add @ to sharedBy. permanent fix should be in AtKey.fromString
+    atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
+    final conflictInfo = ConflictInfo();
+    bool keyExists = false;
+    for (CommitEntry entry in uncommittedEntries) {
+      if (key == entry.atKey) {
+        keyExists = true;
+      }
+    }
+    if (keyExists) {
+      final localValue =
+          await _atClient.getLocalSecondary()!.keyStore!.get(key);
+      if (atKey is PublicKey || key.contains('public:')) {
+        final serverValue = serverCommitEntry['value'];
+        if (localValue != serverValue) {
+          conflictInfo.localValue = localValue;
+          conflictInfo.remoteValue = serverValue;
+        }
+        return conflictInfo;
+      }
+      final serverEncryptedValue = serverCommitEntry['value'];
+      final decryptionManager =
+          AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
+      final serverDecryptedValue =
+          await decryptionManager.decrypt(atKey, serverEncryptedValue);
+      final localDecryptedValue = await _atClient.get(atKey);
+      if (localDecryptedValue.value != serverDecryptedValue) {
+        conflictInfo.localValue = localDecryptedValue.value;
+        conflictInfo.remoteValue = serverDecryptedValue;
+      }
+      return conflictInfo;
+    }
+    return null;
+  }
+
   Future<List<BatchRequest>> _getBatchRequests(
       List<CommitEntry> uncommittedEntries) async {
     var batchRequests = <BatchRequest>[];
     var batchId = 1;
     for (var entry in uncommittedEntries) {
       String command;
+      //Skipping the cached keys to sync to cloud secondary.
+      if (entry.atKey!.startsWith('cached:')) {
+        _logger.finer(
+            '${entry.atKey} is skipped. cached keys will not be synced to cloud secondary');
+        continue;
+      }
       try {
         command = await _getCommand(entry);
       } on KeyNotFoundException {
@@ -698,11 +760,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 class KeyInfo {
   String key;
   SyncDirection syncDirection;
+  ConflictInfo? conflictInfo;
+
   KeyInfo(this.key, this.syncDirection);
 
   @override
   String toString() {
-    return 'KeyInfo{key: $key, syncDirection: $syncDirection}';
+    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo}';
   }
 }
 

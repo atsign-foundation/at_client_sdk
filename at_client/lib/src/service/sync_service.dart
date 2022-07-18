@@ -1,4 +1,5 @@
 import 'package:at_client/src/listener/sync_progress_listener.dart';
+import 'package:at_client/src/service/sync/sync_conflict.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
 
 abstract class SyncService {
