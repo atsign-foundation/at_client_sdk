@@ -181,13 +181,16 @@ class NotificationServiceImpl
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {Function? onSuccess, Function? onError}) async {
+      {Function(NotificationResult)? onSuccess, Function(NotificationResult)? onError, Function(NotificationResult)? onSentToSecondary}) async {
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       await _atClient.notifyChange(notificationParams);
+      if (onSentToSecondary != null) {
+        onSentToSecondary(notificationResult);
+      }
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =

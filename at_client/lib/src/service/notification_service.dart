@@ -75,7 +75,7 @@ abstract class NotificationService {
   ///   await notification.notify(NotificationParams.forText('Hello','@bob'));
   ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {Function? onSuccess, Function? onError});
+      {Function(NotificationResult)? onSuccess, Function(NotificationResult)? onError, Function(NotificationResult)? onSentToSecondary});
 
   /// Stops all subscriptions on the current instance
   void stopAllSubscriptions();
