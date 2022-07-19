@@ -1,6 +1,6 @@
 name: at_client
 description: The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the @protocol.
-version: 3.0.29
+version: 3.0.30
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/docs/
@@ -25,7 +25,7 @@ dependencies:
   async: ^2.8.2
   at_persistence_spec: ^2.0.6
   at_persistence_secondary_server: ^3.0.29
-  at_lookup: ^3.0.26
+  at_lookup: ^3.0.27
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
   at_commons: ^3.0.19
