@@ -794,12 +794,6 @@ class AtClientImpl implements AtClient {
   Future<String?> notifyChange(NotificationParams notificationParams) async {
     String? notifyKey = notificationParams.atKey.key;
 
-    // Check for internet. Since notify invoke remote secondary directly, network connection
-    // is mandatory.
-    if (!await NetworkUtil.isNetworkAvailable()) {
-      throw AtClientException(
-          error_codes['AtClientException'], 'No network availability');
-    }
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
