@@ -2,7 +2,8 @@
 - Added bypassCache option in get method
 - Added sync conflict info to sync progress callback
 - Added security policy
-- Fix for skipping reserved keys while checking for sync conflict  
+- Fix for skipping reserved keys while checking for sync conflict
+- Upgrade at_lookup to v3.0.27 for outbound message listener timeout enhancement  
 ## 3.0.29
 - Added additional attributes in SyncProgress for improved sync observability
 ## 3.0.28
