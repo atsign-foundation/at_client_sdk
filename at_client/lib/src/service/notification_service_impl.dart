@@ -21,7 +21,7 @@ class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
   final Map<NotificationConfig, StreamController> _streamListeners = {};
   final emptyRegex = '';
-  static const notificationIdKey = '_latestNotificationIdv2';
+  static const notificationIdKey = 'public:_latestNotificationIdv2';
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
