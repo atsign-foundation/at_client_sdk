@@ -21,7 +21,7 @@ class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
   final Map<NotificationConfig, StreamController> _streamListeners = {};
   final emptyRegex = '';
-  static const notificationIdKey = 'public:_latestNotificationIdv2';
+  static const notificationIdKey = '_latestNotificationIdv2';
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
@@ -92,7 +92,7 @@ class NotificationServiceImpl
 
   Future<int?> _getLastNotificationTime() async {
     var lastNotificationKeyStr =
-        '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
+        'public:$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
     var atKey = AtKey.fromString(lastNotificationKeyStr);
     if (_atClient
         .getLocalSecondary()!
@@ -132,7 +132,8 @@ class NotificationServiceImpl
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
-          await _atClient.put(AtKey()..key = notificationIdKey,
+          await _atClient.put(AtKey()..key = notificationIdKey
+          ..metadata =(Metadata() ..isPublic = true),
               jsonEncode(atNotification.toJson()));
         }
         _streamListeners.forEach((notificationConfig, streamController) async {
