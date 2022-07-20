@@ -98,7 +98,7 @@ class NotificationServiceImpl
         .getLocalSecondary()!
         .keyStore!
         .isKeyExists(lastNotificationKeyStr)) {
-      var atValue;
+      AtValue? atValue;
       try {
         atValue = await _atClient.get(atKey);
       } on Exception catch (e) {
@@ -109,8 +109,8 @@ class NotificationServiceImpl
         _logger.finer('json from hive: ${atValue.value}');
         return jsonDecode(atValue.value)['epochMillis'];
       }
-      return null;
     }
+    return null;
   }
 
   @override
