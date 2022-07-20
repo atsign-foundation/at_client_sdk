@@ -213,16 +213,16 @@ class NotificationServiceImpl
       return notificationResult;
     } else {
       if (waitForFinalDeliveryStatus) {
-        await _handleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+        await _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
         return notificationResult;
       } else { // no wait? no await
-        _handleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+        _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
         return notificationResult;
       }
     }
   }
 
-  Future<void> _handleFinalNotificationSendStatus(
+  Future<void> _waitForAndHandleFinalNotificationSendStatus(
       NotificationParams notificationParams,
       NotificationResult notificationResult,
       Function? onSuccess,
@@ -258,10 +258,16 @@ class NotificationServiceImpl
   /// Takes the notificationId as input as returns the status of the notification
   Future<String> _getFinalNotificationStatus(String notificationId) async {
     String status = '';
+    bool firstCheck = true;
     // For every 2 seconds, queries the status of the notification
     while (status.isEmpty || status == 'data:queued') {
-      await Future.delayed(Duration(seconds: 2),
-          () async => status = await _atClient.notifyStatus(notificationId));
+      if (firstCheck) {
+        await Future.delayed(Duration(milliseconds: 500));
+        firstCheck = false;
+      } else {
+        await Future.delayed(Duration(seconds: 2));
+      }
+      status = await _atClient.notifyStatus(notificationId);
     }
     return status;
   }
