@@ -180,8 +180,13 @@ class NotificationServiceImpl
   }
 
   @override
-  Future<NotificationResult> notify(NotificationParams notificationParams,
-      {Function(NotificationResult)? onSuccess, Function(NotificationResult)? onError, Function(NotificationResult)? onSentToSecondary}) async {
+  Future<NotificationResult> notify(
+      NotificationParams notificationParams,
+      { bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+        bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+        Function(NotificationResult)? onSuccess,
+        Function(NotificationResult)? onError,
+        Function(NotificationResult)? onSentToSecondary}) async {
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
@@ -202,8 +207,26 @@ class NotificationServiceImpl
       if (onError != null) {
         onError(notificationResult);
       }
-      return notificationResult;
     }
+
+    if (! checkForFinalDeliveryStatus) { // don't do polling if we don't need to
+      return notificationResult;
+    } else {
+      if (waitForFinalDeliveryStatus) {
+        await _handleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+        return notificationResult;
+      } else { // no wait? no await
+        _handleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+        return notificationResult;
+      }
+    }
+  }
+
+  Future<void> _handleFinalNotificationSendStatus(
+      NotificationParams notificationParams,
+      NotificationResult notificationResult,
+      Function? onSuccess,
+      Function? onError) async {
     var notificationParser = NotificationResponseParser();
     // Gets the notification status and parse the response.
     var notificationStatus = notificationParser
@@ -229,7 +252,6 @@ class NotificationServiceImpl
         }
         break;
     }
-    return notificationResult;
   }
 
   /// Queries the status of the notification
