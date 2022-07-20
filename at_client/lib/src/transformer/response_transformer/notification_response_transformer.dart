@@ -24,7 +24,9 @@ class NotificationResponseTransformer
     if (tuple.one.messageType.isNotNull &&
         tuple.one.messageType!.toLowerCase().contains('text') &&
         (tuple.one.isEncrypted != null && tuple.one.isEncrypted!)) {
-      //decrypt the text message;
+      // decrypt the text message;
+      // the encrypted text message is a part of notification key. for example
+      // @alice:<text-message>. So split with : to get the encrypted message
       var encryptedValue = atKey.key!.split(':')[1];
       var decryptedValue = await _getDecryptedValue(atKey, encryptedValue);
       atNotification.key = '${tuple.one.to}:$decryptedValue';
