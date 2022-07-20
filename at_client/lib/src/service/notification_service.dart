@@ -15,12 +15,25 @@ abstract class NotificationService {
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///
-  /// Returns [NotificationResult] when await on the method .
-  /// When run asynchronously, register to onSuccess and onError callbacks to get [NotificationResult].
+  /// Returns [NotificationResult] when calling the method synchronously using `await`. Be aware that it could take
+  /// many minutes before we get to a final delivery status when we run synchronously, so we advise against that.
+  /// However there is something in between 'fire and forget' and 'wait a long time' available - if you call the
+  /// method synchronously using `await` but you also set [waitForFinalDeliveryStatus] to false, then the future
+  /// will complete once the notification has been successfully sent to our cloud secondary, which is thereafter
+  /// responsible for forwarding to the recipient; the polling for delivery status will continue asynchronously
+  /// and eventually your provided [onSuccess] or [onError] function will be called.
   ///
-  /// OnSuccess is called when the notification has been delivered to the recipient successfully.
+  /// If you set the optional [checkForFinalDeliveryStatus] parameter to false, then you can prevent the polling for
+  /// final delivery status to be done at all by this method, and instead if you need to, you can do the periodic
+  /// checking for final delivery status elsewhere in your code.
   ///
-  /// onError is called when the notification could not delivered
+  /// When run asynchronously, register to onSentToSecondary, onSuccess and onError callbacks to get [NotificationResult].
+  ///
+  /// onSentToSecondary is called when the notification has been sent from our client to our cloud secondary
+  ///
+  /// onSuccess is called when the notification has been delivered to the recipient's secondary successfully.
+  ///
+  /// onError is called when the notification could not delivered. Note that this could be a very long time
   ///
   /// Following exceptions are encapsulated in [NotificationResult.atClientException]
   ///* [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
@@ -74,8 +87,13 @@ abstract class NotificationService {
   ///   var notification = NotificationServiceImpl(atClient!);
   ///   await notification.notify(NotificationParams.forText('Hello','@bob'));
   ///```
-  Future<NotificationResult> notify(NotificationParams notificationParams,
-      {Function? onSuccess, Function? onError});
+  Future<NotificationResult> notify(
+      NotificationParams notificationParams,
+      { bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+        bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+        Function(NotificationResult)? onSuccess,
+        Function(NotificationResult)? onError,
+        Function(NotificationResult)? onSentToSecondary});
 
   /// Stops all subscriptions on the current instance
   void stopAllSubscriptions();

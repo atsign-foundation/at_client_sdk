@@ -98,7 +98,7 @@ class NotificationServiceImpl
         .getLocalSecondary()!
         .keyStore!
         .isKeyExists(lastNotificationKeyStr)) {
-      var atValue;
+      AtValue? atValue;
       try {
         atValue = await _atClient.get(atKey);
       } on Exception catch (e) {
@@ -109,8 +109,8 @@ class NotificationServiceImpl
         _logger.finer('json from hive: ${atValue.value}');
         return jsonDecode(atValue.value)['epochMillis'];
       }
-      return null;
     }
+    return null;
   }
 
   @override
@@ -180,14 +180,22 @@ class NotificationServiceImpl
   }
 
   @override
-  Future<NotificationResult> notify(NotificationParams notificationParams,
-      {Function? onSuccess, Function? onError}) async {
+  Future<NotificationResult> notify(
+      NotificationParams notificationParams,
+      { bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+        bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+        Function(NotificationResult)? onSuccess,
+        Function(NotificationResult)? onError,
+        Function(NotificationResult)? onSentToSecondary}) async {
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
     try {
       // Notifies key to another notificationParams.atKey.sharedWith atsign
       await _atClient.notifyChange(notificationParams);
+      if (onSentToSecondary != null) {
+        onSentToSecondary(notificationResult);
+      }
     } on Exception catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
@@ -199,8 +207,26 @@ class NotificationServiceImpl
       if (onError != null) {
         onError(notificationResult);
       }
-      return notificationResult;
     }
+
+    if (! checkForFinalDeliveryStatus) { // don't do polling if we don't need to
+      return notificationResult;
+    } else {
+      if (waitForFinalDeliveryStatus) {
+        await _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+        return notificationResult;
+      } else { // no wait? no await
+        _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+        return notificationResult;
+      }
+    }
+  }
+
+  Future<void> _waitForAndHandleFinalNotificationSendStatus(
+      NotificationParams notificationParams,
+      NotificationResult notificationResult,
+      Function? onSuccess,
+      Function? onError) async {
     var notificationParser = NotificationResponseParser();
     // Gets the notification status and parse the response.
     var notificationStatus = notificationParser
@@ -226,17 +252,22 @@ class NotificationServiceImpl
         }
         break;
     }
-    return notificationResult;
   }
 
   /// Queries the status of the notification
   /// Takes the notificationId as input as returns the status of the notification
   Future<String> _getFinalNotificationStatus(String notificationId) async {
     String status = '';
+    bool firstCheck = true;
     // For every 2 seconds, queries the status of the notification
     while (status.isEmpty || status == 'data:queued') {
-      await Future.delayed(Duration(seconds: 2),
-          () async => status = await _atClient.notifyStatus(notificationId));
+      if (firstCheck) {
+        await Future.delayed(Duration(milliseconds: 500));
+        firstCheck = false;
+      } else {
+        await Future.delayed(Duration(seconds: 2));
+      }
+      status = await _atClient.notifyStatus(notificationId);
     }
     return status;
   }
