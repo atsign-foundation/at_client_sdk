@@ -32,7 +32,7 @@ dependencies:
   at_utils: ^3.0.10
   meta: ^1.7.0
 
-#dependency_overrides:
+dependency_overrides:
 #  at_persistence_spec:
 #    git:
 #      url: https://github.com/atsign-foundation/at_server.git
@@ -53,11 +53,11 @@ dependencies:
 #      url: https://github.com/atsign-foundation/at_server.git
 #      path: at_secondary/at_persistence_secondary_server
 #      ref: trunk
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: trunk
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: at_lookup
+      ref: deprecate_find_secondary
 
 dev_dependencies:
   test: ^1.17.2

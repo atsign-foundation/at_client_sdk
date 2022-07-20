@@ -25,7 +25,7 @@ class AtClientManager {
   AtClient get atClient => _currentAtClient;
   late SyncService syncService;
   late NotificationService notificationService;
-  SecondaryAddressFinder? secondaryAddressFinder;
+  CacheableSecondaryAddressFinder? secondaryAddressFinder;
   final _changeListeners = <AtSignChangeListener>[];
 
   static final AtClientManager _singleton = AtClientManager._internal();
@@ -39,7 +39,7 @@ class AtClientManager {
   AtClientManager(_atSign);
 
   void setSecondaryAddressFinder(
-      {SecondaryAddressFinder? secondaryAddressFinder}) {
+      {CacheableSecondaryAddressFinder? secondaryAddressFinder}) {
     if (secondaryAddressFinder != null) {
       this.secondaryAddressFinder = secondaryAddressFinder;
     }
