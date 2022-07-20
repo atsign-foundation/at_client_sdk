@@ -29,7 +29,7 @@ class RemoteSecondary implements Secondary {
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey,
         cramSecret: preference.cramSecret,
-        cacheableSecondaryAddressFinder:
+        secondaryAddressFinder:
             AtClientManager.getInstance().secondaryAddressFinder);
   }
 
