@@ -2,11 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/listener/connectivity_listener.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -15,6 +13,7 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
+import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
@@ -151,36 +150,18 @@ class NotificationServiceImpl
           await _atClient.put(AtKey()..key = notificationIdKey,
               jsonEncode(atNotification.toJson()));
         }
-        // If messageType is Text and text data is encrypted, decrypt the data
-        if ((atNotification.isEncrypted != null &&
-                atNotification.isEncrypted!) &&
-            (atNotification.messageType != null &&
-                atNotification.messageType == 'MessageType.text')) {
-          var encryptedMessage = atNotification.key.split(':')[1];
-          var decryptedMessage = await SharedKeyDecryption().decrypt(
-              AtKey()
-                ..sharedWith = atNotification.to
-                ..sharedBy = atNotification.from
-                ..key = atNotification.key,
-              encryptedMessage);
-          atNotification.key = '${atNotification.to}:$decryptedMessage';
-          _streamListeners.forEach((notificationConfig, streamController) {
-            streamController.add(atNotification);
-          });
-          return;
-        }
         _streamListeners.forEach((notificationConfig, streamController) async {
-          // Decrypt the value in the atNotification object when below criteria is met.
-          if (notificationConfig.shouldDecrypt && atNotification.id != '-1') {
-            atNotification.value =
-                await _getDecryptedNotifications(atNotification);
-          }
+          var transformedNotification =
+              await NotificationResponseTransformer().transform(Tuple()
+                ..one = atNotification
+                ..two = notificationConfig);
+
           if (notificationConfig.regex != emptyRegex) {
             if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
-              streamController.add(atNotification);
+              streamController.add(transformedNotification);
             }
           } else {
-            streamController.add(atNotification);
+            streamController.add(transformedNotification);
           }
         });
       }
@@ -339,30 +320,6 @@ class NotificationServiceImpl
     _logger.finer(
         '${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
     return _monitor!.getStatus();
-  }
-
-  Future<String?> _getDecryptedNotifications(
-      AtNotification atNotification) async {
-    // If atNotification value is null or empty, returning the same.
-    if (atNotification.value == null || atNotification.value!.isEmpty) {
-      return atNotification.value;
-    }
-    try {
-      var atKey = AtKey()
-        ..key = atNotification.key
-        ..sharedBy = atNotification.from
-        ..sharedWith = atNotification.to;
-      var decryptionService =
-          AtKeyDecryptionManager.get(atKey, atNotification.to);
-      var decryptedValue =
-          await decryptionService.decrypt(atKey, atNotification.value);
-      // Return decrypted value
-      return decryptedValue.toString().trim();
-    } on Exception catch (e) {
-      _logger.severe('unable to decrypt notification value: ${e.toString()}');
-    }
-    // Returning the encrypted value if the decryption fails
-    return atNotification.value!;
   }
 
   @override

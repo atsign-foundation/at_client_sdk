@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -11,6 +12,8 @@ import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
+import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_commons/at_commons.dart';
@@ -85,6 +88,13 @@ class MockSharedKeyEncryption extends Mock implements SharedKeyEncryption {
   }
 }
 
+class MockSharedKeyDecryption extends Mock implements SharedKeyDecryption {
+  @override
+  Future decrypt(AtKey atKey, encryptedValue) async {
+    return 'decryptedValue';
+  }
+}
+
 void main() {
   AtClientManager atClientManager = AtClientManager.getInstance();
 
@@ -95,6 +105,7 @@ void main() {
   NetworkConnectivityChecker mockNetworkConnectivityChecker =
       MockNetworkConnectivityChecker();
   SharedKeyEncryption mockSharedKeyEncryption = MockSharedKeyEncryption();
+  SharedKeyDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
 
   setUp(() {
     registerFallbackValue(AtKey());
@@ -195,6 +206,127 @@ void main() {
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
+    });
+  });
+
+  group('A group of test to validate notification response transformer', () {
+    test(
+        'A test to verify notification text is decrypted when isEncrypted is set to true',
+        () async {
+      var isEncrypted = true;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          '@bob:encryptedValue',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.text.toString(),
+          isEncrypted);
+      var notificationResponseTransformer = NotificationResponseTransformer();
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = true));
+      expect(transformedNotification.key, '@bob:decryptedValue');
+    });
+
+    test(
+        'A test to verify notification text is not decrypted when isEncrypted is set to false',
+        () async {
+      var isEncrypted = false;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          '@bob:encryptedValue',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.text.toString(),
+          isEncrypted);
+      var notificationResponseTransformer = NotificationResponseTransformer();
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = true));
+      expect(transformedNotification.key, '@bob:encryptedValue');
+    });
+
+    test(
+        'A test to verify notification key is decrypted when shouldDecrypt is set to true',
+        () async {
+      var isEncrypted = false;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          'key-1',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          isEncrypted,
+          value: 'encryptedValue');
+      var notificationResponseTransformer = NotificationResponseTransformer();
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = true));
+      expect(transformedNotification.value, 'decryptedValue');
+    });
+
+    test(
+        'A test to verify notification key is not decrypted when shouldDecrypt is set to false',
+        () async {
+      var isEncrypted = false;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          'key-1',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          isEncrypted,
+          value: 'encryptedValue');
+      var notificationResponseTransformer = NotificationResponseTransformer();
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = false));
+      expect(transformedNotification.value, 'encryptedValue');
+    });
+
+    test('A test to verify notification is returned as is', () async {
+      var isEncrypted = false;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          'key-1',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          isEncrypted);
+      var notificationResponseTransformer = NotificationResponseTransformer();
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()..regex = '.*'));
+      expect(transformedNotification.id, '124');
+      expect(transformedNotification.key, 'key-1');
     });
   });
 }
