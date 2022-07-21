@@ -1,10 +1,9 @@
 import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
-
-import 'atsign_key.dart';
 
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(
@@ -44,11 +43,8 @@ class AtClientAuthenticator implements AtClientAuth {
     // get existing keys from keychain
     final atsign = await _keyChainManager.readAtsign(name: atSign);
     var publicKey = atsign?.pkamPublicKey;
-        // await _keyChainManager.getValue(atSign, keychainPKAMPublicKey);
     var privateKey = atClientPreference.privateKey ??= atsign?.pkamPrivateKey;
-        // await _keyChainManager.getValue(atSign, keychainPKAMPrivateKey);
     var encryptionPrivateKey =  atsign?.encryptionPublicKey;
-        // await _keyChainManager.getValue(atSign, keychainEncryptionPrivateKey);
 
     // If cram secret is null, perform cram authentication
     if (atClientPreference.cramSecret != null) {
@@ -98,15 +94,9 @@ class AtClientAuthenticator implements AtClientAuth {
           logger
               .finer('generating encryption key pair and self encryption key');
           var encryptionKeyPair = _keyChainManager.generateKeyPair();
-          var atSignItem = await _keyChainManager.readAtsign(name: atSign) ?? AtsignKey(name: atSign);
-          // await _keyChainManager.putValue(atSign, keychainEncryptionPrivateKey,
-          //     encryptionKeyPair.privateKey.toString());
+          var atSignItem = await _keyChainManager.readAtsign(name: atSign) ?? AtsignKey(atSign: atSign);
           var encryptionPubKey = encryptionKeyPair.publicKey.toString();
-          // await _keyChainManager.putValue(
-          //     atSign, keychainEncryptionPublicKey, encryptionPubKey);
           var selfEncryptionKey = EncryptionUtil.generateAESKey();
-          // await _keyChainManager.putValue(
-          //     atSign, keychainSelfEncryptionKey, selfEncryptionKey);
           atSignItem = atSignItem.copyWith(
             encryptionPrivateKey: encryptionKeyPair.privateKey.toString(),
             encryptionPublicKey: encryptionPubKey,

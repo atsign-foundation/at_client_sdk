@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:core';
 
 import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
-import 'atsign_key.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
@@ -196,19 +196,13 @@ class AtClientService {
     var encryptionPublicKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
         decryptKey);
-    // await _keyChainManager.putValue(
-    //     atsign, keychainEncryptionPublicKey, encryptionPublicKey);
 
     var encryptionPrivateKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
         decryptKey);
-    // await _keyChainManager.putValue(
-    //     atsign, keychainEncryptionPrivateKey, encryptionPrivateKey);
-    // await _keyChainManager.putValue(
-    //     atsign, keychainSelfEncryptionKey, decryptKey);
 
     var atSignItem = await _keyChainManager.readAtsign(name: atsign) ??
-        AtsignKey(name: atsign);
+        AtsignKey(atSign: atsign);
     atSignItem = atSignItem.copyWith(
       encryptionPrivateKey: encryptionPrivateKey,
       encryptionPublicKey: encryptionPublicKey,
@@ -269,8 +263,6 @@ class AtClientService {
   ///Returns [OnboardingStatus] of the atsign by checking it with remote server.
   Future<OnboardingStatus> getKeyRestorePolicy(String atSign) async {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
-    // var localEncryptionPublicKey =
-    //     await _keyChainManager.getValue(atSign, keychainEncryptionPublicKey);
     var localEncryptionPublicKey =
         await _keyChainManager.getEncryptionPublicKey(atSign);
     if (_isNullOrEmpty(localEncryptionPublicKey) &&
@@ -380,7 +372,6 @@ class KeychainUtil {
   }
 
   static Future<String?> getAESKey(String atsign) async {
-    // return await _keyChainManager.getValue(atsign, keychainSelfEncryptionKey);
     return (await _keyChainManager.readAtsign(name: atsign))?.selfEncryptionKey;
   }
 

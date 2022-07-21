@@ -24,7 +24,6 @@ class _LoginScreen extends State<LoginScreen> {
   ClientSdkService clientSDKInstance = ClientSdkService.getInstance();
   AtClientPreference? atClientPreference;
 
-  // final AtSignLogger _logger = AtSignLogger('Plugin example app');
   Future<void> call() async {
     await clientSDKInstance
         .getAtClientPreference()
@@ -52,26 +51,6 @@ class _LoginScreen extends State<LoginScreen> {
             Center(
               child: TextButton(
                 onPressed: () async {
-                  // Onboarding(
-                  //   context: context,
-                  //   atClientPreference: atClientPreference!,
-                  //   domain: AtEnv.rootDomain,
-                  //   appColor: Theme.of(context).primaryColor,
-                  //   onboard:
-                  //       (Map<String?, AtClientService> value, String? atsign) {
-                  //     atSign = atsign;
-                  //     clientSDKInstance.atsign = atsign!;
-                  //     clientSDKInstance.atClientServiceMap = value;
-                  //     clientSDKInstance.atClientServiceInstance = value[atsign];
-                  //     _logger.finer('Successfully onboarded $atsign');
-                  //   },
-                  //   onError: (Object? error) {
-                  //     // _logger.severe('Onboarding throws $error error');
-                  //   },
-                  //   nextScreen: const HomeScreen(),
-                  //   appAPIKey: AtEnv.appApiKey,
-                  //   rootEnvironment: AtEnv.rootEnvironment,
-                  // );
                   final result = await AtOnboarding.onboard(
                     context: context,
                     config: AtOnboardingConfig(

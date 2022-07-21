@@ -1,7 +1,7 @@
 ///Save atsign key
 /// https://docs.google.com/document/d/1JAXNrGr6J30m1xTWD4t7z2eQRo6O7icEOprJh1KKNas/edit?hl=en&forcehl=1#
 class AtsignKey {
-  final String name;
+  final String atSign;
   final String? pkamPublicKey;
   final String? pkamPrivateKey;
   final String? encryptionPublicKey;
@@ -11,7 +11,7 @@ class AtsignKey {
   final String? secret;
 
   AtsignKey({
-    required this.name,
+    required this.atSign,
     this.pkamPrivateKey,
     this.pkamPublicKey,
     this.encryptionPublicKey,
@@ -22,7 +22,7 @@ class AtsignKey {
   });
 
   factory AtsignKey.fromJson(Map<String, dynamic> json) => AtsignKey(
-        name: json["name"] is String ? json["name"] : "",
+        atSign: json["name"] is String ? json["name"] : "",
         pkamPrivateKey:
             json["pkamPrivateKey"] is String ? json["pkamPrivateKey"] : null,
         pkamPublicKey:
@@ -41,7 +41,7 @@ class AtsignKey {
       );
 
   Map<String, dynamic> toJson() => {
-        "name": name,
+        "name": atSign,
         "pkamPrivateKey": pkamPrivateKey,
         "pkamPublicKey": pkamPublicKey,
         "encryptionPublicKey": encryptionPublicKey,
@@ -62,7 +62,7 @@ class AtsignKey {
     String? secret,
   }) {
     return AtsignKey(
-      name: name ?? this.name,
+      atSign: name ?? atSign,
       pkamPublicKey: pkamPublicKey ?? this.pkamPublicKey,
       pkamPrivateKey: pkamPrivateKey ?? this.pkamPrivateKey,
       encryptionPublicKey: encryptionPublicKey ?? this.encryptionPublicKey,

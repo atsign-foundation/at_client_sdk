@@ -191,7 +191,7 @@ class KeyChainManager {
                 await (await BiometricStorage().getStorage('$key:_secret'))
                     .read();
             final newAtSignKey = AtsignKey(
-              name: key,
+              atSign: key,
               pkamPublicKey: pkamPublicKey,
               pkamPrivateKey: pkamPrivateKey,
               encryptionPublicKey: encryptionPublicKey,
@@ -225,7 +225,7 @@ class KeyChainManager {
             final String? secret =
                 await FlutterKeychain.get(key: '$key:_secret');
             final newAtSignKey = AtsignKey(
-              name: key,
+              atSign: key,
               pkamPublicKey: pkamPublicKey,
               pkamPrivateKey: pkamPrivateKey,
               encryptionPublicKey: encryptionPublicKey,
@@ -238,40 +238,6 @@ class KeyChainManager {
           }
         }
         migratedData = migratedData.copyWith(keys: newAtSignKeys);
-        //Todo: don't remove old data in keychain because still have some apps using old package
-        // if ((keysFromBiometric ?? '').isNotEmpty) {
-        //   //Read data and migrate 'BiometricStorage'
-        //   final keys = jsonDecode(keysFromBiometric!) as Map<String, bool>;
-        //   keys.forEach((key, value) async {
-        //     await (await BiometricStorage().getStorage('$key:_pkam_public_key'))
-        //         .delete();
-        //     await (await BiometricStorage().getStorage('$key:_pkam_private_key'))
-        //         .delete();
-        //     await (await BiometricStorage()
-        //             .getStorage('$key:_encryption_public_key'))
-        //         .delete();
-        //     await (await BiometricStorage()
-        //             .getStorage('$key:_encryption_private_key'))
-        //         .delete();
-        //     await (await BiometricStorage().getStorage('$key:_aesKey')).delete();
-        //     await (await BiometricStorage().getStorage('$key:_hive_secret'))
-        //         .delete();
-        //     await (await BiometricStorage().getStorage('$key:_secret')).delete();
-        //   });
-        //   await (await BiometricStorage().getStorage('@atsign')).delete();
-        // } else if ((keysFromKeychain ?? '').isNotEmpty) {
-        //   final keys = jsonDecode(keysFromBiometric!) as Map<String, bool>;
-        //   keys.forEach((key, value) async {
-        //     await FlutterKeychain.remove(key: '$key:_pkam_public_key');
-        //     await FlutterKeychain.remove(key: '$key:_pkam_private_key');
-        //     await FlutterKeychain.remove(key: '$key:_encryption_public_key');
-        //     await FlutterKeychain.remove(key: '$key:_encryption_private_key');
-        //     await FlutterKeychain.remove(key: '$key:_aesKey');
-        //     await FlutterKeychain.remove(key: '$key:_hive_secret');
-        //     await FlutterKeychain.remove(key: '$key:_secret');
-        //   });
-        //   await FlutterKeychain.remove(key: '@atsign');
-        // }
       } catch (e, s) {
         _logger.warning('Migrate Keychain Data', e, s);
       }
@@ -286,13 +252,13 @@ class KeyChainManager {
   /// Function to get atsign's key with name
   Future<AtsignKey?> readAtsign({required String name}) async {
     final atSigns = await readAtsigns();
-    if (atSigns.isNotEmpty) {
-      for (int i = 0; i < atSigns.length; i++) {
-        if (atSigns[i].name == name) {
-          return atSigns[i];
-        }
-      }
+    if (atSigns.isEmpty) {
       return null;
+    }
+    for (int i = 0; i < atSigns.length; i++) {
+      if (atSigns[i].atSign == name) {
+        return atSigns[i];
+      }
     }
     return null;
   }
@@ -315,7 +281,7 @@ class KeyChainManager {
         await readAtClientData(useSharedStorage: useSharedStorage);
     if (atClientData != null) {
       final atSigns = atClientData.keys;
-      atSigns.removeWhere((element) => element.name == atSign.name);
+      atSigns.removeWhere((element) => element.atSign == atSign.atSign);
       atSigns.add(atSign);
       await _saveAtClientData(
           data: atClientData, useSharedStorage: useSharedStorage);
@@ -337,7 +303,7 @@ class KeyChainManager {
       final oldAtSigns = atClientData.keys;
       //If have no account => make this account is default
       for (var atsign in atSigns) {
-        oldAtSigns.removeWhere((element) => element.name == atsign.name);
+        oldAtSigns.removeWhere((element) => element.atSign == atsign.atSign);
         oldAtSigns.add(atsign);
       }
       final newAtClientData = atClientData.copyWith(keys: oldAtSigns);
@@ -379,7 +345,7 @@ class KeyChainManager {
   /// Fetches list of all the onboarded atsigns
   Future<List<String>> getAtSignListFromKeychain() async {
     final atsigns = await readAtsigns();
-    return atsigns.map((e) => e.name).toList();
+    return atsigns.map((e) => e.atSign).toList();
   }
 
   /// Function to get atsign secret from keychain
@@ -416,7 +382,7 @@ class KeyChainManager {
       if (secret != null) {
         secret = secret.trim().toLowerCase().replaceAll(' ', '');
       }
-      final index = atsigns.indexWhere((element) => element.name == atSign);
+      final index = atsigns.indexWhere((element) => element.atSign == atSign);
       if (index >= 0) {
         atsigns[index] = atsigns[index].copyWith(
           secret: secret,
@@ -424,7 +390,7 @@ class KeyChainManager {
           pkamPublicKey: publicKey,
         );
       } else {
-        atsigns.add(AtsignKey(name: atSign).copyWith(
+        atsigns.add(AtsignKey(atSign: atSign).copyWith(
           secret: secret,
           pkamPrivateKey: privateKey,
           pkamPublicKey: publicKey,
@@ -455,14 +421,14 @@ class KeyChainManager {
         await readAtClientData(useSharedStorage: useSharedStorage);
     try {
       final atsigns = atClientData?.keys ?? [];
-      final index = atsigns.indexWhere((element) => element.name == atsign);
+      final index = atsigns.indexWhere((element) => element.atSign == atsign);
       if (index >= 0) {
         atsigns[index] = atsigns[index].copyWith(
           pkamPrivateKey: privateKey,
           pkamPublicKey: publicKey,
         );
       } else {
-        atsigns.add(AtsignKey(name: atsign).copyWith(
+        atsigns.add(AtsignKey(atSign: atsign).copyWith(
           pkamPrivateKey: privateKey,
           pkamPublicKey: publicKey,
         ));
@@ -541,20 +507,20 @@ class KeyChainManager {
       final atsignKeys =
           (await readAtClientData(useSharedStorage: false))?.keys ?? [];
       for (var element in atsignKeys) {
-        if (element.name == defaultAtsign) {
-          return element.name;
+        if (element.atSign == defaultAtsign) {
+          return element.atSign;
         }
       }
-      if (atsignKeys.isNotEmpty) return atsignKeys.first.name;
+      if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
     } else if (atClientData?.config?.useSharedStorage == true) {
       final atsignKeys =
           (await readAtClientData(useSharedStorage: true))?.keys ?? [];
       for (var element in atsignKeys) {
-        if (element.name == defaultAtsign) {
-          return element.name;
+        if (element.atSign == defaultAtsign) {
+          return element.atSign;
         }
       }
-      if (atsignKeys.isNotEmpty) return atsignKeys.first.name;
+      if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
     }
     return null;
   }
@@ -580,7 +546,7 @@ class KeyChainManager {
   Future<bool> deleteAtSignFromKeychain(String atsign) async {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    atClientData?.keys.removeWhere((element) => element.name == atsign);
+    atClientData?.keys.removeWhere((element) => element.atSign == atsign);
     if (atClientData != null) {
       await _saveAtClientData(
           data: atClientData, useSharedStorage: useSharedStorage);
@@ -594,7 +560,7 @@ class KeyChainManager {
   Future<bool> resetAtSignFromKeychain({required String atsign}) async {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    atClientData?.keys.removeWhere((element) => element.name == atsign);
+    atClientData?.keys.removeWhere((element) => element.atSign == atsign);
     if (atClientData != null) {
       await _saveAtClientData(
           data: atClientData, useSharedStorage: useSharedStorage);
@@ -640,30 +606,13 @@ class KeyChainManager {
     }
   }
 
-  // /// Function to save atsigns. It will replace all old keys with new keys passed by param
-  // Future<void> _saveAtsigns({
-  //   required List<AtsignKey> atsigns,
-  // }) async {
-  //   var atClientData = await getAtClientData() ??
-  //       AtClientData(
-  //         config: AtClientDataConfig(schemaVersion: _kDataSchemeVersion),
-  //         keys: [],
-  //       );
-  //   //If have 1 account => make first account is default
-  //   if (atsigns.length == 1) {
-  //     atsigns[0] = atsigns[0].copyWith(isDefault: true);
-  //   }
-  //   atClientData = atClientData.copyWith(keys: atsigns);
-  //   _saveAtClientData(data: atClientData);
-  // }
-
   /// Function to get Map of atsigns from keychain
   Future<Map<String, bool?>> _getAtSignMap() async {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final atsigns = await readAtsigns();
     final result = <String, bool?>{};
     for (var element in atsigns) {
-      result[element.name] = element.name == atClientData?.defaultAtsign;
+      result[element.atSign] = element.atSign == atClientData?.defaultAtsign;
     }
     return result;
   }
