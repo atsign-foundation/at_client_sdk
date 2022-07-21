@@ -5,12 +5,10 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -96,14 +94,9 @@ class MockSharedKeyDecryption extends Mock implements SharedKeyDecryption {
 }
 
 void main() {
-  AtClientManager atClientManager = AtClientManager.getInstance();
-
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
-  Monitor mockMonitor = MockMonitor();
-  NetworkConnectivityChecker mockNetworkConnectivityChecker =
-      MockNetworkConnectivityChecker();
   SharedKeyEncryption mockSharedKeyEncryption = MockSharedKeyEncryption();
   SharedKeyDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
 
@@ -117,27 +110,6 @@ void main() {
 
     when(() => mockSecondaryKeyStore.isKeyExists(
         '_latestNotificationIdv2.wavi@alice')).thenAnswer((_) => true);
-  });
-
-  group('A group of test to notification service', () {
-    test('A test to verify network failure return exception', () async {
-      var notificationService = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          atClientManager: atClientManager,
-          monitor: mockMonitor,
-          networkConnectivityChecker: mockNetworkConnectivityChecker);
-
-      var notificationResponse = await notificationService.notify(
-          NotificationParams.forUpdate((AtKey.shared('phone', namespace: 'wavi')
-                ..sharedWith('@bob'))
-              .build()));
-
-      expect(notificationResponse.notificationStatusEnum,
-          NotificationStatusEnum.undelivered);
-      expect(notificationResponse.atClientException?.message,
-          'No network availability');
-      assert(notificationResponse.atClientException is AtClientException);
-    });
   });
 
   group('a group of test to validate notification request processor', () {

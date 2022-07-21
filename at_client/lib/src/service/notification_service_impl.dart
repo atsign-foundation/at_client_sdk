@@ -19,7 +19,6 @@ import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_utils/at_utils.dart';
 
 class NotificationServiceImpl
@@ -36,28 +35,22 @@ class NotificationServiceImpl
   ConnectivityListener? _connectivityListener;
   dynamic _lastMonitorRetried;
   late AtClientManager _atClientManager;
-  late NetworkConnectivityChecker _networkConnectivityChecker;
   AtClientValidation atClientValidation = AtClientValidation();
 
   static Future<NotificationService> create(AtClient atClient,
-      {required AtClientManager atClientManager,
-      Monitor? monitor,
-      NetworkConnectivityChecker? networkConnectivityChecker}) async {
+      {required AtClientManager atClientManager, Monitor? monitor}) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
-    final notificationService = NotificationServiceImpl._(
-        atClientManager, atClient,
-        monitor: monitor,
-        networkConnectivityChecker: networkConnectivityChecker);
+    final notificationService =
+        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     await notificationService._init();
     _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
   NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
-      {Monitor? monitor,
-      NetworkConnectivityChecker? networkConnectivityChecker}) {
+      {Monitor? monitor}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
     _monitor = monitor ??
@@ -68,8 +61,6 @@ class NotificationServiceImpl
             _atClient.getPreferences()!,
             MonitorPreference()..keepAlive = true,
             _monitorRetry);
-    _networkConnectivityChecker =
-        networkConnectivityChecker ?? NetworkConnectivityChecker();
     _atClientManager.listenToAtSignChange(this);
   }
 
@@ -195,21 +186,18 @@ class NotificationServiceImpl
   }
 
   @override
-  Future<NotificationResult> notify(
-      NotificationParams notificationParams,
-      { bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
-        bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
-        Function(NotificationResult)? onSuccess,
-        Function(NotificationResult)? onError,
-        Function(NotificationResult)? onSentToSecondary}) async {
+  Future<NotificationResult> notify(NotificationParams notificationParams,
+      {bool waitForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
+      Function(NotificationResult)? onSuccess,
+      Function(NotificationResult)? onError,
+      Function(NotificationResult)? onSentToSecondary}) async {
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
     try {
-      // If network is unavailable, throw AtConnectException
-      if (!(await _networkConnectivityChecker.isNetworkAvailable())) {
-        throw AtConnectException('No network availability');
-      }
       // If sharedBy atSign is null, default to current atSign.
       if (notificationParams.atKey.sharedBy.isNull) {
         notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
@@ -249,15 +237,18 @@ class NotificationServiceImpl
         onError(notificationResult);
       }
     }
-
-    if (! checkForFinalDeliveryStatus) { // don't do polling if we don't need to
+    if (!checkForFinalDeliveryStatus) {
+      // don't do polling if we don't need to
       return notificationResult;
     } else {
       if (waitForFinalDeliveryStatus) {
-        await _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+        await _waitForAndHandleFinalNotificationSendStatus(
+            notificationParams, notificationResult, onSuccess, onError);
         return notificationResult;
-      } else { // no wait? no await
-        _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
+      } else {
+        // no wait? no await
+        _waitForAndHandleFinalNotificationSendStatus(
+            notificationParams, notificationResult, onSuccess, onError);
         return notificationResult;
       }
     }
