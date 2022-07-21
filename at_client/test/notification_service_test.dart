@@ -12,7 +12,6 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -64,14 +63,6 @@ class MockMonitor extends Mock implements Monitor {
   @override
   MonitorStatus getStatus() {
     return status;
-  }
-}
-
-class MockNetworkConnectivityChecker extends Mock
-    implements NetworkConnectivityChecker {
-  @override
-  Future<bool> isNetworkAvailable() async {
-    return false;
   }
 }
 

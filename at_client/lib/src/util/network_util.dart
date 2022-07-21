@@ -12,9 +12,3 @@ class NetworkUtil {
     return result;
   }
 }
-
-class NetworkConnectivityChecker {
-  Future<bool> isNetworkAvailable() async {
-    return NetworkUtil.isNetworkAvailable();
-  }
-}
