@@ -10,7 +10,7 @@ const notificationIdKey = '_latestNotificationIdv2';
 
 void main() {
    test('put method - create a key sharing to other atSign', () async {
-    var atsign = '@alice🛠';
+    var atsign = '@sitaram';
     var preference = TestUtils.getPreference(atsign);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
@@ -20,8 +20,7 @@ void main() {
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
     var notificationKey = AtKey()
-      ..key = notificationIdKey
-      ..metadata = (Metadata() ..isPublic = true);
+      ..key = notificationIdKey;
     var value = '-1';
     var putResult = await atClient.put(notificationKey, value);
     expect(putResult, true);
