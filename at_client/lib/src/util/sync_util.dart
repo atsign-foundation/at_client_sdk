@@ -111,7 +111,8 @@ class SyncUtil {
   static bool shouldSync(String key) {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
-        key.startsWith(AT_ENCRYPTION_PRIVATE_KEY)) {
+        key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
+        key.startsWith(notificationIdKey)) {
       return false;
     }
     return true;
