@@ -1,4 +1,4 @@
-import 'package:demo/src/services/sdk.service.dart';
+import 'package:example/src/services/sdk.service.dart';
 import 'package:flutter/material.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -12,7 +12,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // Set of strings
-  Set<String> _selectedStrings = <String>{};
+  final Set<String> _selectedStrings = <String>{};
   final ClientSdkService _clientSdkService = ClientSdkService.getInstance();
   String? atSign,
       _key,

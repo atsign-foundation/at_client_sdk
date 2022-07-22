@@ -1,10 +1,10 @@
-import 'package:demo/src/screens/home.dart';
+import 'package:example/src/screens/home.dart';
 import 'package:flutter/material.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:at_app_flutter/at_app_flutter.dart' show AtEnv;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:demo/src/services/sdk.service.dart';
+import 'package:example/src/services/sdk.service.dart';
 
 class LoginScreen extends StatefulWidget {
   /// Login screen id.
@@ -60,18 +60,26 @@ class _LoginScreen extends State<LoginScreen> {
                       appAPIKey: AtEnv.appApiKey,
                     ),
                   );
-                  switch (result) {
-                    case AtOnboardingResult.success:
+                  switch (result.status) {
+                    case AtOnboardingResultStatus.success:
                       Navigator.push(
                           context,
                           MaterialPageRoute(
                               builder: (_) => const HomeScreen()));
                       break;
-                    case AtOnboardingResult.error:
-                    // TODO: Handle this case.
+                    case AtOnboardingResultStatus.error:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Onboard error!${result.message}'),
+                        ),
+                      );
                       break;
-                    case AtOnboardingResult.cancel:
-                    // TODO: Handle this case.
+                    case AtOnboardingResultStatus.cancel:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Cancelled!'),
+                        ),
+                      );
                       break;
                   }
                 },
@@ -84,7 +92,7 @@ class _LoginScreen extends State<LoginScreen> {
             Center(
               child: TextButton(
                 onPressed: () async {
-                  final result = await AtOnboarding.start(
+                  final result = await AtOnboarding.onboard(
                     context: context,
                     config: AtOnboardingConfig(
                       atClientPreference: atClientPreference!,
@@ -92,19 +100,28 @@ class _LoginScreen extends State<LoginScreen> {
                       rootEnvironment: AtEnv.rootEnvironment,
                       appAPIKey: AtEnv.appApiKey,
                     ),
+                    isSwitchingAtsign: true,
                   );
-                  switch (result) {
-                    case AtOnboardingResult.success:
+                  switch (result.status) {
+                    case AtOnboardingResultStatus.success:
                       Navigator.push(
                           context,
                           MaterialPageRoute(
                               builder: (_) => const HomeScreen()));
                       break;
-                    case AtOnboardingResult.error:
-                      // TODO: Handle this case.
+                    case AtOnboardingResultStatus.error:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Onboard error!${result.message}'),
+                        ),
+                      );
                       break;
-                    case AtOnboardingResult.cancel:
-                      // TODO: Handle this case.
+                    case AtOnboardingResultStatus.cancel:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Cancelled!'),
+                        ),
+                      );
                       break;
                   }
                 },
@@ -120,7 +137,7 @@ class _LoginScreen extends State<LoginScreen> {
                     KeyChainManager.getInstance();
                 List<String>? _atSignsList =
                     await _keyChainManager.getAtSignListFromKeychain();
-                if (_atSignsList == null || _atSignsList.isEmpty) {
+                if (_atSignsList.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
