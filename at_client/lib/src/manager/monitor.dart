@@ -416,8 +416,13 @@ class MonitorOutboundConnectionFactory {
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
 
+    SecureSocketConfig secureSocketConfig = SecureSocketConfig();
+    secureSocketConfig.decryptPackets = decryptPackets;
+    secureSocketConfig.pathToCerts = pathToCerts;
+    secureSocketConfig.tlsKeysSavePath = tlsKeysSavePath;
+
     SecureSocket secureSocket = await SecureSocketUtil.createSecureSocket(
-        host, port, decryptPackets, pathToCerts, tlsKeysSavePath);
+        host, port, secureSocketConfig);
     return OutboundConnectionImpl(secureSocket);
   }
 
