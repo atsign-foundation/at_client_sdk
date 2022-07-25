@@ -26,8 +26,14 @@ class RemoteSecondary implements Secondary {
     _atSign = AtUtils.formatAtSign(atSign)!;
     _preference = preference;
     privateKey ??= preference.privateKey;
+    SecureSocketConfig secureSocketConfig = SecureSocketConfig();
+    secureSocketConfig.decryptPackets = preference.decryptPackets;
+    secureSocketConfig.pathToCerts = preference.pathToCerts;
+    secureSocketConfig.tlsKeysSavePath = preference.tlsKeysSavePath;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
-        privateKey: privateKey, cramSecret: preference.cramSecret);
+        privateKey: privateKey,
+        cramSecret: preference.cramSecret,
+        secureSocketConfig: secureSocketConfig);
   }
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.

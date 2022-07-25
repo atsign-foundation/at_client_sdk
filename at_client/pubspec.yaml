@@ -33,6 +33,11 @@ dependencies:
   meta: ^1.7.0
 
 #dependency_overrides:
+#  at_lookup:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: at_lookup
+#      ref: sec_socket_util
 #  at_persistence_spec:
 #    git:
 #      url: https://github.com/atsign-foundation/at_server.git

@@ -10,6 +10,9 @@ class TestUtils {
     preference.isLocalStoreRequired = true;
     preference.privateKey = demo_credentials.pkamPrivateKeyMap[atsign];
     preference.rootDomain = 'vip.ve.atsign.zone';
+    preference.decryptPackets = true;
+    preference.pathToCerts = 'test/testData/cert.pem';
+    preference.tlsKeysSavePath = 'test/tlsKeysFile';
     return preference;
   }
 }
