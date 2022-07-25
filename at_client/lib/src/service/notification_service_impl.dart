@@ -217,10 +217,6 @@ class NotificationServiceImpl
               atKeyEncryption)
           .transform(notificationParams);
 
-      if (builder.atKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
-          builder.atKey!.startsWith(AT_PKAM_PUBLIC_KEY)) {
-        builder.sharedBy = null;
-      }
       // Run the notify verb on the remote secondary instance.
       await _atClient.getRemoteSecondary()?.executeVerb(builder);
       if (onSentToSecondary != null) {

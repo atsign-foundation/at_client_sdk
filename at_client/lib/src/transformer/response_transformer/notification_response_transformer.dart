@@ -6,6 +6,7 @@ import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:meta/meta.dart';
 
+/// Class is responsible for decrypting the notification value/text-message data
 class NotificationResponseTransformer
     implements
         Transformer<Tuple<AtNotification, NotificationConfig>, AtNotification> {
