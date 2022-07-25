@@ -3,8 +3,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 import 'set_encryption_keys.dart';
@@ -38,7 +36,9 @@ void main() {
     expect(result.atKey?.sharedWith, phoneKey.sharedWith);
   });
 
-   test('notify updating of a key to sharedWith atSign - get status using the notification Id', () async {
+  test(
+      'notify updating of a key to sharedWith atSign - get status using the notification Id',
+      () async {
     // phone.me@alice🛠
     var lastNumber = Random().nextInt(30);
     var landlineKey = AtKey()
@@ -49,10 +49,12 @@ void main() {
     var result = await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(landlineKey, value: value));
     print('NotificationId : ${result.notificationID}');
-    final notificationStatus = await atClientManager.notificationService.getStatus(result.notificationID);
+    final notificationStatus = await atClientManager.notificationService
+        .getStatus(result.notificationID);
     print('Notification status is $notificationStatus');
     expect(notificationStatus.notificationID, result.notificationID);
-    expect(notificationStatus.notificationStatusEnum, NotificationStatusEnum.delivered);
+    expect(notificationStatus.notificationStatusEnum,
+        NotificationStatusEnum.delivered);
     expect(result.atKey?.key, 'landline');
     expect(result.atKey?.sharedWith, landlineKey.sharedWith);
   });
@@ -92,6 +94,17 @@ void main() {
   test('notify text of to sharedWith atSign', () async {
     var notificationResult = await atClientManager.notificationService
         .notify(NotificationParams.forText('Hello', sharedWithAtSign));
+    expect(notificationResult.notificationStatusEnum.toString(),
+        'NotificationStatusEnum.delivered');
+    expect(notificationResult.atKey?.key, 'Hello');
+    expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
+  });
+
+  test('notify text of to sharedWith atSign with shouldEncrypt set to true',
+      () async {
+    var notificationResult = await atClientManager.notificationService.notify(
+        NotificationParams.forText('Hello', sharedWithAtSign,
+            shouldEncrypt: true));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
     expect(notificationResult.atKey?.key, 'Hello');

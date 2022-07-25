@@ -242,7 +242,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
     _logger.info(
-        'Inside syncComplete  ${syncRequest.requestSource}  : ${syncRequest.onDone}');
+        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource} ; syncRequest.onDone : ${syncRequest.onDone}');
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
