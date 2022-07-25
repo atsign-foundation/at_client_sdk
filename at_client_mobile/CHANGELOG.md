@@ -1,3 +1,7 @@
+## 3.1.19
+- at_client dependency upgraded to latest version v3.0.30
+- at_lookup dependency upgraded to latest version v3.0.27
+- at_commons dependency upgraded to latest version v3.0.19
 ## 3.1.18
 - at_client version upgraded to 3.0.27
 ## 3.1.17

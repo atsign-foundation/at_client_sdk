@@ -4,6 +4,7 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 
 class AtClientValidation {
   static void validateKey(String? key) {
@@ -118,6 +119,33 @@ class AtClientValidation {
         (atClientPreference.namespace == null ||
             atClientPreference.namespace!.isEmpty)) {
       throw AtKeyException('namespace is mandatory');
+    }
+  }
+
+  Future<void> validateNotificationRequest(
+      NotificationParams notificationParams,
+      AtClientPreference atClientPreference) async {
+    // validate the notification request
+    if (notificationParams.atKey.sharedWith.isNull) {
+      throw AtKeyException(
+          'shared with cannot be null on notification request');
+    }
+    AtUtils.formatAtSign(notificationParams.atKey.sharedWith);
+    await isAtSignExists(notificationParams.atKey.sharedWith!,
+        atClientPreference.rootDomain, atClientPreference.rootPort);
+
+    // For messageType is text, text may contains spaces but key should not have spaces
+    // Hence do not validate the key.
+    if (notificationParams.messageType != MessageTypeEnum.text) {
+      AtClientValidation.validateKey(notificationParams.atKey.key);
+      ValidationResult validationResult = AtKeyValidators.get().validate(
+          notificationParams.atKey.toString(),
+          ValidationContext()
+            ..atSign = notificationParams.atKey.sharedBy
+            ..validateOwnership = true);
+      if (!validationResult.isValid) {
+        throw AtClientException('AT0014', validationResult.failureReason);
+      }
     }
   }
 }

@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/listener/connectivity_listener.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -12,10 +12,14 @@ import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
+import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
@@ -31,23 +35,32 @@ class NotificationServiceImpl
   ConnectivityListener? _connectivityListener;
   dynamic _lastMonitorRetried;
   late AtClientManager _atClientManager;
+  AtClientValidation atClientValidation = AtClientValidation();
 
   static Future<NotificationService> create(AtClient atClient,
-      {required AtClientManager atClientManager}) async {
+      {required AtClientManager atClientManager, Monitor? monitor}) async {
     if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
       return _notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
     final notificationService =
-        NotificationServiceImpl._(atClientManager, atClient);
+        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     await notificationService._init();
     _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
-  NotificationServiceImpl._(
-      AtClientManager atClientManager, AtClient atClient) {
+  NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
+      {Monitor? monitor}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
+    _monitor = monitor ??
+        Monitor(
+            _internalNotificationCallback,
+            _onMonitorError,
+            _atClient.getCurrentAtSign()!,
+            _atClient.getPreferences()!,
+            MonitorPreference()..keepAlive = true,
+            _monitorRetry);
     _atClientManager.listenToAtSignChange(this);
   }
 
@@ -77,13 +90,6 @@ class NotificationServiceImpl
       return;
     }
     final lastNotificationTime = await _getLastNotificationTime();
-    _monitor = Monitor(
-        _internalNotificationCallback,
-        _onMonitorError,
-        _atClient.getCurrentAtSign()!,
-        _atClient.getPreferences()!,
-        MonitorPreference()..keepAlive = true,
-        _monitorRetry);
     await _monitor!.start(lastNotificationTime: lastNotificationTime);
     if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
@@ -98,7 +104,7 @@ class NotificationServiceImpl
         .getLocalSecondary()!
         .keyStore!
         .isKeyExists(lastNotificationKeyStr)) {
-      var atValue;
+      AtValue? atValue;
       try {
         atValue = await _atClient.get(atKey);
       } on Exception catch (e) {
@@ -109,8 +115,8 @@ class NotificationServiceImpl
         _logger.finer('json from hive: ${atValue.value}');
         return jsonDecode(atValue.value)['epochMillis'];
       }
-      return null;
     }
+    return null;
   }
 
   @override
@@ -136,17 +142,17 @@ class NotificationServiceImpl
               jsonEncode(atNotification.toJson()));
         }
         _streamListeners.forEach((notificationConfig, streamController) async {
-          // Decrypt the value in the atNotification object when below criteria is met.
-          if (notificationConfig.shouldDecrypt && atNotification.id != '-1') {
-            atNotification.value =
-                await _getDecryptedNotifications(atNotification);
-          }
+          var transformedNotification =
+              await NotificationResponseTransformer().transform(Tuple()
+                ..one = atNotification
+                ..two = notificationConfig);
+
           if (notificationConfig.regex != emptyRegex) {
             if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
-              streamController.add(atNotification);
+              streamController.add(transformedNotification);
             }
           } else {
-            streamController.add(atNotification);
+            streamController.add(transformedNotification);
           }
         });
       }
@@ -181,26 +187,74 @@ class NotificationServiceImpl
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {Function? onSuccess, Function? onError}) async {
+      {bool waitForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
+      Function(NotificationResult)? onSuccess,
+      Function(NotificationResult)? onError,
+      Function(NotificationResult)? onSentToSecondary}) async {
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
     try {
-      // Notifies key to another notificationParams.atKey.sharedWith atsign
-      await _atClient.notifyChange(notificationParams);
-    } on Exception catch (e) {
+      // If sharedBy atSign is null, default to current atSign.
+      if (notificationParams.atKey.sharedBy.isNull) {
+        notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
+      }
+      // Append '@' if not already set.
+      AtUtils.formatAtSign(notificationParams.atKey.sharedBy!);
+      // validate notification request
+      atClientValidation.validateNotificationRequest(
+          notificationParams, _atClient.getPreferences()!);
+      // Get the EncryptionInstance to encrypt the data.
+      var atKeyEncryption = AtKeyEncryptionManager.get(
+          notificationParams.atKey, _atClient.getCurrentAtSign()!);
+      // Get the NotifyVerbBuilder from NotificationParams
+      var builder = await NotificationRequestTransformer(
+              _atClient.getCurrentAtSign()!,
+              _atClient.getPreferences()!,
+              atKeyEncryption)
+          .transform(notificationParams);
+
+      // Run the notify verb on the remote secondary instance.
+      await _atClient.getRemoteSecondary()?.executeVerb(builder);
+      if (onSentToSecondary != null) {
+        onSentToSecondary(notificationResult);
+      }
+    } on AtException catch (e) {
       // Setting notificationStatusEnum to errored
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.undelivered;
-      var atClientException =
-          AtClientException(error_codes['AtClientException'], e.toString());
-      notificationResult.atClientException = atClientException;
+      notificationResult.atClientException =
+          AtExceptionManager.createException(e) as AtClientException;
       // Invoke onErrorCallback
       if (onError != null) {
         onError(notificationResult);
       }
-      return notificationResult;
     }
+    if (!checkForFinalDeliveryStatus) {
+      // don't do polling if we don't need to
+      return notificationResult;
+    } else {
+      if (waitForFinalDeliveryStatus) {
+        await _waitForAndHandleFinalNotificationSendStatus(
+            notificationParams, notificationResult, onSuccess, onError);
+        return notificationResult;
+      } else {
+        // no wait? no await
+        _waitForAndHandleFinalNotificationSendStatus(
+            notificationParams, notificationResult, onSuccess, onError);
+        return notificationResult;
+      }
+    }
+  }
+
+  Future<void> _waitForAndHandleFinalNotificationSendStatus(
+      NotificationParams notificationParams,
+      NotificationResult notificationResult,
+      Function? onSuccess,
+      Function? onError) async {
     var notificationParser = NotificationResponseParser();
     // Gets the notification status and parse the response.
     var notificationStatus = notificationParser
@@ -226,17 +280,22 @@ class NotificationServiceImpl
         }
         break;
     }
-    return notificationResult;
   }
 
   /// Queries the status of the notification
   /// Takes the notificationId as input as returns the status of the notification
   Future<String> _getFinalNotificationStatus(String notificationId) async {
     String status = '';
+    bool firstCheck = true;
     // For every 2 seconds, queries the status of the notification
     while (status.isEmpty || status == 'data:queued') {
-      await Future.delayed(Duration(seconds: 2),
-          () async => status = await _atClient.notifyStatus(notificationId));
+      if (firstCheck) {
+        await Future.delayed(Duration(milliseconds: 500));
+        firstCheck = false;
+      } else {
+        await Future.delayed(Duration(seconds: 2));
+      }
+      status = await _atClient.notifyStatus(notificationId);
     }
     return status;
   }
@@ -279,30 +338,6 @@ class NotificationServiceImpl
     _logger.finer(
         '${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
     return _monitor!.getStatus();
-  }
-
-  Future<String?> _getDecryptedNotifications(
-      AtNotification atNotification) async {
-    // If atNotification value is null or empty, returning the same.
-    if (atNotification.value == null || atNotification.value!.isEmpty) {
-      return atNotification.value;
-    }
-    try {
-      var atKey = AtKey()
-        ..key = atNotification.key
-        ..sharedBy = atNotification.from
-        ..sharedWith = atNotification.to;
-      var decryptionService =
-          AtKeyDecryptionManager.get(atKey, atNotification.to);
-      var decryptedValue =
-          await decryptionService.decrypt(atKey, atNotification.value);
-      // Return decrypted value
-      return decryptedValue.toString().trim();
-    } on Exception catch (e) {
-      _logger.severe('unable to decrypt notification value: ${e.toString()}');
-    }
-    // Returning the encrypted value if the decryption fails
-    return atNotification.value!;
   }
 
   @override

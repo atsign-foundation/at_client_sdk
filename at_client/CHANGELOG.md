@@ -1,3 +1,13 @@
+## 3.0.31
+- Enhance notify text to send text message encrypted
+- Upgrade at_persistence_secondary_server to v3.0.30
+- Upgrade at_commons version to v3.0.20 for encrypt notify text message
+- Upgrade at_lookup version to v3.0.28 for adding mutex to authenticate methods
+- feat: Add to NotificationService.notify() signature:
+    * added new optional callback parameter, onSentToSecondary
+    * added new optional 'checkForFinalDeliveryStatus' parameter
+    * added new optional 'checkForFinalDeliveryStatus' parameter
+    * and updated code documentation for NotificationService.notify() method
 ## 3.0.30
 - Added bypassCache option in get method
 - Added sync conflict info to sync progress callback
