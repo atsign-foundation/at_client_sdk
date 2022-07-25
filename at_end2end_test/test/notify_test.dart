@@ -137,7 +137,7 @@ void main() {
               notificationListJSON.first['isEncrypted'])
           ..two = (NotificationConfig()..shouldDecrypt = true));
         expect(response.key, expectedOutput);
-      });
+      }, timeout: Timeout(Duration(minutes: 2)));
     });
   });
 
