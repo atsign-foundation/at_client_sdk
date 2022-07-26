@@ -34,7 +34,7 @@ class RemoteSecondary implements Secondary {
         privateKey: privateKey,
         cramSecret: preference.cramSecret,
         secondaryAddressFinder:
-            AtClientManager.getInstance().secondaryAddressFinder);
+            AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig);
   }
 
