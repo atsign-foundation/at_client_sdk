@@ -45,5 +45,5 @@ dependencies:
 #      ref: trunk
 
 dev_dependencies:
-  lints: ^1.0.1
+  lints: ^2.0.0
   test: ^1.6.0

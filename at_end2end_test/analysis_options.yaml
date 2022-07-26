@@ -2,7 +2,7 @@
 # details and rationale, see
 # https://github.com/dart-lang/pedantic#enabled-lints.
 
-include: package:pedantic/analysis_options.yaml
+include: package:lints/recommended.yaml
 
 # For lint rules and documentation, see http://dart-lang.github.io/linter/lints.
 
