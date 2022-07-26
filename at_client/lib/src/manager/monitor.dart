@@ -9,7 +9,6 @@ import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
@@ -278,7 +277,10 @@ class Monitor {
 
     //2. create a connection to secondary server
     var outboundConnection =
-        await _monitorOutboundConnectionFactory.createConnection(secondaryUrl);
+        await _monitorOutboundConnectionFactory.createConnection(secondaryUrl,
+            decryptPackets: _preference.decryptPackets,
+            pathToCerts: _preference.pathToCerts,
+            tlsKeysSavePath: _preference.tlsKeysSavePath);
     return outboundConnection;
   }
 
@@ -408,12 +410,19 @@ class MonitorConnectivityChecker {
 }
 
 class MonitorOutboundConnectionFactory {
-  Future<OutboundConnection> createConnection(String secondaryUrl) async {
+  Future<OutboundConnection> createConnection(String secondaryUrl,
+      {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
 
-    var secureSocket = await SecureSocket.connect(host, int.parse(port));
+    SecureSocketConfig secureSocketConfig = SecureSocketConfig();
+    secureSocketConfig.decryptPackets = decryptPackets;
+    secureSocketConfig.pathToCerts = pathToCerts;
+    secureSocketConfig.tlsKeysSavePath = tlsKeysSavePath;
+
+    SecureSocket secureSocket = await SecureSocketUtil.createSecureSocket(
+        host, port, secureSocketConfig);
     return OutboundConnectionImpl(secureSocket);
   }
 
