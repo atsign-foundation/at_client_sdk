@@ -28,16 +28,16 @@ dependencies:
   at_lookup: ^3.0.28
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.20
+  at_commons: ^3.0.21
   at_utils: ^3.0.10
   meta: ^1.7.0
 
-#dependency_overrides:
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: sec_socket_util
+# dependency_overrides:
+#   at_commons:
+#     git:
+#       url: https://github.com/atsign-foundation/at_tools.git
+#       path: at_commons
+#       ref: trunk
 #  at_persistence_spec:
 #    git:
 #      url: https://github.com/atsign-foundation/at_server.git
