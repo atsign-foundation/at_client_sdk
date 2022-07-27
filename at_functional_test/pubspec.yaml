@@ -26,7 +26,7 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
       ref: encode_public_data
-
+      
 dev_dependencies:
   test: ^1.17.2
   lints: ^1.0.1
