@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -405,7 +406,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // The keys starting with publickey. and shared_key. are the reserved keys
     // and do not require actions. Hence skipping from checking conflict resolution.
     // TODO: Skipping the cached keys for now. Revisit to check if this is fine or not
-    if (key.startsWith('publickey.') || key.startsWith('shared_key.') || key.startsWith('cached:')) {
+    if (key.startsWith('publickey.') ||
+        key.startsWith('shared_key.') ||
+        key.startsWith('cached:')) {
       _logger.finer('$key found in conflict resolution, returning null');
       return null;
     }
@@ -497,22 +500,31 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         break;
       case CommitOp.UPDATE_ALL:
         var key = entry.atKey;
-        var value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
-        var metaData =
-            await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
+        AtData value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
         var keyGen = '';
-        if (metaData != null) {
-          keyGen = _metadataToString(metaData);
+        // If metadata.encoding is not empty, the value is encoded.
+        // When value is encoded, use update:json variant in update regex to
+        // send command to cloud secondary
+        if (value.metaData != null && value.metaData?.encoding != null) {
+          var updateParams = UpdateParams()
+            ..atKey = entry.atKey
+            ..metadata = metadataAdapter(value.metaData!)
+            ..value = value.data;
+          command = 'update:json:${jsonEncode(updateParams)}';
+          break;
         }
+        keyGen = _metadataToString(value.metaData);
         keyGen += ':$key';
-        value?.metaData = metaData;
-        command = 'update$keyGen ${value?.data}';
+        command = 'update$keyGen ${value.data}';
         break;
     }
     return command;
   }
 
   String _metadataToString(dynamic metadata) {
+    if (metadata == null) {
+      return '';
+    }
     var metadataStr = '';
     if (metadata.ttl != null) metadataStr += ':ttl:${metadata.ttl}';
     if (metadata.ttb != null) metadataStr += ':ttb:${metadata.ttb}';
@@ -538,8 +550,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (metadata.pubKeyCS != null) {
         metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
       }
-      if (metadata.isEncoded != null) {
-        metadataStr += ':isEncoded:${metadata.isEncoded}';
+      if (metadata.encoding != null) {
+        metadataStr += ':encoding:${metadata.encoding}';
       }
     } on NoSuchMethodError {
       // ignore for uncommitted entries added before shared key metadata version
@@ -715,8 +727,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM] != null) {
         builder.pubKeyChecksum = metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
       }
-      if (metaData[IS_ENCODED] != null) {
-        builder.isEncoded = metaData[IS_ENCODED];
+      if (metaData['encoding'] != null) {
+        builder.encoding = metaData['encoding'];
       }
     }
   }

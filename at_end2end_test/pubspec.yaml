@@ -2,6 +2,7 @@ name: at_end2end_test
 description: A starting point for Dart libraries or applications.
 version: 1.0.0
 homepage: https://www.atsign.com
+publish_to: none
 
 environment:
   sdk: '>=2.12.0 <3.0.0'
@@ -20,12 +21,12 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_persistence/at_persistence_spec
-      ref: encode_public_data
+      ref: at_persistence_encode_public_data
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: at_secondary/at_persistence_secondary_server
-      ref: encode_public_data
+      ref: at_secondary_encode_public_data
 dev_dependencies:
   pedantic: ^1.10.0
   test: ^1.16.0

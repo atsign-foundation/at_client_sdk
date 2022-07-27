@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -104,7 +105,7 @@ class AtClientUtil {
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
     metadata.sharedKeyEnc = metadataMap[SHARED_KEY_ENCRYPTED];
     metadata.pubKeyCS = metadataMap[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
-    metadata.isEncoded = (metadataMap[IS_ENCODED] != null) ? metadataMap[IS_ENCODED] : false;
+    metadata.encoding = metadataMap['encoding'];
     if (isPublic!) {
       metadata.isPublic = isPublic;
     }
@@ -133,6 +134,14 @@ class AtClientUtil {
       return '${atKey.key}.${atClientPreference.namespace}';
     }
     return atKey.key!;
+  }
+
+  /// Converts the String representation of encodingType to [EncodingType]
+  EncodingType atDecoderStringToEnum(String encodingType) {
+    if (encodingType == EncodingType.base64.toString()) {
+      return EncodingType.base64;
+    }
+    return EncodingType.base64;
   }
 }
 

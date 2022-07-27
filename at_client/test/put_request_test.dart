@@ -19,12 +19,12 @@ void main() {
     var inputToExpectedOutput = {
       'A test to verify public data with \n character is encoded': {
         'isNewLineCharPresentInOutput': false,
-        'isEncoded': true,
+        'encoding': 'EncodingType.base64',
         'isDataSignaturePresent': true
       },
       'A test to verify public data without new line character is encoded': {
         'isNewLineCharPresentInOutput': false,
-        'isEncoded': false,
+        'encoding': null,
         'isDataSignaturePresent': true
       }
     };
@@ -43,7 +43,7 @@ void main() {
             .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
         expect(updateVerbBuilder.value.contains('\n'),
             expectedResults['isNewLineCharPresentInOutput']);
-        expect(updateVerbBuilder.isEncoded, expectedResults['isEncoded']);
+        expect(updateVerbBuilder.encoding, expectedResults['encoding']);
         expect(updateVerbBuilder.dataSignature.isNotNull,
             expectedResults['isDataSignaturePresent']);
       });

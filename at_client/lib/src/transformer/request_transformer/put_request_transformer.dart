@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
@@ -11,10 +9,15 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
 
+import '../../converters/encoder/at_encoder.dart';
+
 /// Class responsible for transforming the put request from [AtKey] to [VerbBuilder]
 class PutRequestTransformer
     extends RequestTransformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   late final AtClient _atClient;
+
+  /// the default encoding when the value contains a new line character.
+  EncodingType encodingType = EncodingType.base64;
 
   PutRequestTransformer(this._atClient);
 
@@ -49,8 +52,10 @@ class PutRequestTransformer
       // Encode the public data if it contains new line characters
       if (updateVerbBuilder.value.contains('\n')) {
         updateVerbBuilder.value =
-            base64Encode(utf8.encode(updateVerbBuilder.value));
-        updateVerbBuilder.isEncoded = true;
+            AtEncoderImpl().encodeData(updateVerbBuilder.value, encodingType);
+        updateVerbBuilder.encoding = encodingType.toString();
+        // When data is encode, use update:json in update regex. Hence setting isJson to true.
+        updateVerbBuilder.isJson = true;
       }
     }
 

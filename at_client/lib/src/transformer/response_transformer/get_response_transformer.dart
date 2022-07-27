@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_base2e15/at_base2e15.dart';
+import 'package:at_client/src/converters/decoder/at_decoder.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
@@ -53,8 +53,9 @@ class GetResponseTransformer
 
     if (((decodedResponse['key'].startsWith('public:')) ||
             (decodedResponse['key'].startsWith('cached:public:'))) &&
-        (atValue.metadata!.isEncoded)) {
-      atValue.value = utf8.decode(base64Decode(atValue.value));
+        (atValue.metadata!.encoding.isNotNull)) {
+      atValue.value = AtDecoderImpl().decodeData(atValue.value,
+          AtClientUtil().atDecoderStringToEnum(atValue.metadata!.encoding!));
     }
 
     // After decrypting the data, if data is binary, decode the data
