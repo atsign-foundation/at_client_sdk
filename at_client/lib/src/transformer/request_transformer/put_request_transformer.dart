@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
@@ -44,6 +46,12 @@ class PutRequestTransformer
       }
       updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
           updateVerbBuilder.value, encryptionPrivateKey!);
+      // Encode the public data if it contains new line characters
+      if (updateVerbBuilder.value.contains('\n')) {
+        updateVerbBuilder.value =
+            base64Encode(utf8.encode(updateVerbBuilder.value));
+        updateVerbBuilder.isEncoded = true;
+      }
     }
 
     return updateVerbBuilder;

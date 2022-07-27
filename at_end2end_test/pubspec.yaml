@@ -10,18 +10,22 @@ dependencies:
   at_client:
     path: ../at_client
 
-#dependency_overrides:
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: sec_socket_util
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_commons
+      ref: encode_public_data
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_persistence/at_persistence_spec
+      ref: encode_public_data
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_secondary/at_persistence_secondary_server
+      ref: encode_public_data
 
 dev_dependencies:
   pedantic: ^1.10.0

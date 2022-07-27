@@ -491,7 +491,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         var metaData =
             await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
         if (metaData != null) {
-          key = '$key$_metadataToString(metaData)';
+          key = '$key${_metadataToString(metaData)}';
         }
         command = 'update:meta:$key';
         break;
@@ -537,6 +537,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       if (metadata.pubKeyCS != null) {
         metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
+      }
+      if (metadata.isEncoded != null) {
+        metadataStr += ':isEncoded:${metadata.isEncoded}';
       }
     } on NoSuchMethodError {
       // ignore for uncommitted entries added before shared key metadata version
@@ -711,6 +714,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       if (metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM] != null) {
         builder.pubKeyChecksum = metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
+      }
+      if (metaData[IS_ENCODED] != null) {
+        builder.isEncoded = metaData[IS_ENCODED];
       }
     }
   }

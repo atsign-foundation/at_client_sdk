@@ -32,32 +32,32 @@ dependencies:
   at_utils: ^3.0.10
   meta: ^1.7.0
 
-#dependency_overrides:
+dependency_overrides:
 #  at_lookup:
 #    git:
 #      url: https://github.com/atsign-foundation/at_libraries.git
 #      path: at_lookup
 #      ref: sec_socket_util
-#  at_persistence_spec:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_persistence/at_persistence_spec
-#      ref: trunk
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_persistence/at_persistence_spec
+      ref: encode_public_data
 #  at_utils:
 #    git:
 #      url: https://github.com/atsign-foundation/at_tools.git
 #      path: at_utils
 #      ref: trunk
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-#  at_persistence_secondary_server:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_secondary/at_persistence_secondary_server
-#      ref: trunk
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_commons
+      ref: encode_public_data
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: at_secondary/at_persistence_secondary_server
+      ref: encode_public_data
 #  at_lookup:
 #    git:
 #      url: https://github.com/atsign-foundation/at_libraries.git

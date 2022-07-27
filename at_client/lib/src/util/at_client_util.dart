@@ -104,6 +104,7 @@ class AtClientUtil {
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
     metadata.sharedKeyEnc = metadataMap[SHARED_KEY_ENCRYPTED];
     metadata.pubKeyCS = metadataMap[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
+    metadata.isEncoded = (metadataMap[IS_ENCODED] != null) ? metadataMap[IS_ENCODED] : false;
     if (isPublic!) {
       metadata.isPublic = isPublic;
     }

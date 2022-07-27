@@ -29,7 +29,6 @@ import 'package:at_client/src/transformer/response_transformer/put_response_tran
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_commons/at_builders.dart';
@@ -259,7 +258,7 @@ class AtClientImpl implements AtClient {
         ..one = atKey
         ..two = (getResponse);
       // Transform the response and return
-      var atValue = await GetResponseTransformer().transform(getResponseTuple);
+      var atValue = await GetResponseTransformer(this).transform(getResponseTuple);
       return atValue;
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)

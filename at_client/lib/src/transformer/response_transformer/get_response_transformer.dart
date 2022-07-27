@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
-import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -15,6 +16,10 @@ import 'package:at_commons/at_commons.dart';
 /// Decodes the binary data and decrypts the encrypted data
 class GetResponseTransformer
     implements Transformer<Tuple<AtKey, String>, AtValue> {
+  late final AtClient _atClient;
+
+  GetResponseTransformer(this._atClient);
+
   @override
   FutureOr<AtValue> transform(Tuple<AtKey, String> tuple) async {
     var atValue = AtValue();
@@ -34,8 +39,8 @@ class GetResponseTransformer
     // Decrypt the data, for other keys
     if (!(decodedResponse['key'].startsWith('public:')) &&
         !(decodedResponse['key'].startsWith('cached:public:'))) {
-      var decryptionService = AtKeyDecryptionManager.get(tuple.one,
-          AtClientManager.getInstance().atClient.getCurrentAtSign()!);
+      var decryptionService =
+          AtKeyDecryptionManager.get(tuple.one, _atClient.getCurrentAtSign()!);
       try {
         atValue.value =
             await decryptionService.decrypt(tuple.one, atValue.value) as String;
@@ -44,6 +49,12 @@ class GetResponseTransformer
             ExceptionScenario.decryptionFailed, 'Failed to decrypt the data'));
         rethrow;
       }
+    }
+
+    if (((decodedResponse['key'].startsWith('public:')) ||
+            (decodedResponse['key'].startsWith('cached:public:'))) &&
+        (atValue.metadata!.isEncoded)) {
+      atValue.value = utf8.decode(base64Decode(atValue.value));
     }
 
     // After decrypting the data, if data is binary, decode the data

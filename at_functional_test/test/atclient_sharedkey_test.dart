@@ -56,7 +56,7 @@ void main() {
     var metadata = await atClient.getMeta(phoneKey);
     expect(metadata?.sharedKeyEnc, isNotEmpty);
     expect(metadata?.pubKeyCS, isNotEmpty);
-  });
+  }, timeout: Timeout(Duration(minutes: 3)));
 }
 
 AtClientPreference getPreference(String atsign) {
