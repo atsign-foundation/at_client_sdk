@@ -17,6 +17,5 @@ export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/encryption_util.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_client/src/service/sync/sync_conflict.dart';
-export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_commons/at_commons.dart';
 
