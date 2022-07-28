@@ -502,17 +502,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         var key = entry.atKey;
         AtData value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
         var keyGen = '';
-        // If metadata.encoding is not empty, the value is encoded.
-        // When value is encoded, use update:json variant in update regex to
-        // send command to cloud secondary
-        if (value.metaData != null && value.metaData?.encoding != null) {
-          var updateParams = UpdateParams()
-            ..atKey = entry.atKey
-            ..metadata = metadataAdapter(value.metaData!)
-            ..value = value.data;
-          command = 'update:json:${jsonEncode(updateParams)}';
-          break;
-        }
         keyGen = _metadataToString(value.metaData);
         keyGen += ':$key';
         command = 'update$keyGen ${value.data}';
@@ -727,8 +716,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM] != null) {
         builder.pubKeyChecksum = metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
       }
-      if (metaData['encoding'] != null) {
-        builder.encoding = metaData['encoding'];
+      if (metaData[ENCODING] != null) {
+        builder.encoding = metaData[ENCODING];
       }
     }
   }

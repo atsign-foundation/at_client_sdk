@@ -105,7 +105,7 @@ class AtClientUtil {
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
     metadata.sharedKeyEnc = metadataMap[SHARED_KEY_ENCRYPTED];
     metadata.pubKeyCS = metadataMap[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
-    metadata.encoding = metadataMap['encoding'];
+    metadata.encoding = metadataMap[ENCODING];
     if (isPublic!) {
       metadata.isPublic = isPublic;
     }
@@ -138,7 +138,7 @@ class AtClientUtil {
 
   /// Converts the String representation of encodingType to [EncodingType]
   EncodingType atDecoderStringToEnum(String encodingType) {
-    if (encodingType == EncodingType.base64.toString()) {
+    if (encodingType == EncodingType.base64.toString().split('.')[1]) {
       return EncodingType.base64;
     }
     return EncodingType.base64;
