@@ -19,7 +19,7 @@ void main() {
     var inputToExpectedOutput = {
       'A test to verify public data with \n character is encoded': {
         'isNewLineCharPresentInOutput': false,
-        'encoding': 'EncodingType.base64',
+        'encoding': 'base64',
         'isDataSignaturePresent': true
       },
       'A test to verify public data without new line character is encoded': {
