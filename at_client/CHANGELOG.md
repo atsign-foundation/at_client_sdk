@@ -1,5 +1,6 @@
 ## 3.0.32
 - fix: while syncing keys from server to local if there is an issue syncing a key, continue syncing rest of the keys
+- [optional] Users can set SecureSocket's securityContext and store current session TLS keys through AtClientPreferences
 ## 3.0.31
 - Enhance notify text to send text message encrypted
 - Upgrade at_persistence_secondary_server to v3.0.30
