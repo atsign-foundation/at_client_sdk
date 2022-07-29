@@ -1,5 +1,8 @@
 ## 3.0.32
 - fix: while syncing keys from server to local if there is an issue syncing a key, continue syncing rest of the keys
+- fix: do not sync statsNotificationID from client to server
+- feat: KeyStreams
+- fix: do not create new instance of CacheableSecondaryAddressFinder in at lookup 
 - [optional] Users can set SecureSocket's securityContext and store current session TLS keys through AtClientPreferences
 ## 3.0.31
 - Enhance notify text to send text message encrypted
