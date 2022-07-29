@@ -1,4 +1,4 @@
-name: demo
+name: example
 description: A new Flutter project.
 
 # The following line prevents the package from being accidentally published to
@@ -18,7 +18,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ">=2.15.0 <3.0.0"
+  sdk: ">=2.17.0 <3.0.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -38,7 +38,14 @@ dependencies:
   at_client: ^3.0.22
 
 
-#dependency_overrides:
+dependency_overrides:
+  at_client_mobile:
+    path: ../../at_client_mobile
+  at_onboarding_flutter:
+    git:
+      url: https://github.com/atsign-foundation/at_widgets.git
+      path: at_onboarding_flutter
+      ref: feature/on-boarding-3.0
 #  at_client:
 #    git:
 #      url: https://github.com/atsign-foundation/at_client_sdk.git
