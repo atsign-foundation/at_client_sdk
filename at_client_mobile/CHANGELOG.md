@@ -1,3 +1,5 @@
+## 3.2.0
+- Updated keychain data structure
 ## 3.1.19
 - at_client dependency upgraded to latest version v3.0.30
 - at_lookup dependency upgraded to latest version v3.0.27
