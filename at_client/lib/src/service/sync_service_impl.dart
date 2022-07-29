@@ -339,13 +339,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           } on Exception catch (e) {
             _logger.severe(
                 'exception while updating commit entry for entry:$entry ${e.toString()}');
-            return keyInfoList;
           }
         }
       } on Exception catch (e) {
         _logger.severe(
             'exception while syncing batch: ${e.toString()} batch commit entries: $unCommittedEntryList');
-        return keyInfoList;
       }
     }
     return keyInfoList;
@@ -386,7 +384,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         } on Exception catch (e) {
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - ${e.toString()}');
-          return keyInfoList;
         }
       }
       // assigning the lastSynced local commit id.
