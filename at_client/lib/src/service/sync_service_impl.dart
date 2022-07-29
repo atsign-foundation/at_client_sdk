@@ -339,7 +339,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           } on Exception catch (e) {
             _logger.severe(
                 'exception while updating commit entry for entry:$entry ${e.toString()}');
-            return keyInfoList;
           }
         }
       } on Exception catch (e) {
