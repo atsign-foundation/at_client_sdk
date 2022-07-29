@@ -344,7 +344,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       } on Exception catch (e) {
         _logger.severe(
             'exception while syncing batch: ${e.toString()} batch commit entries: $unCommittedEntryList');
-        return keyInfoList;
       }
     }
     return keyInfoList;
