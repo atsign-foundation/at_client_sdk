@@ -386,7 +386,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         } on Exception catch (e) {
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - ${e.toString()}');
-          return keyInfoList;
         }
       }
       // assigning the lastSynced local commit id.
