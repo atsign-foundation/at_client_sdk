@@ -31,7 +31,8 @@ class SetKeyStream<T> extends KeyStreamIterableBase<T, Set<T>>
     String? sharedWith,
     bool shouldGetKeys = true,
     String Function(AtKey key, AtValue value)? generateRef,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
+        onError,
     AtClientManager? atClientManager,
   }) : super(
           convert: convert,

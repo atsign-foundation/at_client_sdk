@@ -31,7 +31,8 @@ class MapKeyStream<K, V> extends KeyStreamMapBase<K, V, Map<K, V>>
     String? sharedWith,
     bool shouldGetKeys = true,
     String Function(AtKey key, AtValue value)? generateRef,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
+        onError,
     AtClientManager? atClientManager,
   }) : super(
           convert: convert,
@@ -47,4 +48,5 @@ class MapKeyStream<K, V> extends KeyStreamMapBase<K, V, Map<K, V>>
 }
 
 @visibleForTesting
-Map<K, V> castTo<K, V>(Iterable<MapEntry<K, V>> values) => Map.fromEntries(values);
+Map<K, V> castTo<K, V>(Iterable<MapEntry<K, V>> values) =>
+    Map.fromEntries(values);

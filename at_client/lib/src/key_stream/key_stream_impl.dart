@@ -26,7 +26,8 @@ class KeyStreamImpl<T> extends KeyStreamMixin<T?> implements KeyStream<T> {
     bool shouldGetKeys = true,
     String? sharedBy,
     String? sharedWith,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
+        onError,
     AtClientManager? atClientManager,
   }) : super(
           convert: convert,
