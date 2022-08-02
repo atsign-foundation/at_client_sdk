@@ -135,14 +135,6 @@ class AtClientUtil {
     }
     return atKey.key!;
   }
-
-  /// Converts the String representation of encodingType to [EncodingType]
-  EncodingType atDecoderStringToEnum(String encodingType) {
-    if (encodingType == EncodingType.base64.toString().split('.')[1]) {
-      return EncodingType.base64;
-    }
-    return EncodingType.base64;
-  }
 }
 
 class Tuple<T1, T2> {
@@ -162,4 +154,11 @@ extension NullCheck on String? {
   bool get isNull => _isNull();
 
   bool get isNotNull => !_isNull();
+}
+
+/// Parse [EncodingType] to String
+extension ParseEncodingTypeToString on EncodingType {
+  String toShortString() {
+    return toString().split('.').last;
+  }
 }

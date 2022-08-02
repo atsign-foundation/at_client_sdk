@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 
 /// An abstract class for encode of data
 abstract class AbstractAtDecoder<T, V> {
@@ -15,8 +16,8 @@ class AtBase64Decoder extends AbstractAtDecoder<String, String> {
 }
 
 class AtDecoderFactory {
-  AbstractAtDecoder get(EncodingType encodingType) {
-    if (encodingType == EncodingType.base64) {
+  AbstractAtDecoder get(String encodingTypeStr) {
+    if (encodingTypeStr == EncodingType.base64.toShortString()) {
       return AtBase64Decoder();
     }
     return AtBase64Decoder();
@@ -24,7 +25,7 @@ class AtDecoderFactory {
 }
 
 class AtDecoderImpl {
-  String decodeData(String value, EncodingType encodingType) {
-    return AtDecoderFactory().get(encodingType).decode(value);
+  String decodeData(String value, String encodingTypeStr) {
+    return AtDecoderFactory().get(encodingTypeStr).decode(value);
   }
 }

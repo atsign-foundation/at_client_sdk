@@ -52,7 +52,7 @@ class PutRequestTransformer
       if (updateVerbBuilder.value.contains('\n')) {
         updateVerbBuilder.value =
             AtEncoderImpl().encodeData(updateVerbBuilder.value, encodingType);
-        updateVerbBuilder.encoding = encodingType.toString().split('.')[1];
+        updateVerbBuilder.encoding = encodingType.toShortString();
       }
     }
 

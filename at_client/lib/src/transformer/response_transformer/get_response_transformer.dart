@@ -54,8 +54,8 @@ class GetResponseTransformer
     if (((decodedResponse['key'].startsWith('public:')) ||
             (decodedResponse['key'].startsWith('cached:public:'))) &&
         (atValue.metadata!.encoding.isNotNull)) {
-      atValue.value = AtDecoderImpl().decodeData(atValue.value,
-          AtClientUtil().atDecoderStringToEnum(atValue.metadata!.encoding!));
+      atValue.value = AtDecoderImpl()
+          .decodeData(atValue.value, atValue.metadata!.encoding!);
     }
 
     // After decrypting the data, if data is binary, decode the data
