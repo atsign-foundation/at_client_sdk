@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Move issue to "Triage"'
-        uses: leonsteinhaeuser/project-beta-automations@v1.2.1
+        uses: leonsteinhaeuser/project-beta-automations@v1.3.0
         with:
           gh_token: ${{ secrets.MY_GITHUB_TOKEN }}
           organization: atsign-foundation
