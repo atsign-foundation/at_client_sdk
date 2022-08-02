@@ -7,7 +7,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
-
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
   AtClient? _atClient;
