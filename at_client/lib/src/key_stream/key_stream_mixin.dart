@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart' show AtClient, AtClientManager, AtNotification;
+import 'package:at_client/at_client.dart'
+    show AtClient, AtClientManager, AtNotification;
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_commons/at_commons.dart' show AtException, AtKey, AtValue;
@@ -86,15 +87,18 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }) {
     _logger.finer('init Keystream: $this');
 
-    this.onError = onError ?? (Object e, [StackTrace? s]) => _logger.warning('Error in', e, s);
+    this.onError = onError ??
+        (Object e, [StackTrace? s]) => _logger.warning('Error in', e, s);
 
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
 
-    notificationSubscription =
-        _atClientManager.notificationService.subscribe(shouldDecrypt: true, regex: regex).listen(_notificationListener);
+    notificationSubscription = _atClientManager.notificationService
+        .subscribe(shouldDecrypt: true, regex: regex)
+        .listen(_notificationListener);
 
-    if (disposeOnAtsignChange) _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
+    if (disposeOnAtsignChange)
+      _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
   }
 
   /// A function that preloads this Stream with keys that match [regex], [sharedBy], and [sharedWith].
@@ -116,7 +120,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
           .then(
             // ignore: unnecessary_cast
             (AtValue value) {
-              _logger.finest('handleNotification key: $key, value: $value, operation: init');
+              _logger.finest(
+                  'handleNotification key: $key, value: $value, operation: init');
               handleNotification(key, value, 'init');
             } as void Function(AtValue),
           )
@@ -137,7 +142,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
         .then(
           // ignore: unnecessary_cast
           (AtValue value) {
-            _logger.finest('handleNotification key: $key, value: $value, operation: ${event.operation}');
+            _logger.finest(
+                'handleNotification key: $key, value: $value, operation: ${event.operation}');
             handleNotification(key, value, event.operation);
           } as void Function(AtValue),
         )
@@ -272,7 +278,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   Stream<T> asBroadcastStream(
       {void Function(StreamSubscription<T> subscription)? onListen,
       void Function(StreamSubscription<T> subscription)? onCancel}) {
-    return controller.stream.asBroadcastStream(onListen: onListen, onCancel: onCancel);
+    return controller.stream
+        .asBroadcastStream(onListen: onListen, onCancel: onCancel);
   }
 
   @override
@@ -339,7 +346,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   @override
-  Stream<T> handleError(Function onError, {bool Function(dynamic error)? test}) {
+  Stream<T> handleError(Function onError,
+      {bool Function(dynamic error)? test}) {
     return controller.stream.handleError(onError, test: test);
   }
 
@@ -368,7 +376,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   @override
   StreamSubscription<T> listen(void Function(T event)? onData,
       {Function? onError, void Function()? onDone, bool? cancelOnError}) {
-    return controller.stream.listen(onData, onError: onError, cancelOnError: cancelOnError);
+    return controller.stream
+        .listen(onData, onError: onError, cancelOnError: cancelOnError);
   }
 
   @override
@@ -415,7 +424,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   @override
-  Stream<T> timeout(Duration timeLimit, {void Function(EventSink<T> sink)? onTimeout}) {
+  Stream<T> timeout(Duration timeLimit,
+      {void Function(EventSink<T> sink)? onTimeout}) {
     return controller.stream.timeout(timeLimit, onTimeout: onTimeout);
   }
 

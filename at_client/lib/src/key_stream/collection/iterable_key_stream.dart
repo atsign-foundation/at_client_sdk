@@ -32,7 +32,8 @@ class IterableKeyStream<T> extends KeyStreamIterableBase<T, Iterable<T>>
     String? sharedWith,
     bool shouldGetKeys = true,
     String Function(AtKey key, AtValue value)? generateRef,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
+        onError,
     AtClientManager? atClientManager,
   }) : super(
           convert: convert,

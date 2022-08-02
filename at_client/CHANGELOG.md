@@ -1,3 +1,5 @@
+## 3.0.33
+- feat: Upgrade lints version to 2.0.0 
 ## 3.0.32
 - fix: while syncing keys from server to local if there is an issue syncing a key, continue syncing rest of the keys
 - fix: do not sync statsNotificationID from client to server

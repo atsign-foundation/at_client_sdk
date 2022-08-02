@@ -4,7 +4,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 import 'package:meta/meta.dart';
 
-class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> implements Stream<I> {
+class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I>
+    implements Stream<I> {
   @visibleForTesting
   final Map<String, T> store = {};
 
@@ -49,7 +50,8 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I> 
     String? sharedWith,
     String Function(AtKey key, AtValue value)? generateRef,
     I Function(Iterable<T> values)? castTo,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
+        onError,
     AtClientManager? atClientManager,
   })  : _generateRef = generateRef ?? ((key, value) => key.key ?? ''),
         _castTo = castTo ?? ((Iterable<T> values) => values as I),
