@@ -1,3 +1,5 @@
+## 3.2.1
+- feat: Upgrade lints version to 2.0.0
 ## 3.2.0
 - Updated keychain data structure
 ## 3.1.19
