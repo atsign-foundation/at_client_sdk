@@ -328,7 +328,7 @@ class AtClientService {
       return '';
     }
     atsign = atsign.trim().toLowerCase().replaceAll(' ', '');
-    atsign = !atsign.startsWith('@') ? '@' + atsign : atsign;
+    atsign = !atsign.startsWith('@') ? '@$atsign' : atsign;
     return atsign;
   }
 }
