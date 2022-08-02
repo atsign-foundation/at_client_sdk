@@ -342,7 +342,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
             _logger.severe(
                 'exception while updating commit entry for entry:$entry Reason: $cause');
-            return keyInfoList;
           }
         }
       } on Exception catch (e) {
@@ -391,7 +390,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - $cause');
-          return keyInfoList;
         }
       }
       // assigning the lastSynced local commit id.
