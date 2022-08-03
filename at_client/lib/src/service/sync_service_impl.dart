@@ -110,7 +110,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void sync({Function? onDone, Function? onError}) {
     final syncRequest = SyncRequest();
     syncRequest.onDone = onDone;
-    syncRequest.onError = onError;
     syncRequest.requestSource = SyncRequestSource.app;
     syncRequest.requestedOn = DateTime.now().toUtc();
     syncRequest.result = SyncResult();
