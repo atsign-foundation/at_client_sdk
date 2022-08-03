@@ -241,7 +241,7 @@ class AtClientImpl implements AtClient {
     Secondary? secondary;
     try {
       // validate the get request.
-      await AtClientValidation.validateAtKey(atKey);
+      await AtClientValidation().validateAtKey(atKey);
       // Get the verb builder for the atKey
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
@@ -797,7 +797,7 @@ class AtClientImpl implements AtClient {
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    await AtClientValidation.isAtSignExists(
+    await AtClientValidation().isAtSignExists(AtClientManager.getInstance().secondaryAddressFinder!,
         notificationParams.atKey.sharedWith!,
         _preference!.rootDomain,
         _preference!.rootPort);
@@ -851,7 +851,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager.get(
+          final atKeyEncryption = AtKeyEncryptionManager().get(
               notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
@@ -864,7 +864,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager.get(
+          final atKeyEncryption = AtKeyEncryptionManager().get(
               notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);

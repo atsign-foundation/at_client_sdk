@@ -154,7 +154,7 @@ void main() {
       ..metadata = Metadata();
     var value = 'New Jersey';
     var encryptionService =
-        AtKeyEncryptionManager.get(locationKey, currentAtSign);
+        AtKeyEncryptionManager().get(locationKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(locationKey, value);
     var result = await currentAtSignClientManager?.atClient
         .getRemoteSecondary()!

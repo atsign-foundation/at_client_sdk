@@ -159,7 +159,7 @@ void main() {
         await remoteSecondary.executeVerb(lookupVerbBuilder);
       } on AtException catch (e) {
         expect(e.getTraceMessage(),
-            'Failed to fetch data caused by\nConnection timeout');
+            'Failed to fetchData caused by\nConnection timeout');
       }
     });
   });
