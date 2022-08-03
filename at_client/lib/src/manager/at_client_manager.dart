@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -60,8 +59,8 @@ class AtClientManager {
         SwitchAtSignEvent(_previousAtClient, _currentAtClient);
     notificationService = await NotificationServiceImpl.create(_currentAtClient,
         atClientManager: this);
-    syncService =
-        await SyncServiceImpl.create(_currentAtClient, atClientManager: this);
+    syncService = await SyncServiceImpl.create(_currentAtClient,
+        atClientManager: this, notificationService: notificationService);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
     return this;

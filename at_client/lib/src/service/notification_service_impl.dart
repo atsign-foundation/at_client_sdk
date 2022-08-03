@@ -36,6 +36,7 @@ class NotificationServiceImpl
   dynamic _lastMonitorRetried;
   late AtClientManager _atClientManager;
   AtClientValidation atClientValidation = AtClientValidation();
+  AtKeyEncryptionManager atKeyEncryptionManager = AtKeyEncryptionManager();
 
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
@@ -209,10 +210,12 @@ class NotificationServiceImpl
       // Append '@' if not already set.
       AtUtils.formatAtSign(notificationParams.atKey.sharedBy!);
       // validate notification request
-      atClientValidation.validateNotificationRequest(
-          notificationParams, _atClient.getPreferences()!);
+      await atClientValidation.validateNotificationRequest(
+          _atClientManager.secondaryAddressFinder!,
+          notificationParams,
+          _atClient.getPreferences()!);
       // Get the EncryptionInstance to encrypt the data.
-      var atKeyEncryption = AtKeyEncryptionManager.get(
+      var atKeyEncryption = atKeyEncryptionManager.get(
           notificationParams.atKey, _atClient.getCurrentAtSign()!);
       // Get the NotifyVerbBuilder from NotificationParams
       var builder = await NotificationRequestTransformer(
@@ -231,7 +234,7 @@ class NotificationServiceImpl
       notificationResult.notificationStatusEnum =
           NotificationStatusEnum.undelivered;
       notificationResult.atClientException =
-          AtExceptionManager.createException(e) as AtClientException;
+          AtExceptionManager.createException(e);
       // Invoke onErrorCallback
       if (onError != null) {
         onError(notificationResult);
