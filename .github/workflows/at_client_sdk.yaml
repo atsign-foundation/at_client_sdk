@@ -137,6 +137,8 @@ jobs:
 
       # Logs into CICD VMs and runs script to update to the latest secondary image
       - name: update image on cicd VMs
+        # Needs a secret, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
         uses: appleboy/ssh-action@v0.1.5
         with:
           host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
@@ -147,9 +149,13 @@ jobs:
 
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
+        # Needs a secret, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
         run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
 
       # Run end-to-end test
       - name: End to end test
+        # Needs a secret, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: at_end2end_test
         run: dart test --concurrency=1
