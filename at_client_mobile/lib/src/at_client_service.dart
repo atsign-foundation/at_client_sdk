@@ -157,7 +157,7 @@ class AtClientService {
           .performInitialAuth(atsign, atClientPreference);
     }
     // Get privateKey from KeyChainManager.
-    atClientPreference.privateKey ??=
+    atClientPreference.privateKey =
         await _keyChainManager.getPkamPrivateKey(atsign);
     // If privatekey is null, authentication failed. return false.
     if (atClientPreference.privateKey == null) {
