@@ -87,13 +87,14 @@ abstract class NotificationService {
   ///   var notification = NotificationServiceImpl(atClient!);
   ///   await notification.notify(NotificationParams.forText('Hello','@bob'));
   ///```
-  Future<NotificationResult> notify(
-      NotificationParams notificationParams,
-      { bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
-        bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
-        Function(NotificationResult)? onSuccess,
-        Function(NotificationResult)? onError,
-        Function(NotificationResult)? onSentToSecondary});
+  Future<NotificationResult> notify(NotificationParams notificationParams,
+      {bool waitForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
+      Function(NotificationResult)? onSuccess,
+      Function(NotificationResult)? onError,
+      Function(NotificationResult)? onSentToSecondary});
 
   /// Stops all subscriptions on the current instance
   void stopAllSubscriptions();

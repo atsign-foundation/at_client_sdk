@@ -1,9 +1,13 @@
 import 'package:test/test.dart';
 
-import 'package:at_client/src/key_stream/collection/iterable_key_stream.dart' as _iterable;
-import 'package:at_client/src/key_stream/collection/list_key_stream.dart' as _list;
-import 'package:at_client/src/key_stream/collection/map_key_stream.dart' as _map;
-import 'package:at_client/src/key_stream/collection/set_key_stream.dart' as _set;
+import 'package:at_client/src/key_stream/collection/iterable_key_stream.dart'
+    as _iterable;
+import 'package:at_client/src/key_stream/collection/list_key_stream.dart'
+    as _list;
+import 'package:at_client/src/key_stream/collection/map_key_stream.dart'
+    as _map;
+import 'package:at_client/src/key_stream/collection/set_key_stream.dart'
+    as _set;
 
 void main() {
   group('A group of castTo tests', () {
@@ -42,7 +46,8 @@ void main() {
     });
 
     test('MapKeyStream castTo', () {
-      var iter = Iterable<MapEntry<String, int>>.generate(5, (i) => MapEntry(i.toString(), i));
+      var iter = Iterable<MapEntry<String, int>>.generate(
+          5, (i) => MapEntry(i.toString(), i));
       Map<String, int> res = _map.castTo(iter);
       // Test that castTo contains the correct contents
       for (int i = 0; i < 5; i++) {

@@ -70,7 +70,6 @@ class AtClientPreference {
 
   ///[OptionalParameter] path to trusted certificates. Required to create security context.
   String? pathToCerts;
-
 }
 
 @Deprecated("Use SyncService")
