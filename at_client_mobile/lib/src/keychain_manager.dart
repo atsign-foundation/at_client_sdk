@@ -31,7 +31,7 @@ class KeyChainManager {
     try {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
       final value = await store.read();
-      final json = jsonDecode(value ?? '');
+      final json = jsonDecode(value ?? '{}');
       if (json is Map<String, dynamic>) {
         return AtClientData.fromJson(json);
       }
@@ -152,13 +152,13 @@ class KeyChainManager {
         try {
           final data =
               await (await BiometricStorage().getStorage('@atsign')).read();
-          keysFromBiometric = jsonDecode(data ?? '');
+          keysFromBiometric = jsonDecode(data ?? '{}');
         } catch (e, s) {
           _logger.warning('Read keys from BiometricStorage', e, s);
         }
         try {
           final data = await FlutterKeychain.get(key: '@atsign');
-          keysFromKeychain = jsonDecode(data ?? '');
+          keysFromKeychain = jsonDecode(data ?? '{}');
         } catch (e, s) {
           _logger.warning('Read keys from FlutterKeychain', e, s);
         }
