@@ -48,12 +48,12 @@ class RemoteSecondary implements Secondary {
       return verbResult;
     } on AtException catch (e) {
       throw e
-        ..stack(AtChainedException(Intent.fetchData,
+        ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
       var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
       throw exception
-        ..stack(AtChainedException(Intent.fetchData,
+        ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, exception.message));
     }
   }
@@ -166,5 +166,18 @@ class RemoteSecondary implements Secondary {
       String command, Function notificationCallBack, String privateKey) async {
     logger.info('auto restarting monitor');
     await monitor(command, notificationCallBack, privateKey);
+  }
+
+  Intent _getIntent(VerbBuilder builder) {
+    if (builder is NotifyVerbBuilder) {
+      return Intent.notifyData;
+    }
+    if (builder is UpdateVerbBuilder) {
+      return Intent.shareData;
+    }
+    if (builder is SyncVerbBuilder) {
+      return Intent.syncData;
+    }
+    return Intent.fetchData;
   }
 }

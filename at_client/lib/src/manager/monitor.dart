@@ -401,7 +401,7 @@ enum MonitorStatus { notStarted, started, stopped, errored }
 
 class MonitorConnectivityChecker {
   Future<void> checkConnectivity(RemoteSecondary remoteSecondary) async {
-    if (!(await NetworkUtil.isNetworkAvailable())) {
+    if (!(await NetworkUtil().isNetworkAvailable())) {
       throw AtConnectException(
           'Monitor connectivity checker: Internet connection unavailable');
     }

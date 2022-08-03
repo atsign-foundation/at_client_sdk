@@ -88,7 +88,7 @@ void main() {
         ..sharedWith = '@bob'
         ..sharedBy = '@alice';
 
-      var encryptionService = AtKeyEncryptionManager.get(atKey, currentAtSign);
+      var encryptionService = AtKeyEncryptionManager().get(atKey, currentAtSign);
       expect(encryptionService, isA<SharedKeyEncryption>());
     });
 
@@ -100,7 +100,7 @@ void main() {
         ..sharedBy = '@alice'
         ..metadata = Metadata();
 
-      var encryptionService = AtKeyEncryptionManager.get(atKey, currentAtSign);
+      var encryptionService = AtKeyEncryptionManager().get(atKey, currentAtSign);
       expect(encryptionService, isA<SelfKeyEncryption>());
     });
   });
@@ -116,7 +116,7 @@ void main() {
         ..metadata = (Metadata()..isPublic = false);
       var value = 918078908676;
 
-      var encryptionService = AtKeyEncryptionManager.get(atKey, currentAtSign);
+      var encryptionService = AtKeyEncryptionManager().get(atKey, currentAtSign);
 
       expect(
           () => encryptionService.encrypt(atKey, value),

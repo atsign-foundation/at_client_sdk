@@ -1,21 +1,17 @@
-import 'dart:convert';
-
-import 'package:at_client/src/client/at_client_impl.dart';
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/request_options.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/response/at_notification.dart' as at_notification;
-import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
-import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_commons/at_builders.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart';
+import 'package:at_client/src/response/at_notification.dart' as at_notification;
+import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 
 class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
 
@@ -28,24 +24,6 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   @override
   String? getCurrentAtSign() {
     return '@alice';
-  }
-
-  var atKey = AtKey.fromString('_latestNotificationIdv2.wavi@alice');
-
-  @override
-  Future<AtValue> get(atKey,
-      {GetRequestOptions? getRequestOptions, bool isDedicated = false}) async {
-    var atNotificationMap = at_notification.AtNotification(
-            '123',
-            '@bob:phone@alice',
-            '@bob',
-            '@alice',
-            DateTime.now().millisecondsSinceEpoch,
-            'MessageType.key',
-            false)
-        .toJson();
-    AtValue atValue = AtValue()..value = jsonEncode(atNotificationMap);
-    return atValue;
   }
 }
 
@@ -66,7 +44,11 @@ class MockMonitor extends Mock implements Monitor {
   }
 }
 
-class MockSharedKeyEncryption extends Mock implements SharedKeyEncryption {
+// Mock class without implementation to throw exceptions
+class MockSharedKeyEncryption extends Mock implements SharedKeyEncryption {}
+
+// Mock class with implementation to populate metadata on encrypting value
+class MockSharedKeyEncryptionImpl extends Mock implements SharedKeyEncryption {
   @override
   Future encrypt(AtKey atKey, value) async {
     //Set encryptionMetadata to atKey metadata
@@ -77,33 +59,39 @@ class MockSharedKeyEncryption extends Mock implements SharedKeyEncryption {
   }
 }
 
-class MockSharedKeyDecryption extends Mock implements SharedKeyDecryption {
-  @override
-  Future decrypt(AtKey atKey, encryptedValue) async {
-    return 'decryptedValue';
-  }
-}
+class MockSharedKeyDecryption extends Mock implements SharedKeyDecryption {}
+
+class MockAtClientManager extends Mock implements AtClientManager {}
+
+class MockSecondaryAddressFinder extends Mock
+    implements SecondaryAddressFinder {}
+
+class MockAtKeyEncryptionManager extends Mock
+    implements AtKeyEncryptionManager {}
+
+class MockAtLookupImpl extends Mock implements AtLookupImpl {}
+
+class FakeNotifyVerbBuilder extends Fake implements NotifyVerbBuilder {}
+
+class FakeAtKey extends Fake implements AtKey {}
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  LocalSecondary mockLocalSecondary = MockLocalSecondary();
-  SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
-  SharedKeyEncryption mockSharedKeyEncryption = MockSharedKeyEncryption();
   SharedKeyDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
+  AtClientManager mockAtClientManager = MockAtClientManager();
+  Monitor mockMonitor = MockMonitor();
+  SecondaryAddressFinder mockSecondaryAddressFinder =
+      MockSecondaryAddressFinder();
+  AtKeyEncryptionManager mockAtKeyEncryptionManager =
+      MockAtKeyEncryptionManager();
+  AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
 
-  setUp(() {
-    registerFallbackValue(AtKey());
-    when(() => mockAtClientImpl.getLocalSecondary())
-        .thenAnswer((_) => mockLocalSecondary);
-
-    when(() => mockLocalSecondary.keyStore)
-        .thenAnswer((_) => mockSecondaryKeyStore);
-
-    when(() => mockSecondaryKeyStore.isKeyExists(
-        '_latestNotificationIdv2.wavi@alice')).thenAnswer((_) => true);
-  });
-
-  group('a group of test to validate notification request processor', () {
+  group('A group of test to validate notification request processor', () {
+    var value = '+91908909933';
+    late SharedKeyEncryption mockSharedKeyEncryptionImpl;
+    setUp(() {
+      mockSharedKeyEncryptionImpl = MockSharedKeyEncryptionImpl();
+    });
     test(
         'A test to validate notification request without value return verb builder',
         () async {
@@ -126,9 +114,11 @@ void main() {
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
               .build(),
-          value: '+91908909933');
-      var notifyVerbBuilder = await NotificationRequestTransformer('@alice',
-              AtClientPreference()..namespace = 'wavi', mockSharedKeyEncryption)
+          value: value);
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
       expect(notifyVerbBuilder.atKey, 'phone.wavi');
       expect(notifyVerbBuilder.sharedWith, '@bob');
@@ -145,8 +135,10 @@ void main() {
         () async {
       var notificationParams =
           NotificationParams.forText('Hi How are you', '@bob');
-      var notifyVerbBuilder = await NotificationRequestTransformer('@alice',
-              AtClientPreference()..namespace = 'wavi', mockSharedKeyEncryption)
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
       expect(notifyVerbBuilder.atKey, 'Hi How are you');
       expect(notifyVerbBuilder.sharedWith, '@bob');
@@ -161,8 +153,10 @@ void main() {
       var notificationParams = NotificationParams.forText(
           'Hi How are you', '@bob',
           shouldEncrypt: true);
-      var notifyVerbBuilder = await NotificationRequestTransformer('@alice',
-              AtClientPreference()..namespace = 'wavi', mockSharedKeyEncryption)
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
       expect(notifyVerbBuilder.atKey, 'encryptedValue');
       expect(notifyVerbBuilder.sharedWith, '@bob');
@@ -173,6 +167,11 @@ void main() {
   });
 
   group('A group of test to validate notification response transformer', () {
+    setUp(() {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedValue'))
+          .thenAnswer((_) => Future.value('decryptedValue'));
+    });
     test(
         'A test to verify notification text is decrypted when isEncrypted is set to true',
         () async {
@@ -290,6 +289,96 @@ void main() {
             ..two = (NotificationConfig()..regex = '.*'));
       expect(transformedNotification.id, '124');
       expect(transformedNotification.key, 'key-1');
+    });
+  });
+
+  group('A group of tests to validate notification exception chaining', () {
+    late SharedKeyEncryption mockSharedKeyEncryption;
+    setUp(() {
+      mockSharedKeyEncryption = MockSharedKeyEncryption();
+    });
+    test('A test to validate exception chaining on encryption failure',
+        () async {
+      var currentAtSign = '@alice';
+      AtKey atKey =
+          (AtKey.shared('phone', namespace: 'wavi', sharedBy: currentAtSign)
+                ..sharedWith('@bob')
+                ..cache(1000, true))
+              .build();
+      var value = '91807876564';
+
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtKeyEncryptionManager.get(atKey, currentAtSign))
+          .thenAnswer((_) => mockSharedKeyEncryption);
+      when(() => mockSharedKeyEncryption.encrypt(atKey, value)).thenThrow(
+          AtPublicKeyNotFoundException(
+              'Failed to fetch public key of ${atKey.sharedWith}')
+            ..stack(AtChainedException(
+                Intent.shareData,
+                ExceptionScenario.keyNotFound,
+                'public:publickey@bob does not exist in keystore')));
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      notificationServiceImpl.atKeyEncryptionManager =
+          mockAtKeyEncryptionManager;
+
+      var notificationResult = await notificationServiceImpl.notify(
+          NotificationParams.forUpdate(atKey, value: value),
+          checkForFinalDeliveryStatus: false);
+      expect(notificationResult.atClientException,
+          isA<AtPublicKeyNotFoundException>());
+      expect(notificationResult.atClientException!.getTraceMessage(),
+          'Failed to notifyData caused by\nFailed to encrypt the data caused by\npublic:publickey@bob does not exist in keystore');
+    });
+
+    test('A test to verify exception from cloud secondary is chained',
+        () async {
+      var currentAtSign = '@alice';
+      AtKey atKey =
+          (AtKey.shared('phone', namespace: 'wavi', sharedBy: currentAtSign)
+                ..sharedWith('@bob')
+                ..cache(1000, true))
+              .build();
+      var value = '91807876564';
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtKeyEncryptionManager.get(atKey, currentAtSign))
+          .thenAnswer((_) => mockSharedKeyEncryption);
+      when(() => mockSharedKeyEncryption.encrypt(atKey, value))
+          .thenAnswer((_) => Future.value('encrypted_value'));
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any()))
+          .thenThrow(AtLookUpException('AT0013', 'Invalid syntax exception'));
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      notificationServiceImpl.atKeyEncryptionManager =
+          mockAtKeyEncryptionManager;
+
+      var notificationResult = await notificationServiceImpl.notify(
+          NotificationParams.forUpdate(atKey, value: value),
+          checkForFinalDeliveryStatus: false);
+      expect(notificationResult.atClientException, isA<AtClientException>());
+      expect(notificationResult.atClientException?.getTraceMessage(),
+          'Failed to notifyData caused by\nInvalid syntax exception');
+      expect(notificationResult.notificationStatusEnum,
+          NotificationStatusEnum.undelivered);
     });
   });
 }
