@@ -8,9 +8,7 @@ abstract class Transformer<T, V> {
   FutureOr<V> transform(T value);
 }
 
-
-abstract class RequestTransformer<T, V> extends  Transformer<T, V> {
+abstract class RequestTransformer<T, V> extends Transformer<T, V> {
   @override
   FutureOr<V> transform(T value, {RequestOptions? requestOptions});
 }
-

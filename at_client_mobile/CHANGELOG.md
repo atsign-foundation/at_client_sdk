@@ -1,3 +1,7 @@
+## 3.2.1
+- feat: Upgrade lints version to 2.0.0
+## 3.2.0
+- Updated keychain data structure
 ## 3.1.19
 - at_client dependency upgraded to latest version v3.0.30
 - at_lookup dependency upgraded to latest version v3.0.27
