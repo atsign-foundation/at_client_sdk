@@ -386,7 +386,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         ..limit = _atClient.getPreferences()!.syncPageLimit
         ..isPaginated = true;
       _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
-      List syncResponseJson;
+      List syncResponseJson = [];
       try {
         syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
             .parse(await _remoteSecondary.executeVerb(syncBuilder))
@@ -396,11 +396,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
         _logger.severe(
             'Exception occurred in fetching sync response : ${e.getTraceMessage()}');
-        rethrow;
       }
       _logger.finest('** syncResponse $syncResponseJson');
 
-      if (syncResponseJson == null || syncResponseJson.isEmpty) {
+      if (syncResponseJson.isEmpty) {
         _logger.finer(
             'sync response is empty: local commitID: $localCommitId server commitID: $serverCommitId');
         break;
