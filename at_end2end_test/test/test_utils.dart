@@ -41,25 +41,22 @@ class TestUtils {
           AT_ENCRYPTION_PRIVATE_KEY,
           AtCredentials
               .credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY]);
-      _logger.info('Encryption private key is set successfully $result');
+      _logger.info('Encryption private key $AT_ENCRYPTION_PRIVATE_KEY was set successfully. putValue() result: $result');
 
       // set encryption public key. should be synced
-      metadata.isPublic = true;
-      var atKey = AtKey()
-        ..key = 'publickey'
-        ..metadata = metadata;
-      result = await atClient.put(
-          atKey,
-          AtCredentials
-              .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
-      _logger.info('Encryption public key is set successfully $result');
+      var encryptionPublicKey = '$AT_ENCRYPTION_PUBLIC_KEY$atSign';
+      result = await atClient
+          .getLocalSecondary()!.putValue(
+            encryptionPublicKey,
+            AtCredentials.credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
+      _logger.info('Encryption public key $encryptionPublicKey was set successfully. putValue() result: $result');
 
       // set self encryption key
       result = await atClient.getLocalSecondary()!.putValue(
           AT_ENCRYPTION_SELF_KEY,
           AtCredentials
               .credentialsMap[atSign]![TestConstants.SELF_ENCRYPTION_KEY]);
-      _logger.info('Self encryption key is set successfully $result');
+      _logger.info('Self encryption key $AT_ENCRYPTION_SELF_KEY was set successfully. putValue() result: $result');
     } on Exception catch (e) {
       _logger.severe(e.toString());
     }
