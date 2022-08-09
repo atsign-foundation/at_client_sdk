@@ -15,7 +15,7 @@ void main() {
   setUpAll(() async {
     var preference = TestUtils.getPreference(currentAtSign);
     atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, 'me', preference);
+        .setCurrentAtSign(currentAtSign, 'wavi', preference);
     atClientManager.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(currentAtSign, preference);
@@ -24,7 +24,8 @@ void main() {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = sharedWithAtSign;
+      ..sharedWith = sharedWithAtSign
+      ..namespace = '.wavi';
     var value = '+1 100 200 300';
 
     var result = await atClientManager.notificationService
@@ -43,7 +44,8 @@ void main() {
     var lastNumber = Random().nextInt(30);
     var landlineKey = AtKey()
       ..key = 'landline'
-      ..sharedWith = sharedWithAtSign;
+      ..sharedWith = sharedWithAtSign
+      ..namespace = '.wavi';
     var value = '040-238989$lastNumber';
 
     var result = await atClientManager.notificationService
@@ -63,7 +65,8 @@ void main() {
       () async {
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = sharedWithAtSign;
+      ..sharedWith = sharedWithAtSign
+      ..namespace = '.wavi';
     var value = '+1 100 200 300';
     await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
@@ -72,7 +75,8 @@ void main() {
   test('notify deletion of a key to sharedWith atSign', () async {
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = sharedWithAtSign;
+      ..sharedWith = sharedWithAtSign
+      ..namespace = '.wavi';
     var notificationResult = await atClientManager.notificationService
         .notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult.notificationStatusEnum.toString(),
@@ -84,7 +88,8 @@ void main() {
   test('notify deletion of a key to sharedWith atSign - callback', () async {
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = '@bob🛠'
+      ..namespace = '.wavi';
     await atClientManager.notificationService.notify(
         NotificationParams.forDelete(phoneKey),
         onSuccess: onSuccessCallback);
@@ -122,36 +127,39 @@ void main() {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = sharedWithAtSign;
+      ..sharedWith = sharedWithAtSign
+      ..namespace = '.wavi';
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
     final notifyResult =
         await atClient.notify(phoneKey, value, OperationEnum.update);
     expect(notifyResult, true);
   });
-  test('notifyall - test deprecated method using notificationservice',
-      () async {
-    final bobAtSign = '@bob🛠';
-    final colinAtSign = '@colin🛠';
-    // phone.me@alice🛠
-    var shareWithList = []
-      ..add(bobAtSign)
-      ..add(colinAtSign);
-    var phoneKey = AtKey()
-      ..key = 'phone'
-      ..sharedWith = jsonEncode(shareWithList);
-    var value = '+1 100 200 300';
-    final atClient = atClientManager.atClient;
-    final notifyResult =
-        await atClient.notifyAll(phoneKey, value, OperationEnum.update);
-    expect(jsonDecode(notifyResult)[bobAtSign], true);
-    expect(jsonDecode(notifyResult)[colinAtSign], true);
-  });
+  // test('notifyall - test deprecated method using notificationservice',
+  //     () async {
+  //   final bobAtSign = '@bob🛠';
+  //   final colinAtSign = '@colin🛠';
+  //   // phone.me@alice🛠
+  //   var shareWithList = []
+  //     ..add(bobAtSign)
+  //     ..add(colinAtSign);
+  //   var phoneKey = AtKey()
+  //     ..key = 'phone'
+  //     ..sharedWith = jsonEncode(shareWithList)
+  //   ..namespace = '.wavi';
+  //   var value = '+1 100 200 300';
+  //   final atClient = atClientManager.atClient;
+  //   final notifyResult =
+  //       await atClient.notifyAll(phoneKey, value, OperationEnum.update);
+  //   expect(jsonDecode(notifyResult)['@bobAtSign'], true);
+  //   expect(jsonDecode(notifyResult)['@colinAtSign'], true);
+  // });
   test('notify check value decryption on receiver', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = sharedWithAtSign;
+      ..sharedWith = sharedWithAtSign
+    ..namespace = '.wavi';
     var value = '+1 100 200 300';
     await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
