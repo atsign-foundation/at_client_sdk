@@ -354,15 +354,15 @@ class KeyChainManager {
     return atsigns?.secret;
   }
 
-  /// Use [getValue]
-  @Deprecated("Use getValue")
+  /// Use [readAtsign]
+  @Deprecated("Use readAtsign function to get AtsignKey")
   Future<String?> getPrivateKeyFromKeyChain(String atsign) async {
     final atsigns = await readAtsign(name: atsign);
     return atsigns?.pkamPrivateKey;
   }
 
-  /// Use [getValue]
-  @Deprecated("Use getValue")
+  /// Use [readAtsign]
+  @Deprecated("Use readAtsign function to get AtsignKey")
   Future<String?> getPublicKeyFromKeyChain(String atsign) async {
     final atsigns = await readAtsign(name: atsign);
     return atsigns?.pkamPublicKey;
@@ -568,6 +568,40 @@ class KeyChainManager {
     } else {
       return false;
     }
+  }
+
+  /// Fetches the list of onboarded atsign saved in map datatype
+  Future<Map<String, bool?>> checkForValuesInFlutterKeychain() async {
+    return getAtsignsWithStatus();
+  }
+
+  /// Function to clear all entries from keychain
+  Future<void> clearKeychainEntries() async {
+    for (var element
+        in (await KeyChainManager.getInstance().getAtSignListFromKeychain())) {
+      await KeyChainManager.getInstance().deleteAtSignFromKeychain(element);
+    }
+  }
+
+  /// This function will removed
+  @Deprecated("This function will removed")
+  Future<BiometricStorageFile> getBiometricStorageFile(String key) async {
+    return await BiometricStorage().getStorage(key,
+        options: StorageFileInitOptions(
+          authenticationRequired: false,
+        ));
+  }
+
+  /// Function to get value for the key passed from keychain
+  @Deprecated("This function isn't working correctly for now")
+  Future<String?> getValue(String atsign, String key) async {
+    throw UnimplementedError();
+  }
+
+  /// Function to save value for the key passed to keychain
+  @Deprecated("This function isn't working correctly for now")
+  Future<String> putValue(String atsign, String key, String value) async {
+    throw UnimplementedError();
   }
 
   Future<BiometricStorageFile> _getAppStorage({
