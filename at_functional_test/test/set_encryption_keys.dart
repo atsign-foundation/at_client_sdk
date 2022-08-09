@@ -20,7 +20,6 @@ Future<void> setEncryptionKeys(
     print('Setting encryption private key: $result');
 
     // set encryption public key. should be synced
-    // set encryption public key. should be synced
     var encryptionPublicKey = '$AT_ENCRYPTION_PUBLIC_KEY$atsign';
     result = await atClient
         .getLocalSecondary()!.putValue(
