@@ -110,6 +110,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void sync({Function? onDone, Function? onError}) {
     final syncRequest = SyncRequest();
     syncRequest.onDone = onDone;
+    syncRequest.onError = onError;
     syncRequest.requestSource = SyncRequestSource.app;
     syncRequest.requestedOn = DateTime.now().toUtc();
     syncRequest.result = SyncResult();
@@ -602,7 +603,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return SyncUtil.isInSync(
           unCommittedEntries, serverCommitId, lastSyncedCommitId);
     } on Exception catch (e) {
-      _logger.severe('exception in isInSync ${e.toString()}');
+      var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+      _logger.severe('exception in isInSync $cause');
       throw AtClientException.message(e.toString());
     } finally {
       remoteSecondary.atLookUp.close();
