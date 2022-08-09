@@ -583,8 +583,9 @@ class KeyChainManager {
     }
   }
 
-  /// This function will removed
-  @Deprecated("This function will removed")
+  /// This function is deprecated and will be removed in upcoming version
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version")
   Future<BiometricStorageFile> getBiometricStorageFile(String key) async {
     return await BiometricStorage().getStorage(key,
         options: StorageFileInitOptions(
@@ -593,13 +594,15 @@ class KeyChainManager {
   }
 
   /// Function to get value for the key passed from keychain
-  @Deprecated("This function isn't working correctly for now")
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version")
   Future<String?> getValue(String atsign, String key) async {
     throw UnimplementedError();
   }
 
   /// Function to save value for the key passed to keychain
-  @Deprecated("This function isn't working correctly for now")
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version")
   Future<String> putValue(String atsign, String key, String value) async {
     throw UnimplementedError();
   }
