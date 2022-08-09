@@ -58,7 +58,8 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone$randomValue'
       ..sharedWith = sharedWithAtSign
-      ..metadata = (Metadata()..ttr = 60000);
+      ..metadata = (Metadata()..ttr = 60000)
+      ..namespace = 'e2etest';
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
