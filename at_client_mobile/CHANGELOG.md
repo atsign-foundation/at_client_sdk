@@ -1,3 +1,5 @@
+## 3.2.2
+- fix: Format Exception - ChunkedJsonParser.fail
 ## 3.2.1
 - feat: Upgrade lints version to 2.0.0
 ## 3.2.0
