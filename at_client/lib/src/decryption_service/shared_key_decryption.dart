@@ -68,8 +68,20 @@ class SharedKeyDecryption implements AtKeyDecryption {
           intent: Intent.fetchEncryptionPrivateKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    return EncryptionUtil.decryptValue(encryptedValue,
-        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey));
+    String decryptedValue = '';
+    try {
+      decryptedValue = EncryptionUtil.decryptValue(
+          encryptedValue,
+          EncryptionUtil.decryptKey(
+              encryptedSharedKey, currentAtSignPrivateKey));
+    } on AtKeyException catch (e) {
+      e.stack(AtChainedException(
+          Intent.decryptData,
+          ExceptionScenario.decryptionFailed,
+          'Failed to decrypt ${atKey.toString()}'));
+      rethrow;
+    }
+    return decryptedValue;
   }
 
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
