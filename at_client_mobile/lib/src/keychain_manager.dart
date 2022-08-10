@@ -349,9 +349,9 @@ class KeyChainManager {
   }
 
   /// Function to get atsign secret from keychain
-  Future<String?> getSecretFromKeychain(String atsign) async {
+  Future<String> getSecretFromKeychain(String atsign) async {
     final atsigns = await readAtsign(name: atsign);
-    return atsigns?.secret;
+    return atsigns?.secret ?? '';
   }
 
   /// Use [readAtsign]
@@ -557,7 +557,7 @@ class KeyChainManager {
   }
 
   /// Function to delete all values related to the atsign passed from keychain
-  Future<bool> resetAtSignFromKeychain({required String atsign}) async {
+  Future<bool> resetAtSignFromKeychain(String atsign) async {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
     atClientData?.keys.removeWhere((element) => element.atSign == atsign);
@@ -570,7 +570,9 @@ class KeyChainManager {
     }
   }
 
-  /// Fetches the list of onboarded atsign saved in map datatype
+  /// This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead")
   Future<Map<String, bool?>> checkForValuesInFlutterKeychain() async {
     return getAtsignsWithStatus();
   }
