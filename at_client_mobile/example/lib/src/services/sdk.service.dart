@@ -47,7 +47,7 @@ class ClientSdkService {
       AtValue? result = await _getAtClientForAtsign()!.get(atKey);
       return result.value;
     } on AtClientException catch (atClientExcep) {
-      _logger.severe('❌ AtClientException : ${atClientExcep.errorMessage}');
+      _logger.severe('❌ AtClientException : ${atClientExcep.message}');
       return null;
     } catch (e) {
       _logger.severe('❌ Exception : ${e.toString()}');
@@ -61,7 +61,7 @@ class ClientSdkService {
     try {
       return _getAtClientForAtsign()!.put(atKey, value);
     } on AtClientException catch (atClientExcep) {
-      _logger.severe('❌ AtClientException : ${atClientExcep.errorMessage}');
+      _logger.severe('❌ AtClientException : ${atClientExcep.message}');
       return false;
     } catch (e) {
       _logger.severe('❌ Exception : ${e.toString()}');
@@ -79,7 +79,7 @@ class ClientSdkService {
       }
       return false;
     } on AtClientException catch (atClientExcep) {
-      _logger.severe('❌ AtClientException : ${atClientExcep.errorMessage}');
+      _logger.severe('❌ AtClientException : ${atClientExcep.message}');
       return false;
     } catch (e) {
       _logger.severe('❌ Exception : ${e.toString()}');

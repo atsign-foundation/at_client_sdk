@@ -32,10 +32,12 @@ class EncryptionUtil {
       _logger
           .severe('Exception while decrypting value: ${e.toString()} $trace');
       throw AtKeyException(e.toString());
-    } on Error catch (e, trace) {
+    } on Error catch (e) {
       // Catching error since underlying decryption library may throw Error e.g corrupt pad block
-      _logger.severe('Error while decrypting value: ${e.toString()} $trace');
-      throw AtKeyException(e.toString());
+      _logger.severe('Error while decrypting value: ${e.toString()}');
+      throw AtKeyException(e.toString(),
+          intent: Intent.decryptData,
+          exceptionScenario: ExceptionScenario.decryptionFailed);
     }
   }
 

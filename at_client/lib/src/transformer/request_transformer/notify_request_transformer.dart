@@ -70,21 +70,27 @@ class NotificationRequestTransformer
 
   void _addMetadataToBuilder(
       NotifyVerbBuilder builder, NotificationParams notificationParams) {
-    builder.ttl = notificationParams.atKey.metadata!.ttl;
-    builder.ttb = notificationParams.atKey.metadata!.ttb;
-    builder.ttr = notificationParams.atKey.metadata!.ttr;
-    builder.ccd = notificationParams.atKey.metadata!.ccd;
+    builder.ttl = notificationParams.atKey.metadata?.ttl;
+    builder.ttb = notificationParams.atKey.metadata?.ttb;
+    builder.ttr = notificationParams.atKey.metadata?.ttr;
+    builder.ccd = notificationParams.atKey.metadata?.ccd;
     builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
     if (notificationParams.atKey.metadata!.isEncrypted != null) {
       builder.isTextMessageEncrypted =
           notificationParams.atKey.metadata!.isEncrypted!;
     }
     builder.sharedKeyEncrypted =
-        notificationParams.atKey.metadata!.sharedKeyEnc;
-    builder.pubKeyChecksum = notificationParams.atKey.metadata!.pubKeyCS;
+        notificationParams.atKey.metadata?.sharedKeyEnc;
+    builder.pubKeyChecksum = notificationParams.atKey.metadata?.pubKeyCS;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {
-    return await atKeyEncryption.encrypt(atKey, value);
+    try {
+      return await atKeyEncryption.encrypt(atKey, value);
+    } on AtException catch (e) {
+      e.stack(AtChainedException(Intent.notifyData,
+          ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
+      rethrow;
+    }
   }
 }

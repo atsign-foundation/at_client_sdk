@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io' as io;
-import 'package:demo/src/screens/home.dart';
-import 'package:demo/src/screens/login.dart';
+import 'package:example/src/screens/home.dart';
+import 'package:example/src/screens/login.dart';
 import 'package:flutter/material.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:path_provider/path_provider.dart'

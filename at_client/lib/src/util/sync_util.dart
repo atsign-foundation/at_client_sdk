@@ -21,7 +21,8 @@ class SyncUtil {
       var commitEntry, int commitId, String atSign) async {
     var commitLogInstance =
         await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
-    logger.finer('Updating commit log entry $commitEntry with commitId $commitId');
+    logger.finer(
+        'Updating commit log entry $commitEntry with commitId $commitId');
     await commitLogInstance?.update(commitEntry, commitId);
   }
 
@@ -112,7 +113,7 @@ class SyncUtil {
   static bool shouldSync(String key) {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
-        key.startsWith(AT_ENCRYPTION_PRIVATE_KEY)||
+        key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
         key.startsWith(statsNotificationId)) {
       return false;
     }

@@ -142,17 +142,21 @@ class NotificationServiceImpl
               jsonEncode(atNotification.toJson()));
         }
         _streamListeners.forEach((notificationConfig, streamController) async {
-          var transformedNotification =
-              await NotificationResponseTransformer().transform(Tuple()
-                ..one = atNotification
-                ..two = notificationConfig);
+          try {
+            var transformedNotification =
+                await NotificationResponseTransformer().transform(Tuple()
+                  ..one = atNotification
+                  ..two = notificationConfig);
 
-          if (notificationConfig.regex != emptyRegex) {
-            if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
+            if (notificationConfig.regex != emptyRegex) {
+              if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
+                streamController.add(transformedNotification);
+              }
+            } else {
               streamController.add(transformedNotification);
             }
-          } else {
-            streamController.add(transformedNotification);
+          } on AtException catch (e) {
+            _logger.severe(e.getTraceMessage());
           }
         });
       }
