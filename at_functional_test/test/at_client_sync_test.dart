@@ -19,8 +19,8 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     // Get server commit id before put operation
-    var serverCommitId = await SyncUtil.getLatestServerCommitId(
-        atClient.getRemoteSecondary()!, '');
+    var serverCommitId = await SyncUtil()
+        .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     print('serverCommitId before put method $serverCommitId');
     expect(serverCommitId != null, true);
     // twitter.me@alice🛠
@@ -33,8 +33,8 @@ void main() {
     // waiting for 15 seconds for sync to complete.
     await Future.delayed(Duration(seconds: 10));
     // Getting server commit id after put
-    var serverCommitIdAfterPut = await SyncUtil.getLatestServerCommitId(
-        atClient.getRemoteSecondary()!, '');
+    var serverCommitIdAfterPut = await SyncUtil()
+        .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     print('serverCommitId after put method $serverCommitIdAfterPut');
     // After sync successful, the serverCommitId after put should be greater
     // than server commit before put
@@ -65,7 +65,7 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     // Get local commit id before put operation
-    var localEntry = await SyncUtil.getLastSyncedEntry('', atSign: atSign);
+    var localEntry = await SyncUtil().getLastSyncedEntry('', atSign: atSign);
     print('localCommitId before put method ${localEntry?.commitId}');
     expect(localEntry?.commitId != null, true);
     // twitter.me@alice🛠
@@ -82,7 +82,7 @@ void main() {
     await Future.delayed(Duration(seconds: 10));
     // Getting server commit id after put
     var localEntryAfterSync =
-        await SyncUtil.getLastSyncedEntry('', atSign: atSign);
+        await SyncUtil().getLastSyncedEntry('', atSign: atSign);
     print('localCommitId after put method ${localEntryAfterSync?.commitId}');
     // After sync successful, the localCommitId after put should be greater
     // than localCommitId before put

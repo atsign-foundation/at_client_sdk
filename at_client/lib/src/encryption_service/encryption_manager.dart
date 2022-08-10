@@ -7,7 +7,7 @@ import 'package:at_commons/at_commons.dart';
 class AtKeyEncryptionManager {
   /// Accepts the [AtKey] and currentAtSign and returns the relevant
   /// [AtKeyEncryption] subclass.
-  static AtKeyEncryption get(AtKey atKey, String currentAtSign) {
+  AtKeyEncryption get(AtKey atKey, String currentAtSign) {
     // If atKey is sharedKey, return sharedKeyEncryption
     // Eg. @bob:phone.wavi@alice. and @alice is currentAtSign.
     // else returns SelfKeyEncryption.
