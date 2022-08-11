@@ -6,36 +6,39 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 
+/// Class contains all the util methods that perform CRUD operations on the commit log keystore.
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
 
-  static Future<CommitEntry?> getCommitEntry(
-      int sequenceNumber, String atSign) async {
-    var commitLogInstance =
-        await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
-    var commitEntry = await commitLogInstance?.getEntry(sequenceNumber);
+  AtCommitLog? atCommitLog;
+
+  SyncUtil({this.atCommitLog});
+
+  Future<CommitEntry?> getCommitEntry(int sequenceNumber, String atSign) async {
+    atCommitLog ??=
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+
+    var commitEntry = await atCommitLog?.getEntry(sequenceNumber);
     return commitEntry;
   }
 
-  static Future<void> updateCommitEntry(
+  Future<void> updateCommitEntry(
       var commitEntry, int commitId, String atSign) async {
-    var commitLogInstance =
-        await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
-    logger.finer(
-        'Updating commit log entry $commitEntry with commitId $commitId');
-    await commitLogInstance?.update(commitEntry, commitId);
+    atCommitLog ??=
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    await atCommitLog?.update(commitEntry, commitId);
   }
 
-  static Future<CommitEntry?> getLastSyncedEntry(String? regex,
+  Future<CommitEntry?> getLastSyncedEntry(String? regex,
       {required String atSign}) async {
-    var commitLogInstance =
+    atCommitLog ??=
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
 
     CommitEntry? lastEntry;
     if (regex != null) {
-      lastEntry = await commitLogInstance!.lastSyncedEntryWithRegex(regex);
+      lastEntry = await atCommitLog?.lastSyncedEntryWithRegex(regex);
     } else {
-      lastEntry = await commitLogInstance!.lastSyncedEntry();
+      lastEntry = await atCommitLog?.lastSyncedEntry();
     }
     return lastEntry;
   }
@@ -47,15 +50,15 @@ class SyncUtil {
     return entry;
   }
 
-  static Future<List<CommitEntry>> getChangesSinceLastCommit(
+  Future<List<CommitEntry>> getChangesSinceLastCommit(
       int? seqNum, String? regex,
       {required String atSign}) async {
-    var commitLogInstance =
-        await (AtCommitLogManagerImpl.getInstance().getCommitLog(atSign));
-    if (commitLogInstance == null) {
+    atCommitLog ??=
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    if (atCommitLog == null) {
       return [];
     }
-    return commitLogInstance.getChanges(seqNum, regex);
+    return atCommitLog!.getChanges(seqNum, regex);
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
@@ -77,7 +80,7 @@ class SyncUtil {
 
   /// throws [AtClientException] if there is an issue processing stats verb on server or
   /// server is not reachable
-  static Future<int?> getLatestServerCommitId(
+  Future<int?> getLatestServerCommitId(
       RemoteSecondary remoteSecondary, String? regex) async {
     int? commitId;
     var builder = StatsVerbBuilder()..statIds = '3';
@@ -98,7 +101,7 @@ class SyncUtil {
       throw AtClientException.message(
           'Unable to fetch latest server commit id: ${e.toString()}');
     }
-    result = result.replaceAll('data: ', '');
+    result = result.replaceAll('data:', '');
     var statsJson = JsonUtils.decodeJson(result);
     if (statsJson[0]['value'] != 'null') {
       commitId = int.parse(statsJson[0]['value']);
