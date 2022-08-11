@@ -10,12 +10,12 @@ dependencies:
   at_client:
     path: ../at_client
 
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: at_commons
-      ref: trunk
+#dependency_overrides:
+#  at_commons:
+#    git:
+#      url: https://github.com/atsign-foundation/at_tools.git
+#      path: at_commons
+#      ref: trunk
 #  at_lookup:
 #    git:
 #      url: https://github.com/atsign-foundation/at_libraries.git
@@ -23,7 +23,7 @@ dependency_overrides:
 #      ref: deprecate_find_secondary
 
 dev_dependencies:
-  test: ^1.17.2
-  lints: ^1.0.1
-  at_demo_data: ^0.0.3+1
-  coverage: ^1.0.3
+  test: ^1.21.4
+  lints: ^2.0.0
+  at_demo_data: ^1.0.0
+  coverage: ^1.5.0
