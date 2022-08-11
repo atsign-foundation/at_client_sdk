@@ -1,3 +1,5 @@
+## 3.2.3
+- fix: Deprecated keychain manager functions according to new keychain data structure. 
 ## 3.2.2
 - fix: Format Exception - ChunkedJsonParser.fail
 ## 3.2.1
