@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_client/src/response/at_notification.dart'
     as _at_notification;
 import 'package:at_client/src/service/sync/sync_request.dart';
@@ -158,8 +159,7 @@ void main() async {
   });
 
   group('A group of tests to validate exception chaining in sync service', () {
-    test('A test to validate server responds with AtTimeOutException',
-        () async {
+    test('A test to validate server responds with AtTimeOutException', () async {
       registerFallbackValue(FakeSyncVerbBuilder());
       var localCommitId = -1;
       when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) =>
@@ -181,17 +181,36 @@ void main() async {
                   ])}'));
 
       syncServiceImpl.networkUtil = mockNetworkUtil;
-      syncServiceImpl.sync(onError: onError);
-      syncServiceImpl.sync(onError: onError);
-      syncServiceImpl.sync(onError: onError);
+
+      // ignore: prefer_typing_uninitialized_variables
+      var actualSyncException;
+
+      var listener = MySyncProgressListener();
+      syncServiceImpl.addProgressListener(listener);
+      syncServiceImpl.sync(onError: (SyncResult syncResult) {
+        actualSyncException = syncResult.atClientException;
+      });
 
       await syncServiceImpl.processSyncRequests();
+
+      while (! listener.syncComplete) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
+
+      expect(actualSyncException, isA<AtClientException>());
+      expect(actualSyncException.getTraceMessage(),
+          'Failed to syncData caused by\nWaited for 10000 millis. No response after 90000');
     });
   });
 }
 
-void onError(SyncResult syncResult) {
-  expect(syncResult.atClientException, isA<AtClientException>());
-  expect(syncResult.atClientException!.getTraceMessage(),
-      'Failed to syncData caused by\nWaited for 10000 millis. No response after 90000');
+class MySyncProgressListener extends SyncProgressListener {
+  bool syncComplete = false;
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    if (syncProgress.syncStatus == SyncStatus.failure || syncProgress.syncStatus == SyncStatus.success) {
+      syncComplete = true;
+    }
+    return;
+  }
 }
