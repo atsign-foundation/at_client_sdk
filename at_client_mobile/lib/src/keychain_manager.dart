@@ -349,20 +349,20 @@ class KeyChainManager {
   }
 
   /// Function to get atsign secret from keychain
-  Future<String?> getSecretFromKeychain(String atsign) async {
+  Future<String> getSecretFromKeychain(String atsign) async {
     final atsigns = await readAtsign(name: atsign);
-    return atsigns?.secret;
+    return atsigns?.secret ?? '';
   }
 
-  /// Use [getValue]
-  @Deprecated("Use getValue")
+  /// Use [readAtsign]
+  @Deprecated("Use readAtsign function to get AtsignKey")
   Future<String?> getPrivateKeyFromKeyChain(String atsign) async {
     final atsigns = await readAtsign(name: atsign);
     return atsigns?.pkamPrivateKey;
   }
 
-  /// Use [getValue]
-  @Deprecated("Use getValue")
+  /// Use [readAtsign]
+  @Deprecated("Use readAtsign function to get AtsignKey")
   Future<String?> getPublicKeyFromKeyChain(String atsign) async {
     final atsigns = await readAtsign(name: atsign);
     return atsigns?.pkamPublicKey;
@@ -557,7 +557,7 @@ class KeyChainManager {
   }
 
   /// Function to delete all values related to the atsign passed from keychain
-  Future<bool> resetAtSignFromKeychain({required String atsign}) async {
+  Future<bool> resetAtSignFromKeychain(String atsign) async {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
     atClientData?.keys.removeWhere((element) => element.atSign == atsign);
@@ -568,6 +568,45 @@ class KeyChainManager {
     } else {
       return false;
     }
+  }
+
+  /// This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead")
+  Future<Map<String, bool?>> checkForValuesInFlutterKeychain() async {
+    return getAtsignsWithStatus();
+  }
+
+  /// Function to clear all entries from keychain
+  Future<void> clearKeychainEntries() async {
+    for (var element
+        in (await KeyChainManager.getInstance().getAtSignListFromKeychain())) {
+      await KeyChainManager.getInstance().deleteAtSignFromKeychain(element);
+    }
+  }
+
+  /// This function is deprecated and will be removed in upcoming version
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version")
+  Future<BiometricStorageFile> getBiometricStorageFile(String key) async {
+    return await BiometricStorage().getStorage(key,
+        options: StorageFileInitOptions(
+          authenticationRequired: false,
+        ));
+  }
+
+  /// Function to get value for the key passed from keychain
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version")
+  Future<String?> getValue(String atsign, String key) async {
+    throw UnimplementedError();
+  }
+
+  /// Function to save value for the key passed to keychain
+  @Deprecated(
+      "This function is deprecated and will be removed in upcoming version")
+  Future<String> putValue(String atsign, String key, String value) async {
+    throw UnimplementedError();
   }
 
   Future<BiometricStorageFile> _getAppStorage({
