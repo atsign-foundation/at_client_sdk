@@ -93,8 +93,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
 
-    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
-        () async {
+    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'), () async {
       try {
         await processSyncRequests();
       } on Exception catch (e, trace) {
@@ -396,6 +395,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
         _logger.severe(
             'Exception occurred in fetching sync response : ${e.getTraceMessage()}');
+        rethrow;
       }
       _logger.finest('** syncResponse $syncResponseJson');
 
