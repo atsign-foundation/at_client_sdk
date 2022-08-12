@@ -384,13 +384,18 @@ class AtClientImpl implements AtClient {
       atKey.namespace ??= preference?.namespace;
     }
     // validate the atKey
-    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
-    // KeyShare validation
+    // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
+    // * Setting enforceNamespace to true unless specifically set to false in the AtClientPreference
+    bool enforceNamespace = true;
+    if (preference != null && preference!.enforceNamespace == false) {
+      enforceNamespace = false;
+    }
     var validationResult = AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
           ..atSign = currentAtSign
-          ..validateOwnership = true);
+          ..validateOwnership = true
+          ..enforceNamespace = enforceNamespace);
     // If the validationResult.isValid is false, validation of AtKey failed.
     // throw AtClientException with failure reason.
     if (!validationResult.isValid) {

@@ -22,14 +22,14 @@ dependencies:
   http: ^0.13.3
   internet_connection_checker: ^0.0.1+2
   async: ^2.8.2
-  at_persistence_spec: ^2.0.6
-  at_persistence_secondary_server: ^3.0.30
-  at_lookup: ^3.0.28
+  at_persistence_spec: ^2.0.7
+  at_persistence_secondary_server: ^3.0.32
+  at_lookup: ^3.0.29
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.21
+  at_commons: ^3.0.23
   at_utils: ^3.0.10
-  meta: ^1.7.0
+  meta: ^1.8.0
 
 #dependency_overrides:
 #  at_commons:
@@ -65,8 +65,8 @@ dependencies:
 
 dev_dependencies:
   lints: ^2.0.0
-  test: ^1.17.2
-  at_demo_data: ^0.0.3+1
-  coverage: ^1.0.3
+  test: ^1.21.4
+  at_demo_data: ^1.0.0
+  coverage: ^1.5.0
   mocktail: ^0.3.0
-  dart_code_metrics: ^4.8.1
+  dart_code_metrics: ^4.17.0
