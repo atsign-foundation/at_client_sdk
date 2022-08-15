@@ -1,4 +1,4 @@
-## 3.0.33
+## 3.0.34
 * fix: Ensure _syncFromServer rethrows caught exceptions once it's handled the exception chaining
 * feat: Add enforceNamespace (default value true) to AtClientPreference
 ## 3.0.33
