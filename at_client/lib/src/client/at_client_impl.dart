@@ -29,7 +29,6 @@ import 'package:at_client/src/transformer/response_transformer/put_response_tran
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_commons/at_builders.dart';
@@ -92,6 +91,7 @@ class AtClientImpl implements AtClient {
 
   @Deprecated("Use [create]")
   AtClientImpl(
+      // ignore: no_leading_underscores_for_local_identifiers
       String _atSign, String? namespace, AtClientPreference preference) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
@@ -117,6 +117,7 @@ class AtClientImpl implements AtClient {
     return _atClientInstanceMap[currentAtSign];
   }
 
+  // ignore: no_leading_underscores_for_local_identifiers
   AtClientImpl._(String _atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
@@ -387,6 +388,7 @@ class AtClientImpl implements AtClient {
     // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
     // * Setting enforceNamespace to true unless specifically set to false in the AtClientPreference
     bool enforceNamespace = true;
+    // ignore: deprecated_member_use_from_same_package
     if (preference != null && preference!.enforceNamespace == false) {
       enforceNamespace = false;
     }
