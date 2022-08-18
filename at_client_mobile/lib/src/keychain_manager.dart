@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client_mobile/src/atsign_key.dart';
@@ -12,6 +13,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 const String _kDefaultKeystoreAccount = '@atsigns';
 const int _kDataSchemeVersion = 1;
+const int _kWindowSegmentDataLength =
+    2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
 /// Service to manage keychain entries. This includes saving the
 /// encryption keys and secret to keychain
@@ -30,7 +33,7 @@ class KeyChainManager {
       {bool useSharedStorage = false}) async {
     try {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
-      final value = await store.read();
+      final value = await _readDataFromStore(store: store);
       final json = jsonDecode(value ?? '{}');
       if (json is Map<String, dynamic>) {
         return AtClientData.fromJson(json);
@@ -637,7 +640,7 @@ class KeyChainManager {
     try {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
       final mapList = jsonEncode(data.toJson());
-      await store.write(mapList);
+      await _writeDataToStore(store: store, data: mapList);
       return true;
     } catch (e, s) {
       _logger.info('_saveClientData', e, s);
@@ -654,5 +657,77 @@ class KeyChainManager {
       result[element.atSign] = element.atSign == atClientData?.defaultAtsign;
     }
     return result;
+  }
+
+  /// The function write String data to BiometricStorageFile
+  /// If Platform is Windows, data will separated into segments before save. Because in Window, BiometricStorage limit the data length saved
+  Future<void> _writeDataToStore({
+    required BiometricStorageFile store,
+    required String data,
+  }) async {
+    if (Platform.isWindows) {
+      final dataList = _splitString(data, _kWindowSegmentDataLength);
+      await store.write(dataList.length.toString());
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      final packageName = packageInfo.packageName;
+
+      for (int i = 0; i < dataList.length; i++) {
+        final dataStore = await BiometricStorage().getStorage(
+          '${packageName}_data_$i',
+          options: StorageFileInitOptions(
+            authenticationRequired: false,
+          ),
+        );
+        await dataStore.write(dataList[i]);
+      }
+    } else {
+      await store.write(data);
+    }
+  }
+
+  /// The function read String data to BiometricStorageFile
+  Future<String?> _readDataFromStore({
+    required BiometricStorageFile store,
+  }) async {
+    if (Platform.isWindows) {
+      final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      final packageName = packageInfo.packageName;
+      final results = <String>[];
+      for (int i = 0; i < segmentCount; i++) {
+        final dataStore = await BiometricStorage().getStorage(
+          '${packageName}_data_$i',
+          options: StorageFileInitOptions(
+            authenticationRequired: false,
+          ),
+        );
+        results.add(await dataStore.read() ?? '');
+      }
+      return _combineString(results);
+    }
+    return await store.read();
+  }
+
+  /// The function separated a String to a list of segment String
+  /// Max length of segment is [segmentLength]
+  List<String> _splitString(String text, int segmentLength) {
+    int segmentCount = (text.length / segmentLength).ceil();
+    final result = <String>[];
+    for (int i = 0; i < segmentCount; i++) {
+      if (i == segmentCount - 1) {
+        result.add(text.substring(i * segmentLength, text.length));
+      } else {
+        result.add(text.substring(i * segmentLength, (i + 1) * segmentLength));
+      }
+    }
+    return result;
+  }
+
+  /// The function combine list of String to String
+  String? _combineString(List<String> texts) {
+    if (texts.isEmpty) {
+      return null;
+    }
+    return texts.join();
   }
 }
