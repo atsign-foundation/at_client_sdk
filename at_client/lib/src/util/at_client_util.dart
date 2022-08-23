@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
@@ -132,6 +131,13 @@ class AtClientUtil {
       return '${atKey.key}.${atClientPreference.namespace}';
     }
     return atKey.key!;
+  }
+
+  static String getVersion() {
+    var applicationConfiguration = ApplicationConfiguration('pubspec.yaml');
+    var yamlMap = applicationConfiguration.getYaml();
+    var version = yamlMap![VERSION];
+    return version;
   }
 }
 
