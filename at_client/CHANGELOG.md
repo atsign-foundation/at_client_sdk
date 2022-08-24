@@ -1,3 +1,12 @@
+## 3.0.36
+* Send clientConfig to the cloud secondary
+* Add metadata validation to the put request
+* Encode new line characters in the public data
+## 3.0.35
+* fix: Reverted dependency on 'meta' package to ^1.7.0 as flutter_test package requires 1.7.0 
+## 3.0.34
+* fix: Ensure _syncFromServer rethrows caught exceptions once it's handled the exception chaining
+* feat: Add enforceNamespace (default value true) to AtClientPreference
 ## 3.0.33
 - feat: Upgrade lints version to 2.0.0 
 ## 3.0.32
