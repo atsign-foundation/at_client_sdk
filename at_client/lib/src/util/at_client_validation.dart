@@ -119,6 +119,8 @@ class AtClientValidation {
             atClientPreference.namespace!.isEmpty)) {
       throw AtKeyException('namespace is mandatory');
     }
+    // validate metadata
+    validateMetadata(atKey.metadata);
   }
 
   Future<void> validateNotificationRequest(SecondaryAddressFinder secondaryAddressFinder,
