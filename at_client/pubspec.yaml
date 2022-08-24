@@ -1,6 +1,6 @@
 name: at_client
 description: The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the @protocol.
-version: 3.0.33
+version: 3.0.35
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/docs/
@@ -22,51 +22,19 @@ dependencies:
   http: ^0.13.3
   internet_connection_checker: ^0.0.1+2
   async: ^2.8.2
-  at_persistence_spec: ^2.0.6
-  at_persistence_secondary_server: ^3.0.30
-  at_lookup: ^3.0.28
+  at_persistence_spec: ^2.0.7
+  at_persistence_secondary_server: ^3.0.34
+  at_lookup: ^3.0.29
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.21
+  at_commons: ^3.0.24
   at_utils: ^3.0.10
   meta: ^1.7.0
 
-#dependency_overrides:
-#  at_commons:
-#     git:
-#       url: https://github.com/atsign-foundation/at_tools.git
-#       path: at_commons
-#       ref: trunk
-#  at_persistence_spec:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_persistence/at_persistence_spec
-#      ref: trunk
-#  at_utils:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_utils
-#      ref: trunk
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-#  at_persistence_secondary_server:
-#    git:
-#      url: https://github.com/atsign-foundation/at_server.git
-#      path: at_secondary/at_persistence_secondary_server
-#      ref: trunk
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: deprecate_find_secondary
-
 dev_dependencies:
   lints: ^2.0.0
-  test: ^1.17.2
-  at_demo_data: ^0.0.3+1
-  coverage: ^1.0.3
+  test: ^1.21.4
+  at_demo_data: ^1.0.0
+  coverage: ^1.5.0
   mocktail: ^0.3.0
-  dart_code_metrics: ^4.8.1
+  dart_code_metrics: ^4.17.0

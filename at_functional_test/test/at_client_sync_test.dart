@@ -48,7 +48,7 @@ void main() {
     var getResponse =
         await atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
     var transformedValue =
-        await GetResponseTransformer().transform(Tuple<AtKey, String>()
+        await GetResponseTransformer(atClient).transform(Tuple<AtKey, String>()
           ..one = twitterKey
           ..two = (getResponse));
     // Decrypting and verifying the value from the remote secondary
