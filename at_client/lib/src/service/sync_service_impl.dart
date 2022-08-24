@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -523,28 +524,26 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         var metaData =
             await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
         if (metaData != null) {
-          key = '$key$_metadataToString(metaData)';
+          key = '$key${_metadataToString(metaData)}';
         }
         command = 'update:meta:$key';
         break;
       case CommitOp.UPDATE_ALL:
         var key = entry.atKey;
-        var value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
-        var metaData =
-            await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
+        AtData value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
         var keyGen = '';
-        if (metaData != null) {
-          keyGen = _metadataToString(metaData);
-        }
+        keyGen = _metadataToString(value.metaData);
         keyGen += ':$key';
-        value?.metaData = metaData;
-        command = 'update$keyGen ${value?.data}';
+        command = 'update$keyGen ${value.data}';
         break;
     }
     return command;
   }
 
   String _metadataToString(dynamic metadata) {
+    if (metadata == null) {
+      return '';
+    }
     var metadataStr = '';
     if (metadata.ttl != null) metadataStr += ':ttl:${metadata.ttl}';
     if (metadata.ttb != null) metadataStr += ':ttb:${metadata.ttb}';
@@ -569,6 +568,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       if (metadata.pubKeyCS != null) {
         metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
+      }
+      if (metadata.encoding != null) {
+        metadataStr += ':encoding:${metadata.encoding}';
       }
     } on NoSuchMethodError {
       // ignore for uncommitted entries added before shared key metadata version
@@ -744,6 +746,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       if (metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM] != null) {
         builder.pubKeyChecksum = metaData[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
+      }
+      if (metaData[ENCODING] != null) {
+        builder.encoding = metaData[ENCODING];
       }
     }
   }

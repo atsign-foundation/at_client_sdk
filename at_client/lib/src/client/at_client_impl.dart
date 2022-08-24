@@ -260,7 +260,7 @@ class AtClientImpl implements AtClient {
         ..one = atKey
         ..two = (getResponse);
       // Transform the response and return
-      var atValue = await GetResponseTransformer().transform(getResponseTuple);
+      var atValue = await GetResponseTransformer(this).transform(getResponseTuple);
       return atValue;
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
