@@ -388,7 +388,7 @@ class KeychainUtil {
   }
 
   static Future<void> resetAtSignFromKeychain(String atsign) async {
-    await _keyChainManager.resetAtSignFromKeychain(atsign: atsign);
+    await _keyChainManager.resetAtSignFromKeychain(atsign);
   }
 
   static Future<void> deleteAtSignFromKeychain(String atsign) async {

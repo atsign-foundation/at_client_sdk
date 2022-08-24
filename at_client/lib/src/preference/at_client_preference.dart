@@ -70,6 +70,16 @@ class AtClientPreference {
 
   ///[OptionalParameter] path to trusted certificates. Required to create security context.
   String? pathToCerts;
+
+  // TODO Remove this in next major version
+  @Deprecated("namespace presence will become mandatory in next major version of the SDK")
+  /// [AtClient.put] uses this parameter to decide whether to check for presence of a namespace in the
+  /// string representation of the AtKey.
+  /// * When set to true, keys such as public:foo@alice or @bob:foo@alice will be rejected
+  /// because they do not have a namespace. But keys such as public:foo.bar@alice of @bob:foo.bar.baz.bash@alice will be accepted.
+  /// * When set to false keys such as public:foo@alice or @bob:foo@alice will not be rejected
+  /// * Defaults to true, as applications should always be placing keys within a namespace
+  bool enforceNamespace = true;
 }
 
 @Deprecated("Use SyncService")

@@ -1,8 +1,24 @@
+## 3.2.3+1
+- docs: Updated CHANGELOG with discontinue notice on versions 3.2.0 to 3.2.2.
+## 3.2.3
+- fix: Restored the Public API of KeyChainManager.
 ## 3.2.2
+**DO NOT USE**
+- This version has been discontinued due to unintended breaking changes in KeyChainManager.
+- Please use version constraint "^3.2.3" to ensure that you do not experience these issues.
+Changes:
 - fix: Format Exception - ChunkedJsonParser.fail
 ## 3.2.1
+**DO NOT USE**
+- This version has been discontinued due to unintended breaking changes in KeyChainManager.
+- Please use version constraint "^3.2.3" to ensure that you do not experience these issues.
+Changes:
 - feat: Upgrade lints version to 2.0.0
 ## 3.2.0
+**DO NOT USE**
+- This version has been discontinued due to unintended breaking changes in KeyChainManager.
+- Please use version constraint "^3.2.3" to ensure that you do not experience these issues.
+Changes:
 - Updated keychain data structure
 ## 3.1.19
 - at_client dependency upgraded to latest version v3.0.30
@@ -12,7 +28,7 @@
 - at_client version upgraded to 3.0.27
 ## 3.1.17
 - at_client version upgrade to v3.0.26 for AtException chaining
-- at_commons version upgrade to v3.0.17 for AtException hierarchy 
+- at_commons version upgrade to v3.0.17 for AtException hierarchy
 ## 3.1.16
 - at client version upgrade v3.0.25
 - at lookup version upgrade v3.0.24

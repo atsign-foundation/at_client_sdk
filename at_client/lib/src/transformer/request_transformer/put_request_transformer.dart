@@ -31,7 +31,7 @@ class PutRequestTransformer
     //Encrypt the data for non public keys
     if (!tuple.one.metadata!.isPublic!) {
       var encryptionService =
-          AtKeyEncryptionManager.get(tuple.one, _atClient.getCurrentAtSign()!);
+          AtKeyEncryptionManager().get(tuple.one, _atClient.getCurrentAtSign()!);
       try {
         updateVerbBuilder.value =
             await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);

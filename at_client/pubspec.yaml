@@ -1,6 +1,6 @@
 name: at_client
 description: The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the @protocol.
-version: 3.0.33
+version: 3.0.35
 repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://atsign.dev
 documentation: https://atsign.dev/docs/
@@ -33,8 +33,8 @@ dependencies:
 
 dev_dependencies:
   lints: ^2.0.0
-  test: ^1.17.2
-  at_demo_data: ^0.0.3+1
-  coverage: ^1.0.3
+  test: ^1.21.4
+  at_demo_data: ^1.0.0
+  coverage: ^1.5.0
   mocktail: ^0.3.0
-  dart_code_metrics: ^4.8.1
+  dart_code_metrics: ^4.17.0

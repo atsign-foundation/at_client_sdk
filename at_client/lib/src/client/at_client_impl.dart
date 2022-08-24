@@ -91,6 +91,7 @@ class AtClientImpl implements AtClient {
 
   @Deprecated("Use [create]")
   AtClientImpl(
+      // ignore: no_leading_underscores_for_local_identifiers
       String _atSign, String? namespace, AtClientPreference preference) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
@@ -116,6 +117,7 @@ class AtClientImpl implements AtClient {
     return _atClientInstanceMap[currentAtSign];
   }
 
+  // ignore: no_leading_underscores_for_local_identifiers
   AtClientImpl._(String _atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
@@ -240,7 +242,7 @@ class AtClientImpl implements AtClient {
     Secondary? secondary;
     try {
       // validate the get request.
-      await AtClientValidation.validateAtKey(atKey);
+      await AtClientValidation().validateAtKey(atKey);
       // Get the verb builder for the atKey
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
@@ -383,13 +385,19 @@ class AtClientImpl implements AtClient {
       atKey.namespace ??= preference?.namespace;
     }
     // validate the atKey
-    // Setting the validateOwnership to true to perform KeyOwnerShip validation and
-    // KeyShare validation
+    // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
+    // * Setting enforceNamespace to true unless specifically set to false in the AtClientPreference
+    bool enforceNamespace = true;
+    // ignore: deprecated_member_use_from_same_package
+    if (preference != null && preference!.enforceNamespace == false) {
+      enforceNamespace = false;
+    }
     var validationResult = AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
           ..atSign = currentAtSign
-          ..validateOwnership = true);
+          ..validateOwnership = true
+          ..enforceNamespace = enforceNamespace);
     // If the validationResult.isValid is false, validation of AtKey failed.
     // throw AtClientException with failure reason.
     if (!validationResult.isValid) {
@@ -796,7 +804,7 @@ class AtClientImpl implements AtClient {
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    await AtClientValidation.isAtSignExists(
+    await AtClientValidation().isAtSignExists(AtClientManager.getInstance().secondaryAddressFinder!,
         notificationParams.atKey.sharedWith!,
         _preference!.rootDomain,
         _preference!.rootPort);
@@ -850,7 +858,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager.get(
+          final atKeyEncryption = AtKeyEncryptionManager().get(
               notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
@@ -863,7 +871,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager.get(
+          final atKeyEncryption = AtKeyEncryptionManager().get(
               notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
