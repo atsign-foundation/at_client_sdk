@@ -419,6 +419,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - $cause');
+        } on Error catch(e) {
+          _logger.severe(
+              'error syncing entry to local $serverCommitEntry - ${e.toString()}');
         }
       }
       // assigning the lastSynced local commit id.
