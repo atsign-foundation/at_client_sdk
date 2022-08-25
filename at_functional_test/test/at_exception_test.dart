@@ -36,4 +36,10 @@ void main() {
     expect(() async => await atClient.get(key),
         throwsA(predicate((dynamic e) => e is AtClientException)));
   });
+
+   test('Verify empty atsign throws exception', () async {
+    var atSign = '';
+    expect(() async => await AtClientManager.getInstance().setCurrentAtSign(atSign, namespace, TestUtils.getPreference(currentAtSign)),
+        throwsA(predicate((dynamic e) => e is AtException)));
+  });
 }

@@ -46,6 +46,9 @@ class AtClientManager {
 
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference) async {
+      if(atSign.isEmpty) {
+        throw AtException('atSign cannot be empty', intent: Intent.validateAtSign, exceptionScenario: ExceptionScenario.invalidValueProvided);
+      }
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
     if (_previousAtClient != null &&
