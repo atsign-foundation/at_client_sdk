@@ -40,6 +40,6 @@ void main() {
    test('Verify empty atsign throws exception', () async {
     var atSign = '';
     expect(() async => await AtClientManager.getInstance().setCurrentAtSign(atSign, namespace, TestUtils.getPreference(currentAtSign)),
-        throwsA(predicate((dynamic e) => e is AtException)));
+        throwsA(predicate((dynamic e) => e is InvalidAtSignException)));
   });
 }
