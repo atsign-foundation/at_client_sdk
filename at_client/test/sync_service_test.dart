@@ -159,7 +159,8 @@ void main() async {
   });
 
   group('A group of tests to validate exception chaining in sync service', () {
-    test('A test to validate server responds with AtTimeOutException', () async {
+    test('A test to validate server responds with AtTimeOutException',
+        () async {
       registerFallbackValue(FakeSyncVerbBuilder());
       var localCommitId = -1;
       when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) =>
@@ -193,7 +194,7 @@ void main() async {
 
       await syncServiceImpl.processSyncRequests();
 
-      while (! listener.syncComplete) {
+      while (!listener.syncComplete) {
         await Future.delayed(Duration(milliseconds: 10));
       }
 
@@ -210,7 +211,38 @@ void main() async {
       registerFallbackValue(FakeUpdateVerbBuilder());
 
       when(() => mockRemoteSecondary.executeVerb(any()))
-          .thenAnswer((_) => Future.value('data: { "atKey":"public:twitter.wavi@alice","value": "twitter.alice",  "metadata": {  "createdAt": "2021-04-08 12:59:19.251"  "updatedAt": "2021-04-08 12:59:19.251"},  "commitId": 1,  "operation": "+"}'));
+          .thenAnswer((_) => Future.value('data:${jsonEncode([
+                    {
+                      "atKey": "public:twitter.wavi@alice",
+                      "value": "twitter.alice",
+                      "metadata": {
+                        "createdAt": "2021-04-08 12:59:19.251",
+                        "updatedAt": "2021-04-08 12:59:19.251"
+                      },
+                      "commitId": 1,
+                      "operation": "+"
+                    },
+                    {
+                      "atKey": "public:insta.buzz@alice",
+                      "value": "insta_buzz",
+                      "metadata": {
+                        "createdAt": "2021-04-08 07:39:27.616Z",
+                        "updatedAt": "2022-06-30 09:41:59.264Z"
+                      },
+                      "commitId": '2', //invalid data type
+                      "operation": "*"
+                    },
+                    {
+                      "atKey": "public:instagram.wavi@alice",
+                      "value": "instagram.alice",
+                      "metadata": {
+                        "createdAt": "2021-04-08 07:39:27.616Z",
+                        "updatedAt": "2022-06-30 09:41:59.264Z"
+                      },
+                      "commitId": 3,
+                      "operation": "*"
+                    }
+                  ])}'));
 
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => mockLocalSecondary);
@@ -230,8 +262,12 @@ void main() async {
       var serverCommitId = 2;
       var syncRequest = SyncRequest()..result = SyncResult();
       print('calling sync internal');
-      final syncResult = await syncServiceImpl.syncInternal(serverCommitId, syncRequest);
-      print(syncResult.keyInfoList);
+      final syncResult =
+          await syncServiceImpl.syncInternal(serverCommitId, syncRequest);
+      expect(syncResult.keyInfoList, isNotEmpty);
+      expect(syncResult.keyInfoList.length, 2);
+      expect(syncResult.keyInfoList[0].key, 'public:twitter.wavi@alice');
+      expect(syncResult.keyInfoList[1].key, 'public:instagram.wavi@alice');
       mockCommitLogStore.clear();
     });
   });
@@ -241,7 +277,8 @@ class MySyncProgressListener extends SyncProgressListener {
   bool syncComplete = false;
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
-    if (syncProgress.syncStatus == SyncStatus.failure || syncProgress.syncStatus == SyncStatus.success) {
+    if (syncProgress.syncStatus == SyncStatus.failure ||
+        syncProgress.syncStatus == SyncStatus.success) {
       syncComplete = true;
     }
     return;
