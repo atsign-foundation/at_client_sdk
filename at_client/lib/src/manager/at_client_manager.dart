@@ -5,6 +5,7 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_utils.dart';
 
 /// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
 ///
@@ -46,6 +47,7 @@ class AtClientManager {
 
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference) async {
+    AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
     if (_previousAtClient != null &&
