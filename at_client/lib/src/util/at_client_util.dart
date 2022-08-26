@@ -132,13 +132,6 @@ class AtClientUtil {
     }
     return atKey.key!;
   }
-
-  static String getVersion() {
-    var applicationConfiguration = ApplicationConfiguration('pubspec.yaml');
-    var yamlMap = applicationConfiguration.getYaml();
-    var version = yamlMap![VERSION];
-    return version;
-  }
 }
 
 class Tuple<T1, T2> {
