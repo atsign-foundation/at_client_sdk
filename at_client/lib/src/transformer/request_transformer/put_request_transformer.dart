@@ -5,6 +5,7 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/encryption_service/signin_public_data.dart';
+import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
@@ -13,6 +14,9 @@ import 'package:at_utils/at_utils.dart';
 class PutRequestTransformer
     extends RequestTransformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   late final AtClient _atClient;
+
+  /// the default encoding when the value contains a new line character.
+  EncodingType encodingType = EncodingType.base64;
 
   PutRequestTransformer(this._atClient);
 
@@ -44,6 +48,12 @@ class PutRequestTransformer
       }
       updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
           updateVerbBuilder.value, encryptionPrivateKey!);
+      // Encode the public data if it contains new line characters
+      if (updateVerbBuilder.value.contains('\n')) {
+        updateVerbBuilder.value =
+            AtEncoderImpl().encodeData(updateVerbBuilder.value, encodingType);
+        updateVerbBuilder.encoding = encodingType.toShortString();
+      }
     }
 
     return updateVerbBuilder;

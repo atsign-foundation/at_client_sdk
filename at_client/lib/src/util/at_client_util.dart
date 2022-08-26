@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
@@ -103,6 +104,7 @@ class AtClientUtil {
     metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
     metadata.sharedKeyEnc = metadataMap[SHARED_KEY_ENCRYPTED];
     metadata.pubKeyCS = metadataMap[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
+    metadata.encoding = metadataMap[ENCODING];
     if (isPublic!) {
       metadata.isPublic = isPublic;
     }
@@ -151,4 +153,11 @@ extension NullCheck on String? {
   bool get isNull => _isNull();
 
   bool get isNotNull => !_isNull();
+}
+
+/// Parse [EncodingType] to String
+extension ParseEncodingTypeToString on EncodingType {
+  String toShortString() {
+    return toString().split('.').last;
+  }
 }
