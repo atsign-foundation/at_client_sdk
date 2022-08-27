@@ -170,7 +170,7 @@ jobs:
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
   end2end_test_14:
-    needs: [   end2end_tests ]
+    needs: [ end2end_tests ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -203,3 +203,32 @@ jobs:
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: at_end2end_test
         run: dart test --concurrency=1
+
+  # The job fetches the version from the pubspec.yaml and populates the version in
+  # [AtClientConfig]
+  update_client_version:
+    needs: [ unit_and_functional_tests ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dart-lang/setup-dart@v1.3
+        with:
+          sdk: stable
+
+      - name: Update version from pubspec.yaml
+        working-directory: at_client
+        run: |
+          dart pub get
+          sed -i "s/atClientVersion.*/atClientVersion = '$(dart run lib/src/util/fetch_version_number.dart)';/" lib/src/preference/at_client_config.dart
+          cat lib/src/preference/at_client_config.dart
+          echo $(git status)
+          if [ -z "$(git status --porcelain)" ]; then
+            git config --global user.name 'automated action'
+            git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+            git add lib/src/preference/at_client_config.dart
+            echo $(git status)
+            git commit -m 'build: automated version update'
+            echo $(git status)
+            echo $(git branch)
+            git push
+          fi

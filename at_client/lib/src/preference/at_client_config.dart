@@ -9,5 +9,8 @@ class AtClientConfig {
   }
 
   /// Represents the at_client version.
-  final String atClientVersion = '3.0.36';
+  /// The version number is updated here through the github actions (Refrain from updating the version manually).
+  /// workflow name: at_client_sdk
+  /// job name: update_client_version
+  String atClientVersion = '3.0.35';
 }
