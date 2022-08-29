@@ -1,3 +1,5 @@
+## 3.0.36
+* fix: setCurrentAtsign() throws an exception when an invalid atsign is passed. 
 ## 3.0.35
 * fix: Reverted dependency on 'meta' package to ^1.7.0 as flutter_test package requires 1.7.0 
 ## 3.0.34
