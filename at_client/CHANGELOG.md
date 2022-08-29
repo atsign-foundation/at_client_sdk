@@ -1,3 +1,9 @@
+## 3.0.36
+- fix: Add metadata validation to put request on client SDK  
+- feat: Encode new line characters in public-key value 
+- Added unit tests for sync failure
+- fix: Export SyncProgressListener to track the SyncProgress. 
+- fix: setCurrentAtsign() throws an exception when an invalid atsign is passed.
 ## 3.0.35
 * fix: Reverted dependency on 'meta' package to ^1.7.0 as flutter_test package requires 1.7.0 
 ## 3.0.34
