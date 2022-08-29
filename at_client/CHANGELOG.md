@@ -1,6 +1,6 @@
 ## 3.0.36
-- fix: add metadata validation to put request on client SDK  
-- feat: encode new line characters in public-key value 
+- fix: Add metadata validation to put request on client SDK  
+- feat: Encode new line characters in public-key value 
 - Added unit tests for sync failure
 - fix: Export SyncProgressListener to track the SyncProgress. 
 - fix: setCurrentAtsign() throws an exception when an invalid atsign is passed.
