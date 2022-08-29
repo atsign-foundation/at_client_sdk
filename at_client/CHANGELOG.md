@@ -1,7 +1,10 @@
 ## 3.0.36
-* Send clientConfig to the cloud secondary
-* Add metadata validation to the put request
-* Encode new line characters in the public data
+- fix: Add metadata validation to put request on client SDK  
+- fix: Added unit tests for sync failure
+- fix: Export SyncProgressListener to track the SyncProgress. 
+- fix: setCurrentAtsign() throws an exception when an invalid atsign is passed.
+- feat: Encode new line characters in public-key value
+- feat: Send clientConfig to the cloud secondary 
 ## 3.0.35
 * fix: Reverted dependency on 'meta' package to ^1.7.0 as flutter_test package requires 1.7.0 
 ## 3.0.34
