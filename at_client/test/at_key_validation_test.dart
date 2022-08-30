@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:test/test.dart';
 import 'package:at_commons/at_commons.dart';
@@ -26,5 +27,13 @@ void main() {
               e is AtKeyException &&
               e.message == 'Key cannot be null or empty')));
     });
+  });
+
+  test('Verify empty atsign throws exception', () async {
+    var atSign = '';
+    final namespace = 'test';
+    final preference = AtClientPreference();
+    expect(() async => await AtClientManager.getInstance().setCurrentAtSign(atSign, namespace, preference),
+        throwsA(predicate((dynamic e) => e is InvalidAtSignException)));
   });
 }

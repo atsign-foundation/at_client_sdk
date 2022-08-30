@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';

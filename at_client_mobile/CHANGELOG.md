@@ -1,3 +1,5 @@
+## 3.2.4
+- fix: fixed bug in windows keychain data storage.
 ## 3.2.3+1
 - docs: Updated CHANGELOG with discontinue notice on versions 3.2.0 to 3.2.2.
 ## 3.2.3
