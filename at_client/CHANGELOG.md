@@ -1,3 +1,5 @@
+## 3.0.37
+- fix: Revert sending client config changes to server
 ## 3.0.36
 - fix: Add metadata validation to put request on client SDK  
 - fix: Added unit tests for sync failure
