@@ -113,7 +113,7 @@ class NotificationParams {
   late PriorityEnum _priority;
   late StrategyEnum _strategy;
   final int _latestN = 1;
-  final String _notifier = SYSTEM;
+  String _notifier = SYSTEM;
 
   String get id => _id;
 
@@ -158,7 +158,9 @@ class NotificationParams {
 
   /// Returns [NotificationParams] to send a text message to another atSign.
   static NotificationParams forText(String text, String whomToNotify,
-      {bool shouldEncrypt = false}) {
+      {bool shouldEncrypt = false,
+      StrategyEnum strategyEnum = StrategyEnum.all,
+      String notifier = SYSTEM}) {
     var atKey = AtKey()
       ..key = text
       ..sharedWith = whomToNotify
@@ -169,7 +171,8 @@ class NotificationParams {
       .._operation = OperationEnum.update
       .._messageType = MessageTypeEnum.text
       .._priority = PriorityEnum.low
-      .._strategy = StrategyEnum.all;
+      .._strategy = strategyEnum
+      .._notifier = notifier;
   }
 }
 
