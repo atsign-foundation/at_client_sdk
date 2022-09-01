@@ -139,22 +139,48 @@ class AtClientService {
   Future<bool> authenticate(
       String atsign, AtClientPreference atClientPreference,
       {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
-    // If cramSecret is null, PKAMAuth is completed,
-    // decode the json data and add keys to KeyChainManager
+    /**
+     * The authentication is performed either by CRAM authentication or PKAM authentication
+     * 1. If AtClientPreference.cramSecret is populated, then atSign is considered as new atSign.
+     * So, perform CRAM auth and if successful, generate PKAM key-pair and encryption key-pair
+     * and store them into key-chain manager and return true, else false.
+     * 2. If AtClientPreference.privateKey is populated, then atSign is considered as existing atSign.
+     * So, first verify if .atKeys file provided have valid key-pair. Perform PKAM auth to validate the
+     * key-pair. If successful, store the keys into key-chain manager and return true, else false.
+     **/
     if (atClientPreference.cramSecret == null) {
       atsign = _formatAtSign(atsign);
       if (atsign.isEmpty) {
         return false;
       }
-      await _decodeAndStoreToKeychain(atsign, jsonData!, decryptKey!);
+      // If JSON data (encrypted keys from .atKeys file) or decrypt key is null or empty,
+      // cannot process authentication. Hence return false.
+      if ((jsonData == null || jsonData.isEmpty) ||
+          (decryptKey == null || decryptKey.isEmpty)) {
+        return false;
+      }
+      var decryptedAtKeysMap = _decodeAndDecryptKeys(jsonData, decryptKey);
+      // If validateAtKeys fail, UnAuthenticatedException is throws which is handled in
+      // the caller method.
+      await _validateAtKeys(
+          decryptedAtKeysMap[
+              BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE]!,
+          atsign,
+          atClientPreference);
+      //If atKeys are valid, store keys to keychain manager
+      await _storeToKeyChainManager(atsign, decryptedAtKeysMap);
     }
     // If cramSecret is not null and privateKey is null, pkam auth is not completed.
     // Perform initial auth to generate keys.
     if (atClientPreference.cramSecret != null &&
         atClientPreference.privateKey == null) {
       _atClientAuthenticator ??= AtClientAuthenticator();
-      await _atClientAuthenticator!
+      var isAuthenticated = await _atClientAuthenticator!
           .performInitialAuth(atsign, atClientPreference);
+      // If authentication is failed, return false.
+      if (!isAuthenticated) {
+        return isAuthenticated;
+      }
     }
     // Get privateKey from KeyChainManager.
     atClientPreference.privateKey ??=
@@ -177,9 +203,9 @@ class AtClientService {
     return true;
   }
 
-  ///Decodes the [jsonData] with [decryptKey] for [atsign] and stores it in keychain.
-  Future<void> _decodeAndStoreToKeychain(
-      String atsign, String jsonData, String decryptKey) async {
+  ///Decodes the [jsonData] with [decryptKey] and returns the original keys in a map
+  Map<String, String> _decodeAndDecryptKeys(
+      String jsonData, String decryptKey) {
     var extractedjsonData = jsonDecode(jsonData);
 
     var pkamPublicKey = EncryptionUtil.decryptValue(
@@ -189,8 +215,6 @@ class AtClientService {
     var pkamPrivateKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
         decryptKey);
-    await _keyChainManager.storePkamKeysToKeychain(atsign,
-        privateKey: pkamPrivateKey, publicKey: pkamPublicKey);
 
     var encryptionPublicKey = EncryptionUtil.decryptValue(
         extractedjsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
@@ -200,18 +224,52 @@ class AtClientService {
         extractedjsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
         decryptKey);
 
+    var atKeysMap = {
+      BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE: pkamPrivateKey,
+      BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE: pkamPublicKey,
+      BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE: encryptionPrivateKey,
+      BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE: encryptionPublicKey,
+      BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE: decryptKey
+    };
+    return atKeysMap;
+  }
+
+  /// Stores the atKeys to Key-Chain Manager.
+  Future<void> _storeToKeyChainManager(
+      String atsign, Map<String, String> atKeysMap) async {
+    await _keyChainManager.storePkamKeysToKeychain(atsign,
+        privateKey:
+            atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
+        publicKey: atKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]);
+
     var atSignItem = await _keyChainManager.readAtsign(name: atsign) ??
         AtsignKey(atSign: atsign);
     atSignItem = atSignItem.copyWith(
-      encryptionPrivateKey: encryptionPrivateKey,
-      encryptionPublicKey: encryptionPublicKey,
-      selfEncryptionKey: decryptKey,
+      encryptionPrivateKey:
+          atKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
+      encryptionPublicKey:
+          atKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
+      selfEncryptionKey:
+          atKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE],
     );
+
     await _keyChainManager.storeAtSign(atSign: atSignItem);
 
-    // Add atsign to the keychain.
+    // Add atSign to the keychain.
     await _keyChainManager.storeCredentialToKeychain(atsign,
-        privateKey: pkamPrivateKey, publicKey: pkamPublicKey);
+        privateKey:
+            atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
+        publicKey: atKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]);
+  }
+
+  /// Validates if the provided atKeys file is valid.
+  /// Performs PKAM auth on the cloud secondary.
+  /// If atKeys are valid returns true; else, returns false.
+  Future<bool> _validateAtKeys(String authenticateKey, String atSign,
+      AtClientPreference atClientPreference) async {
+    AtLookupImpl atLookup = AtLookupImpl(
+        atSign, atClientPreference.rootDomain, atClientPreference.rootPort);
+    return await atLookup.authenticate(authenticateKey);
   }
 
   Future<bool?> isUsingSharedStorage() async {
