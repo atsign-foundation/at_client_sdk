@@ -1,3 +1,5 @@
+## 3.2.5
+- fix: Fixed bug authenticate method returns true when invalid atKeys are supplied
 ## 3.2.4
 - fix: fixed bug in windows keychain data storage.
 ## 3.2.3+1
