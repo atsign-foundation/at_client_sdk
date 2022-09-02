@@ -16,7 +16,6 @@ on:
 jobs:
   unit_and_functional_tests:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
 
@@ -42,17 +41,17 @@ jobs:
         working-directory: at_client
         run: dart test --concurrency=1 --coverage="coverage"
 
-#     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
-#      - name: Convert coverage to LCOV format
-#        working-directory: at_client
-#        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
-#
-#      - name: Upload coverage to Codecov
-#        uses: codecov/codecov-action@v3.1.0
-#        with:
-#          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-#          file: at_client/coverage.lcov
-#          flags: unit_tests
+      #     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
+      #      - name: Convert coverage to LCOV format
+      #        working-directory: at_client
+      #        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
+      #
+      #      - name: Upload coverage to Codecov
+      #        uses: codecov/codecov-action@v3.1.0
+      #        with:
+      #          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
+      #          file: at_client/coverage.lcov
+      #          flags: unit_tests
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
@@ -83,17 +82,17 @@ jobs:
         working-directory: at_functional_test
         run: dart test --concurrency=1 --coverage="coverage"
 
-#     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
-#      - name: Convert coverage to LCOV format
-#        working-directory: at_functional_test
-#        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
-#
-#      - name: Upload coverage to Codecov
-#        uses: codecov/codecov-action@v3.1.0
-#        with:
-#          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-#          file: at_functional_test/coverage.lcov
-#          flags: functional_tests
+      #     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
+      #      - name: Convert coverage to LCOV format
+      #        working-directory: at_functional_test
+      #        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
+      #
+      #      - name: Upload coverage to Codecov
+      #        uses: codecov/codecov-action@v3.1.0
+      #        with:
+      #          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
+      #          file: at_functional_test/coverage.lcov
+      #          flags: functional_tests
 
       # Adding flutter to path
       - name: Installing Flutter
@@ -116,12 +115,29 @@ jobs:
         working-directory: at_functional_test/test
         run: docker-compose down
 
-  # The Job runs end2end tests
+  end2end_tests_prep:
+    # Don't run on PRs from a fork or Dependabot as the secrets aren't available
+    if: ${{ github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]'}}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: update image on cicd VMs
+        # Needs a secret, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
+          username: ubuntu
+          key: ${{ secrets.CICD_SSH_KEY }}
+          script: |
+            ./update_ce2e_images.sh
+
+  # The Job runs end-to-end tests between two atSign's running on server trunk branch
   end2end_tests:
+    needs: [ end2end_tests_prep ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-
       - uses: dart-lang/setup-dart@v1.3
         with:
           sdk: stable
@@ -135,23 +151,51 @@ jobs:
         working-directory: at_end2end_test
         run: dart pub get
 
-      # Logs into CICD VMs and runs script to update to the latest secondary image
-      - name: update image on cicd VMs
+      # Populate at_credentials.dart from CICD_DATA_DART secret
+      - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: appleboy/ssh-action@v0.1.5
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
+
+      # Move the config file in-place
+      - name: Config for @cicd1/2
+        run: mv at_end2end_test/config/config12.yaml at_end2end_test/config/config.yaml
+
+      # Run end-to-end test
+      - name: End to end test
+        # Needs a secret, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
+        working-directory: at_end2end_test
+        run: dart test --concurrency=1
+
+  # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
+  end2end_test_14:
+    needs: [   end2end_tests ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dart-lang/setup-dart@v1.3
         with:
-          host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
-          username: ubuntu
-          key: ${{ secrets.CICD_SSH_KEY }}
-          script: |
-            ./update_ce2e_images.sh
+          sdk: stable
+
+      - name: Install dependencies in at_client
+        working-directory: at_client
+        run: dart pub get
+
+      # Install dependencies in at_end2end_test
+      - name: Install dependencies in at_end2end_test
+        working-directory: at_end2end_test
+        run: dart pub get
 
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
         run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
+
+      # Move the config file in-place
+      - name: Config for @cicd1/4
+        run: mv at_end2end_test/config/config14.yaml at_end2end_test/config/config.yaml
 
       # Run end-to-end test
       - name: End to end test
