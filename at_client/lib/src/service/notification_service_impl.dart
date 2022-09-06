@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -20,10 +21,12 @@ import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:meta/meta.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
-  final Map<NotificationConfig, StreamController> _streamListeners = {};
+  final Map<NotificationConfig, StreamController> _streamListeners =
+      HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationIdv2';
   static final Map<String, NotificationService> _notificationServiceMap = {};
@@ -311,16 +314,28 @@ class NotificationServiceImpl
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
     regex ??= emptyRegex;
-    if (_streamListeners.containsKey(regex)) {
-      _logger.finer('subscription already exists');
-      return _streamListeners[regex]!.stream as Stream<AtNotification>;
-    }
-    final _controller = StreamController<AtNotification>.broadcast();
-    _streamListeners[NotificationConfig()
+    var notificationConfig = NotificationConfig()
       ..regex = regex
-      ..shouldDecrypt = shouldDecrypt] = _controller;
-    _logger.finer('added regex to listener $regex');
-    return _controller.stream;
+      ..shouldDecrypt = shouldDecrypt;
+    var atNotificationStream = _streamListeners.putIfAbsent(
+        notificationConfig, () => StreamController<AtNotification>.broadcast());
+    return atNotificationStream.stream as Stream<AtNotification>;
+  }
+
+  /// Ensures that distinct [NotificationConfig.regex] exists in the key
+  /// Compares the [NotificationConfig] object with [NotificationConfig.regex]
+  /// If regex's are equals, returns true; else false.
+  static bool _compareNotificationConfig(NotificationConfig notificationConfig1,
+      NotificationConfig notificationConfig2) {
+    if (notificationConfig1.regex == notificationConfig2.regex) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Returns the hashcode for the [NotificationConfig.regex]
+  static int _generateHashCode(NotificationConfig notificationConfig) {
+    return notificationConfig.regex.hashCode;
   }
 
   @override
@@ -378,5 +393,11 @@ class NotificationServiceImpl
       default:
         return NotificationStatusEnum.undelivered;
     }
+  }
+
+  ///Not a part of API. Exposed for unit test
+  @visibleForTesting
+  getStreamListenersCount() {
+    return _streamListeners.length;
   }
 }

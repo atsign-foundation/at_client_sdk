@@ -381,4 +381,48 @@ void main() {
           NotificationStatusEnum.undelivered);
     });
   });
+
+  group('A group of tests to validate notification subscribe method', () {
+    test('NotificationService subscribe returns a new stream for a new regex', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var notificationStream = notificationServiceImpl.subscribe(
+          regex: '.wavi', shouldDecrypt: false);
+      notificationStream.listen((event) async {
+        print(event);
+      });
+
+      var notificationStream1 = notificationServiceImpl.subscribe(
+          regex: '.buzz', shouldDecrypt: false);
+      notificationStream1.listen((event) {
+        print(event);
+      });
+      expect(notificationServiceImpl.getStreamListenersCount(), 2);
+      notificationServiceImpl.stopAllSubscriptions();
+    });
+
+    test('NotificationService subscribe returns an existing stream for a same regex', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var notificationStream = notificationServiceImpl.subscribe(
+          regex: '.wavi', shouldDecrypt: false);
+      notificationStream.listen((event) async {
+        print(event);
+      });
+
+      var notificationStream1 = notificationServiceImpl.subscribe(
+          regex: '.wavi', shouldDecrypt: true);
+      notificationStream1.listen((event) {
+        print(event);
+      });
+      expect(notificationServiceImpl.getStreamListenersCount(), 1);
+      notificationServiceImpl.stopAllSubscriptions();
+    });
+  });
 }
