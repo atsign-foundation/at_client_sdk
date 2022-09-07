@@ -36,7 +36,8 @@ class RemoteSecondary implements Secondary {
         cramSecret: preference.cramSecret,
         secondaryAddressFinder:
             AtClientManager.getInstance().secondaryAddressFinder,
-        secureSocketConfig: secureSocketConfig);
+        secureSocketConfig: secureSocketConfig,
+        clientConfig: {VERSION: AtClientConfig.getInstance().atClientVersion});
   }
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
