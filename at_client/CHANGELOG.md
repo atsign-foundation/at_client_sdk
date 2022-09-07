@@ -1,3 +1,6 @@
+## 3.0.38
+- fix: Add client sending config changes to server
+- fix: NotificationService.subscribe to return existing listener on same regex
 ## 3.0.37
 - fix: Revert sending client config changes to server
 ## 3.0.36
