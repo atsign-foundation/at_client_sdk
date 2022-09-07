@@ -4,29 +4,20 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync/sync_conflict.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
-import 'package:at_client/src/service/sync/sync_result.dart';
 import 'package:at_client/src/service/sync_service.dart';
-import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:cron/cron.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
@@ -94,7 +85,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
 
-    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'), () async {
+    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
+        () async {
       try {
         await processSyncRequests();
       } on Exception catch (e, trace) {
@@ -419,7 +411,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - $cause');
-        } on Error catch(e) {
+        } on Error catch (e) {
           _logger.severe(
               'error syncing entry to local $serverCommitEntry - ${e.toString()}');
         }
@@ -641,6 +633,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Throws [AtLookUpException] if secondary is not reachable
   Future<int> _getServerCommitId({RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= _remoteSecondary;
+    // ignore: no_leading_underscores_for_local_identifiers
     var _serverCommitId = await syncUtil.getLatestServerCommitId(
         remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;

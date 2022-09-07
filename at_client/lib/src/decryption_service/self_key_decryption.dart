@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
-import 'package:at_commons/at_commons.dart';
 
 /// Class responsible for decrypting the value of self key's
 /// Example:

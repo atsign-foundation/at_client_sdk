@@ -33,6 +33,7 @@ class EncryptionService {
   /// Throws [IllegalArgumentException] if encrypted value is null.
   /// Throws [KeyNotFoundException] if encryption keys are not found.
   Future<String> decrypt(String encryptedValue, String sharedBy) async {
+    // ignore: unnecessary_null_comparison
     if (encryptedValue == null || encryptedValue.isEmpty) {
       throw IllegalArgumentException(
           'Decryption failed. Encrypted value is null');
@@ -242,6 +243,7 @@ class EncryptionService {
       return;
     }
     var selfKeys = await atClient.getAtKeys(sharedBy: currentAtSign);
+    // ignore: avoid_function_literals_in_foreach_calls
     selfKeys.forEach((atKey) async {
       var key = atKey.key!;
       if (!(key.startsWith(AT_PKAM_PRIVATE_KEY) ||
@@ -526,6 +528,7 @@ class EncryptionService {
   Future<File> decryptFileInChunks(
       File encryptedFile, String fileDecryptionKey, int chunkSize) async {
     var chunkedStream = ChunkedStreamReader(encryptedFile.openRead());
+    // ignore: unused_local_variable
     var startTime = DateTime.now();
     final length = encryptedFile.lengthSync();
     final fileName = encryptedFile.uri.pathSegments.last;

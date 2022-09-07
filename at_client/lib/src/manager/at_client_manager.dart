@@ -36,6 +36,7 @@ class AtClientManager {
     return _singleton;
   }
 
+  // ignore: no_leading_underscores_for_local_identifiers
   AtClientManager(_atSign);
 
   void setSecondaryAddressFinder(

@@ -2,7 +2,7 @@
 
 ## Now for some internet optimism.
 
-[![pub package](https://img.shields.io/pub/v/at_client)](https://pub.dev/packages/at_client) [![pub points](https://badges.bar/at_client/pub%20points)](https://pub.dev/packages/at_client/score) [![build status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml) [![gitHub license](https://img.shields.io/badge/license-BSD3-blue.svg)](./LICENSE)
+[![pub package](https://img.shields.io/pub/v/at_client)](https://pub.dev/packages/at_client) [![pub points](https://img.shields.io/badge/dynamic/json?url=https://pub.dev/api/packages/at_client/score&label=pub%20score&query=grantedPoints)](https://pub.dev/packages/at_client/score) [![build status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml) [![gitHub license](https://img.shields.io/badge/license-BSD3-blue.svg)](./LICENSE)
 
 # at_client
 

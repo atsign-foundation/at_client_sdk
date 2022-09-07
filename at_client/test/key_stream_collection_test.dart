@@ -1,3 +1,5 @@
+// ignore_for_file: no_leading_underscores_for_library_prefixes
+
 import 'package:test/test.dart';
 
 import 'package:at_client/src/key_stream/collection/iterable_key_stream.dart'

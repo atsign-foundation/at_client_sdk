@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart'
     show AtClient, AtClientManager, AtNotification;
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
+// ignore: unused_shown_name
 import 'package:at_commons/at_commons.dart' show AtException, AtKey, AtValue;
 import 'package:at_utils/at_logger.dart';
 
@@ -97,8 +98,9 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
         .subscribe(shouldDecrypt: true, regex: regex)
         .listen(_notificationListener);
 
-    if (disposeOnAtsignChange)
+    if (disposeOnAtsignChange) {
       _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
+    }
   }
 
   /// A function that preloads this Stream with keys that match [regex], [sharedBy], and [sharedWith].

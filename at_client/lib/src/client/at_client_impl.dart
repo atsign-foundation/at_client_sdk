@@ -92,7 +92,9 @@ class AtClientImpl implements AtClient {
   @Deprecated("Use [create]")
   AtClientImpl(
       // ignore: no_leading_underscores_for_local_identifiers
-      String _atSign, String? namespace, AtClientPreference preference) {
+      String _atSign,
+      String? namespace,
+      AtClientPreference preference) {
     currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
     _namespace = namespace;
@@ -260,7 +262,8 @@ class AtClientImpl implements AtClient {
         ..one = atKey
         ..two = (getResponse);
       // Transform the response and return
-      var atValue = await GetResponseTransformer(this).transform(getResponseTuple);
+      var atValue =
+          await GetResponseTransformer(this).transform(getResponseTuple);
       return atValue;
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
@@ -626,7 +629,9 @@ class AtClientImpl implements AtClient {
     var encryptionKey = _encryptionService!.generateFileEncryptionKey();
     var key = TextConstants.fileTransferKey + Uuid().v4();
     var fileStatus = await _uploadFiles(key, files, encryptionKey);
+    // ignore: prefer_interpolation_to_compose_strings
     var fileUrl = TextConstants.fileBinURL + 'archive/' + key + '/zip';
+
     return shareFiles(
         sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
   }
@@ -705,9 +710,8 @@ class AtClientImpl implements AtClient {
 
         // storing sent files in a a directory.
         if (preference?.downloadPath != null) {
-          var sentFilesDirectory = await Directory(preference!.downloadPath! +
-                  Platform.pathSeparator +
-                  'sent-files')
+          var sentFilesDirectory = await Directory(
+                  '${preference!.downloadPath!}${Platform.pathSeparator}sent-files')
               .create();
           await File(file.path).copy(sentFilesDirectory.path +
               Platform.pathSeparator +
@@ -804,7 +808,8 @@ class AtClientImpl implements AtClient {
     // validate sharedWith atSign
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
-    await AtClientValidation().isAtSignExists(AtClientManager.getInstance().secondaryAddressFinder!,
+    await AtClientValidation().isAtSignExists(
+        AtClientManager.getInstance().secondaryAddressFinder!,
         notificationParams.atKey.sharedWith!,
         _preference!.rootDomain,
         _preference!.rootPort);
@@ -858,8 +863,8 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager().get(
-              notificationParams.atKey, currentAtSign!);
+          final atKeyEncryption = AtKeyEncryptionManager()
+              .get(notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
@@ -871,8 +876,8 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager().get(
-              notificationParams.atKey, currentAtSign!);
+          final atKeyEncryption = AtKeyEncryptionManager()
+              .get(notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {

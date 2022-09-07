@@ -19,6 +19,7 @@ class ConnectivityListener {
   /// Listen to [InternetConnectionChecker.onStatusChange] and returns Stream<True> whenever
   /// internet connection is online. Returns Stream<False> if internet connection is lost.
   Stream<bool> subscribe() {
+    // ignore: no_leading_underscores_for_local_identifiers
     final _controller = StreamController<bool>();
     _listener = InternetConnectionChecker().onStatusChange.listen((status) {
       switch (status) {

@@ -1,10 +1,6 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/network_util.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
 
 class AtClientValidation {
@@ -92,7 +88,8 @@ class AtClientValidation {
     validateMetadata(atKey.metadata);
     // verifies if the sharedWith atSign exists.
     if (atKey.sharedWith != null && await NetworkUtil().isNetworkAvailable()) {
-      await isAtSignExists(AtClientManager.getInstance().secondaryAddressFinder!,
+      await isAtSignExists(
+          AtClientManager.getInstance().secondaryAddressFinder!,
           atKey.sharedWith!,
           AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
           AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
@@ -123,7 +120,8 @@ class AtClientValidation {
     validateMetadata(atKey.metadata);
   }
 
-  Future<void> validateNotificationRequest(SecondaryAddressFinder secondaryAddressFinder,
+  Future<void> validateNotificationRequest(
+      SecondaryAddressFinder secondaryAddressFinder,
       NotificationParams notificationParams,
       AtClientPreference atClientPreference) async {
     // validate the notification request
@@ -132,8 +130,11 @@ class AtClientValidation {
           'shared with cannot be null on notification request');
     }
     AtUtils.formatAtSign(notificationParams.atKey.sharedWith);
-    await isAtSignExists(secondaryAddressFinder,notificationParams.atKey.sharedWith!,
-        atClientPreference.rootDomain, atClientPreference.rootPort);
+    await isAtSignExists(
+        secondaryAddressFinder,
+        notificationParams.atKey.sharedWith!,
+        atClientPreference.rootDomain,
+        atClientPreference.rootPort);
 
     // For messageType is text, text may contains spaces but key should not have spaces
     // Hence do not validate the key.

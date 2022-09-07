@@ -21,6 +21,7 @@ class PutRequestTransformer
   PutRequestTransformer(this._atClient);
 
   @override
+  // ignore: avoid_renaming_method_parameters
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
       {String? encryptionPrivateKey, RequestOptions? requestOptions}) async {
     // Populate the update verb builder
@@ -30,8 +31,8 @@ class PutRequestTransformer
     updateVerbBuilder.value = tuple.two;
     //Encrypt the data for non public keys
     if (!tuple.one.metadata!.isPublic!) {
-      var encryptionService =
-          AtKeyEncryptionManager().get(tuple.one, _atClient.getCurrentAtSign()!);
+      var encryptionService = AtKeyEncryptionManager()
+          .get(tuple.one, _atClient.getCurrentAtSign()!);
       try {
         updateVerbBuilder.value =
             await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
