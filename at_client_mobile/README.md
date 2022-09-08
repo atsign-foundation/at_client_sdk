@@ -22,9 +22,9 @@ We call giving people control of access to their data "*flipping the internet*".
 
 ## Get Started
 
-Initially to get a basic overview of the SDK, you must read the [atsign docs](https://atsign.dev/docs/overview/).
+Initially to get a basic overview of the SDK, you must read the [atsign docs](https://docs.atsign.com/).
 
-> To use this package you must be having a basic setup, Follow here to [get started](https://atsign.dev/docs/get-started/setup-your-env/).
+> To use this package you must have a basic setup. Follow the instructions to [get started](https://docs.atsign.com/sdk/flutter/introduction/).
 
 Check how to use this package in the [at_client_mobile installation tab](https://pub.dev/packages/at_client_mobile/install).
 
