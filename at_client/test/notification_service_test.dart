@@ -383,7 +383,8 @@ void main() {
   });
 
   group('A group of tests to validate notification subscribe method', () {
-    test('NotificationService subscribe returns a new stream for a new regex', () async {
+    test('NotificationService subscribe returns a new stream for a new regex',
+        () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
@@ -404,7 +405,9 @@ void main() {
       notificationServiceImpl.stopAllSubscriptions();
     });
 
-    test('NotificationService subscribe returns an existing stream for a same regex', () async {
+    test(
+        'NotificationService subscribe returns an existing stream for a same regex',
+        () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,

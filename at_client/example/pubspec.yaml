@@ -1,0 +1,16 @@
+name: at_client_example
+description: An example application to demostrate the at_client package usage.
+version: 1.0.0
+
+environment:
+  sdk: '>=2.14.4 <3.0.0'
+
+
+dependencies:
+  at_utils: ^3.0.11
+  at_commons: ^3.0.25
+  at_lookup: ^3.0.30
+  at_client: ^3.0.37
+
+dev_dependencies:
+  lints: ^1.0.0

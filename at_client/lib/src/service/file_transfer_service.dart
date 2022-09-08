@@ -10,6 +10,7 @@ class FileTransferService {
       List<int> file, String container, String fileName) async {
     try {
       var response = await http.post(
+        // ignore: prefer_interpolation_to_compose_strings
         Uri.parse(TextConstants.fileBinURL + '$container/' + fileName),
         body: file,
       );
@@ -23,6 +24,7 @@ class FileTransferService {
       File file, String container, String fileName) async {
     try {
       var postUri =
+          // ignore: prefer_interpolation_to_compose_strings
           Uri.parse(TextConstants.fileBinURL + '$container/' + fileName);
       final streamedRequest = http.StreamedRequest('POST', postUri);
 

@@ -40,8 +40,13 @@ class SyncManager {
 
   SyncManager(this._atSign);
 
-  void init(String atSign, AtClientPreference preference,
-      RemoteSecondary? _remoteSecondary, LocalSecondary? _localSecondary) {
+  void init(
+      String atSign,
+      AtClientPreference preference,
+      // ignore: no_leading_underscores_for_local_identifiers
+      RemoteSecondary? _remoteSecondary,
+      // ignore: no_leading_underscores_for_local_identifiers
+      LocalSecondary? _localSecondary) {
     _atSign = atSign;
     _preference = preference;
     this._localSecondary = _localSecondary;

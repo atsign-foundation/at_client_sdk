@@ -72,7 +72,9 @@ class AtClientPreference {
   String? pathToCerts;
 
   // TODO Remove this in next major version
-  @Deprecated("namespace presence will become mandatory in next major version of the SDK")
+  @Deprecated(
+      "namespace presence will become mandatory in next major version of the SDK")
+
   /// [AtClient.put] uses this parameter to decide whether to check for presence of a namespace in the
   /// string representation of the AtKey.
   /// * When set to true, keys such as public:foo@alice or @bob:foo@alice will be rejected

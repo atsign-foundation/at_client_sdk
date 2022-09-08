@@ -18,7 +18,7 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
 class MockAtClientImpl extends Mock implements AtClientImpl {}
 
 void main() {
-  var storageDir = Directory.current.path + '/test/hive';
+  var storageDir = '${Directory.current.path}/test/hive';
   setUp(() async => await setUpFunc(storageDir));
   group('A group of local secondary get keys test', () {
     test('test get private key', () async {

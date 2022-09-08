@@ -25,6 +25,7 @@ class StreamNotificationHandler {
     var host = secondaryAddress.host;
     var port = secondaryAddress.port;
     var socket = await SecureSocket.connect(host, port);
+    // ignore: prefer_interpolation_to_compose_strings
     var f = File((preference!.downloadPath ?? '') +
         Platform.pathSeparator +
         'encrypted_${streamNotification.fileName}');

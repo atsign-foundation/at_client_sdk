@@ -45,6 +45,7 @@ class FileTransferObject {
         ..sharedStatus = json['sharedStatus']
         ..error = json['error'];
     } catch (error) {
+      // ignore: prefer_interpolation_to_compose_strings
       print('FileTransferObject.fromJson error: ' + error.toString());
     }
     return null;
@@ -80,6 +81,7 @@ class FileStatus {
           size: json['size'],
           error: json['error']);
     } catch (error) {
+      // ignore: prefer_interpolation_to_compose_strings
       print('FileStatus.fromJson error: ' + error.toString());
     }
     return null;

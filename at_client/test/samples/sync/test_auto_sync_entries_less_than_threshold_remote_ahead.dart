@@ -1,6 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 import '../test_util.dart';

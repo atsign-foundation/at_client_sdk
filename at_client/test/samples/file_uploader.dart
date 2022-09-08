@@ -17,6 +17,7 @@ void main() async {
     var file2 = File('test/data/cat.jpeg');
     var fileList = <File>[file1, file2];
     var sharedTo = <String>['@bob🛠'];
+    // ignore: deprecated_member_use_from_same_package
     var fileTransferResult = await atClient.uploadFile(fileList, sharedTo);
     fileTransferResult.forEach((key, value) {
       print('atsign: $key');
