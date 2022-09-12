@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/response/at_notification.dart'
     // ignore: no_leading_underscores_for_library_prefixes
     as _at_notification;

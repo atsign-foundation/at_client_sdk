@@ -1,4 +1,6 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';

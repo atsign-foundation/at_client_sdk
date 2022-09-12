@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';

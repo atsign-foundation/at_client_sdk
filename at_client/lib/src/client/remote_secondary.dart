@@ -26,7 +26,6 @@ class RemoteSecondary implements Secondary {
       {String? privateKey}) {
     _atSign = AtUtils.formatAtSign(atSign)!;
     _preference = preference;
-    privateKey ??= preference.privateKey;
     SecureSocketConfig secureSocketConfig = SecureSocketConfig();
     secureSocketConfig.decryptPackets = preference.decryptPackets;
     secureSocketConfig.pathToCerts = preference.pathToCerts;

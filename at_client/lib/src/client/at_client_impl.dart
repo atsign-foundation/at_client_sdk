@@ -72,7 +72,6 @@ class AtClientImpl implements AtClient {
   }
 
   @Deprecated("Use [create]")
-
   /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
       AtClientPreference preferences) async {
@@ -133,8 +132,9 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       _localSecondary = LocalSecondary(this);
     }
+     final privateKey = await _localSecondary?.getPrivateKey(); // TODO will not work for unit tests since _localSecondary won't be init
     _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
-        privateKey: _preference!.privateKey);
+        privateKey: privateKey);
     _encryptionService = EncryptionService();
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;

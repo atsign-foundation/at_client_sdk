@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -57,6 +58,8 @@ class Monitor {
   late MonitorOutboundConnectionFactory _monitorOutboundConnectionFactory;
 
   bool _closeOpInProgress = false;
+
+  String? _privateKey;
 
   /// The time (milliseconds since epoch) that the last heartbeat message was sent
   int _lastHeartbeatSentTime = 0;
@@ -123,7 +126,8 @@ class Monitor {
       {RemoteSecondary? remoteSecondary,
       MonitorConnectivityChecker? monitorConnectivityChecker,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-      Duration? monitorHeartbeatInterval}) {
+      Duration? monitorHeartbeatInterval,
+      String? privateKey}) {
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -139,6 +143,7 @@ class Monitor {
         monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
     _heartbeatInterval =
         monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
+    _privateKey = privateKey;
   }
 
   /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
@@ -252,7 +257,15 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    var key = RSAPrivateKey.fromString(_preference.privateKey!);
+    _privateKey ??= await AtClientManager
+          .getInstance()
+          .atClient
+          .getLocalSecondary()!
+          .getPrivateKey();
+    if (_privateKey == null || _privateKey!.isEmpty) {
+      throw UnAuthenticatedException(('Monitor auth - Pkam private key is null/empty'));
+    }
+    var key = RSAPrivateKey.fromString(_privateKey!);
     var sha256signature =
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);

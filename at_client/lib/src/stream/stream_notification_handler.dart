@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_utils/at_logger.dart';

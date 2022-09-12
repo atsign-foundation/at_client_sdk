@@ -14,13 +14,14 @@ class AtClientPreference {
   @Deprecated("Use [SyncService]")
   SyncStrategy? syncStrategy;
 
-  /// Specify whether local store is required
+  /// Specify whether local store is required.
   bool isLocalStoreRequired = false;
 
   /// Shared secret of the atSign
   String? cramSecret;
 
   /// Private key of the atSign
+  @Deprecated('apps should not set private key here')
   String? privateKey;
 
   /// Specifies the namespace of an app.
