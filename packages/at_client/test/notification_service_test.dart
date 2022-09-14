@@ -128,6 +128,8 @@ void main() {
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
+      // The default duration is 24 hours - converted into milliseconds
+      expect(notifyVerbBuilder.ttln, 86400000);
     });
 
     test(
@@ -136,7 +138,12 @@ void main() {
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
               .build(),
-          value: value);
+          value: value,
+          priority: PriorityEnum.high,
+          strategy: StrategyEnum.latest,
+          notifier: 'test-notifier',
+          latestN: 2,
+          notificationExpiry: Duration(minutes: 1));
       var notifyVerbBuilder = await NotificationRequestTransformer(
               '@alice',
               AtClientPreference()..namespace = 'wavi',
@@ -145,11 +152,14 @@ void main() {
       expect(notifyVerbBuilder.atKey, 'phone.wavi');
       expect(notifyVerbBuilder.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
-      expect(notifyVerbBuilder.priority, PriorityEnum.low);
-      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
+      expect(notifyVerbBuilder.priority, PriorityEnum.high);
+      expect(notifyVerbBuilder.strategy, StrategyEnum.latest);
       expect(notifyVerbBuilder.value, 'encryptedValue');
       expect(notifyVerbBuilder.sharedKeyEncrypted, 'sharedKeyEnc');
       expect(notifyVerbBuilder.pubKeyChecksum, 'publicKeyCS');
+      expect(notifyVerbBuilder.notifier, 'test-notifier');
+      expect(notifyVerbBuilder.latestN, 2);
+      expect(notifyVerbBuilder.ttln, Duration(minutes: 1).inMilliseconds);
     });
 
     test(
