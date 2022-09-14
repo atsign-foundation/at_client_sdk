@@ -110,10 +110,23 @@ class NotificationParams {
   String? _value;
   late OperationEnum _operation;
   late MessageTypeEnum _messageType;
-  late PriorityEnum _priority;
-  late StrategyEnum _strategy;
-  final int _latestN = 1;
-  final String _notifier = SYSTEM;
+
+  /// Represents the priority of the Notification.
+  /// By default, all the notifications are set to low priority
+  PriorityEnum priority = PriorityEnum.low;
+
+  /// Represents the strategy of the Notification.
+  /// By default, all the notifications are set to strategy - 'all' .
+  StrategyEnum strategy = StrategyEnum.all;
+
+  /// Represents the most recent 'N' notifications to be delivered. Defaults to 1.
+  int latestN = 1;
+
+  /// Groups the notifications
+  String notifier = SYSTEM;
+
+  /// Represents the time for the notification to expire. Defaults to 15 minute
+  Duration notificationExpiry = Duration(minutes: 15);
 
   String get id => _id;
 
@@ -125,14 +138,6 @@ class NotificationParams {
 
   MessageTypeEnum get messageType => _messageType;
 
-  PriorityEnum get priority => _priority;
-
-  StrategyEnum get strategy => _strategy;
-
-  String get notifier => _notifier;
-
-  int get latestN => _latestN;
-
   /// Returns [NotificationParams] to send an update notification.
   static NotificationParams forUpdate(AtKey atKey, {String? value}) {
     return NotificationParams()
@@ -140,9 +145,7 @@ class NotificationParams {
       .._atKey = atKey
       .._value = value
       .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.key
-      .._priority = PriorityEnum.low
-      .._strategy = StrategyEnum.all;
+      .._messageType = MessageTypeEnum.key;
   }
 
   /// Returns [NotificationParams] to send a delete notification.
@@ -151,9 +154,7 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.delete
-      .._messageType = MessageTypeEnum.key
-      .._priority = PriorityEnum.low
-      .._strategy = StrategyEnum.all;
+      .._messageType = MessageTypeEnum.key;
   }
 
   /// Returns [NotificationParams] to send a text message to another atSign.
@@ -167,9 +168,7 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.text
-      .._priority = PriorityEnum.low
-      .._strategy = StrategyEnum.all;
+      .._messageType = MessageTypeEnum.text;
   }
 }
 
