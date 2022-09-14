@@ -50,7 +50,8 @@ class NotificationRequestTransformer
       ..priority = notificationParams.priority
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
-      ..notifier = notificationParams.notifier;
+      ..notifier = notificationParams.notifier
+      ..ttln = notificationParams.notificationExpiry.inMilliseconds;
     // Append namespace only to message type key. For message type text do not
     // append namespaces.
     if (notificationParams.messageType == MessageTypeEnum.key) {
