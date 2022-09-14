@@ -7,7 +7,8 @@ void main() async {
   try {
     AtSignLogger.root_level = 'finer';
     var atSign = '@alice🛠';
-    var preference = TestUtil.getAlicePreference();
+    await TestUtil.setUpKeys(atSign);
+    var preference = TestUtil.getPreference(atSign);
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', preference);
     var result = await atClientManager.syncService.isInSync();

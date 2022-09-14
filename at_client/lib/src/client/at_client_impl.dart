@@ -132,7 +132,7 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       _localSecondary = LocalSecondary(this);
     }
-     final privateKey = await _localSecondary?.getPrivateKey(); // TODO will not work for unit tests since _localSecondary won't be init
+    final privateKey = await _localSecondary?.getPrivateKey();
     _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
         privateKey: privateKey);
     _encryptionService = EncryptionService();
@@ -574,7 +574,8 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
+    final privateKey = await _localSecondary?.getPrivateKey();
+    var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,privateKey: privateKey);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
