@@ -151,13 +151,7 @@ class EncryptionService {
       } on AtClientException {
         logger.finer(
             'shared key for $sharedWith not found in remote secondary. Generating a new shared key');
-      }
-    }
-    // If sharedKey is not found in localSecondary, search in remote secondary.
-    if (!isSharedKeyInLocal) {
-      try {
-        sharedKey = await _getSharedKeyFromRemoteForEncryption(sharedWith);
-      } on AtClientException {
+      } on KeyNotFoundException{
         logger.finer(
             'shared key for $sharedWith not found in remote secondary. Generating a new shared key');
       }
