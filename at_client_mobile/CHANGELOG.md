@@ -1,3 +1,5 @@
+## 3.2.6
+- chore: update at_client version to 3.0.39 and at_utils version to 3.0.11
 ## 3.2.5
 - fix: Fixed bug authenticate method returns true when invalid atKeys are supplied
 ## 3.2.4
