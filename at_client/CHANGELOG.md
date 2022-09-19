@@ -1,3 +1,6 @@
+## 3.0.39
+- chore: upgrade 3rd party dependencies except hive
+- chore: upgrade persistence secondary to version 3.0.36
 ## 3.0.38
 - fix: Add client sending config changes to server
 - fix: NotificationService.subscribe to return existing listener on same regex
