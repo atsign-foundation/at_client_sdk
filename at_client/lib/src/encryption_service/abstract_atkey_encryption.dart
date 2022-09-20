@@ -233,5 +233,12 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         .atClient
         .getLocalSecondary()!
         .executeVerb(updateSharedKeyBuilder, sync: true);
+    // Write the shared_key to the remote secondary to expedite the sync process
+    // The reason behind expediting is because when notification is sent before the shared_key is
+    // sync'ed the decryption fails on the receiver's side.
+    await AtClientManager.getInstance()
+        .atClient
+        .getRemoteSecondary()!
+        .executeVerb(updateSharedKeyBuilder);
   }
 }
