@@ -32,6 +32,13 @@ dependencies:
   at_utils: ^3.0.11
   meta: ^1.8.0
 
+dependency_overrides:
+  at_lookup:  
+    git:
+     url: https://github.com/atsign-foundation/at_libraries.git
+     path: at_lookup
+     ref: fix_analyzer_issues
+     
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.21.4
