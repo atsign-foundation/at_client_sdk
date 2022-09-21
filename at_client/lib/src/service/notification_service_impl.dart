@@ -93,8 +93,16 @@ class NotificationServiceImpl
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
     }
-    final lastNotificationTime = await _getLastNotificationTime();
-    await _monitor!.start(lastNotificationTime: lastNotificationTime);
+    if (AtClientManager.getInstance()
+        .atClient
+        .getPreferences()!
+        .fetchOfflineNotifications) {
+      final lastNotificationTime = await _getLastNotificationTime();
+      await _monitor!.start(lastNotificationTime: lastNotificationTime);
+    } else {
+      await _monitor!.start();
+    }
+
     if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
     }

@@ -82,6 +82,10 @@ class AtClientPreference {
   /// * When set to false keys such as public:foo@alice or @bob:foo@alice will not be rejected
   /// * Defaults to true, as applications should always be placing keys within a namespace
   bool enforceNamespace = true;
+
+  /// Fetch the notifications received when the client is offline. Defaults to true.
+  /// Set to false to ignore the notifications received when device is offline.
+  bool fetchOfflineNotifications = true;
 }
 
 @Deprecated("Use SyncService")
