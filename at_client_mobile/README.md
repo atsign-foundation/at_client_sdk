@@ -136,6 +136,13 @@ flutter:
     - .env
 ```
 
+- If your app supports windows platform then add `biometric_storage` in app's dependencies
+
+```
+dependencies:
+ biometric_storage: ^4.1.3
+```
+
 ## Example
 
 We have a good example with explanation in the [at_client_mobile](https://pub.dev/packages/at_client_mobile/example) package.
