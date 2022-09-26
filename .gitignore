@@ -25,3 +25,7 @@ doc/api/
 *.ipr
 *.iws
 *.idea/
+
+# Codecov related
+
+coverage/
