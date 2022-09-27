@@ -1,3 +1,5 @@
+## 3.0.40
+- chore: upgrade at_commons to 3.0.26
 ## 3.0.39
 - chore: upgrade 3rd party dependencies except hive
 - chore: upgrade persistence secondary to version 3.0.36
