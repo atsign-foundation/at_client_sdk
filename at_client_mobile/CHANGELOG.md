@@ -1,3 +1,5 @@
+## 3.2.7
+- chore: Upgraded biometric storage dependency to 4.1.3
 ## 3.2.6
 - chore: update at_client version to 3.0.39 and at_utils version to 3.0.11
 ## 3.2.5
