@@ -98,14 +98,14 @@ void main() {
     // Setting currentAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    var uniqueIdentifier = Uuid().v4();
     var verificationKey = AtKey()
-      ..key = 'verificationnumber'
+      ..key = 'cache_key_test-$uniqueIdentifier'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()
-        ..ttr = 1000
-        ..ccd = true
-        ..ttl = 300000);
-    var value = '0873';
+        ..ttr = 60000
+        ..ccd = true);
+    var value = 'cached_key_value';
     var putResult =
         await currentAtSignClientManager?.atClient.put(verificationKey, value);
     expect(putResult, true);
@@ -116,23 +116,34 @@ void main() {
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
+    // verifying if the key is synced to remote secondary
+    var response = await currentAtSignClientManager!.atClient
+        .getRemoteSecondary()!
+        .executeCommand('scan cache_key_test-$uniqueIdentifier\n', auth: true);
+    print('The scan response on after sync on $currentAtSign : $response');
     // Setting sharedWithAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+    var scanResponse = await currentAtSignClientManager!.atClient
+        .getRemoteSecondary()!
+        .executeCommand('scan cache_key_test-$uniqueIdentifier\n', auth: true);
+    print('The scan response on $sharedWithAtSign : $scanResponse');
     isSyncInProgress = true;
     sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
+    sharedWithAtSignClientManager!.syncService
+        .addProgressListener(MySyncProgressListener());
     while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 5));
     }
     var getResult = await sharedWithAtSignClientManager?.atClient.getKeys(
         regex:
-            'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
-    print(getResult);
+            'cached:$sharedWithAtSign:${verificationKey.key}-$uniqueIdentifier.$namespace$currentAtSign');
+    print('The get result: $getResult');
     expect(
         getResult?.contains(
-            'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign'),
+            'cached:$sharedWithAtSign:${verificationKey.key}-$uniqueIdentifier.$namespace$currentAtSign'),
         true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
@@ -184,4 +195,11 @@ void main() {
       Directory('test/hive/').deleteSync(recursive: true);
     }
   });
+}
+
+class MySyncProgressListener extends SyncProgressListener {
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    print(syncProgress.toString());
+  }
 }
