@@ -64,7 +64,7 @@ jobs:
       # Start docker container to run functional tests
       - name: Start docker instance
         working-directory: at_functional_test/test
-        run: docker-compose up -d
+        run: docker-compose pull && docker-compose up -d
 
       - name: Check for docker container readiness
         working-directory: at_functional_test
