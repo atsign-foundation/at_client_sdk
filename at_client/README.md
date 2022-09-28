@@ -23,9 +23,9 @@ We call giving people control of access to their data "*flipping the internet*".
 
 ## Get Started
 
-Initially to get a basic overview of the SDK, you must read the [atsign docs](https://atsign.dev/docs/overview/).
+Initially to get a basic overview of the SDK, you must read the [atsign docs](https://docs.atsign.com/).
 
-> To use this package you must be having a basic setup, Follow here to [get started](https://atsign.dev/docs/get-started/setup-your-env/).
+> To use this package you must have a basic setup. Follow this to [get started](https://atsign.dev/docs/get-started/setup-your-env/).
 
 Check how to use this package in the [at_client installation tab](https://pub.dev/packages/at_client/install).
 
@@ -126,7 +126,7 @@ ConnectivityListener().subscribe().listen((isConnected) {
 });
 ```
 
-AtClient has many more methods that are exposed. Please refer to the [atsign docs](https://atsign.dev/docs/overview/) for more details.
+AtClient has many more methods that are exposed. Please refer to the [atsign docs](https://docs.atsign.com/) for more details.
 
 
 ## Example
