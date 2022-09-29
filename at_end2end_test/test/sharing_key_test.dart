@@ -122,21 +122,22 @@ void main() {
     var response = await currentAtSignClientManager!.atClient
         .getRemoteSecondary()!
         .executeCommand('scan cache_key_test-$uniqueIdentifier\n', auth: true);
-    print('The scan response on after sync on $currentAtSign : $response');
+    print('${DateTime.now().toUtc()} | The scan response on after sync on $currentAtSign : $response');
     // Setting sharedWithAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
     var scanResponse = await currentAtSignClientManager!.atClient
         .getRemoteSecondary()!
         .executeCommand('scan cache_key_test-$uniqueIdentifier\n', auth: true);
-    print('The scan response on $sharedWithAtSign : $scanResponse');
+    print('${DateTime.now().toUtc()} | The scan response on $sharedWithAtSign : $scanResponse');
     isSyncInProgress = true;
     sharedWithAtSignClientManager?.syncService
         .setOnDone((SyncResult syncResult) {
-      print('${DateTime.now().toUtc()} | ${syncResult.keyInfoList}');
+      print('${DateTime.now().toUtc()} | The key list info : ${syncResult.keyInfoList}');
       var itr = syncResult.keyInfoList.iterator;
       while (itr.moveNext()) {
         if (itr.current.key.contains(uniqueIdentifier)) {
+          print('${DateTime.now().toUtc()} | Found the key');
           isSyncInProgress = false;
           break;
         } else {
@@ -160,7 +161,7 @@ void main() {
         true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 5)));
+  }, timeout: Timeout(Duration(minutes: 30)));
 
   /// The purpose of this test verify the following:
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
