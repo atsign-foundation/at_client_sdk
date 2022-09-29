@@ -114,7 +114,7 @@ void main() {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 5));
+      await Future.delayed(Duration(milliseconds: 20));
     }
     // verifying if the key is synced to remote secondary
     var response = await currentAtSignClientManager!.atClient
@@ -132,14 +132,11 @@ void main() {
     sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
-    sharedWithAtSignClientManager!.syncService
-        .addProgressListener(MySyncProgressListener());
     while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 5));
+      await Future.delayed(Duration(milliseconds: 20));
     }
-    var getResult = await sharedWithAtSignClientManager?.atClient.getKeys(
-        regex:
-            'cached:$sharedWithAtSign:${verificationKey.key}-$uniqueIdentifier.$namespace$currentAtSign');
+    var getResult = await sharedWithAtSignClientManager?.atClient
+        .getKeys(regex: '$uniqueIdentifier');
     print('The get result: $getResult');
     expect(
         getResult?.contains(
@@ -147,7 +144,7 @@ void main() {
         true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, skip: 'skipping to test temporarily to unblock');
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   /// The purpose of this test verify the following:
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
