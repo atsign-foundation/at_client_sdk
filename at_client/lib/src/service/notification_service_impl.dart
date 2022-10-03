@@ -12,6 +12,7 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
@@ -19,7 +20,10 @@ import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
@@ -407,5 +411,38 @@ class NotificationServiceImpl
   @visibleForTesting
   getStreamListenersCount() {
     return _streamListeners.length;
+  }
+
+  @override
+  Future<AtNotification> fetch(String notificationId) async {
+    var notifyFetchVerbBuilder = NotifyFetchVerbBuilder()
+      ..notificationId = notificationId;
+    var atNotificationStr = await _atClient
+        .getRemoteSecondary()
+        ?.executeVerb(notifyFetchVerbBuilder);
+    if (atNotificationStr == null) {
+      throw AtClientException.message('Failed to fetch the notification id',
+          intent: Intent.remoteVerbExecution,
+          exceptionScenario: ExceptionScenario.remoteVerbExecutionFailed);
+    }
+    AtResponse atResponse = DefaultResponseParser().parse(atNotificationStr);
+    var atNotificationMap = jsonDecode(atResponse.response);
+    if (atNotificationMap['notificationStatus'] ==
+        at_persistence_secondary_server.NotificationStatus.expired.toString()) {
+      return AtNotification.empty()
+        ..id = atNotificationMap['id']
+        ..status = atNotificationMap['notificationStatus'];
+    }
+    return AtNotification.empty()
+      ..id = atNotificationMap['id']
+      ..key = atNotificationMap['notification']
+      ..from = atNotificationMap['fromAtSign']
+      ..to = atNotificationMap['toAtSign']
+      ..epochMillis = DateTime.parse(atNotificationMap['notificationDateTime'])
+          .millisecondsSinceEpoch
+      ..status = atNotificationMap['notificationStatus']
+      ..value = atNotificationMap['atValue']
+      ..operation = atNotificationMap['opType']
+      ..messageType = atNotificationMap['messageType'];
   }
 }

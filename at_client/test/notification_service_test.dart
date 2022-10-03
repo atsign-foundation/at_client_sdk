@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
@@ -72,6 +74,9 @@ class MockAtKeyEncryptionManager extends Mock
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
 class FakeNotifyVerbBuilder extends Fake implements NotifyVerbBuilder {}
+
+class FakeNotifyFetchVerbBuilder extends Fake
+    implements NotifyFetchVerbBuilder {}
 
 class FakeAtKey extends Fake implements AtKey {}
 
@@ -426,6 +431,78 @@ void main() {
       });
       expect(notificationServiceImpl.getStreamListenersCount(), 1);
       notificationServiceImpl.stopAllSubscriptions();
+    });
+  });
+
+  group('A group of tests to validate notification fetch', () {
+    test('A test to verify notification fetch for non-existing notification',
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+          Future.value('data:${jsonEncode({
+                'id': '123',
+                'notificationStatus': 'NotificationStatus.expired'
+              })}'));
+
+      var response = await notificationServiceImpl.fetch('123');
+      expect(response.id, '123');
+      expect(response.status, 'NotificationStatus.expired');
+    });
+
+    test('A test to verify notification fetch for an existing notification',
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+          Future.value('data:{"id":"fb948e15-128f-408d-b73f-0ab1372da4a3",'
+              '"fromAtSign":"@alice",'
+              '"notificationDateTime":"2022-10-03 18:34:58.601",'
+              '"toAtSign":"@bob","notification":"@bob:phone@alice",'
+              '"type":"NotificationType.sent",'
+              '"opType":"OperationType.update",'
+              '"messageType":"MessageType.key",'
+              '"priority":"NotificationPriority.low",'
+              '"notificationStatus":"NotificationStatus.delivered",'
+              '"expiresAt":"2022-10-03 13:20:58.565Z",'
+              '"atValue":"+445 112 3434"}'));
+
+      var atNotification = await notificationServiceImpl.fetch('123');
+      expect(atNotification.id, 'fb948e15-128f-408d-b73f-0ab1372da4a3');
+      expect(atNotification.key, '@bob:phone@alice');
+      expect(atNotification.from, '@alice');
+      expect(atNotification.to, '@bob');
+      expect(
+          atNotification.epochMillis,
+          DateTime.parse('2022-10-03 18:34:58.601')
+              .millisecondsSinceEpoch);
+      expect(atNotification.value, '+445 112 3434');
+      expect(atNotification.operation, 'OperationType.update');
+      expect(atNotification.status, 'NotificationStatus.delivered');
     });
   });
 }

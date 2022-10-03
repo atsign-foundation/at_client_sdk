@@ -101,6 +101,9 @@ abstract class NotificationService {
 
   /// Returns the status of the given notificationId
   Future<NotificationResult> getStatus(String notificationId);
+
+  /// Returns the [AtNotification] of the given notificationId
+  Future<AtNotification> fetch(String notificationId);
 }
 
 /// [NotificationParams] represents a notification input params.
