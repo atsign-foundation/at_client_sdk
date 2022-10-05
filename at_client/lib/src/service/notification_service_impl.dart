@@ -101,6 +101,7 @@ class NotificationServiceImpl
     }
   }
 
+
   Future<int?> _getLastNotificationTime() async {
     if (AtClientManager.getInstance().atClient.getPreferences()!.fetchOfflineNotifications == false) {
       // Don't fetch notifications which were received by the server while this client was offline ...
