@@ -93,15 +93,8 @@ class NotificationServiceImpl
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
     }
-    if (AtClientManager.getInstance()
-        .atClient
-        .getPreferences()!
-        .fetchOfflineNotifications) {
-      final lastNotificationTime = await _getLastNotificationTime();
-      await _monitor!.start(lastNotificationTime: lastNotificationTime);
-    } else {
-      await _monitor!.start();
-    }
+
+    await _monitor!.start(lastNotificationTime: await _getLastNotificationTime());
 
     if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
@@ -109,6 +102,14 @@ class NotificationServiceImpl
   }
 
   Future<int?> _getLastNotificationTime() async {
+    if (AtClientManager.getInstance().atClient.getPreferences()!.fetchOfflineNotifications == false) {
+      // Don't fetch notifications which were received by the server while this client was offline ...
+      // ... means ask only for notifications received after RIGHT NOW
+      return DateTime.now().millisecondsSinceEpoch;
+    }
+
+    // DO fetch notifications which were received by the server while this client was offline ...
+    // ... means ask for notifications which were received by the server since this client last received a notification
     var lastNotificationKeyStr =
         '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
     var atKey = AtKey.fromString(lastNotificationKeyStr);
@@ -128,6 +129,7 @@ class NotificationServiceImpl
         return jsonDecode(atValue.value)['epochMillis'];
       }
     }
+
     return null;
   }
 
@@ -179,22 +181,18 @@ class NotificationServiceImpl
   }
 
   void _monitorRetry() {
-    if (_lastMonitorRetried != null &&
-        DateTime.now().toUtc().difference(_lastMonitorRetried).inSeconds < 15) {
+    if (_lastMonitorRetried != null && DateTime.now().toUtc().difference(_lastMonitorRetried).inSeconds < 15) {
       _logger.info('Attempting to retry in less than 15 seconds... Rejected');
       return;
     }
     if (_isMonitorPaused) {
-      _logger.finer(
-          '${_atClient.getCurrentAtSign()} monitor is paused. not retrying');
+      _logger.finer('${_atClient.getCurrentAtSign()} monitor is paused. not retrying');
       return;
     }
     _lastMonitorRetried = DateTime.now().toUtc();
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
-    Future.delayed(
-        Duration(seconds: 15),
-        () async => _monitor!
-            .start(lastNotificationTime: await _getLastNotificationTime()));
+
+    Future.delayed(Duration(seconds: 15), () async => _monitor!.start(lastNotificationTime: await _getLastNotificationTime()));
   }
 
   void _onMonitorError(Exception e) {
