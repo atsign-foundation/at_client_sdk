@@ -29,6 +29,21 @@ class KeyChainManager {
     return _singleton;
   }
 
+  Future<AtClientData?> deleteAllData({
+    bool useSharedStorage = false,
+  }) async {
+    try {
+      final store = await _getAppStorage(useSharedStorage: useSharedStorage);
+      final store1 = await _getAppStorage(useSharedStorage: true);
+      await store.delete();
+      await store1.delete();
+    } catch (e, s) {
+      _logger.info('_getAtClientData', e, s);
+      print(s);
+    }
+    return null;
+  }
+
   Future<AtClientData?> readAtClientData(
       {bool useSharedStorage = false}) async {
     try {
