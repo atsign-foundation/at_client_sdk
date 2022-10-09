@@ -308,11 +308,13 @@ class AtClientImpl implements AtClient {
       {String? regex,
       String? sharedBy,
       String? sharedWith,
+      bool showHiddenKeys = false,
       bool isDedicated = false}) async {
     var getKeysResult = await getKeys(
         regex: regex,
         sharedBy: sharedBy,
         sharedWith: sharedWith,
+        showHiddenKeys: showHiddenKeys,
         isDedicated: isDedicated);
     var result = <AtKey>[];
     if (getKeysResult.isNotEmpty) {
@@ -323,7 +325,7 @@ class AtClientImpl implements AtClient {
           _logger.severe('$key is not a well-formed key');
         } on Exception catch (e) {
           _logger.severe(
-              'Exception occured: ${e.toString()}. Unable to form key $key');
+              'Exception occurred: ${e.toString()}. Unable to form key $key');
         }
       }
     }
