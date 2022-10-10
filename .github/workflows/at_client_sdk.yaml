@@ -116,7 +116,7 @@ jobs:
         run: docker-compose down
 
   end2end_tests_prep:
-    # Don't run on PRs from a fork or Dependabot as the secrets aren't available
+    # Don't run on PRs from a fork as the secrets aren't available
     if: ${{ github.event.pull_request.head.repo.fork == false }}
     runs-on: ubuntu-latest
 
