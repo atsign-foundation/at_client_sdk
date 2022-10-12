@@ -504,5 +504,53 @@ void main() {
       expect(atNotification.operation, 'OperationType.update');
       expect(atNotification.status, 'NotificationStatus.delivered');
     });
+
+    test('A test to verify remote secondary timeouts to respond', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+      throw AtLookUpException(
+          'AT0023', 'Waited for 10000 millis. No response after 100000'));
+      // The errorCode AT0023 results to AtTimeoutException. Since AtTimeoutException is
+      // not a sub-class of AtClientException, the exception is converted to AtClientException and returned.`
+      expect(() async => await notificationServiceImpl.fetch('123'),
+          throwsA(predicate((dynamic e) => e is AtClientException)));
+    });
+
+    test('A test to verify remote secondary is not reachable', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+      throw AtLookUpException(
+          'AT0021', 'Secondary Connect Exception'));
+      // The errorCode AT0021 results to SecondaryConnectException. Since SecondaryConnectException is
+      // not a sub-class of AtClientException, the exception is converted to AtClientException and returned.`
+      expect(() async => await notificationServiceImpl.fetch('123'),
+          throwsA(predicate((dynamic e) => e is AtClientException)));
+    });
   });
 }

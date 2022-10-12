@@ -417,9 +417,14 @@ class NotificationServiceImpl
   Future<AtNotification> fetch(String notificationId) async {
     var notifyFetchVerbBuilder = NotifyFetchVerbBuilder()
       ..notificationId = notificationId;
-    var atNotificationStr = await _atClient
-        .getRemoteSecondary()
-        ?.executeVerb(notifyFetchVerbBuilder);
+    String? atNotificationStr;
+    try {
+      atNotificationStr = await _atClient
+          .getRemoteSecondary()
+          ?.executeVerb(notifyFetchVerbBuilder);
+    } on AtException catch (e) {
+      throw AtExceptionManager.createException(e);
+    }
     if (atNotificationStr == null) {
       throw AtClientException.message('Failed to fetch the notification id',
           intent: Intent.remoteVerbExecution,

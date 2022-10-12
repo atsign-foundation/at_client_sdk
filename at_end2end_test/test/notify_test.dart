@@ -111,21 +111,31 @@ void main() {
         expect(notificationResult.notificationStatusEnum,
             NotificationStatusEnum.delivered);
 
-            await AtClientManager.getInstance().setCurrentAtSign(
-                sharedWithAtSign,
-                namespace, TestUtils.getPreference(sharedWithAtSign));
-            var atNotification = await AtClientManager
-                .getInstance()
-                .notificationService
-                .fetch(notificationResult.notificationID);
-            atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
-            await NotificationResponseTransformer().transform(Tuple()
-              ..one = atNotification
-              ..two = (NotificationConfig()
-                ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));
-            expect(atNotification.id, notificationResult.notificationID);
-            expect(atNotification.key, '$whomToNotify:$notifyText');
-          });
+        await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
+            namespace, TestUtils.getPreference(sharedWithAtSign));
+        var atNotification = await AtClientManager.getInstance()
+            .notificationService
+            .fetch(notificationResult.notificationID);
+        atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
+        await NotificationResponseTransformer().transform(Tuple()
+          ..one = atNotification
+          ..two = (NotificationConfig()
+            ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));
+        expect(atNotification.id, notificationResult.notificationID);
+        expect(atNotification.key, expectedOutput);
+      });
+    });
+  });
+
+  group('A group of tests for notification fetch', () {
+    test('A test to verify non existent notification', () async {
+      await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      var notificationResult = await AtClientManager.getInstance()
+          .notificationService
+          .fetch('abc-123');
+      expect(notificationResult.id, 'abc-123');
+      expect(notificationResult.status, 'NotificationStatus.expired');
     });
   });
 
