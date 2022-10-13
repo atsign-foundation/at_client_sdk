@@ -463,8 +463,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (serverMetaData != null && serverMetaData[IS_ENCRYPTED] == "true") {
         final decryptionManager =
             AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
-        final serverDecryptedValue =
-            await decryptionManager.decrypt(atKey, serverEncryptedValue);
+        var serverDecryptedValue;
+        if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {
+          serverDecryptedValue =
+              await decryptionManager.decrypt(atKey, serverEncryptedValue);
+        }
         final localDecryptedValue = await _atClient.get(atKey);
         if (localDecryptedValue.value != serverDecryptedValue) {
           conflictInfo.localValue = localDecryptedValue.value;
