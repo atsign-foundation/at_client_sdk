@@ -699,7 +699,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       case '#':
       case '*':
         var builder = UpdateVerbBuilder()
-          ..atKey = serverCommitEntry['atKey']
+          ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
