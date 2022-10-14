@@ -211,7 +211,7 @@ void main() {
       expect(response?.contains('_profilePic.wavi@alice'), true);
     });
 
-    test('A test to validate getKeys when showHidden is set to true', () async {
+    test('A test to validate getKeys when showHidden is set to false', () async {
       AtClientImpl mockAtClientImpl = MockAtClientImpl();
       SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
       LocalSecondary localSecondary = LocalSecondary(mockAtClientImpl);
