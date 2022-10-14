@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -14,22 +15,81 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:uuid/uuid.dart';
 
-class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
+String? lastNotificationJson;
+
+class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
+  @override
+  bool isKeyExists(String key) {
+    if (! key.contains(NotificationServiceImpl.notificationIdKey)) {
+      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+    }
+    return (lastNotificationJson != null);
+  }
+}
+
+class MockLocalSecondary extends Mock implements LocalSecondary  {
+  @override
+  SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
+
+}
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
+  AtClientPreference mockPreferences = AtClientPreference()..namespace = 'wavi';
   @override
   AtClientPreference getPreferences() {
-    return AtClientPreference()..namespace = 'wavi';
+    mockPreferences.fetchOfflineNotifications = true;
+    return mockPreferences;
   }
 
   @override
   String? getCurrentAtSign() {
     return '@alice';
   }
-}
 
-class MockLocalSecondary extends Mock implements LocalSecondary {}
+  LocalSecondary mockLocalSecondary = MockLocalSecondary();
+  @override
+  LocalSecondary? getLocalSecondary() {
+    return mockLocalSecondary;
+  }
+
+  @override
+  Future<AtValue> get(AtKey atKey,
+      {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
+    if (atKey.key != NotificationServiceImpl.notificationIdKey) {
+      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+    }
+    if (lastNotificationJson != null) {
+      return AtValue()..value = lastNotificationJson;
+    } else {
+      return AtValue();
+    }
+  }
+
+  @override
+  Future<bool> put(AtKey atKey, dynamic value,
+      {bool isDedicated = false}) async {
+    if (atKey.key != NotificationServiceImpl.notificationIdKey) {
+      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+    }
+    lastNotificationJson = value;
+    return true;
+  }
+
+  @override
+  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) async {
+    if (atKey.key != NotificationServiceImpl.notificationIdKey) {
+      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+    }
+    if (lastNotificationJson == null) {
+      return false;
+    } else {
+      lastNotificationJson = null;
+      return true;
+    }
+  }
+}
 
 class MockMonitor extends Mock implements Monitor {
   @override
@@ -552,5 +612,62 @@ void main() {
       expect(() async => await notificationServiceImpl.fetch('123'),
           throwsA(predicate((dynamic e) => e is AtClientException)));
     });
+
+  group('Tests of getLastNotificationTime()', () {
+    setUpAll(() {
+      when(() => mockAtClientManager.atClient)
+          .thenAnswer((_) => mockAtClientImpl);
+    });
+
+    test('getLastNotificationTime() returns null if checkOfflineNotifications is set to false',
+            () async {
+          var notificationServiceImpl = await NotificationServiceImpl.create(
+              mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
+
+          notificationServiceImpl.stopAllSubscriptions();
+
+          mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = false;
+
+          expect(await notificationServiceImpl.getLastNotificationTime(), null);
+        });
+
+    test(
+        'getLastNotificationTime() returns null if checkOfflineNotifications is true but there is no stored value',
+            () async {
+              var notificationServiceImpl = await NotificationServiceImpl.create(
+                  mockAtClientImpl,
+                  atClientManager: mockAtClientManager,
+                  monitor: mockMonitor) as NotificationServiceImpl;
+
+              notificationServiceImpl.stopAllSubscriptions();
+
+              mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
+
+              await mockAtClientImpl.delete(AtKey()..key = NotificationServiceImpl.notificationIdKey);
+
+              expect(await notificationServiceImpl.getLastNotificationTime(), null);
+        });
+
+    test(
+        'getLastNotificationTime() returns the stored value if checkOfflineNotifications is true and there is a stored value',
+            () async {
+          var notificationServiceImpl = await NotificationServiceImpl.create(
+              mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
+
+          notificationServiceImpl.stopAllSubscriptions();
+
+          mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
+
+          int epochMillis = DateTime.now().millisecondsSinceEpoch;
+          var atNotification = at_notification.AtNotification(Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
+          await mockAtClientImpl.put(AtKey()..key = NotificationServiceImpl.notificationIdKey,
+              jsonEncode(atNotification.toJson()));
+
+          expect(await notificationServiceImpl.getLastNotificationTime(), epochMillis);
+        });
   });
 }

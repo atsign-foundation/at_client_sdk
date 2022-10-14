@@ -1,3 +1,5 @@
+## 3.2.8
+- chore: Upgraded at_client dependency to 3.0.41
 ## 3.2.7
 - chore: Upgraded biometric storage dependency to 4.1.3
 ## 3.2.6

@@ -97,22 +97,23 @@ class NotificationServiceImpl
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
     }
-    if (AtClientManager.getInstance()
-        .atClient
-        .getPreferences()!
-        .fetchOfflineNotifications) {
-      final lastNotificationTime = await _getLastNotificationTime();
-      await _monitor!.start(lastNotificationTime: lastNotificationTime);
-    } else {
-      await _monitor!.start();
-    }
+    await _monitor!.start(lastNotificationTime: await getLastNotificationTime());
 
     if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
     }
   }
 
-  Future<int?> _getLastNotificationTime() async {
+  @visibleForTesting
+  Future<int?> getLastNotificationTime() async {
+    if (_atClientManager.atClient.getPreferences()!.fetchOfflineNotifications == false) {
+      // fetchOfflineNotifications == false means issue `monitor` command without a lastNotificationTime
+      // which will result in the server not sending any previously received notifications
+      return null;
+    }
+
+    // fetchOfflineNotifications == true (the default) means we want all notifications since the last one we received
+    // We keep track of the last notification id in the client-side key store
     var lastNotificationKeyStr =
         '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
     var atKey = AtKey.fromString(lastNotificationKeyStr);
@@ -198,7 +199,7 @@ class NotificationServiceImpl
     Future.delayed(
         Duration(seconds: 15),
         () async => _monitor!
-            .start(lastNotificationTime: await _getLastNotificationTime()));
+            .start(lastNotificationTime: await getLastNotificationTime()));
   }
 
   void _onMonitorError(Exception e) {
