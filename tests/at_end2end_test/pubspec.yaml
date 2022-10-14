@@ -10,7 +10,7 @@ environment:
 
 dependencies:
   at_client:
-    path: ../at_client
+    path: ../../packages/at_client
 
 dev_dependencies:
   pedantic: ^1.11.1
