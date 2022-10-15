@@ -22,8 +22,8 @@ class LocalSecondary implements Secondary {
   /// Local keystore used to store data for the current atSign.
   SecondaryKeyStore? keyStore;
 
-  LocalSecondary(this._atClient) {
-    keyStore = SecondaryPersistenceStoreFactory.getInstance()
+  LocalSecondary(this._atClient, {this.keyStore}) {
+    keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();
   }
