@@ -1,3 +1,6 @@
+## 3.0.42
+- fix: Improved performance of getKeys (and getAtKeys) when sharedBy is specified, by using the existing 
+RemoteSecondary connection rather than creating a new one
 ## 3.0.41
 - chore: upgrade persistence secondary to version 3.0.38 which reverts sync of signing keys and statsNotificationKey
 ## 3.0.40

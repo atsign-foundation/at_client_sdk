@@ -4,6 +4,12 @@ import 'package:at_client/src/service/sync/sync_status.dart';
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
   ///
+  /// NB: With current SyncServiceImpl this may not immediately sync. Instead, it will enqueue a request for sync to take place.
+  ///
+  /// This method will be obsolete in the forthcoming alternative implementation which takes an event-driven
+  /// streaming approach to syncing. Instead of requesting a sync, you will request that processing
+  /// of the data events (whether originating from client or server) be paused or resumed or re-initialized
+  ///
   /// If local secondary is ahead, pushes the changes to the cloud secondary.
   /// If cloud secondary is ahead, pulls the changes to the local secondary.
   ///
@@ -22,7 +28,7 @@ abstract class SyncService {
   ///   print(syncResult.lastSyncedOn);
   /// }
   /// ```
-  void sync({Function? onDone});
+  void sync({Function? onDone, Function? onError});
 
   /// Call this method to set the Global onDone callback.
   /// This method will be called when a sync is completed.
