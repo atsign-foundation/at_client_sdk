@@ -7,10 +7,10 @@
 This repo contains two versions of the at_client_sdk that you can choose from 
 depending on what kind of device you are targeting for your application.
 
-* [at_client](./at_client) a non platform specific SDK that can be used for
+* [at_client](./packages/at_client) a non platform specific SDK that can be used for
 writing things like command line applications and headless apps for Internet
 of Things (IoT) devices.
 
-* [at_client_mobile](./at_client_mobile) an SDK specifically written for iOS and 
+* [at_client_mobile](./packages/at_client_mobile) an SDK specifically written for iOS and 
 Android apps with support for secure storage and keys backup on the device with
 embedded storage and hardware trusted root keychain.
