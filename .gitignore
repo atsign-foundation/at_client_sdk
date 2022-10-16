@@ -27,6 +27,9 @@ doc/api/
 *.iws
 *.idea/
 
+# Visual Studio Code
+.vscode/
+
 # Codecov related
 
 coverage/
