@@ -22,8 +22,8 @@ class LocalSecondary implements Secondary {
   /// Local keystore used to store data for the current atSign.
   SecondaryKeyStore? keyStore;
 
-  LocalSecondary(this._atClient) {
-    keyStore = SecondaryPersistenceStoreFactory.getInstance()
+  LocalSecondary(this._atClient, {this.keyStore}) {
+    keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();
   }
@@ -176,9 +176,7 @@ class LocalSecondary implements Secondary {
       // shared with current atSign
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
-        return await RemoteSecondary(
-                _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
-                privateKey: _atClient.getPreferences()!.privateKey)
+        return _atClient.getRemoteSecondary()!
             .executeCommand(command, auth: true);
       }
       List<String?> keys;

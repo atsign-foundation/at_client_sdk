@@ -143,7 +143,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @visibleForTesting
-  Future<void> processSyncRequests() async {
+  Future<void> processSyncRequests({bool respectSyncRequestQueueSizeAndRequestTriggerDuration = true}) async {
     final syncProgress = SyncProgress()..syncStatus = SyncStatus.started;
     syncProgress.startedAt = DateTime.now().toUtc();
     _logger.finest('in _processSyncRequests');
@@ -160,16 +160,21 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _informSyncProgress(syncProgress);
       return;
     }
-    if (_syncRequests.isEmpty ||
-        (_syncRequests.length < _syncRequestThreshold &&
-            (_syncRequests.isNotEmpty &&
-                DateTime.now()
-                        .toUtc()
-                        .difference(_syncRequests.elementAt(0).requestedOn)
-                        .inSeconds <
-                    _syncRequestTriggerInSeconds))) {
-      _logger.finest('skipping sync - queue length ${_syncRequests.length}');
-      return;
+    if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
+      if (_syncRequests.isEmpty ||
+          (_syncRequests.length < _syncRequestThreshold &&
+              (_syncRequests.isNotEmpty &&
+                  DateTime
+                      .now()
+                      .toUtc()
+                      .difference(_syncRequests
+                      .elementAt(0)
+                      .requestedOn)
+                      .inSeconds <
+                      _syncRequestTriggerInSeconds))) {
+        _logger.finest('skipping sync - queue length ${_syncRequests.length}');
+        return;
+      }
     }
     final syncRequest = _getSyncRequest();
     try {

@@ -36,6 +36,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
@@ -46,6 +47,7 @@ class AtClientImpl implements AtClient {
   AtClientPreference? get preference => _preference;
   String? currentAtSign;
   String? _namespace;
+  SecondaryKeyStore? _localSecondaryKeyStore;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
 
@@ -57,85 +59,72 @@ class AtClientImpl implements AtClient {
   AtClientManager? _atClientManager;
 
   final _logger = AtSignLogger('AtClientImpl');
-  static final Map _atClientInstanceMap = <String, AtClient>{};
 
-  /// Returns a new instance of [AtClient]. App has to pass the current user atSign
-  /// and the client preference.
-  @Deprecated("Use AtClientManger to get instance of atClient")
-  static Future<AtClient?> getClient(String? currentAtSign) async {
-    if (_atClientInstanceMap.containsKey(currentAtSign)) {
-      return _atClientInstanceMap[currentAtSign];
-    }
-    AtSignLogger('AtClientImpl')
-        .severe('Instance of atclientimpl for $currentAtSign is not created');
-    return null;
-  }
-
-  @Deprecated("Use [create]")
-
-  /// use [create]
-  static Future<void> createClient(String currentAtSign, String? namespace,
-      AtClientPreference preferences) async {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
-    if (_atClientInstanceMap.containsKey(currentAtSign)) {
-      return;
-    }
-    if (preferences.isLocalStoreRequired) {
-      var storageManager = StorageManager(preferences);
-      await storageManager.init(currentAtSign, preferences.keyStoreSecret);
-    }
-    var atClientImpl = AtClientImpl(currentAtSign, namespace, preferences);
-    await atClientImpl._init();
-    _atClientInstanceMap[currentAtSign] = atClientImpl;
-  }
-
-  @Deprecated("Use [create]")
-  AtClientImpl(
-      // ignore: no_leading_underscores_for_local_identifiers
-      String _atSign,
-      String? namespace,
-      AtClientPreference preference) {
-    currentAtSign = AtUtils.formatAtSign(_atSign);
-    _preference = preference;
-    _namespace = namespace;
-  }
+  @visibleForTesting
+  static final Map atClientInstanceMap = <String, AtClient>{};
 
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
-      {AtClientManager? atClientManager}) async {
+      {
+        AtClientManager? atClientManager,
+        RemoteSecondary? remoteSecondary,
+        EncryptionService? encryptionService,
+        SecondaryKeyStore? localSecondaryKeyStore
+      }) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
-    if (_atClientInstanceMap.containsKey(currentAtSign)) {
-      return _atClientInstanceMap[currentAtSign];
+    if (atClientInstanceMap.containsKey(currentAtSign)) {
+      return atClientInstanceMap[currentAtSign];
     }
-    if (preferences.isLocalStoreRequired) {
-      var storageManager = StorageManager(preferences);
-      await storageManager.init(currentAtSign, preferences.keyStoreSecret);
-    }
+
     atClientManager ??= AtClientManager.getInstance();
     var atClientImpl =
-        AtClientImpl._(currentAtSign, namespace, preferences, atClientManager);
+        AtClientImpl._(currentAtSign, namespace, preferences, atClientManager,
+          remoteSecondary: remoteSecondary,
+          encryptionService: encryptionService,
+          localSecondaryKeyStore: localSecondaryKeyStore);
+
     await atClientImpl._init();
-    _atClientInstanceMap[currentAtSign] = atClientImpl;
-    return _atClientInstanceMap[currentAtSign];
+
+    atClientInstanceMap[currentAtSign] = atClientImpl;
+    return atClientInstanceMap[currentAtSign];
   }
 
-  // ignore: no_leading_underscores_for_local_identifiers
-  AtClientImpl._(String _atSign, String? namespace,
-      AtClientPreference preference, AtClientManager atClientManager) {
-    currentAtSign = AtUtils.formatAtSign(_atSign);
+  AtClientImpl._(String atSign, String? namespace,
+      AtClientPreference preference, AtClientManager atClientManager,
+      {
+        RemoteSecondary? remoteSecondary,
+        EncryptionService? encryptionService,
+        SecondaryKeyStore? localSecondaryKeyStore
+      }) {
+    currentAtSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     _preference?.namespace ??= namespace;
     _namespace = namespace;
     _atClientManager = atClientManager;
+    _localSecondaryKeyStore = localSecondaryKeyStore;
+    if (_localSecondaryKeyStore != null && ! _preference!.isLocalStoreRequired) {
+      throw IllegalArgumentException('A SecondaryKeyStore was injected, but preference.isLocalStoreRequired is false');
+    }
+    _remoteSecondary = remoteSecondary;
+    _encryptionService = encryptionService;
   }
 
   Future<void> _init() async {
     if (_preference!.isLocalStoreRequired) {
-      _localSecondary = LocalSecondary(this);
+      if (_localSecondaryKeyStore == null) {
+        var storageManager = StorageManager(preference);
+        await storageManager.init(currentAtSign!, preference!.keyStoreSecret);
+      }
+
+      _localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
     }
-    _remoteSecondary = RemoteSecondary(currentAtSign!, _preference!,
-        privateKey: _preference!.privateKey);
-    _encryptionService = EncryptionService();
+
+    // Now using ??= because we may be injecting a RemoteSecondary
+    _remoteSecondary ??= RemoteSecondary(currentAtSign!, _preference!, privateKey: _preference!.privateKey);
+
+    // Now using ??= because we may be injecting an EncryptionService
+    _encryptionService ??= EncryptionService();
+
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
     _encryptionService!.localSecondary = _localSecondary;
@@ -286,8 +275,7 @@ class AtClientImpl implements AtClient {
       {String? regex,
       String? sharedBy,
       String? sharedWith,
-      bool showHiddenKeys = false,
-      bool isDedicated = false}) async {
+      bool showHiddenKeys = false}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
@@ -308,12 +296,12 @@ class AtClientImpl implements AtClient {
       {String? regex,
       String? sharedBy,
       String? sharedWith,
-      bool isDedicated = false}) async {
+      bool showHiddenKeys = false}) async {
     var getKeysResult = await getKeys(
         regex: regex,
         sharedBy: sharedBy,
         sharedWith: sharedWith,
-        isDedicated: isDedicated);
+        showHiddenKeys: showHiddenKeys);
     var result = <AtKey>[];
     if (getKeysResult.isNotEmpty) {
       for (var key in getKeysResult) {
@@ -323,7 +311,7 @@ class AtClientImpl implements AtClient {
           _logger.severe('$key is not a well-formed key');
         } on Exception catch (e) {
           _logger.severe(
-              'Exception occured: ${e.toString()}. Unable to form key $key');
+              'Exception occurred: ${e.toString()}. Unable to form key $key');
         }
       }
     }
@@ -903,4 +891,49 @@ class AtClientImpl implements AtClient {
     }
     return await getRemoteSecondary()?.executeVerb(builder);
   }
+
+  //
+  // Everything after this point has been deprecated
+  //
+
+  /// Returns a new instance of [AtClient]. App has to pass the current user atSign
+  /// and the client preference.
+  @Deprecated("Use AtClientManger to get instance of atClient")
+  static Future<AtClient?> getClient(String? currentAtSign) async {
+    if (atClientInstanceMap.containsKey(currentAtSign)) {
+      return atClientInstanceMap[currentAtSign];
+    }
+    AtSignLogger('AtClientImpl')
+        .severe('Instance of AtClientImpl for $currentAtSign has not been created');
+    return null;
+  }
+
+  @Deprecated("Use [create]")
+  /// use [create]
+  static Future<void> createClient(String currentAtSign, String? namespace,
+      AtClientPreference preferences) async {
+    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
+    if (atClientInstanceMap.containsKey(currentAtSign)) {
+      return;
+    }
+    if (preferences.isLocalStoreRequired) {
+      var storageManager = StorageManager(preferences);
+      await storageManager.init(currentAtSign, preferences.keyStoreSecret);
+    }
+    var atClientImpl = AtClientImpl(currentAtSign, namespace, preferences);
+    await atClientImpl._init();
+    atClientInstanceMap[currentAtSign] = atClientImpl;
+  }
+
+  @Deprecated("Use [create]")
+  AtClientImpl(
+      // ignore: no_leading_underscores_for_local_identifiers
+      String _atSign,
+      String? namespace,
+      AtClientPreference preference) {
+    currentAtSign = AtUtils.formatAtSign(_atSign);
+    _preference = preference;
+    _namespace = namespace;
+  }
+
 }

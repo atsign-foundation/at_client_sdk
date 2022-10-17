@@ -192,7 +192,7 @@ void main() async {
         actualSyncException = syncResult.atClientException;
       });
 
-      await syncServiceImpl.processSyncRequests();
+      await syncServiceImpl.processSyncRequests(respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
 
       while (!listener.syncComplete) {
         await Future.delayed(Duration(milliseconds: 10));

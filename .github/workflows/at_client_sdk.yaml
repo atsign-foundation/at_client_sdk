@@ -28,22 +28,22 @@ jobs:
 
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
-        working-directory: at_client
+        working-directory: packages/at_client
         run: dart pub get
 
       # Run analyzer in at_client library
       - name: Analyze project source in at_client
-        working-directory: at_client
+        working-directory: packages/at_client
         run: dart analyze
 
       # Run unit tests
       - name: Run unit tests, with code coverage measurement
-        working-directory: at_client
+        working-directory: packages/at_client
         run: dart test --concurrency=1 --coverage="coverage"
 
       #     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
       #      - name: Convert coverage to LCOV format
-      #        working-directory: at_client
+      #        working-directory: packages/at_client
       #        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
       #
       #      - name: Upload coverage to Codecov
@@ -55,7 +55,7 @@ jobs:
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
-        working-directory: at_functional_test
+        working-directory: tests/at_functional_test
         run: dart pub get
 
       - name: Add entry to hosts file
@@ -63,35 +63,35 @@ jobs:
 
       # Start docker container to run functional tests
       - name: Start docker instance
-        working-directory: at_functional_test/test
+        working-directory: tests/at_functional_test/test
         run: docker-compose pull && docker-compose up -d
 
       - name: Check for docker container readiness
-        working-directory: at_functional_test
+        working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
 
       - name: Run PKAM
         run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
 
       - name: Check test environment readiness
-        working-directory: at_functional_test
+        working-directory: tests/at_functional_test
         run: dart run test/check_test_env.dart
 
       # Run functional tests
       - name: Run functional tests
-        working-directory: at_functional_test
+        working-directory: tests/at_functional_test
         run: dart test --concurrency=1 --coverage="coverage"
 
       #     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
       #      - name: Convert coverage to LCOV format
-      #        working-directory: at_functional_test
+      #        working-directory: tests/at_functional_test
       #        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
       #
       #      - name: Upload coverage to Codecov
       #        uses: codecov/codecov-action@v3.1.0
       #        with:
       #          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-      #          file: at_functional_test/coverage.lcov
+      #          file: tests/at_functional_test/coverage.lcov
       #          flags: functional_tests
 
       # Adding flutter to path
@@ -102,17 +102,17 @@ jobs:
 
       # Install dependencies of at_client_mobile
       - name: Installing dependencies
-        working-directory: at_client_mobile
+        working-directory: packages/at_client_mobile
         run: flutter pub get
 
       # Analyze at_client_mobile package
       - name: flutter analyze
-        working-directory: at_client_mobile
+        working-directory: packages/at_client_mobile
         run: flutter analyze
 
       # stop docker containers
       - name: stop docker containers
-        working-directory: at_functional_test/test
+        working-directory: tests/at_functional_test/test
         run: docker-compose down
 
   end2end_tests_prep:
@@ -143,29 +143,29 @@ jobs:
           sdk: stable
 
       - name: Install dependencies in at_client
-        working-directory: at_client
+        working-directory: packages/at_client
         run: dart pub get
 
       # Install dependencies in at_end2end_test
       - name: Install dependencies in at_end2end_test
-        working-directory: at_end2end_test
+        working-directory: tests/at_end2end_test
         run: dart pub get
 
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/test/at_credentials.dart
 
       # Move the config file in-place
       - name: Config for @cicd1/2
-        run: mv at_end2end_test/config/config12.yaml at_end2end_test/config/config.yaml
+        run: mv tests/at_end2end_test/config/config12.yaml tests/at_end2end_test/config/config.yaml
 
       # Run end-to-end test
       - name: End to end test
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        working-directory: at_end2end_test
+        working-directory: tests/at_end2end_test
         run: dart test --concurrency=1
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
@@ -179,27 +179,27 @@ jobs:
           sdk: stable
 
       - name: Install dependencies in at_client
-        working-directory: at_client
+        working-directory: packages/at_client
         run: dart pub get
 
       # Install dependencies in at_end2end_test
       - name: Install dependencies in at_end2end_test
-        working-directory: at_end2end_test
+        working-directory: tests/at_end2end_test
         run: dart pub get
 
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > at_end2end_test/test/at_credentials.dart
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/test/at_credentials.dart
 
       # Move the config file in-place
       - name: Config for @cicd1/4
-        run: mv at_end2end_test/config/config14.yaml at_end2end_test/config/config.yaml
+        run: mv tests/at_end2end_test/config/config14.yaml tests/at_end2end_test/config/config.yaml
 
       # Run end-to-end test
       - name: End to end test
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        working-directory: at_end2end_test
+        working-directory: tests/at_end2end_test
         run: dart test --concurrency=1

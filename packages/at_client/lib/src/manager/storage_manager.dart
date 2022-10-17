@@ -3,14 +3,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 
 /// Manager to create local storage
 class StorageManager {
-  static final StorageManager _singleton = StorageManager._internal();
-
-  StorageManager._internal();
-
-  factory StorageManager.getInstance() {
-    return _singleton;
-  }
-
   bool isStorageInitialized = false;
 
   AtClientPreference? preferences;
