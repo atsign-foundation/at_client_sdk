@@ -49,14 +49,6 @@ class RemoteSecondary implements Secondary {
   /// Throws [AtConnectException] when network is not available
   @override
   Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
-    // Since execution on remote secondary needs network connection
-    // checking for network connection before executing the verb.
-    if (!(await networkUtil.isNetworkAvailable())) {
-      throw AtConnectException(
-          'Failed to execute verb. internet connection unavailable',
-          intent: Intent.remoteVerbExecution,
-          exceptionScenario: ExceptionScenario.remoteVerbExecutionFailed);
-    }
     try {
       String verbResult;
       verbResult = await atLookUp.executeVerb(builder);
