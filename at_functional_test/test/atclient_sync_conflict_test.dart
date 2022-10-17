@@ -33,8 +33,10 @@ void main() async {
     await Future.delayed(Duration(seconds: 10));
   });
 
-  // server value is null, client has non value for same key.
-  // you should get a sync conflict populated with no exception thrown.
+  /// The purpose of this test verify the following:
+  /// 1. Updating a key with ttl 10ms to the cloud (Key becomes null after 10s in the server)
+  /// 2. Updating the same key in the client with a non null value
+  /// 3. Verifying that sync conflict is populated with no exception thrown
   test('server value is null', () async {
     AtSignLogger.root_level = 'info';
     final atSign = '@alice🛠';
