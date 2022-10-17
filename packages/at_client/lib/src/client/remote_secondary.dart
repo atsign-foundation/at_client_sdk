@@ -6,7 +6,6 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -22,8 +21,6 @@ class RemoteSecondary implements Secondary {
   late AtClientPreference _preference;
 
   late AtLookupImpl atLookUp;
-
-  NetworkUtil networkUtil = NetworkUtil();
 
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey}) {
@@ -45,8 +42,7 @@ class RemoteSecondary implements Secondary {
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Optionally [privateKey] is passed for verb builders which require authentication.
-  ///
-  /// Throws [AtConnectException] when network is not available
+
   @override
   Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
     try {
