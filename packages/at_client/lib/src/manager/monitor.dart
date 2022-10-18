@@ -12,6 +12,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:meta/meta.dart';
 
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
@@ -246,7 +247,7 @@ class Monitor {
 
   Future<void> _authenticateConnection() async {
     await _monitorConnection!.write('from:$_atSign\n');
-    var fromResponse = await _getQueueResponse();
+    var fromResponse = await getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
     }
@@ -259,7 +260,7 @@ class Monitor {
     _logger.finer('Authenticating the monitor connection: pkam:$signature');
     await _monitorConnection!.write('pkam:$signature\n');
 
-    var pkamResponse = await _getQueueResponse();
+    var pkamResponse = await getQueueResponse();
     if (!pkamResponse.contains('success')) {
       throw UnAuthenticatedException(
           'Monitor connection authentication failed');
@@ -285,10 +286,11 @@ class Monitor {
   }
 
   ///Returns the response of the monitor verb queue.
-  Future<String> _getQueueResponse() async {
+  @visibleForTesting
+  Future<String> getQueueResponse({int maxWaitTimeInMills = 6000}) async {
     dynamic monitorResponse;
     //waits for 30 seconds
-    for (var i = 0; i < 6000; i++) {
+    for (var i = 0; i < maxWaitTimeInMills; i++) {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
@@ -297,6 +299,10 @@ class Monitor {
         break;
       }
       await Future.delayed(Duration(milliseconds: 5));
+    }
+    if (monitorResponse == null) {
+      throw AtTimeoutException(
+          'Waited for ${5 * maxWaitTimeInMills} milliseconds and no response received');
     }
     // If monitor response contains error, return error
     if (monitorResponse.isError) {
@@ -394,6 +400,13 @@ class Monitor {
       _buffer.clear();
       _handleResponse(result, _onResponse);
     }
+  }
+
+  /// NOT a part of API.
+  /// Used to populate data into the monitorVerbResponseQueue for unit testing
+  @visibleForTesting
+  void addMonitorResponseToQueue(String data) {
+    _monitorVerbResponseQueue.add(data);
   }
 }
 
