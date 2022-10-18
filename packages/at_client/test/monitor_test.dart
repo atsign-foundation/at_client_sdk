@@ -427,4 +427,60 @@ void main() {
       expect(monitor.status, MonitorStatus.started);
     });
   });
+
+  group('A group of tests to validate verb queue', () {
+    test('test when verb queue response is not populated', () async {
+      Monitor monitor = Monitor(
+          (String json) => print('onResponse: $json'),
+          (e) => print('onError: $e'),
+          atSign,
+          atClientPreference,
+          MonitorPreference(),
+          () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory:
+              mockMonitorOutboundConnectionFactory);
+
+      expect(() async => await monitor.getQueueResponse(maxWaitTimeInMills: 2),
+          throwsA(predicate((dynamic e) => e is AtTimeoutException)));
+    });
+
+    test('test when verb queue response is populated with data: response', () async {
+      Monitor monitor = Monitor(
+          (String json) => print('onResponse: $json'),
+          (e) => print('onError: $e'),
+          atSign,
+          atClientPreference,
+          MonitorPreference(),
+          () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory:
+              mockMonitorOutboundConnectionFactory);
+      monitor.addMonitorResponseToQueue('data:success');
+
+      var response = await monitor.getQueueResponse();
+      expect(response, 'success');
+    });
+
+    test('test when verb queue response is populated with error: response', () async {
+      Monitor monitor = Monitor(
+              (String json) => print('onResponse: $json'),
+              (e) => print('onError: $e'),
+          atSign,
+          atClientPreference,
+          MonitorPreference(),
+              () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory:
+          mockMonitorOutboundConnectionFactory);
+      monitor.addMonitorResponseToQueue('error: AT0003 - Invalid syntax exception');
+
+      expect(() async => await monitor.getQueueResponse(maxWaitTimeInMills: 2),
+          throwsA(predicate((dynamic e) => e is AtClientException)));
+
+    });
+  });
 }
