@@ -4,6 +4,7 @@ RemoteSecondary connection rather than creating a new one
 - fix: Do not try to decrypt empty or null serverEncryptedValue when generating SyncConflict info
 - fix: put try-catch around most of the `SyncServiceImpl._checkConflict` method so sync is not impeded if
 _checkConflict encounters an exception
+- Fix null pointer exception in monitorResponse due to delayed server response
 ## 3.0.41
 - chore: upgrade persistence secondary to version 3.0.38 which reverts sync of signing keys and statsNotificationKey
 ## 3.0.40
