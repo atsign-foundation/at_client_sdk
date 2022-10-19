@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -33,6 +32,33 @@ void main() async {
     }
     await Future.delayed(Duration(seconds: 10));
   });
+
+  /// The purpose of this test verify the following:
+  /// 1. Updating a key with ttl 10ms to the cloud (Key becomes null after 10s in the server)
+  /// 2. Updating the same key in the client with a non null value
+  /// 3. Verifying that sync conflict is populated with no exception thrown
+  test('server value is null', () async {
+    AtSignLogger.root_level = 'info';
+    final atSign = '@alice🛠';
+    var preference = TestUtils.getPreference(atSign);
+    var atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
+    final progressListener = MySyncProgressListener2();
+    atClientManager.syncService.addProgressListener(progressListener);
+    final atClient = atClientManager.atClient;
+    // To setup encryption keys
+    await setEncryptionKeys(atSign, preference);
+    final remoteSecondary = atClient.getRemoteSecondary()!;
+    final updateVerbBuilder = UpdateVerbBuilder()
+      ..sharedBy = atSign
+      ..atKey = 'test.wavi'
+      ..ttl = 10
+      ..value = 'randomvalue';
+    await remoteSecondary.executeVerb(updateVerbBuilder);
+    var testKey = AtKey()..key = 'test';
+    await atClient.put(testKey, '123');
+    await Future.delayed(Duration(seconds: 10));
+  });
 }
 
 class MySyncProgressListener extends SyncProgressListener {
@@ -56,5 +82,23 @@ class MySyncProgressListener extends SyncProgressListener {
     expect(syncProgress.localCommitId,
         greaterThan(syncProgress.localCommitIdBeforeSync!));
     expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
+  }
+}
+
+class MySyncProgressListener2 extends SyncProgressListener {
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    bool conflictExists = false;
+    for (var keyInfo in syncProgress.keyInfoList!) {
+      if (keyInfo.key == 'test.wavi@alice🛠' &&
+          keyInfo.syncDirection.toString() == 'SyncDirection.remoteToLocal') {
+        final conflictInfo = keyInfo.conflictInfo;
+        if (conflictInfo != null) {
+          conflictExists = true;
+          print('conflictInfo is $conflictInfo');
+        }
+      }
+    }
+    expect(conflictExists, true);
   }
 }
