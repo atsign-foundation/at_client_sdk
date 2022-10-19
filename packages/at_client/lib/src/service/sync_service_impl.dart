@@ -445,14 +445,21 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     final atKey = AtKey.fromString(key);
     // temporary fix to add @ to sharedBy. permanent fix should be in AtKey.fromString
     atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
-    final conflictInfo = ConflictInfo();
-    bool keyExists = false;
+
+    bool serverCommitEntryKeyExistsInLocalUncommittedEntries = false;
     for (CommitEntry entry in uncommittedEntries) {
       if (key == entry.atKey) {
-        keyExists = true;
+        serverCommitEntryKeyExistsInLocalUncommittedEntries = true;
       }
     }
-    if (keyExists) {
+
+    if (!serverCommitEntryKeyExistsInLocalUncommittedEntries) {
+      return null;
+    }
+
+    final conflictInfo = ConflictInfo();
+
+    try {
       final localValue =
           await _atClient.getLocalSecondary()!.keyStore!.get(key);
       if (atKey is PublicKey || key.contains('public:')) {
@@ -468,7 +475,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (serverMetaData != null && serverMetaData[IS_ENCRYPTED] == "true") {
         final decryptionManager =
             AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
+
+        // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue;
+
         if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {
           serverDecryptedValue =
               await decryptionManager.decrypt(atKey, serverEncryptedValue);
@@ -480,8 +490,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         }
       }
       return conflictInfo;
+    } catch (e, st) {
+      conflictInfo.errorOrExceptionMessage = '_checkConflict for $atKey encountered exception $e';
+      _logger.warning(conflictInfo.errorOrExceptionMessage, e, st);
+      return conflictInfo;
     }
-    return null;
   }
 
   Future<List<BatchRequest>> _getBatchRequests(
