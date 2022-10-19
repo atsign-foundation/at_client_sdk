@@ -168,8 +168,8 @@ class NotificationServiceImpl
             } else {
               streamController.add(transformedNotification);
             }
-          } on AtException catch (e, st) {
-            _logger.severe('Hello! ${e.getTraceMessage()}', e, st);
+          } on AtException catch (e) {
+            _logger.severe(e.getTraceMessage());
           }
         });
       }
