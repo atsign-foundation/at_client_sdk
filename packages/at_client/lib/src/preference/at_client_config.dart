@@ -9,5 +9,5 @@ class AtClientConfig {
   }
 
   /// Represents the at_client version.
-  final String atClientVersion = '3.0.41';
+  final String atClientVersion = '3.0.42';
 }

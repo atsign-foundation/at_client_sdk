@@ -25,9 +25,10 @@ class ResolutionContext {
 class ConflictInfo {
   dynamic remoteValue;
   dynamic localValue;
+  String? errorOrExceptionMessage;
 
   @override
   String toString() {
-    return 'ConflictInfo{remoteValue: $remoteValue, localValue: $localValue}';
+    return 'ConflictInfo{remoteValue: $remoteValue, localValue: $localValue, errorOrExceptionMessage: $errorOrExceptionMessage}';
   }
 }
