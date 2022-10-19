@@ -9,6 +9,7 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -23,6 +24,8 @@ class EncryptionService {
   String? currentAtSign;
 
   var logger = AtSignLogger('EncryptionService');
+
+  AtTelemetryService? telemetry;
 
   Future<String> encrypt(String? key, String value, String sharedWith) async {
     return EncryptionUtil.encryptValue(

@@ -30,6 +30,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
 
+  /// utility method to reduce code verbosity in this file
+  void _sendTelemetry(String name, dynamic value) {
+    _atClient.telemetry?.controller.sink.add(SyncTelemetryEvent(name, value));
+  }
+
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
@@ -194,7 +199,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _syncInProgress = true;
       int serverCommitId = await _getServerCommitId();
       final localCommitIdBeforeSync = await _getLocalCommitId();
+
+      // Hint for the casual reader - main sync algorithm is in [syncInternal]
       final syncResult = await syncInternal(serverCommitId, syncRequest);
+
       _syncComplete(syncRequest);
       syncProgress.syncStatus = syncResult.syncStatus;
       syncProgress.keyInfoList = syncResult.keyInfoList;
@@ -311,14 +319,22 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (serverCommitId > localCommitId) {
       _logger.finer(
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
+
+      // Hint to casual reader: This is where we sync new changes from the server to this this client
+      // Note that if the 'while' loop in _syncFromServer never exits, then we never get to calling
+      // _syncToRemote down below, which is where we send pending local changes to the server
       final keyInfoList = await _syncFromServer(
           serverCommitId, localCommitId, unCommittedEntries);
+
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
       _logger.finer(
           'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
+
+      // Hint to casual reader: This is where we sync new changes from this client to the server
       final keyInfoList = await _syncToRemote(unCommittedEntries);
+
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     syncResult.lastSyncedOn = DateTime.now().toUtc();
@@ -376,7 +392,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       List<CommitEntry> uncommittedEntries) async {
     // Iterates until serverCommitId is greater than localCommitId are equal.
     List<KeyInfo> keyInfoList = [];
+
+    // Hint to casual reader: Most sync weirdness is caused by this while condition not being met
+    // - i.e. this becomes an infinite loop, and then we never get to the next step in the sync
+    // algorithm, which is syncing local changes to the cloud secondary
     while (serverCommitId > localCommitId) {
+      _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "localCommitId":localCommitId});
+
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
@@ -404,6 +426,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
+        _sendTelemetry('_syncFromServer.forEachEntry.start', {"serverCommitEntry":serverCommitEntry});
         try {
           final keyInfo =
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
@@ -412,11 +435,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
-        } on Exception catch (e) {
+          _sendTelemetry('_syncFromServer.forEachEntry.end', keyInfo);
+        } on Exception catch (e, st) {
           var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+          _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":st,"cause":cause});
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry - $cause');
-        } on Error catch (e) {
+        } on Error catch (e, st) {
+          _sendTelemetry('_syncFromServer.forEachEntry.error', {"e":e,"st":st});
           _logger.severe(
               'error syncing entry to local $serverCommitEntry - ${e.toString()}');
         }

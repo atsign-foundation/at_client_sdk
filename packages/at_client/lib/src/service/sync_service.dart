@@ -1,5 +1,6 @@
 import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
+import 'package:at_client/src/telemetry/at_telemetry.dart';
 
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
@@ -46,4 +47,8 @@ abstract class SyncService {
 
   /// Removes a sync progress listener
   void removeProgressListener(SyncProgressListener listener);
+}
+
+class SyncTelemetryEvent extends AtTelemetryEvent {
+  SyncTelemetryEvent(String name, value) : super(name, value);
 }

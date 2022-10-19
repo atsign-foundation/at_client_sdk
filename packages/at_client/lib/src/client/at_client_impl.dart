@@ -22,6 +22,7 @@ import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
@@ -52,6 +53,15 @@ class AtClientImpl implements AtClient {
   RemoteSecondary? _remoteSecondary;
 
   EncryptionService? _encryptionService;
+
+  AtTelemetryService? _telemetry;
+  @override
+  set telemetry(AtTelemetryService? telemetryService) {
+    _telemetry = telemetryService;
+    _cascadeSetTelemetryService();
+  }
+  @override
+  AtTelemetryService? get telemetry => _telemetry;
 
   @override
   EncryptionService? get encryptionService => _encryptionService;
@@ -128,6 +138,16 @@ class AtClientImpl implements AtClient {
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
     _encryptionService!.localSecondary = _localSecondary;
+
+    _cascadeSetTelemetryService();
+  }
+
+  void _cascadeSetTelemetryService() {
+    if (telemetry != null) {
+      _encryptionService?.telemetry = telemetry;
+      _localSecondary?.telemetry = telemetry;
+      _remoteSecondary?.telemetry = telemetry;
+    }
   }
 
   Secondary getSecondary() {
@@ -191,39 +211,30 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
+  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) async {
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key":atKey}));
+
     var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic! : false;
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
-    return _delete(atKey.key!,
-        sharedWith: atKey.sharedWith,
-        sharedBy: atKey.sharedBy,
-        isPublic: isPublic,
-        isCached: isCached,
-        namespaceAware: isNamespaceAware);
-  }
-
-  Future<bool> _delete(String key,
-      {String? sharedWith,
-      String? sharedBy,
-      bool isPublic = false,
-      bool isCached = false,
-      bool namespaceAware = true}) async {
     String keyWithNamespace;
-    if (namespaceAware) {
-      keyWithNamespace = _getKeyWithNamespace(key);
+    if (isNamespaceAware) {
+      keyWithNamespace = _getKeyWithNamespace(atKey.key!);
     } else {
-      keyWithNamespace = key;
+      keyWithNamespace = atKey.key!;
     }
-    sharedBy ??= currentAtSign;
+    atKey.sharedBy ??= currentAtSign;
     var builder = DeleteVerbBuilder()
       ..isCached = isCached
       ..isPublic = isPublic
-      ..sharedWith = sharedWith
+      ..sharedWith = atKey.sharedWith
       ..atKey = keyWithNamespace
-      ..sharedBy = sharedBy;
+      ..sharedBy = atKey.sharedBy;
     var deleteResult = await getSecondary().executeVerb(builder, sync: true);
+
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete', {"key":atKey, "deleteResult":deleteResult}));
+
     return deleteResult != null;
   }
 
@@ -321,6 +332,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put called', {"key":atKey,"value":value}));
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -333,6 +345,7 @@ class AtClientImpl implements AtClient {
     if (value is List<int>) {
       atResponse = await putBinary(atKey, value);
     }
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put complete', {"atKey":atKey}));
     return atResponse.response.isNotEmpty;
   }
 

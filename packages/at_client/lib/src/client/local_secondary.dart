@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -27,6 +27,8 @@ class LocalSecondary implements Secondary {
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();
   }
+
+  AtTelemetryService? telemetry;
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/telemetry/at_client_telemetry.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:uuid/uuid.dart';
 
