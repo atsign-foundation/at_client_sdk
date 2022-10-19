@@ -44,10 +44,10 @@ class AtClientTelemetryConsumer {
   AtClientTelemetryConsumer(this.telemetry, {this.bufferSize = 10000});
 
   StreamSubscription? _subscription;
-  void start() {
+  void startConsuming() {
     _subscription ??= telemetry.stream.listen(eventHandler);
   }
-  void stop() {
+  void stopConsuming() {
     _subscription?.cancel();
     _subscription = null;
   }
