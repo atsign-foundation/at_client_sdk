@@ -103,6 +103,28 @@ abstract class NotificationService {
   Future<NotificationResult> getStatus(String notificationId);
 
   /// Returns the [AtNotification] of the given notificationId
+  ///
+  /// Usage:
+  ///
+  ///  To fetch a notification with id: abc-123
+  /// ```dart
+  /// var notification = NotificationServiceImpl(atClient!);
+  /// var atNotification = await notification.fetch('abc-123');
+  /// ```
+  /// Returns [NotificationStatus.delivered] when notification exist in the key-store
+  /// ```
+  ///  AtNotification{id: abc-123, key: @bob:phone.wavi@alice,
+  ///  from: @alice, to: @bob, epochMillis: 1666268427030, value: "+1 887 887 7876",
+  ///  operation: OperationType.update, status: NotificationStatus.delivered}
+  /// ```
+  ///
+  /// Returns [NotificationStatus.expired] when
+  /// * Notification id does not exist
+  /// * Notification is expired / delete
+  /// ```
+  ///  AtNotification{id: abc-123, status: NotificationStatus.expired}
+  /// ```
+  /// Throws [AtClientException] when server is not reachable or server timeout's to respond
   Future<AtNotification> fetch(String notificationId);
 }
 
