@@ -144,9 +144,9 @@ class LocalSecondary implements Secondary {
     }
   }
 
-  Future<String> _delete(DeleteVerbBuilder builder) async {
+  Future<String?> _delete(DeleteVerbBuilder builder) async {
+    var deleteKey = '';
     try {
-      var deleteKey = '';
       if (builder.isCached) {
         deleteKey += 'cached:';
       }
@@ -167,6 +167,10 @@ class LocalSecondary implements Secondary {
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
       rethrow;
+    } on KeyNotFoundException {
+      _logger
+          .warning('key to be deleted $deleteKey is not present in keystore');
+      return null;
     }
   }
 

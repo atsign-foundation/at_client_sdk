@@ -225,6 +225,8 @@ abstract class AtClient {
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
   /// [isDedicated] need to be set to true to create a dedicated connection
+  /// Returns true if the delete operation is successful.
+  /// Returns false if the delete operation fails or if the key is not present in keystore
   /// ```
   /// e.g alice is current atsign
   /// delete:phone@alice

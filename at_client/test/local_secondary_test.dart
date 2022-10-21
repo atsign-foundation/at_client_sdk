@@ -164,6 +164,33 @@ void main() {
       expect(localSecondary.executeVerb(llookupVerbBuilder, sync: false),
           throwsA(isA<KeyNotFoundException>()));
     });
+    test('test delete verb builder - delete non existent key', () async {
+      final atSign = '@alice';
+      final atClientManager = AtClientManager(atSign);
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive';
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atClientManager: atClientManager);
+      final localSecondary = LocalSecondary(atClient);
+      final verbBuilder = UpdateVerbBuilder()
+        ..value = 'alice@gmail.com'
+        ..atKey = 'email'
+        ..sharedBy = atSign;
+      await localSecondary.executeVerb(verbBuilder, sync: false);
+      var deleteVerbBuilder = DeleteVerbBuilder()
+        ..atKey = 'email'
+        ..sharedBy = atSign;
+      await expectLater(
+          await localSecondary.executeVerb(deleteVerbBuilder, sync: false),
+          startsWith('data:'));
+      deleteVerbBuilder = DeleteVerbBuilder()
+        ..atKey = 'email'
+        ..sharedBy = atSign;
+      await expectLater(
+          await localSecondary.executeVerb(deleteVerbBuilder, sync: false),
+          null);
+    });
     test('test scan verb builder', () async {
       final atSign = '@alice';
       final atClientManager = AtClientManager(atSign);
