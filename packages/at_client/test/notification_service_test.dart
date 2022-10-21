@@ -352,6 +352,30 @@ void main() {
       expect(transformedNotification.id, '124');
       expect(transformedNotification.key, 'key-1');
     });
+
+    test('A test to verify the reserved key is not decrypted', () async {
+      var isEncrypted = true;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          '@bob:shared_key@alice',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          isEncrypted,
+          value: 'encryptedValue');
+      var notificationResponseTransformer = NotificationResponseTransformer();
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = true));
+      expect(transformedNotification.id, '124');
+      expect(transformedNotification.value, 'encryptedValue');
+    });
   });
 
   group('A group of tests to validate notification exception chaining', () {
