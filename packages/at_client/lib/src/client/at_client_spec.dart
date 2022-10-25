@@ -230,6 +230,8 @@ abstract class AtClient {
   /// to false.
   ///
   /// [isDedicated] is currently ignored and will be removed in next major version
+  /// Returns true if the delete operation is successful.
+  /// Returns false if the delete operation fails or if the key is not present in keystore.
   /// ```
   /// e.g alice is current atsign
   /// delete:phone@alice
