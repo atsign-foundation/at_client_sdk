@@ -339,7 +339,7 @@ class NotificationServiceImpl
     var atNotificationStream = _streamListeners.putIfAbsent(
         notificationConfig, () => StreamController<AtNotification>.broadcast());
     if (regex == 'statsNotification') {
-      Future.delayed(Duration(seconds: 10), () async => _init());
+      Future.delayed(Duration(seconds: 30), () async => _init());
     } else {
       Future.delayed(Duration(milliseconds: 5), () async => _init());
     }
