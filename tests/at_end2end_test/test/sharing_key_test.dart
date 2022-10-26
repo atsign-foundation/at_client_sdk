@@ -1,48 +1,27 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_end2end_test/config/config_util.dart';
+import 'package:at_end2end_test/src/sync_initializer.dart';
+import 'package:at_end2end_test/src/test_initializers.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
-import 'test_utils.dart';
-
-void main() {
-  var currentAtSign, sharedWithAtSign;
-  AtClientManager? currentAtSignClientManager, sharedWithAtSignClientManager;
-  var namespace = 'wavi';
+void main() async {
+  late AtClientManager currentAtClientManager;
+  late AtClientManager sharedWithAtClientManager;
+  late String currentAtSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    // Create atClient instance for currentAtSign
-    currentAtSignClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(
-            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-    // Set Encryption Keys for currentAtSign
-    await TestUtils.setEncryptionKeys(currentAtSign);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
-    // Create atClient instance for atSign2
-    sharedWithAtSignClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(sharedWithAtSign, namespace,
-            TestUtils.getPreference(sharedWithAtSign));
-    // Set Encryption Keys for sharedWithAtSign
-    await TestUtils.setEncryptionKeys(sharedWithAtSign);
-    isSyncInProgress = true;
-    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(currentAtSign, namespace);
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(sharedWithAtSign, namespace);
   });
 
   /// The purpose of this test verify the following:
@@ -51,6 +30,10 @@ void main() {
   /// 3. Get method - lookup verb
   test('Share a key to sharedWith atSign and lookup from sharedWith atSign',
       () async {
+    // Setting currentAtSign atClient instance to context.
+    currentAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
     var uuid = Uuid();
     // Generate  uuid
     var randomValue = uuid.v4();
@@ -62,23 +45,16 @@ void main() {
     // Appending a random number as a last number to generate a new phone number
     // for each run.
     var value = '+91 901920192';
-    // Setting currentAtSign atClient instance to context.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
     var putResult =
-        await currentAtSignClientManager?.atClient.put(phoneNumberKey, value);
+        await currentAtClientManager.atClient.put(phoneNumberKey, value);
     expect(putResult, true);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 5));
-    }
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.syncService);
     // Setting sharedWithAtSign atClient instance to context.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
+    sharedWithAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(sharedWithAtSign, namespace,
+            TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    var getResult = await sharedWithAtClientManager?.atClient.get(AtKey()
       ..key = 'phoneNumber$randomValue'
       ..sharedBy = currentAtSign);
     expect(getResult?.value, value);
@@ -96,8 +72,9 @@ void main() {
       'Create a key to sharedWith atSign with ttr and verify sharedWith atSign has a cached_key',
       () async {
     // Setting currentAtSign atClient instance to context.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    currentAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
     var verificationKey = AtKey()
       ..key = 'verificationnumber'
       ..sharedWith = sharedWithAtSign
@@ -107,36 +84,28 @@ void main() {
         ..ttl = 300000);
     var value = '0873';
     var putResult =
-        await currentAtSignClientManager?.atClient.put(verificationKey, value);
+        await currentAtClientManager.atClient.put(verificationKey, value);
     expect(putResult, true);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 5));
-    }
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.syncService);
+
     // Setting sharedWithAtSign atClient instance to context.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    isSyncInProgress = true;
-    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 5));
-    }
-    var getResult = await sharedWithAtSignClientManager?.atClient.getKeys(
+    sharedWithAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(sharedWithAtSign, namespace,
+            TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await E2ESyncService.getInstance()
+        .syncData(sharedWithAtClientManager.syncService);
+    var getResult = await sharedWithAtClientManager.atClient.getKeys(
         regex:
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
     print(getResult);
     expect(
-        getResult?.contains(
+        getResult.contains(
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign'),
         true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, skip: 'skipping to test temporarily to unblock');
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   /// The purpose of this test verify the following:
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
@@ -144,9 +113,9 @@ void main() {
   test(
       'verify backward compatibility for sharedKey and checksum in metadata for sharedkey',
       () async {
-    currentAtSignClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(
-            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+    currentAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
     var locationKey = AtKey()
       ..key = 'location'
       ..sharedWith = sharedWithAtSign
@@ -156,32 +125,20 @@ void main() {
     var encryptionService =
         AtKeyEncryptionManager().get(locationKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(locationKey, value);
-    var result = await currentAtSignClientManager?.atClient
+    var result = await currentAtClientManager.atClient
         .getRemoteSecondary()!
         .executeCommand(
             'update:ttl:300000:$sharedWithAtSign:location.$namespace$currentAtSign $encryptedValue\n',
             auth: true);
     expect(result != null, true);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
-    sharedWithAtSignClientManager = await AtClientManager.getInstance()
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.syncService);
+    sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
-            TestUtils.getPreference(sharedWithAtSign));
-    var getResult = await sharedWithAtSignClientManager?.atClient.get(AtKey()
+            TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    var getResult = await sharedWithAtClientManager.atClient.get(AtKey()
       ..key = 'location'
       ..sharedBy = currentAtSign);
-    expect(getResult?.value, value);
+    expect(getResult.value, value);
   }, timeout: Timeout(Duration(minutes: 5)));
-
-  tearDownAll(() async {
-    var isExists = await Directory('test/hive').exists();
-    if (isExists) {
-      Directory('test/hive/').deleteSync(recursive: true);
-    }
-  });
 }
