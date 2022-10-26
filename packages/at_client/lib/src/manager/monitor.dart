@@ -307,6 +307,7 @@ class Monitor {
       throw AtTimeoutException(
           'Waited for ${5 * maxWaitTimeInMillis} milliseconds and no response received');
     }
+    _logger.info(monitorResponse);
     // If monitor response contains error, return error
     if (monitorResponse.isError) {
       return '${monitorResponse.errorCode}: ${monitorResponse.errorDescription}';

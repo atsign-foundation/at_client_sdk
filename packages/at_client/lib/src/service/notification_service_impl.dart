@@ -32,7 +32,7 @@ class NotificationServiceImpl
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
-  var _isMonitorPaused = false;
+  var _isMonitorPaused = true;
   late AtClient _atClient;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
@@ -48,7 +48,7 @@ class NotificationServiceImpl
     }
     final notificationService =
         NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
-    await notificationService._init();
+
     _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return _notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
@@ -68,8 +68,13 @@ class NotificationServiceImpl
     _atClientManager.listenToAtSignChange(this);
   }
 
+  bool _alreadyInitialized = false;
   Future<void> _init() async {
-    _logger.finer('${_atClient.getCurrentAtSign()} notification service init');
+    if (_alreadyInitialized) {
+      return;
+    }
+    _alreadyInitialized = true;
+    _logger.info('${_atClient.getCurrentAtSign()} notification service _init()');
     await _startMonitor();
     _logger.finer(
         '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
@@ -145,6 +150,8 @@ class NotificationServiceImpl
 
   Future<void> _internalNotificationCallback(String notificationJSON) async {
     try {
+      _logger.info('DEBUG: $notificationJSON');
+
       final notificationParser = NotificationResponseParser();
       final atNotifications = await notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
@@ -324,12 +331,18 @@ class NotificationServiceImpl
   @override
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
+    _logger.info('subscribe(regex: $regex, shouldDecrypt: $shouldDecrypt');
     regex ??= emptyRegex;
     var notificationConfig = NotificationConfig()
       ..regex = regex
       ..shouldDecrypt = shouldDecrypt;
     var atNotificationStream = _streamListeners.putIfAbsent(
         notificationConfig, () => StreamController<AtNotification>.broadcast());
+    if (regex == 'statsNotification') {
+      Future.delayed(Duration(seconds: 10), () async => _init());
+    } else {
+      Future.delayed(Duration(milliseconds: 5), () async => _init());
+    }
     return atNotificationStream.stream as Stream<AtNotification>;
   }
 
