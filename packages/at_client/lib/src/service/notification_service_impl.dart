@@ -250,6 +250,8 @@ class NotificationServiceImpl
       // Invoke onErrorCallback
       if (onError != null) {
         onError(notificationResult);
+      } else {
+        rethrow;
       }
     }
     if (!checkForFinalDeliveryStatus) {
