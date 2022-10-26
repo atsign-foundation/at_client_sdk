@@ -150,7 +150,7 @@ class NotificationServiceImpl
 
   Future<void> _internalNotificationCallback(String notificationJSON) async {
     try {
-      _logger.info('DEBUG: $notificationJSON');
+      _logger.finer('DEBUG: $notificationJSON');
 
       final notificationParser = NotificationResponseParser();
       final atNotifications = await notificationParser
