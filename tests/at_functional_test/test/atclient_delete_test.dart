@@ -60,6 +60,7 @@ void main() {
     if (serverVersion != null) {
       version = Version.parse(serverVersion);
     }
+    print('***version $version');
     if (version > Version(3, 0, 25)) {
       expect(deleteResult, false);
     } else {
