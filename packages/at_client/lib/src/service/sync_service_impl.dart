@@ -22,9 +22,9 @@ import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
-  static const _syncRequestThreshold = 3,
-      _syncRequestTriggerInSeconds = 3,
-      _syncRunIntervalSeconds = 5,
+  static const _syncRequestThreshold = 1,
+      _syncRequestTriggerInSeconds = 2,
+      _syncRunIntervalSeconds = 1,
       _queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
