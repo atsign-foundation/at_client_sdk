@@ -53,19 +53,7 @@ void main() {
     var deleteResult = await atClient.delete(phoneKey);
     expect(deleteResult, true);
     deleteResult = await atClient.delete(phoneKey);
-    final socketHandler =
-        await getUnAuthSocketHandler(host, atSignPort, atsign);
-    final serverVersion = await socketHandler.getVersion();
-    var version;
-    if (serverVersion != null) {
-      version = Version.parse(serverVersion);
-    }
-    print('***version $version');
-    if (version > Version(3, 0, 25)) {
-      expect(deleteResult, false);
-    } else {
-      expect(deleteResult, true);
-    }
+    expect(deleteResult, false);
   });
   tearDown(() async => await tearDownFunc());
 }
