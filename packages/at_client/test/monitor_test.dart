@@ -446,7 +446,8 @@ void main() {
           throwsA(predicate((dynamic e) => e is AtTimeoutException)));
     });
 
-    test('test when verb queue response is populated with data: response', () async {
+    test('test when verb queue response is populated with data: response',
+        () async {
       Monitor monitor = Monitor(
           (String json) => print('onResponse: $json'),
           (e) => print('onError: $e'),
@@ -464,23 +465,24 @@ void main() {
       expect(response, 'success');
     });
 
-    test('test when verb queue response is populated with error: response', () async {
+    test('test when verb queue response is populated with error: response',
+        () async {
       Monitor monitor = Monitor(
-              (String json) => print('onResponse: $json'),
-              (e) => print('onError: $e'),
+          (String json) => print('onResponse: $json'),
+          (e) => print('onError: $e'),
           atSign,
           atClientPreference,
           MonitorPreference(),
-              () => print('onRetry called'),
+          () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-          mockMonitorOutboundConnectionFactory);
-      monitor.addMonitorResponseToQueue('error: AT0003 - Invalid syntax exception');
+              mockMonitorOutboundConnectionFactory);
+      monitor.addMonitorResponseToQueue(
+          'error: AT0003 - Invalid syntax exception');
 
       expect(() async => await monitor.getQueueResponse(maxWaitTimeInMills: 2),
           throwsA(predicate((dynamic e) => e is AtClientException)));
-
     });
   });
 }

@@ -22,21 +22,22 @@ String? lastNotificationJson;
 class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
   @override
   bool isKeyExists(String key) {
-    if (! key.contains(NotificationServiceImpl.notificationIdKey)) {
-      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+    if (!key.contains(NotificationServiceImpl.notificationIdKey)) {
+      throw IllegalArgumentException(
+          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
     }
     return (lastNotificationJson != null);
   }
 }
 
-class MockLocalSecondary extends Mock implements LocalSecondary  {
+class MockLocalSecondary extends Mock implements LocalSecondary {
   @override
   SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
-
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
   AtClientPreference mockPreferences = AtClientPreference()..namespace = 'wavi';
+
   @override
   AtClientPreference getPreferences() {
     mockPreferences.fetchOfflineNotifications = true;
@@ -49,6 +50,7 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   }
 
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
+
   @override
   LocalSecondary? getLocalSecondary() {
     return mockLocalSecondary;
@@ -58,7 +60,8 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   Future<AtValue> get(AtKey atKey,
       {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
     if (atKey.key != NotificationServiceImpl.notificationIdKey) {
-      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+      throw IllegalArgumentException(
+          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
     }
     if (lastNotificationJson != null) {
       return AtValue()..value = lastNotificationJson;
@@ -71,7 +74,8 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
     if (atKey.key != NotificationServiceImpl.notificationIdKey) {
-      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+      throw IllegalArgumentException(
+          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
     }
     lastNotificationJson = value;
     return true;
@@ -80,7 +84,8 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   @override
   Future<bool> delete(AtKey atKey, {bool isDedicated = false}) async {
     if (atKey.key != NotificationServiceImpl.notificationIdKey) {
-      throw IllegalArgumentException("This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
+      throw IllegalArgumentException(
+          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
     }
     if (lastNotificationJson == null) {
       return false;
@@ -134,6 +139,9 @@ class MockAtKeyEncryptionManager extends Mock
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
 class FakeNotifyVerbBuilder extends Fake implements NotifyVerbBuilder {}
+
+class FakeNotifyFetchVerbBuilder extends Fake
+    implements NotifyFetchVerbBuilder {}
 
 class FakeAtKey extends Fake implements AtKey {}
 
@@ -515,61 +523,182 @@ void main() {
     });
   });
 
+  group('A group of tests to validate notification fetch', () {
+    test('A test to verify notification fetch for non-existing notification',
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+          Future.value('data:${jsonEncode({
+                'id': '123',
+                'notificationStatus': 'NotificationStatus.expired'
+              })}'));
+
+      var response = await notificationServiceImpl.fetch('123');
+      expect(response.id, '123');
+      expect(response.status, 'NotificationStatus.expired');
+    });
+
+    test('A test to verify notification fetch for an existing notification',
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+          Future.value('data:{"id":"fb948e15-128f-408d-b73f-0ab1372da4a3",'
+              '"fromAtSign":"@alice",'
+              '"notificationDateTime":"2022-10-03 18:34:58.601",'
+              '"toAtSign":"@bob","notification":"@bob:phone@alice",'
+              '"type":"NotificationType.sent",'
+              '"opType":"OperationType.update",'
+              '"messageType":"MessageType.key",'
+              '"priority":"NotificationPriority.low",'
+              '"notificationStatus":"NotificationStatus.delivered",'
+              '"expiresAt":"2022-10-03 13:20:58.565Z",'
+              '"atValue":"+445 112 3434"}'));
+
+      var atNotification = await notificationServiceImpl.fetch('123');
+      expect(atNotification.id, 'fb948e15-128f-408d-b73f-0ab1372da4a3');
+      expect(atNotification.key, '@bob:phone@alice');
+      expect(atNotification.from, '@alice');
+      expect(atNotification.to, '@bob');
+      expect(atNotification.epochMillis,
+          DateTime.parse('2022-10-03 18:34:58.601').millisecondsSinceEpoch);
+      expect(atNotification.value, '+445 112 3434');
+      expect(atNotification.operation, 'OperationType.update');
+      expect(atNotification.status, 'NotificationStatus.delivered');
+    });
+
+    test('A test to verify remote secondary timeouts to respond', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+          throw AtLookUpException(
+              'AT0023', 'Waited for 10000 millis. No response after 100000'));
+      // The errorCode AT0023 results to AtTimeoutException. Since AtTimeoutException is
+      // not a sub-class of AtClientException, the exception is converted to AtClientException and returned.`
+      expect(() async => await notificationServiceImpl.fetch('123'),
+          throwsA(predicate((dynamic e) => e is AtClientException)));
+    });
+
+    test('A test to verify remote secondary is not reachable', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      remoteSecondary.atLookUp = mockAtLookupImpl;
+      when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenAnswer((_) => remoteSecondary);
+      registerFallbackValue(FakeNotifyFetchVerbBuilder());
+      when(() => mockAtLookupImpl.executeVerb(any())).thenAnswer((_) =>
+          throw AtLookUpException('AT0021', 'Secondary Connect Exception'));
+      // The errorCode AT0021 results to SecondaryConnectException. Since SecondaryConnectException is
+      // not a sub-class of AtClientException, the exception is converted to AtClientException and returned.`
+      expect(() async => await notificationServiceImpl.fetch('123'),
+          throwsA(predicate((dynamic e) => e is AtClientException)));
+    });
+  });
   group('Tests of getLastNotificationTime()', () {
     setUpAll(() {
       when(() => mockAtClientManager.atClient)
           .thenAnswer((_) => mockAtClientImpl);
     });
 
-    test('getLastNotificationTime() returns null if checkOfflineNotifications is set to false',
-            () async {
-          var notificationServiceImpl = await NotificationServiceImpl.create(
-              mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
+    test(
+        'getLastNotificationTime() returns null if checkOfflineNotifications is set to false',
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
 
-          notificationServiceImpl.stopAllSubscriptions();
+      notificationServiceImpl.stopAllSubscriptions();
 
-          mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = false;
+      mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = false;
 
-          expect(await notificationServiceImpl.getLastNotificationTime(), null);
-        });
+      expect(await notificationServiceImpl.getLastNotificationTime(), null);
+    });
 
     test(
         'getLastNotificationTime() returns null if checkOfflineNotifications is true but there is no stored value',
-            () async {
-              var notificationServiceImpl = await NotificationServiceImpl.create(
-                  mockAtClientImpl,
-                  atClientManager: mockAtClientManager,
-                  monitor: mockMonitor) as NotificationServiceImpl;
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
 
-              notificationServiceImpl.stopAllSubscriptions();
+      notificationServiceImpl.stopAllSubscriptions();
 
-              mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
+      mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
 
-              await mockAtClientImpl.delete(AtKey()..key = NotificationServiceImpl.notificationIdKey);
+      await mockAtClientImpl
+          .delete(AtKey()..key = NotificationServiceImpl.notificationIdKey);
 
-              expect(await notificationServiceImpl.getLastNotificationTime(), null);
-        });
+      expect(await notificationServiceImpl.getLastNotificationTime(), null);
+    });
 
     test(
         'getLastNotificationTime() returns the stored value if checkOfflineNotifications is true and there is a stored value',
-            () async {
-          var notificationServiceImpl = await NotificationServiceImpl.create(
-              mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
 
-          notificationServiceImpl.stopAllSubscriptions();
+      notificationServiceImpl.stopAllSubscriptions();
 
-          mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
+      mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
 
-          int epochMillis = DateTime.now().millisecondsSinceEpoch;
-          var atNotification = at_notification.AtNotification(Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
-          await mockAtClientImpl.put(AtKey()..key = NotificationServiceImpl.notificationIdKey,
-              jsonEncode(atNotification.toJson()));
+      int epochMillis = DateTime.now().millisecondsSinceEpoch;
+      var atNotification = at_notification.AtNotification(
+          Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
+      await mockAtClientImpl.put(
+          AtKey()..key = NotificationServiceImpl.notificationIdKey,
+          jsonEncode(atNotification.toJson()));
 
-          expect(await notificationServiceImpl.getLastNotificationTime(), epochMillis);
-        });
+      expect(
+          await notificationServiceImpl.getLastNotificationTime(), epochMillis);
+    });
   });
 }

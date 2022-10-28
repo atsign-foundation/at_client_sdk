@@ -5,9 +5,6 @@ import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
-import 'package:at_client/src/manager/monitor.dart';
-import 'package:at_client/src/response/notification_response_parser.dart';
-import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
@@ -108,42 +105,39 @@ void main() {
         // Setting the AtClientManager instance to current atsign
         await AtClientManager.getInstance().setCurrentAtSign(
             currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-
-        var epochMillsNow = DateTime.now().millisecondsSinceEpoch;
         var notificationResult = await AtClientManager.getInstance()
             .notificationService
             .notify(input);
         expect(notificationResult.notificationStatusEnum,
             NotificationStatusEnum.delivered);
 
-        // Setting the AtClientManager instance to sharedWith atsign
         await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
             namespace, TestUtils.getPreference(sharedWithAtSign));
-        // Getting the notification via the monitor command
-        var streamController = StreamController<AtNotification>();
-        var isNotificationReceived = false;
-        var monitorForNotification = MonitorForNotification(
-            notificationResult.notificationID,
-            sharedWithAtSign,
-            epochMillsNow,
-            streamController);
-        await monitorForNotification.init();
-        streamController.stream.listen((atNotification) async {
-          isNotificationReceived = true;
-          var response =
-              await NotificationResponseTransformer().transform(Tuple()
-                ..one = atNotification
-                ..two = (NotificationConfig()..shouldDecrypt = true));
-          expect(response.key, expectedOutput);
-        });
-        while (!isNotificationReceived) {
-          await Future.delayed(Duration(milliseconds: 100));
-        }
+        var atNotification = await AtClientManager.getInstance()
+            .notificationService
+            .fetch(notificationResult.notificationID);
+        atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
+        await NotificationResponseTransformer().transform(Tuple()
+          ..one = atNotification
+          ..two = (NotificationConfig()
+            ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));
+        expect(atNotification.id, notificationResult.notificationID);
+        expect(atNotification.key, expectedOutput);
       });
     });
-  },
-      skip:
-          'The tests are failing because of the timezone issue between client and server');
+  });
+
+  group('A group of tests for notification fetch', () {
+    test('A test to verify non existent notification', () async {
+      await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      var notificationResult = await AtClientManager.getInstance()
+          .notificationService
+          .fetch('abc-123');
+      expect(notificationResult.id, 'abc-123');
+      expect(notificationResult.status, 'NotificationStatus.expired');
+    });
+  });
 
   tearDownAll(() async {
     var isExists = await Directory('test/hive').exists();
@@ -151,51 +145,4 @@ void main() {
       Directory('test/hive/').deleteSync(recursive: true);
     }
   });
-}
-
-/// Class responsible for getting the notifications from the cloud secondary
-class MonitorForNotification {
-  String notificationId;
-  String atSign;
-  int epochMillsNow;
-  StreamController streamController;
-  Monitor? monitor;
-
-  MonitorForNotification(this.notificationId, this.atSign, this.epochMillsNow,
-      this.streamController);
-
-  Future<void> init() async {
-    monitor = Monitor(
-        _onMonitorSuccess,
-        _onMonitorError,
-        atSign,
-        TestUtils.getPreference(atSign),
-        MonitorPreference()
-          ..lastNotificationTime = epochMillsNow
-          ..keepAlive = false,
-        _onMonitorRetry);
-
-    await monitor?.start(lastNotificationTime: epochMillsNow);
-  }
-
-  Future<void> _onMonitorSuccess(String notificationStr) async {
-    if (notificationStr.contains(notificationId)) {
-      final notificationResponseParser = NotificationResponseParser();
-      final atNotifications =
-          await notificationResponseParser.getAtNotifications(
-              notificationResponseParser.parse(notificationStr));
-      for (var element in atNotifications) {
-        streamController.add(element);
-      }
-      monitor?.stop();
-    }
-  }
-
-  //Dummy implementation for error
-  void _onMonitorError(arg1) {
-    print(arg1);
-  }
-
-  // Dummy implementation for retry callback
-  void _onMonitorRetry() {}
 }
