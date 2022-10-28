@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -35,6 +34,13 @@ void main() {
         'NotificationStatusEnum.delivered');
     expect(result.atKey?.key, 'phone');
     expect(result.atKey?.sharedWith, phoneKey.sharedWith);
+    // fetch notification using notify fetch
+    var atNotification =
+        await atClientManager.notificationService.fetch(result.notificationID);
+    expect(atNotification.key, phoneKey.toString());
+    expect(atNotification.status, 'NotificationStatus.delivered');
+    expect(atNotification.messageType, 'MessageType.key');
+    expect(atNotification.operation, 'OperationType.update');
   });
 
   test(
@@ -159,7 +165,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-    ..namespace = '.wavi';
+      ..namespace = '.wavi';
     var value = '+1 100 200 300';
     await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
@@ -173,6 +179,13 @@ void main() {
       print(event);
     });
     Future.delayed(Duration(seconds: 10));
+  });
+
+  test('A test to fetch non existent notification', () async {
+    var atNotification =
+        await atClientManager.notificationService.fetch('abc-123');
+    expect(atNotification.id, 'abc-123');
+    expect(atNotification.status, 'NotificationStatus.expired');
   });
   tearDownAll(() async => await tearDownFunc());
 }

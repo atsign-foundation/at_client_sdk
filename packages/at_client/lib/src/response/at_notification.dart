@@ -2,14 +2,18 @@ import 'package:at_client/at_client.dart';
 
 class AtNotification {
   late String id;
-  late String key;
-  late String from;
-  late String to;
-  late int epochMillis;
+  String key = '';
+  String from = '';
+  String to = '';
+  int epochMillis = 0;
+  String status = '';
   String? value;
   String? operation;
   String? messageType;
   bool? isEncrypted;
+
+  /// AtNotification instance is created without initializing the fields
+  AtNotification.empty();
 
   AtNotification(this.id, this.key, this.from, this.to, this.epochMillis,
       this.messageType, this.isEncrypted,
@@ -31,7 +35,8 @@ class AtNotification {
       'value': value,
       'operation': operation,
       'messageType': messageType,
-      IS_ENCRYPTED: isEncrypted
+      IS_ENCRYPTED: isEncrypted,
+      'notificationStatus': status
     };
   }
 
@@ -46,6 +51,6 @@ class AtNotification {
 
   @override
   String toString() {
-    return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation}';
+    return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation, status: $status}';
   }
 }
