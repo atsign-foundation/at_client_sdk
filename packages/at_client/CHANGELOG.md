@@ -4,8 +4,9 @@ RemoteSecondary connection rather than creating a new one
 - fix: Do not try to decrypt empty or null serverEncryptedValue when generating SyncConflict info
 - fix: put try-catch around most of the `SyncServiceImpl._checkConflict` method so sync is not impeded if
 _checkConflict encounters an exception
-- Fix null pointer exception in monitorResponse due to delayed server response
+- fix: null pointer exception in monitorResponse due to delayed server response
 - fix: Skip reserved keys from decryption in the notification callback
+- fix: Update at_commons to 3.0.29 which fixes AtKey sharedWith attribute has incorrect value for public keys
 ## 3.0.41
 - chore: upgrade persistence secondary to version 3.0.38 which reverts sync of signing keys and statsNotificationKey
 ## 3.0.40

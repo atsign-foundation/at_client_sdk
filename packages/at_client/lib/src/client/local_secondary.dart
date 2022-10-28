@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -176,7 +175,8 @@ class LocalSecondary implements Secondary {
       // shared with current atSign
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
-        return _atClient.getRemoteSecondary()!
+        return _atClient
+            .getRemoteSecondary()!
             .executeCommand(command, auth: true);
       }
       List<String?> keys;

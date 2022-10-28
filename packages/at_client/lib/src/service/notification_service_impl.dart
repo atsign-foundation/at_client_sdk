@@ -93,7 +93,8 @@ class NotificationServiceImpl
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
     }
-    await _monitor!.start(lastNotificationTime: await getLastNotificationTime());
+    await _monitor!
+        .start(lastNotificationTime: await getLastNotificationTime());
 
     if (_monitor!.status == MonitorStatus.started) {
       _isMonitorPaused = false;
@@ -102,7 +103,8 @@ class NotificationServiceImpl
 
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
-    if (_atClientManager.atClient.getPreferences()!.fetchOfflineNotifications == false) {
+    if (_atClientManager.atClient.getPreferences()!.fetchOfflineNotifications ==
+        false) {
       // fetchOfflineNotifications == false means issue `monitor` command without a lastNotificationTime
       // which will result in the server not sending any previously received notifications
       return null;

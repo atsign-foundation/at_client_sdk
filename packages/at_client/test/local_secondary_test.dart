@@ -15,10 +15,14 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
   static const String nonHiddenKey2 = 'some.self.key.wavi@alice';
   static const String otherWaviHiddenKey = 'public:__location.other_wavi@alice';
   static const String waviOtherHiddenKey = 'public:__location.wavi_other@alice';
-  static const String otherWaviOtherHiddenKey = 'public:__location.other_wavi_other@alice';
-  static const String otherWaviNonHiddenKey = 'public:nickname.other_wavi@alice';
-  static const String waviOtherNonHiddenKey = 'public:nickname.wavi_other@alice';
-  static const String otherWaviOtherNonHiddenKey = 'public:nickname.other_wavi_other@alice';
+  static const String otherWaviOtherHiddenKey =
+      'public:__location.other_wavi_other@alice';
+  static const String otherWaviNonHiddenKey =
+      'public:nickname.other_wavi@alice';
+  static const String waviOtherNonHiddenKey =
+      'public:nickname.wavi_other@alice';
+  static const String otherWaviOtherNonHiddenKey =
+      'public:nickname.other_wavi_other@alice';
   static const List<String> keysInKeyStore = [
     nonHiddenKey1,
     hiddenKey1,
@@ -238,195 +242,461 @@ void main() {
     final String namespace = 'validate_get_keys';
     final preference = AtClientPreference()
       ..syncRegex = '.$namespace'
-      ..hiveStoragePath = '*&@should not be used by these tests, we will mock local storage'
+      ..hiveStoragePath =
+          '*&@should not be used by these tests, we will mock local storage'
       ..isLocalStoreRequired = true;
-
 
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
 
       mockSecondaryKeyStore = MockSecondaryKeyStore();
       atClient = await AtClientImpl.create(atSign, namespace, preference,
-        atClientManager: AtClientManager(atSign),
-        localSecondaryKeyStore: mockSecondaryKeyStore
-      );
-      localSecondary = LocalSecondary(atClient, keyStore: mockSecondaryKeyStore);
+          atClientManager: AtClientManager(atSign),
+          localSecondaryKeyStore: mockSecondaryKeyStore);
+      localSecondary =
+          LocalSecondary(atClient, keyStore: mockSecondaryKeyStore);
     });
 
     tearDown(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
     });
 
-    test('LocalSecondary scan, showHiddenKeys:true, regex:<actualDot>wavi@', () async {
-      var response = await localSecondary
-          .executeVerb(ScanVerbBuilder()..showHiddenKeys = true..regex='\\.wavi@');
+    test('LocalSecondary scan, showHiddenKeys:true, regex:<actualDot>wavi@',
+        () async {
+      var response = await localSecondary.executeVerb(ScanVerbBuilder()
+        ..showHiddenKeys = true
+        ..regex = '\\.wavi@');
       expect(response?.contains(MockSecondaryKeyStore.hiddenKey1), true);
       expect(response?.contains(MockSecondaryKeyStore.hiddenKey2), true);
       expect(response?.contains(MockSecondaryKeyStore.nonHiddenKey1), true);
       expect(response?.contains(MockSecondaryKeyStore.nonHiddenKey2), true);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey), false);
+      expect(
+          response?.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
+      expect(
+          response?.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
+      expect(response?.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey),
+          false);
+      expect(response?.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey),
+          false);
+      expect(response?.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey),
+          false);
+      expect(
+          response?.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey),
+          false);
     });
 
     test('getKeys, showHiddenKeys:true, regex:<actualDot>wavi@', () async {
-      List<String> response = await atClient.getKeys(showHiddenKeys: true, regex: '\\.wavi@');
+      List<String> response =
+          await atClient.getKeys(showHiddenKeys: true, regex: '\\.wavi@');
       expect(response.contains(MockSecondaryKeyStore.hiddenKey1), true);
       expect(response.contains(MockSecondaryKeyStore.hiddenKey2), true);
       expect(response.contains(MockSecondaryKeyStore.nonHiddenKey1), true);
       expect(response.contains(MockSecondaryKeyStore.nonHiddenKey2), true);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey), false);
+      expect(
+          response.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
+      expect(
+          response.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
+      expect(response.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey),
+          false);
+      expect(response.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey),
+          false);
+      expect(response.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey),
+          false);
+      expect(
+          response.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey),
+          false);
     });
 
     // We'll test getAtKeys (which calls getKeys, which calls LocalSecondary scan)
     // with multiple regex variants to verify regex is being processed correctly
     test('getAtKeys, showHiddenKeys:true, regex:<actualDot>wavi@', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: true, regex: '\\.wavi@');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), false);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: true, regex: '\\.wavi@');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          false);
     });
 
     test('getAtKeys, showHiddenKeys:true, regex:<regexDot>wavi@', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: true, regex: '.wavi@');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), false);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: true, regex: '.wavi@');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          false);
     });
 
     test('getAtKeys, showHiddenKeys:true, regex:<actualDot>wavi', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: true, regex: '\\.wavi');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), false);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: true, regex: '\\.wavi');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          false);
     });
 
     test('getAtKeys, showHiddenKeys:true, regex:<regexDot>wavi', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: true, regex: '.wavi');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), true);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: true, regex: '.wavi');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          true);
     });
 
-    test('LocalSecondary scan, showHiddenKeys:false, regex:<actualDot>wavi@', () async {
-      var response = await localSecondary
-          .executeVerb(ScanVerbBuilder()..showHiddenKeys = false..regex='\\.wavi@');
+    test('LocalSecondary scan, showHiddenKeys:false, regex:<actualDot>wavi@',
+        () async {
+      var response = await localSecondary.executeVerb(ScanVerbBuilder()
+        ..showHiddenKeys = false
+        ..regex = '\\.wavi@');
       expect(response?.contains(MockSecondaryKeyStore.hiddenKey1), false);
       expect(response?.contains(MockSecondaryKeyStore.hiddenKey2), false);
       expect(response?.contains(MockSecondaryKeyStore.nonHiddenKey1), true);
       expect(response?.contains(MockSecondaryKeyStore.nonHiddenKey2), true);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey), false);
-      expect(response?.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey), false);
+      expect(
+          response?.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
+      expect(
+          response?.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
+      expect(response?.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey),
+          false);
+      expect(response?.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey),
+          false);
+      expect(response?.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey),
+          false);
+      expect(
+          response?.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey),
+          false);
     });
 
     test('getKeys, showHiddenKeys:false, regex:<actualDot>wavi@', () async {
-      List<String> response = await atClient.getKeys(showHiddenKeys: false, regex: '\\.wavi@');
+      List<String> response =
+          await atClient.getKeys(showHiddenKeys: false, regex: '\\.wavi@');
       expect(response.contains(MockSecondaryKeyStore.hiddenKey1), false);
       expect(response.contains(MockSecondaryKeyStore.hiddenKey2), false);
       expect(response.contains(MockSecondaryKeyStore.nonHiddenKey1), true);
       expect(response.contains(MockSecondaryKeyStore.nonHiddenKey2), true);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey), false);
-      expect(response.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey), false);
+      expect(
+          response.contains(MockSecondaryKeyStore.otherWaviHiddenKey), false);
+      expect(
+          response.contains(MockSecondaryKeyStore.waviOtherHiddenKey), false);
+      expect(response.contains(MockSecondaryKeyStore.otherWaviOtherHiddenKey),
+          false);
+      expect(response.contains(MockSecondaryKeyStore.otherWaviNonHiddenKey),
+          false);
+      expect(response.contains(MockSecondaryKeyStore.waviOtherNonHiddenKey),
+          false);
+      expect(
+          response.contains(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey),
+          false);
     });
 
     test('getAtKeys, showHiddenKeys:false, regex:<actualDot>wavi@', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: false, regex: '\\.wavi@');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), false);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: false, regex: '\\.wavi@');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          false);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          false);
     });
 
     test('getAtKeys, showHiddenKeys:false, regex:<regexDot>wavi@', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: false, regex: '.wavi@');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), false);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: false, regex: '.wavi@');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          false);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          false);
     });
 
     test('getAtKeys, showHiddenKeys:false, regex:<actualDot>wavi', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: false, regex: '\\.wavi');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), false);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: false, regex: '\\.wavi');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          false);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          false);
     });
 
     test('getAtKeys, showHiddenKeys:false, regex:<regexDot>wavi', () async {
-      List<AtKey> response = await atClient.getAtKeys(showHiddenKeys: false, regex:'.wavi');
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)), false);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)), true);
-      expect(response.contains(AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)), true);
+      List<AtKey> response =
+          await atClient.getAtKeys(showHiddenKeys: false, regex: '.wavi');
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey1)),
+          false);
+      expect(
+          response.contains(AtKey.fromString(MockSecondaryKeyStore.hiddenKey2)),
+          false);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey1)),
+          true);
+      expect(
+          response
+              .contains(AtKey.fromString(MockSecondaryKeyStore.nonHiddenKey2)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviOtherHiddenKey)),
+          false);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.otherWaviNonHiddenKey)),
+          true);
+      expect(
+          response.contains(
+              AtKey.fromString(MockSecondaryKeyStore.waviOtherNonHiddenKey)),
+          true);
+      expect(
+          response.contains(AtKey.fromString(
+              MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
+          true);
     });
   });
 }
@@ -444,8 +714,8 @@ Future<void> tearDownLocalStorage(storageDir) async {
   try {
     var isExists = await Directory(storageDir).exists();
     if (isExists) {
-        Directory(storageDir).deleteSync(recursive: true);
-      }
+      Directory(storageDir).deleteSync(recursive: true);
+    }
   } catch (e, st) {
     print('local_secondary_test.dart: exception / error in tearDown: $e, $st');
   }
