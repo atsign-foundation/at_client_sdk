@@ -289,7 +289,10 @@ abstract class AtClient {
   ///   getKeys(sharedBy:'@bob');
   ///```
   Future<List<AtKey>> getAtKeys(
-      {String? regex, String? sharedBy, String? sharedWith, bool showHiddenKeys = false});
+      {String? regex,
+      String? sharedBy,
+      String? sharedWith,
+      bool showHiddenKeys = false});
 
   /// Get all the keys stored in user's secondary in string format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.

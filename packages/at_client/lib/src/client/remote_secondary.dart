@@ -45,6 +45,7 @@ class RemoteSecondary implements Secondary {
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Optionally [privateKey] is passed for verb builders which require authentication.
+
   @override
   Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
     try {

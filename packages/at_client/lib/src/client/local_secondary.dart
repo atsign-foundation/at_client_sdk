@@ -178,7 +178,8 @@ class LocalSecondary implements Secondary {
       // shared with current atSign
       if (builder.sharedBy != null) {
         var command = builder.buildCommand();
-        return _atClient.getRemoteSecondary()!
+        return _atClient
+            .getRemoteSecondary()!
             .executeCommand(command, auth: true);
       }
       List<String?> keys;

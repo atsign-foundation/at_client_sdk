@@ -56,8 +56,8 @@ abstract class NotificationService {
   ///    ..key = 'phone'
   ///    ..sharedWith = '@bob';
   ///
-  ///  var notification = NotificationServiceImpl(atClient!);
-  /// await notification.notify(NotificationParams.forUpdate(key));
+  ///  var notificationService = AtClientManager.getInstance().notificationService;
+  ///  await notificationService.notify(NotificationParams.forUpdate(key));
   ///```
   ///2. To notify and cache a key to @bob
   ///```dart
@@ -69,8 +69,8 @@ abstract class NotificationService {
   ///
   ///  var value = '+1 998 999 4940'
   ///
-  ///  var notification = NotificationServiceImpl(atClient!);
-  /// await notification.notify(NotificationParams.forUpdate(key, value: value));
+  ///  var notificationService = AtClientManager.getInstance().notificationService;
+  ///  await notificationService.notify(NotificationParams.forUpdate(key, value: value));
   ///```
   ///3. To notify deletion of a key to @bob.
   ///```dart
@@ -78,15 +78,15 @@ abstract class NotificationService {
   ///     ..key = 'phone'
   ///     ..sharedWith = '@bob';
   ///
-  ///   var notification = NotificationServiceImpl(atClient!);
-  ///   await notification.notify(NotificationParams.forDelete(key));
+  ///   var notificationService = AtClientManager.getInstance().notificationService;
+  ///   await notificationService.notify(NotificationParams.forDelete(key));
   ///```
   ///4. To notify a text message to @bob
-  ///   await notification.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));
+  ///   await notificationService.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));
   ///
   ///```dart
-  ///   var notification = NotificationServiceImpl(atClient!);
-  ///   await notification.notify(NotificationParams.forText('Hello','@bob'));
+  ///   var notificationService = AtClientManager.getInstance().notificationService;
+  ///   await notificationService.notify(NotificationParams.forText('Hello','@bob'));
   ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {bool waitForFinalDeliveryStatus =
@@ -101,7 +101,48 @@ abstract class NotificationService {
   void stopAllSubscriptions();
 
   /// Returns the status of the given notificationId
+  ///
+  /// Usage:
+  ///
+  /// To get the status of a notification
+  ///```dart
+  /// var notificationService = AtClientManager.getInstance().notificationService;
+  /// var notificationResult = await notificationService.status('abc-123');
+  ///```
+  ///
+  /// * Returns [NotificationResult] for the given notification-id.
+  ///
+  /// * When notification is delivered successfully, [NotificationResult.notificationStatusEnum] is set to delivered
+  ///
+  /// * When notification is fail to deliver, [NotificationResult.notificationStatusEnum] is set to undelivered
+  ///
+  /// * The exception are captured in [NotificationResult.atClientException]
   Future<NotificationResult> getStatus(String notificationId);
+
+  /// Returns the [AtNotification] of the given notificationId
+  ///
+  /// Usage:
+  ///
+  ///  To fetch a notification with id: abc-123
+  /// ```dart
+  /// var notificationService = AtClientManager.getInstance().notificationService;
+  /// var atNotification = await notificationService.fetch('abc-123');
+  /// ```
+  /// Returns [NotificationStatus.delivered] when notification exist in the key-store
+  /// ```
+  ///  AtNotification{id: abc-123, key: @bob:phone.wavi@alice,
+  ///  from: @alice, to: @bob, epochMillis: 1666268427030, value: "+1 887 887 7876",
+  ///  operation: OperationType.update, status: NotificationStatus.delivered}
+  /// ```
+  ///
+  /// Returns [NotificationStatus.expired] when
+  /// * Notification id does not exist
+  /// * Notification is expired / delete
+  /// ```
+  ///  AtNotification{id: abc-123, status: NotificationStatus.expired}
+  /// ```
+  /// Throws [AtClientException] when server is not reachable or server timeout's to respond
+  Future<AtNotification> fetch(String notificationId);
 }
 
 /// [NotificationParams] represents a notification input params.

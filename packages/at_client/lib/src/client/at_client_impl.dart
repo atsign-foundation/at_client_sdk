@@ -75,23 +75,21 @@ class AtClientImpl implements AtClient {
 
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
-      {
-        AtClientManager? atClientManager,
-        RemoteSecondary? remoteSecondary,
-        EncryptionService? encryptionService,
-        SecondaryKeyStore? localSecondaryKeyStore
-      }) async {
+      {AtClientManager? atClientManager,
+      RemoteSecondary? remoteSecondary,
+      EncryptionService? encryptionService,
+      SecondaryKeyStore? localSecondaryKeyStore}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       return atClientInstanceMap[currentAtSign];
     }
 
     atClientManager ??= AtClientManager.getInstance();
-    var atClientImpl =
-        AtClientImpl._(currentAtSign, namespace, preferences, atClientManager,
-          remoteSecondary: remoteSecondary,
-          encryptionService: encryptionService,
-          localSecondaryKeyStore: localSecondaryKeyStore);
+    var atClientImpl = AtClientImpl._(
+        currentAtSign, namespace, preferences, atClientManager,
+        remoteSecondary: remoteSecondary,
+        encryptionService: encryptionService,
+        localSecondaryKeyStore: localSecondaryKeyStore);
 
     await atClientImpl._init();
 
@@ -101,19 +99,18 @@ class AtClientImpl implements AtClient {
 
   AtClientImpl._(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
-      {
-        RemoteSecondary? remoteSecondary,
-        EncryptionService? encryptionService,
-        SecondaryKeyStore? localSecondaryKeyStore
-      }) {
+      {RemoteSecondary? remoteSecondary,
+      EncryptionService? encryptionService,
+      SecondaryKeyStore? localSecondaryKeyStore}) {
     currentAtSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     _preference?.namespace ??= namespace;
     _namespace = namespace;
     _atClientManager = atClientManager;
     _localSecondaryKeyStore = localSecondaryKeyStore;
-    if (_localSecondaryKeyStore != null && ! _preference!.isLocalStoreRequired) {
-      throw IllegalArgumentException('A SecondaryKeyStore was injected, but preference.isLocalStoreRequired is false');
+    if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
+      throw IllegalArgumentException(
+          'A SecondaryKeyStore was injected, but preference.isLocalStoreRequired is false');
     }
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
@@ -130,7 +127,8 @@ class AtClientImpl implements AtClient {
     }
 
     // Now using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(currentAtSign!, _preference!, privateKey: _preference!.privateKey);
+    _remoteSecondary ??= RemoteSecondary(currentAtSign!, _preference!,
+        privateKey: _preference!.privateKey);
 
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService();
@@ -916,12 +914,13 @@ class AtClientImpl implements AtClient {
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       return atClientInstanceMap[currentAtSign];
     }
-    AtSignLogger('AtClientImpl')
-        .severe('Instance of AtClientImpl for $currentAtSign has not been created');
+    AtSignLogger('AtClientImpl').severe(
+        'Instance of AtClientImpl for $currentAtSign has not been created');
     return null;
   }
 
   @Deprecated("Use [create]")
+
   /// use [create]
   static Future<void> createClient(String currentAtSign, String? namespace,
       AtClientPreference preferences) async {
@@ -948,5 +947,4 @@ class AtClientImpl implements AtClient {
     _preference = preference;
     _namespace = namespace;
   }
-
 }
