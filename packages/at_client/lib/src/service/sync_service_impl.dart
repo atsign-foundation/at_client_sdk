@@ -404,7 +404,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
-        lastReceivedServerCommitId = serverCommitEntry['commitId'];
+        final receivedServerCommitId = serverCommitEntry['commitId'];
+        if (receivedServerCommitId is int) {
+          lastReceivedServerCommitId = receivedServerCommitId;
+        } else {
+          lastReceivedServerCommitId = int.parse(receivedServerCommitId);
+        }
         try {
           final keyInfo =
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
@@ -422,7 +427,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
               'error syncing entry to local $serverCommitEntry - ${e.toString()}');
         }
       }
-      _logger.finest('**lastReceivedServerCommitId $lastReceivedServerCommitId');
+      _logger
+          .finest('**lastReceivedServerCommitId $lastReceivedServerCommitId');
     }
     return keyInfoList;
   }
