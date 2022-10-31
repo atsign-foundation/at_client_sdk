@@ -375,7 +375,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       List<CommitEntry> uncommittedEntries) async {
     // Iterates until serverCommitId is greater than localCommitId are equal.
     List<KeyInfo> keyInfoList = [];
-    while (serverCommitId > localCommitId) {
+    int lastReceivedServerCommitId = localCommitId;
+    while (serverCommitId > lastReceivedServerCommitId) {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
@@ -403,6 +404,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
+        lastReceivedServerCommitId = serverCommitEntry['commitId'];
         try {
           final keyInfo =
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
@@ -420,9 +422,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
               'error syncing entry to local $serverCommitEntry - ${e.toString()}');
         }
       }
-      // assigning the lastSynced local commit id.
-      localCommitId = await _getLocalCommitId();
-      _logger.finest('**localCommitId $localCommitId');
+      _logger.finest('**lastReceivedServerCommitId $lastReceivedServerCommitId');
     }
     return keyInfoList;
   }
