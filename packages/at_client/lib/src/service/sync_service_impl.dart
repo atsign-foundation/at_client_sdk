@@ -378,7 +378,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     int lastReceivedServerCommitId = localCommitId;
     while (serverCommitId > lastReceivedServerCommitId) {
       var syncBuilder = SyncVerbBuilder()
-        ..commitId = localCommitId
+        ..commitId = lastReceivedServerCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
         ..limit = _atClient.getPreferences()!.syncPageLimit
         ..isPaginated = true;
