@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-
 import 'test_util.dart';
 
 void main() async {
@@ -11,8 +10,8 @@ void main() async {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
-    var streamResult =
-        await atClient.stream('@bob🛠', 'cat.jpeg', namespace: 'atmosphere');
+    var streamResult = await atClient
+        .stream('@bob🛠', 'data/encryption/cat.jpeg', namespace: 'atmosphere');
     print(streamResult);
   } on Exception catch (e, trace) {
     print(e.toString());

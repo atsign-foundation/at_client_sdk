@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-
 import 'test_util.dart';
 
 AtClient? atClient;
@@ -13,6 +12,7 @@ void main() async {
     final preference = TestUtil.getBobPreference();
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
+    atClient = atClientManager.atClient;
     atClientManager.notificationService
         .subscribe(regex: 'atmosphere')
         .listen((notification) {

@@ -464,18 +464,10 @@ class EncryptionService {
   Future<String> getSharedKeyForDecryption(String sharedBy) async {
     sharedBy = sharedBy.replaceFirst('@', '');
 
-    var encryptedSharedKey = await _getSharedKeyForDecryption(sharedBy);
-    if (encryptedSharedKey == null || encryptedSharedKey == 'null') {
+    var sharedKey = await _getSharedKeyForDecryption(sharedBy);
+    if (sharedKey == null || sharedKey == 'null') {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
-    //2. decrypt shared key using private key
-    var currentAtSignPrivateKey =
-        await (localSecondary!.getEncryptionPrivateKey());
-    if (currentAtSignPrivateKey == null) {
-      throw KeyNotFoundException('private encryption key not found');
-    }
-    var sharedKey =
-        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
     return sharedKey;
   }
 
