@@ -54,12 +54,12 @@ void main() async {
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign));
-    var getResult = await sharedWithAtClientManager?.atClient.get(AtKey()
+    var getResult = await sharedWithAtClientManager.atClient.get(AtKey()
       ..key = 'phoneNumber$randomValue'
       ..sharedBy = currentAtSign);
-    expect(getResult?.value, value);
-    expect(getResult?.metadata?.sharedKeyEnc != null, true);
-    expect(getResult?.metadata?.pubKeyCS != null, true);
+    expect(getResult.value, value);
+    expect(getResult.metadata?.sharedKeyEnc != null, true);
+    expect(getResult.metadata?.pubKeyCS != null, true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
   }, timeout: Timeout(Duration(minutes: 5)));

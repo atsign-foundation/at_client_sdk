@@ -7,8 +7,6 @@ import 'package:at_utils/at_logger.dart';
 
 import 'at_credentials.dart';
 
-late AtSignLogger logger;
-
 class TestSuiteInitializer {
   final _logger = AtSignLogger('TestSuiteInitializer');
 
@@ -36,7 +34,7 @@ class TestSuiteInitializer {
       var result = await atClientManager.atClient
           .getLocalSecondary()!
           .getEncryptionPublicKey(atSign);
-      logger.finer('encryption public key set to local key-store: $result');
+      _logger.finer('encryption public key set to local key-store: $result');
       assert(result ==
           AtCredentials
               .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);

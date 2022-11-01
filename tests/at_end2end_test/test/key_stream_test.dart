@@ -278,6 +278,8 @@ void main() async {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
+      currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+      sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
       // Create atClient instance for currentAtSign
       currentAtSignClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(currentAtSign, namespace,
