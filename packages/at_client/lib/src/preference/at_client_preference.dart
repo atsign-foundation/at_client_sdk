@@ -46,7 +46,7 @@ class AtClientPreference {
   int maxDataSize = 512000;
 
   /// Default path to download stream files
-  String? downloadPath;
+  String? downloadPath='test/data';
 
   /// regex to perform sync
   String? syncRegex;
