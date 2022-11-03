@@ -1,3 +1,5 @@
+## 3.0.43
+- chore: upgrade persistence secondary to version 3.0.42 and persistence spec to 2.0.9
 ## 3.0.42
 - fix: Improved performance of getKeys (and getAtKeys) when sharedBy is specified, by using the existing 
 RemoteSecondary connection rather than creating a new one
