@@ -65,7 +65,7 @@ jobs:
           committer: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           signoff: false
-          add-paths: ./tools/build_virtual_environment
+          add-paths: ./tests/at_functional_test/test/testData
           branch: bot-new-certs
           delete-branch: true
           title: 'chore: New certificates generated'
