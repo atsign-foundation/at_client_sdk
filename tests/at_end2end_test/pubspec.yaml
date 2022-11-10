@@ -8,6 +8,13 @@ publish_to: none
 environment:
   sdk: '>=2.12.0 <3.0.0'
 
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      ref: add_verb_validations
+      path: packages/at_commons
+
 dependencies:
   at_client:
     path: ../../packages/at_client
