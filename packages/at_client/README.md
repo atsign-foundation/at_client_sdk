@@ -25,7 +25,7 @@ We call giving people control of access to their data "*flipping the internet*".
 
 Initially to get a basic overview of the SDK, you must read the [atsign docs](https://docs.atsign.com/).
 
-> To use this package you must have a basic setup. Follow this to [get started](https://atsign.dev/docs/get-started/setup-your-env/).
+> To use this package you must have a basic setup. Follow this to [get started](https://docs.atsign.com/start/).
 
 Check how to use this package in the [at_client installation tab](https://pub.dev/packages/at_client/install).
 
@@ -103,7 +103,7 @@ bool isNotified = await atClientManagerInstance.notify(atKey, value, operation);
 print(isNotified); // true if notified
 ```
 
-- Notify an update operation to an atsign.
+- Notify an update operation to an atSign.
 
 ```dart
 String toAtsign = '@bob';
