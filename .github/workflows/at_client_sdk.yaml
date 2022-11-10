@@ -140,7 +140,7 @@ jobs:
     needs: [ end2end_tests_prep ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1.3
         with:
           sdk: stable
@@ -176,7 +176,7 @@ jobs:
     needs: [   end2end_tests ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1.3
         with:
           sdk: stable
