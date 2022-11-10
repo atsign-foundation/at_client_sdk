@@ -114,11 +114,7 @@ jobs:
       - name: stop docker containers
         working-directory: tests/at_functional_test/test
         run: docker-compose down
-      
-      #tmate to debug actions
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v1
-        
+
   end2end_tests_prep:
     # Don't run on PRs from a fork as the secrets aren't available
     if: ${{ github.event.pull_request.head.repo.fork == false }}
@@ -154,6 +150,10 @@ jobs:
       - name: Install dependencies in at_end2end_test
         working-directory: tests/at_end2end_test
         run: dart pub get
+
+       #tmate to debug actions
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v1
 
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
