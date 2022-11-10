@@ -1,11 +1,8 @@
 import 'dart:convert';
 
-import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
@@ -64,7 +61,7 @@ class LocalSecondary implements Secondary {
   Future<String> _update(UpdateVerbBuilder builder) async {
     try {
       dynamic updateResult;
-      var updateKey = AtClientUtil.buildKey(builder);
+      var updateKey = builder.buildKey();
       switch (builder.operation) {
         case UPDATE_META:
           var metadata = Metadata();
@@ -110,21 +107,7 @@ class LocalSecondary implements Secondary {
   Future<String> _llookup(LLookupVerbBuilder builder) async {
     var llookupKey = '';
     try {
-      if (builder.isCached) {
-        llookupKey += 'cached:';
-      }
-      if (builder.isPublic) {
-        llookupKey += 'public:';
-      }
-      if (builder.sharedWith != null) {
-        llookupKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
-      }
-      if (builder.atKey != null) {
-        llookupKey += builder.atKey!;
-      }
-      if (builder.sharedBy != null) {
-        llookupKey += AtUtils.formatAtSign(builder.sharedBy)!;
-      }
+      llookupKey = builder.buildKey();
       var llookupMeta = await keyStore!.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
       String? result;

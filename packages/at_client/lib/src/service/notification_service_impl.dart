@@ -2,10 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
-import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_client/src/listener/connectivity_listener.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -13,15 +11,11 @@ import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
-import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
-import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -33,6 +27,7 @@ class NotificationServiceImpl
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationIdv2';
+  static const lastReceivedNotificationKey = 'lastReceivedNotification';
   static final Map<String, NotificationService> _notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
@@ -44,6 +39,9 @@ class NotificationServiceImpl
   late AtClientManager _atClientManager;
   AtClientValidation atClientValidation = AtClientValidation();
   AtKeyEncryptionManager atKeyEncryptionManager = AtKeyEncryptionManager();
+
+  @visibleForTesting
+  late AtKey lastReceivedNotificationAtKey;
 
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
@@ -70,6 +68,10 @@ class NotificationServiceImpl
             MonitorPreference()..keepAlive = true,
             _monitorRetry);
     _atClientManager.listenToAtSignChange(this);
+    lastReceivedNotificationAtKey = AtKey.local(lastReceivedNotificationKey,
+            _atClientManager.atClient.getCurrentAtSign()!,
+            namespace: _atClientManager.atClient.getPreferences()!.namespace)
+        .build();
   }
 
   Future<void> _init() async {
@@ -106,6 +108,12 @@ class NotificationServiceImpl
   }
 
   @visibleForTesting
+
+  /// Return the last received notification DateTime in epochMillis when
+  /// [AtClientPreference.fetchOfflineNotifications] is set true.
+  ///
+  /// Returns null when the key which holds the lastNotificationReceived
+  /// does not exist.
   Future<int?> getLastNotificationTime() async {
     if (_atClientManager.atClient.getPreferences()!.fetchOfflineNotifications ==
         false) {
@@ -116,24 +124,37 @@ class NotificationServiceImpl
 
     // fetchOfflineNotifications == true (the default) means we want all notifications since the last one we received
     // We keep track of the last notification id in the client-side key store
-    var lastNotificationKeyStr =
-        '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
-    var atKey = AtKey.fromString(lastNotificationKeyStr);
+    // Check if the new key (local:lastNotificationReceived@alice) is available in the keystore.
+    // If yes, fetch the value;
+    AtValue? atValue;
     if (_atClient
         .getLocalSecondary()!
         .keyStore!
-        .isKeyExists(lastNotificationKeyStr)) {
-      AtValue? atValue;
-      try {
-        atValue = await _atClient.get(atKey);
-      } on Exception catch (e) {
-        _logger
-            .severe('Exception in getting last notification id: ${e.toString}');
+        .isKeyExists(lastReceivedNotificationAtKey.toString())) {
+      atValue = await _atClient.get(lastReceivedNotificationAtKey);
+    }
+    // If new key does not exist or value is null, check for the old key (_latestNotificationIdv2@alice)
+    // If old key exist, fetch the value and update the new key with old key's value
+    if (atValue == null || atValue.value == null) {
+      var lastNotificationKeyStr =
+          '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
+      var atKey = AtKey.fromString(lastNotificationKeyStr);
+      if (_atClient
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(lastNotificationKeyStr)) {
+        try {
+          atValue = await _atClient.get(atKey);
+          await _atClient.put(lastReceivedNotificationAtKey, atValue.value);
+        } on Exception catch (e) {
+          _logger.severe(
+              'Exception in getting last notification id: ${e.toString}');
+        }
       }
-      if (atValue != null && atValue.value != null) {
-        _logger.finer('json from hive: ${atValue.value}');
-        return jsonDecode(atValue.value)['epochMillis'];
-      }
+    }
+    if (atValue?.value != null) {
+      _logger.finer('json from hive: ${atValue?.value}');
+      return jsonDecode(atValue?.value)['epochMillis'];
     }
     return null;
   }
@@ -157,7 +178,7 @@ class NotificationServiceImpl
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
-          await _atClient.put(AtKey()..key = notificationIdKey,
+          await _atClient.put(lastReceivedNotificationAtKey,
               jsonEncode(atNotification.toJson()));
         }
         _streamListeners.forEach((notificationConfig, streamController) async {

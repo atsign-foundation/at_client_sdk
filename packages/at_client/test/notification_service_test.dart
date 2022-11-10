@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -19,16 +18,7 @@ import 'package:uuid/uuid.dart';
 
 String? lastNotificationJson;
 
-class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
-  @override
-  bool isKeyExists(String key) {
-    if (!key.contains(NotificationServiceImpl.notificationIdKey)) {
-      throw IllegalArgumentException(
-          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
-    }
-    return (lastNotificationJson != null);
-  }
-}
+class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {
   @override
@@ -40,7 +30,6 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
 
   @override
   AtClientPreference getPreferences() {
-    mockPreferences.fetchOfflineNotifications = true;
     return mockPreferences;
   }
 
@@ -54,45 +43,6 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   @override
   LocalSecondary? getLocalSecondary() {
     return mockLocalSecondary;
-  }
-
-  @override
-  Future<AtValue> get(AtKey atKey,
-      {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
-    if (atKey.key != NotificationServiceImpl.notificationIdKey) {
-      throw IllegalArgumentException(
-          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
-    }
-    if (lastNotificationJson != null) {
-      return AtValue()..value = lastNotificationJson;
-    } else {
-      return AtValue();
-    }
-  }
-
-  @override
-  Future<bool> put(AtKey atKey, dynamic value,
-      {bool isDedicated = false}) async {
-    if (atKey.key != NotificationServiceImpl.notificationIdKey) {
-      throw IllegalArgumentException(
-          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
-    }
-    lastNotificationJson = value;
-    return true;
-  }
-
-  @override
-  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) async {
-    if (atKey.key != NotificationServiceImpl.notificationIdKey) {
-      throw IllegalArgumentException(
-          "This mock client only understands how to get, put and delete ${NotificationServiceImpl.notificationIdKey}");
-    }
-    if (lastNotificationJson == null) {
-      return false;
-    } else {
-      lastNotificationJson = null;
-      return true;
-    }
   }
 }
 
@@ -414,6 +364,8 @@ void main() {
                 Intent.shareData,
                 ExceptionScenario.keyNotFound,
                 'public:publickey@bob does not exist in keystore')));
+      when(() => mockAtClientManager.atClient)
+          .thenAnswer((_) => mockAtClientImpl);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -653,6 +605,11 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: mockMonitor) as NotificationServiceImpl;
 
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((_) => true);
+
       notificationServiceImpl.stopAllSubscriptions();
 
       mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = false;
@@ -663,6 +620,7 @@ void main() {
     test(
         'getLastNotificationTime() returns null if checkOfflineNotifications is true but there is no stored value',
         () async {
+      registerFallbackValue(FakeAtKey());
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
@@ -672,33 +630,162 @@ void main() {
 
       mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
 
-      await mockAtClientImpl
-          .delete(AtKey()..key = NotificationServiceImpl.notificationIdKey);
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((_) => true);
+
+      when(() => mockAtClientImpl.get(any()))
+          .thenAnswer((_) async => Future.value(AtValue()));
+
+      when(() => mockAtClientImpl.put(any(), any()))
+          .thenAnswer((_) async => true);
 
       expect(await notificationServiceImpl.getLastNotificationTime(), null);
     });
 
+    /// The test case verifies the following:
+    /// When a new key (local:lastReceivedNotification) exists and return null,
+    /// fetch the data from the old key return epochMillis.
     test(
-        'getLastNotificationTime() returns the stored value if checkOfflineNotifications is true and there is a stored value',
+        'getLastNotificationTime() returns the stored value from old key if checkOfflineNotifications is true and there is a stored value',
         () async {
+      registerFallbackValue(FakeAtKey());
+      int epochMillis = DateTime.now().millisecondsSinceEpoch;
+      var atNotification = at_notification.AtNotification(
+          Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
+
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
           monitor: mockMonitor) as NotificationServiceImpl;
 
+      when(() => mockAtClientImpl
+              .get(notificationServiceImpl.lastReceivedNotificationAtKey))
+          .thenAnswer((_) async => Future.value(AtValue()));
+
+      when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
+          .thenAnswer((_) async => Future.value(AtValue()
+            ..value = jsonEncode(atNotification)
+            ..metadata = Metadata()));
+
+      when(() => mockAtClientImpl.put(any(), any()))
+          .thenAnswer((_) async => true);
+
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((_) => true);
+
       notificationServiceImpl.stopAllSubscriptions();
 
       mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
 
+      expect(
+          await notificationServiceImpl.getLastNotificationTime(), epochMillis);
+    });
+
+    /// The test case verifies that when a new exists, fetch data from the new key and return epochMillis
+    test(
+        'getLastNotificationTime() returns the stored value from new key - local:lastReceivedNotification',
+        () async {
+      registerFallbackValue(FakeAtKey());
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
       var atNotification = at_notification.AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
-      await mockAtClientImpl.put(
-          AtKey()..key = NotificationServiceImpl.notificationIdKey,
-          jsonEncode(atNotification.toJson()));
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      when(() => mockAtClientImpl
+              .get(notificationServiceImpl.lastReceivedNotificationAtKey))
+          .thenAnswer((_) async => Future.value(AtValue()
+            ..value = jsonEncode(atNotification)
+            ..metadata = Metadata()));
+
+      when(() => mockAtClientImpl.put(any(), any()))
+          .thenAnswer((_) async => true);
+
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((_) => true);
+
+      notificationServiceImpl.stopAllSubscriptions();
+
+      mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
+
+      expect(
+          await notificationServiceImpl.getLastNotificationTime(), epochMillis);
+    });
+
+    test(
+        'test the verifies old key value is fetched when new key does not exist',
+        () async {
+      registerFallbackValue(FakeAtKey());
+      int epochMillis = DateTime.now().millisecondsSinceEpoch;
+      var atNotification = at_notification.AtNotification(
+          Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
+              notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
+          .thenAnswer((_) => false);
+
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
+              any(that: startsWith('_latestNotificationIdv2.wavi@alice'))))
+          .thenAnswer((_) => true);
+
+      when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
+          .thenAnswer((_) async => Future.value(AtValue()
+            ..value = jsonEncode(atNotification)
+            ..metadata = Metadata()));
+
+      when(() => mockAtClientImpl.put(any(), any()))
+          .thenAnswer((_) async => true);
 
       expect(
           await notificationServiceImpl.getLastNotificationTime(), epochMillis);
     });
   });
+
+  group('A group of tests for lastNotificationReceived key', () {
+    test('test to verify lastNotificationReceived toString', () {
+      var lastReceivedNotification = AtKey.local(
+              NotificationServiceImpl.lastReceivedNotificationKey, '@alice',
+              namespace: 'wavi')
+          .build();
+      expect(lastReceivedNotification.toString(),
+          'local:lastReceivedNotification.wavi@alice');
+    });
+
+    test('test to verify lastNotificationReceived fromString', () {
+      var lastReceivedNotification =
+          AtKey.fromString('local:lastReceivedNotification.wavi@alice');
+      expect(lastReceivedNotification.key,
+          NotificationServiceImpl.lastReceivedNotificationKey);
+      expect(lastReceivedNotification.namespace, 'wavi');
+      expect(lastReceivedNotification.isLocal, true);
+    });
+  });
+}
+
+class StatsAtKeyMatcher extends Matcher {
+  @override
+  Description describe(Description description) =>
+      description.add('A custom matcher to match the old statsNotificationKey');
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key!.contains('_latestNotificationIdv2')) {
+      return true;
+    }
+    return false;
+  }
 }
