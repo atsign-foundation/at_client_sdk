@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
