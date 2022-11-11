@@ -72,9 +72,9 @@ class PutRequestTransformer
       ..isEncrypted = (atKey.metadata?.isEncrypted != null)
           ? atKey.metadata?.isEncrypted!
           : false
-      ..isBinary = (atKey.metadata?.isBinary != null)
-          ? atKey.metadata?.isBinary!
-          : false;
+      ..isBinary =
+          (atKey.metadata?.isBinary != null) ? atKey.metadata?.isBinary! : false
+      ..isLocal = atKey.isLocal;
 
     if (atKey.metadata!.ttl != null) {
       updateVerbBuilder.ttl = atKey.metadata!.ttl;

@@ -174,8 +174,9 @@ void main() {
         ..sharedBy = atSign;
       await localSecondary.executeVerb(verbBuilder, sync: false);
       final llookupVerbBuilder = LLookupVerbBuilder()
-        ..atKey = 'public:email'
-        ..sharedBy = atSign;
+        ..atKey = 'email'
+        ..sharedBy = atSign
+        ..isPublic = true;
       final llookupResult =
           await localSecondary.executeVerb(llookupVerbBuilder, sync: false);
       expect(llookupResult, 'data:alice@gmail.com');
@@ -196,12 +197,14 @@ void main() {
         ..sharedBy = atSign;
       await localSecondary.executeVerb(verbBuilder, sync: false);
       final deleteVerbBuilder = DeleteVerbBuilder()
-        ..atKey = 'public:email'
-        ..sharedBy = atSign;
+        ..atKey = 'email'
+        ..sharedBy = atSign
+        ..isPublic = true;
       await localSecondary.executeVerb(deleteVerbBuilder, sync: false);
       final llookupVerbBuilder = LLookupVerbBuilder()
-        ..atKey = 'public:email'
-        ..sharedBy = atSign;
+        ..atKey = 'email'
+        ..sharedBy = atSign
+        ..isPublic = true;
       expect(localSecondary.executeVerb(llookupVerbBuilder, sync: false),
           throwsA(isA<KeyNotFoundException>()));
     });

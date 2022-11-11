@@ -130,6 +130,9 @@ jobs:
           username: ubuntu
           key: ${{ secrets.CICD_SSH_KEY }}
           script: |
+            scriptURL="https://raw.githubusercontent.com/atsign-foundation/at_client_sdk/trunk/tools/${HOSTNAME}/update_ce2e_images.sh"
+            echo "$scriptURL"
+            wget -q -O update_ce2e_images.sh "$scriptURL"
             ./update_ce2e_images.sh
 
   # The Job runs end-to-end tests between two atSign's running on server trunk branch
@@ -137,7 +140,7 @@ jobs:
     needs: [ end2end_tests_prep ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1.3
         with:
           sdk: stable
@@ -173,7 +176,7 @@ jobs:
     needs: [   end2end_tests ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1.3
         with:
           sdk: stable

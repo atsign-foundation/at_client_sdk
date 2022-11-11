@@ -7,7 +7,7 @@ void main() {
     test('test non public key', () {
       var builder = UpdateVerbBuilder()
         ..atKey = 'privatekey:at_pkam_privatekey';
-      var updateKey = AtClientUtil.buildKey(builder);
+      var updateKey = builder.buildKey();
       expect(updateKey, 'privatekey:at_pkam_privatekey');
     });
 
@@ -16,7 +16,7 @@ void main() {
         ..isPublic = true
         ..atKey = 'phone'
         ..sharedBy = 'alice';
-      var updateKey = AtClientUtil.buildKey(builder);
+      var updateKey = builder.buildKey();
       expect(updateKey, 'public:phone@alice');
     });
 
@@ -25,7 +25,7 @@ void main() {
         ..sharedWith = 'bob'
         ..atKey = 'phone'
         ..sharedBy = 'alice';
-      var updateKey = AtClientUtil.buildKey(builder);
+      var updateKey = builder.buildKey();
       expect(updateKey, '@bob:phone@alice');
     });
   });

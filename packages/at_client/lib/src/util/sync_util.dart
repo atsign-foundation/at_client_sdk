@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/json_utils.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
@@ -117,7 +118,8 @@ class SyncUtil {
     if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
         key.startsWith(AT_PKAM_PUBLIC_KEY) ||
         key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
-        key.startsWith(statsNotificationId)) {
+        key.startsWith(NotificationServiceImpl.notificationIdKey) ||
+        key.startsWith(NotificationServiceImpl.lastReceivedNotificationKey)) {
       return false;
     }
     return true;

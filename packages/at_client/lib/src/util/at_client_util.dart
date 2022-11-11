@@ -3,27 +3,10 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
-import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
-  static String buildKey(UpdateVerbBuilder builder) {
-    var updateKey = '';
-    if (builder.isPublic) {
-      updateKey += 'public:';
-    }
-    if (builder.sharedWith != null && builder.sharedWith!.isNotEmpty) {
-      updateKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
-    }
-    updateKey += builder.atKey!;
-    if (builder.sharedBy != null) {
-      updateKey += AtUtils.formatAtSign(builder.sharedBy)!;
-    }
-    return updateKey;
-  }
-
   @Deprecated('use RemoteSecondary.findSecondaryUrl')
   static Future<String> findSecondary(
       String toAtSign, String rootDomain, int rootPort) async {
