@@ -373,9 +373,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Syncs the cloud secondary changes to local secondary.
   Future<List<KeyInfo>> _syncFromServer(int serverCommitId, int localCommitId,
       List<CommitEntry> uncommittedEntries) async {
-    // Iterates until serverCommitId is greater than localCommitId are equal.
+    // Iterates until serverCommitId is greater than lastReceivedServerCommitId.
+    // replacing localCommitId with lastReceivedServerCommitId fixes infinite loop issue
+    // in certain scenarios e.g server has a commit entry that need not be synced on client side,
+    // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
-    while (serverCommitId > localCommitId) {
+    int lastReceivedServerCommitId = localCommitId;
+    while (serverCommitId > lastReceivedServerCommitId) {
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
@@ -403,6 +407,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
+        if (serverCommitEntry['commitId'] is int) {
+          lastReceivedServerCommitId = serverCommitEntry['commitId'];
+        } else {
+          lastReceivedServerCommitId = int.parse(serverCommitEntry['commitId']);
+        }
         try {
           final keyInfo =
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
@@ -422,7 +431,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
-      _logger.finest('**localCommitId $localCommitId');
+      _logger
+          .finest('**lastReceivedServerCommitId $lastReceivedServerCommitId');
     }
     return keyInfoList;
   }
