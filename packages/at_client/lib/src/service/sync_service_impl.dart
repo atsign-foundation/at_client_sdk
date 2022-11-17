@@ -409,6 +409,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ConflictInfo? conflictInfo =
               await _checkConflict(serverCommitEntry, uncommittedEntries);
           keyInfo.conflictInfo = conflictInfo;
+          keyInfo.operation = serverCommitEntry['operation'];
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
         } on Exception catch (e) {
@@ -819,12 +820,13 @@ class KeyInfo {
   String key;
   SyncDirection syncDirection;
   ConflictInfo? conflictInfo;
+  String? operation;
 
   KeyInfo(this.key, this.syncDirection);
 
   @override
   String toString() {
-    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo}';
+    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo, operation: $operation}';
   }
 }
 
