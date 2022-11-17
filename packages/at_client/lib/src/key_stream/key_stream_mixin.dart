@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart'
-    show AtClient, AtClientManager, AtNotification;
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
+    show AtClient, AtClientManager, AtNotification, SyncProgress, SyncProgressListener, SyncStatus;
+import 'package:at_client/src/listener/at_sign_change_listener.dart' show AtSignChangeListener;
+import 'package:at_client/src/listener/switch_at_sign_event.dart' show SwitchAtSignEvent;
+import 'package:at_client/src/service/sync_service_impl.dart' show KeyInfo;
 // ignore: unused_shown_name
 import 'package:at_commons/at_commons.dart' show AtException, AtKey, AtValue;
 import 'package:at_utils/at_logger.dart';
@@ -18,15 +19,11 @@ import 'package:meta/meta.dart';
 ///
 /// [KeyStreamMixin] initializes a [StreamSubscription<AtNotification>] and listens for incoming notifications. When a
 /// notification is received, [KeyStreamMixin] calls atClient.get() on the Key, and calls handleNotification with the
-/// resulting value. [handleNotification] is an abstract function which defines how values get added to the stream.
+/// resulting value. [handleStreamEvent] is an abstract function which defines how values get added to the stream.
 /// The operation on handleNotfication is identical to that of [AtNotification.operation] with the exception of the
 /// additional 'init' operation, which is used to identify a key which was initialized with the stream (when
 /// [shouldGetKeys] is true).
 abstract class KeyStreamMixin<T> implements Stream<T> {
-  /// A subscription that listens to notifications.
-  @visibleForTesting
-  late StreamSubscription<AtNotification> notificationSubscription;
-
   late AtClientManager _atClientManager;
 
   static final AtSignLogger _logger = AtSignLogger('KeyStream');
@@ -88,15 +85,12 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }) {
     _logger.finer('init Keystream: $this');
 
-    this.onError = onError ??
-        (Object e, [StackTrace? s]) => _logger.warning('Error in', e, s);
+    this.onError = onError ?? (Object e, [StackTrace? s]) => _logger.warning('Error in', e, s);
 
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
 
-    notificationSubscription = _atClientManager.notificationService
-        .subscribe(shouldDecrypt: true, regex: regex)
-        .listen(_notificationListener);
+    _atClientManager.syncService.addProgressListener(KeyStreamProgressListener(this));
 
     if (disposeOnAtsignChange) {
       _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
@@ -122,106 +116,69 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
           .then(
             // ignore: unnecessary_cast
             (AtValue value) {
-              _logger.finest(
-                  'handleNotification key: $key, value: $value, operation: init');
-              handleNotification(key, value, 'init');
+              _logger.finest('handleNotification key: $key, value: $value, operation: init');
+              handleStreamEvent(key, value, 'init');
             } as void Function(AtValue),
           )
           .catchError(onError);
     }
   }
 
-  /// Internal notification listener
+  /// Internal sync listener
   ///
   /// Validates the sharedBy and sharedWith values before
-  void _notificationListener(AtNotification event) {
-    AtKey key = AtKey.fromString(event.key);
-    if (sharedBy != null && sharedBy != event.from) return;
-    if (sharedWith != null && sharedWith != event.to) return;
+  void _onSyncProgressEvent(SyncProgress event) {
+    switch (event.syncStatus) {
+      case SyncStatus.failure:
+      case null:
+        onError('Sync failed in KeyStream $this');
+        return;
+      case SyncStatus.success:
+        for (KeyInfo keyInfo in (event.keyInfoList ?? [])) {
+          AtKey key = AtKey.fromString(keyInfo.key);
+          // TODO check regex expression using same technique as notification service
+          if (sharedBy != null && sharedBy != key.sharedBy) continue;
+          if (sharedWith != null && sharedWith != key.sharedWith) continue;
 
-    _atClientManager.atClient
-        .get(key)
-        .then(
-          // ignore: unnecessary_cast
-          (AtValue value) {
-            _logger.finest(
-                'handleNotification key: $key, value: $value, operation: ${event.operation}');
-            handleNotification(key, value, event.operation);
-          } as void Function(AtValue),
-        )
-        .catchError(onError);
+          _atClientManager.atClient
+              .get(key)
+              .then(
+                // ignore: unnecessary_cast
+                (AtValue value) {
+                  _logger.finest('handleNotification key: $key, value: $value, operation: ${event.operation}');
+                  handleStreamEvent(key, value, event.operation);
+                } as void Function(AtValue),
+              )
+              .catchError(onError);
+        }
+        break;
+      default:
+        break;
+    }
   }
 
   @protected
-
-  /// How to handle notifications received by the internal [notificationSubscription].
+  // TODO replace/remove operation
+  // ? What happens to deleted keys in terms of feedback in the KeyInfo
+  /// How to handle changes to keys.
   ///
   /// Possible operations are:
   /// 'update', 'append', 'remove', 'delete', 'init', null
   ///
   /// These operations are the same as [AtNotification], with an additional ['init'] operation
   /// which is used by [getKeys()] to indicate that this key was preloaded.
-  void handleNotification(AtKey key, AtValue value, String? operation);
+  void handleStreamEvent(AtKey key, AtValue value, String? operation);
 
-  /// Requests that the [notificationSubscription] stream pauses events until further notice.
-  ///
-  /// While paused, the subscription will not fire any events.
-  /// If it receives events from its source, they will be buffered until
-  /// the subscription is resumed.
-  /// For non-broadcast streams, the underlying source is usually informed
-  /// about the pause,
-  /// so it can stop generating events until the subscription is resumed.
-  ///
-  /// To avoid buffering events on a broadcast stream, it is better to
-  /// cancel this subscription, and start to listen again when events
-  /// are needed, if the intermediate events are not important.
-  ///
-  /// If [resumeSignal] is provided, the stream subscription will undo the pause
-  /// when the future completes, as if by a call to [resume].
-  /// If the future completes with an error,
-  /// the stream will still resume, but the error will be considered unhandled
-  /// and is passed to [Zone.handleUncaughtError].
-  ///
-  /// A call to [resume] will also undo a pause.
-  ///
-  /// If the subscription is paused more than once, an equal number
-  /// of resumes must be performed to resume the stream.
-  /// Calls to [resume] and the completion of a [resumeSignal] are
-  /// interchangeable - the [pause] which was passed a [resumeSignal] may be
-  /// ended by a call to [resume], and completing the [resumeSignal] may end a
-  /// different [pause].
-  ///
-  /// It is safe to [resume] or complete a [resumeSignal] even when the
-  /// subscription is not paused, and the resume will have no effect.
-  void pause([Future<void>? resumeSignal]) {
-    _logger.finer('notificationSubscription pause');
-    notificationSubscription.pause(resumeSignal);
-  }
+  @Deprecated('Notification subsystem is no longer used by KeyStream.')
+  void pause([Future<void>? resumeSignal]) {}
 
-  /// Resumes the [notificationSubscription] after a pause.
-  ///
-  /// This undoes one previous call to [pause].
-  /// When all previously calls to [pause] have been matched by a calls to
-  /// [resume], possibly through a `resumeSignal` passed to [pause],
-  /// the stream subscription may emit events again.
-  ///
-  /// It is safe to [resume] even when the subscription is not paused, and the
-  /// resume will have no effect.
-  void resume() {
-    _logger.finer('notificationSubscription resume');
-    notificationSubscription.resume();
-  }
+  @Deprecated('Notification subsystem is no longer used by KeyStream.')
+  void resume() {}
 
-  /// Whether the [notificationSubscription] is currently paused.
-  ///
-  /// If there have been more calls to [pause] than to [resume] on this
-  /// stream subscription, the subscription is paused, and this getter
-  /// returns `true`.
-  ///
-  /// Returns `false` if the stream can currently emit events, or if
-  /// the subscription has completed or been cancelled.
-  bool get isPaused => notificationSubscription.isPaused;
+  @Deprecated('Notification subsystem is no longer used by KeyStream.')
+  bool get isPaused => true;
 
+  // TODO update documentation (remove notification subscription reference)
   /// Closes the stream and cancels the notification subscription.
   ///
   /// Closes the stream:
@@ -260,7 +217,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// completes with that error.
   Future<void> dispose() async {
     _logger.finer('dispose KeyStream $this');
-    await Future.wait([controller.close(), notificationSubscription.cancel()]);
+    await controller.close();
   }
 
   @override
@@ -280,8 +237,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   Stream<T> asBroadcastStream(
       {void Function(StreamSubscription<T> subscription)? onListen,
       void Function(StreamSubscription<T> subscription)? onCancel}) {
-    return controller.stream
-        .asBroadcastStream(onListen: onListen, onCancel: onCancel);
+    return controller.stream.asBroadcastStream(onListen: onListen, onCancel: onCancel);
   }
 
   @override
@@ -348,8 +304,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   @override
-  Stream<T> handleError(Function onError,
-      {bool Function(dynamic error)? test}) {
+  Stream<T> handleError(Function onError, {bool Function(dynamic error)? test}) {
     return controller.stream.handleError(onError, test: test);
   }
 
@@ -378,8 +333,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   @override
   StreamSubscription<T> listen(void Function(T event)? onData,
       {Function? onError, void Function()? onDone, bool? cancelOnError}) {
-    return controller.stream
-        .listen(onData, onError: onError, cancelOnError: cancelOnError);
+    return controller.stream.listen(onData, onError: onError, cancelOnError: cancelOnError);
   }
 
   @override
@@ -426,8 +380,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   @override
-  Stream<T> timeout(Duration timeLimit,
-      {void Function(EventSink<T> sink)? onTimeout}) {
+  Stream<T> timeout(Duration timeLimit, {void Function(EventSink<T> sink)? onTimeout}) {
     return controller.stream.timeout(timeLimit, onTimeout: onTimeout);
   }
 
@@ -461,5 +414,15 @@ class KeyStreamDisposeListener extends AtSignChangeListener {
     if (_ref.disposeOnAtsignChange) {
       await _ref.dispose();
     }
+  }
+}
+
+class KeyStreamProgressListener extends SyncProgressListener {
+  final KeyStreamMixin _ref;
+  KeyStreamProgressListener(KeyStreamMixin ref) : _ref = ref;
+
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    _ref._onSyncProgressEvent(syncProgress);
   }
 }

@@ -5,7 +5,7 @@ import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 
 class KeyStreamImpl<T> extends KeyStreamMixin<T?> implements KeyStream<T> {
   @override
-  void handleNotification(AtKey key, AtValue value, String? operation) {
+  void handleStreamEvent(AtKey key, AtValue value, String? operation) {
     T? data = convert(key, value);
     if (data == null) return controller.add(null);
     switch (operation) {
@@ -26,8 +26,7 @@ class KeyStreamImpl<T> extends KeyStreamMixin<T?> implements KeyStream<T> {
     bool shouldGetKeys = true,
     String? sharedBy,
     String? sharedWith,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
-        onError,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   }) : super(
           convert: convert,

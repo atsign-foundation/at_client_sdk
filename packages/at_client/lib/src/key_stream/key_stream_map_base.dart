@@ -4,8 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 import 'package:meta/meta.dart';
 
-class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I>
-    implements Stream<I> {
+class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I> implements Stream<I> {
   @visibleForTesting
   final Map<String, MapEntry<K, V>> store = {};
 
@@ -16,7 +15,7 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I>
   final String Function(AtKey key, AtValue value) _generateRef;
 
   @override
-  void handleNotification(AtKey key, AtValue value, String? operation) {
+  void handleStreamEvent(AtKey key, AtValue value, String? operation) {
     switch (operation) {
       case 'delete':
       case 'remove':
@@ -26,8 +25,7 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I>
       case 'update':
       case 'append':
       default:
-        store[_generateRef(key, value)] =
-            convert(key, value)! as MapEntry<K, V>;
+        store[_generateRef(key, value)] = convert(key, value)! as MapEntry<K, V>;
     }
     controller.add(_castTo(store.values));
   }
@@ -40,8 +38,7 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I>
     String? sharedWith,
     String Function(AtKey key, AtValue value)? generateRef,
     I Function(Iterable<MapEntry<K, V>> values)? castTo,
-    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
-        onError,
+    FutureOr<void> Function(Object exception, [StackTrace? stackTrace])? onError,
     AtClientManager? atClientManager,
   })  : _generateRef = generateRef ?? ((key, value) => key.key ?? ''),
         _castTo = castTo ?? ((Iterable<MapEntry<K, V>> values) => values as I),
