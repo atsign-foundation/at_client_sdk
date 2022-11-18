@@ -15,15 +15,15 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I> impl
   final String Function(AtKey key, AtValue value) _generateRef;
 
   @override
-  void handleStreamEvent(AtKey key, AtValue value, String? operation) {
+  void handleStreamEvent(AtKey key, AtValue value, KeyStreamOperation operation) {
     switch (operation) {
-      case 'delete':
-      case 'remove':
+      case KeyStreamOperation.none:
+      // TODO this is the resulting value from CommitOp being null, i.e. keyInfo.operation == null
+      // Should I assume that the Key is bad and should be removed from the stream, OR
+      // Should I do nothing to the Key... can CommitOp even be null here?
+      case KeyStreamOperation.delete:
         store.remove(_generateRef(key, value));
         break;
-      case 'init':
-      case 'update':
-      case 'append':
       default:
         store[_generateRef(key, value)] = convert(key, value)! as MapEntry<K, V>;
     }

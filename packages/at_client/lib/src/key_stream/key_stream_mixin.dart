@@ -4,7 +4,7 @@ import 'package:at_client/at_client.dart'
     show AtClient, AtClientManager, AtNotification, SyncProgress, SyncProgressListener, SyncStatus;
 import 'package:at_client/src/listener/at_sign_change_listener.dart' show AtSignChangeListener;
 import 'package:at_client/src/listener/switch_at_sign_event.dart' show SwitchAtSignEvent;
-import 'package:at_client/src/service/sync_service_impl.dart' show KeyInfo;
+import 'package:at_client/src/util/regex_match_util.dart';
 // ignore: unused_shown_name
 import 'package:at_commons/at_commons.dart' show AtException, AtKey, AtValue;
 import 'package:at_utils/at_logger.dart';
@@ -116,8 +116,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
           .then(
             // ignore: unnecessary_cast
             (AtValue value) {
-              _logger.finest('handleNotification key: $key, value: $value, operation: init');
-              handleStreamEvent(key, value, 'init');
+              _logger.finest('handleNotification key: $key, value: $value, operation: ${KeyStreamOperation.init}');
+              handleStreamEvent(key, value, KeyStreamOperation.init);
             } as void Function(AtValue),
           )
           .catchError(onError);
@@ -134,23 +134,42 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
         onError('Sync failed in KeyStream $this');
         return;
       case SyncStatus.success:
-        for (KeyInfo keyInfo in (event.keyInfoList ?? [])) {
+        // This loop can be done asynchronously in the background
+        // ignore: avoid_function_literals_in_foreach_calls
+        (event.keyInfoList ?? []).forEach((keyInfo) async {
           AtKey key = AtKey.fromString(keyInfo.key);
-          // TODO check regex expression using same technique as notification service
-          if (sharedBy != null && sharedBy != key.sharedBy) continue;
-          if (sharedWith != null && sharedWith != key.sharedWith) continue;
 
-          _atClientManager.atClient
-              .get(key)
-              .then(
-                // ignore: unnecessary_cast
-                (AtValue value) {
-                  _logger.finest('handleNotification key: $key, value: $value, operation: ${event.operation}');
-                  handleStreamEvent(key, value, event.operation);
-                } as void Function(AtValue),
-              )
-              .catchError(onError);
-        }
+          if (key.key == null) return;
+          if (regex != null && regex != '' && !hasRegexMatch(key.toString(), regex!)) return;
+          if (sharedBy != null && sharedBy != key.sharedBy) return;
+          if (sharedWith != null && sharedWith != key.sharedWith) return;
+
+          // TODO determine whether sync direction matters
+
+          KeyStreamOperation op = KeyStreamOp.fromCommitOp(keyInfo.operation);
+
+          switch (op) {
+            case KeyStreamOperation.update:
+              _atClientManager.atClient
+                  .get(key)
+                  .then(
+                    // ignore: unnecessary_cast
+                    (AtValue value) {
+                      if (value.value == null) op = KeyStreamOperation.delete;
+                      _logger.finest('handleNotification key: $key, value: $value, operation: $op');
+                      handleStreamEvent(key, value, op);
+                    } as void Function(AtValue),
+                  )
+                  .catchError(onError);
+              break;
+            case KeyStreamOperation.delete:
+              (() async => handleStreamEvent(key, AtValue(), op))();
+              break;
+            case KeyStreamOperation.init: // Should never occur here, thus ignore it.
+            case KeyStreamOperation.none:
+              break;
+          }
+        });
         break;
       default:
         break;
@@ -158,16 +177,9 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   }
 
   @protected
-  // TODO replace/remove operation
-  // ? What happens to deleted keys in terms of feedback in the KeyInfo
+
   /// How to handle changes to keys.
-  ///
-  /// Possible operations are:
-  /// 'update', 'append', 'remove', 'delete', 'init', null
-  ///
-  /// These operations are the same as [AtNotification], with an additional ['init'] operation
-  /// which is used by [getKeys()] to indicate that this key was preloaded.
-  void handleStreamEvent(AtKey key, AtValue value, String? operation);
+  void handleStreamEvent(AtKey key, AtValue value, KeyStreamOperation operation);
 
   @Deprecated('Notification subsystem is no longer used by KeyStream.')
   void pause([Future<void>? resumeSignal]) {}
@@ -178,9 +190,6 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   @Deprecated('Notification subsystem is no longer used by KeyStream.')
   bool get isPaused => true;
 
-  // TODO update documentation (remove notification subscription reference)
-  /// Closes the stream and cancels the notification subscription.
-  ///
   /// Closes the stream:
   ///
   /// No further events can be added to a closed stream.
@@ -197,24 +206,6 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// If no one listens to a non-broadcast stream,
   /// or the listener pauses and never resumes,
   /// the done event will not be sent and this future will never complete.
-  ///
-  /// Cancels the notification subscription:
-  ///
-  /// After this call, the subscription no longer receives events.
-  ///
-  /// The stream may need to shut down the source of events and clean up after
-  /// the subscription is canceled.
-  ///
-  /// Returns a future that is completed once the stream has finished
-  /// its cleanup.
-  ///
-  /// Typically, cleanup happens when the stream needs to release resources.
-  /// For example, a stream might need to close an open file (as an asynchronous
-  /// operation). If the listener wants to delete the file after having
-  /// canceled the subscription, it must wait for the cleanup future to complete.
-  ///
-  /// If the cleanup throws, which it really shouldn't, the returned future
-  /// completes with that error.
   Future<void> dispose() async {
     _logger.finer('dispose KeyStream $this');
     await controller.close();
@@ -424,5 +415,27 @@ class KeyStreamProgressListener extends SyncProgressListener {
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     _ref._onSyncProgressEvent(syncProgress);
+  }
+}
+
+enum KeyStreamOperation {
+  init,
+  update,
+  delete,
+  none,
+}
+
+extension KeyStreamOp on KeyStreamOperation {
+  static KeyStreamOperation fromCommitOp(String? commitOp) {
+    switch (commitOp) {
+      case '-': // DELETE
+        return KeyStreamOperation.delete;
+      case '+': // UPDATE
+      case '#': // UPDATE_META
+      case '*': // UPDATE_ALL
+        return KeyStreamOperation.update;
+      default: // null
+        return KeyStreamOperation.none;
+    }
   }
 }
