@@ -907,22 +907,25 @@ class AtClientImpl implements AtClient {
 
   /// Method to convert keys of type AtKey (or) String to lowercase
   /// Returns the same type of AtKey passed into the method
-  dynamic _toLowerCase(var atKey){
-    if (atKey.runtimeType == AtKey){
-    String localKey = atKey.toString();
-    if(localKey.contains(RegExp(r'[A-z]'))){
-      _logger.finer('$localKey has uppercase characters');
-      _logger.warning('Converting provided atKey with uppercase characters to lowercase');
-    }
-    return AtKey.fromString(localKey.toLowerCase());
-    } else if (atKey.runtimeType == String){
-      if(atKey.contains(RegExp(r'[A-z]'))){
+  dynamic _toLowerCase(var atKey) {
+    if (atKey.runtimeType == AtKey) {
+      String localKey = atKey.toString();
+      if (localKey.contains(RegExp(r'[A-z]'))) {
+        _logger.finer('$localKey has uppercase characters');
+        _logger.warning(
+            'Converting provided atKey with uppercase characters to lowercase');
+      }
+      return AtKey.fromString(localKey.toLowerCase());
+    } else if (atKey.runtimeType == String) {
+      if (atKey.contains(RegExp(r'[A-z]'))) {
         _logger.finer('$atKey has uppercase characters');
-        _logger.warning('Converting provided atKey with uppercase characters to lowercase');
+        _logger.warning(
+            'Converting provided atKey with uppercase characters to lowercase');
       }
       return atKey.toLowerCase();
     }
-    _logger.finer('atKey: $atKey type is neither AtKey or String. lowercase enforcement not done');
+    _logger.finer(
+        'atKey: $atKey type is neither AtKey or String. lowercase enforcement not done');
     return atKey;
   }
 
