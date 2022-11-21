@@ -11,6 +11,7 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
@@ -24,6 +25,8 @@ abstract class AtClient {
   RemoteSecondary? getRemoteSecondary();
 
   LocalSecondary? getLocalSecondary();
+
+  void setAtChops(AtChops atChops);
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);

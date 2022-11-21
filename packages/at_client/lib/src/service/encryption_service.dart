@@ -14,11 +14,14 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:at_chops/at_chops.dart';
 
 class EncryptionService {
   RemoteSecondary? remoteSecondary;
 
   LocalSecondary? localSecondary;
+
+  AtChops? _atChops;
 
   String? currentAtSign;
 
@@ -56,8 +59,6 @@ class EncryptionService {
           'Decryption failed. Encrypted value is null');
     }
     sharedWithUser = sharedWithUser.replaceFirst('@', '');
-    var currentAtSignPrivateKey =
-        await localSecondary!.getEncryptionPrivateKey();
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
       ..sharedBy = currentAtSign;
@@ -70,7 +71,7 @@ class EncryptionService {
     //trying to llookup a value without shared key. throw exception or return null}
     sharedKey = sharedKey.replaceFirst('data:', '');
     var decryptedSharedKey =
-        EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+        _atChops!.decryptString(sharedKey, EncryptionKeyType.rsa_2048);
     var decryptedValue =
         EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey);
 
@@ -168,10 +169,9 @@ class EncryptionService {
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
       sharedKey = sharedKey.replaceFirst('data:', '');
-      var currentAtSignPrivateKey =
-          await localSecondary!.getEncryptionPrivateKey();
       sharedKey =
-          EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
+          _atChops!.decryptString(sharedKey, EncryptionKeyType.rsa_2048);
+      ;
     }
 
     // e.g save @bob:shared_key@alice
@@ -451,13 +451,8 @@ class EncryptionService {
     }
 
     //2. decrypt shared key using private key
-    var currentAtSignPrivateKey =
-        await (localSecondary!.getEncryptionPrivateKey());
-    if (currentAtSignPrivateKey == null) {
-      throw KeyNotFoundException('encryption private not found');
-    }
     var sharedKey =
-        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
+        _atChops!.decryptString(encryptedSharedKey, EncryptionKeyType.rsa_2048);
     return sharedKey;
   }
 
@@ -468,14 +463,9 @@ class EncryptionService {
     if (encryptedSharedKey == null || encryptedSharedKey == 'null') {
       throw KeyNotFoundException('encrypted Shared key not found');
     }
-    //2. decrypt shared key using private key
-    var currentAtSignPrivateKey =
-        await (localSecondary!.getEncryptionPrivateKey());
-    if (currentAtSignPrivateKey == null) {
-      throw KeyNotFoundException('private encryption key not found');
-    }
+    // decrypt shared key using private key
     var sharedKey =
-        EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
+        _atChops!.decryptString(encryptedSharedKey, EncryptionKeyType.rsa_2048);
     return sharedKey;
   }
 

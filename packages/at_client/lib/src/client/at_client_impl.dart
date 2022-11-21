@@ -36,6 +36,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
@@ -50,6 +51,7 @@ class AtClientImpl implements AtClient {
   SecondaryKeyStore? _localSecondaryKeyStore;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
+  AtChops? _atChops;
 
   EncryptionService? _encryptionService;
 
@@ -68,7 +70,8 @@ class AtClientImpl implements AtClient {
       {AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore}) async {
+      SecondaryKeyStore? localSecondaryKeyStore,
+      AtChops? atChops}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       return atClientInstanceMap[currentAtSign];
@@ -933,5 +936,10 @@ class AtClientImpl implements AtClient {
     currentAtSign = AtUtils.formatAtSign(_atSign);
     _preference = preference;
     _namespace = namespace;
+  }
+
+  @override
+  void setAtChops(AtChops atChops) {
+    _atChops = atChops;
   }
 }
