@@ -13,7 +13,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: packages/at_lookup
-      ref: gkc-at-lookup-fix-race-on-reconnect
+      ref: trunk
 
 dependencies:
   at_client:
