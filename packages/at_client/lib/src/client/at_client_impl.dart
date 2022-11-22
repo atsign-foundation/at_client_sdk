@@ -939,7 +939,36 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  void setAtChops(AtChops atChops) {
-    _atChops = atChops;
+
+  /// Inject an instance of [AtChops]
+  /// if [AtChops] is not injected then pkam and encryption keys should be saved to local secondary before invoking this method.
+  void setAtChops({AtChops? atChops}) async {
+    if (atChops != null) {
+      _atChops = atChops;
+      return;
+    }
+    if (_atChops != null) {
+      return;
+    }
+    final atEncryptionPublicKey =
+        await _localSecondary!.getEncryptionPublicKey(currentAtSign!);
+    final atEncryptionPrivateKey =
+        await _localSecondary!.getEncryptionPrivateKey();
+
+    if (atEncryptionPrivateKey == null || atEncryptionPublicKey == null) {
+      throw Exception('AtEncryptionKeyPair cannot be created with a null key');
+    }
+    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
+        atEncryptionPublicKey, atEncryptionPrivateKey);
+
+    final atPkamPublicKey = await _localSecondary!.getPublicKey();
+    final atPkamPrivateKey = await _localSecondary!.getPrivateKey();
+    if (atPkamPublicKey == null || atPkamPrivateKey == null) {
+      throw Exception('AtPkamKeyPair cannot be created with a null key');
+    }
+    final atPkamKeyPair =
+        AtPkamKeyPair.create(atPkamPublicKey, atPkamPrivateKey);
+    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    _atChops = AtChopsImpl(atChopsKeys);
   }
 }
