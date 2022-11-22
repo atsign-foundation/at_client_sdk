@@ -13,16 +13,19 @@ on:
     branches:
       - trunk
 
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
 jobs:
   unit_and_functional_tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
 
       # Note: This workflow uses the latest stable version of the Dart SDK.
       # You can specify other versions if desired, see documentation here:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
-      - uses: dart-lang/setup-dart@v1.3
+      - uses: dart-lang/setup-dart@6a218f2413a3e78e9087f638a238f6b40893203d # v1.3
         with:
           sdk: stable
 
@@ -96,7 +99,7 @@ jobs:
 
       # Adding flutter to path
       - name: Installing Flutter
-        uses: britannio/action-install-flutter@v1.1
+        uses: britannio/action-install-flutter@a486b7e3148e54a76390d849100b9dee819ff810 # v1.1
         with:
           version: stable
 
@@ -124,7 +127,7 @@ jobs:
       - name: update image on cicd VMs
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: appleboy/ssh-action@v0.1.5
+        uses: appleboy/ssh-action@f9010ff7f1bbd7db1a0b4bab661437550cea20c0 # v0.1.5
         with:
           host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
           username: ubuntu
@@ -140,8 +143,8 @@ jobs:
     needs: [ end2end_tests_prep ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: dart-lang/setup-dart@v1.3
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
+      - uses: dart-lang/setup-dart@6a218f2413a3e78e9087f638a238f6b40893203d # v1.3
         with:
           sdk: stable
 
@@ -176,8 +179,8 @@ jobs:
     needs: [   end2end_tests ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: dart-lang/setup-dart@v1.3
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
+      - uses: dart-lang/setup-dart@6a218f2413a3e78e9087f638a238f6b40893203d # v1.3
         with:
           sdk: stable
 
