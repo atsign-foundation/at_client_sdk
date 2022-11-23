@@ -6,6 +6,7 @@ import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_chops/at_chops.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
@@ -51,9 +52,9 @@ class AtClientService {
     // Get keys from KeyChain manager
     String? pkamPrivateKey = await KeychainUtil.getPkamPrivateKey(atSign);
     String? pkamPublicKey = await KeychainUtil.getPkamPublicKey(atSign);
-    String? encryptPrivateKey =
+    String? encryptionPrivateKey =
         await KeychainUtil.getEncryptionPrivateKey(atSign);
-    String? encryptPublicKey =
+    String? encryptionPublicKey =
         await KeychainUtil.getEncryptionPublicKey(atSign);
     String? selfEncryptionKey = await KeychainUtil.getSelfEncryptionKey(atSign);
 
@@ -65,10 +66,10 @@ class AtClientService {
     if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
-    if (encryptPrivateKey == null || encryptPrivateKey.isEmpty) {
+    if (encryptionPrivateKey == null || encryptionPrivateKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
-    if (encryptPublicKey == null || encryptPublicKey.isEmpty) {
+    if (encryptionPublicKey == null || encryptionPublicKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
     if (selfEncryptionKey == null || selfEncryptionKey.isEmpty) {
@@ -84,12 +85,12 @@ class AtClientService {
         .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
+        .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptionPrivateKey);
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = 'publickey'
       ..isPublic = true
       ..sharedBy = atSign
-      ..value = encryptPublicKey;
+      ..value = encryptionPublicKey;
     await _atClient!
         .getLocalSecondary()!
         .executeVerb(updateBuilder, sync: true);
@@ -99,6 +100,15 @@ class AtClientService {
 
     // Verify if keys are added to local storage.
     var result = await _getKeysFromLocalSecondary(atSign);
+
+    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
+        encryptionPublicKey, encryptionPrivateKey);
+    final atPkamKeyPair =
+    AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
+    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    final atChops = AtChopsImpl(atChopsKeys);
+    atLookUp.setAtChops(atChops);
+    _atClient!.setAtChops(atChops: atChops);
     return result;
   }
 
@@ -303,6 +313,7 @@ class AtClientService {
       _logger.severe('PrivateKey not found');
       throw OnboardingStatus.PRIVATE_KEY_NOT_FOUND;
     }
+    // #TODO remove this once onboarding flow is changed to at_chops
     atClientPreference.privateKey = privateKey;
     await _init(atsign, atClientPreference);
     await persistKeys(atsign);
