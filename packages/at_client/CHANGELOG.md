@@ -1,3 +1,5 @@
+## 3.0.47
+- fix: Fixed a bug where initial notifications fails to decrypt - invalid pad block issue 
 ## 3.0.46
 - fix: Ensure that we handle any and all exceptions related to sending heartbeat request
 - feat: Made NotificationServiceImpl's retry delay into a public instance variable, so it can be set by application code
