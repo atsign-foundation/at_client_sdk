@@ -13,17 +13,17 @@ jobs:
     name: SSL Renewal for vip.ve.atsign.zone
     steps:
       - name: Set up Python
-        uses: actions/setup-python@13ae5bb136fac2878aff31522b9efb785519f984 # v4
+        uses: actions/setup-python@13ae5bb136fac2878aff31522b9efb785519f984 # v4.3.0
         with:
           python-version: 3.9 #install the python needed
       - name: setup certinfo
-        uses: atsign-company/certinfo-action@1a06eeae7c008349c3393e5872b422e122697152 # v1
+        uses: atsign-company/certinfo-action@e33db584f27bbbc0260af9916aeaefbec0db8ef4 # v1.0.1
       # checkout at_server code
       - name: checkout repo content
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
+        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
       # Pull ZeroSSL and Letsencrypt keys file from secret
       - name: Pull ACME script
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
+        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
         with:
           repository: atsign-company/secondaries-scripts
           path: secondaries-scripts
@@ -59,7 +59,7 @@ jobs:
       # create PR with renewed certificate
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@d7db273d6c7206ba99224e659c982ae34a1025e3 # v4
+        uses: peter-evans/create-pull-request@d7db273d6c7206ba99224e659c982ae34a1025e3 # v4.2.1
         with:
           token: ${{ secrets.MY_GITHUB_TOKEN }}
           commit-message: 'chore: New certificates for at_server'
