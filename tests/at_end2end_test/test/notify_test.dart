@@ -102,13 +102,13 @@ void main() async {
         expect(notificationResult.notificationStatusEnum,
             NotificationStatusEnum.delivered);
 
-        await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
+        sharedWithAtClientManager = await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
             namespace, TestPreferences.getInstance().getPreference(sharedWithAtSign));
         var atNotification = await AtClientManager.getInstance()
             .notificationService
             .fetch(notificationResult.notificationID);
         atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
-        await NotificationResponseTransformer().transform(Tuple()
+        await NotificationResponseTransformer(sharedWithAtClientManager.atClient).transform(Tuple()
           ..one = atNotification
           ..two = (NotificationConfig()
             ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));

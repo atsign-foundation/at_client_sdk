@@ -7,8 +7,11 @@ import 'package:at_utils/at_logger.dart';
 /// Example of local keys:
 /// CurrentAtSign: @bob
 /// llookup:@alice:phone@bob
-class LocalKeyDecryption implements AtKeyDecryption {
+class LocalKeyDecryption extends AbstractAtKeyEncryption
+    implements AtKeyDecryption {
   final _logger = AtSignLogger('LocalKeyDecryption');
+
+  LocalKeyDecryption(AtClient atClient) : super(atClient);
 
   @override
   Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {
@@ -18,7 +21,7 @@ class LocalKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     // Get the shared key.
-    var sharedKey = await AbstractAtKeyEncryption.getSharedKey(atKey);
+    var sharedKey = await getSharedKey(atKey);
 
     if (sharedKey.isEmpty) {
       _logger.severe('Decryption failed. SharedKey is null');

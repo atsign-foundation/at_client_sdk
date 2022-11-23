@@ -123,7 +123,8 @@ void main() async {
       ..metadata = Metadata();
     var value = 'New Jersey';
     var encryptionService =
-        AtKeyEncryptionManager().get(locationKey, currentAtSign);
+        AtKeyEncryptionManager.getInstance(currentAtClientManager.atClient)
+            .get(locationKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(locationKey, value);
     var result = await currentAtClientManager.atClient
         .getRemoteSecondary()!
