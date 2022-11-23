@@ -1,4 +1,10 @@
+import 'dart:io';
+
+import 'package:at_client/src/util/sync_util.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:test/test.dart';
+import 'package:at_client/at_client.dart';
 
 ///Notes:
 /// Description of terminology used in the test cases:
@@ -12,6 +18,8 @@ void main() {
   // (Client) How the client processes that uncommitted queue (while sending updates to server) - e.g. how is the queue ordered, how is it de-duped, etc
   // (Client) How the client processes updates from the server - can the client reject? under what conditions? what happens upon a rejection?
   // The 7th contract is the contract for precisely how the client and server exchange information. Currently this is implemented using the batch verb and has state like 'syncInProgress' and 'isInSync'. (Aside: Fsync will implement this contract in a streaming fashion bidirectionally.)
+
+  var storageDir = '${Directory.current.path}/test/hive';
   group(
       'Tests to validate how items are added to the uncommitted queue on the client side (upon data store operations)',
       () {
@@ -357,35 +365,90 @@ void main() {
   group(
       'Tests to validate how the client processes that uncommitted queue (while sending updates to server) - e.g. how is the queue ordered, how is it de-duped, etc',
       () {
+    String atsign = '@bob';
+
+    /// Preconditions:
+    /// 1. The hive key store has 5 distinct keys with different key types - public key, shared key and self key
+    /// 2. The commit log has corresponding entries for the above keys and commit id should be null
+    ///
+    /// Operations:
+    /// Get the uncommitted operations
+    ///
+    /// Assertions:
+    /// 1. The uncommitted entries should be returned as in same order that keys are create
     test(
         'Verify that entries to be sent to the server from the uncommitted queue are retrieved in the order of creation - FIFO',
-        () {
-      /// Preconditions:
-      /// 1. The hive key store has 5 distinct keys with different key types - public key, shared key and self key
-      /// 2. The commit log has corresponding entries for the above keys and commit id should be null
-      ///
-      /// Operations:
-      /// Get the uncommitted operations
-      ///
-      /// Assertions:
-      /// 1. The uncommitted entries should be returned as in same order that keys are created
+        () async {
+      await Resources.setupLocalStorage(storageDir, atsign,
+          enableCommitId: false);
+      HiveKeystore? keystore = Resources.getHiveKeyStore(atsign);
+      int? currentSeqnum = Resources.commitLog?.lastCommittedSequenceNumber();
+      List<String> keys = [];
+      keys.add(AtKey.public('test_key0', sharedBy: atsign).build().toString());
+      keys.add((AtKey.shared('test_key1', sharedBy: atsign)
+            ..sharedWith('@alice'))
+          .build()
+          .toString());
+      keys.add(AtKey.public('test_key2', sharedBy: atsign).build().toString());
+      keys.add((AtKey.shared('test_key3', sharedBy: atsign)
+            ..sharedWith('@alice'))
+          .build()
+          .toString());
+      keys.add(AtKey.self('test_key4', sharedBy: atsign).build().toString());
+      for (var element in keys) {
+        await keystore?.put(element, AtData()..data = 'dummydata');
+      }
+      // print(await Resources.commitLog?.commitLogKeyStore.toMap());
+      List<CommitEntry> changes = await SyncUtil(
+              atCommitLog: Resources.commitLog)
+          .getChangesSinceLastCommit(currentSeqnum, 'test_key', atSign: atsign);
+      for (int i = 0; i < 5; i++) {
+        expect(changes[i].atKey, keys[i]);
+      }
+      Resources.tearDownLocalStorage(storageDir);
     });
+
+    /// Preconditions:
+    /// 1. The server commit id and local commit id are equal
+    /// 2. The uncommitted entries should have following entries
+    ///    a. hive_seq: 1 - @alice:phone@bob - commitOp. Update - value: +445-446-4847
+    ///    b. hive_seq:2 - @alice:phone@bob - commitOp. Update - value: +447-448-4849
+    ///
+    /// Operations:
+    /// Get the uncommitted operations
+    ///
+    /// Assertion:
+    ///  1. When fetch uncommitted entry should be fetched:
+    ///     - The entry with hive_seq -2
     test(
         'Verify that for a same key with many updates only the latest entry is selected from uncommitted queue to be sent to the server',
-        () {
-      /// Preconditions:
-      /// 1. The server commit id and local commit id are equal
-      /// 2. The uncommitted entries should have following entries
-      ///    a. hive_seq: 1 - @alice:phone@bob - commitOp. Update - value: +445-446-4847
-      ///    b. hive_seq:2 - @alice:phone@bob - commitOp. Update - value: +447-448-4849
-      ///
-      /// Operations:
-      /// Get the uncommitted operations
-      ///
-      /// Assertion:
-      ///  1. When fetch uncommitted entry should be fetched:
-      ///     - The entry with hive_seq -2
+        () async {
+      await Resources.setupLocalStorage(storageDir, atsign,
+          enableCommitId: false);
+      HiveKeystore? keystore = Resources.getHiveKeyStore(atsign);
+      int? currentSeqnum = Resources.commitLog?.lastCommittedSequenceNumber();
+      print(currentSeqnum);
+      var key =
+          AtKey.public('test2_key0', namespace: 'group2test2', sharedBy: atsign)
+              .build()
+              .toString();
+
+      var seq_num = await keystore?.put(key, AtData()..data = 'test_data1');
+      //t2
+      //second seq num await keystore?.put(key, AtData()..data = 'test_data2');
+
+
+      List<CommitEntry> changes =
+          await SyncUtil(atCommitLog: Resources.commitLog)
+              .getChangesSinceLastCommit(currentSeqnum, 'group2test2',
+                  atSign: atsign);
+
+      expect(changes.length, 1);
+      print(changes);
+      // expect(changes[0].internal_seq, 2);
+      await Resources.tearDownLocalStorage(storageDir);
     });
+
     test(
         'Verify that a same key with a update and delete nothing is selected from uncommitted queue',
         () {
@@ -1149,4 +1212,39 @@ void main() {
       });
     });
   });
+}
+
+class Resources {
+  static AtCommitLog? commitLog;
+  static SecondaryPersistenceStore? secondaryPersistenceStore;
+
+  static Future<void> setupLocalStorage(String storageDir, String atSign,
+      {bool enableCommitId = true}) async {
+    commitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign,
+        commitLogPath: storageDir, enableCommitId: enableCommitId);
+    var secondaryPersistenceStore =
+        SecondaryPersistenceStoreFactory.getInstance()
+            .getSecondaryPersistenceStore(atSign)!;
+    await secondaryPersistenceStore
+        .getHivePersistenceManager()!
+        .init(storageDir);
+    secondaryPersistenceStore.getSecondaryKeyStore()!.commitLog = commitLog;
+  }
+
+  static Future<void> tearDownLocalStorage(storageDir) async {
+    try {
+      var isExists = await Directory(storageDir).exists();
+      if (isExists) {
+        Directory(storageDir).deleteSync(recursive: true);
+      }
+    } catch (e, st) {
+      print('sync_test.dart: exception / error in tearDown: $e, $st');
+    }
+  }
+
+  static HiveKeystore? getHiveKeyStore(String atsign) {
+    return SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(atsign)
+        ?.getSecondaryKeyStore();
+  }
 }
