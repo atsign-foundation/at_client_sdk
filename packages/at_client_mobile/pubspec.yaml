@@ -23,7 +23,10 @@ dependencies:
 
 dependency_overrides:
   at_client:
-    path: ../at_client
+    git:
+      url: https://github.com/atsign-foundation/at_client_sdk.git
+      path: packages/at_client
+      ref: at_chops
   at_chops:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
