@@ -103,7 +103,6 @@ void main() {
       expect(keyStoreGetResult.metaData!.version, 0);
       var commitLogEntry =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      print(commitLogEntry);
       expect(commitLogEntry!.operation, CommitOp.UPDATE);
     });
 
@@ -158,7 +157,7 @@ void main() {
       // verifying the key in the commit log
       commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.UPDATE_ALL, true);
+      expect(commitEntryResult!.operation, CommitOp.UPDATE_ALL);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -193,7 +192,7 @@ void main() {
       // verifying the key in the commit log
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.DELETE, true);
+      expect(commitEntryResult!.operation, CommitOp.DELETE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -244,8 +243,8 @@ void main() {
       // verify the entries in the commit log
       var commitEntriesResult = await SyncUtil()
           .getChangesSinceLastCommit(seqNum, 'wavi', atSign: atsign);
-      expect(commitEntriesResult[0].operation == CommitOp.DELETE, true);
-      expect(commitEntriesResult[1].operation == CommitOp.UPDATE, true);
+      expect(commitEntriesResult[0].operation, CommitOp.DELETE);
+      expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -288,7 +287,7 @@ void main() {
       // verifying the key in the commit log
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.UPDATE, true);
+      expect(commitEntryResult!.operation, CommitOp.UPDATE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -339,7 +338,7 @@ void main() {
       // verifying the key in the commit log
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.UPDATE_ALL, true);
+      expect(commitEntryResult!.operation, CommitOp.UPDATE_ALL);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -375,7 +374,7 @@ void main() {
       // verifying the key in the commit log
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.DELETE, true);
+      expect(commitEntryResult!.operation, CommitOp.DELETE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -426,8 +425,8 @@ void main() {
       // verify the entries in the commit log
       var commitEntriesResult = await SyncUtil()
           .getChangesSinceLastCommit(seqNum, 'wavi', atSign: atsign);
-      expect(commitEntriesResult[0].operation == CommitOp.DELETE, true);
-      expect(commitEntriesResult[1].operation == CommitOp.UPDATE, true);
+      expect(commitEntriesResult[0].operation, CommitOp.DELETE);
+      expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -471,7 +470,7 @@ void main() {
       print(commitEntryResult);
       // This assertion fails when run as a group
       // expect(commitEntryResult!.commitId, 0);
-      expect(commitEntryResult!.operation == CommitOp.UPDATE, true);
+      expect(commitEntryResult!.operation,CommitOp.UPDATE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -525,7 +524,7 @@ void main() {
       // verifying the key in the commit log
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.UPDATE_ALL, true);
+      expect(commitEntryResult!.operation, CommitOp.UPDATE_ALL);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -559,7 +558,7 @@ void main() {
       // verifying the key in the commit log
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.DELETE, true);
+      expect(commitEntryResult!.operation, CommitOp.DELETE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -608,8 +607,8 @@ void main() {
       // verify the entries in the commit log
       var commitEntriesResult = await SyncUtil()
           .getChangesSinceLastCommit(seqNum, 'wavi', atSign: atsign);
-      expect(commitEntriesResult[0].operation == CommitOp.DELETE, true);
-      expect(commitEntriesResult[1].operation == CommitOp.UPDATE, true);
+      expect(commitEntriesResult[0].operation, CommitOp.DELETE);
+      expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -868,7 +867,7 @@ void main() {
       // verify the latest entry in the commit log is for DELETE
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation == CommitOp.DELETE, true);
+      expect(commitEntryResult!.operation, CommitOp.DELETE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -916,7 +915,7 @@ void main() {
       final commitLogInstance =
           await (AtCommitLogManagerImpl.getInstance().getCommitLog(atsign));
       var commitEntryResult = commitLogInstance!.getLatestCommitEntry(atKey);
-      expect(commitEntryResult!.operation == CommitOp.DELETE, true);
+      expect(commitEntryResult!.operation, CommitOp.DELETE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -960,7 +959,7 @@ void main() {
       final commitLogInstance =
           await (AtCommitLogManagerImpl.getInstance().getCommitLog(atsign));
       var commitEntryResult = commitLogInstance!.getLatestCommitEntry(atKey);
-      expect(commitEntryResult!.operation == CommitOp.DELETE, true);
+      expect(commitEntryResult!.operation, CommitOp.DELETE);
       await TestResources.tearDownLocalStorage();
     });
   });
@@ -1141,7 +1140,6 @@ void main() {
           SyncRequest()
             ..result = SyncResult()
             ..requestedOn);
-      print(result);
       //------------------------------assertion---------------------------------
       AtData? atData = await TestResources.getHiveKeyStore(atsign)?.get(key);
       expect(atData?.data, 'test_data1');
