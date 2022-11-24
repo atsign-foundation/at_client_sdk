@@ -48,14 +48,12 @@ jobs:
         working-directory: packages/at_client
         run: dart pub run coverage:format_coverage --lcov --in=coverage --out=unit_test_coverage.lcov --packages=.packages --report-on=lib
 
-#      - name: Upload coverage to Codecov
-#        working-directory: packages/at_client
-#        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
-#        with:
-#          # According to codecov docs, the token is not required for open-source repos
-#          # token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-#          file: unit_test_coverage.lcov
-#          flags: unit_tests
+      - name: Upload coverage to Codecov
+        working-directory: packages/at_client
+        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
+        with:
+          file: unit_test_coverage.lcov
+          flags: unit_tests
 
       # Adding flutter to path
       - name: Installing Flutter
@@ -122,8 +120,6 @@ jobs:
 #        working-directory: tests/at_functional_test
 #        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
 #        with:
-#          # According to codecov docs, the token is not required for open-source repos
-#          # token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
 #          file: functional_test_coverage.lcov
 #          flags: functional_tests
 
