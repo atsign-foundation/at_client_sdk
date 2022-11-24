@@ -7,9 +7,10 @@ include: package:lints/recommended.yaml
 # Uncomment to specify additional rules.
 linter:
   rules:
-    - camel_case_types
-    - unnecessary_string_interpolations
-    - await_only_futures
+    camel_case_types : true
+    unnecessary_string_interpolations : true
+    await_only_futures : true
+    depend_on_referenced_packages : false
 
 analyzer:
   exclude:
