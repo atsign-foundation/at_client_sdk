@@ -104,6 +104,7 @@ void main() {
       var commitLogEntry =
           await TestResources.getCommitEntryLatest(atsign, atKey);
       expect(commitLogEntry!.operation, CommitOp.UPDATE);
+      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions:
@@ -136,9 +137,6 @@ void main() {
       await keystore!.put(atKey, atData);
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.metaData!.createdAt, isNotNull);
-      // var createdAtTime = keyStoreGetResult.metaData!.createdAt;
-      var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
       //-----------Operation---------------------------------
       await keystore.put(atKey, newData);
       //-----------Assertions---------------------------------
@@ -155,7 +153,7 @@ void main() {
       /// Version doesn't get incremented when the same key is updated
       // expect(keyStoreGetResult.metaData!.version, 1);
       // verifying the key in the commit log
-      commitEntryResult =
+      var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
       expect(commitEntryResult!.operation, CommitOp.UPDATE_ALL);
       await TestResources.tearDownLocalStorage();
@@ -470,7 +468,7 @@ void main() {
       print(commitEntryResult);
       // This assertion fails when run as a group
       // expect(commitEntryResult!.commitId, 0);
-      expect(commitEntryResult!.operation,CommitOp.UPDATE);
+      expect(commitEntryResult!.operation, CommitOp.UPDATE);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -644,10 +642,10 @@ void main() {
           true);
       // verifying the version of the key is 0
       expect(keyStoreGetResult.metaData!.version, 0);
-      await TestResources.tearDownLocalStorage();
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
       expect(commitEntryResult, null);
+      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions
@@ -724,10 +722,10 @@ void main() {
       // verifying the key in the key store
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
-      await TestResources.tearDownLocalStorage();
       var commitEntryResult =
           await TestResources.getCommitEntryLatest(atsign, atKey);
       expect(commitEntryResult, null);
+      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions:
