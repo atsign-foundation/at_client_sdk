@@ -49,10 +49,9 @@ jobs:
         run: dart pub run coverage:format_coverage --lcov --in=coverage --out=unit_test_coverage.lcov --packages=.packages --report-on=lib
 
       - name: Upload coverage to Codecov
-        working-directory: packages/at_client
         uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
         with:
-          file: unit_test_coverage.lcov
+          file: packages/at_client/unit_test_coverage.lcov
           flags: unit_tests
 
       # Adding flutter to path
@@ -116,12 +115,11 @@ jobs:
         working-directory: tests/at_functional_test
         run: dart pub run coverage:format_coverage --lcov --in=coverage --out=functional_test_coverage.lcov --packages=.packages --report-on=../../packages/at_client/lib
 
-#      - name: Upload coverage to Codecov
-#        working-directory: tests/at_functional_test
-#        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
-#        with:
-#          file: functional_test_coverage.lcov
-#          flags: functional_tests
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
+        with:
+          file: tests/at_functional_test/functional_test_coverage.lcov
+          flags: functional_tests
 
       # stop docker containers
       - name: stop docker containers
