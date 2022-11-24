@@ -217,4 +217,3 @@ jobs:
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
         run: dart test --concurrency=1
-
