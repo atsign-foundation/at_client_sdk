@@ -623,6 +623,7 @@ void main() {
     /// 1. Keystore should have the local key with the value inserted
     /// 2. Assert the metadata of the key. "CreatedAt" should be populated with
     /// DateTime which is less than DateTime.now()
+    /// 3. There should be no entry in the commit log for the local key
     test('Verify uncommitted queue on creation of a local key', () async {
       //------------Setup---------------------------------
       await TestResources.setupLocalStorage(atsign);
@@ -644,6 +645,9 @@ void main() {
       // verifying the version of the key is 0
       expect(keyStoreGetResult.metaData!.version, 0);
       await TestResources.tearDownLocalStorage();
+      var commitEntryResult =
+          await TestResources.getCommitEntryLatest(atsign, atKey);
+      expect(commitEntryResult, null);
     });
 
     /// Preconditions
@@ -658,6 +662,7 @@ void main() {
     /// 1. keystore should have the local key with the new value inserted
     /// 2. Assert the metadata of the key. "CreatedAt" field should not be modified and
     /// "UpdatedAt" should be less than now().
+    /// 3. There should be no entry in the commit log for the local key
     test('Verify uncommitted queue on updation of a local key', () async {
       //------------Setup---------------------------------
       await TestResources.setupLocalStorage(atsign);
@@ -686,19 +691,22 @@ void main() {
           true);
       // verifying the version of the key is 1
       // expect(keyStoreGetResult.metaData!.version, 1);
+      var commitEntryResult =
+          await TestResources.getCommitEntryLatest(atsign, atKey);
+      expect(commitEntryResult, null);
       await TestResources.tearDownLocalStorage();
     });
 
     /// Pre-conditions
     /// 1. There should be an entry for the same key in the key store
-    /// 2. There should be an entry for the same key in the commit log
+    /// 2. There should not be an entry for the same key in the commit log
 
     // Operation
     /// Delete a local key
 
     // Assertions
     /// 1. Keystore should not have the local key
-    /// 2. CommitLog should have an entry for the deleted local key (commitOp.delete)
+    /// 2. CommitLog should not have an entry for the deleted local key (commitOp.delete)
     test('Verify uncommitted queue on deletion of a local key', () async {
       //------------Setup---------------------------------
       await TestResources.setupLocalStorage(atsign);
@@ -717,6 +725,9 @@ void main() {
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
       await TestResources.tearDownLocalStorage();
+      var commitEntryResult =
+          await TestResources.getCommitEntryLatest(atsign, atKey);
+      expect(commitEntryResult, null);
     });
 
     /// Preconditions:
@@ -752,6 +763,9 @@ void main() {
       // verifiyng the createdAt time is less than DateTime.now()
       expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
           true);
+      var commitEntryResult =
+          await TestResources.getCommitEntryLatest(atsign, atKey);
+      expect(commitEntryResult, null);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -764,6 +778,7 @@ void main() {
 
     // Assertions
     /// 1. Keystore should have the private encryption key with the value inserted
+    /// 2. CommitLog should not have an entry for the private encryption key
     test('Verify uncommitted queue on creation of a private encryption key',
         () async {
       //------------Setup---------------------------------
@@ -782,6 +797,9 @@ void main() {
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, encryptionPrivateKey);
+      var commitEntryResult =
+          await TestResources.getCommitEntryLatest(atsign, atKey);
+      expect(commitEntryResult, null);
       await TestResources.tearDownLocalStorage();
     });
 
@@ -802,6 +820,7 @@ void main() {
 
     // Assertions
     /// 1. Keystore should have the pkam private key with the value inserted
+    /// 2. CommitLog should not have an entry for the pkam private key
     test('Verify uncommitted queue on creation of a pkam private key',
         () async {
       //------------Setup---------------------------------
@@ -819,6 +838,9 @@ void main() {
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, pkamPrivateKey);
+      var commitEntryResult =
+          await TestResources.getCommitEntryLatest(atsign, atKey);
+      expect(commitEntryResult, null);
       await TestResources.tearDownLocalStorage();
     });
     test('Verify uncommitted queue on deletion of a pkam private key', () {
