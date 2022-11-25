@@ -20,7 +20,6 @@ class AtClientPreference {
   /// Shared secret of the atSign
   String? cramSecret;
 
-  @Deprecated('Do not use private key from preferences. Use at_chops package')
   /// Private key of the atSign
   String? privateKey;
 
