@@ -1,3 +1,6 @@
+## 3.0.45
+- fix: Fix sync running into infinite loop when invalid keys does not sync into local storage
+- fix: Upgrade persistence secondary to version 3.0.43 to fix empty batch request being sent to cloud secondary
 ## 3.0.44
 - feat: Introduce fetch method to NotificationService to fetch the notification using id.
 - fix: Replace latestNotificationId with local key to store/fetch last received notification
