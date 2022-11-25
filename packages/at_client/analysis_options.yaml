@@ -11,6 +11,8 @@ linter:
     unnecessary_string_interpolations : true
     await_only_futures : true
     depend_on_referenced_packages : false
+    # temporary flag till private key reference is fully removed
+    deprecated_member_use: false
 
 analyzer:
 #   exclude:
