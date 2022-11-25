@@ -9,6 +9,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:at_chops/at_chops.dart';
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
@@ -29,7 +30,9 @@ void main() {
   AtLookupImpl mockAtLookup = MockAtLookup();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
-
+  var atClientPreferenceWithAtChops = AtClientPreference()..useAtChops = true;
+  var atClientPreferenceWithoutAtChops = AtClientPreference()
+    ..useAtChops = false;
   var lookupVerbBuilder = LookupVerbBuilder()
     ..atKey = 'phone.wavi'
     ..sharedBy = '@alice';
@@ -69,10 +72,18 @@ void main() {
 
       when(() => mockLocalSecondary.getEncryptionPrivateKey())
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
-
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => atClientPreferenceWithoutAtChops);
       var sharedKeyDecryption = SharedKeyDecryption(atClient: mockAtClientImpl);
       var result = await sharedKeyDecryption.decrypt(atKey, encryptedValue);
       expect(result, 'hello');
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => atClientPreferenceWithAtChops);
+      final atChopsKeys = AtChopsKeys.create(
+          AtEncryptionKeyPair.create('', encryptionPrivateKey), null);
+      when(() => mockAtClientImpl.getAtChops())
+          .thenAnswer((_) => AtChopsImpl(atChopsKeys));
+      expect(await sharedKeyDecryption.decrypt(atKey, encryptedValue), 'hello');
     });
   });
 
@@ -136,16 +147,28 @@ void main() {
         ..sharedKeyEnc = 'dummy_shared_key'
         ..pubKeyCS = 'd4f6d9483907286a0563b9fdeb01aa61';
 
-      // Retuning empty string to test negative scenario
+      // Returning empty string to test negative scenario
       when(() => mockLocalSecondary.getEncryptionPrivateKey())
           .thenAnswer((_) => Future.value(''));
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => atClientPreferenceWithoutAtChops);
 
       var sharedKeyDecryption = SharedKeyDecryption(atClient: mockAtClientImpl);
       expect(
-          () => sharedKeyDecryption.decrypt(atKey, '123'),
+          () async => await sharedKeyDecryption.decrypt(atKey, '123'),
           throwsA(predicate((dynamic e) =>
               e is AtPrivateKeyNotFoundException &&
               e.message == 'Encryption private not found')));
+      // when(() => mockAtClientImpl.getPreferences())
+      //     .thenAnswer((_) => atClientPreferenceWithAtChops);
+      // final atChopsKeys = AtChopsKeys.create(AtEncryptionKeyPair.create('', ''), null);
+      // when(() => mockAtClientImpl.getAtChops())
+      //     .thenAnswer((_) => AtChopsImpl(atChopsKeys));
+      // // #TODO below assert not working
+      // expect(
+      //         ()  async => await sharedKeyDecryption.decrypt(atKey, '123'),
+      //     throwsA(predicate((dynamic e) =>
+      //     e is AtException)));
     });
 
     // The AtLookup verb throws exception is stacked by the executeVerb in remote secondary

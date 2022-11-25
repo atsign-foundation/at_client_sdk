@@ -29,6 +29,8 @@ abstract class AtClient {
   /// Set an instance of [AtChops] for data encryption and signing operations
   void setAtChops({AtChops? atChops});
 
+  AtChops? getAtChops();
+
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
 

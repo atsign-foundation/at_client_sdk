@@ -7,6 +7,7 @@ import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
 abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
@@ -96,20 +97,27 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     // If sharedKey is found, decrypt the shared key and return.
     if (key != null && key.isNotEmpty && key != 'data:null') {
       key = DefaultResponseParser().parse(key).response;
-      String? encryptionPrivateKey;
-      try {
-        encryptionPrivateKey = await AtClientManager.getInstance()
+      //# TODO remove else once atChops once testing is good
+      if (AtClientManager.getInstance().atClient.getPreferences()!.useAtChops) {
+        return AtClientManager.getInstance()
             .atClient
-            .getLocalSecondary()!
-            .getEncryptionPrivateKey();
-      } on KeyNotFoundException catch (e) {
-        e.stack(AtChainedException(
-            Intent.fetchEncryptionPrivateKey,
-            ExceptionScenario.encryptionFailed,
-            'Failed to decrypt the encrypted shared key'));
-        rethrow;
+            .getAtChops()!
+            .decryptString(key, EncryptionKeyType.rsa_2048);
+      } else {
+        try {
+          var encryptionPrivateKey = await AtClientManager.getInstance()
+              .atClient
+              .getLocalSecondary()!
+              .getEncryptionPrivateKey();
+          return EncryptionUtil.decryptKey(key, encryptionPrivateKey!);
+        } on KeyNotFoundException catch (e) {
+          e.stack(AtChainedException(
+              Intent.fetchEncryptionPrivateKey,
+              ExceptionScenario.encryptionFailed,
+              'Failed to decrypt the encrypted shared key'));
+          rethrow;
+        }
       }
-      return EncryptionUtil.decryptKey(key, encryptionPrivateKey!);
     }
     return key!;
   }

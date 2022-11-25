@@ -20,6 +20,7 @@ class AtClientPreference {
   /// Shared secret of the atSign
   String? cramSecret;
 
+  @Deprecated('Do not use private key from preferences. Use at_chops package')
   /// Private key of the atSign
   String? privateKey;
 
@@ -86,6 +87,9 @@ class AtClientPreference {
   /// Fetch the notifications received when the client is offline. Defaults to true.
   /// Set to false to ignore the notifications received when device is offline.
   bool fetchOfflineNotifications = true;
+
+  /// Temporary feature flag. Remove once tests are successful.
+  bool useAtChops = false;
 }
 
 @Deprecated("Use SyncService")

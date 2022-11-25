@@ -971,4 +971,9 @@ class AtClientImpl implements AtClient {
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     _atChops = AtChopsImpl(atChopsKeys);
   }
+
+  @override
+  AtChops? getAtChops() {
+    return _atChops;
+  }
 }
