@@ -421,12 +421,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
         } on Exception catch (e, stacktrace) {
-          var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
-              'exception syncing entry to local $serverCommitEntry - $cause - stacktrace: $stacktrace');
+              'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
         } on Error catch (e, stacktrace) {
           _logger.severe(
-              'error syncing entry to local $serverCommitEntry - ${e.toString()} - stacktrace: $stacktrace');
+              'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
         }
       }
       // assigning the lastSynced local commit id.
