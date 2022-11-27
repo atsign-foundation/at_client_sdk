@@ -11,7 +11,17 @@ import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockMonitorConnectivityChecker extends Mock
-    implements MonitorConnectivityChecker {}
+    implements MonitorConnectivityChecker {
+  bool shouldFail = false;
+  @override
+  Future<void> checkConnectivity(RemoteSecondary remoteSecondary) async {
+    if (shouldFail) {
+      throw Exception('mock check connectivity - No No No!');
+    } else {
+      print('mock check connectivity - OK');
+    }
+  }
+}
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
@@ -31,10 +41,11 @@ void main() {
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   MonitorOutboundConnectionFactory mockMonitorOutboundConnectionFactory =
       MockMonitorOutboundConnectionFactory();
-  MonitorConnectivityChecker mockMonitorConnectivityChecker =
+  MockMonitorConnectivityChecker mockMonitorConnectivityChecker =
       MockMonitorConnectivityChecker();
   OutboundConnection mockOutboundConnection = MockOutboundConnection();
   SecureSocket mockSocket = MockSecureSocket();
+  MonitorPreference monitorPreference = MonitorPreference()..keepAlive = true;
   late Function(dynamic data) socketOnDataFn;
   late Function() socketOnDoneFn;
   late Function(Exception e) socketOnErrorFn;
@@ -51,53 +62,50 @@ void main() {
   atClientPreference.tlsKeysSavePath = fakeTlsKeysSavePath;
   atClientPreference.pathToCerts = fakeCertsLocation;
 
-  group('Monitor constructor and start tests', () {
-    setUp(() {
-      reset(mockMonitorConnectivityChecker);
-      reset(mockRemoteSecondary);
-      reset(mockSocket);
-      reset(mockOutboundConnection);
-      reset(mockMonitorOutboundConnectionFactory);
+  setUp(() {
+    reset(mockMonitorConnectivityChecker);
+    reset(mockRemoteSecondary);
+    reset(mockSocket);
+    reset(mockOutboundConnection);
+    reset(mockMonitorOutboundConnectionFactory);
+    mockMonitorConnectivityChecker.shouldFail = false;
 
-      when(() => mockMonitorConnectivityChecker
-          .checkConnectivity(mockRemoteSecondary)).thenAnswer((_) async {
-        print('mock check connectivity - OK');
-      });
-      when(() => mockRemoteSecondary.isAvailable())
-          .thenAnswer((_) async => true);
-      when(() => mockRemoteSecondary.findSecondaryUrl())
-          .thenAnswer((_) async => fakeSecondaryUrl);
-      when(() => mockOutboundConnection.getSocket())
-          .thenAnswer((_) => mockSocket);
-      when(() => mockMonitorOutboundConnectionFactory.createConnection(
-              fakeSecondaryUrl,
-              decryptPackets: true,
-              tlsKeysSavePath: fakeTlsKeysSavePath,
-              pathToCerts: fakeCertsLocation))
-          .thenAnswer((_) async => mockOutboundConnection);
-      when(() => mockSocket.listen(any(),
-          onError: any(named: "onError"),
-          onDone: any(named: "onDone"))).thenAnswer((Invocation invocation) {
-        socketOnDataFn = invocation.positionalArguments[0];
-        socketOnDoneFn = invocation.namedArguments[#onDone];
-        socketOnErrorFn = invocation.namedArguments[#onError];
+    when(() => mockRemoteSecondary.isAvailable())
+        .thenAnswer((_) async => true);
+    when(() => mockRemoteSecondary.findSecondaryUrl())
+        .thenAnswer((_) async => fakeSecondaryUrl);
+    when(() => mockOutboundConnection.getSocket())
+        .thenAnswer((_) => mockSocket);
+    when(() => mockMonitorOutboundConnectionFactory.createConnection(
+        fakeSecondaryUrl,
+        decryptPackets: true,
+        tlsKeysSavePath: fakeTlsKeysSavePath,
+        pathToCerts: fakeCertsLocation))
+        .thenAnswer((_) async => mockOutboundConnection);
+    when(() => mockSocket.listen(any(),
+        onError: any(named: "onError"),
+        onDone: any(named: "onDone"))).thenAnswer((Invocation invocation) {
+      socketOnDataFn = invocation.positionalArguments[0];
+      socketOnDoneFn = invocation.namedArguments[#onDone];
+      socketOnErrorFn = invocation.namedArguments[#onError];
 
-        return MockStreamSubscription<Uint8List>();
-      });
-
-      when(() => mockOutboundConnection.write('from:$atSign\n'))
-          .thenAnswer((Invocation invocation) async {
-        socketOnDataFn("server challenge\n"
-            .codeUnits); // actual challenge is different, of course, but not important for unit tests
-      });
-      when(() => mockOutboundConnection.write(any(that: startsWith('pkam:'))))
-          .thenAnswer((Invocation invocation) async {
-        socketOnDataFn("success\n".codeUnits);
-      });
-      when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
-          .thenAnswer((Invocation invocation) async {});
+      return MockStreamSubscription<Uint8List>();
     });
 
+    when(() => mockOutboundConnection.write('from:$atSign\n'))
+        .thenAnswer((Invocation invocation) async {
+      socketOnDataFn("server challenge\n"
+          .codeUnits); // actual challenge is different, of course, but not important for unit tests
+    });
+    when(() => mockOutboundConnection.write(any(that: startsWith('pkam:'))))
+        .thenAnswer((Invocation invocation) async {
+      socketOnDataFn("success\n".codeUnits);
+    });
+    when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
+        .thenAnswer((Invocation invocation) async {});
+  });
+
+  group('Monitor constructor and start tests', () {
     /// create a monitor without passing a heartbeat interval; it should pick it up from
     /// the AtClientPreference that was passed.
     test('Monitor gets heartbeatInterval from AtClientPreference', () {
@@ -106,7 +114,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -131,7 +139,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -155,7 +163,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -184,7 +192,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -206,17 +214,13 @@ void main() {
     });
 
     test('Monitor start, secondary not available', () async {
-      when(() => mockMonitorConnectivityChecker
-          .checkConnectivity(mockRemoteSecondary)).thenAnswer((_) async {
-        throw Exception('No No No');
-      });
-
+      mockMonitorConnectivityChecker.shouldFail = true;
       Monitor monitor = Monitor(
           (String json) => print('onResponse: $json'),
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -234,7 +238,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -257,7 +261,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -275,13 +279,13 @@ void main() {
     });
 
     test('Monitor heartbeat sending regularly', () async {
-      int heartbeatIntervalMillis = 500;
+      int heartbeatIntervalMillis = 100;
       Monitor monitor = Monitor(
           (String json) => print('onResponse: $json'),
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -318,13 +322,13 @@ void main() {
       // and the monitor status is still 'started'
       expect(monitor.status, MonitorStatus.started);
 
-      // Now let's wait long enough for 5 heartbeats to be sent, check they have all been sent,
+      // Now let's wait long enough for some heartbeats to be sent, check they have all been sent,
       // and check that the monitor status is still 'started'
-      int additionalHeartbeatsToSend = 5;
+      int additionalHeartbeatsToSend = 3;
+      int expectedHeartbeatCount = numHeartbeatsSent + additionalHeartbeatsToSend;
       await Future.delayed(Duration(
           milliseconds: heartbeatIntervalMillis * additionalHeartbeatsToSend +
               (heartbeatIntervalMillis / 3).floor()));
-      int expectedHeartbeatCount = 1 + additionalHeartbeatsToSend;
       expect(numHeartbeatsSent, expectedHeartbeatCount);
       expect(monitor.status, MonitorStatus.started);
 
@@ -337,15 +341,16 @@ void main() {
       expect(numHeartbeatsSent, expectedHeartbeatCount);
     });
 
-    test('Monitor heartbeat response not received in time', () async {
-      int heartbeatIntervalMillis = 500;
+    test('Test when monitor heartbeat response not received, restart monitor first fails, then succeeds', () async {
+      int heartbeatIntervalMillis = 100;
+      Duration delayBeforeRestart = Duration(milliseconds: 200);
       Monitor? monitor;
       // Note that in this test, our retryCallback is doing something real - it's restarting the monitor
-      bool retryCallbackCalled = false;
+      int retryCallbackCalledCount = 0;
       void retryCallback() {
-        retryCallbackCalled = true;
-        print('retryCallback called - will restart the monitor in a second');
-        Future.delayed(Duration(seconds: 1), () {
+        retryCallbackCalledCount++;
+        print('retryCallback called - will restart the monitor in $delayBeforeRestart');
+        Future.delayed(delayBeforeRestart, () {
           print('restarting the monitor');
           monitor!.start(lastNotificationTime: null);
         });
@@ -356,7 +361,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => retryCallback(),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -378,18 +383,16 @@ void main() {
 
       when(() => mockOutboundConnection.close()).thenAnswer((_) async => {});
 
-      Future<void> monitorStartFuture =
-          monitor.start(lastNotificationTime: null);
-      await monitorStartFuture;
+      await monitor.start(lastNotificationTime: null);
       expect(monitor.status, MonitorStatus.started);
 
-      // Now let's wait long enough for 5 heartbeats to be sent, check they have all been sent,
+      // Now let's wait long enough for some heartbeats to be sent, check they have all been sent,
       // and check that the monitor status is still 'started'
-      int additionalHeartbeatsToSend = 5;
+      int additionalHeartbeatsToSend = 3;
+      int expectedHeartbeatCount = additionalHeartbeatsToSend;
       await Future.delayed(Duration(
           milliseconds: heartbeatIntervalMillis * additionalHeartbeatsToSend +
               50)); // 50 == fudge factor
-      int expectedHeartbeatCount = additionalHeartbeatsToSend;
       expect(numHeartbeatsSent, expectedHeartbeatCount);
       expect(monitor.status, MonitorStatus.started);
 
@@ -407,18 +410,34 @@ void main() {
               50)); // 50 == fudge factor
       // The Monitor should have set status to stopped
       expect(monitor.status, MonitorStatus.stopped);
+      // We expect that the retryCallback should have been called once
+      expect(retryCallbackCalledCount, 1);
+
+
+      // OK - now let's make the retry fail
+      // First of all let's make sure that "start" will fail
+      mockMonitorConnectivityChecker.shouldFail = true;
+      // The retryCallback will call Monitor.start() after a delay, so let's wait for that delay
+      await Future.delayed(delayBeforeRestart);
+
+      // The Monitor should have set status to errored
+      expect(monitor.status, MonitorStatus.errored);
+      // And expect that the retryCallback should have been called again
+      expect(retryCallbackCalledCount, 2);
+
       // let's start sending responses to heartbeats again
       sendHeartbeatResponse = true;
+      // and let's make the connectivity checks succeed again
+      mockMonitorConnectivityChecker.shouldFail = false;
 
-      // And the retryCallback should have been called
-      expect(retryCallbackCalled, true);
-      // And the retryCallback will restart the monitor after a second, so the monitor state should be 'started' again
-      await Future.delayed(Duration(seconds: 1));
+      // The retryCallback will call Monitor.start() after a delay, so let's wait for that delay
+      await Future.delayed(delayBeforeRestart);
+      // Now the monitor state should be 'started' again
       expect(monitor.status, MonitorStatus.started);
 
       // Finally, let's make sure that heartbeats are happening again, and the monitor is still happy
       int lastHeartbeatCount = numHeartbeatsSent;
-      additionalHeartbeatsToSend = 5;
+      additionalHeartbeatsToSend = 3;
       await Future.delayed(Duration(
           milliseconds: heartbeatIntervalMillis * additionalHeartbeatsToSend +
               50)); // 50 == fudge factor
@@ -435,7 +454,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -453,7 +472,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
@@ -472,7 +491,7 @@ void main() {
           (e) => print('onError: $e'),
           atSign,
           atClientPreference,
-          MonitorPreference(),
+          monitorPreference,
           () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
