@@ -532,9 +532,9 @@ void main() {
       // So, let's wait long enough for a couple of heartbeats to be sent, check they have all been sent,
       // and check that the monitor status is still 'started'
       int additionalHeartbeatsToSend = 2;
-      int expectedHeartbeatCount = additionalHeartbeatsToSend;
+      int expectedHeartbeatRequestsSent = additionalHeartbeatsToSend;
       await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis * additionalHeartbeatsToSend + 50)); // 50 == fudge factor
-      expect(numHeartbeatRequests, expectedHeartbeatCount);
+      expect(numHeartbeatRequests, greaterThanOrEqualTo(expectedHeartbeatRequestsSent));
       // We expect same number of responses as requests
       expect(numHeartbeatResponses, numHeartbeatRequests);
       expect(monitor.status, MonitorStatus.started);
@@ -542,10 +542,11 @@ void main() {
       // Now, let's throw exceptions now to heartbeat requests
       heartbeatRequestShouldThrowException = true;
 
-      // Let's wait long enough for the heartbeat request to happen
+      expectedHeartbeatRequestsSent = numHeartbeatRequests + 1;
+      // Let's wait long enough for at least one more heartbeat request to happen
       await Future.delayed(Duration(milliseconds: heartbeatIntervalMillis.floor()));
       // Let's check that at least one more heartbeat has indeed been sent
-      expect(numHeartbeatRequests, greaterThan(expectedHeartbeatCount));
+      expect(numHeartbeatRequests, greaterThanOrEqualTo(expectedHeartbeatRequestsSent));
       // And that the responses received is now fewer than the number of requests sent
       expect(numHeartbeatResponses, lessThan(numHeartbeatRequests));
       // Now let's wait long enough for the heartbeat response monitor to detect that no response has been received
