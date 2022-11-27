@@ -228,7 +228,6 @@ class Monitor {
           _scheduleHeartbeat();
         } catch (e) {
           _logger.warning("Exception sending heartbeat: $e");
-          _callCloseStopAndRetry();
         }
       }
     });
