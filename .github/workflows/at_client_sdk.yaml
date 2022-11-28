@@ -169,7 +169,7 @@ jobs:
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/test/at_credentials.dart
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/lib/src/at_credentials.dart
 
       # Move the config file in-place
       - name: Config for @cicd1/2
@@ -205,7 +205,7 @@ jobs:
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/test/at_credentials.dart
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/lib/src/at_credentials.dart
 
       # Move the config file in-place
       - name: Config for @cicd1/4
