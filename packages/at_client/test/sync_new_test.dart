@@ -1299,13 +1299,13 @@ void main() {
       /// 1. Both the commits should be synced to the cloud secondary
       /// (If we sync only update_meta, the value will not be updated to cloud secondary)
     });
+
+    //TODO: Arch all discussion: When key is still not born, we return data:null
+    // however, when sync process triggers before the key is not born, we get the actual
+    // value from keystore instead of 'data:null' to sync to server
     test(
         'A test to verify when ttb is set on key and key is not available when sync',
         () {
-      //TODO: Arch all discussion: When key is still not born, we return data:null
-      // however, when sync process triggers before the key is not born, we get the actual
-      // value from keystore instead of 'data:null' to sync to server
-
       /// Preconditions:
       /// 1. Create a key with ttb value of 30 seconds
       /// 2. Initiate sync at 10th second
@@ -1444,7 +1444,7 @@ void main() {
       ///
       /// Assertions:
       /// 1. The key should be deleted from the hive keystore
-      /// 2. Am entry with commitOp.delete should be added to the commit log
+      /// 2. An entry with commitOp.delete should be added to the commit log
     });
     test('Delete from server for a key that does not exist in local secondary',
         () {
@@ -1454,6 +1454,10 @@ void main() {
       /// Assertions;
       /// An entry should be added to commit log to prevent sync imbalance
     });
+
+    // TODO - ENHANCEMENT REQUESTS
+    /// Improve KeyInfo to include description *
+    /// Example - Include info that says 'this happens to be a bad key'
     test('Verify clients handling of bad keys in updates from server', () {
       /// Precondition:
       /// Key will be rejected by a put / attempt to write to key store
@@ -1464,9 +1468,11 @@ void main() {
       /// 1. KeyInfo should inform about a bad key / not able sync this key
       /// 2. Key store should be in right state
       /// 3. CommitLog should have an entry along with server commit id
-
-      /// Needs refactoring *
     });
+
+    /// TODO - ENHANCEMENT REQUESTS
+    /// Improve KeyInfo to include description *
+    /// Example - Include info that says 'this happens to be a bad key'
     test(
         'Verify clients handling of bad keys in deletes from server - For an existing bad key',
         () {
@@ -1476,11 +1482,9 @@ void main() {
       /// Key store has a entry for this key
 
       /// Assertions:
-      /// 1. KeyInfo should inform about a key being deleted - Can we include info that says 'this happens to be a bad key'
+      /// 1. KeyInfo should inform about a key being deleted
       /// 2. Key store should be in right state
       /// 3. CommitLog should have an entry along with server commit id
-
-      /// Enhancement improve KeyInfo to include description *
     });
     test(
         'Verify clients handling of bad keys in deletes from server - Bad key is not present in the local key store',
@@ -1508,64 +1512,133 @@ void main() {
       test(
           'A test to verify when invalid keys are returned in sync response from server',
           () {});
+      /// Preconditions:
+      /// 1. There should be no entry for the same key in the key store
+      /// 2. There should be no entry for the same key in the commit log
+
+      /// Operation:
+      /// CommitOp.UPDATE
+
+      /// Assertions:
+      /// 1. Key store should have the public key with the value inserted
+      /// 2. Assert the metadata of the key. "CreatedAt" should be populated with
+      /// DateTime which is less than DateTime.now()
+      /// 3. The version of the key should be set to 0
+      /// 4. CommitLog should have an entry for the new public key with commitOp.Update
+      /// and commitId is null
       test(
           'A test to verify a new key is created in local keystore on update commit operation',
-          () {
-        /// Preconditions:
-        /// 1. There should be no entry for the same key in the key store
-        /// 2. There should be no entry for the same key in the commit log
-
-        /// Operation:
-        /// CommitOp.UPDATE
-
-        /// Assertions:
-        /// 1. Key store should have the public key with the value inserted
-        /// 2. Assert the metadata of the key. "CreatedAt" should be populated with
-        /// DateTime which is less than DateTime.now()
-        /// 3. The version of the key should be set to 0
-        /// 4. CommitLog should have an entry for the new public key with commitOp.Update
-        /// and commitId is null
+          () async {
+        // --------------------- Setup ---------------------
+        await TestResources.setupLocalStorage(atsign);
+        HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+        var atData = AtData();
+        atData.data = 'Hyderabad';
+        //------------------Operation-------------
+        //  creating a key in the keystore
+        String atKey =
+            (AtKey.public('city', namespace: 'wavi', sharedBy: atsign))
+                .build()
+                .toString();
+        await keystore!.put(atKey, atData);
+        //------------------Assertions-------------
+        var keyStoreGetResult = await keystore.get(atKey);
+        expect(keyStoreGetResult!.metaData!.createdAt!.isBefore(DateTime.now()),
+            true);
+        expect(keyStoreGetResult.metaData!.version, 0);
+       // verifying the key in the commit log
+        var commitEntryResult =
+            await TestResources.getCommitEntryLatest(atsign, atKey);
+        expect(commitEntryResult!.operation, CommitOp.UPDATE);
+        await TestResources.tearDownLocalStorage();
       });
+      //TODO: Update all the available metadata fields and assert
+      /// Preconditions:
+      /// 1. There should be an entry for the same key in the key store
+      /// 2. There should be an entry for the same key in the commit log
+
+      /// Operation:
+      /// Updating the metadata for an existing shared key
+      /// CommitOp.UPDATE_META
+      /// a. Update TTL value to 30 seconds
+      /// b. Update TTB value to 10 seconds
+      /// c. Update TTR
+      /// d. Update CCD to TRUE
+
+      /// Assertions:
+      ///1. Assert the metadata of the key. "CreatedAt" field should not be modified and
+      /// "UpdatedAt" should be less than now().
+      ///  expiresAt, availableAt, refreshAt values in the metadata should be in line with the updated values
+      ///  CCD should be true
+      /// a. The key should expire after 30seconds
+      /// b. The key should be available only after 10 seconds
+      ///
+      /// 2. The version of the key should be incremented by 1
+      /// 4. CommitLog should have an entry for the  key with commitOp.UPDATE_META
       test(
           'A test to verify existing key metadata is updated on update_meta commit operation',
-          () {
-        //TODO: Update all the available metadata fields and assert
-        /// Preconditions:
-        /// 1. There should be an entry for the same key in the key store
-        /// 2. There should be an entry for the same key in the commit log
-
-        /// Operation:
-        /// Updating the metadata for an existing shared key
-        /// CommitOp.UPDATE_META
-        /// a. Update TTL value to 30 seconds
-        /// b. Update TTB value to 10 seconds
-        /// c. Update TTR
-        /// d. Update CCD to TRUE
-
-        /// Assertions:
-        ///1. Assert the metadata of the key. "CreatedAt" field should not be modified and
-        /// "UpdatedAt" should be less than now().
-        ///  expiresAt, availableAt, refreshAt values in the metadata should be in line with the updated values
-        ///  CCD should be true
-        /// a. The key should expire after 30seconds
-        /// b. The key should be available only after 10 seconds
-        ///
-        /// 2. The version of the key should be incremented by 1
-        /// 4. CommitLog should have an entry for the  key with commitOp.UPDATE_META
+          () async {
+        // --------------------- Setup ---------------------
+        await TestResources.setupLocalStorage(atsign);
+        HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+        //------------------Operation-------------
+        //  creating a key in the keystore
+        String atKey =
+            (AtKey.public('city', namespace: 'wavi', sharedBy: atsign))
+                .build()
+                .toString();
+        AtMetaData? metaData;
+        metaData = AtMetaData();
+        metaData.ttl = 30;
+        metaData.ttb = 10;
+        metaData.ttr = 20;
+        metaData.isCascade = true;
+        await keystore!.putMeta(atKey, metaData);
+        //------------------Assertions-------------
+        var keyStoreGetResult = await keystore.getMeta(atKey);
+        expect(keyStoreGetResult!.createdAt!.isBefore(DateTime.now()), true);
+        expect(keyStoreGetResult.ttl, 30);
+        expect(keyStoreGetResult.ttb, 10);
+        expect(keyStoreGetResult.ttr, 20);
+        expect(keyStoreGetResult.isCascade, true);
+        await TestResources.tearDownLocalStorage();
+      // verifying the key in the commit log
+      var commitEntryResult =
+          await TestResources.getCommitEntryLatest(atsign, atKey);
+      expect(commitEntryResult!.operation, CommitOp.UPDATE_META);
       });
+      /// Preconditions:
+      /// 1. There should be an entry for the same key in the key store
+      /// 2. There should be an entry for the same key in the commit log
+      ///
+      /// Operation:
+      /// CommitOp.DELETE
+      ///
+      /// Assertions:
+      /// 1. The key should be deleted from the key store
+      /// 2. CommitLog should have an entry for the key with commitOp.DELETE
       test(
           'A test to verify existing key is deleted when delete commit operation is received',
-          () {
-        /// Preconditions:
-        /// 1. There should be an entry for the same key in the key store
-        /// 2. There should be an entry for the same key in the commit log
-        ///
-        /// Operation:
-        /// CommitOp.DELETE
-        ///
-        /// Assertions:
-        /// 1. The key should be deleted from the key store
-        /// 2. CommitLog should have an entry for the key with commitOp.DELETE
+          ()  async{
+        // --------------------- Setup ---------------------
+        await TestResources.setupLocalStorage(atsign);
+        HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+        //------------------Operation-------------
+        //  creating a key in the keystore
+        String atKey =
+            (AtKey.public('message', namespace: 'wavi', sharedBy: atsign))
+                .build()
+                .toString();
+        await keystore!.put(atKey, AtData() ..data = 'hello');
+        await keystore.remove(atKey);
+        //------------------Assertions-------------
+       expect(() async => await keystore.get(atKey),
+          throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
+       // verifying the key in the commit log
+        var commitEntryResult =
+            await TestResources.getCommitEntryLatest(atsign, atKey);
+        expect(commitEntryResult!.operation, CommitOp.DELETE);  
+        await TestResources.tearDownLocalStorage();
       });
       test(
           'A test to verify when local keystore does not contain key which is in delete commit operation',
@@ -1607,19 +1680,23 @@ void main() {
     });
   });
 
+  /// TODO
+  /// Needs Refactoring:
+  /// isInSync should return an enum - InSync, ServerAhead, ClientAhead
   group('Tests to validate how the client and server exchange information', () {
     group('A group of test to verify if client and server are in sync', () {
+       /// Preconditions:
+      /// 1. The server commitId is at 15 and local commitId is at 15
+      ///
+      /// Assertions:
+      /// 1. isInSync should return true
       test(
           'A test to verify isInSync returns inSync when localCommitId and serverCommitId are equal',
-          () {
-        /// Preconditions:
-        /// 1. The server commitId is at 15 and local commitId is at 15
-        ///
-        /// Assertions:
-        /// 1. isInSync should return true
-        ///
-        /// Needs Refactoring:
-        /// isInSync should return an enum
+          () async {
+        // --------------------- Preconditions ---------------------
+        var isInSync = SyncUtil.isInSync(null, 15, 15);
+        // --------------------- Assertions ---------------------
+        expect(isInSync, true);
       });
       test(
           'A test to verify serverAhead when serverCommitId is greater than localCommitId',
@@ -1649,6 +1726,13 @@ void main() {
         /// 1. isInSync should localAhead
       });
     });
+
+    /// Needs refactoring * - TODO
+    /// Say no when:
+    /// 1. sync is already running
+    /// 2. there is no network
+    /// 3. Server and client are already in sync
+    /// 4. sync request threshold is not met
     group('A group of tests to verify sync trigger criteria', () {
       test(
           'A test to verify sync process triggers at configured values for frequent intervals',
@@ -1659,13 +1743,6 @@ void main() {
         ///
         /// Assertions:
         /// Assert that sync process is triggered at 3 seconds
-
-        /// Needs refactoring *
-        /// Say no when:
-        /// 1. sync is already running
-        /// 2. there is no network
-        /// 3. Server and client are already in sync
-        /// 4. sync request threshold is not met
       });
       test(
           'A test to verify new sync process does not start when existing sync process is running',
