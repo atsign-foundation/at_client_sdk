@@ -122,5 +122,5 @@ void main() async {
     }
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  });
+  }, timeout: Timeout(Duration(minutes: 5)));
 }
