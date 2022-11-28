@@ -182,7 +182,7 @@ class Monitor {
 
       _scheduleHeartbeat();
       return;
-    } on Exception catch (e) {
+    } catch (e) {
       _handleError(e);
     }
   }
@@ -203,8 +203,6 @@ class Monitor {
       if (status != MonitorStatus.started) {
         _logger.info("status is $status : heartbeat will not be sent");
       } else {
-        // send heartbeat and save the heartbeat sent time
-        _logger.finest("sending heartbeat");
         _lastHeartbeatSentTime = DateTime.now().millisecondsSinceEpoch;
         // schedule a future to check if a timely heartbeat response is received
         Future.delayed(
@@ -222,10 +220,15 @@ class Monitor {
           }
         });
 
-        await _monitorConnection!.write("noop:0\n");
-
-        // schedule the next heartbeat to be sent
-        _scheduleHeartbeat();
+        _logger.finest("sending heartbeat");
+        try {
+          // actually send the heartbeat
+          await _monitorConnection!.write("noop:0\n");
+          // schedule the next heartbeat to be sent
+          _scheduleHeartbeat();
+        } catch (e) {
+          _logger.warning("Exception sending heartbeat: $e");
+        }
       }
     });
   }
@@ -353,12 +356,10 @@ class Monitor {
     // Pass monitor and error
     // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
-      // We will use a strategy here
-      _logger.info('Retrying start monitor due to error');
+      _logger.info('Monitor error $e - calling the retryCallback');
       _retryCallBack();
     } else {
-      _logger.warning(
-          '_keepAlive is false : monitor is errored, and NOT calling retryCallback');
+      _logger.severe('Monitor error $e - but _keepAlive is false so monitor will NOT be restarted');
       _onError(e);
     }
   }

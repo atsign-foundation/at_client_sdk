@@ -28,31 +28,57 @@ class NotificationServiceImpl
   final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationIdv2';
   static const lastReceivedNotificationKey = 'lastReceivedNotification';
-  static final Map<String, NotificationService> _notificationServiceMap = {};
+
+  /// Contains a map of created [NotificationServiceImpl]s, keyed by AtSign
+  @visibleForTesting
+  static final Map<String, NotificationService> notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
-  var _isMonitorPaused = false;
+  /// monitorIsPaused is set to true when [stopAllSubscriptions] is called,
+  /// and to false when [start] is successful.
+  @visibleForTesting
+  var monitorIsPaused = false;
+
   late AtClient _atClient;
   Monitor? _monitor;
   ConnectivityListener? _connectivityListener;
-  dynamic _lastMonitorRetried;
+
   late AtClientManager _atClientManager;
   AtClientValidation atClientValidation = AtClientValidation();
   AtKeyEncryptionManager atKeyEncryptionManager = AtKeyEncryptionManager();
 
+  /// The delay between when a call is made to monitorRetry() - i.e. a monitorRestart is queued -
+  /// and when Monitor.start() is subsequently called
+  Duration monitorRetryInterval = Duration(seconds: 5);
+
   @visibleForTesting
   late AtKey lastReceivedNotificationAtKey;
 
+  /// If false, is set to true when [monitorRetry] is called.
+  /// If true, remains true when [monitorRetry] is called.
+  /// Is reset to false when [monitorRetry] actually calls Monitor.start
+  @visibleForTesting
+  bool monitorRestartQueued = false;
+
+  /// Number of times the [monitorRetry] function has been called
+  @visibleForTesting
+  int callsToMonitorRetry = 0;
+
+  /// Number of times [monitorRetry] has actually called [Monitor.start]. Note that when [monitorRetry]
+  /// is called, it will not queue a call to [Monitor.start] if [monitorRestartQueued] is true
+  @visibleForTesting
+  int monitorRetryCallsToMonitorStart = 0;
+
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
-    if (_notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
-      return _notificationServiceMap[atClient.getCurrentAtSign()]!;
+    if (notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
+      return notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
     final notificationService =
         NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     await notificationService._init();
-    _notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
-    return _notificationServiceMap[atClient.getCurrentAtSign()]!;
+    notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
+    return notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
 
   NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
@@ -66,7 +92,7 @@ class NotificationServiceImpl
             _atClient.getCurrentAtSign()!,
             _atClient.getPreferences()!,
             MonitorPreference()..keepAlive = true,
-            _monitorRetry);
+            monitorRetry);
     _atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(lastReceivedNotificationKey,
             _atClientManager.atClient.getCurrentAtSign()!,
@@ -103,7 +129,7 @@ class NotificationServiceImpl
         .start(lastNotificationTime: await getLastNotificationTime());
 
     if (_monitor!.status == MonitorStatus.started) {
-      _isMonitorPaused = false;
+      monitorIsPaused = false;
     }
   }
 
@@ -161,7 +187,7 @@ class NotificationServiceImpl
 
   @override
   void stopAllSubscriptions() {
-    _isMonitorPaused = true;
+    monitorIsPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
     _streamListeners.forEach((regex, streamController) {
@@ -206,23 +232,48 @@ class NotificationServiceImpl
     }
   }
 
-  void _monitorRetry() {
-    if (_lastMonitorRetried != null &&
-        DateTime.now().toUtc().difference(_lastMonitorRetried).inSeconds < 15) {
-      _logger.info('Attempting to retry in less than 15 seconds... Rejected');
-      return;
+  @visibleForTesting
+  /// Called by [NotificationServiceImpl]'s Monitor when the Monitor has detected that it (the Monitor) has
+  /// failed and needs to be retried.
+  /// * Returns _true_ if a call to Monitor.start() has been queued, _false_ otherwise.
+  ///
+  /// Behaviour:
+  /// * Increments [callsToMonitorRetry] every time it is called.
+  /// * First check - if there is a retry already 'in progress' - i.e. [monitorRestartQueued] is true - then return _false_
+  /// * Second check - if monitor has been paused, then retries should not happen, so return _false_
+  /// * If there is not a retry already 'in progress' - i.e. [monitorRestartQueued] is false - then
+  ///   * set monitorRestartQueued to true
+  ///   * create a delayed future which will execute after [monitorRetryInterval] which will
+  ///     * set monitorRestartQueued to false
+  ///     * Increment [monitorRetryCallsToMonitorStart]
+  ///     * call monitor.start()
+  ///   * return _true_
+  bool monitorRetry() {
+    callsToMonitorRetry++;
+    if (monitorRestartQueued) {
+      _logger.info('Monitor retry already queued');
+      return false;
     }
-    if (_isMonitorPaused) {
+    if (monitorIsPaused) {
       _logger.finer(
           '${_atClient.getCurrentAtSign()} monitor is paused. not retrying');
-      return;
+      return false;
     }
-    _lastMonitorRetried = DateTime.now().toUtc();
+    monitorRestartQueued = true;
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
-    Future.delayed(
-        Duration(seconds: 15),
-        () async => _monitor!
-            .start(lastNotificationTime: await getLastNotificationTime()));
+    Future.delayed(monitorRetryInterval, () async {
+      monitorRestartQueued = false;
+      if (monitorIsPaused) { // maybe it's been paused since we requested the retry
+        _logger.warning("monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
+      } else {
+        monitorRetryCallsToMonitorStart++;
+        await _monitor!.start(lastNotificationTime: await getLastNotificationTime());
+        // Note we do not need to handle exceptions as Monitor.start handles all of them.
+        // Additionally, we do not need to queue another monitor retry, since Monitor.start
+        // will call this function (_monitorRetry) if required
+      }
+    });
+    return true;
   }
 
   void _onMonitorError(Exception e) {
@@ -384,7 +435,7 @@ class NotificationServiceImpl
       stopAllSubscriptions();
       _logger.finer(
           'removing from _notificationServiceMap: ${_atClient.getCurrentAtSign()}');
-      _notificationServiceMap.remove(_atClient.getCurrentAtSign());
+      notificationServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }
 
