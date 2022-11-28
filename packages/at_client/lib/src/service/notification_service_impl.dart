@@ -347,10 +347,6 @@ class NotificationServiceImpl
       // Invoke onErrorCallback
       if (onError != null) {
         onError(notificationResult);
-      } else {
-        // If there's no onError supplied, then the only way a client will ever
-        // know we encountered an exception is if we throw it here.
-        rethrow;
       }
     }
     if (!checkForFinalDeliveryStatus) {
