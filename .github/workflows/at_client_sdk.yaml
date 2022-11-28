@@ -151,10 +151,6 @@ jobs:
         working-directory: tests/at_end2end_test
         run: dart pub get
 
-       #tmate to debug actions
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v1
-
       # Populate at_credentials.dart from CICD_DATA_DART secret
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
