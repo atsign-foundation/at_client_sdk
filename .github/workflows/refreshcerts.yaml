@@ -1,0 +1,79 @@
+name: Refreshcerts
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 2 15 * *' # At 0215 on the 15th day of every odd month
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  refresh-ACME-cert:
+    runs-on: ubuntu-latest
+    name: SSL Renewal for vip.ve.atsign.zone
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@13ae5bb136fac2878aff31522b9efb785519f984 # v4.3.0
+        with:
+          python-version: 3.9 #install the python needed
+      - name: setup certinfo
+        uses: atsign-company/certinfo-action@e33db584f27bbbc0260af9916aeaefbec0db8ef4 # v1.0.1
+      # checkout at_server code
+      - name: checkout repo content
+        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+      # Pull ZeroSSL and Letsencrypt keys file from secret
+      - name: Pull ACME script
+        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+        with:
+          repository: atsign-company/secondaries-scripts
+          path: secondaries-scripts
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+          ref: trunk
+      # Create required directory
+      - name: Create required directory and pull secrets
+        run: |-
+          sudo mkdir -p /gluster/@/api/keys
+          sudo chmod -R 777 /gluster/@/api/keys
+          echo "${{secrets.LETSENCRYPT_PRIVKEY}}" > /gluster/@/api/keys/letsencrypt.key
+          echo "${{secrets.ZEROSSL_PRIVKEY}}" > /gluster/@/api/keys/zerossl.key
+          echo "${{secrets.GOOGLE_PRIVKEY}}" > /gluster/@/api/keys/google.key
+      # Install Python Libraries
+      - name: Install Python Libraries
+        run: |-
+          python3 -m pip install --require-hashes -r tools/requirements.txt
+      # Run Python ACME script
+      - name: Run ACME script
+        run: |-
+          set +e
+          chmod -R 777 secondaries-scripts
+          cd secondaries-scripts && ./create_cert_workflow.sh vip.ve.atsign.zone
+          cp cert.pem ../tests/at_functional_test/test/testData/cert.pem
+          cd .. && rm -rf  vip.ve.atsign.zone* secondaries-scripts
+          git config --global user.name 'Getcert Action'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          set -e
+        env:
+          DO_KEY: ${{ secrets.DO_KEY }}
+          gChat_url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+
+      # create PR with renewed certificate
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@331d02c7e2104af23ad5974d4d5cbc58a3e6dc77 # v4.2.2
+        with:
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+          commit-message: 'chore: New certificates for at_server'
+          committer: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          signoff: false
+          add-paths: ./tests/at_functional_test/test/testData
+          branch: bot-new-certs
+          delete-branch: true
+          title: 'chore: New certificates generated'
+          body: |
+            Fresh certificates generated.
+          labels: |
+            operations
+          assignees: cpswan
+          reviewers: gkc
+          draft: false          

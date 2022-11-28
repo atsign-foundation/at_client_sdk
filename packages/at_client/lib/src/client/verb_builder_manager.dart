@@ -49,6 +49,7 @@ class LookUpBuilderManager {
       ..isCached = (atKey.metadata != null && atKey.metadata?.isCached != null)
           ? atKey.metadata!.isCached
           : false
+      ..isLocal = atKey.isLocal
       ..operation = 'all';
   }
 }

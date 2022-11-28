@@ -70,7 +70,7 @@ void main() async {
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
     expect(notificationListJson[0]['value'], isNotEmpty);
-  });
+  }, timeout: Timeout(Duration(minutes: 1)));
 
   /// The purpose of this test is to verify the notify text with setting
   /// shouldEncrypt parameter to true (which encrypt the notify text)

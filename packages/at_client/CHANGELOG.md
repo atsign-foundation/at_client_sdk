@@ -1,10 +1,18 @@
+## 3.0.45
+- fix: Fix sync running into infinite loop when invalid keys does not sync into local storage
+- fix: Upgrade persistence secondary to version 3.0.43 to fix empty batch request being sent to cloud secondary
+## 3.0.44
+- feat: Introduce fetch method to NotificationService to fetch the notification using id.
+- fix: Replace latestNotificationId with local key to store/fetch last received notification
+## 3.0.43
+- chore: upgrade persistence secondary to version 3.0.42 and persistence spec to 2.0.9
 ## 3.0.42
 - fix: Improved performance of getKeys (and getAtKeys) when sharedBy is specified, by using the existing 
 RemoteSecondary connection rather than creating a new one
 - fix: Do not try to decrypt empty or null serverEncryptedValue when generating SyncConflict info
 - fix: put try-catch around most of the `SyncServiceImpl._checkConflict` method so sync is not impeded if
 _checkConflict encounters an exception
-- fix: null pointer exception in monitorResponse due to delayed server response
+- fix: fix null pointer exception in monitorResponse due to delayed server response
 - fix: Skip reserved keys from decryption in the notification callback
 - fix: Update at_commons to 3.0.29 which fixes AtKey sharedWith attribute has incorrect value for public keys
 ## 3.0.41
