@@ -34,10 +34,14 @@ class NotificationServiceImpl
   static final Map<String, NotificationService> notificationServiceMap = {};
 
   final _logger = AtSignLogger('NotificationServiceImpl');
-  /// monitorIsPaused is set to true when [stopAllSubscriptions] is called,
-  /// and to false when [start] is successful.
+
+  /// Controls whether or not the monitor is actually running.
+  /// monitorIsPaused is initially set to true (monitor should not be running)
+  /// set to false when [start] is successful (monitor should be running)
+  /// and set to true when [stopAllSubscriptions] is called (monitor should not be running).
+  /// ( Note that stopAllSubscriptions also calls Monitor.stop() )
   @visibleForTesting
-  var monitorIsPaused = false;
+  var monitorIsPaused = true;
 
   late AtClient _atClient;
   Monitor? _monitor;
@@ -75,8 +79,9 @@ class NotificationServiceImpl
       return notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
     final notificationService =
-        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
-    await notificationService._init();
+    NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
+    // We used to call _init() at this point which would start the monitor, but now we
+    // call _init() from the [subscribe] method
     notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
     return notificationServiceMap[atClient.getCurrentAtSign()]!;
   }
@@ -100,22 +105,35 @@ class NotificationServiceImpl
         .build();
   }
 
+  // Simple state so the bulk of _init() doesn't execute more than once
+  bool _initialized = false;
+  bool _initializing = false;
   Future<void> _init() async {
-    _logger.finer('${_atClient.getCurrentAtSign()} notification service init');
-    await _startMonitor();
-    _logger.finer(
-        '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
-    if (_connectivityListener == null) {
-      _connectivityListener = ConnectivityListener();
-      _connectivityListener!.subscribe().listen((isConnected) {
-        if (isConnected) {
-          _logger.finer(
-              '${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
-          _startMonitor();
-        } else {
-          _logger.finer('lost network connectivity');
-        }
-      });
+    if (_initializing || _initialized) {
+      return;
+    }
+
+    _initializing = true;
+    try {
+      _logger.info('${_atClient.getCurrentAtSign()} notification service _init()');
+      await _startMonitor();
+      _logger.finer(
+          '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
+      if (_connectivityListener == null) {
+        _connectivityListener = ConnectivityListener();
+        _connectivityListener!.subscribe().listen((isConnected) {
+          if (isConnected) {
+            _logger.finer(
+                '${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
+            _startMonitor();
+          } else {
+            _logger.finer('lost network connectivity');
+          }
+        });
+      }
+      _initialized = true;
+    } finally {
+      _initializing = false;
     }
   }
 
@@ -187,6 +205,7 @@ class NotificationServiceImpl
 
   @override
   void stopAllSubscriptions() {
+    _logger.info('stopAllSubscriptions() called - setting monitorIsPaused to true');
     monitorIsPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
@@ -198,6 +217,8 @@ class NotificationServiceImpl
 
   Future<void> _internalNotificationCallback(String notificationJSON) async {
     try {
+      _logger.finest('DEBUG: $notificationJSON');
+
       final notificationParser = NotificationResponseParser();
       final atNotifications = await notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
@@ -282,10 +303,8 @@ class NotificationServiceImpl
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -328,6 +347,10 @@ class NotificationServiceImpl
       // Invoke onErrorCallback
       if (onError != null) {
         onError(notificationResult);
+      } else {
+        // If there's no onError supplied, then the only way a client will ever
+        // know we encountered an exception is if we throw it here.
+        rethrow;
       }
     }
     if (!checkForFinalDeliveryStatus) {
@@ -400,12 +423,42 @@ class NotificationServiceImpl
   @override
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
+    _logger.info('subscribe(regex: $regex, shouldDecrypt: $shouldDecrypt');
     regex ??= emptyRegex;
     var notificationConfig = NotificationConfig()
       ..regex = regex
       ..shouldDecrypt = shouldDecrypt;
     var atNotificationStream = _streamListeners.putIfAbsent(
         notificationConfig, () => StreamController<AtNotification>.broadcast());
+
+    // Temporary fix for https://github.com/atsign-foundation/at_client_sdk/issues/770
+    //     (Temporary because it's a bit of a kludge, but the proper fix requires the implementation
+    //      of enhancements to the monitor verb which allow for multiple subscriptions, and changes
+    //      to this service and to the Monitor to make use of that enhancement.)
+    // Previously we were initializing the notification service
+    // before there were any 'real' subscriptions
+    // and because the notification service currently starts the monitor
+    // without any regex, the monitor immediately starts to stream all notifications
+    //
+    // As a result, if there is even a very short delay between when the notification service
+    // is created and when the app calls 'subscribe', then the app will 'miss'
+    // those notifications.
+    //
+    // So - for now, if the subscription is 'statsNotification', then we will delay
+    // initialization of the service until when the app does a real 'subscribe' call.
+    //
+    // Normally, the app code will call subscribe which will
+    // start the monitor, and SyncService will start receiving statsNotifications.
+    // However, if the app isn't explicitly calling 'sync', and hasn't called subscribe(),
+    // then there will be a delay of 30 seconds before the monitor is started, the first
+    // statsNotification message is received, and a sync request is queued.
+    // In order to compensate for that, the SyncServiceImpl itself now queues a sync request
+    // when it is initialized.
+    if (regex == 'statsNotification') {
+      Future.delayed(Duration(seconds: 30), () async => _init());
+    } else {
+      Future.delayed(Duration(milliseconds: 5), () async => _init());
+    }
     return atNotificationStream.stream as Stream<AtNotification>;
   }
 

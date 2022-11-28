@@ -65,7 +65,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
     await syncService._statsServiceListener();
+
     syncService._scheduleSyncRun();
+
     _syncServiceMap[atClient.getCurrentAtSign()!] = syncService;
     return _syncServiceMap[atClient.getCurrentAtSign()]!;
   }
@@ -80,6 +82,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _remoteSecondary = remoteSecondary;
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _atClientManager.listenToAtSignChange(this);
+
+    // Enqueue a sync request. See https://github.com/atsign-foundation/at_client_sdk/issues/770
+    final syncRequest = SyncRequest();
+    syncRequest.onDone = _onDone;
+    syncRequest.onError = _onError;
+    syncRequest.requestSource = SyncRequestSource.system;
+    syncRequest.requestedOn = DateTime.now().toUtc();
+    syncRequest.result = SyncResult();
+    _addSyncRequestToQueue(syncRequest);
   }
 
   void _scheduleSyncRun() {
