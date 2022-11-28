@@ -1,3 +1,7 @@
+## 3.0.46
+- fix: Ensure that we handle any and all exceptions related to sending heartbeat request
+- feat: Made NotificationServiceImpl's retry delay into a public instance variable, so it can be set by application code
+- feat: Changed NotificationServiceImpl's retry delay (from when monitorRetry() is called to when Monitor.start() is called) from 15 seconds to 5 seconds
 ## 3.0.45
 - fix: Fix sync running into infinite loop when invalid keys does not sync into local storage
 - fix: Upgrade persistence secondary to version 3.0.43 to fix empty batch request being sent to cloud secondary
