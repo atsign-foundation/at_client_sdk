@@ -389,13 +389,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Syncs the cloud secondary changes to local secondary.
   Future<List<KeyInfo>> _syncFromServer(int serverCommitId, int localCommitId,
       List<CommitEntry> uncommittedEntries) async {
-    // Iterates until serverCommitId is greater than localCommitId are equal.
+    // Iterates until serverCommitId is greater than lastReceivedServerCommitId.
+    // replacing localCommitId with lastReceivedServerCommitId fixes infinite loop issue
+    // in certain scenarios e.g server has a commit entry that need not be synced on client side,
+    // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
-
-    // Hint to casual reader: Most sync weirdness is caused by this while condition not being met
-    // - i.e. this becomes an infinite loop, and then we never get to the next step in the sync
-    // algorithm, which is syncing local changes to the cloud secondary
-    while (serverCommitId > localCommitId) {
+    int lastReceivedServerCommitId = localCommitId;
+    while (serverCommitId > lastReceivedServerCommitId) {
       _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "localCommitId":localCommitId});
 
       var syncBuilder = SyncVerbBuilder()
@@ -426,6 +426,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
         _sendTelemetry('_syncFromServer.forEachEntry.start', {"serverCommitEntry":serverCommitEntry});
+        if (serverCommitEntry['commitId'] is int) {
+          lastReceivedServerCommitId = serverCommitEntry['commitId'];
+        } else {
+          lastReceivedServerCommitId = int.parse(serverCommitEntry['commitId']);
+        }
         try {
           final keyInfo =
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
@@ -435,20 +440,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
           _sendTelemetry('_syncFromServer.forEachEntry.end', keyInfo);
-        } on Exception catch (e, st) {
-          var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
-          _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":st,"cause":cause});
+        } on Exception catch (e, stacktrace) {
+          _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":stacktrace});
           _logger.severe(
-              'exception syncing entry to local $serverCommitEntry - $cause');
-        } on Error catch (e, st) {
-          _sendTelemetry('_syncFromServer.forEachEntry.error', {"e":e,"st":st});
+              'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
+        } on Error catch (e, stacktrace) {
+          _sendTelemetry('_syncFromServer.forEachEntry.error', {"e":e,"st":stacktrace});
           _logger.severe(
-              'error syncing entry to local $serverCommitEntry - ${e.toString()}');
+              'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
         }
       }
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
-      _logger.finest('**localCommitId $localCommitId');
+      _logger
+          .finest('**lastReceivedServerCommitId $lastReceivedServerCommitId');
     }
     return keyInfoList;
   }
