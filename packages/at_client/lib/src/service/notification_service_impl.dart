@@ -146,11 +146,23 @@ class NotificationServiceImpl
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
     }
-    await _monitor!
-        .start(lastNotificationTime: await getLastNotificationTime());
 
-    if (_monitor!.status == MonitorStatus.started) {
-      monitorIsPaused = false;
+    int? lastNotificationTime;
+    try {
+      lastNotificationTime = await getLastNotificationTime();
+    } catch (e) {
+      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
+      return;
+    }
+
+    try {
+      await _monitor!.start(lastNotificationTime: lastNotificationTime);
+      if (_monitor!.status == MonitorStatus.started) {
+        monitorIsPaused = false;
+      }
+    } catch (e) {
+      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
+      return;
     }
   }
 
