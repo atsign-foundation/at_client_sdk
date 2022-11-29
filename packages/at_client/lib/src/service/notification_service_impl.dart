@@ -105,16 +105,19 @@ class NotificationServiceImpl
         .build();
   }
 
-  // Simple state so the bulk of _init() doesn't execute more than once
-  bool _initialized = false;
+  /// Simple state to prevent _init() running more than once *concurrently*
   bool _initializing = false;
+
   Future<void> _init() async {
-    if (_initializing || _initialized) {
+    // Note that it is safe to call _init() more than once, sequentially, because it only does two things,
+    // and both of those things are safe guarded:
+    // (1) calls _startMonitor() - which won't do anything if the monitor is already started
+    // (2) creates a connectivity listener and subscription - but only if _connectivityListener is currently null
+    if (_initializing) {
       return;
     }
-
-    _initializing = true;
     try {
+      _initializing = true;
       _logger.finer('${_atClient.getCurrentAtSign()} notification service _init()');
       await _startMonitor();
       _logger.finer(
@@ -133,7 +136,6 @@ class NotificationServiceImpl
           }
         });
       }
-      _initialized = true;
     } finally {
       _initializing = false;
     }
