@@ -224,6 +224,7 @@ class NotificationServiceImpl
     monitorIsPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
+    _connectivityListener = null;
     _streamListeners.forEach((regex, streamController) {
       if (!streamController.isClosed) () => streamController.close();
     });
