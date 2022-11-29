@@ -811,6 +811,10 @@ void main() {
           await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
               as NotificationServiceImpl;
 
+      // Set monitorIsPaused to false, since it isn't explicitly set to false
+      // until NotificationServiceImpl._init runs.
+      notificationServiceImpl.monitorIsPaused = false;
+
       notificationServiceImpl.monitorRetryInterval = Duration(milliseconds: 50);
       notificationServiceImpl.monitorRetry();
       expect(notificationServiceImpl.callsToMonitorRetry, 1);
@@ -828,6 +832,10 @@ void main() {
       NotificationServiceImpl notificationServiceImpl =
       await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
       as NotificationServiceImpl;
+
+      // Set monitorIsPaused to false, since it isn't explicitly set to false
+      // until NotificationServiceImpl._init runs.
+      notificationServiceImpl.monitorIsPaused = false;
 
       expect(notificationServiceImpl.monitorRestartQueued, false);
 
@@ -848,6 +856,10 @@ void main() {
       NotificationServiceImpl notificationServiceImpl =
       await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
       as NotificationServiceImpl;
+
+      // Set monitorIsPaused to false, since it isn't explicitly set to false
+      // until NotificationServiceImpl._init runs.
+      notificationServiceImpl.monitorIsPaused = false;
 
       expect(notificationServiceImpl.monitorIsPaused, false);
       expect(notificationServiceImpl.monitorRestartQueued, false);
@@ -870,6 +882,10 @@ void main() {
       NotificationServiceImpl notificationServiceImpl =
       await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
       as NotificationServiceImpl;
+
+      // Set monitorIsPaused to false, since it isn't explicitly set to false
+      // until NotificationServiceImpl._init runs.
+      notificationServiceImpl.monitorIsPaused = false;
 
       notificationServiceImpl.monitorRetryInterval = Duration(milliseconds: 50);
 
@@ -896,6 +912,10 @@ void main() {
       NotificationServiceImpl notificationServiceImpl =
       await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
       as NotificationServiceImpl;
+
+      // Set monitorIsPaused to false, since it isn't explicitly set to false
+      // until NotificationServiceImpl._init runs.
+      notificationServiceImpl.monitorIsPaused = false;
 
       notificationServiceImpl.monitorRetryInterval = Duration(milliseconds: 50);
 
