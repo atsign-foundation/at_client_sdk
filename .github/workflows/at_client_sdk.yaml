@@ -46,7 +46,7 @@ jobs:
 
       - name: Convert coverage to LCOV format
         working-directory: packages/at_client
-        run: dart run coverage:format_coverage --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
@@ -113,7 +113,7 @@ jobs:
 
       - name: Convert coverage to LCOV format
         working-directory: tests/at_functional_test
-        run: dart run coverage:format_coverage --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
