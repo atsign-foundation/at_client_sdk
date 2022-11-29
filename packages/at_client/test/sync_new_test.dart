@@ -1335,37 +1335,102 @@ void main() {
   group(
       'A group of tests on fetching the local commit id and uncommitted entries',
       () {
-    test('A test to verify highest localCommitId is fetched with no regex', () {
-      ///Preconditions:
-      /// 1. The local keystore contains following keys
-      ///   a. phone.wavi@alice with commit id 10
-      ///   b. mobile.atmosphere@alice with commit id 11
-      ///
-      /// Assertions:
-      /// When fetched highest commit entry - entry with commit id 11 should be fetched
-    });
-    test(
-        'A test to verify highest localCommitId satisfying the regex is fetched',
-        () {
-      ///Preconditions:
-      /// 1. The local keystore contains following keys
-      ///   a. phone.wavi@alice with commit id 10
-      ///   b. mobile.atmosphere@alice with commit id 11
-      ///
-      /// Assertions:
-      /// When fetched highest commit entry with regex .wavi - entry with
-      /// commit Id 10 should be fetched
+    ///Preconditions:
+    /// 1. The local keystore contains following keys
+    ///   a. phone.wavi@alice with commit id 10
+    ///   b. mobile.atmosphere@alice with commit id 11
+    ///
+    /// Assertions:
+    /// When fetched highest commit entry - entry with commit id 11 should be fetched
+    test('A test to verify highest localCommitId is fetched with no regex',
+        () async {
+      //----------------------------------Setup---------------------------------
+      await TestResources.setupLocalStorage(atsign);
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey1 = AtKey.self('phone', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var atKey2 =
+          AtKey.self('mobile', namespace: 'atmosphere', sharedBy: atsign)
+              .build()
+              .toString();
+      //----------------------------------Operations----------------------------
+      await keystore!.put(atKey1, AtData()..data = '1234567890');
+      await keystore.put(atKey2, AtData()..data = '909120909109');
+      var commitLogEntry =
+          await TestResources.getCommitEntryLatest(atsign, atKey2);
+      var commitId = commitLogEntry!.commitId;
+      //----------------------------------Assertions----------------------------
+      var lastSyncedEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('', atSign: atsign);
+      expect(lastSyncedEntry!.commitId, commitId);
+      await TestResources.tearDownLocalStorage();
     });
 
+    ///Preconditions:
+    /// 1. The local keystore contains following keys
+    ///   a. phone.wavi@alice with commit id 10
+    ///   b. mobile.atmosphere@alice with commit id 11
+    ///
+    /// Assertions:
+    /// When fetched highest commit entry with regex .wavi - entry with
+    /// commit Id 10 should be fetched
+    test(
+        'A test to verify highest localCommitId satisfying the regex is fetched',
+        () async {
+      //----------------------------------Setup---------------------------------
+      await TestResources.setupLocalStorage(atsign);
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var waviKey = AtKey.self('phone', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var atmosphereKey =
+          AtKey.self('mobile', namespace: 'atmosphere', sharedBy: atsign)
+              .build()
+              .toString();
+      //----------------------------------Operations----------------------------
+      await keystore!.put(waviKey, AtData()..data = '1234567890');
+      await keystore.put(atmosphereKey, AtData()..data = '909120909109');
+      var commitLogEntry =
+          await TestResources.getCommitEntryLatest(atsign, waviKey);
+      var commitIdWaviKey = commitLogEntry!.commitId;
+      //----------------------------------Assertions----------------------------
+      var lastSyncedEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('.wavi', atSign: atsign);
+      expect(lastSyncedEntry!.commitId, commitIdWaviKey);
+      await TestResources.tearDownLocalStorage();
+    });
+
+    ///Preconditions:
+    /// 1. The local keystore contains following keys
+    ///   a. phone.wavi@alice with commit id 10
+    ///   b. mobile.atmosphere@alice with commit id 11
+    ///
+    /// Assertions:
+    /// The lastSyncEntry must have the highest commit id - here commitId 11
     test('A test to verify lastSyncedEntry returned has the highest commitId',
-        () {
-      ///Preconditions:
-      /// 1. The local keystore contains following keys
-      ///   a. phone.wavi@alice with commit id 10
-      ///   b. mobile.atmosphere@alice with commit id 11
-      ///
-      /// Assertions:
-      /// The lastSyncEntry must have the highest commit id - here commitId 11
+        () async {
+      //----------------------------------Setup---------------------------------
+      await TestResources.setupLocalStorage(atsign);
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey1 = AtKey.self('phone', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var atKey2 =
+          AtKey.self('mobile', namespace: 'atmosphere', sharedBy: atsign)
+              .build()
+              .toString();
+      //----------------------------------Operations----------------------------
+      await keystore!.put(atKey1, AtData()..data = '1234567890');
+      await keystore.put(atKey2, AtData()..data = '909120909109');
+      var commitLogEntry =
+          await TestResources.getCommitEntryLatest(atsign, atKey2);
+      var commitId = commitLogEntry!.commitId;
+      //----------------------------------Assertions----------------------------
+      var lastSyncedEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('', atSign: atsign);
+      expect(lastSyncedEntry!.commitId, commitId);
+      await TestResources.tearDownLocalStorage();
     });
 
     test(
@@ -1382,15 +1447,27 @@ void main() {
       ///  The uncommitted entries much have entries with commitId null
       ///    Here: commit entries of aboutMe.wavi@alice and country.wavi@alice
     });
+
+    /// Preconditions:
+    ///  1. The local keystore does not contains key
+    ///
+    /// Assertions:
+    ///  a. The lastSyncedEntry should be null
+    ///  b. The commit entry should be -1
     test(
         'A test to verify lastSyncedEntry returns -1 when commit log do not have keys',
-        () {
-      /// Preconditions:
-      ///  1. The local keystore does not contains keys
-      ///
-      /// Assertions:
-      ///  a. The lastSyncedEntry should be null
-      ///  b. The commit entry should be -1
+        () async {
+      //----------------------------------Setup---------------------------------
+      await TestResources.setupLocalStorage(atsign);
+      //----------------------------------Operations----------------------------
+      int? seqNum = TestResources.commitLog!.lastCommittedSequenceNumber();
+      var lastSyncedEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('', atSign: atsign);
+      //------------------------------Assertions--------------------------------
+      expect(lastSyncedEntry, null);
+      var commitEntry = await TestResources.commitLog!.getEntry(seqNum);
+      expect(commitEntry, null);
+      await TestResources.tearDownLocalStorage();
     });
     test('A test to verify sync with regex when local is ahead', () {
       /// Preconditions:
@@ -1512,6 +1589,7 @@ void main() {
       test(
           'A test to verify when invalid keys are returned in sync response from server',
           () {});
+
       /// Preconditions:
       /// 1. There should be no entry for the same key in the key store
       /// 2. There should be no entry for the same key in the commit log
@@ -1546,7 +1624,7 @@ void main() {
         expect(keyStoreGetResult!.metaData!.createdAt!.isBefore(DateTime.now()),
             true);
         expect(keyStoreGetResult.metaData!.version, 0);
-       // verifying the key in the commit log
+        // verifying the key in the commit log
         var commitEntryResult =
             await TestResources.getCommitEntryLatest(atsign, atKey);
         expect(commitEntryResult!.operation, CommitOp.UPDATE);
@@ -1602,11 +1680,12 @@ void main() {
         expect(keyStoreGetResult.ttr, 20);
         expect(keyStoreGetResult.isCascade, true);
         await TestResources.tearDownLocalStorage();
-      // verifying the key in the commit log
-      var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation, CommitOp.UPDATE_META);
+        // verifying the key in the commit log
+        var commitEntryResult =
+            await TestResources.getCommitEntryLatest(atsign, atKey);
+        expect(commitEntryResult!.operation, CommitOp.UPDATE_META);
       });
+
       /// Preconditions:
       /// 1. There should be an entry for the same key in the key store
       /// 2. There should be an entry for the same key in the commit log
@@ -1619,7 +1698,7 @@ void main() {
       /// 2. CommitLog should have an entry for the key with commitOp.DELETE
       test(
           'A test to verify existing key is deleted when delete commit operation is received',
-          ()  async{
+          () async {
         // --------------------- Setup ---------------------
         await TestResources.setupLocalStorage(atsign);
         HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
@@ -1629,15 +1708,15 @@ void main() {
             (AtKey.public('message', namespace: 'wavi', sharedBy: atsign))
                 .build()
                 .toString();
-        await keystore!.put(atKey, AtData() ..data = 'hello');
+        await keystore!.put(atKey, AtData()..data = 'hello');
         await keystore.remove(atKey);
         //------------------Assertions-------------
-       expect(() async => await keystore.get(atKey),
-          throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
-       // verifying the key in the commit log
+        expect(() async => await keystore.get(atKey),
+            throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
+        // verifying the key in the commit log
         var commitEntryResult =
             await TestResources.getCommitEntryLatest(atsign, atKey);
-        expect(commitEntryResult!.operation, CommitOp.DELETE);  
+        expect(commitEntryResult!.operation, CommitOp.DELETE);
         await TestResources.tearDownLocalStorage();
       });
       test(
@@ -1685,7 +1764,7 @@ void main() {
   /// isInSync should return an enum - InSync, ServerAhead, ClientAhead
   group('Tests to validate how the client and server exchange information', () {
     group('A group of test to verify if client and server are in sync', () {
-       /// Preconditions:
+      /// Preconditions:
       /// 1. The server commitId is at 15 and local commitId is at 15
       ///
       /// Assertions:
@@ -1974,6 +2053,15 @@ void main() {
       });
     });
   });
+}
+
+class MySyncProgressListener extends SyncProgressListener {
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    print('received sync progress: $syncProgress');
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+  }
 }
 
 class TestResources {
