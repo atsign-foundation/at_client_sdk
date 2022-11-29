@@ -4,7 +4,7 @@ description: The at_client library is the non-platform specific Client SDK which
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 3.0.45
+version: 3.0.46
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -13,13 +13,6 @@ homepage: https://docs.atsign.com/
 
 environment:
   sdk: '>=2.12.0 <3.0.0'
-
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: packages/at_commons
-      ref: gkc-telemetry-v1-beta
 
 dependencies:
   path: ^1.8.2
@@ -40,7 +33,7 @@ dependencies:
   at_lookup: ^3.0.32
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.30
+  at_commons: ^3.0.31
   at_utils: ^3.0.11
   meta: ^1.8.0
 
