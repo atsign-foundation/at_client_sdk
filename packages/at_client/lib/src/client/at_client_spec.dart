@@ -23,6 +23,7 @@ abstract class AtClient {
 
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
+  @experimental
   AtTelemetryService? get telemetry;
 
   /// Returns a [RemoteSecondary] to communicate with user's cloud secondary server.

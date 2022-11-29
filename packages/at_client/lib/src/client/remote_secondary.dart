@@ -11,6 +11,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
+import 'package:meta/meta.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
@@ -40,6 +41,7 @@ class RemoteSecondary implements Secondary {
         clientConfig: {VERSION: AtClientConfig.getInstance().atClientVersion});
   }
 
+  @experimental
   AtTelemetryService? telemetry;
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.

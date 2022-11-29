@@ -14,6 +14,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:meta/meta.dart';
 
 class EncryptionService {
   RemoteSecondary? remoteSecondary;
@@ -24,6 +25,7 @@ class EncryptionService {
 
   var logger = AtSignLogger('EncryptionService');
 
+  @experimental
   AtTelemetryService? telemetry;
 
   Future<String> encrypt(String? key, String value, String sharedWith) async {

@@ -31,6 +31,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final NotificationServiceImpl _statsNotificationListener;
 
   /// utility method to reduce code verbosity in this file
+  /// Does nothing if a telemetryService has not been injected
   void _sendTelemetry(String name, dynamic value) {
     _atClient.telemetry?.controller.sink.add(SyncTelemetryEvent(name, value));
   }
@@ -337,8 +338,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
 
       // Hint to casual reader: This is where we sync new changes from the server to this this client
-      // Note that if the 'while' loop in _syncFromServer never exits, then we never get to calling
-      // _syncToRemote down below, which is where we send pending local changes to the server
       final keyInfoList = await _syncFromServer(
           serverCommitId, localCommitId, unCommittedEntries);
 

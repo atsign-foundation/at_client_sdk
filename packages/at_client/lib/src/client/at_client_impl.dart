@@ -143,6 +143,7 @@ class AtClientImpl implements AtClient {
     _cascadeSetTelemetryService();
   }
 
+  /// Does nothing unless a telemetry service has been injected
   void _cascadeSetTelemetryService() {
     if (telemetry != null) {
       _encryptionService?.telemetry = telemetry;
