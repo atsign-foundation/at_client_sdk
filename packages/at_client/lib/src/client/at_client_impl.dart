@@ -208,30 +208,42 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) async {
+  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
     _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key":atKey}));
-
     var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic! : false;
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
+    var _deleteResult = _delete(atKey.key!,
+        sharedWith: atKey.sharedWith,
+        sharedBy: atKey.sharedBy,
+        isPublic: isPublic,
+        isCached: isCached,
+        namespaceAware: isNamespaceAware);
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete', {"key":atKey, "_deleteResult":_deleteResult}));
+    return _deleteResult;
+  }
+
+  Future<bool> _delete(String key,
+      {String? sharedWith,
+      String? sharedBy,
+      bool isPublic = false,
+      bool isCached = false,
+      bool namespaceAware = true}) async {
     String keyWithNamespace;
-    if (isNamespaceAware) {
-      keyWithNamespace = _getKeyWithNamespace(atKey.key!);
+    if (namespaceAware) {
+      keyWithNamespace = _getKeyWithNamespace(key);
     } else {
-      keyWithNamespace = atKey.key!;
+      keyWithNamespace = key;
     }
-    atKey.sharedBy ??= currentAtSign;
+    sharedBy ??= currentAtSign;
     var builder = DeleteVerbBuilder()
       ..isCached = isCached
       ..isPublic = isPublic
-      ..sharedWith = atKey.sharedWith
+      ..sharedWith = sharedWith
       ..atKey = keyWithNamespace
-      ..sharedBy = atKey.sharedBy;
+      ..sharedBy = sharedBy;
     var deleteResult = await getSecondary().executeVerb(builder, sync: true);
-
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete', {"key":atKey, "deleteResult":deleteResult}));
-
     return deleteResult != null;
   }
 
