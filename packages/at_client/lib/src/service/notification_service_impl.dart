@@ -166,13 +166,12 @@ class NotificationServiceImpl
     }
   }
 
-  @visibleForTesting
-
   /// Return the last received notification DateTime in epochMillis when
   /// [AtClientPreference.fetchOfflineNotifications] is set true.
   ///
   /// Returns null when the key which holds the lastNotificationReceived
   /// does not exist.
+  @visibleForTesting
   Future<int?> getLastNotificationTime() async {
     if (_atClientManager.atClient.getPreferences()!.fetchOfflineNotifications ==
         false) {
