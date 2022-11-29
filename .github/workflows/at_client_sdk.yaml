@@ -180,7 +180,17 @@ jobs:
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
-        run: dart test --concurrency=1
+        run: dart test --concurrency=1 --coverage="coverage"
+
+      - name: Convert coverage to LCOV format
+        working-directory: tests/at_end2end_test
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=end2end_test_coverage.lcov --report-on=lib
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
+        with:
+          file: tests/at_end2end_test/end2end_test_coverage.lcov
+          flags: end2end_tests
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
   end2end_test_14:
