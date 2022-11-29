@@ -53,13 +53,17 @@ class AtClientImpl implements AtClient {
 
   EncryptionService? _encryptionService;
 
+  @experimental
   AtTelemetryService? _telemetry;
+
   @override
+  @experimental
   set telemetry(AtTelemetryService? telemetryService) {
     _telemetry = telemetryService;
     _cascadeSetTelemetryService();
   }
   @override
+  @experimental
   AtTelemetryService? get telemetry => _telemetry;
 
   @override

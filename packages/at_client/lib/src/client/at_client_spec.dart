@@ -11,6 +11,7 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
@@ -20,6 +21,7 @@ abstract class AtClient {
   @Deprecated("Use SyncManager.sync")
   SyncManager? getSyncManager();
 
+  @experimental
   set telemetry(AtTelemetryService? telemetryService);
   AtTelemetryService? get telemetry;
 
