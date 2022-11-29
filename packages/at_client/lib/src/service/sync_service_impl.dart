@@ -89,6 +89,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         () async {
       try {
         await processSyncRequests();
+        // If no sync request has ever been made, let's enqueue one now.
+        // See https://github.com/atsign-foundation/at_client_sdk/issues/770
+        if (hasHadNoSyncRequests) {
+          final syncRequest = SyncRequest();
+          syncRequest.onDone = _onDone;
+          syncRequest.onError = _onError;
+          syncRequest.requestSource = SyncRequestSource.system;
+          syncRequest.requestedOn = DateTime.now().toUtc();
+          syncRequest.result = SyncResult();
+          _addSyncRequestToQueue(syncRequest);
+        }
       } on Exception catch (e, trace) {
         var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.finest(trace);
@@ -281,7 +292,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         .severe('system sync error ${syncResult.atClientException?.message}');
   }
 
+  /// We use this so that after [processSyncRequests] runs, it can enqueue a sync
+  /// request if none have yet been received. This is to address a side-effect
+  /// of the fix for https://github.com/atsign-foundation/at_client_sdk/issues/770
+  @visibleForTesting
+  bool hasHadNoSyncRequests = true;
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
+    hasHadNoSyncRequests = false;
     if (_syncRequests.length == _queueSize) {
       _syncRequests.removeLast();
     }
@@ -637,7 +654,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.severe('exception in isInSync $cause');
       throw AtClientException.message(e.toString());
     } finally {
-      remoteSecondary.atLookUp.close();
+      unawaited(remoteSecondary.atLookUp.close());
     }
   }
 
