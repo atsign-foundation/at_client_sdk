@@ -1,5 +1,8 @@
+import 'package:uuid/uuid.dart';
+
 abstract class AtCollectionModel {
-  String? keyId;
+  late String? keyId = Uuid().v4();
+  late String collectionName = runtimeType.toString();
 
   Map<String, dynamic> toJson();
 }
