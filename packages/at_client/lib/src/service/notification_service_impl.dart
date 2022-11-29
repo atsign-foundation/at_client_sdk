@@ -36,9 +36,9 @@ class NotificationServiceImpl
   final _logger = AtSignLogger('NotificationServiceImpl');
 
   /// Controls whether or not the monitor is actually running.
-  /// monitorIsPaused is initially set to true (monitor should not be running)
-  /// set to false when [start] is successful (monitor should be running)
-  /// and set to true when [stopAllSubscriptions] is called (monitor should not be running).
+  /// * monitorIsPaused is initially set to true (monitor should not be running)
+  /// * it is set to false when [_startMonitor] is called (monitor should be running)
+  /// * and it is set to true when [stopAllSubscriptions] is called (monitor should not be running).
   /// ( Note that stopAllSubscriptions also calls Monitor.stop() )
   @visibleForTesting
   var monitorIsPaused = true;
@@ -142,6 +142,8 @@ class NotificationServiceImpl
   }
 
   Future<void> _startMonitor() async {
+    monitorIsPaused = false;
+
     if (_monitor != null && _monitor!.status == MonitorStatus.started) {
       _logger.finer(
           'monitor is already started for ${_atClient.getCurrentAtSign()}');
@@ -158,9 +160,6 @@ class NotificationServiceImpl
 
     try {
       await _monitor!.start(lastNotificationTime: lastNotificationTime);
-      if (_monitor!.status == MonitorStatus.started) {
-        monitorIsPaused = false;
-      }
     } catch (e) {
       _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
       return;
@@ -300,7 +299,7 @@ class NotificationServiceImpl
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
     Future.delayed(monitorRetryInterval, () async {
       monitorRestartQueued = false;
-      if (monitorIsPaused) { // maybe it's been paused since we requested the retry
+      if (monitorIsPaused) { // maybe it's been paused during the time since the retry was requested
         _logger.warning("monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
       } else {
         monitorRetryCallsToMonitorStart++;
