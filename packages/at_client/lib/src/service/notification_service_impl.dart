@@ -79,7 +79,7 @@ class NotificationServiceImpl
       return notificationServiceMap[atClient.getCurrentAtSign()]!;
     }
     final notificationService =
-    NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
+        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     // We used to call _init() at this point which would start the monitor, but now we
     // call _init() from the [subscribe] method
     notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
@@ -115,7 +115,7 @@ class NotificationServiceImpl
 
     _initializing = true;
     try {
-      _logger.info('${_atClient.getCurrentAtSign()} notification service _init()');
+      _logger.finer('${_atClient.getCurrentAtSign()} notification service _init()');
       await _startMonitor();
       _logger.finer(
           '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
@@ -123,9 +123,12 @@ class NotificationServiceImpl
         _connectivityListener = ConnectivityListener();
         _connectivityListener!.subscribe().listen((isConnected) {
           if (isConnected) {
-            _logger.finer(
-                '${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
-            _startMonitor();
+            if (monitorIsPaused) {
+              _logger.finer('${_atClient.getCurrentAtSign()} connectivity listener detected connection, but monitor is paused, so will not start monitor');
+            } else {
+              _logger.finer('${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
+              _startMonitor();
+            }
           } else {
             _logger.finer('lost network connectivity');
           }
@@ -205,7 +208,7 @@ class NotificationServiceImpl
 
   @override
   void stopAllSubscriptions() {
-    _logger.info('stopAllSubscriptions() called - setting monitorIsPaused to true');
+    _logger.finer('stopAllSubscriptions() called - setting monitorIsPaused to true');
     monitorIsPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
@@ -359,8 +362,8 @@ class NotificationServiceImpl
         return notificationResult;
       } else {
         // no wait? no await
-        _waitForAndHandleFinalNotificationSendStatus(
-            notificationParams, notificationResult, onSuccess, onError);
+        unawaited(_waitForAndHandleFinalNotificationSendStatus(
+            notificationParams, notificationResult, onSuccess, onError));
         return notificationResult;
       }
     }
@@ -419,7 +422,7 @@ class NotificationServiceImpl
   @override
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
-    _logger.info('subscribe(regex: $regex, shouldDecrypt: $shouldDecrypt');
+    _logger.finer('subscribe(regex: $regex, shouldDecrypt: $shouldDecrypt');
     regex ??= emptyRegex;
     var notificationConfig = NotificationConfig()
       ..regex = regex
@@ -453,7 +456,7 @@ class NotificationServiceImpl
     if (regex == 'statsNotification') {
       Future.delayed(Duration(seconds: 30), () async => _init());
     } else {
-      Future.delayed(Duration(milliseconds: 5), () async => _init());
+      _init();
     }
     return atNotificationStream.stream as Stream<AtNotification>;
   }

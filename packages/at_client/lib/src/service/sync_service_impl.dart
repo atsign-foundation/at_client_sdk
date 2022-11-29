@@ -654,7 +654,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.severe('exception in isInSync $cause');
       throw AtClientException.message(e.toString());
     } finally {
-      remoteSecondary.atLookUp.close();
+      unawaited(remoteSecondary.atLookUp.close());
     }
   }
 
