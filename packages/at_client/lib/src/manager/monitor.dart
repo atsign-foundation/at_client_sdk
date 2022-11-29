@@ -290,10 +290,13 @@ class Monitor {
 
   ///Returns the response of the monitor verb queue.
   @visibleForTesting
-  Future<String> getQueueResponse({int maxWaitTimeInMills = 6000}) async {
+  Future<String> getQueueResponse({int maxWaitTimeInMillis = 30000}) async {
     dynamic monitorResponse;
-    //waits for 30 seconds
-    for (var i = 0; i < maxWaitTimeInMills; i++) {
+
+    var checkDelayMillis = 5;
+    var checkDelayDuration = Duration(milliseconds: checkDelayMillis);
+    var checkCount = maxWaitTimeInMillis / checkDelayMillis;
+    for (var i = 0; i < checkCount; i++) {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
@@ -301,11 +304,11 @@ class Monitor {
             .parse(_monitorVerbResponseQueue.removeFirst());
         break;
       }
-      await Future.delayed(Duration(milliseconds: 5));
+      await Future.delayed(checkDelayDuration);
     }
     if (monitorResponse == null) {
       throw AtTimeoutException(
-          'Waited for ${5 * maxWaitTimeInMills} milliseconds and no response received');
+          'Waited for $maxWaitTimeInMillis milliseconds and no response received');
     }
     // If monitor response contains error, return error
     if (monitorResponse.isError) {
