@@ -577,7 +577,7 @@ void main() {
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
 
-      expect(() async => await monitor.getQueueResponse(maxWaitTimeInMills: 2),
+      expect(() async => await monitor.getQueueResponse(maxWaitTimeInMillis: 10),
           throwsA(predicate((dynamic e) => e is AtTimeoutException)));
     });
 
@@ -616,7 +616,7 @@ void main() {
       monitor.addMonitorResponseToQueue(
           'error: AT0003 - Invalid syntax exception');
 
-      expect(() async => await monitor.getQueueResponse(maxWaitTimeInMills: 2),
+      expect(() async => await monitor.getQueueResponse(maxWaitTimeInMillis: 10),
           throwsA(predicate((dynamic e) => e is AtClientException)));
     });
   });
