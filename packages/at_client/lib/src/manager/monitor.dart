@@ -288,15 +288,12 @@ class Monitor {
     return outboundConnection;
   }
 
-  /// Returns the response of the monitor verb queue.
+  ///Returns the response of the monitor verb queue.
   @visibleForTesting
-  Future<String> getQueueResponse({int maxWaitTimeInMillis = 30000}) async {
+  Future<String> getQueueResponse({int maxWaitTimeInMills = 6000}) async {
     dynamic monitorResponse;
-
-    var checkDelayMillis = 5;
-    var checkDelayDuration = Duration(milliseconds: checkDelayMillis);
-    var checkCount = maxWaitTimeInMillis / checkDelayMillis;
-    for (var i = 0; i < checkCount; i++) {
+    //waits for 30 seconds
+    for (var i = 0; i < maxWaitTimeInMills; i++) {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
@@ -304,13 +301,12 @@ class Monitor {
             .parse(_monitorVerbResponseQueue.removeFirst());
         break;
       }
-      await Future.delayed(checkDelayDuration);
+      await Future.delayed(Duration(milliseconds: 5));
     }
     if (monitorResponse == null) {
       throw AtTimeoutException(
-          'Waited for ${5 * maxWaitTimeInMillis} milliseconds and no response received');
+          'Waited for ${5 * maxWaitTimeInMills} milliseconds and no response received');
     }
-    _logger.info(monitorResponse);
     // If monitor response contains error, return error
     if (monitorResponse.isError) {
       return '${monitorResponse.errorCode}: ${monitorResponse.errorDescription}';
@@ -358,12 +354,11 @@ class Monitor {
     _monitorConnection?.close();
     status = MonitorStatus.errored;
     // Pass monitor and error
-    // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
       _logger.info('Monitor error $e - calling the retryCallback');
       _retryCallBack();
     } else {
-      _logger.severe('Monitor error $e - but _keepAlive is false so monitor will NOT be restarted');
+      _logger.severe('Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
       _onError(e);
     }
   }
