@@ -9,7 +9,6 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
-import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -407,7 +406,7 @@ class EncryptionService {
   Future<void> _saveSharedKeyInLocal(
       String sharedKey, String sharedWith) async {
     var sharedWithUser = sharedWith.replaceFirst('@', '');
-    // Store the sharedKey for future retrival.
+    // Store the sharedKey for future retrieval.
     // Encrypt the sharedKey with currentAtSign Public key and store it.
     var currentAtSignPublicKey =
         await localSecondary!.getEncryptionPublicKey(currentAtSign!);

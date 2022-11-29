@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:at_client/src/telemetry/at_telemetry.dart';
+import 'package:meta/meta.dart';
 
 import '../../at_client.dart';
 
@@ -18,23 +18,32 @@ import '../../at_client.dart';
 /// how much data has been received over the network, the number of keystore operations, the
 /// number of sync operations, the number of entries synced to the server, the number synced
 /// from the server, etc etc etc
+@experimental
 class AtClientTelemetryService extends AtTelemetryService {
   final AtClient atClient;
+
   AtClientTelemetryService(this.atClient, {StreamController<AtTelemetryEvent>? controller}) :
         super(controller: controller) {
     atClient.telemetry = this;
   }
 
   final List<AtTelemetrySample> _samples = <AtTelemetrySample>[];
+
   @override
   Iterator<AtTelemetrySample> get samples => _samples.iterator;
 
   @override
-  Future<void> sample({String? name}) async {
+  Future<void> takeSample({String? sampleName}) async {
+    // TODO
+  }
+
+  @override
+  void addSample(AtTelemetrySample sample) {
     // TODO
   }
 }
 
+@experimental
 class AtClientTelemetryConsumer {
   final AtClientTelemetryService telemetry;
 

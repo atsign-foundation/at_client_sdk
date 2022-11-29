@@ -413,7 +413,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     List<KeyInfo> keyInfoList = [];
     int lastReceivedServerCommitId = localCommitId;
     while (serverCommitId > lastReceivedServerCommitId) {
-      _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "localCommitId":localCommitId});
+      _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "lastReceivedServerCommitId":lastReceivedServerCommitId});
 
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
@@ -442,7 +442,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
-        _sendTelemetry('_syncFromServer.forEachEntry.start', {"serverCommitEntry":serverCommitEntry});
+        _sendTelemetry(
+            '_syncFromServer.forEachEntry.start',
+            {
+              "atKey":serverCommitEntry['atKey'],
+              "operation":serverCommitEntry['operation'],
+              "commitId":serverCommitEntry['commitId'],
+            });
         if (serverCommitEntry['commitId'] is int) {
           lastReceivedServerCommitId = serverCommitEntry['commitId'];
         } else {
@@ -456,7 +462,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
-          _sendTelemetry('_syncFromServer.forEachEntry.end', keyInfo);
+          _sendTelemetry(
+              '_syncFromServer.forEachEntry.end',
+              {
+                'atKey': keyInfo.key,
+                'syncDirection': keyInfo.syncDirection,
+                'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
+              });
         } on Exception catch (e, stacktrace) {
           _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":stacktrace});
           _logger.severe(

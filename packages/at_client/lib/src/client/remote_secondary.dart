@@ -5,7 +5,6 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';

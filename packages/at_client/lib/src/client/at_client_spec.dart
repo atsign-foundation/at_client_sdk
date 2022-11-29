@@ -10,7 +10,6 @@ import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Interface for a client application that can communicate with a secondary server.

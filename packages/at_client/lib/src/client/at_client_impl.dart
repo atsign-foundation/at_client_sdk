@@ -22,7 +22,6 @@ import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
-import 'package:at_client/src/telemetry/at_telemetry.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';

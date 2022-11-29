@@ -1,6 +1,6 @@
 import 'package:at_client/src/listener/sync_progress_listener.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
-import 'package:at_client/src/telemetry/at_telemetry.dart';
+import 'package:at_commons/at_commons.dart';
 
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.

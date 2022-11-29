@@ -14,6 +14,13 @@ homepage: https://docs.atsign.com/
 environment:
   sdk: '>=2.12.0 <3.0.0'
 
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: packages/at_commons
+      ref: gkc-telemetry-v1-beta
+
 dependencies:
   path: ^1.8.2
   hive: ^2.0.4
