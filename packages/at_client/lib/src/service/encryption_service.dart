@@ -14,6 +14,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:meta/meta.dart';
 
 class EncryptionService {
   RemoteSecondary? remoteSecondary;
@@ -23,6 +24,9 @@ class EncryptionService {
   String? currentAtSign;
 
   var logger = AtSignLogger('EncryptionService');
+
+  @experimental
+  AtTelemetryService? telemetry;
 
   Future<String> encrypt(String? key, String value, String sharedWith) async {
     return EncryptionUtil.encryptValue(
@@ -404,7 +408,7 @@ class EncryptionService {
   Future<void> _saveSharedKeyInLocal(
       String sharedKey, String sharedWith) async {
     var sharedWithUser = sharedWith.replaceFirst('@', '');
-    // Store the sharedKey for future retrival.
+    // Store the sharedKey for future retrieval.
     // Encrypt the sharedKey with currentAtSign Public key and store it.
     var currentAtSignPublicKey =
         await localSecondary!.getEncryptionPublicKey(currentAtSign!);

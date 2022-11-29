@@ -30,6 +30,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
 
+  /// utility method to reduce code verbosity in this file
+  /// Does nothing if a telemetryService has not been injected
+  void _sendTelemetry(String name, dynamic value) {
+    _atClient.telemetry?.controller.sink.add(SyncTelemetryEvent(name, value));
+  }
+
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
@@ -204,7 +210,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _syncInProgress = true;
       int serverCommitId = await _getServerCommitId();
       final localCommitIdBeforeSync = await _getLocalCommitId();
+
+      // Hint for the casual reader - main sync algorithm is in [syncInternal]
       final syncResult = await syncInternal(serverCommitId, syncRequest);
+
       _syncComplete(syncRequest);
       syncProgress.syncStatus = syncResult.syncStatus;
       syncProgress.keyInfoList = syncResult.keyInfoList;
@@ -327,14 +336,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (serverCommitId > localCommitId) {
       _logger.finer(
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
+
+      // Hint to casual reader: This is where we sync new changes from the server to this this client
       final keyInfoList = await _syncFromServer(
           serverCommitId, localCommitId, unCommittedEntries);
+
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
       _logger.finer(
           'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
+
+      // Hint to casual reader: This is where we sync new changes from this client to the server
       final keyInfoList = await _syncToRemote(unCommittedEntries);
+
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     syncResult.lastSyncedOn = DateTime.now().toUtc();
@@ -397,6 +412,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     List<KeyInfo> keyInfoList = [];
     int lastReceivedServerCommitId = localCommitId;
     while (serverCommitId > lastReceivedServerCommitId) {
+      _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "lastReceivedServerCommitId":lastReceivedServerCommitId});
+
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
@@ -424,6 +441,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
+        _sendTelemetry(
+            '_syncFromServer.forEachEntry.start',
+            {
+              "atKey":serverCommitEntry['atKey'],
+              "operation":serverCommitEntry['operation'],
+              "commitId":serverCommitEntry['commitId'],
+            });
         if (serverCommitEntry['commitId'] is int) {
           lastReceivedServerCommitId = serverCommitEntry['commitId'];
         } else {
@@ -437,10 +461,19 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
+          _sendTelemetry(
+              '_syncFromServer.forEachEntry.end',
+              {
+                'atKey': keyInfo.key,
+                'syncDirection': keyInfo.syncDirection,
+                'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
+              });
         } on Exception catch (e, stacktrace) {
+          _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":stacktrace});
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
         } on Error catch (e, stacktrace) {
+          _sendTelemetry('_syncFromServer.forEachEntry.error', {"e":e,"st":stacktrace});
           _logger.severe(
               'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
         }

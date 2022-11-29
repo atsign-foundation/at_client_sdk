@@ -357,12 +357,11 @@ class Monitor {
     _monitorConnection?.close();
     status = MonitorStatus.errored;
     // Pass monitor and error
-    // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
       _logger.info('Monitor error $e - calling the retryCallback');
       _retryCallBack();
     } else {
-      _logger.severe('Monitor error $e - but _keepAlive is false so monitor will NOT be restarted');
+      _logger.severe('Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
       _onError(e);
     }
   }

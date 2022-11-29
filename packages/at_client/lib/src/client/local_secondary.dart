@@ -6,6 +6,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:meta/meta.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
 /// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
@@ -23,6 +24,9 @@ class LocalSecondary implements Secondary {
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();
   }
+
+  @experimental
+  AtTelemetryService? telemetry;
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.
