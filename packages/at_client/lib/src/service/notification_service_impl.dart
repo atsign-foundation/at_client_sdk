@@ -121,14 +121,13 @@ class NotificationServiceImpl
           '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
       if (_connectivityListener == null) {
         _connectivityListener = ConnectivityListener();
+        // Note that this subscription is cancelled by stopAllSubscriptions(), so we don't need to worry
+        // about this subscription accidentally starting the monitor after it has been intentionally stopped,
+        // for example by switching atSigns
         _connectivityListener!.subscribe().listen((isConnected) {
           if (isConnected) {
-            if (monitorIsPaused) {
-              _logger.finer('${_atClient.getCurrentAtSign()} connectivity listener detected connection, but monitor is paused, so will not start monitor');
-            } else {
-              _logger.finer('${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
-              _startMonitor();
-            }
+            _logger.finer('${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
+            _startMonitor();
           } else {
             _logger.finer('lost network connectivity');
           }
