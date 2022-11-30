@@ -813,6 +813,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void setOnDone(Function onDone) {
     this.onDone = onDone;
   }
+
+  @visibleForTesting
+  int syncProgressListenerSize(){
+    return _syncProgressListeners.length;
+  }
 }
 
 class KeyInfo {
@@ -829,3 +834,5 @@ class KeyInfo {
 }
 
 enum SyncDirection { localToRemote, remoteToLocal }
+
+
