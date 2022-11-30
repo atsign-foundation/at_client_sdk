@@ -1,4 +1,5 @@
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
+import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
@@ -6,16 +7,17 @@ import 'dart:convert';
 
 import 'package:at_commons/at_commons.dart';
 
-class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
-  late String? keyId = Uuid().v4();
-  late String collectionName = runtimeType.toString();
+class AtCollectionImpl<T extends AtCollectionModel>
+    implements AtCollectionSpec {
+  late String collectionName;
   final _logger = AtSignLogger('AtCollectionImpl');
 
-  AtCollectionImpl({required this.collectionName});
+  init(String collectionName) {
+    this.collectionName = collectionName;
+  }
 
   @override
-  Future<List<AtCollectionModel>> getAllData(
-      AtCollectionModel Function(String p1) convert) {
+  Future<List<T>> getAllData() {
     /// list = [];
     /// dataMap = getAllDataWithKeys()
     ///
@@ -47,7 +49,7 @@ class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
   }
 
   @override
-  Future<Map<String, AtCollectionModel>> getSharedWithList(String keyId) {
+  Future<List<String>> getSharedWithList() {
     /// Step 1:
     /// keyExistsInLocal = check if self key exists
     ///
@@ -55,9 +57,9 @@ class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
     ///     throw KeyNotFoundException
     ///
     /// (keyExistsInLocal == true)
-    /// fetch all keys and save data in a map
+    /// fetch all shared with list
     ///
-    /// return map
+    /// return list
     ///
     // TODO: implement getSharedWithList
     throw UnimplementedError();
@@ -70,7 +72,7 @@ class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
   }
 
   @override
-  Future<AtCollectionModel?> save(T value, {int? expiryTime}) {
+  Future<T?> save({int? expiryTime}) async {
     ///
     /// check if T.keyId already exists
     /// keyExistsInLocal = check if self key exists
@@ -94,7 +96,7 @@ class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
   }
 
   @override
-  Future<Map<String, AtDataStatus>> delete(T value) {
+  Future<Map<String, AtDataStatus>> delete() {
     /// create intent
     /// Step 1: delete self key
     ///
@@ -125,10 +127,44 @@ class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
     throw UnimplementedError();
   }
 
+  // Time complexity of share:
+  // ---------------------------
+  // Awaiting on share is tricky. Time it takes for the share depends on following parameters:
+  // 1. Number of atsigns
+  // 2. Atsigns whose publick keys are already cached vs the ones requiring a look on remote secondary
+  // 3. Socket issues that might result in delays (TCP/IP) - Late but happens
+  // 4. Network timeout - Late and does not happen
+
+  // alternate return types
+  //  Map<String, AtException>
+  //  List<ShareFailure>
+  //  List<AllStatusObject>
+
+  // Future<void> share(data, List<String> atSigns, ResponseStream stream) {
+
+  // 	N
+
+  // 	try {
+  // 	i = 1.. N
+  // 		stream.convey(AtSign i successful);
+
+  // 	catch() {
+  // 		stream.convey(AtSign i fail);
+  // 	}
+  // }
+
   /// accepting keyId instead of model to avoid conflict between saved and unsaved key
+  ///
+  /// TODO: change return type of [share] in specs and imp file
+  /// return type of stream based share approach
+  /// class ShareOperation {
+  ///     ResponseStream<AtDataStatus> stream;
+  ///     ShareOperationSummary summary;
+  ///     stop();
+  /// }
+
   @override
-  Future<Map<String, AtDataStatus>> share(
-      String keyId, List<String> atSignsList) {
+  Future<Map<String, AtDataStatus>> share(List<String> atSignsList) {
     /// create intent
     /// Map<String, AtDataStatus> atDataStatus = {};
 
@@ -136,6 +172,7 @@ class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
     /// keyExistsInLocal = check if self key exists in hive
     ///
     /// (keyExistsInLocal == false)
+    ///  delete intent
     ///     throw KeyNotFoundException
     ///
 
@@ -162,7 +199,40 @@ class AtCollectionImpl<T extends AtCollectionModel> extends AtCollectionModel {
   }
 
   @override
-  Future<Map<String, AtDataStatus>> update(T value) {
+  Future<Map<String, AtDataStatus>> unShare(
+      String keyId, List<String> atSignsList) {
+    /// create intent
+    /// Map<String, AtDataStatus> atDataStatus = {};
+
+    /// Step 1:
+    /// keyExistsInLocal = check if self key exists in hive
+    ///
+    /// (keyExistsInLocal == false)
+    ///     throw KeyNotFoundException
+    ///
+
+    /// if(keyExistsInLocal)
+    // Step 2: Fetch all shared keys and filter out the ones in atSignsList
+
+    /// step 3:
+    ///
+    /// for(sharedKey in filteredSharedKeys) {
+    ///         atClient.delete(sharedKey, value);
+    ///         atDataStatus.put(atSign, sharedKey, true);
+    ///         }
+    ///         catch(e){
+    ///          atDataStatus.put(atSign, key, e, false);
+    /// }
+    ///
+    /// delete intent
+    /// returns atDataStatus
+
+    // TODO: implement share
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, AtDataStatus>> update() {
     /// create intent
     /// Step 1: update self key
     ///
