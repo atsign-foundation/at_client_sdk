@@ -1,6 +1,7 @@
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
@@ -9,15 +10,10 @@ import 'package:at_commons/at_commons.dart';
 
 class AtCollectionImpl<T extends AtCollectionModel>
     implements AtCollectionSpec {
-  late String collectionName;
   final _logger = AtSignLogger('AtCollectionImpl');
 
-  init(String collectionName) {
-    this.collectionName = collectionName;
-  }
-
   @override
-  Future<List<T>> getAllData() {
+  Future<List<T>> getAllData() async {
     /// list = [];
     /// dataMap = getAllDataWithKeys()
     ///
@@ -73,7 +69,13 @@ class AtCollectionImpl<T extends AtCollectionModel>
 
   @override
   Future<T?> save({int? expiryTime}) async {
-    ///
+    // TODO: add intent
+    // var jsonModel = toJson();
+    // print('expiryTime : ${jsonModel['keyId']}');
+    // String keyWithCollectionName = jsonModel['keyId'] + '.$this.';
+
+    // AtKey atKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
+
     /// check if T.keyId already exists
     /// keyExistsInLocal = check if self key exists
     ///
@@ -260,12 +262,6 @@ class AtCollectionImpl<T extends AtCollectionModel>
     /// return atDataStatus
 
     // TODO: implement update
-    throw UnimplementedError();
-  }
-
-  @override
-  Map<String, dynamic> toJson() {
-    // TODO: implement toJson
     throw UnimplementedError();
   }
 
