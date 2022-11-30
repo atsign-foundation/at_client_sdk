@@ -219,6 +219,7 @@ class AtClientImpl implements AtClient {
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
+    // ignore: no_leading_underscores_for_local_identifiers
     var _deleteResult = _delete(atKey.key!,
         sharedWith: atKey.sharedWith,
         sharedBy: atKey.sharedBy,
@@ -772,12 +773,12 @@ class AtClientImpl implements AtClient {
       throw Exception('json decode exception in download file ${e.toString()}');
     }
     var downloadedFiles = <File>[];
-    var fileDownloadReponse = await FileTransferService()
+    var fileDownloadResponse = await FileTransferService()
         .downloadFromFileBin(fileTransferObject, downloadPath);
-    if (fileDownloadReponse.isError) {
+    if (fileDownloadResponse.isError) {
       throw Exception('download fail');
     }
-    var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
+    var encryptedFileList = Directory(fileDownloadResponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(
@@ -793,7 +794,7 @@ class AtClientImpl implements AtClient {
         decryptedFile.deleteSync();
       }
       // deleting temp directory
-      Directory(fileDownloadReponse.filePath!).deleteSync(recursive: true);
+      Directory(fileDownloadResponse.filePath!).deleteSync(recursive: true);
       return downloadedFiles;
     } catch (e) {
       print('error in downloadFile: $e');
