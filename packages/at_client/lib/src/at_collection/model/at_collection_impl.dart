@@ -165,6 +165,26 @@ class AtCollectionImpl<T extends AtCollectionModel>
   ///     ShareOperationSummary summary;
   ///     stop();
   /// }
+  
+  /// For eg.
+  /// var _newAtShareOperation = myModelAtCollectionImpl.share(data, ['@kevin', '@colin']);
+  ///  _newAtShareOperation.atShareOperationStream.listen((atDataStatusEvent) {
+  ///    /// current operation
+  ///    print("${atDataStatusEvent.atSign}: ${atDataStatusEvent.status}");
+
+  ///    /// to check if it is completed
+  ///    if(_newAtShareOperation.atShareOperationStatus == AtShareOperationStatus.COMPLETE){
+  ///      /// complete
+  ///    }
+
+  ///    /// all data till now
+  ///    for(var _data in _newAtShareOperation.allData){
+  ///      print("${_data.atSign}: ${_data.status}");
+  ///    }
+  ///  });
+  /// 
+  ///  // to stop further shares
+  ///  _newAtShareOperation.stop();
 
   @override
   AtShareOperation share(dynamic data, List<String> atSignsList) {
@@ -374,13 +394,13 @@ class AtCollectionImpl<T extends AtCollectionModel>
 class AtDataStatus {
   late String atSign;
   late String key;
-  late bool status;
+  late bool complete;
   Exception? exception;
 
   AtDataStatus({
     required this.atSign,
     required this.key,
-    required this.status,
+    required this.complete,
     this.exception,
   });
 }

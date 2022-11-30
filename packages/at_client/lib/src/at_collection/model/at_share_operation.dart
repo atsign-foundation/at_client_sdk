@@ -55,7 +55,7 @@ class AtShareOperation {
         emitFromStream(AtDataStatus(
             atSign: atSign,
             key: atKey.key!,
-            status: _res,
+            complete: _res,
             exception: null,
           ),
         );
@@ -64,7 +64,7 @@ class AtShareOperation {
         emitFromStream(AtDataStatus(
             atSign: atSign,
             key: atKey.key!,
-            status: false,
+            complete: false,
             exception: e as Exception,
           ),
         );
@@ -84,7 +84,7 @@ class AtShareOperation {
 }
 
 enum AtShareOperationStatus {
-  PENDING,
+  INPROGRESS,
   COMPLETE,
   STOPPED,
 }
