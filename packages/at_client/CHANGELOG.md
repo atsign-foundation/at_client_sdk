@@ -1,3 +1,13 @@
+## 3.0.46
+- fix: Ensure that we handle any and all exceptions related to sending heartbeat request
+- feat: Made NotificationServiceImpl's retry delay into a public instance variable, so it can be set by application code
+- feat: Changed NotificationServiceImpl's retry delay (from when monitorRetry() is called to when Monitor.start() is called) from 15 seconds to 5 seconds
+- fix: Fixed a bug where client could 'miss' notifications while starting up
+- fix: Ensure that exceptions related to sending heartbeat request are always caught correctly
+- feat: Added experimental telemetry feature
+## 3.0.45
+- fix: Fix sync running into infinite loop when invalid keys does not sync into local storage
+- fix: Upgrade persistence secondary to version 3.0.43 to fix empty batch request being sent to cloud secondary
 ## 3.0.44
 - feat: Introduce fetch method to NotificationService to fetch the notification using id.
 - fix: Replace latestNotificationId with local key to store/fetch last received notification

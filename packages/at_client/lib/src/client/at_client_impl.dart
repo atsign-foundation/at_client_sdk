@@ -53,6 +53,19 @@ class AtClientImpl implements AtClient {
 
   EncryptionService? _encryptionService;
 
+  @experimental
+  AtTelemetryService? _telemetry;
+
+  @override
+  @experimental
+  set telemetry(AtTelemetryService? telemetryService) {
+    _telemetry = telemetryService;
+    _cascadeSetTelemetryService();
+  }
+  @override
+  @experimental
+  AtTelemetryService? get telemetry => _telemetry;
+
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
@@ -126,6 +139,17 @@ class AtClientImpl implements AtClient {
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
     _encryptionService!.localSecondary = _localSecondary;
+
+    _cascadeSetTelemetryService();
+  }
+
+  /// Does nothing unless a telemetry service has been injected
+  void _cascadeSetTelemetryService() {
+    if (telemetry != null) {
+      _encryptionService?.telemetry = telemetry;
+      _localSecondary?.telemetry = telemetry;
+      _remoteSecondary?.telemetry = telemetry;
+    }
   }
 
   Secondary getSecondary() {
@@ -190,16 +214,19 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key":atKey}));
     var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic! : false;
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
     var isNamespaceAware =
         atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
-    return _delete(atKey.key!,
+    var _deleteResult = _delete(atKey.key!,
         sharedWith: atKey.sharedWith,
         sharedBy: atKey.sharedBy,
         isPublic: isPublic,
         isCached: isCached,
         namespaceAware: isNamespaceAware);
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete', {"key":atKey, "_deleteResult":_deleteResult}));
+    return _deleteResult;
   }
 
   Future<bool> _delete(String key,
@@ -319,6 +346,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put called', {"key":atKey}));
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -331,6 +359,7 @@ class AtClientImpl implements AtClient {
     if (value is List<int>) {
       atResponse = await putBinary(atKey, value);
     }
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put complete', {"atKey":atKey}));
     return atResponse.response.isNotEmpty;
   }
 

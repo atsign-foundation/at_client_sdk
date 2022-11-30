@@ -10,6 +10,7 @@ linter:
     - camel_case_types
     - unnecessary_string_interpolations
     - await_only_futures
+    - unawaited_futures
 
 analyzer:
 #   exclude:
