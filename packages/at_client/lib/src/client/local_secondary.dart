@@ -132,23 +132,7 @@ class LocalSecondary implements Secondary {
 
   Future<String> _delete(DeleteVerbBuilder builder) async {
     try {
-      var deleteKey = '';
-      if (builder.isCached) {
-        deleteKey += 'cached:';
-      }
-      if (builder.isPublic) {
-        deleteKey += 'public:';
-      }
-      if (builder.sharedWith != null && builder.sharedWith!.isNotEmpty) {
-        deleteKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
-      }
-      if (builder.sharedBy != null && builder.sharedBy!.isNotEmpty) {
-        deleteKey +=
-            '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy!)}';
-      } else {
-        deleteKey += builder.atKey!;
-      }
-      var deleteResult = await keyStore!.remove(deleteKey);
+      var deleteResult = await keyStore!.remove(builder.buildKey());
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
