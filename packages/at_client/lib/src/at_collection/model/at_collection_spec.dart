@@ -1,5 +1,6 @@
 import 'package:at_client/src/at_collection/model/at_collection_impl.dart';
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
+import 'package:at_client/src/at_collection/model/at_share_operation.dart';
 
 abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// Used to save the model in a self key
@@ -44,7 +45,7 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// returns Map<String, AtDataStatus> where String is the atSign and AtDataStatus has the status of share
   ///
   /// throws [exception] if [T.keyId] is null
-  Future<Map<String, AtDataStatus>> share(List<String> atSignsList);
+  AtShareOperation share(dynamic data, List<String> atSignsList);
 
   /// deletes shared keys with [atSignsList]
   Future<Map<String, AtDataStatus>> unShare(

@@ -1,5 +1,6 @@
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
+import 'package:at_client/src/at_collection/model/at_share_operation.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:at_utils/at_logger.dart';
@@ -166,7 +167,10 @@ class AtCollectionImpl<T extends AtCollectionModel>
   /// }
 
   @override
-  Future<Map<String, AtDataStatus>> share(List<String> atSignsList) {
+  AtShareOperation share(dynamic data, List<String> atSignsList) {
+
+    return AtShareOperation(data: data, atSignsList: atSignsList);
+
     /// create intent
     /// Map<String, AtDataStatus> atDataStatus = {};
 
@@ -371,5 +375,12 @@ class AtDataStatus {
   late String atSign;
   late String key;
   late bool status;
-  AtClientException? exception;
+  Exception? exception;
+
+  AtDataStatus({
+    required this.atSign,
+    required this.key,
+    required this.status,
+    this.exception,
+  });
 }
