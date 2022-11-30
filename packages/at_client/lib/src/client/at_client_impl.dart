@@ -225,7 +225,8 @@ class AtClientImpl implements AtClient {
         sharedBy: atKey.sharedBy,
         isPublic: isPublic,
         isCached: isCached,
-        namespaceAware: isNamespaceAware);
+        namespaceAware: isNamespaceAware,
+        isLocal: atKey.isLocal);
     _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete', {"key":atKey, "_deleteResult":_deleteResult}));
     return _deleteResult;
   }
@@ -235,7 +236,8 @@ class AtClientImpl implements AtClient {
       String? sharedBy,
       bool isPublic = false,
       bool isCached = false,
-      bool namespaceAware = true}) async {
+      bool namespaceAware = true,
+      bool isLocal = false}) async {
     String keyWithNamespace;
     if (namespaceAware) {
       keyWithNamespace = _getKeyWithNamespace(key);
@@ -244,6 +246,7 @@ class AtClientImpl implements AtClient {
     }
     sharedBy ??= currentAtSign;
     var builder = DeleteVerbBuilder()
+      ..isLocal = isLocal
       ..isCached = isCached
       ..isPublic = isPublic
       ..sharedWith = sharedWith
