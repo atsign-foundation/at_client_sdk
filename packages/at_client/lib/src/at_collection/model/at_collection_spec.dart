@@ -23,6 +23,11 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// we assume all data with same [T.keyId] are same
   Future<List<T>> getAllData();
 
+  /// returns [T] by finding the value by [key]
+  /// returns null if value could not be fetched
+  /// throws KeyNotFoundException if key does not exists
+  Future<T?> getDataById(String keyId, {String sharedWith});
+
   /// deletes all the keys associated with [T.keyId]
   ///
   /// e.g alice's self key - 1234.collection@alice

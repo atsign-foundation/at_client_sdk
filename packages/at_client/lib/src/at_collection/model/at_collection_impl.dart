@@ -45,6 +45,22 @@ class AtCollectionImpl<T extends AtCollectionModel>
     return dataList;
   }
 
+  @override
+  Future<T> getDataById(String id, {String? sharedWith}) async {
+    AtKey selKey = AtCollectionUtil.formAtKey(
+      key: '$id.$collectionName',
+      sharedWith: sharedWith,
+    );
+
+    try {
+      var atValue = await AtClientManager.getInstance().atClient.get(selKey);
+      var modelData = convert(atValue.value);
+      return modelData;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<Map<String, AtCollectionModel>> getAllDataWithKeys(
       AtCollectionModel Function(String p1) convert) {
     /// fetchStatus = {};
@@ -91,10 +107,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
 
   @override
   Future<bool> save(AtCollectionModel model, {int? expiryTime}) async {
-    // TODO: add intent
-
     String keyWithCollectionName = '${model.keyId}.${model.collectionName}';
-    model.collectionName = keyWithCollectionName;
 
     AtKey selKey = AtCollectionUtil.formAtKey(
       key: keyWithCollectionName,
