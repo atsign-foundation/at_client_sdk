@@ -6,7 +6,7 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// a unique ID is generated and stored in [T.keyId]
   /// returns the model,[T] if operation was successful else return null
   /// [expiryTime] Represents the time in milliseconds beyond which the key expires
-  Future<T?> save({int? expiryTime});
+  Future<T?> save(T model, {int? expiryTime});
 
   /// updates the [T] data using [T.keyId] as identifier
   /// if [T.keyId] is null, throws [Exception]

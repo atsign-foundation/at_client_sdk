@@ -12,6 +12,10 @@ class AtCollectionImpl<T extends AtCollectionModel>
     implements AtCollectionSpec {
   final _logger = AtSignLogger('AtCollectionImpl');
 
+  late String collectionName;
+
+  AtCollectionImpl({required this.collectionName});
+
   @override
   Future<List<T>> getAllData() async {
     /// list = [];
@@ -68,7 +72,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
   }
 
   @override
-  Future<T?> save({int? expiryTime}) async {
+  Future<T?> save(AtCollectionModel model, {int? expiryTime}) async {
     // TODO: add intent
     // var jsonModel = toJson();
     // print('expiryTime : ${jsonModel['keyId']}');
