@@ -12,7 +12,8 @@ class AtCollectionUtil {
       ..metadata = Metadata()
       ..metadata!.ttr = -1
       ..sharedWith = sharedWith
-      ..metadata!.ttl = ttl
+      // ..metadata!.ttl = ttl
+      ..metadata!.ttl = 172800000 // TODO: remove after testing
       ..sharedBy = AtClientManager.getInstance().atClient.getCurrentAtSign();
   }
 }

@@ -4,16 +4,16 @@ import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// Used to save the model in a self key
   /// a unique ID is generated and stored in [T.keyId]
-  /// returns the model,[T] if operation was successful else return null
+  /// returns true if operation was successful else returns false
   /// [expiryTime] Represents the time in milliseconds beyond which the key expires
-  Future<T?> save({int? expiryTime});
+  Future<bool> save(T model, {int? expiryTime});
 
   /// updates the [T] data using [T.keyId] as identifier
   /// if [T.keyId] is null, throws [Exception]
   ///
   /// Also, updates all the associated data with [T.keyId] if it has been shared with mutiple atSigns
   /// returns false if failes to update any key, self or shared.
-  Future<Map<String, AtDataStatus>> update();
+  Future<Map<String, AtDataStatus>> update(T model);
 
   /// returns all unique data for [T.collectionName]
   /// unique data is identified as the self keys which are not shared with any atSign
