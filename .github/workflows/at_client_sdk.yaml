@@ -183,10 +183,14 @@ jobs:
         run: dart test --concurrency=1 --coverage="coverage"
 
       - name: Convert coverage to LCOV format
+        # Needs tests to have run, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=end2end_test_coverage.lcov --report-on=lib
 
       - name: Upload coverage to Codecov
+        # Needs LCOV report to upload, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
         uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
         with:
           file: tests/at_end2end_test/end2end_test_coverage.lcov
