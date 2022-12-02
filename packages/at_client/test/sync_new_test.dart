@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:crypton/crypton.dart';
@@ -19,7 +22,7 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {
 
   @override
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
-    return 'success';
+    return 'data:success';
   }
 }
 
@@ -52,6 +55,10 @@ class MockNetworkUtil extends Mock implements NetworkUtil {
     return Future.value(true);
   }
 }
+
+class FakeSyncVerbBuilder extends Fake implements SyncVerbBuilder {}
+
+class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
 ///Notes:
 /// Description of terminology used in the test cases:
@@ -205,7 +212,7 @@ void main() {
     /// 2. CommitLog should have a following entries in sequence as described below
     ///     a. Commit entry with CommitOp.Delete
     ///     b. CommitEntry with CommitOp.Update
-    
+
     test('Verify uncommitted queue on re-creation of a public key', () async {
       //------------Setup---------------------------------
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
@@ -941,8 +948,8 @@ void main() {
   });
 
   group(
-      'Tests to validate how the client processes that uncommitted queue (while sending updates to server) - e.g. how is the queue ordered, how is it de-duped, etc',
-      () {
+      'Tests to validate how the client processes that uncommitted queue (while sending updates to server)'
+      'e.g. how is the queue ordered, how is it de-duped, etc', () {
     setUpAll(() async =>
         await TestResources.setupLocalStorage(atsign, enableCommitId: false));
 
@@ -967,8 +974,7 @@ void main() {
         () async {
       //----------------------------setup---------------------------
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
-      int? currentSeqnum =
-          TestResources.commitLog?.lastCommittedSequenceNumber();
+      int? preOpSeqNum = TestResources.commitLog?.lastCommittedSequenceNumber();
       List<String> keys = [];
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -989,7 +995,7 @@ void main() {
       //-----------------------operation------------------------------
       List<CommitEntry> changes = await SyncUtil(
               atCommitLog: TestResources.commitLog)
-          .getChangesSinceLastCommit(currentSeqnum, 'test_key', atSign: atsign);
+          .getChangesSinceLastCommit(preOpSeqNum, 'test_key', atSign: atsign);
       //----------------------assertion-------------------------------
       for (int i = 0; i < 5; i++) {
         //assert that the order of changes received and the local list of keys is the same
@@ -1013,7 +1019,7 @@ void main() {
     test(
         'Verify that for a same key with many updates only the latest entry is selected from uncommitted queue to be sent to the server',
         () async {
-      //------------setup---------------------------------
+      // //------------setup---------------------------------
       // HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       // //capture hive seq_num before put to get changes after this num
       // int? currentSeqnum =
@@ -1091,12 +1097,15 @@ void main() {
       //----------------------------------setup---------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(atsign));
+
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
       //re-initialize sync util using the local commit log for unit tests
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
@@ -1112,36 +1121,138 @@ void main() {
       int serverCommitId = -1;
       //-------------------------------operation--------------------------------
       SyncResult result = await syncService.syncInternal(
-          serverCommitId,
-          SyncRequest()
-            ..result = SyncResult()
-            ..requestedOn);
+          serverCommitId, SyncRequest()..result = SyncResult());
       //------------------------------assertion---------------------------------
       AtData? atData = await TestResources.getHiveKeyStore(atsign)?.get(key);
       expect(atData?.data, 'test_data1');
     });
     tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
+
   group(
       'tests related to sending uncommitted entries to server via the batch verb',
       () {
-    test('A test to verify batch requests does not entries with commitId', () {
-      /// Preconditions:
-      /// 1. The local commitId is at commitId 5 and hive_seq is also at 5
-      /// 2. There are 3 uncommitted entries - CommitOp.Update - 3.
-      ///    The hive_seq is for above 3 uncommitted entries is 6,7,8
-      /// 3. ServerCommitId is at 7
-      ///
-      /// Operation
-      /// 1. Initiate sync
-      ///
-      /// Assertions
-      /// 1. The entries from server should be created at hive_seq 9,10 and 11
-      /// 2. When fetching uncommitted entries only entries with hive_seq 6,7,8 should be returned.
+    setUpAll(() async =>
+        await TestResources.setupLocalStorage(atsign, enableCommitId: false));
+
+    AtClient mockAtClient = MockAtClient();
+    AtClientManager mockAtClientManager = MockAtClientManager();
+    NotificationServiceImpl mockNotificationService =
+        MockNotificationServiceImpl();
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+    /// Preconditions:
+    /// 1. The local commitId is 5 and hive_seq is also at 5
+    /// 2. There are 3 uncommitted entries - CommitOp.Update - 3.
+    ///    The hive_seq for above 3 uncommitted entries is 6,7,8
+    /// 3. ServerCommitId is at 7
+    ///
+    /// Operation
+    /// 1. Initiate sync
+    ///
+    /// Assertions
+    /// 1. The entries from server should be created at hive_seq 9,10 and 11
+    /// 2. When fetching uncommitted entries only entries with hive_seq 6,7,8 should be returned.
+    test('A test to verify batch requests does not sync entries with commitId',
+        () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:${jsonEncode([
+                    {
+                      "atKey": "public:twitter.wavi@alice",
+                      "value": "twitter.alice",
+                      "metadata": {
+                        "createdAt": "2021-04-08 12:59:19.251",
+                        "updatedAt": "2021-04-08 12:59:19.251"
+                      },
+                      "commitId": 6,
+                      "operation": "+"
+                    },
+                    {
+                      "atKey": "public:instagram.wavi@alice",
+                      "value": "instagram.alice",
+                      "metadata": {
+                        "createdAt": "2021-04-08 07:39:27.616Z",
+                        "updatedAt": "2022-06-30 09:41:59.264Z"
+                      },
+                      "commitId": 7,
+                      "operation": "*"
+                    }
+                  ])}'));
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      //capture hive seq_num before operation
+      int? preOpSeqNum = TestResources.commitLog?.lastCommittedSequenceNumber();
+      int count = 0;
+      //------------------preconditions setup-----------------------
+      //create 5 random keys of types public/shared/self
+      await localSecondary.putValue(
+          'public:test_key0.group3test1@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key1.group3test1@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test1@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key4.group3test1@bob', 'dummy');
+      await localSecondary.putValue('test_key4.group3test1@bob', 'dummyData');
+      //assign commitIds to commit entries created above. to simulate sync
+      for (var commitEntry in (await syncService.syncUtil
+          .getChangesSinceLastCommit(preOpSeqNum, 'group3test1',
+              atSign: atsign))) {
+        await syncService.syncUtil
+            .updateCommitEntry(commitEntry, ++count, atsign);
+      }
+
+      //capture hive_seq_num before creating uncommitted entries again
+      preOpSeqNum =
+          syncService.syncUtil.atCommitLog?.lastCommittedSequenceNumber();
+      //create new uncommitted entries
+      await localSecondary.putValue(
+          'public:test_key0.group3test1@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key1.group3test1@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test1@bob', 'dummydata');
+      // capture uncommitted entries. Only these entries should be returned after sync
+      var preSyncUncommittedEntries = await syncService.syncUtil
+          .getChangesSinceLastCommit(preOpSeqNum, 'group3test1',
+              atSign: atsign);
+      //-------------------------------operation--------------------------------
+      SyncRequest syncRequest = SyncRequest()..result = SyncResult();
+      await syncService.syncInternal(7, syncRequest);
+      var postSyncUncommittedEntries = await syncService.syncUtil
+          .getChangesSinceLastCommit(preOpSeqNum, 'group3test1',
+              atSign: atsign);
+      //------------------------------assertion---------------------------------
+      //asserting that even though entries been synced from server, that does not affect the uncommitted entries
+      expect(postSyncUncommittedEntries, preSyncUncommittedEntries);
+      expect(postSyncUncommittedEntries.length, 3);
+      for (var commitEntry in postSyncUncommittedEntries) {
+        expect(commitEntry.commitId, null);
+      }
     });
+
+    ///***********************************************
+    ///Validations in the keystore do not allow invalid/malformed keys into the keystore
+    ///Hence assertion is not possible
+    ///skipping this test for now
+    ///************************************************
     test(
         'A test to verify invalid keys and cached keys are not added to batch request',
-        () {
+        () async {
       /// Preconditions:
       /// 1. The local commitId is at commitId 5
       /// 2. There are 2 uncommitted entries:
@@ -1153,25 +1264,115 @@ void main() {
       /// 1. Initiate sync
       ///
       /// Assertions
-      /// 1. The cached key from server should be sync
+      /// 1. The cached key from server should be synced
       /// 2. When fetching uncommitted entries only valid key should be added to uncommittedEntries queue
     });
+
+    /// Preconditions:
+    /// Have batch limit set to 5
+    /// Have 10 valid keys in the local keystore
+    ///
+    /// Assertions:
+    /// 1. Batch request should contain only 5 keys
     test('A test to verify keys in a batch request does not exceed batch limit',
-        () {
-      /// Preconditions:
-      /// Have batch limit set to 5
-      /// Have 10 valid keys in the local keystore
-      ///
-      /// Assertions:
-      /// 1. Batch request should contain only 5 keys
+        () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      //ToDo - Need to set queue size to 5(unclear how)
+      //------------------------------preconditions setup-----------------------
+      await localSecondary.putValue(
+          'public:test_key0.group3test3@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key1.group3test3@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test3@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key4.group3test3@bob', 'dummy');
+      await localSecondary.putValue('test_key14.group3test3@bob', 'dummyData');
+      await localSecondary.putValue(
+          'public:test_key10.group3test3@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key11.group3test3@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test13@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key14.group3test3@bob', 'dummy');
+      await localSecondary.putValue('test_key4.group3test13@bob', 'dummyData');
+      //-------------------------------operation--------------------------------
+      var batchRequests = await syncService.getBatchRequests(await syncService
+          .syncUtil
+          .getChangesSinceLastCommit(-1, 'group3test3', atSign: atsign));
+      //------------------------------assertion---------------------------------
+      expect(batchRequests.length, 5);
     });
-    test('A test to verify valid keys added to batch request', () {
-      /// Preconditions:
-      /// Uncommitted entries should have 5 valid keys
-      ///
-      /// Assertions:
-      /// 1. Batch request should contain all the 5 valid keys
+
+    /// Preconditions:
+    /// Uncommitted entries should have 5 valid keys
+    ///
+    /// Assertions:
+    /// 1. Batch request should contain all the 5 valid keys
+    /// HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+    test('A test to verify valid keys added to batch request', () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      //------------------preconditions setup-----------------------
+      //create 5 random keys of types public/shared/self
+      List<String> keys = [];
+      keys.add(
+          AtKey.public('test_key0', sharedBy: atsign, namespace: 'group3test4')
+              .build()
+              .toString());
+      keys.add(
+          (AtKey.shared('test_key1', sharedBy: atsign, namespace: 'group3test4')
+                ..sharedWith('@alice'))
+              .build()
+              .toString());
+      keys.add(
+          AtKey.public('test_key2', sharedBy: atsign, namespace: 'group3test4')
+              .build()
+              .toString());
+      keys.add(
+          (AtKey.shared('test_key3', sharedBy: atsign, namespace: 'group3test4')
+                ..sharedWith('@alice'))
+              .build()
+              .toString());
+      keys.add(
+          AtKey.self('test_key4', sharedBy: atsign, namespace: 'group3test4')
+              .build()
+              .toString());
+      for (var key in keys) {
+        await keystore?.put(key, AtData()..data = 'dummydata');
+      }
+
+      //-------------------------------operation--------------------------------
+      var batchRequest = await syncService.getBatchRequests(await syncService
+          .syncUtil
+          .getChangesSinceLastCommit(-1, 'group3test4', atSign: atsign));
+      //------------------------------assertion---------------------------------
+      for (int i = 0; i < keys.length; i++) {
+        //key cannot be extracted from batchRequest as the entry is a command
+        //assert that the actual key is part of the command
+        expect(batchRequest[i].command?.contains(keys[i]), true);
+      }
     });
+
     test(
         'A test to verify the commitId is updated against the uncommitted entries on batch response',
         () {
@@ -1182,6 +1383,10 @@ void main() {
       /// Assertions:
       /// Batch response should contain the commitId for every key sent in the batch request
     });
+
+    ///********************************
+    ///Assertion not possible as invalid keys cannot be inserted into the keystore
+    ///********************************
     test(
         'A test to verify sync continues when server returns exception for one of the sync entry',
         () {
@@ -1196,29 +1401,66 @@ void main() {
       /// Sync should not be in infinite loop
     });
 
+    ///Note: The uncommitted entries in the hive keystore
+    /// should be added to batch request in the same order.
+    /// If there are two entries for same key with commit op. update and delete,
+    /// then batch request should have the same sequence in it.
+
+    /// Preconditions:
+    /// 1. Have uncommitted entries in the keystore
+    /// a. hive_seq: 1 - @alice:phone@bob - commitOp. Update - value: +445-446-4847
+    /// b. hive_seq:2 - @alice:phone@bob - commitOp. delete
+    /// c. hive_seq:3 - @alice:email@bob - commitOp. Update - value: alice@gmail.com
+    /// d. hive_seq:4 - @alice:username@bob - commitOp. Update - value: alice123
+    /// e. hive_seq:5 - @alice:facebook@bob - commitOp. Update - value: alice
+    ///
+    /// Assertions:
+    /// 1. Batch request should have the same sequence as inserted hive keystore
+    ///  i.e., - a,b,c,d,e
     test(
         'A test to verify the key into batch request are added in sequential order as in hive keystore',
-        () {
-      ///Notes of the test case: The uncommitted entries in the hive keystore
-      /// should be added to batch request in the same order.
-      /// If there are two entries for same key with commit op. update and delete,
-      /// then batch request should have the same sequence in it.
+        () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
 
-      /// Preconditions:
-      /// 1. Have uncommitted entries in the keystore
-      /// a. hive_seq: 1 - @alice:phone@bob - commitOp. Update - value: +445-446-4847
-      /// b. hive_seq:2 - @alice:phone@bob - commitOp. delete
-      /// c. hive_seq:3 - @alice:email@bob - commitOp. Update - value: alice@gmail.com
-      /// d. hive_seq:4 - @alice:username@bob - commitOp. Update - value: alice123
-      /// e. hive_seq:5 - @alice:facebook@bob - commitOp. Update - value: alice
-      ///
-      /// Assertions:
-      /// 1. Batch request should have the same sequence as inserted hive keystore
-      ///  i.e., - a,b,c,d,e
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      //------------------preconditions setup-----------------------
+      //create 5 random keys of types public/shared/self
+      await localSecondary.putValue(
+          'public:test_key0.group3test7@bob', 'dummydata');
+      await keystore?.remove('test_key0.group3test7@bob');
+      await localSecondary.putValue(
+          'public:test_key1.group3test7@bob', 'dummy');
+      await keystore?.remove('test_key1.group3test7@bob');
+      await localSecondary.putValue(
+          'public:test_key2.group3test7@bob', 'dummydata');
+
+      //-------------------------------operation--------------------------------
+      var batchRequest = await syncService.getBatchRequests(await syncService
+          .syncUtil
+          .getChangesSinceLastCommit(-1, 'group3test7', atSign: atsign));
+      //------------------------------assertion---------------------------------
+      expect(batchRequest[0].command,
+          'update:public:test_key0.group3test7@bob dummydata');
+      expect(batchRequest[1].command, 'delete:test_key0.group3test7@bob');
+      expect(batchRequest[2].command,
+          'update:public:test_key1.group3test7@bob dummy');
+      expect(batchRequest[3].command, 'delete:test_key1.group3test7@bob');
+      expect(batchRequest[4].command,
+          'update:public:test_key2.group3test7@bob dummydata');
     });
+    tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
+
   group('tests related to TTL and TTB', () {
-    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
     test('A test to verify when a key is set with TTL and expired when sync',
         () {
       /// Preconditions:
@@ -1287,8 +1529,7 @@ void main() {
     /// 4. CommitLog should have an entry for the new public key with commitOp.Update
     /// and commitId is null
     test('A test to verify when a key is set with TTB and key is available',
-        () {
-    });
+        () {});
 
     tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
@@ -1447,7 +1688,18 @@ void main() {
     ///  b. The commit entry should be -1
     test(
         'A test to verify lastSyncedEntry returns -1 when commit log do not have keys',
-        () {
+        () async {
+      //----------------------------------Setup---------------------------------
+      await TestResources.setupLocalStorage(atsign);
+      //----------------------------------Operations----------------------------
+      int? seqNum = TestResources.commitLog!.lastCommittedSequenceNumber();
+      var lastSyncedEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('', atSign: atsign);
+      //------------------------------Assertions--------------------------------
+      expect(lastSyncedEntry, null);
+      var commitEntry = await TestResources.commitLog!.getEntry(seqNum);
+      expect(commitEntry, null);
+      await TestResources.tearDownLocalStorage();
     });
     test('A test to verify sync with regex when local is ahead', () {
       /// Preconditions:
@@ -1459,7 +1711,6 @@ void main() {
       /// 1. Server and local should be in sync and 5 uncommitted entries
       ///    must be synced to cloud secondary
     });
-    tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
 
   group(
@@ -1556,7 +1807,6 @@ void main() {
       /// An entry should be added to commit log to prevent sync imbalance
     });
     group('A group of tests when server is ahead of local commit id', () {
-      setUpAll(() async => await TestResources.setupLocalStorage(atsign));
       test('A test to verify server commit entries are synced to local', () {
         /// The test should contain all types of keys - public key, shared key, self key
         ///
@@ -1610,7 +1860,8 @@ void main() {
         expect(keyStoreGetResult.metaData!.version, 0);
         // verifying the key in the commit log
         var commitEntryResult =
-            await SyncUtil(atCommitLog: TestResources.commitLog).getCommitEntry(putCommitId, atsign);
+            await SyncUtil(atCommitLog: TestResources.commitLog)
+                .getCommitEntry(putCommitId, atsign);
         expect(commitEntryResult!.operation, CommitOp.UPDATE);
       });
       //TODO: Update all the available metadata fields and assert
@@ -1663,9 +1914,9 @@ void main() {
         expect(keyStoreGetResult.isCascade, true);
         // verifying the key in the commit log
         var commitEntryResult =
-            await SyncUtil(atCommitLog: TestResources.commitLog).getCommitEntry(putMetaId!, atsign);
+            await SyncUtil(atCommitLog: TestResources.commitLog)
+                .getCommitEntry(putMetaId!, atsign);
         expect(commitEntryResult!.operation, CommitOp.UPDATE_META);
-        
       });
 
       /// Preconditions:
@@ -1696,7 +1947,8 @@ void main() {
             throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
         // verifying the key in the commit log
         var commitEntryResult =
-           await SyncUtil(atCommitLog: TestResources.commitLog).getCommitEntry(removeId!, atsign);
+            await SyncUtil(atCommitLog: TestResources.commitLog)
+                .getCommitEntry(removeId!, atsign);
         expect(commitEntryResult!.operation, CommitOp.DELETE);
       });
       test(
@@ -1723,7 +1975,7 @@ void main() {
         /// 1. The keys matching the regex should only sync to local secondary
         /// 2. isInSync should return after sync completion
       });
-      tearDownAll(() async => await TestResources.tearDownLocalStorage() );
+      tearDownAll(() async => await TestResources.tearDownLocalStorage());
     });
     group('A group of test to verify sync conflict resolution', () {
       test(
@@ -1910,6 +2162,11 @@ void main() {
         /// 1. On catching the exception, the isSyncInProgress flag should be set to false
       });
     });
+
+    ///*****************************
+    ///test similar to group3test3
+    ///the additional case in the test will be added there
+    ///*****************************
     group(
         'A group of tests to validated batch command - sync client changes to server',
         () {
@@ -1925,6 +2182,11 @@ void main() {
         /// 2. The first batch command should have the first 5 entries
         /// 3. The second batch command should have the remaining 5 entries
       });
+
+      ///****************************
+      ///test similar to group3test4
+      ///ignoring this
+      ///****************************
       test(
           'A test to verify batch command when batch size and uncommitted entries list are equal',
           () {
