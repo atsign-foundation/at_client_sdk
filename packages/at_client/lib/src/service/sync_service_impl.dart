@@ -333,7 +333,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
     for (var unCommittedEntryList in uncommittedEntryBatch) {
       try {
-        var batchRequests = await _getBatchRequests(unCommittedEntryList);
+        var batchRequests = await getBatchRequests(unCommittedEntryList);
         var batchResponse = await _sendBatch(batchRequests);
         for (var entry in batchResponse) {
           try {
@@ -497,7 +497,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
   }
 
-  Future<List<BatchRequest>> _getBatchRequests(
+  @visibleForTesting
+  Future<List<BatchRequest>> getBatchRequests(
       List<CommitEntry> uncommittedEntries) async {
     var batchRequests = <BatchRequest>[];
     var batchId = 1;
@@ -834,5 +835,3 @@ class KeyInfo {
 }
 
 enum SyncDirection { localToRemote, remoteToLocal }
-
-
