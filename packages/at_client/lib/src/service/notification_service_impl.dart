@@ -103,7 +103,7 @@ class NotificationServiceImpl
             _atClientManager.atClient.getCurrentAtSign()!,
             namespace: _atClientManager.atClient.getPreferences()!.namespace)
         .build();
-    atKeyEncryptionManager = AtKeyEncryptionManager.getInstance(_atClient);
+    atKeyEncryptionManager = AtKeyEncryptionManager(_atClient);
   }
 
   /// Simple state to prevent _init() running more than once *concurrently*

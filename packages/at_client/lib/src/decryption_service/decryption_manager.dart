@@ -6,17 +6,9 @@ import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 
 ///The manager class for [AtKeyDecryption]
 class AtKeyDecryptionManager {
-  late AtClient _atClient;
+  late final AtClient _atClient;
 
-  static final AtKeyDecryptionManager _singleton =
-      AtKeyDecryptionManager._internal();
-
-  AtKeyDecryptionManager._internal();
-
-  factory AtKeyDecryptionManager.getInstance(AtClient atClient) {
-    _singleton._atClient = atClient;
-    return _singleton;
-  }
+  AtKeyDecryptionManager(this._atClient);
 
   /// Return the relevant instance of [AtKeyDecryption] for the given [AtKey]
   AtKeyDecryption get(AtKey atKey, String currentAtSign) {

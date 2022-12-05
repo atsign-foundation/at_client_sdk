@@ -531,7 +531,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverEncryptedValue = serverCommitEntry['value'];
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null && serverMetaData[IS_ENCRYPTED] == "true") {
-        final decryptionManager = AtKeyDecryptionManager.getInstance(_atClient)
+        final decryptionManager = AtKeyDecryptionManager(_atClient)
             .get(atKey, _atClient.getCurrentAtSign()!);
 
         // ignore: prefer_typing_uninitialized_variables

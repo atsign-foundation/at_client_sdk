@@ -174,7 +174,7 @@ void main() {
         ..sharedBy = '@alice';
 
       var decryptionService =
-          AtKeyDecryptionManager.getInstance(mockAtClientImpl)
+          AtKeyDecryptionManager(mockAtClientImpl)
               .get(atKey, currentAtSign);
       expect(decryptionService, isA<SharedKeyDecryption>());
     });
@@ -190,7 +190,7 @@ void main() {
         ..metadata = Metadata();
 
       var decryptionService =
-          AtKeyDecryptionManager.getInstance(mockAtClientImpl)
+          AtKeyDecryptionManager(mockAtClientImpl)
               .get(atKey, currentAtSign);
       expect(decryptionService, isA<LocalKeyDecryption>());
     });
@@ -206,7 +206,7 @@ void main() {
         ..metadata = Metadata();
 
       var decryptionService =
-          AtKeyDecryptionManager.getInstance(mockAtClientImpl)
+          AtKeyDecryptionManager(mockAtClientImpl)
               .get(atKey, currentAtSign);
       expect(decryptionService, isA<SelfKeyDecryption>());
     });
@@ -221,7 +221,7 @@ void main() {
         ..metadata = Metadata();
 
       var decryptionService =
-          AtKeyDecryptionManager.getInstance(mockAtClientImpl)
+          AtKeyDecryptionManager(mockAtClientImpl)
               .get(atKey, currentAtSign);
       expect(decryptionService, isA<SelfKeyDecryption>());
     });

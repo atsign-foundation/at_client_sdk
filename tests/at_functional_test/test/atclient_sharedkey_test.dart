@@ -40,7 +40,7 @@ void main() {
       ..sharedBy = currentAtSign
       ..metadata = (Metadata()..ttl = 120000);
     var value = '+91 887 888 3435';
-    var encryptionService = AtKeyEncryptionManager.getInstance(atClient)
+    var encryptionService = AtKeyEncryptionManager(atClient)
         .get(phoneKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(phoneKey, value);
     var result = await atClient.getRemoteSecondary()!.executeCommand(

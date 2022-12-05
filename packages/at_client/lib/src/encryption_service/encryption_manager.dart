@@ -7,17 +7,9 @@ import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 class AtKeyEncryptionManager {
   /// Accepts the [AtKey] and currentAtSign and returns the relevant
   /// [AtKeyEncryption] subclass.
-  late AtClient _atClient;
+  late final AtClient _atClient;
 
-  static final AtKeyEncryptionManager _singleton =
-      AtKeyEncryptionManager._internal();
-
-  AtKeyEncryptionManager._internal();
-
-  factory AtKeyEncryptionManager.getInstance(AtClient atClient) {
-    _singleton._atClient = atClient;
-    return _singleton;
-  }
+  AtKeyEncryptionManager(this._atClient);
 
   AtKeyEncryption get(AtKey atKey, String currentAtSign) {
     // If atKey is sharedKey, return sharedKeyEncryption
