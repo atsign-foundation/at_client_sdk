@@ -2,29 +2,36 @@ import 'package:at_client/src/at_collection/model/at_collection_impl.dart';
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 
 mixin AtCollectionModelMethods on AtCollectionModel {
-  late AtCollectionImpl? atCollectionImpl;
+  AtCollectionImpl? atCollectionImpl;
+
   init() {
-    atCollectionImpl = AtCollectionImpl(
+    atCollectionImpl ??= AtCollectionImpl(
       collectionName: collectionName,
       convert: convert,
     );
   }
 
-  save({int? expiryTime}) {
+  Future<bool> save({int? expiryTime}) async {
     init();
-    atCollectionImpl?.save(
-      this,
-      expiryTime: expiryTime,
-    );
+    return await atCollectionImpl!.save(this, expiryTime: expiryTime);
   }
 
-  getAllData() {
+  Future<List<AtDataStatus>> update() async {
     init();
-    atCollectionImpl?.getAllData();
+    return await atCollectionImpl!.update(this);
   }
 
-  getDataById(String id, {String? sharedWith}) {
+  Future<List<AtDataStatus>> delete() async {
     init();
-    atCollectionImpl?.getDataById(id, sharedWith: sharedWith);
+    return await atCollectionImpl!.delete(this);
+  }
+
+  share() {}
+
+  unshare() {}
+
+  Future<List<String>> getSharedWithList() async {
+    init();
+    return await atCollectionImpl!.getSharedWithList(this);
   }
 }
