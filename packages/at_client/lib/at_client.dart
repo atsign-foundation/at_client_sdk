@@ -22,3 +22,4 @@ export 'package:at_client/src/listener/sync_progress_listener.dart';
 export 'package:at_client/src/at_collection/model/at_collection_impl.dart';
 export 'package:at_client/src/at_collection/model/at_collection_model.dart';
 export 'package:at_client/src/at_collection/model/at_collection_spec.dart';
+export 'package:at_client/src/at_collection/model/at_collection_model_methods_mixin.dart';

@@ -1,11 +1,12 @@
 import 'package:at_client/src/at_collection/model/at_collection_impl.dart';
 import 'package:uuid/uuid.dart';
 
-abstract class AtCollectionModel with AtCollectionImpl {
+abstract class AtCollectionModel {
   late String keyId;
   late String collectionName;
+  final AtCollectionModel Function(String encodedString) convert;
 
-  AtCollectionModel({required this.collectionName}) {
+  AtCollectionModel({required this.collectionName, required this.convert}) {
     keyId = Uuid().v4();
   }
 

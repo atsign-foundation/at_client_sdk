@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
 import 'package:at_client/src/at_collection/model/at_share_operation.dart';
@@ -12,16 +14,52 @@ import 'package:at_commons/at_commons.dart';
 class AtCollectionImpl<T extends AtCollectionModel>
     implements AtCollectionSpec {
   final _logger = AtSignLogger('AtCollectionImpl');
+  late String collectionName;
+
+  /// convert is similar to fromJson, this is used to convert encoded string to object model
+  final T Function(String encodedString) convert;
+
+  AtCollectionImpl({required this.collectionName, required this.convert});
 
   @override
   Future<List<T>> getAllData() async {
-    /// list = [];
-    /// dataMap = getAllDataWithKeys()
-    ///
-    /// filter all keys which have data and store it in list
-    /// return list
-    // TODO: implement getAllData
-    throw UnimplementedError();
+    List<T> dataList = [];
+
+    var collectionAtKeys = await AtClientManager.getInstance()
+        .atClient
+        .getAtKeys(regex: collectionName);
+
+    collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
+
+    /// TODO: can there be a scenario when key is available but we can't get data
+    /// In that scenario we might have to give failure results to app.
+    for (var atKey in collectionAtKeys) {
+      try {
+        var atValue = await AtClientManager.getInstance().atClient.get(atKey);
+        var data = convert(atValue.value);
+        dataList.add(data);
+      } catch (e) {
+        _logger.severe('failed to get value of ${atKey.key}');
+      }
+    }
+
+    return dataList;
+  }
+
+  @override
+  Future<T> getDataById(String id, {String? sharedWith}) async {
+    AtKey selKey = AtCollectionUtil.formAtKey(
+      key: '$id.$collectionName',
+      sharedWith: sharedWith,
+    );
+
+    try {
+      var atValue = await AtClientManager.getInstance().atClient.get(selKey);
+      var modelData = convert(atValue.value);
+      return modelData;
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<Map<String, AtCollectionModel>> getAllDataWithKeys(
@@ -69,33 +107,26 @@ class AtCollectionImpl<T extends AtCollectionModel>
   }
 
   @override
-  Future<T?> save({int? expiryTime}) async {
-    // TODO: add intent
-    // var jsonModel = toJson();
-    // print('expiryTime : ${jsonModel['keyId']}');
-    // String keyWithCollectionName = jsonModel['keyId'] + '.$this.';
+  Future<bool> save(AtCollectionModel model, {int? expiryTime}) async {
+    String keyWithCollectionName = '${model.keyId}.${model.collectionName}';
 
-    // AtKey atKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
+    AtKey selKey = AtCollectionUtil.formAtKey(
+      key: keyWithCollectionName,
+      ttl: expiryTime,
+    );
 
-    /// check if T.keyId already exists
-    /// keyExistsInLocal = check if self key exists
-    ///
-    /// if(keyExistsInLocal == true)
-    /// throw KeyAlreadyExistsException
-    ///
-    /// if(keyExistsInLocal == false)
-    ///
-    /// forms self key
-    /// try {
-    /// result = put(key, value)
-    /// }
-    /// catch(e){
-    /// rethrow(e)
-    /// }
-    ///
+    var result = false;
+    try {
+      result = await AtClientManager.getInstance().atClient.put(
+            selKey,
+            jsonEncode(model.toJson()),
+          );
 
-    // TODO: implement save
-    throw UnimplementedError();
+      _logger.finer('model saved: ${model.keyId}');
+      return result;
+    } catch (e) {
+      rethrow;
+    }
   }
 
   @override
@@ -258,7 +289,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
   }
 
   @override
-  Future<Map<String, AtDataStatus>> update() {
+  Future<Map<String, AtDataStatus>> update(AtCollectionModel model) {
     /// create intent
     /// Step 1: update self key
     ///
