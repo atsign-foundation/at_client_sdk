@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
 import 'package:at_client/src/at_collection/model/at_share_operation.dart';
+import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:at_utils/at_logger.dart';
@@ -256,8 +257,11 @@ class AtCollectionImpl<T extends AtCollectionModel>
   }
 
   @override
-  Future<Map<String, AtDataStatus>> unShare(
-      String keyId, List<String> atSignsList) {
+  AtUnshareOperation unShare(
+      AtKey selfKey, List<String> atSignsList) {
+
+  return AtUnshareOperation(selfKey: selfKey, atSignsList: atSignsList);
+
     /// create intent
     /// Map<String, AtDataStatus> atDataStatus = {};
 
