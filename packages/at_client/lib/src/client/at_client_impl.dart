@@ -64,6 +64,7 @@ class AtClientImpl implements AtClient {
     _telemetry = telemetryService;
     _cascadeSetTelemetryService();
   }
+
   @override
   @experimental
   AtTelemetryService? get telemetry => _telemetry;
@@ -95,7 +96,8 @@ class AtClientImpl implements AtClient {
         currentAtSign, namespace, preferences, atClientManager,
         remoteSecondary: remoteSecondary,
         encryptionService: encryptionService,
-        localSecondaryKeyStore: localSecondaryKeyStore);
+        localSecondaryKeyStore: localSecondaryKeyStore,
+        atChops: atChops);
 
     await atClientImpl._init();
 
@@ -107,7 +109,8 @@ class AtClientImpl implements AtClient {
       AtClientPreference preference, AtClientManager atClientManager,
       {RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore}) {
+      SecondaryKeyStore? localSecondaryKeyStore,
+      AtChops? atChops}) {
     currentAtSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     _preference?.namespace ??= namespace;
@@ -217,7 +220,8 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key":atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
     var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic! : false;
     var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
     var isNamespaceAware =
@@ -230,7 +234,8 @@ class AtClientImpl implements AtClient {
         isCached: isCached,
         namespaceAware: isNamespaceAware,
         isLocal: atKey.isLocal);
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete', {"key":atKey, "_deleteResult":_deleteResult}));
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',
+        {"key": atKey, "_deleteResult": _deleteResult}));
     return _deleteResult;
   }
 
@@ -353,7 +358,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put called', {"key":atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.put called', {"key": atKey}));
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -366,7 +372,8 @@ class AtClientImpl implements AtClient {
     if (value is List<int>) {
       atResponse = await putBinary(atKey, value);
     }
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put complete', {"atKey":atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}));
     return atResponse.response.isNotEmpty;
   }
 
@@ -784,7 +791,8 @@ class AtClientImpl implements AtClient {
     if (fileDownloadResponse.isError) {
       throw Exception('download fail');
     }
-    var encryptedFileList = Directory(fileDownloadResponse.filePath!).listSync();
+    var encryptedFileList =
+        Directory(fileDownloadResponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(
@@ -978,9 +986,6 @@ class AtClientImpl implements AtClient {
   void setAtChops({AtChops? atChops}) async {
     if (atChops != null) {
       _atChops = atChops;
-      return;
-    }
-    if (_atChops != null) {
       return;
     }
     final atEncryptionPublicKey =

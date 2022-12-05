@@ -101,13 +101,12 @@ class AtClientService {
     // Verify if keys are added to local storage.
     var result = await _getKeysFromLocalSecondary(atSign);
 
-    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        encryptionPublicKey, encryptionPrivateKey);
-    final atPkamKeyPair =
-    AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
+    final atEncryptionKeyPair =
+        AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
+    final atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     final atChops = AtChopsImpl(atChopsKeys);
-    atLookUp.setAtChops(atChops);
+    atLookUp.atChops = atChops;
     _atClient!.setAtChops(atChops: atChops);
     return result;
   }
