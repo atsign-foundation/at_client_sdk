@@ -99,10 +99,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       key = DefaultResponseParser().parse(key).response;
       //# TODO remove else once atChops once testing is good
       if (AtClientManager.getInstance().atClient.getPreferences()!.useAtChops) {
-        return AtClientManager.getInstance()
+        final decryptionResult = AtClientManager.getInstance()
             .atClient
             .getAtChops()!
-            .decryptString(key, EncryptionKeyType.rsa_2048);
+            .decryptString(key, EncryptionKeyType.rsa2048);
+        return decryptionResult.result;
       } else {
         try {
           var encryptionPrivateKey = await AtClientManager.getInstance()

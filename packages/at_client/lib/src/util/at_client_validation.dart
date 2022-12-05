@@ -136,8 +136,11 @@ class AtClientValidation {
         atClientPreference.rootDomain,
         atClientPreference.rootPort);
 
-    // For messageType is text, text may contains spaces but key should not have spaces
-    // Hence do not validate the key.
+    // For reasons lost in the mists of time, we are overloading use of the 'key' field
+    // in the notification so it actually contains the text of 'text' notifications.
+    // And the text may of course contain spaces.
+    // However, for validation purposes, 'key' should not have spaces.
+    // Hence we only validate the 'key' if notification type is not 'text'.
     if (notificationParams.messageType != MessageTypeEnum.text) {
       AtClientValidation.validateKey(notificationParams.atKey.key);
       ValidationResult validationResult = AtKeyValidators.get().validate(

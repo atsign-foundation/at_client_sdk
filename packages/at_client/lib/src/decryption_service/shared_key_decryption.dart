@@ -66,11 +66,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
     try {
       //# TODO remove else block once atChops once testing is good
       if (atClient!.getPreferences()!.useAtChops) {
-        final decryptionKey = atClient!
+        final decryptionResult = atClient!
             .getAtChops()!
-            .decryptString(encryptedSharedKey, EncryptionKeyType.rsa_2048);
-        decryptedValue =
-            EncryptionUtil.decryptValue(encryptedValue, decryptionKey);
+            .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
+        decryptedValue = EncryptionUtil.decryptValue(
+            encryptedValue, decryptionResult.result);
       } else {
         var currentAtSignPrivateKey =
             await (atClient!.getLocalSecondary()!.getEncryptionPrivateKey());

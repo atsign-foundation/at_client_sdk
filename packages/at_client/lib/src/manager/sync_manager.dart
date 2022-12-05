@@ -17,8 +17,10 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart';
 import 'package:cron/cron.dart';
 
+// coverage:ignore-file
+
 /// [Deprecate] Use [SyncService]
-@Deprecated("Use SyncService.Sync")
+@Deprecated("Use SyncService")
 class SyncManager {
   var logger = AtSignLogger('SyncManager');
 

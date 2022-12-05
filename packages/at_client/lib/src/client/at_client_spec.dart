@@ -12,6 +12,7 @@ import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
@@ -20,6 +21,11 @@ abstract class AtClient {
   /// [Deprecated] Use [AtClientManager.syncService]
   @Deprecated("Use SyncManager.sync")
   SyncManager? getSyncManager();
+
+  @experimental
+  set telemetry(AtTelemetryService? telemetryService);
+  @experimental
+  AtTelemetryService? get telemetry;
 
   /// Returns a [RemoteSecondary] to communicate with user's cloud secondary server.
   RemoteSecondary? getRemoteSecondary();
@@ -444,9 +450,9 @@ abstract class AtClient {
   ///                    ..sharedWith = '@alice'
   ///                    ..sharedBy = ‘@bob’
   /// Execute the notify verb
-  /// var notiticationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
+  /// var notificationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
   ///  Get the status for notificationId
-  ///   notifyStatus(notiticationId);
+  ///   notifyStatus(notificationId);
   ///
   ///```
   Future<String> notifyStatus(String notificationId);

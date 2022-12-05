@@ -12,7 +12,7 @@ linter:
     await_only_futures : true
     depend_on_referenced_packages : false
     #TODO remove this once private key references from at_client_mobile is fully removed
-    deprecated_member_use: false
+    #deprecated_member_use: false
 
 analyzer:
   exclude:
