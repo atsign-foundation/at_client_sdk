@@ -230,7 +230,7 @@ class AtClientImpl implements AtClient {
       {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
     Secondary? secondary;
     try {
-      atKey = _toLowerCase(atKey);
+      atKey.lowercase();
       // validate the get request.
       await AtClientValidation().validateAtKey(atKey);
       // Get the verb builder for the atKey
@@ -306,7 +306,7 @@ class AtClientImpl implements AtClient {
     if (getKeysResult.isNotEmpty) {
       for (var key in getKeysResult) {
         try {
-          atKey = _toLowerCase(AtKey.fromString(key));
+          atKey?.lowercase();
           result.add(atKey!);
         } on InvalidSyntaxException {
           _logger.severe('$key is not a well-formed key');
@@ -368,7 +368,7 @@ class AtClientImpl implements AtClient {
 
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
     //enforce lowercase conversion on atKey
-    atKey = _toLowerCase(atKey);
+    atKey.lowercase();
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -428,7 +428,7 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
-    atKey = _toLowerCase(atKey);
+    atKey.lowercase();
     AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
@@ -448,7 +448,7 @@ class AtClientImpl implements AtClient {
     var returnMap = {};
     var sharedWithList = jsonDecode(atKey.sharedWith!);
     for (var sharedWith in sharedWithList) {
-      atKey = _toLowerCase(atKey);
+      atKey.lowercase();
       atKey.sharedWith = sharedWith;
       final notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
@@ -489,7 +489,7 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> putMeta(AtKey atKey) async {
-    atKey = _toLowerCase(atKey);
+    atKey.lowercase();
     var updateKey = atKey.key;
     var metadata = atKey.metadata!;
     if (metadata.namespaceAware) {
@@ -516,7 +516,7 @@ class AtClientImpl implements AtClient {
   }
 
   String _getKeyWithNamespace(String key) {
-    key = _toLowerCase(key);
+    key = key.toLowerCase();
     var keyWithNamespace = key;
     if (_namespace != null && _namespace!.isNotEmpty) {
       keyWithNamespace = '$keyWithNamespace.$_namespace';
@@ -550,8 +550,7 @@ class AtClientImpl implements AtClient {
   String _formatResult(String? commandResult) {
     var result = commandResult;
     if (result != null) {
-      result = result.replaceFirst('data:', '');
-      result = _toLowerCase(result);
+      result = result.replaceFirst('data:', '').toLowerCase();
     }
     return result ??= '';
   }
@@ -642,7 +641,7 @@ class AtClientImpl implements AtClient {
       {DateTime? date}) async {
     var result = <String, FileTransferObject>{};
     for (var sharedWithAtSign in sharedWithAtSigns) {
-      key = _toLowerCase(key);
+      key = key.toLowerCase();
       var fileTransferObject = FileTransferObject(
           key, encryptionKey, fileUrl, sharedWithAtSign, fileStatus,
           date: date);
@@ -905,29 +904,29 @@ class AtClientImpl implements AtClient {
   // Everything after this point has been deprecated
   //
 
-  /// Method to convert keys of type AtKey (or) String to lowercase
-  /// Returns the same type of AtKey passed into the method
-  dynamic _toLowerCase(var atKey) {
-    if (atKey.runtimeType == AtKey) {
-      String localKey = atKey.toString();
-      if (localKey.contains(RegExp(r'[A-z]'))) {
-        _logger.finer('$localKey has uppercase characters');
-        _logger.warning(
-            'Converting provided atKey with uppercase characters to lowercase');
-      }
-      return AtKey.fromString(localKey.toLowerCase());
-    } else if (atKey.runtimeType == String) {
-      if (atKey.contains(RegExp(r'[A-z]'))) {
-        _logger.finer('$atKey has uppercase characters');
-        _logger.warning(
-            'Converting provided atKey with uppercase characters to lowercase');
-      }
-      return atKey.toLowerCase();
-    }
-    _logger.finer(
-        'atKey: $atKey type is neither AtKey or String. lowercase enforcement not done');
-    return atKey;
-  }
+  // /// Method to convert keys of type AtKey (or) String to lowercase
+  // /// Returns the same type of AtKey passed into the method
+  // dynamic _toLowerCase(var atKey) {
+  //   if (atKey.runtimeType == AtKey) {
+  //     String localKey = atKey.toString();
+  //     if (localKey.contains(RegExp(r'[A-z]'))) {
+  //       _logger.finer('$localKey has uppercase characters');
+  //       _logger.warning(
+  //           'Converting provided atKey with uppercase characters to lowercase');
+  //     }
+  //     return AtKey.fromString(localKey.toLowerCase());
+  //   } else if (atKey.runtimeType == String) {
+  //     if (atKey.contains(RegExp(r'[A-z]'))) {
+  //       _logger.finer('$atKey has uppercase characters');
+  //       _logger.warning(
+  //           'Converting provided atKey with uppercase characters to lowercase');
+  //     }
+  //     return atKey.toLowerCase();
+  //   }
+  //   _logger.finer(
+  //       'atKey: $atKey type is neither AtKey or String. lowercase enforcement not done');
+  //   return atKey;
+  // }
 
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
   /// and the client preference.
