@@ -2,6 +2,8 @@ import 'dart:developer';
 
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
+import 'package:at_client/src/at_collection/model/at_share_operation.dart';
+import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:at_utils/at_logger.dart';
@@ -152,19 +154,19 @@ class AtCollectionImpl<T extends AtCollectionModel>
       late AtDataStatus atDataStatus = AtDataStatus(
         atSign: sharedKey.sharedWith!,
         key: sharedKey.key!,
-        status: false,
+        complete: false,
       );
 
       try {
         var res =
             await AtClientManager.getInstance().atClient.delete(sharedKey);
 
-        atDataStatus.status = res;
+        atDataStatus.complete = res;
       } on AtClientException catch (e) {
-        atDataStatus.status = false;
+        atDataStatus.complete = false;
         atDataStatus.exception = e;
       } catch (e) {
-        atDataStatus.status = false;
+        atDataStatus.complete = false;
         atDataStatus.exception = Exception('Could not update shared key');
       }
     }
@@ -209,8 +211,30 @@ class AtCollectionImpl<T extends AtCollectionModel>
   ///     stop();
   /// }
 
+  /// For eg.
+  /// var _newAtShareOperation = myModelAtCollectionImpl.share(data, ['@kevin', '@colin']);
+  ///  _newAtShareOperation.atShareOperationStream.listen((atDataStatusEvent) {
+  ///    /// current operation
+  ///    print("${atDataStatusEvent.atSign}: ${atDataStatusEvent.status}");
+
+  ///    /// to check if it is completed
+  ///    if(_newAtShareOperation.atShareOperationStatus == AtShareOperationStatus.COMPLETE){
+  ///      /// complete
+  ///    }
+
+  ///    /// all data till now
+  ///    for(var _data in _newAtShareOperation.allData){
+  ///      print("${_data.atSign}: ${_data.status}");
+  ///    }
+  ///  });
+  ///
+  ///  // to stop further shares
+  ///  _newAtShareOperation.stop();
+
   @override
-  Future<Map<String, AtDataStatus>> share(List<String> atSignsList) {
+  AtShareOperation share(dynamic data, List<String> atSignsList) {
+    return AtShareOperation(data: data, atSignsList: atSignsList);
+
     /// create intent
     /// Map<String, AtDataStatus> atDataStatus = {};
 
@@ -239,14 +263,12 @@ class AtCollectionImpl<T extends AtCollectionModel>
     ///
     /// delete intent
     /// returns atDataStatus
-
-    // TODO: implement share
-    throw UnimplementedError();
   }
 
   @override
-  Future<Map<String, AtDataStatus>> unShare(
-      String id, List<String> atSignsList) {
+  AtUnshareOperation unShare(AtKey selfKey, List<String> atSignsList) {
+    return AtUnshareOperation(selfKey: selfKey, atSignsList: atSignsList);
+
     /// create intent
     /// Map<String, AtDataStatus> atDataStatus = {};
 
@@ -272,9 +294,6 @@ class AtCollectionImpl<T extends AtCollectionModel>
     ///
     /// delete intent
     /// returns atDataStatus
-
-    // TODO: implement share
-    throw UnimplementedError();
   }
 
   @override
@@ -301,7 +320,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
       late AtDataStatus atDataStatus = AtDataStatus(
         atSign: sharedKey.sharedWith!,
         key: sharedKey.key!,
-        status: false,
+        complete: false,
       );
 
       try {
@@ -310,12 +329,12 @@ class AtCollectionImpl<T extends AtCollectionModel>
               jsonEncode(model.toJson()),
             );
 
-        atDataStatus.status = res;
+        atDataStatus.complete = res;
       } on AtClientException catch (e) {
-        atDataStatus.status = false;
+        atDataStatus.complete = false;
         atDataStatus.exception = e;
       } catch (e) {
-        atDataStatus.status = false;
+        atDataStatus.complete = false;
         atDataStatus.exception = Exception('Could not update shared key');
       }
     }
@@ -429,11 +448,13 @@ class AtCollectionImpl<T extends AtCollectionModel>
 class AtDataStatus {
   late String atSign;
   late String key;
-  late bool status;
+  late bool complete;
   Exception? exception;
-  AtDataStatus(
-      {required this.atSign,
-      required this.key,
-      required this.status,
-      this.exception});
+
+  AtDataStatus({
+    required this.atSign,
+    required this.key,
+    required this.complete,
+    this.exception,
+  });
 }

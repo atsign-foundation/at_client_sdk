@@ -1,0 +1,94 @@
+ import 'dart:async';
+
+import 'package:at_client/at_client.dart';
+
+class AtUnshareOperation {
+  /// we store the [selfKey] here, might not be needed
+  AtKey selfKey;
+  /// we store the [atSignsList] here
+  List<String> atSignsList;
+
+  /// stream, after each successful/unsuccessful unshare operation
+  /// the [AtDataStatus] is added to [atUnshareOperationStream]
+  final StreamController _atUnshareOperationController =
+      StreamController<AtDataStatus>.broadcast();
+  Stream<AtDataStatus> get atUnshareOperationStream =>
+      _atUnshareOperationController.stream as Stream<AtDataStatus>;
+
+  /// will contain list of all AtDataStatus sent to [atUnshareOperationStream] till now
+  late List<AtDataStatus> allData;
+
+  /// enum to denote current state of share
+  late AtUnshareOperationStatus atUnshareOperationStatus;
+
+  bool _stopPendingUnshares = false;
+
+  AtUnshareOperation({
+    required this.selfKey,
+    required this.atSignsList,
+  }){
+    _unshare(selfKey, atSignsList);
+  }
+
+  /// when called, any pending shares will not be processed
+  void stop() {
+    _stopPendingUnshares = true;
+    atUnshareOperationStatus = AtUnshareOperationStatus.STOPPED;
+  }
+
+  void emitFromStream(AtDataStatus _event) {
+    if(!_stopPendingUnshares){
+      _atUnshareOperationController.sink.add(_event);
+    }
+  }
+
+  void _unshare(AtKey selfKey, List<String> atSignsList) async {
+    for(var atSign in atSignsList) {
+      if(_stopPendingUnshares) {
+        return;
+      }
+    
+      var sharedAtKey = selfKey; /// TODO: might give problem of pass by reference
+      sharedAtKey.sharedWith = atSign;
+
+      try {
+        /// TODO: we might need to check whether the key exists before deleting it
+        var _res = await AtClientManager.getInstance().atClient.delete(sharedAtKey);
+
+        _checkForUnhareOperationStatus(atSign, atSignsList);
+        emitFromStream(AtDataStatus(
+            atSign: atSign,
+            key: sharedAtKey.key!,
+            complete: _res,
+            exception: null,
+          ),
+        );
+      } catch(e) {
+        _checkForUnhareOperationStatus(atSign, atSignsList);
+        emitFromStream(AtDataStatus(
+            atSign: atSign,
+            key: sharedAtKey.key!,
+            complete: false,
+            exception: e as Exception,
+          ),
+        );
+      }
+    }
+  }
+
+  void _checkForUnhareOperationStatus(String atSign, List<String> atSignsList) {
+    if (
+      (atUnshareOperationStatus != AtUnshareOperationStatus.STOPPED)
+       && 
+      (atSignsList.indexOf(atSign) == (atSignsList.length - 1)
+    )){
+      atUnshareOperationStatus = AtUnshareOperationStatus.COMPLETE;
+    }
+  }
+}
+
+enum AtUnshareOperationStatus {
+  INPROGRESS,
+  COMPLETE,
+  STOPPED,
+}
