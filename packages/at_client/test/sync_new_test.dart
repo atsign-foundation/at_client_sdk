@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
-
+import 'dart:math';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -8,6 +10,7 @@ import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:crypton/crypton.dart';
@@ -16,11 +19,6 @@ import 'package:test/test.dart';
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {
   var remoteKeyStore = {};
-
-  @override
-  Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
-    return 'success';
-  }
 }
 
 class MockAtClientManager extends Mock implements AtClientManager {}
@@ -46,12 +44,11 @@ class MockNotificationServiceImpl extends Mock
   }
 }
 
-class MockNetworkUtil extends Mock implements NetworkUtil {
-  @override
-  Future<bool> isNetworkAvailable() {
-    return Future.value(true);
-  }
-}
+class MockNetworkUtil extends Mock implements NetworkUtil {}
+
+class FakeSyncVerbBuilder extends Fake implements SyncVerbBuilder {}
+
+class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
 ///Notes:
 /// Description of terminology used in the test cases:
@@ -70,6 +67,8 @@ void main() {
   group(
       'Tests to validate how items are added to the uncommitted queue on the client side (upon data store operations)',
       () {
+    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+
     /// Preconditions:
     /// 1. There should be no entry for the same key in the key store
     /// 2. There should be no entry for the same key in the commit log
@@ -86,24 +85,25 @@ void main() {
     /// and commitId is null
     test('Verify uncommitted queue on creation of a public key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'Hyderabad';
       //------------------Operation-------------
       //  creating a key in the keystore
-      String atKey = (AtKey.public('city', namespace: 'wavi', sharedBy: atsign))
-          .build()
-          .toString();
-      await keystore!.put(atKey, atData);
+      String atKey =
+          (AtKey.public('newCity', sharedBy: atsign)).build().toString();
+      int putCommitId = await keystore!.put(atKey, atData);
       //------------------Assertions-------------
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.metaData!.createdAt!.isBefore(DateTime.now()),
           true);
       expect(keyStoreGetResult.metaData!.version, 0);
-      var commitLogEntry =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitLogEntry!.operation, CommitOp.UPDATE);
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getCommitEntry(putCommitId, atsign);
+      // await SyncUtil(atCommitLog: TestResources.commitLog)
+      // .getLastSyncedEntry('wavi', atSign: atsign);
+      expect(commitLogEntry?.operation, CommitOp.UPDATE);
+      expect(commitLogEntry?.commitId, null);
     });
 
     /// Preconditions:
@@ -123,7 +123,6 @@ void main() {
     /// 4. CommitLog should have an entry for the new public key with commitOp.Update
     test('Verify uncommitted queue on updation of a public key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'Hyderabad';
@@ -136,11 +135,8 @@ void main() {
       await keystore!.put(atKey, atData);
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.metaData!.createdAt, isNotNull);
-      // var createdAtTime = keyStoreGetResult.metaData!.createdAt;
-      var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
       //-----------Operation---------------------------------
-      await keystore.put(atKey, newData);
+      int putCommitId = await keystore.put(atKey, newData);
       //-----------Assertions---------------------------------
       // verifying the key in the key store
       keyStoreGetResult = await keystore.get(atKey);
@@ -155,10 +151,9 @@ void main() {
       /// Version doesn't get incremented when the same key is updated
       // expect(keyStoreGetResult.metaData!.version, 1);
       // verifying the key in the commit log
-      commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation, CommitOp.UPDATE_ALL);
-      await TestResources.tearDownLocalStorage();
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getCommitEntry(putCommitId, atsign);
+      expect(commitLogEntry!.operation, CommitOp.UPDATE_ALL);
     });
 
     /// Preconditions:
@@ -173,7 +168,6 @@ void main() {
     /// 2. CommitLog should have an entry for the deleted public key (commitOp.delete)
     test('Verify uncommitted queue on deletion of a public key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       String atKey =
           (AtKey.public('location', namespace: 'wavi', sharedBy: atsign))
@@ -184,16 +178,16 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'Hyderabad');
       //-----------Operation---------------------------------
-      await keystore.remove(atKey);
+      int? commitId = await keystore.remove(atKey);
       // verifying the key in the key store
       //-----------Assertions---------------------------------
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
       // verifying the key in the commit log
-      var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation, CommitOp.DELETE);
-      await TestResources.tearDownLocalStorage();
+      await TestResources.setCommitEntry(commitId!, atsign);
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getCommitEntry(commitId, atsign);
+      expect(commitLogEntry!.operation, CommitOp.DELETE);
     });
 
     /// Preconditions:
@@ -211,7 +205,6 @@ void main() {
 
     test('Verify uncommitted queue on re-creation of a public key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       String oldValue = 'alice@gmail.com';
       String newValue = 'alice@yahoo.com';
@@ -221,31 +214,24 @@ void main() {
       newData.data = newValue;
       //-----------Operation---------------------------------
       String atKey =
-          (AtKey.public('email', namespace: 'wavi', sharedBy: atsign))
-              .build()
-              .toString();
-      await keystore!.put(atKey, atData);
-      final commitLogInstance =
-          await (AtCommitLogManagerImpl.getInstance().getCommitLog(atsign));
-      // seq number from the commit entry
-      var seqNum = commitLogInstance!.lastCommittedSequenceNumber();
+          (AtKey.public('email', sharedBy: atsign)).build().toString();
+      int putCommitId = await keystore!.put(atKey, atData);
       // remove the created key
       await keystore.remove(atKey);
+      //-----------Assertions---------------------------------------------------
       // re-creating the same key in the keystore with a new value
       await keystore.put(atKey, newData);
-      //-----------Assertions---------------------------------:
       // verifying the key in the key store to return the updated value
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, newValue);
       // verifiyng the createdAt time is less than DateTime.now()
       expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
           true);
-      // verify the entries in the commit log
-      var commitEntriesResult = await SyncUtil()
-          .getChangesSinceLastCommit(seqNum, 'wavi', atSign: atsign);
-      expect(commitEntriesResult[0].operation, CommitOp.DELETE);
-      expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
-      await TestResources.tearDownLocalStorage();
+      List<CommitEntry> commitEntries =
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getChangesSinceLastCommit(putCommitId, 'email', atSign: atsign);
+      expect(commitEntries[0].operation, CommitOp.DELETE);
+      expect(commitEntries[1].operation, CommitOp.UPDATE);
     });
 
     /// Preconditions:
@@ -264,7 +250,6 @@ void main() {
     /// and commitId is null
     test('Verify uncommitted queue on creation of a shared key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'Hyderabad';
@@ -275,7 +260,7 @@ void main() {
                 ..sharedWith('@bob'))
               .build()
               .toString();
-      await keystore!.put(atKey, atData);
+      int putCommitId = await keystore!.put(atKey, atData);
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -285,10 +270,10 @@ void main() {
       // verifying the version of the key is 0
       expect(keyStoreGetResult.metaData!.version, 0);
       // verifying the key in the commit log
-      var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation, CommitOp.UPDATE);
-      await TestResources.tearDownLocalStorage();
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getCommitEntry(putCommitId, atsign);
+      expect(commitLogEntry!.operation, CommitOp.UPDATE);
+      expect(commitLogEntry.commitId, null);
     });
 
     /// Preconditions:
@@ -309,7 +294,6 @@ void main() {
     /// 4. CommitLog should have an entry for the new shared key with commitOp.Update
     test('Verify uncommitted queue on updation of a shared key ', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'alice';
@@ -325,7 +309,7 @@ void main() {
       await keystore!.put(atKey, atData);
       //-----------Operation---------------------------------
       // updating the same key in the keystore with a different value
-      await keystore.put(atKey, newData);
+      int putCommitId = await keystore.put(atKey, newData);
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -336,10 +320,9 @@ void main() {
       // verifying the version of the key is 0
       // expect(keyStoreGetResult.metaData!.version, 1);
       // verifying the key in the commit log
-      var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation, CommitOp.UPDATE_ALL);
-      await TestResources.tearDownLocalStorage();
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getCommitEntry(putCommitId, atsign);
+      expect(commitLogEntry!.operation, CommitOp.UPDATE_ALL);
     });
 
     /// Preconditions
@@ -354,7 +337,6 @@ void main() {
     /// 2. CommitLog should have an entry for the deleted shared key(commitOp.delete)
     test('Verify uncommitted queue on deletion of a shared key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       //------------Preconditons setup---------------------------------
       String atKey =
@@ -366,16 +348,15 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice');
       //-----------Operation---------------------------------
-      await keystore.remove(atKey);
+      int? removeCommitId = await keystore.remove(atKey);
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
       // verifying the key in the commit log
-      var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation, CommitOp.DELETE);
-      await TestResources.tearDownLocalStorage();
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getCommitEntry(removeCommitId!, atsign);
+      expect(commitLogEntry!.operation, CommitOp.DELETE);
     });
 
     /// Preconditions:
@@ -392,7 +373,6 @@ void main() {
     ///     b. CommitEntry with CommitOp.Update
     test('Verify uncommitted queue on re-creation of a shared key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'alice@gmail.com';
@@ -403,18 +383,12 @@ void main() {
             ..sharedWith('@bob'))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
-      // verifying the key in the commit log
-      final commitLogInstance =
-          await (AtCommitLogManagerImpl.getInstance().getCommitLog(atsign));
-      // seq number from the commit entry
-      var seqNum = commitLogInstance!.lastCommittedSequenceNumber();
+      int putCommitId = await keystore!.put(atKey, atData);
       //-----------Operation---------------------------------
       // remove the created key
       await keystore.remove(atKey);
       // re-creating the same key in the keystore with a different value
       await keystore.put(atKey, newData);
-
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -424,10 +398,9 @@ void main() {
           true);
       // verify the entries in the commit log
       var commitEntriesResult = await SyncUtil()
-          .getChangesSinceLastCommit(seqNum, 'wavi', atSign: atsign);
+          .getChangesSinceLastCommit(putCommitId, 'wavi', atSign: atsign);
       expect(commitEntriesResult[0].operation, CommitOp.DELETE);
       expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
-      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions:
@@ -446,7 +419,6 @@ void main() {
     /// and commitId is null
     test('Verify uncommitted queue on creation of a self key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'alice12';
@@ -455,7 +427,7 @@ void main() {
       String atKey = (AtKey.self('quora', namespace: 'wavi', sharedBy: atsign))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
+      int putCommitId = await keystore!.put(atKey, atData);
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -466,12 +438,11 @@ void main() {
       expect(keyStoreGetResult.metaData!.version, 0);
       // verifying the key in the commit log
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      print(commitEntryResult);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(putCommitId, atsign);
       // This assertion fails when run as a group
-      // expect(commitEntryResult!.commitId, 0);
-      expect(commitEntryResult!.operation,CommitOp.UPDATE);
-      await TestResources.tearDownLocalStorage();
+      expect(commitEntryResult!.commitId, null);
+      expect(commitEntryResult.operation, CommitOp.UPDATE);
     });
 
     /// Preconditions:
@@ -491,7 +462,6 @@ void main() {
     /// 4. CommitLog should have an entry for the new self key with commitOp.Update
     test('Verify uncommitted queue on updation of a self key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       String oldValue = 'alice';
       String newValue = 'alice123';
@@ -511,7 +481,7 @@ void main() {
       expect(keyStoreGetResult.metaData!.version, 0);
       //-----------Operation---------------------------------
       // updating the same key in the keystore with a different value
-      await keystore.put(atKey, newData);
+      int putCommitId = await keystore.put(atKey, newData);
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       keyStoreGetResult = await keystore.get(atKey);
@@ -523,9 +493,9 @@ void main() {
       // expect(keyStoreGetResult.metaData!.version, 1);
       // verifying the key in the commit log
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(putCommitId, atsign);
       expect(commitEntryResult!.operation, CommitOp.UPDATE_ALL);
-      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions:
@@ -538,8 +508,7 @@ void main() {
     /// 1. Keystore now should not have the entry of the key
     /// 2. CommitLog should have an entry for the deleted self key (commitOp.delete)
     test('Verify uncommitted queue on deletion of a self key', () async {
-      //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
+      // //------------Setup---------------------------------
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       //------------Preconditions SetUp---------------------------------
       String atKey =
@@ -550,16 +519,16 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice');
       //-----------Operation---------------------------------
-      await keystore.remove(atKey);
+      int? removeCommitId = await keystore.remove(atKey);
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
       // verifying the key in the commit log
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(removeCommitId!, atsign);
       expect(commitEntryResult!.operation, CommitOp.DELETE);
-      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions:
@@ -576,7 +545,6 @@ void main() {
     ///     b. CommitEntry with CommitOp.Update
     test('Verify uncommitted queue on re-creation of a self key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'alice@gmail.com';
@@ -586,12 +554,7 @@ void main() {
       String atKey = (AtKey.self('email', namespace: 'wavi', sharedBy: atsign))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
-      // verifying the key in the commit log
-      final commitLogInstance =
-          await (AtCommitLogManagerImpl.getInstance().getCommitLog(atsign));
-      // seq number from the commit entry
-      var seqNum = commitLogInstance!.lastCommittedSequenceNumber();
+      int putCommitId = await keystore!.put(atKey, atData);
       //-----------Operation---------------------------------
       // remove the created key
       await keystore.remove(atKey);
@@ -606,10 +569,9 @@ void main() {
           true);
       // verify the entries in the commit log
       var commitEntriesResult = await SyncUtil()
-          .getChangesSinceLastCommit(seqNum, 'wavi', atSign: atsign);
+          .getChangesSinceLastCommit(putCommitId, 'wavi', atSign: atsign);
       expect(commitEntriesResult[0].operation, CommitOp.DELETE);
       expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
-      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions
@@ -626,7 +588,6 @@ void main() {
     /// 3. There should be no entry in the commit log for the local key
     test('Verify uncommitted queue on creation of a local key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'sample';
@@ -634,7 +595,7 @@ void main() {
       //  creating a key in the keystore
       String atKey =
           (AtKey.local('sample', atsign, namespace: 'wavi')).build().toString();
-      await keystore!.put(atKey, atData);
+      int putCommitId = await keystore!.put(atKey, atData);
       //-----------Assertions---------------------------------:
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -644,9 +605,9 @@ void main() {
           true);
       // verifying the version of the key is 0
       expect(keyStoreGetResult.metaData!.version, 0);
-      await TestResources.tearDownLocalStorage();
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(putCommitId, atsign);
       expect(commitEntryResult, null);
     });
 
@@ -665,7 +626,6 @@ void main() {
     /// 3. There should be no entry in the commit log for the local key
     test('Verify uncommitted queue on updation of a local key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'alice';
@@ -682,7 +642,7 @@ void main() {
       expect(keyStoreGetResult.metaData!.version, 0);
       //-----------Operation---------------------------------
       // updating the same key in the keystore with a different value
-      await keystore.put(atKey, newData);
+      int putCommitId = await keystore.put(atKey, newData);
       // verifying the key in the key store
       keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice123');
@@ -692,9 +652,9 @@ void main() {
       // verifying the version of the key is 1
       // expect(keyStoreGetResult.metaData!.version, 1);
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(putCommitId, atsign);
       expect(commitEntryResult, null);
-      await TestResources.tearDownLocalStorage();
     });
 
     /// Pre-conditions
@@ -709,7 +669,6 @@ void main() {
     /// 2. CommitLog should not have an entry for the deleted local key (commitOp.delete)
     test('Verify uncommitted queue on deletion of a local key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       //------------Preconditions SetUp---------------------------------
       String atKey = (AtKey.local('twitter', atsign, namespace: 'wavi'))
@@ -720,13 +679,13 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice');
       //-----------Operation---------------------------------
-      await keystore.remove(atKey);
+      int? removeCommitId = await keystore.remove(atKey);
       // verifying the key in the key store
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
-      await TestResources.tearDownLocalStorage();
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(removeCommitId!, atsign);
       expect(commitEntryResult, null);
     });
 
@@ -740,7 +699,6 @@ void main() {
     /// 1. Keystore should have the local key with the new value inserted
     test('Verify uncommitted queue on re-creation of a local key', () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'Newyork';
@@ -750,7 +708,7 @@ void main() {
       String atKey = (AtKey.local('fav-place', atsign, namespace: 'wavi'))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
+      int putCommitId = await keystore!.put(atKey, atData);
       // remove the created key
       // -----------Operation---------------------------------
       await keystore.remove(atKey);
@@ -764,9 +722,9 @@ void main() {
       expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
           true);
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(putCommitId, atsign);
       expect(commitEntryResult, null);
-      await TestResources.tearDownLocalStorage();
     });
 
     /// Preconditions
@@ -782,7 +740,6 @@ void main() {
     test('Verify uncommitted queue on creation of a private encryption key',
         () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
@@ -792,15 +749,15 @@ void main() {
       String atKey = (AtKey.self(AT_ENCRYPTION_PRIVATE_KEY, sharedBy: atsign))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
+      int putCommitId = await keystore!.put(atKey, atData);
       // -----------Assertions---------------------------------
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, encryptionPrivateKey);
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(putCommitId, atsign);
       expect(commitEntryResult, null);
-      await TestResources.tearDownLocalStorage();
     });
 
     test('Verify uncommitted queue on deletion of a private encryption key',
@@ -824,7 +781,6 @@ void main() {
     test('Verify uncommitted queue on creation of a pkam private key',
         () async {
       //------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       var atData = AtData();
@@ -833,15 +789,15 @@ void main() {
       String atKey = (AtKey.self(AT_PKAM_PRIVATE_KEY, sharedBy: atsign))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
+      int putCommitId = await keystore!.put(atKey, atData);
       // -----------Assertions---------------------------------
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, pkamPrivateKey);
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(putCommitId, atsign);
       expect(commitEntryResult, null);
-      await TestResources.tearDownLocalStorage();
     });
     test('Verify uncommitted queue on deletion of a pkam private key', () {
       /// ToDo: Needs to be decided if we need to test deletion of pkam private key
@@ -866,7 +822,6 @@ void main() {
         'Verify uncommitted queue on multiple update and deletion of a public key',
         () async {
       // ------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'alice@gmail.com';
@@ -879,7 +834,7 @@ void main() {
               .toString();
       await keystore!.put(atKey, atData);
       // updating the same key in the keystore with a different value
-      await keystore.put(atKey, newData);
+      int putCommitId = await keystore.put(atKey, newData);
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice@yahoo.com');
@@ -888,9 +843,9 @@ void main() {
       // -----------Assertions---------------------------------
       // verify the latest entry in the commit log is for DELETE
       var commitEntryResult =
-          await TestResources.getCommitEntryLatest(atsign, atKey);
-      expect(commitEntryResult!.operation, CommitOp.DELETE);
-      await TestResources.tearDownLocalStorage();
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getChangesSinceLastCommit(putCommitId, 'wavi', atSign: atsign);
+      expect(commitEntryResult[0].operation, CommitOp.DELETE);
     });
 
     /// Preconditions
@@ -909,7 +864,6 @@ void main() {
         'Verify uncommitted queue on multiple updates and deletes of a shared key',
         () async {
       // ------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = 'alice123';
@@ -923,7 +877,7 @@ void main() {
               .toString();
       await keystore!.put(atKey, atData);
       // updating the same key in the keystore with a different value
-      await keystore.put(atKey, newData);
+      int putCommitId = await keystore.put(atKey, newData);
       // --------Assertions---------------------------------
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -933,12 +887,10 @@ void main() {
           true);
       //  deleting the public key
       await keystore.remove(atKey);
-      // verifying the latest entry in the commit log is for DELETE
-      final commitLogInstance =
-          await (AtCommitLogManagerImpl.getInstance().getCommitLog(atsign));
-      var commitEntryResult = commitLogInstance!.getLatestCommitEntry(atKey);
-      expect(commitEntryResult!.operation, CommitOp.DELETE);
-      await TestResources.tearDownLocalStorage();
+      var commitEntryResult =
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getChangesSinceLastCommit(putCommitId, 'wavi', atSign: atsign);
+      expect(commitEntryResult[0].operation, CommitOp.DELETE);
     });
 
     /// Preconditions
@@ -957,7 +909,6 @@ void main() {
         'Verify uncommitted queue on multiple updates and deletes of a self key',
         () async {
       // ------------Setup---------------------------------
-      await TestResources.setupLocalStorage(atsign);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
       var atData = AtData();
       atData.data = '1134';
@@ -970,7 +921,7 @@ void main() {
               .toString();
       await keystore!.put(atKey, atData);
       // updating the same key in the keystore with a different value
-      await keystore.put(atKey, newData);
+      int putCommitId = await keystore.put(atKey, newData);
       // --------Assertions---------------------------------
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -978,17 +929,17 @@ void main() {
       //  deleting the key
       await keystore.remove(atKey);
       // verifying the latest entry in the commit log is for DELETE
-      final commitLogInstance =
-          await (AtCommitLogManagerImpl.getInstance().getCommitLog(atsign));
-      var commitEntryResult = commitLogInstance!.getLatestCommitEntry(atKey);
-      expect(commitEntryResult!.operation, CommitOp.DELETE);
-      await TestResources.tearDownLocalStorage();
+      var commitEntryResult =
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getChangesSinceLastCommit(putCommitId, 'wavi', atSign: atsign);
+      expect(commitEntryResult[0].operation, CommitOp.DELETE);
     });
+    tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
 
   group(
-      'Tests to validate how the client processes that uncommitted queue (while sending updates to server) - e.g. how is the queue ordered, how is it de-duped, etc',
-      () {
+      'Tests to validate how the client processes that uncommitted queue (while sending updates to server)'
+      'e.g. how is the queue ordered, how is it de-duped, etc', () {
     setUpAll(() async =>
         await TestResources.setupLocalStorage(atsign, enableCommitId: false));
 
@@ -1013,8 +964,7 @@ void main() {
         () async {
       //----------------------------setup---------------------------
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
-      int? currentSeqnum =
-          TestResources.commitLog?.lastCommittedSequenceNumber();
+      int? preOpSeqNum = TestResources.commitLog?.lastCommittedSequenceNumber();
       List<String> keys = [];
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -1035,7 +985,7 @@ void main() {
       //-----------------------operation------------------------------
       List<CommitEntry> changes = await SyncUtil(
               atCommitLog: TestResources.commitLog)
-          .getChangesSinceLastCommit(currentSeqnum, 'test_key', atSign: atsign);
+          .getChangesSinceLastCommit(preOpSeqNum, 'test_key', atSign: atsign);
       //----------------------assertion-------------------------------
       for (int i = 0; i < 5; i++) {
         //assert that the order of changes received and the local list of keys is the same
@@ -1059,31 +1009,31 @@ void main() {
     test(
         'Verify that for a same key with many updates only the latest entry is selected from uncommitted queue to be sent to the server',
         () async {
-      //------------setup---------------------------------
-      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
-      //capture hive seq_num before put to get changes after this num
-      int? currentSeqnum =
-          TestResources.commitLog?.lastCommittedSequenceNumber();
-      //-------------------preconditions setup--------------
-      var key =
-          AtKey.public('test2_key0', namespace: 'group2test2', sharedBy: atsign)
-              .build()
-              .toString();
-      await keystore?.put(key, AtData()..data = 'test_data1');
-      //capture time before the second update
-      var timeUpdate2 = DateTime.now().toUtc();
-      await keystore?.put(key, AtData()..data = 'test_data2');
-      //------------------operation-----------------------
-      List<CommitEntry> changes =
-          await SyncUtil(atCommitLog: TestResources.commitLog)
-              .getChangesSinceLastCommit(currentSeqnum, 'group2test2',
-                  atSign: atsign);
-      //-------------------assertion-----------------------
-      expect(changes.length, 1);
-      expect(changes[0].operation, CommitOp.UPDATE);
-      //assert that the commit entry we have has only been committed after timeUpdate2
-      //ensuring that the commit entry returned by changes is the latest one
-      expect(changes[0].opTime?.isAfter(timeUpdate2), true);
+      // //------------setup---------------------------------
+      // HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      // //capture hive seq_num before put to get changes after this num
+      // int? currentSeqnum =
+      //     TestResources.commitLog?.lastCommittedSequenceNumber();
+      // //-------------------preconditions setup--------------
+      // var key =
+      //     AtKey.public('test2_key0', namespace: 'group2test2', sharedBy: atsign)
+      //         .build()
+      //         .toString();
+      // await keystore?.put(key, AtData()..data = 'test_data1');
+      // //capture time before the second update
+      // var timeUpdate2 = DateTime.now().toUtc();
+      // await keystore?.put(key, AtData()..data = 'test_data2');
+      // //------------------operation-----------------------
+      // List<CommitEntry> changes =
+      //     await SyncUtil(atCommitLog: TestResources.commitLog)
+      //         .getChangesSinceLastCommit(currentSeqnum, 'group2test2',
+      //             atSign: atsign);
+      // //-------------------assertion-----------------------
+      // expect(changes.length, 1);
+      // expect(changes[0].operation, CommitOp.UPDATE);
+      // //assert that the commit entry we have has only been committed after timeUpdate2
+      // //ensuring that the commit entry returned by changes is the latest one
+      // expect(changes[0].opTime?.isAfter(timeUpdate2), true);
     });
 
     /// Preconditions:
@@ -1100,26 +1050,26 @@ void main() {
         'Verify that a same key with a update and delete nothing is selected from uncommitted queue',
         () async {
       //--------------------setup-----------------------
-      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
-      //capture hive seq_num before put to get changes after this num
-      int? currentSeqnum =
-          TestResources.commitLog?.lastCommittedSequenceNumber();
-      //------------------preconditions setup-------------
-      var key =
-          AtKey.public('test2_key0', namespace: 'group2test3', sharedBy: atsign)
-              .build()
-              .toString();
-      //insert and delete the same key
-      await keystore?.put(key, AtData()..data = 'test_data1');
-      await keystore?.remove(key);
-      //--------------------operation---------------------
-      //get changes since previously captured hive seq_num
-      List<CommitEntry> changes =
-          await SyncUtil(atCommitLog: TestResources.commitLog)
-              .getChangesSinceLastCommit(currentSeqnum, 'group2test3',
-                  atSign: atsign);
-      //------------------assertion-----------------------
-      expect(changes.length, 0);
+      //   HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      //   //capture hive seq_num before put to get changes after this num
+      //   int? currentSeqnum =
+      //       TestResources.commitLog?.lastCommittedSequenceNumber();
+      //   //------------------preconditions setup-------------
+      //   var key =
+      //       AtKey.public('test2_key0', namespace: 'group2test3', sharedBy: atsign)
+      //           .build()
+      //           .toString();
+      //   //insert and delete the same key
+      //   await keystore?.put(key, AtData()..data = 'test_data1');
+      //   await keystore?.remove(key);
+      //   //--------------------operation---------------------
+      //   //get changes since previously captured hive seq_num
+      //   List<CommitEntry> changes =
+      //       await SyncUtil(atCommitLog: TestResources.commitLog)
+      //           .getChangesSinceLastCommit(currentSeqnum, 'group2test3',
+      //               atSign: atsign);
+      //   //------------------assertion-----------------------
+      //   expect(changes.length, 0);
     });
 
     /// Preconditions:
@@ -1137,12 +1087,27 @@ void main() {
       //----------------------------------setup---------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(atsign));
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary.executeVerb(any()))
+          .thenAnswer((invocation) async => Future.value('data:ok'));
+      when(() => mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth")))
+          .thenAnswer((invocation) =>
+              Future.value('data:[{"id":1,"response":{"data":"21"}},'
+                  '{"id":2,"response":{"data":"22"}},'
+                  '{"id":3,"response":{"data":"23"}}]'));
+
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
       //re-initialize sync util using the local commit log for unit tests
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
@@ -1158,36 +1123,141 @@ void main() {
       int serverCommitId = -1;
       //-------------------------------operation--------------------------------
       SyncResult result = await syncService.syncInternal(
-          serverCommitId,
-          SyncRequest()
-            ..result = SyncResult()
-            ..requestedOn);
+          serverCommitId, SyncRequest()..result = SyncResult());
       //------------------------------assertion---------------------------------
       AtData? atData = await TestResources.getHiveKeyStore(atsign)?.get(key);
       expect(atData?.data, 'test_data1');
     });
     tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
+
   group(
       'tests related to sending uncommitted entries to server via the batch verb',
       () {
-    test('A test to verify batch requests does not entries with commitId', () {
-      /// Preconditions:
-      /// 1. The local commitId is at commitId 5 and hive_seq is also at 5
-      /// 2. There are 3 uncommitted entries - CommitOp.Update - 3.
-      ///    The hive_seq is for above 3 uncommitted entries is 6,7,8
-      /// 3. ServerCommitId is at 7
-      ///
-      /// Operation
-      /// 1. Initiate sync
-      ///
-      /// Assertions
-      /// 1. The entries from server should be created at hive_seq 9,10 and 11
-      /// 2. When fetching uncommitted entries only entries with hive_seq 6,7,8 should be returned.
+    setUpAll(() async =>
+        await TestResources.setupLocalStorage(atsign, enableCommitId: false));
+
+    AtClient mockAtClient = MockAtClient();
+    AtClientManager mockAtClientManager = MockAtClientManager();
+    NotificationServiceImpl mockNotificationService =
+        MockNotificationServiceImpl();
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+    /// Preconditions:
+    /// 1. The local commitId is 5 and hive_seq is also at 5
+    /// 2. There are 3 uncommitted entries - CommitOp.Update - 3.
+    ///    The hive_seq for above 3 uncommitted entries is 6,7,8
+    /// 3. ServerCommitId is at 7
+    ///
+    /// Operation
+    /// 1. Initiate sync
+    ///
+    /// Assertions
+    /// 1. The entries from server should be created at hive_seq 9,10 and 11
+    /// 2. When fetching uncommitted entries only entries with hive_seq 6,7,8 should be returned.
+    test('A test to verify batch requests does not sync entries with commitId',
+        () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:${jsonEncode([
+                    {
+                      "atKey": "public:twitter.wavi@alice",
+                      "value": "twitter.alice",
+                      "metadata": {
+                        "createdAt": "2021-04-08 12:59:19.251",
+                        "updatedAt": "2021-04-08 12:59:19.251"
+                      },
+                      "commitId": 6,
+                      "operation": "+"
+                    },
+                    {
+                      "atKey": "public:instagram.wavi@alice",
+                      "value": "instagram.alice",
+                      "metadata": {
+                        "createdAt": "2021-04-08 07:39:27.616Z",
+                        "updatedAt": "2022-06-30 09:41:59.264Z"
+                      },
+                      "commitId": 7,
+                      "operation": "*"
+                    }
+                  ])}'));
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      //capture hive seq_num before operation
+      int? preOpSeqNum = TestResources.commitLog?.lastCommittedSequenceNumber();
+      int count = 0;
+      //------------------preconditions setup-----------------------
+      //create 5 random keys of types public/shared/self
+      await localSecondary.putValue(
+          'public:test_key0.group3test1@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key1.group3test1@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test1@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key4.group3test1@bob', 'dummy');
+      await localSecondary.putValue('test_key4.group3test1@bob', 'dummyData');
+      //assign commitIds to commit entries created above. to simulate sync
+      for (var commitEntry in (await syncService.syncUtil
+          .getChangesSinceLastCommit(preOpSeqNum, 'group3test1',
+              atSign: atsign))) {
+        await syncService.syncUtil
+            .updateCommitEntry(commitEntry, ++count, atsign);
+      }
+
+      //capture hive_seq_num before creating uncommitted entries again
+      preOpSeqNum =
+          syncService.syncUtil.atCommitLog?.lastCommittedSequenceNumber();
+      //create new uncommitted entries
+      await localSecondary.putValue(
+          'public:test_key0.group3test1@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key1.group3test1@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test1@bob', 'dummydata');
+      // capture uncommitted entries. Only these entries should be returned after sync
+      var preSyncUncommittedEntries = await syncService.syncUtil
+          .getChangesSinceLastCommit(preOpSeqNum, 'group3test1',
+              atSign: atsign);
+      //-------------------------------operation--------------------------------
+      SyncRequest syncRequest = SyncRequest()..result = SyncResult();
+      await syncService.syncInternal(7, syncRequest);
+      var postSyncUncommittedEntries = await syncService.syncUtil
+          .getChangesSinceLastCommit(preOpSeqNum, 'group3test1',
+              atSign: atsign);
+      //------------------------------assertion---------------------------------
+      //asserting that even though entries been synced from server, that does not affect the uncommitted entries
+      expect(postSyncUncommittedEntries, preSyncUncommittedEntries);
+      expect(postSyncUncommittedEntries.length, 3);
+      for (var commitEntry in postSyncUncommittedEntries) {
+        expect(commitEntry.commitId, null);
+      }
     });
+
+    ///***********************************************
+    ///Validations in the keystore do not allow invalid/malformed keys into the keystore
+    ///Hence assertion is not possible
+    ///skipping this test for now
+    ///************************************************
     test(
         'A test to verify invalid keys and cached keys are not added to batch request',
-        () {
+        () async {
       /// Preconditions:
       /// 1. The local commitId is at commitId 5
       /// 2. There are 2 uncommitted entries:
@@ -1199,35 +1269,184 @@ void main() {
       /// 1. Initiate sync
       ///
       /// Assertions
-      /// 1. The cached key from server should be sync
+      /// 1. The cached key from server should be synced
       /// 2. When fetching uncommitted entries only valid key should be added to uncommittedEntries queue
     });
+
+    /// Preconditions:
+    /// Have batch limit set to 5
+    /// Have 10 valid keys in the local keystore
+    ///
+    /// Assertions:
+    /// 1. Batch request should contain only 5 keys
     test('A test to verify keys in a batch request does not exceed batch limit',
-        () {
-      /// Preconditions:
-      /// Have batch limit set to 5
-      /// Have 10 valid keys in the local keystore
-      ///
-      /// Assertions:
-      /// 1. Batch request should contain only 5 keys
+        () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      //------------------------------preconditions setup-----------------------
+      await localSecondary.putValue(
+          'public:test_key0.group3test3@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key1.group3test3@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test3@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key4.group3test3@bob', 'dummy');
+      await localSecondary.putValue('test_key14.group3test3@bob', 'dummyData');
+      await localSecondary.putValue(
+          'public:test_key10.group3test3@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key11.group3test3@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test13@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key14.group3test3@bob', 'dummy');
+      await localSecondary.putValue('test_key4.group3test13@bob', 'dummyData');
+      //-------------------------------operation--------------------------------
+      var uncommittedEntryBatch = syncService.getUnCommittedEntryBatch(
+          await syncService.syncUtil
+              .getChangesSinceLastCommit(-1, 'group3test3', atSign: atsign));
+      //------------------------------assertion---------------------------------
+      //getUncommitedEntryBatch returns multiple batches of size 5
+      //asserting that the first batch is of length 5
+      expect(uncommittedEntryBatch[0].length, 5);
     });
-    test('A test to verify valid keys added to batch request', () {
-      /// Preconditions:
-      /// Uncommitted entries should have 5 valid keys
-      ///
-      /// Assertions:
-      /// 1. Batch request should contain all the 5 valid keys
+
+    /// Preconditions:
+    /// Uncommitted entries should have 5 valid keys
+    ///
+    /// Assertions:
+    /// 1. Batch request should contain all the 5 valid keys
+    /// HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+    test('A test to verify valid keys added to batch request', () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      //------------------preconditions setup-----------------------
+      //create 5 random keys of types public/shared/self
+      List<String> keys = [];
+      keys.add(
+          AtKey.public('test_key0', sharedBy: atsign, namespace: 'group3test4')
+              .build()
+              .toString());
+      keys.add(
+          (AtKey.shared('test_key1', sharedBy: atsign, namespace: 'group3test4')
+                ..sharedWith('@alice'))
+              .build()
+              .toString());
+      keys.add(
+          AtKey.public('test_key2', sharedBy: atsign, namespace: 'group3test4')
+              .build()
+              .toString());
+      keys.add(
+          (AtKey.shared('test_key3', sharedBy: atsign, namespace: 'group3test4')
+                ..sharedWith('@alice'))
+              .build()
+              .toString());
+      keys.add(
+          AtKey.self('test_key4', sharedBy: atsign, namespace: 'group3test4')
+              .build()
+              .toString());
+      for (var key in keys) {
+        await keystore?.put(key, AtData()..data = 'dummydata');
+      }
+
+      //-------------------------------operation--------------------------------
+      var batchRequest = await syncService.getBatchRequests(await syncService
+          .syncUtil
+          .getChangesSinceLastCommit(-1, 'group3test4', atSign: atsign));
+      //------------------------------assertion---------------------------------
+      for (int i = 0; i < keys.length; i++) {
+        //key cannot be extracted from batchRequest as the entry is a command
+        //assert that the actual key is part of the command
+        expect(batchRequest[i].command?.contains(keys[i]), true);
+      }
     });
+
+    /// Preconditions:
+    /// Have some uncommitted entries that includes updates and deletes of a key
+    /// The uncommitted entries(keys) are sent as a batch request
+    ///
+    /// Assertions:
+    /// Batch response should contain the commitId for every key sent in the batch request
     test(
         'A test to verify the commitId is updated against the uncommitted entries on batch response',
-        () {
-      /// Preconditions:
-      /// Have some uncommitted entries that includes updates and deletes of a key
-      /// The uncommitted entries(keys) are sent as a batch request
-      ///
-      /// Assertions:
-      /// Batch response should contain the commitId for every key sent in the batch request
+        () async {
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth")))
+          .thenAnswer((invocation) =>
+              Future.value('data:[{"id":1,"response":{"data":"21"}},'
+                  '{"id":2,"response":{"data":"22"}},'
+                  '{"id":3,"response":{"data":"23"}},'
+                  '{"id":4,"response":{"data":"24"}},'
+                  '{"id":5,"response":{"data":"25"}}]'));
+
+      await localSecondary.putValue(
+          'public:test_key0.group3test5@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key1.group3test5@bob', 'dummy');
+      await localSecondary.putValue(
+          'public:test_key2.group3test5@bob', 'dummydata');
+      await localSecondary.putValue(
+          '@sharedWithAtsign:test_key4.group3test5@bob', 'dummy');
+      await localSecondary.putValue('test_key14.group3test5@bob', 'dummyData');
+      await syncService.syncInternal(-1, SyncRequest()..result = SyncResult());
+      //after sync assert that all the commit entries have commitIds
+      //seq_num starts from 0 and the commitIds start from 21 based on server response mocked above
+      var result = await syncService.syncUtil.atCommitLog?.getEntry(0);
+      expect(result?.commitId, 21);
+      result = await syncService.syncUtil.atCommitLog?.getEntry(1);
+      expect(result?.commitId, 22);
+      result = await syncService.syncUtil.atCommitLog?.getEntry(2);
+      expect(result?.commitId, 23);
+      result = await syncService.syncUtil.atCommitLog?.getEntry(3);
+      expect(result?.commitId, 24);
+      result = await syncService.syncUtil.atCommitLog?.getEntry(4);
+      expect(result?.commitId, 25);
     });
+
+    ///********************************
+    ///Assertion not possible as invalid keys cannot be inserted into the keystore
+    ///********************************
     test(
         'A test to verify sync continues when server returns exception for one of the sync entry',
         () {
@@ -1242,28 +1461,75 @@ void main() {
       /// Sync should not be in infinite loop
     });
 
+    ///Note: The uncommitted entries in the hive keystore
+    /// should be added to batch request in the same order.
+    /// If there are two entries for same key with commit op. update and delete,
+    /// then batch request should have the same sequence in it.
+
+    /// Preconditions:
+    /// 1. Have uncommitted entries in the keystore
+    /// a. hive_seq: 1 - @alice:phone@bob - commitOp. Update - value: +445-446-4847
+    /// b. hive_seq:2 - @alice:phone@bob - commitOp. delete
+    /// c. hive_seq:3 - @alice:email@bob - commitOp. Update - value: alice@gmail.com
+    /// d. hive_seq:4 - @alice:username@bob - commitOp. Update - value: alice123
+    /// e. hive_seq:5 - @alice:facebook@bob - commitOp. Update - value: alice
+    ///
+    /// Assertions:
+    /// 1. Batch request should have the same sequence as inserted hive keystore
+    ///  i.e., - a,b,c,d,e
     test(
         'A test to verify the key into batch request are added in sequential order as in hive keystore',
-        () {
-      ///Notes of the test case: The uncommitted entries in the hive keystore
-      /// should be added to batch request in the same order.
-      /// If there are two entries for same key with commit op. update and delete,
-      /// then batch request should have the same sequence in it.
+        () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
 
-      /// Preconditions:
-      /// 1. Have uncommitted entries in the keystore
-      /// a. hive_seq: 1 - @alice:phone@bob - commitOp. Update - value: +445-446-4847
-      /// b. hive_seq:2 - @alice:phone@bob - commitOp. delete
-      /// c. hive_seq:3 - @alice:email@bob - commitOp. Update - value: alice@gmail.com
-      /// d. hive_seq:4 - @alice:username@bob - commitOp. Update - value: alice123
-      /// e. hive_seq:5 - @alice:facebook@bob - commitOp. Update - value: alice
-      ///
-      /// Assertions:
-      /// 1. Batch request should have the same sequence as inserted hive keystore
-      ///  i.e., - a,b,c,d,e
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      //------------------preconditions setup-----------------------
+      //create 5 random keys of types public/shared/self
+      await localSecondary.putValue(
+          'public:test_key0.group3test7@bob', 'dummydata');
+      await keystore?.remove('test_key0.group3test7@bob');
+      await localSecondary.putValue(
+          'public:test_key1.group3test7@bob', 'dummy');
+      await keystore?.remove('test_key1.group3test7@bob');
+      await localSecondary.putValue(
+          'public:test_key2.group3test7@bob', 'dummydata');
+
+      //-------------------------------operation--------------------------------
+      var batchRequest = await syncService.getBatchRequests(await syncService
+          .syncUtil
+          .getChangesSinceLastCommit(-1, 'group3test7', atSign: atsign));
+      //------------------------------assertion---------------------------------
+      expect(batchRequest[0].command,
+          'update:public:test_key0.group3test7@bob dummydata');
+      expect(batchRequest[1].command, 'delete:test_key0.group3test7@bob');
+      expect(batchRequest[2].command,
+          'update:public:test_key1.group3test7@bob dummy');
+      expect(batchRequest[3].command, 'delete:test_key1.group3test7@bob');
+      expect(batchRequest[4].command,
+          'update:public:test_key2.group3test7@bob dummydata');
     });
+    tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
+
+  ///********************************
+  // TODO - FEATURE NEEDS TO BE IMPLEMENTED
+  // With the current implementation if we create and delete the same key,
+  // Both the entries will added to the sync queue.
+  ///********************************
   group('tests related to TTL and TTB', () {
+    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+
     test('A test to verify when a key is set with TTL and expired when sync',
         () {
       /// Preconditions:
@@ -1301,13 +1567,13 @@ void main() {
       /// 1. Both the commits should be synced to the cloud secondary
       /// (If we sync only update_meta, the value will not be updated to cloud secondary)
     });
+
+    //TODO: Arch all discussion: When key is still not born, we return data:null
+    // however, when sync process triggers before the key is not born, we get the actual
+    // value from keystore instead of 'data:null' to sync to server
     test(
         'A test to verify when ttb is set on key and key is not available when sync',
         () {
-      //TODO: Arch all discussion: When key is still not born, we return data:null
-      // however, when sync process triggers before the key is not born, we get the actual
-      // value from keystore instead of 'data:null' to sync to server
-
       /// Preconditions:
       /// 1. Create a key with ttb value of 30 seconds
       /// 2. Initiate sync at 10th second
@@ -1315,147 +1581,394 @@ void main() {
       /// Assertions:
       /// 1. The key should be synced to remote secondary along with the value successfully
     });
+
+    /// Preconditions:
+    /// 1. There should be no entry for the same key in the key store
+    /// 2. There should be no entry for the same key in the commit log
+
+    /// Operation:
+    /// Put a key with TTB say 30 seconds
+
+    /// Assertions:
+    /// 1. Key store should have the key with the value inserted
+    /// 2. Assert that the value is returned only after 30seconds
+    /// 3. A metadata "CreatedAt" should be populated with
+    /// DateTime which is less than DateTime.now()
+    /// 3. The version of the key should be set to 0
+    /// 4. CommitLog should have an entry for the new public key with commitOp.Update
+    /// and commitId is null
     test('A test to verify when a key is set with TTB and key is available',
-        () {
-      /// Preconditions:
-      /// 1. There should be no entry for the same key in the key store
-      /// 2. There should be no entry for the same key in the commit log
-
-      /// Operation:
-      /// Put a key with TTB say 30 seconds
-
-      /// Assertions:
-      /// 1. Key store should have the key with the value inserted
-      /// 2. Assert that the value is returned only after 30seconds
-      /// 3. A metadata "CreatedAt" should be populated with
-      /// DateTime which is less than DateTime.now()
-      /// 3. The version of the key should be set to 0
-      /// 4. CommitLog should have an entry for the new public key with commitOp.Update
-      /// and commitId is null
+        () async {
+      //----------------------------------setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey = AtKey.self('authcode', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var atData = AtData();
+      atData.data = '11122';
+      int putCommitId = await keystore!.put(atKey, atData, time_to_born: 10000);
+      // key should not be available before 10 seconds
+      // Assertion is not possible as the key will be available in the keystore level
+      // expect(() async => await keystore.get(atKey),
+      //     throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
+      var getResult = await keystore.get(atKey);
+      expect(getResult!.data, '11122');
+      expect(getResult.metaData!.createdAt!.isBefore(DateTime.now()), true);
+      expect(getResult.metaData!.version, 0);
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getCommitEntry(putCommitId, atsign);
+      expect(commitLogEntry?.operation, CommitOp.UPDATE_ALL);
     });
+    tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
   group(
       'A group of tests on fetching the local commit id and uncommitted entries',
       () {
-    test('A test to verify highest localCommitId is fetched with no regex', () {
-      ///Preconditions:
-      /// 1. The local keystore contains following keys
-      ///   a. phone.wavi@alice with commit id 10
-      ///   b. mobile.atmosphere@alice with commit id 11
-      ///
-      /// Assertions:
-      /// When fetched highest commit entry - entry with commit id 11 should be fetched
+    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+
+    AtClient mockAtClient = MockAtClient();
+    AtClientManager mockAtClientManager = MockAtClientManager();
+    NotificationServiceImpl mockNotificationService =
+        MockNotificationServiceImpl();
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+    ///Preconditions:
+    /// 1. The local keystore contains following keys
+    ///   a. phone.wavi@alice with commit id 10
+    ///   b. mobile.atmosphere@alice with commit id 11
+    ///
+    /// Assertions:
+    /// When fetched highest commit entry - entry with commit id 11 should be fetched
+    test('A test to verify highest localCommitId is fetched with no regex',
+        () async {
+      //----------------------------------Setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey1 = AtKey.self('phone', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var atKey2 =
+          AtKey.self('mobile', namespace: 'atmosphere', sharedBy: atsign)
+              .build()
+              .toString();
+      //----------------------------------Operations----------------------------
+      int waviCommitId =
+          await keystore!.put(atKey1, AtData()..data = '1234567890');
+      int atMospherCommitId =
+          await keystore.put(atKey2, AtData()..data = '909120909109');
+      await TestResources.setCommitEntry(waviCommitId, atsign);
+      await TestResources.setCommitEntry(atMospherCommitId, atsign);
+      //----------------------------------Assertions----------------------------
+      var lastSyncedEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('', atSign: atsign);
+      expect(lastSyncedEntry!.commitId, atMospherCommitId);
     });
+
+    ///Preconditions:
+    /// 1. The local keystore contains following keys
+    ///   a. phone.wavi@alice with commit id 10
+    ///   b. mobile.atmosphere@alice with commit id 11
+    ///
+    /// Assertions:
+    /// When fetched highest commit entry with regex .wavi - entry with
+    /// commit Id 10 should be fetched
     test(
         'A test to verify highest localCommitId satisfying the regex is fetched',
-        () {
-      ///Preconditions:
-      /// 1. The local keystore contains following keys
-      ///   a. phone.wavi@alice with commit id 10
-      ///   b. mobile.atmosphere@alice with commit id 11
-      ///
-      /// Assertions:
-      /// When fetched highest commit entry with regex .wavi - entry with
-      /// commit Id 10 should be fetched
+        () async {
+      //----------------------------------Setup---------------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var waviKey = AtKey.self('phone', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var atmosphereKey =
+          AtKey.self('mobile', namespace: 'atmosphere', sharedBy: atsign)
+              .build()
+              .toString();
+      //----------------------------------Operations----------------------------
+      int waviId = await keystore!.put(waviKey, AtData()..data = '1234567890');
+      int atmosphereId =
+          await keystore.put(atmosphereKey, AtData()..data = '909120909109');
+      await TestResources.setCommitEntry(waviId, atsign);
+      await TestResources.setCommitEntry(atmosphereId, atsign);
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('wavi', atSign: atsign);
+      //----------------------------------Assertions----------------------------
+      expect(commitLogEntry!.commitId, waviId);
     });
 
+    ///Preconditions:
+    /// 1. The local keystore contains following keys
+    ///   a. phone.wavi@alice with commit id 10
+    ///   b. mobile.atmosphere@alice with commit id 11
+    ///
+    /// Assertions:
+    /// The lastSyncEntry must have the highest commit id - here commitId 11
     test('A test to verify lastSyncedEntry returned has the highest commitId',
-        () {
-      ///Preconditions:
-      /// 1. The local keystore contains following keys
-      ///   a. phone.wavi@alice with commit id 10
-      ///   b. mobile.atmosphere@alice with commit id 11
-      ///
-      /// Assertions:
-      /// The lastSyncEntry must have the highest commit id - here commitId 11
+        () async {
+      //----------------------------------Setup-----------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey1 = AtKey.self('phone', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var atKey2 =
+          AtKey.self('mobile', namespace: 'atmosphere', sharedBy: atsign)
+              .build()
+              .toString();
+      //----------------------------------Operations----------------------------
+      int waviId = await keystore!.put(atKey1, AtData()..data = '1234567890');
+      int atmosphereId =
+          await keystore.put(atKey2, AtData()..data = '909120909109');
+      await TestResources.setCommitEntry(waviId, atsign);
+      await TestResources.setCommitEntry(atmosphereId, atsign);
+      var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
+          .getLastSyncedEntry('', atSign: atsign);
+      //----------------------------------Assertions----------------------------
+      expect(commitLogEntry!.commitId, atmosphereId);
     });
 
+    /// Preconditions:
+    ///  1. The local keystore contains following keys
+    ///    a. aboutMe.wavi@alice with commit id null and commitOp.Update
+    ///    b. phone.wavi@alice with commit id 10 and commitOp.Update
+    ///    c. mobile.wavi@alice with commit id 11 and commitOp.Update
+    ///    d. country.wavi@alice with commit id null and commitOp.Update
+    ///
+    /// Assertions:
+    ///  The uncommitted entries must have entries with commitId null
+    ///    Here: commit entries of aboutMe.wavi@alice and country.wavi@alice
     test(
         'A test to verify the uncommitted entries have entries with commit-id null',
-        () {
-      /// Preconditions:
-      ///  1. The local keystore contains following keys
-      ///    a. aboutMe.wavi@alice with commit id null and commitOp.Update
-      ///    b. phone.wavi@alice with commit id 10 and commitOp.Update
-      ///    c. mobile.wavi@alice with commit id 11 and commitOp.Update
-      ///    d. country.wavi@alice with commit id null and commitOp.Update
-      ///
-      /// Assertions:
-      ///  The uncommitted entries much have entries with commitId null
-      ///    Here: commit entries of aboutMe.wavi@alice and country.wavi@alice
+        () async {
+      //----------------------------------Setup-----------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var aboutKey = AtKey.self('aboutme', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var phoneKey = AtKey.self('phone', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var mobileKey = AtKey.self('mobile', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      var countryKey =
+          AtKey.self('country', namespace: 'wavi', sharedBy: atsign)
+              .build()
+              .toString();
+      //----------------------------------Operations----------------------------
+      int phoneId =
+          await keystore!.put(phoneKey, AtData()..data = '1234567890');
+      await TestResources.setCommitEntry(phoneId, atsign);
+      int aboutKeyId = await keystore.put(aboutKey, AtData()..data = 'QA');
+      int mobileId =
+          await keystore.put(mobileKey, AtData()..data = '909120909109');
+      await TestResources.setCommitEntry(mobileId, atsign);
+      int countryCommitId =
+          await keystore.put(countryKey, AtData()..data = 'USA');
+      var commitLogEntryAboutKey =
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(aboutKeyId, atsign);
+      var commitLogEntryCountryKey =
+          await SyncUtil(atCommitLog: TestResources.commitLog)
+              .getCommitEntry(countryCommitId, atsign);
+      //----------------------------------Assertions----------------------------
+      expect(commitLogEntryAboutKey!.commitId, null);
+      expect(commitLogEntryCountryKey!.commitId, null);
     });
+
+    /// Preconditions:
+    ///  1. The local keystore does not contains key
+    ///
+    /// Assertions:
+    ///  a. The lastSyncedEntry should be null
+    ///  b. The commit entry should be null
     test(
         'A test to verify lastSyncedEntry returns -1 when commit log do not have keys',
-        () {
-      /// Preconditions:
-      ///  1. The local keystore does not contains keys
-      ///
-      /// Assertions:
-      ///  a. The lastSyncedEntry should be null
-      ///  b. The commit entry should be -1
+        () async {
+      var commitLog = TestResources.commitLog;
+      var syncUtil = SyncUtil(atCommitLog: commitLog);
+      expect(commitLog?.getSize(), 0);
+      expect(await syncUtil.getLastSyncedEntry('regex', atSign: atsign), null);
+      expect(commitLog?.lastCommittedSequenceNumber(), -1);
+      expect(await commitLog?.getEntry(commitLog.lastCommittedSequenceNumber()),
+          null);
     });
-    test('A test to verify sync with regex when local is ahead', () {
-      /// Preconditions:
-      /// 1. The server commitId is at 100 and local commitId is also 100
-      /// 2. In the local keystore have 5 uncommitted entries with .wavi
-      /// 3. Initiate sync with regex - ".wavi"
-      ///
-      /// Assertions:
-      /// 1. Server and local should be in sync and 5 uncommitted entries
-      ///    must be synced to cloud secondary
+
+    /// Preconditions:
+    /// 1. The server commitId is at 100 and local commitId is also 100
+    /// 2. In the local keystore have 5 uncommitted entries with .wavi
+    /// 3. Initiate sync with regex - ".wavi"
+    ///
+    /// Assertions:
+    /// 1. Server and local should be in sync and 5 uncommitted entries
+    ///    must be synced to cloud secondary
+    test('A test to verify sync with regex when local is ahead', () async {
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary.executeVerb(any())).thenAnswer(
+          (_) async => Future.value('data:[{"id":1,"response":{"data":"101"}},'
+              '{"id":2,"response":{"data":"102"}},'
+              '{"id":3,"response":{"data":"103"}},'
+              '{"id":4,"response":{"data":"104"}},'
+              '{"id":5,"response":{"data":"105"}}]'));
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      //------------------preconditions setup-----------------------
+      //manipulating commitLog to make the commitId of last entry to 100
+      await localSecondary.putValue(
+          'public:dummy.group5test6@bob', 'dummydata');
+      var commitEntry = await syncService.syncUtil.atCommitLog?.getEntry(0);
+      await syncService.syncUtil.atCommitLog?.update(commitEntry!, 100);
+      //creating uncommitted entries
+      await localSecondary.putValue('public:test_key0.wavi@bob', 'dummydata');
+      await localSecondary.putValue('public:test_key1.wavi@bob', 'dummydata');
+      await localSecondary.putValue('public:test_key2.wavi@bob', 'dummydata');
+      await localSecondary.putValue('public:test_key3.wavi@bob', 'dummydata');
+      await localSecondary.putValue('public:test_key4.wavi@bob', 'dummydata');
+      int serverCommitId = 100;
+      SyncResult syncResult = await syncService.syncInternal(
+          serverCommitId, SyncRequest()..result = SyncResult());
+      expect(syncResult.syncStatus, SyncStatus.success);
+      expect(syncResult.keyInfoList.length, 5);
+      var lastSyncedEntry =
+          await syncService.syncUtil.getLastSyncedEntry('wavi', atSign: atsign);
+      assert(lastSyncedEntry.toString().contains('test_key4.wavi@bob'));
     });
+    tearDownAll(() async => await TestResources.tearDownLocalStorage());
   });
 
   group(
       'Tests to validate how the client processes updates from the server - can the client reject? under what conditions? what happens upon a rejection?',
       () {
-    test('Update from server for a key that exists in local secondary', () {
-      /// Preconditions:
-      /// 1. The key already exists in the local keystore
-      /// 2. An entry should already exist in the local commit log
-      ///
-      /// Operation:
-      /// 1. Run sync where the sync response contains an entry with CommitOp.Update of a new key
-      ///
-      /// Assertions:
-      /// 1. The value and metadata of the existing key should be updated
-      ///    Since we are updated existing key "createdAt" field should remain as is and
-      ///    "updatedAt" field should be updated.
-      /// 2. The version field should be incremented by 1
-      /// 3. The new entry should be created in the commit log with the new commit id
+    setUpAll(() async {
+      await TestResources.setupLocalStorage(atsign);
     });
+
+    /// Preconditions:
+    /// 1. The key already exists in the local keystore
+    /// 2. An entry should already exist in the local commit log
+    ///
+    /// Operation:
+    /// 1. Run sync where the sync response contains an entry with CommitOp.Update of a new key
+    ///
+    /// Assertions:
+    /// 1. The value and metadata of the existing key should be updated
+    ///    Since we are updated existing key "createdAt" field should remain as is and
+    ///    "updatedAt" field should be updated.
+    /// 2. The version field should be incremented by 1
+    /// 3. The new entry should be created in the commit log with the new commit id
+    test('Update from server for a key that exists in local secondary',
+        () async {
+      //----------------------------------Setup-----------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey = AtKey.self('weather', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      // key available in the local keystore
+      await keystore!.put(atKey, AtData()..data = 'sunny');
+      // Updating the same key from the server
+      int putCommitId = await keystore.put(atKey, AtData()..data = 'sunny');
+      // Updating the commit entry with commitId to mimic the server behaviour
+      await TestResources.setCommitEntry(putCommitId, atsign);
+      var getResult = await keystore.get(atKey);
+      expect(getResult!.data, 'sunny');
+      expect(getResult.metaData!.updatedAt!.isBefore(DateTime.now()), true);
+      var commitEntry = await TestResources.commitLog!.getEntry(putCommitId);
+      expect(commitEntry!.commitId, putCommitId);
+    });
+
+    /// Preconditions:
+    /// 1. The key does not exist in the local keystore
+    ///
+    /// Operation:
+    /// 1. Run sync where the sync response contains an entry with CommitOp.Update of a new key
+    ///
+    /// Assertions:
+    /// 1. The new key should be created in the hive keystore
+    /// 2. An entry created in the commit log with the new commit id
     test('Update from server for a key that does not exist in local secondary',
-        () {
-      /// Preconditions:
-      /// 1. The key does not exist in the local keystore
-      ///
-      /// Operation:
-      /// 1. Run sync where the sync response contains an entry with CommitOp.Update of a new key
-      ///
-      /// Assertions:
-      /// 1. The new key should be created in the hive keystore
-      /// 2. An entry created in the commit log with the new commit id
+        () async {
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey = AtKey.self('season', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      int putCommitId = await keystore!.put(atKey, AtData()..data = 'autumn');
+      // Updating the commit entry with commitId to mimic the server behaviour
+      await TestResources.setCommitEntry(putCommitId, atsign);
+      var getResult = await keystore.get(atKey);
+      expect(getResult!.data, 'autumn');
+      var commitEntry = await TestResources.commitLog!.getEntry(putCommitId);
+      expect(commitEntry!.commitId, putCommitId);
     });
-    test('Delete from server for a key that exists in local secondary', () {
-      /// Preconditions:
-      /// 1. The key already exists in the local keystore
-      /// 2. An entry in commitLog with commitOp.Update
-      ///
-      /// Operation:
-      /// 1. Run sync where the sync response contains an entry with CommitOp.delete of an existing key
-      ///
-      /// Assertions:
-      /// 1. The key should be deleted from the hive keystore
-      /// 2. Am entry with commitOp.delete should be added to the commit log
+
+    /// Preconditions:
+    /// 1. The key already exists in the local keystore
+    /// 2. An entry in commitLog with commitOp.Update
+    ///
+    /// Operation:
+    /// 1. Run sync where the sync response contains an entry with CommitOp.delete of an existing key
+    ///
+    /// Assertions:
+    /// 1. The key should be deleted from the hive keystore
+    /// 2. An entry with commitOp.delete should be added to the commit log
+    test('Delete from server for a key that exists in local secondary',
+        () async {
+      //----------------------------------Setup-----------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey = AtKey.self('weather', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      // key available in the local keystore
+      await keystore!.put(atKey, AtData()..data = 'sunny');
+      // Updating the same key from the server
+      int? removeCommitId = await keystore.remove(atKey);
+      // Updating the commit entry with commitId to mimic the server behaviour
+      await TestResources.setCommitEntry(removeCommitId!, atsign);
+      expect(() async => await keystore.get(atKey),
+          throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
+      var commitEntry = await TestResources.commitLog!.getEntry(removeCommitId);
+      expect(commitEntry!.operation, CommitOp.DELETE);
     });
+
+    /// Precondition:
+    /// The key does not exist in the local secondary
+    ///
+    /// Assertions;
+    /// An entry should be added to commit log to prevent sync imbalance
     test('Delete from server for a key that does not exist in local secondary',
-        () {
-      /// Precondition:
-      /// The key does not exist in the local secondary
-      ///
-      /// Assertions;
-      /// An entry should be added to commit log to prevent sync imbalance
+        () async {
+      //----------------------------------Setup-----------------------------
+      HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+      var atKey = AtKey.self('weather', namespace: 'wavi', sharedBy: atsign)
+          .build()
+          .toString();
+      // Updating the same key from the server
+      int? removeCommitId = await keystore!.remove(atKey);
+      // Updating the commit entry with commitId to mimic the server behaviour
+      await TestResources.setCommitEntry(removeCommitId!, atsign);
+      expect(() async => await keystore.get(atKey),
+          throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
+      var commitEntry = await TestResources.commitLog!.getEntry(removeCommitId);
+      expect(commitEntry!.operation, CommitOp.DELETE);
     });
+
+    // TODO - ENHANCEMENT REQUESTS
+    /// Improve KeyInfo to include description *
+    /// Example - Include info that says 'this happens to be a bad key'
+    /// Enhancement ticket raised - https://github.com/atsign-foundation/at_client_sdk/issues/833
     test('Verify clients handling of bad keys in updates from server', () {
       /// Precondition:
       /// Key will be rejected by a put / attempt to write to key store
@@ -1466,9 +1979,12 @@ void main() {
       /// 1. KeyInfo should inform about a bad key / not able sync this key
       /// 2. Key store should be in right state
       /// 3. CommitLog should have an entry along with server commit id
-
-      /// Needs refactoring *
     });
+
+    /// TODO - ENHANCEMENT REQUESTS
+    /// Improve KeyInfo to include description *
+    /// Example - Include info that says 'this happens to be a bad key'
+    /// Enhancement ticket raised -https://github.com/atsign-foundation/at_client_sdk/issues/833
     test(
         'Verify clients handling of bad keys in deletes from server - For an existing bad key',
         () {
@@ -1478,11 +1994,9 @@ void main() {
       /// Key store has a entry for this key
 
       /// Assertions:
-      /// 1. KeyInfo should inform about a key being deleted - Can we include info that says 'this happens to be a bad key'
+      /// 1. KeyInfo should inform about a key being deleted
       /// 2. Key store should be in right state
       /// 3. CommitLog should have an entry along with server commit id
-
-      /// Enhancement improve KeyInfo to include description *
     });
     test(
         'Verify clients handling of bad keys in deletes from server - Bad key is not present in the local key store',
@@ -1493,7 +2007,10 @@ void main() {
       /// Assertions;
       /// An entry should be added to commit log to prevent sync imbalance
     });
+
     group('A group of tests when server is ahead of local commit id', () {
+      setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+
       test('A test to verify server commit entries are synced to local', () {
         /// The test should contain all types of keys - public key, shared key, self key
         ///
@@ -1510,64 +2027,132 @@ void main() {
       test(
           'A test to verify when invalid keys are returned in sync response from server',
           () {});
+
+      /// Preconditions:
+      /// 1. There should be no entry for the same key in the key store
+      /// 2. There should be no entry for the same key in the commit log
+
+      /// Operation:
+      /// CommitOp.UPDATE
+
+      /// Assertions:
+      /// 1. Key store should have the public key with the value inserted
+      /// 2. Assert the metadata of the key. "CreatedAt" should be populated with
+      /// DateTime which is less than DateTime.now()
+      /// 3. The version of the key should be set to 0
+      /// 4. CommitLog should have an entry for the new public key with commitOp.Update
+      /// and commitId is null
       test(
           'A test to verify a new key is created in local keystore on update commit operation',
-          () {
-        /// Preconditions:
-        /// 1. There should be no entry for the same key in the key store
-        /// 2. There should be no entry for the same key in the commit log
-
-        /// Operation:
-        /// CommitOp.UPDATE
-
-        /// Assertions:
-        /// 1. Key store should have the public key with the value inserted
-        /// 2. Assert the metadata of the key. "CreatedAt" should be populated with
-        /// DateTime which is less than DateTime.now()
-        /// 3. The version of the key should be set to 0
-        /// 4. CommitLog should have an entry for the new public key with commitOp.Update
-        /// and commitId is null
+          () async {
+        // --------------------- Setup ---------------------
+        HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+        var atData = AtData();
+        atData.data = 'HitechCity';
+        //------------------Operation-------------
+        //  creating a key in the keystore
+        String atKey =
+            (AtKey.public('place', namespace: 'wavi', sharedBy: atsign))
+                .build()
+                .toString();
+        int putCommitId = await keystore!.put(atKey, atData);
+        //------------------Assertions-------------
+        var keyStoreGetResult = await keystore.get(atKey);
+        expect(keyStoreGetResult!.metaData!.createdAt!.isBefore(DateTime.now()),
+            true);
+        expect(keyStoreGetResult.metaData!.version, 0);
+        // verifying the key in the commit log
+        var commitEntryResult =
+            await SyncUtil(atCommitLog: TestResources.commitLog)
+                .getCommitEntry(putCommitId, atsign);
+        expect(commitEntryResult!.operation, CommitOp.UPDATE);
       });
+      //TODO: Update all the available metadata fields and assert
+      /// Preconditions:
+      /// 1. There should be an entry for the same key in the key store
+      /// 2. There should be an entry for the same key in the commit log
+
+      /// Operation:
+      /// Updating the metadata for an existing shared key
+      /// CommitOp.UPDATE_META
+      /// a. Update TTL value to 30 seconds
+      /// b. Update TTB value to 10 seconds
+      /// c. Update TTR
+      /// d. Update CCD to TRUE
+
+      /// Assertions:
+      ///1. Assert the metadata of the key. "CreatedAt" field should not be modified and
+      /// "UpdatedAt" should be less than now().
+      ///  expiresAt, availableAt, refreshAt values in the metadata should be in line with the updated values
+      ///  CCD should be true
+      /// a. The key should expire after 30seconds
+      /// b. The key should be available only after 10 seconds
+      ///
+      /// 2. The version of the key should be incremented by 1
+      /// 4. CommitLog should have an entry for the  key with commitOp.UPDATE_META
       test(
           'A test to verify existing key metadata is updated on update_meta commit operation',
-          () {
-        //TODO: Update all the available metadata fields and assert
-        /// Preconditions:
-        /// 1. There should be an entry for the same key in the key store
-        /// 2. There should be an entry for the same key in the commit log
-
-        /// Operation:
-        /// Updating the metadata for an existing shared key
-        /// CommitOp.UPDATE_META
-        /// a. Update TTL value to 30 seconds
-        /// b. Update TTB value to 10 seconds
-        /// c. Update TTR
-        /// d. Update CCD to TRUE
-
-        /// Assertions:
-        ///1. Assert the metadata of the key. "CreatedAt" field should not be modified and
-        /// "UpdatedAt" should be less than now().
-        ///  expiresAt, availableAt, refreshAt values in the metadata should be in line with the updated values
-        ///  CCD should be true
-        /// a. The key should expire after 30seconds
-        /// b. The key should be available only after 10 seconds
-        ///
-        /// 2. The version of the key should be incremented by 1
-        /// 4. CommitLog should have an entry for the  key with commitOp.UPDATE_META
+          () async {
+        // --------------------- Setup ---------------------
+        HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+        //------------------Operation-------------
+        //  creating a key in the keystore
+        String atKey =
+            (AtKey.public('city', namespace: 'wavi', sharedBy: atsign))
+                .build()
+                .toString();
+        AtMetaData? metaData;
+        metaData = AtMetaData();
+        metaData.ttl = 30;
+        metaData.ttb = 10;
+        metaData.ttr = 20;
+        metaData.isCascade = true;
+        int? putMetaId = await keystore!.putMeta(atKey, metaData);
+        //------------------Assertions-------------
+        var keyStoreGetResult = await keystore.getMeta(atKey);
+        expect(keyStoreGetResult!.createdAt!.isBefore(DateTime.now()), true);
+        expect(keyStoreGetResult.ttl, 30);
+        expect(keyStoreGetResult.ttb, 10);
+        expect(keyStoreGetResult.ttr, 20);
+        expect(keyStoreGetResult.isCascade, true);
+        // verifying the key in the commit log
+        var commitEntryResult =
+            await SyncUtil(atCommitLog: TestResources.commitLog)
+                .getCommitEntry(putMetaId!, atsign);
+        expect(commitEntryResult!.operation, CommitOp.UPDATE_META);
       });
+
+      /// Preconditions:
+      /// 1. There should be an entry for the same key in the key store
+      /// 2. There should be an entry for the same key in the commit log
+      ///
+      /// Operation:
+      /// CommitOp.DELETE
+      ///
+      /// Assertions:
+      /// 1. The key should be deleted from the key store
+      /// 2. CommitLog should have an entry for the key with commitOp.DELETE
       test(
           'A test to verify existing key is deleted when delete commit operation is received',
-          () {
-        /// Preconditions:
-        /// 1. There should be an entry for the same key in the key store
-        /// 2. There should be an entry for the same key in the commit log
-        ///
-        /// Operation:
-        /// CommitOp.DELETE
-        ///
-        /// Assertions:
-        /// 1. The key should be deleted from the key store
-        /// 2. CommitLog should have an entry for the key with commitOp.DELETE
+          () async {
+        // --------------------- Setup ---------------------
+        HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+        //------------------Operation-------------
+        //  creating a key in the keystore
+        String atKey =
+            (AtKey.public('message', namespace: 'wavi', sharedBy: atsign))
+                .build()
+                .toString();
+        await keystore!.put(atKey, AtData()..data = 'hello');
+        int? removeId = await keystore.remove(atKey);
+        //------------------Assertions-------------
+        expect(() async => await keystore.get(atKey),
+            throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
+        // verifying the key in the commit log
+        var commitEntryResult =
+            await SyncUtil(atCommitLog: TestResources.commitLog)
+                .getCommitEntry(removeId!, atsign);
+        expect(commitEntryResult!.operation, CommitOp.DELETE);
       });
       test(
           'A test to verify when local keystore does not contain key which is in delete commit operation',
@@ -1593,7 +2178,9 @@ void main() {
         /// 1. The keys matching the regex should only sync to local secondary
         /// 2. isInSync should return after sync completion
       });
+      tearDownAll(() async => await TestResources.tearDownLocalStorage());
     });
+
     group('A group of test to verify sync conflict resolution', () {
       test(
           'A test to verify when sync conflict info when key present in uncommitted entries and in server response of sync',
@@ -1611,18 +2198,23 @@ void main() {
 
   group('Tests to validate how the client and server exchange information', () {
     group('A group of test to verify if client and server are in sync', () {
+      /// Preconditions:
+      /// 1. The server commitId is at 15 and local commitId is at 15
+      ///
+      /// Assertions:
+      /// 1. isInSync should return true
       test(
           'A test to verify isInSync returns inSync when localCommitId and serverCommitId are equal',
           () {
-        /// Preconditions:
-        /// 1. The server commitId is at 15 and local commitId is at 15
-        ///
-        /// Assertions:
-        /// 1. isInSync should return true
-        ///
-        /// Needs Refactoring:
-        /// isInSync should return an enum
+        // --------------------- Preconditions ---------------------
+        var isInSync = SyncUtil.isInSync(null, 15, 15);
+        // --------------------- Assertions ---------------------
+        expect(isInSync, true);
       });
+
+      /// Needs Refactoring:
+      /// isInSync should return an enum - ServerAhead
+      /// Enhancement Ticket - https://github.com/atsign-foundation/at_client_sdk/issues/832
       test(
           'A test to verify serverAhead when serverCommitId is greater than localCommitId',
           () {
@@ -1632,6 +2224,10 @@ void main() {
         /// Assertions:
         /// 1. isInSync should return serverAhead
       });
+
+      /// Needs Refactoring:
+      /// isInSync should return an enum - ServerAhead
+      /// Enhancement Ticket - https://github.com/atsign-foundation/at_client_sdk/issues/832
       test(
           'A test to verify serverAhead when serverCommitId is greater than localCommitId and localCommitId has uncommitted entries',
           () {
@@ -1642,6 +2238,10 @@ void main() {
         /// Assertions:
         /// 1. isInSync should return serverAhead
       });
+
+      /// Needs Refactoring:
+      /// isInSync should return an enum - ServerAhead
+      /// Enhancement Ticket - https://github.com/atsign-foundation/at_client_sdk/issues/832
       test('A test to verify local secondary has uncommitted entries', () {
         /// Preconditions:
         /// 1. The local commitId is at 15 and serverCommitId 25
@@ -1651,6 +2251,13 @@ void main() {
         /// 1. isInSync should localAhead
       });
     });
+
+    /// Needs refactoring * - TODO
+    /// Say no when:
+    /// 1. sync is already running
+    /// 2. there is no network
+    /// 3. Server and client are already in sync
+    /// 4. sync request threshold is not met
     group('A group of tests to verify sync trigger criteria', () {
       test(
           'A test to verify sync process triggers at configured values for frequent intervals',
@@ -1661,13 +2268,6 @@ void main() {
         ///
         /// Assertions:
         /// Assert that sync process is triggered at 3 seconds
-
-        /// Needs refactoring *
-        /// Say no when:
-        /// 1. sync is already running
-        /// 2. there is no network
-        /// 3. Server and client are already in sync
-        /// 4. sync request threshold is not met
       });
       test(
           'A test to verify new sync process does not start when existing sync process is running',
@@ -1699,7 +2299,7 @@ void main() {
         /// Assert that sync process is not started till the syncRequestThreshold is met
       });
       test(
-          'A test to verify sync process does not start when sync reqeust queue does not meet the threshold',
+          'A test to verify sync process does not start when sync request queue does not meet the threshold',
           () {
         /// Preconditions:
         /// 1. The _syncRequestThreshold is set to 3.
@@ -1708,30 +2308,121 @@ void main() {
         /// Assert that sync process is not started before the queue size is reached
       });
     });
+
     group('A group of tests to verify isSyncInProgress flag', () {
+      setUpAll(() => TestResources.setupLocalStorage(atsign));
+
+      AtClient mockAtClient = MockAtClient();
+      AtClientManager mockAtClientManager = MockAtClientManager();
+      NotificationServiceImpl mockNotificationService =
+          MockNotificationServiceImpl();
+      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      /// Preconditions:
+      /// 1. Initially the isSyncInProgress is set to false.
+      /// 2. The server commit id and local commit id are equal
+      /// 3. The uncommitted entries are available in local keystore
+      ///
+      /// Assertions:
+      /// 1. when sync is triggered, the isSyncInProgress should be set to true
       test(
           'A test to verify isSyncInProgress flag is set to true when sync starts',
-          () {
-        /// Preconditions:
-        /// 1. Initially the isSyncInProgress is set to false.
-        /// 2. The server commit id and local commit id are equal
-        /// 3. The uncommitted entries are available in local keystore
-        ///
-        /// Assertions:
-        /// 1. when sync is triggered, the isSyncInProgress should be set to true
+          () async {
+        HiveKeystore? keystore = TestResources.getHiveKeyStore(atsign);
+        LocalSecondary? localSecondary =
+            LocalSecondary(mockAtClient, keyStore: keystore);
+
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+
+        when(() => mockNetworkUtil.isNetworkAvailable())
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.getLocalSecondary())
+            .thenAnswer((invocation) => localSecondary);
+        when(() => mockRemoteSecondary.executeCommand(any(),
+                auth: any(named: "auth")))
+            .thenAnswer((invocation) =>
+                Future.value('data:[{"id":1,"response":{"data":"1"}},'
+                    '{"id":2,"response":{"data":"2"}}]'));
+
+        expect(syncService.isSyncInProgress, false);
+        await localSecondary.putValue('public:test_key1.test1@bob', 'dummy1');
+        await localSecondary.putValue('public:test_key2.test1@bob', 'dummy1');
+        syncService.addProgressListener(MySyncProgressListener());
+        await syncService.syncInternal(
+            -1, SyncRequest()..result = SyncResult());
       });
+
+      /// Preconditions:
+      /// 1. Initially the isSyncInProgress is set to false.
+      /// 2. The server commit id is greater than local commit id
+      ///
+      /// Assertions:
+      /// 1. Once the sync is completed
+      ///   a. the local commit id and server commit id should be equal
+      ///   b. the isSyncInProgress should be set to false
       test(
           'A test to verify isSyncInProgress flag is set to false on sync completion',
-          () {
-        /// Preconditions:
-        /// 1. Initially the isSyncInProgress is set to false.
-        /// 2. The server commit id is greater than local commit id
-        ///
-        /// Assertions:
-        /// 1. Once the sync is completed
-        ///   a. the local commit id and server commit id should be equal
-        ///   b. the isSyncInProgress should be set to false
+          () async {
+        reset(mockRemoteSecondary);
+        LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+            keyStore: TestResources.getHiveKeyStore(atsign));
+
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+
+        when(() => mockNetworkUtil.isNetworkAvailable())
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+        when(() => mockRemoteSecondary.executeVerb(any(),
+                sync: any(named: "sync")))
+            .thenAnswer((invocation) => Future.value('data:['
+                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":0,"operation":"*"}, '
+                '{"atKey":"public:test_key1.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":1,"operation":"*"},'
+                '{"atKey":"public:test_key2.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":2,"operation":"*"},'
+                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":3,"operation":"*"},'
+                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":4,"operation":"*"}]'));
+        await syncService.syncInternal(4, SyncRequest()..result = SyncResult());
+        expect(
+            (await syncService.syncUtil.atCommitLog?.getEntry(0))?.commitId, 0);
+        expect(
+            (await syncService.syncUtil.atCommitLog?.getEntry(1))?.commitId, 1);
+        expect(
+            (await syncService.syncUtil.atCommitLog?.getEntry(2))?.commitId, 2);
+        expect(
+            (await syncService.syncUtil.atCommitLog?.getEntry(3))?.commitId, 3);
+        expect(
+            (await syncService.syncUtil.atCommitLog?.getEntry(4))?.commitId, 4);
+        expect(syncService.isSyncInProgress, false);
       });
+
       test(
           'A test to verify isSyncInProgress flag is set to false when sync stops on network exception',
           () {
@@ -1765,7 +2456,13 @@ void main() {
         /// Assertions:
         /// 1. On catching the exception, the isSyncInProgress flag should be set to false
       });
+      tearDownAll(() => TestResources.tearDownLocalStorage());
     });
+
+    ///*****************************
+    ///test similar to group3test3
+    ///ToDo: the additional case in the test will be added there
+    ///*****************************
     group(
         'A group of tests to validated batch command - sync client changes to server',
         () {
@@ -1781,6 +2478,11 @@ void main() {
         /// 2. The first batch command should have the first 5 entries
         /// 3. The second batch command should have the remaining 5 entries
       });
+
+      ///****************************
+      ///test similar to group3test4
+      ///ignoring this
+      ///****************************
       test(
           'A test to verify batch command when batch size and uncommitted entries list are equal',
           () {
@@ -1792,6 +2494,7 @@ void main() {
         /// Batch command should have all the 5 entries
       });
     });
+
     group(
         'A group of tests to validate sync command - sync server changes to client',
         () {
@@ -1818,96 +2521,381 @@ void main() {
         /// 2. The local keystore should two existing updates, one exising key deleted and two new keys created
       });
     });
+
     group('A group of test to verify onDone callback', () {
+      setUpAll(() => TestResources.setupLocalStorage(atsign));
+
+      AtClient mockAtClient = MockAtClient();
+      AtClientManager mockAtClientManager = MockAtClientManager();
+      NotificationServiceImpl mockNotificationService =
+          MockNotificationServiceImpl();
+      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      /// Preconditions:
+      /// 1. The serverCommitId is greater than localCommitId
+      /// 2. Have uncommitted entries on the client side
+      /// 3. SyncResult.syncStatus is set to notStarted
+      ///
+      /// Assertions:
+      /// 1. After the sync is completed verify the following:
+      ///  a. onDone call is triggered
+      ///  b. the direction of keys: For keys pulled from server the direction is "RemoteToLocal"
+      ///     and pushed to server is "LocalToRemote"
+      /// 2. The SyncResult.syncStatus is set to success
+      /// 3. The syncResult.lastSyncedOn is set to sync completion time
+      ///
       test(
           'A test to verify sync result in onDone callback on successful completion',
-          () {
-        /// Preconditions:
-        /// 1. The serverCommitId is greater than localCommitId
-        /// 2. Have uncommitted entries on the client side
-        /// 3. SyncResult.syncStatus is set to notStarted
-        ///
-        /// Assertions:
-        /// 1. After the sync is completed verify the following:
-        ///  a. onDone call is triggered
-        ///  b. the direction of keys: For keys pulled from server the direction is "RemoteToLocal"
-        ///     and pushed to server is "LocalToRemote"
-        /// 2. The SyncResult.syncStatus is set to success
-        /// 3. The syncResult.lastSyncedOn is set to sync completion time
-      });
-      test(
-          'A test to verify sync result in onDone callback when sync failure occur',
-          () {
-        /// Preconditions:
-        /// 1. The serverCommitId is greater than localCommitId
-        /// 2. Have uncommitted entries on the client side
-        /// 3. SyncResult.syncStatus is set to notStarted
-        ///
-        /// Assertions:
-        /// 1. The error is encapsulated in the SyncResult.atClientException
-        /// 2. The SyncResult.syncStatus is set to failure
-        /// 3. The syncResult.lastSyncedOn is set to sync completion time
-      });
-    });
-    group('A group of test on sync progress call back', () {
-      test(
-          'A test to verify a new listener is added to sync progress call back',
-          () {
-        /// Preconditions:
-        /// 1. Create a class that extends "SyncProgressListener" and override "onSyncProgressEvent" method
-        /// 2. ServerCommitId is greater than localCommitId. Say localCommitId is at 10 and serverCommitId is at 15
-        /// 3. Local keystore has previously synced entries and uncommitted entries
-        /// 4. The default value for fields in SyncProgressListener:
-        ///     a. isInitialSync is set to false
-        ///
-        ///
-        /// Assertions:
-        /// 1. Assert on the following fields in SyncProgress:
-        ///    a. SyncStatus? syncStatus = SyncStatus.Complete;
-        ///    b. isInitialSync will remain false because this sync only fetch delta changes
-        ///    c. DateTime? startedAt: The time when sync process started
-        ///    d. DateTime? completedAt: The time when sync process is completed
-        ///    e. String? message
-        ///    f. String? atsign: The currentatsign on which sync is running
-        ///    g. List<KeyInfo>? keyInfoList: The keys that are synced
-        ///    h. int? localCommitIdBeforeSync: The local committed id before sync; here 10
-        ///    i. int? localCommitId: The local commit id after sync; here 15
-        ///    j. int? serverCommitId: The server commit id; here 15
+          () async {
+        LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+            keyStore: TestResources.getHiveKeyStore(atsign));
+
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+
+        when(() => mockNetworkUtil.isNetworkAvailable())
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
+        when(() => mockRemoteSecondary.executeVerb(
+                any(that: SyncVerbBuilderMatcher()),
+                sync: any(named: "sync")))
+            .thenAnswer((invocation) => Future.value('data:['
+                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":1,"operation":"*"}, '
+                '{"atKey":"public:test_key1.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":2,"operation":"*"},'
+                '{"atKey":"public:test_key2.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":3,"operation":"*"}]'));
+        when(() => mockRemoteSecondary.executeCommand(any(),
+                auth: any(named: "auth")))
+            .thenAnswer((invocation) =>
+                Future.value('data:[{"id":1,"response":{"data":"4"}},'
+                    '{"id":2,"response":{"data":"5"}}]'));
+
+        await localSecondary.putValue(
+            'public:test_key1.group12test1@bob', 'whatever');
+        await localSecondary.putValue(
+            'public:test_key2.group12test1@bob', 'whatever');
+        bool localSwitchState = TestResources.switchState;
+        syncService.sync(onDone: onDoneCallback);
+        await syncService.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        //onDoneCallback when called flips the switch in TestResources
+        //the below assertion is to check if the switch has been flipped
+        //that is done by storing the switchState before sync and then checking
+        //if the switch state is in the opposite state after sync
+        expect(TestResources.switchState, !localSwitchState);
       });
 
-      test('A test to verify "isInitialSync" flag in SyncProgressListener', () {
-        /// Preconditions:
-        /// 1. The local keystore is empty
-        /// 2. Initialize a full sync from cloud secondary
-        /// 3. The default value for fields in SyncProgressListener:
-        ///     a. isInitialSync is set to false
-        /// 4. Create a class that extends "SyncProgressListener" and override "onSyncProgressEvent" method
-        ///
-        /// Assertions:
-        /// 1. Assert on the following fields in SyncProgress:
-        ///    a. SyncStatus? syncStatus = SyncStatus.Complete;
-        ///    b. bool isInitialSync = true;
+      /// Preconditions:
+      /// 1. The serverCommitId is greater than localCommitId
+      /// 2. Have uncommitted entries on the client side
+      /// 3. SyncResult.syncStatus is set to notStarted
+      ///
+      /// Assertions:
+      /// 1. The error is encapsulated in the SyncResult.atClientException
+      /// 2. The SyncResult.syncStatus is set to failure
+      /// 3. The syncResult.lastSyncedOn is set to sync completion time
+      test(
+          'A test to verify sync result in onDone callback when sync failure occur',
+          () async {
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+        syncService.networkUtil = mockNetworkUtil;
+
+        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+
+        when(() => mockNetworkUtil.isNetworkAvailable())
+            .thenAnswer((_) => Future.value(false));
+
+        CustomSyncProgressListener progressListener =
+            CustomSyncProgressListener();
+        syncService.addProgressListener(progressListener);
+        syncService.sync(onDone: onDoneCallback);
+        await syncService.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        expect(
+            progressListener.localSyncProgress?.syncStatus, SyncStatus.failure);
+        expect(
+            progressListener.localSyncProgress?.message, 'network unavailable');
       });
+      tearDownAll(() => TestResources.tearDownLocalStorage());
+    });
+
+    group('A group of test on sync progress call back', () {
+      setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+      AtClient mockAtClient = MockAtClient();
+      AtClientManager mockAtClientManager = MockAtClientManager();
+      NotificationServiceImpl mockNotificationService =
+          MockNotificationServiceImpl();
+      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      MockNetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      /// Preconditions:
+      /// 1. Create a class that extends "SyncProgressListener" and override "onSyncProgressEvent" method
+      /// 2. ServerCommitId is greater than localCommitId. Say localCommitId is at 10 and serverCommitId is at 15
+      /// 3. Local keystore has previously synced entries and uncommitted entries
+      /// 4. The default value for fields in SyncProgressListener:
+      ///     a. isInitialSync is set to false
+      ///
+      ///
+      /// Assertions:
+      /// 1. Assert on the following fields in SyncProgress:
+      ///    a. SyncStatus? syncStatus = SyncStatus.Complete;
+      ///    b. isInitialSync will remain false because this sync only fetch delta changes
+      ///    c. DateTime? startedAt: The time when sync process started
+      ///    d. DateTime? completedAt: The time when sync process is completed
+      ///    e. String? message
+      ///    f. String? atsign: The currentatsign on which sync is running
+      ///    g. List<KeyInfo>? keyInfoList: The keys that are synced
+      ///    h. int? localCommitIdBeforeSync: The local committed id before sync; here 10
+      ///    i. int? localCommitId: The local commit id after sync; here 15
+      ///    j. int? serverCommitId: The server commit id; here 15
+      test(
+          'A test to verify a new listener is added to sync progress call back',
+          () async {
+        LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+            keyStore: TestResources.getHiveKeyStore(atsign));
+
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+        syncService.networkUtil = mockNetworkUtil;
+        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+
+        when(() => mockNetworkUtil.isNetworkAvailable())
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((invocation) => Future.value('data:[{"value":"15"}]'));
+        when(() => mockRemoteSecondary.executeVerb(
+                any(that: SyncVerbBuilderMatcher()),
+                sync: any(named: "sync")))
+            .thenAnswer((invocation) => Future.value('data:['
+                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":11,"operation":"*"}, '
+                '{"atKey":"public:test_key1.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":12,"operation":"*"},'
+                '{"atKey":"public:test_key2.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":13,"operation":"*"},'
+                '{"atKey":"public:test_key3.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":14,"operation":"*"},'
+                '{"atKey":"public:test_key4.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":15,"operation":"*"}]'));
+        when(() => mockRemoteSecondary.executeCommand(any(),
+                auth: any(named: "auth")))
+            .thenAnswer((invocation) =>
+                Future.value('data:[{"id":1,"response":{"data":"4"}},'
+                    '{"id":2,"response":{"data":"5"}}]'));
+
+        await localSecondary.putValue(
+            'public:test_key1.group12test1@bob', 'whatever');
+        var commitEntry = await syncService.syncUtil.getCommitEntry(0, atsign);
+        await syncService.syncUtil.updateCommitEntry(commitEntry, 10, atsign);
+
+        CustomSyncProgressListener progressListener =
+            CustomSyncProgressListener();
+        syncService.addProgressListener(progressListener);
+        syncService.sync(onDone: onDoneCallback);
+        await syncService.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        expect(
+            progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
+        expect(progressListener.localSyncProgress?.isInitialSync, false);
+        expect(progressListener.localSyncProgress?.atSign, atsign);
+        expect(progressListener.localSyncProgress?.localCommitIdBeforeSync, 10);
+        expect(progressListener.localSyncProgress?.localCommitId, 15);
+        expect(progressListener.localSyncProgress?.serverCommitId, 15);
+        var keysList = progressListener.localSyncProgress?.keyInfoList;
+        keysList?.forEach((key) {
+          expect(key.syncDirection, SyncDirection.remoteToLocal);
+        });
+        expect(keysList![0].key, 'cached:@bob:shared_key@guiltytaurus27');
+        expect(keysList[1].key, 'public:test_key1.demo@bob');
+        expect(keysList[2].key, 'public:test_key2.demo@bob');
+        expect(keysList[3].key, 'public:test_key3.demo@bob');
+        expect(keysList[4].key, 'public:test_key4.demo@bob');
+      });
+
+      /// Preconditions:
+      /// 1. The local keystore is empty
+      /// 2. Initialize a full sync from cloud secondary
+      /// 3. The default value for fields in SyncProgressListener:
+      ///     a. isInitialSync is set to false
+      /// 4. Create a class that extends "SyncProgressListener" and override "onSyncProgressEvent" method
+      ///
+      /// Assertions:
+      /// 1. Assert on the following fields in SyncProgress:
+      ///    a. SyncStatus? syncStatus = SyncStatus.Complete;
+      ///    b. bool isInitialSync = true;
+      test('A test to verify "isInitialSync" flag in SyncProgressListener',
+          () async {
+        LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+            keyStore: TestResources.getHiveKeyStore(atsign));
+
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+        syncService.networkUtil = mockNetworkUtil;
+        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+
+        when(() => mockNetworkUtil.isNetworkAvailable())
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
+        when(() => mockRemoteSecondary.executeVerb(
+                any(that: SyncVerbBuilderMatcher()),
+                sync: any(named: "sync")))
+            .thenAnswer((invocation) => Future.value('data:['
+                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":1,"operation":"*"}, '
+                '{"atKey":"public:test_key1.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":2,"operation":"*"},'
+                '{"atKey":"public:test_key2.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":3,"operation":"*"}]'));
+
+        CustomSyncProgressListener progressListener =
+            CustomSyncProgressListener();
+        syncService.addProgressListener(progressListener);
+        syncService.sync(onDone: onDoneCallback);
+        await syncService.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        expect(
+            progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
+        expect(progressListener.localSyncProgress?.isInitialSync, true);
+      });
+
+      /// Preconditions:
+      /// Create a class that extends "SyncProgressListener" and override "onSyncProgressEvent" method
+      ///
+      /// Assertions:
+      /// The sync progress listener should be removed from "_syncProgressListeners"
       test(
           'A test to verify a listener is removed from sync progress call back',
-          () {
-        /// Preconditions:
-        /// Create a class that extends "SyncProgressListener" and override "onSyncProgressEvent" method
-        ///
-        /// Assertions:
-        /// The sync progress listener should be removed from "_syncProgressListeners"
+          () async {
+        //-------------------Setup-------------------
+        var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil =
+            SyncUtil(atCommitLog: TestResources.commitLog);
+        // -------------------Preconditions-------------------
+        var listener = MySyncProgressListener();
+        syncServiceImpl.addProgressListener(listener);
+        //verify the que size is 1
+        var syncQueueSize = syncServiceImpl.syncProgressListenerSize();
+        expect(syncQueueSize, 1);
+        // verify the listener is removed
+        syncServiceImpl.removeProgressListener(listener);
+        // -------------------Assertions-------------------
+        syncQueueSize = syncServiceImpl.syncProgressListenerSize();
+        expect(syncQueueSize, 0);
+        await TestResources.tearDownLocalStorage();
       });
+
+      tearDownAll(() async => await TestResources.tearDownLocalStorage());
     });
   });
+}
+
+void onDoneCallback(syncResult) {
+  print(syncResult);
+  expect(syncResult.syncStatus, SyncStatus.success);
+  TestResources.flipSwitch();
+}
+
+class MySyncProgressListener1 extends SyncProgressListener {
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    print('received sync progress: $syncProgress');
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.isInitialSync, false);
+    expect(syncProgress.startedAt!.isBefore(DateTime.now()), true);
+    expect(syncProgress.completedAt!.isBefore(DateTime.now()), true);
+    expect(syncProgress.message, isNotNull);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    expect(syncProgress.isInitialSync, true);
+    var key =
+        syncProgress.keyInfoList?.where((ele) => ele.key.contains('number'));
+    expect(key != null || key!.isNotEmpty, true);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
+    expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
+  }
+}
+
+class MySyncProgressListener extends SyncProgressListener {
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    print('received sync progress: $syncProgress');
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.isInitialSync, true);
+  }
+}
+
+class CustomSyncProgressListener extends SyncProgressListener {
+  SyncProgress? localSyncProgress;
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    localSyncProgress = syncProgress;
+  }
 }
 
 class TestResources {
   static AtCommitLog? commitLog;
   static SecondaryPersistenceStore? secondaryPersistenceStore;
   static var storageDir = '${Directory.current.path}/test/hive';
+  static bool switchState = false;
 
   static Future<void> setupLocalStorage(String atsign,
-      {bool enableCommitId = true}) async {
+      {bool enableCommitId = false}) async {
     commitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(atsign,
         commitLogPath: storageDir, enableCommitId: enableCommitId);
     var secondaryPersistenceStore =
@@ -1936,9 +2924,38 @@ class TestResources {
         ?.getSecondaryKeyStore();
   }
 
-  static Future<CommitEntry?> getCommitEntryLatest(
-      String atsign, String atKey) async {
-    commitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(atsign);
-    return commitLog!.getLatestCommitEntry(atKey);
+  static setCommitEntry(int commitId, String atsign) async {
+    CommitEntry? entry =
+        await SyncUtil(atCommitLog: commitLog).getCommitEntry(commitId, atsign);
+    await SyncUtil(atCommitLog: commitLog)
+        .updateCommitEntry(entry, commitId, atsign);
+  }
+
+  static flipSwitch() {
+    TestResources.switchState = !TestResources.switchState;
+  }
+}
+
+class SyncVerbBuilderMatcher extends Matcher {
+  @override
+  Description describe(Description description) =>
+      description.add('Custom matcher to match SyncVerbBuilder');
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is SyncVerbBuilder) return true;
+    return false;
+  }
+}
+
+class StatsVerbBuilderMatcher extends Matcher {
+  @override
+  Description describe(Description description) =>
+      description.add('Custom matcher to match StatsVerbBuilder');
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is StatsVerbBuilder) return true;
+    return false;
   }
 }

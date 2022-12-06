@@ -59,7 +59,7 @@ jobs:
       # create PR with renewed certificate
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@d7db273d6c7206ba99224e659c982ae34a1025e3 # v4.2.1
+        uses: peter-evans/create-pull-request@2b011faafdcbc9ceb11414d64d0573f37c774b04 # v4.2.3
         with:
           token: ${{ secrets.MY_GITHUB_TOKEN }}
           commit-message: 'chore: New certificates for at_server'
