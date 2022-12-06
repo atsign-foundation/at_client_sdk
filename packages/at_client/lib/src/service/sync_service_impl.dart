@@ -362,11 +362,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<List<KeyInfo>> _syncToRemote(
       List<CommitEntry> unCommittedEntries) async {
     List<KeyInfo> keyInfoList = [];
-    var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
+    var uncommittedEntryBatch = getUnCommittedEntryBatch(unCommittedEntries);
     for (var unCommittedEntryList in uncommittedEntryBatch) {
       try {
         var batchRequests = await getBatchRequests(unCommittedEntryList);
-        var batchResponse = await _sendBatch(batchRequests);
+        var batchResponse = await sendBatch(batchRequests);
         for (var entry in batchResponse) {
           try {
             var batchId = entry['id'];
@@ -741,7 +741,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return localCommitId;
   }
 
-  dynamic _sendBatch(List<BatchRequest> requests) async {
+  @visibleForTesting
+  dynamic sendBatch(List<BatchRequest> requests) async {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
@@ -776,7 +777,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
   }
 
-  List<dynamic> _getUnCommittedEntryBatch(
+  @visibleForTesting
+  List<dynamic> getUnCommittedEntryBatch(
       List<CommitEntry?> uncommittedEntries) {
     var unCommittedEntryBatch = [];
     var batchSize = _atClient.getPreferences()!.syncBatchSize, i = 0;
