@@ -1,5 +1,7 @@
 import 'package:at_client/src/at_collection/model/at_collection_impl.dart';
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
+import 'package:at_client/src/at_collection/model/at_share_operation.dart';
+import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
 
 mixin AtCollectionModelMethods on AtCollectionModel {
   AtCollectionImpl? atCollectionImpl;
@@ -26,9 +28,15 @@ mixin AtCollectionModelMethods on AtCollectionModel {
     return await atCollectionImpl!.delete(this);
   }
 
-  share() {}
+  AtShareOperation share(List<String> atSignsList) {
+    init();
+    return atCollectionImpl!.share(this, atSignsList);
+  }
 
-  unshare() {}
+  AtUnshareOperation unShare(List<String> atSignsList) {
+    init();
+    return atCollectionImpl!.unShare(this, atSignsList);
+  }
 
   Future<List<String>> getSharedWithList() async {
     init();

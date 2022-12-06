@@ -132,15 +132,11 @@ class AtCollectionImpl<T extends AtCollectionModel>
     List<AtDataStatus> atDataStatus = [];
 
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
-    print('keyWithCollectionName: ${keyWithCollectionName}');
     AtKey selfAtKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
-    print('selfAtKey: ${selfAtKey.key}');
 
     var res = await AtClientManager.getInstance().atClient.delete(selfAtKey);
 
-    print('delete res: ${res}');
-
-    if (res != null && !res) {
+    if (!res) {
       /// delete intent
       return atDataStatus;
     }
@@ -232,8 +228,17 @@ class AtCollectionImpl<T extends AtCollectionModel>
   ///  _newAtShareOperation.stop();
 
   @override
-  AtShareOperation share(dynamic data, List<String> atSignsList) {
-    return AtShareOperation(data: data, atSignsList: atSignsList);
+  AtShareOperation share(AtCollectionModel model, List<String> atSignsList) {
+    /// create intent
+    /// TODO: throw keyNotFoundException when self key is not formed.
+    String keyWithCollectionName = '${model.id}.${model.collectionName}';
+
+    var selfKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
+    return AtShareOperation(
+      jsonEncodedData: jsonEncode(model.toJson()),
+      atSignsList: atSignsList,
+      selfAtKey: selfKey,
+    );
 
     /// create intent
     /// Map<String, AtDataStatus> atDataStatus = {};
@@ -266,7 +271,12 @@ class AtCollectionImpl<T extends AtCollectionModel>
   }
 
   @override
-  AtUnshareOperation unShare(AtKey selfKey, List<String> atSignsList) {
+  AtUnshareOperation unShare(
+      AtCollectionModel model, List<String> atSignsList) {
+    /// create intent
+    String keyWithCollectionName = '${model.id}.${model.collectionName}';
+
+    var selfKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
     return AtUnshareOperation(selfKey: selfKey, atSignsList: atSignsList);
 
     /// create intent
@@ -342,107 +352,6 @@ class AtCollectionImpl<T extends AtCollectionModel>
     /// delete intent
     return atDataStatus;
   }
-
-  //
-  // Future<T?> create(T value) async {
-  //   String key = '${Uuid().v4()}.$collectionName';
-  //   value.id = key;
-
-  //   var atKey = getAtKey(key);
-
-  //   var res = await AtClientManager.getInstance()
-  //       .atClient
-  //       .put(atKey, jsonEncode(value.toJson()));
-
-  //   return res ? value : null;
-  // }
-
-  // Future<bool> update(T value) async {
-  //   assert(value.id != null, 'id can not be null');
-
-  //   var atKey = getAtKey(value.id!);
-
-  //   var res = await AtClientManager.getInstance()
-  //       .atClient
-  //       .put(atKey, jsonEncode(value.toJson()));
-  //   return res;
-  // }
-
-  // Future<List<T>> getAllData(T Function(String) convert) async {
-  //   List<T> allRecords = [];
-
-  //   var records = await AtClientManager.getInstance()
-  //       .atClient
-  //       .getAtKeys(regex: collectionName);
-
-  //   records.retainWhere((element) => element.sharedWith == null);
-
-  //   for (var key in records) {
-  //     var atValue = await AtClientManager.getInstance().atClient.get(key);
-  //     var tempModel = convert(atValue.value);
-  //     allRecords.add(tempModel);
-  //   }
-  //   return allRecords;
-  // }
-
-  // Future<void> delete(T value) async {
-  //   var records = await AtClientManager.getInstance()
-  //       .atClient
-  //       .getAtKeys(regex: value.id);
-
-  //   for (var key in records) {
-  //     var res = await AtClientManager.getInstance().atClient.delete(key);
-  //     _logger.finer('delete ${key.key}: $res');
-  //   }
-  // }
-
-  // share(T value, String atSign) async {
-  //   assert(value.id != null, 'id can not be null');
-
-  //   var atKey = getAtKey(value.id!, sharedWith: atSign);
-  //   var res = await AtClientManager.getInstance()
-  //       .atClient
-  //       .put(atKey, jsonEncode(value.toJson()));
-  // }
-
-  // Future<List<String>> getSharedWithList(T value) async {
-  //   List<String> sharedWithList = [];
-
-  //   var records = await AtClientManager.getInstance()
-  //       .atClient
-  //       .getAtKeys(regex: value.id);
-
-  //   records.retainWhere((element) => element.sharedWith != null);
-  //   records.forEach((element) {
-  //     sharedWithList.add(element.sharedWith!);
-  //   });
-  //   return sharedWithList;
-  // }
-
-  // ///testing
-  // deleteAll() async {
-  //   var records = await AtClientManager.getInstance()
-  //       .atClient
-  //       .getAtKeys(regex: collectionName);
-
-  //   for (var key in records) {
-  //     var atValue = await AtClientManager.getInstance().atClient.delete(key);
-  //   }
-  // }
-
-  // getAtKey(String key, {String? sharedWith}) {
-  //   return AtKey()
-  //     ..key = key
-  //     ..namespace = nameSpace
-  //     ..metadata = Metadata()
-  //     ..metadata!.ttr = -1
-  //     ..sharedWith = sharedWith
-  //     // file transfer key will be deleted after 15 days
-
-  //     /// TODO : only for testing purpose
-  //     ..metadata!.ttl = 1296000000 // 1000 * 60 * 60 * 24 * 15
-  //     ..sharedBy = AtClientManager.getInstance().atClient.getCurrentAtSign();
-  // }
 }
 
 class AtDataStatus {

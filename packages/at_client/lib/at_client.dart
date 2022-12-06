@@ -23,3 +23,5 @@ export 'package:at_client/src/at_collection/model/at_collection_impl.dart';
 export 'package:at_client/src/at_collection/model/at_collection_model.dart';
 export 'package:at_client/src/at_collection/model/at_collection_spec.dart';
 export 'package:at_client/src/at_collection/model/at_collection_model_methods_mixin.dart';
+export 'package:at_client/src/at_collection/model/at_share_operation.dart';
+export 'package:at_client/src/at_collection/model/at_unshare_operation.dart';

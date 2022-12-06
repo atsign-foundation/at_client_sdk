@@ -52,10 +52,10 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// returns Map<String, AtDataStatus> where String is the atSign and AtDataStatus has the status of share
   ///
   /// throws [exception] if [T.keyId] is null
-  AtShareOperation share(dynamic data, List<String> atSignsList);
+  AtShareOperation share(T model, List<String> atSignsList);
 
   /// deletes shared keys with [atSignsList]
-  AtUnshareOperation unShare(AtKey selfKey, List<String> atSignsList);
+  AtUnshareOperation unShare(T model, List<String> atSignsList);
 
   /// returns List of String that the data [T] is shared with
   /// If [T.id] does not exists on key store throws [KeyNotFoundException]

@@ -1,10 +1,11 @@
- import 'dart:async';
+import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 
 class AtUnshareOperation {
   /// we store the [selfKey] here, might not be needed
   AtKey selfKey;
+
   /// we store the [atSignsList] here
   List<String> atSignsList;
 
@@ -26,7 +27,9 @@ class AtUnshareOperation {
   AtUnshareOperation({
     required this.selfKey,
     required this.atSignsList,
-  }){
+  }) {
+    allData = [];
+    atUnshareOperationStatus = AtUnshareOperationStatus.INPROGRESS;
     _unshare(selfKey, atSignsList);
   }
 
@@ -37,35 +40,40 @@ class AtUnshareOperation {
   }
 
   void emitFromStream(AtDataStatus _event) {
-    if(!_stopPendingUnshares){
+    if (!_stopPendingUnshares) {
+      allData.add(_event);
       _atUnshareOperationController.sink.add(_event);
     }
   }
 
   void _unshare(AtKey selfKey, List<String> atSignsList) async {
-    for(var atSign in atSignsList) {
-      if(_stopPendingUnshares) {
+    for (var atSign in atSignsList) {
+      if (_stopPendingUnshares) {
         return;
       }
-    
-      var sharedAtKey = selfKey; /// TODO: might give problem of pass by reference
+
+      var sharedAtKey = selfKey;
+
       sharedAtKey.sharedWith = atSign;
 
       try {
         /// TODO: we might need to check whether the key exists before deleting it
-        var _res = await AtClientManager.getInstance().atClient.delete(sharedAtKey);
+        var _res =
+            await AtClientManager.getInstance().atClient.delete(sharedAtKey);
 
         _checkForUnhareOperationStatus(atSign, atSignsList);
-        emitFromStream(AtDataStatus(
+        emitFromStream(
+          AtDataStatus(
             atSign: atSign,
             key: sharedAtKey.key!,
             complete: _res,
             exception: null,
           ),
         );
-      } catch(e) {
+      } catch (e) {
         _checkForUnhareOperationStatus(atSign, atSignsList);
-        emitFromStream(AtDataStatus(
+        emitFromStream(
+          AtDataStatus(
             atSign: atSign,
             key: sharedAtKey.key!,
             complete: false,
@@ -77,11 +85,8 @@ class AtUnshareOperation {
   }
 
   void _checkForUnhareOperationStatus(String atSign, List<String> atSignsList) {
-    if (
-      (atUnshareOperationStatus != AtUnshareOperationStatus.STOPPED)
-       && 
-      (atSignsList.indexOf(atSign) == (atSignsList.length - 1)
-    )){
+    if ((atUnshareOperationStatus != AtUnshareOperationStatus.STOPPED) &&
+        (atSignsList.indexOf(atSign) == (atSignsList.length - 1))) {
       atUnshareOperationStatus = AtUnshareOperationStatus.COMPLETE;
     }
   }
