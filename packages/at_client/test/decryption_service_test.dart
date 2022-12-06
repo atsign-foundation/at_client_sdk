@@ -159,16 +159,30 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtPrivateKeyNotFoundException &&
               e.message == 'Encryption private not found')));
-      // when(() => mockAtClientImpl.getPreferences())
-      //     .thenAnswer((_) => atClientPreferenceWithAtChops);
-      // final atChopsKeys = AtChopsKeys.create(AtEncryptionKeyPair.create('', ''), null);
-      // when(() => mockAtClientImpl.getAtChops())
-      //     .thenAnswer((_) => AtChopsImpl(atChopsKeys));
-      // // #TODO below assert not working
-      // expect(
-      //         ()  async => await sharedKeyDecryption.decrypt(atKey, '123'),
-      //     throwsA(predicate((dynamic e) =>
-      //     e is AtException)));
+    });
+
+    test(
+        'A test to verify exception is thrown when private encryption key is not found using at_chops',
+        () {
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@murali')
+            ..sharedWith('@sitaram'))
+          .build();
+      atKey.metadata = Metadata()
+        ..sharedKeyEnc = 'dummy_shared_key'
+        ..pubKeyCS = 'd4f6d9483907286a0563b9fdeb01aa61';
+
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => atClientPreferenceWithAtChops);
+      var sharedKeyDecryptionWithAtChops =
+          SharedKeyDecryption(atClient: mockAtClientImpl);
+      final atChopsKeys =
+          AtChopsKeys.create(AtEncryptionKeyPair.create('', ''), null);
+      when(() => mockAtClientImpl.getAtChops())
+          .thenAnswer((_) => AtChopsImpl(atChopsKeys));
+      expect(
+          () async =>
+              await sharedKeyDecryptionWithAtChops.decrypt(atKey, '123'),
+          throwsA(predicate((dynamic e) => e is Exception)));
     });
 
     // The AtLookup verb throws exception is stacked by the executeVerb in remote secondary
