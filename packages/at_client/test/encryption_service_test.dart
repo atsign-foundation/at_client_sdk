@@ -100,8 +100,8 @@ void main() {
       when(() => mockAtClientManager.atClient).thenAnswer((_) => mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => '@sitaram');
 
-      var encryptionService = AtKeyEncryptionManager(mockAtClient)
-          .get(atKey, currentAtSign);
+      var encryptionService =
+          AtKeyEncryptionManager(mockAtClient).get(atKey, currentAtSign);
       expect(encryptionService, isA<SharedKeyEncryption>());
     });
 
@@ -113,8 +113,8 @@ void main() {
         ..sharedBy = '@alice'
         ..metadata = Metadata();
 
-      var encryptionService = AtKeyEncryptionManager(mockAtClient)
-          .get(atKey, currentAtSign);
+      var encryptionService =
+          AtKeyEncryptionManager(mockAtClient).get(atKey, currentAtSign);
       expect(encryptionService, isA<SelfKeyEncryption>());
     });
   });
@@ -130,8 +130,8 @@ void main() {
         ..metadata = (Metadata()..isPublic = false);
       var value = 918078908676;
 
-      var encryptionService = AtKeyEncryptionManager(mockAtClient)
-          .get(atKey, currentAtSign);
+      var encryptionService =
+          AtKeyEncryptionManager(mockAtClient).get(atKey, currentAtSign);
 
       expect(
           () => encryptionService.encrypt(atKey, value),
@@ -255,6 +255,11 @@ void main() {
         ..sharedWith = '@bob';
       expect(
           await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
+      // assert the sync status is not added to cache map when commit id is null.
+      expect(
+          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+              .containsKey(atKey.toString()),
+          false);
     });
 
     test(
@@ -272,6 +277,11 @@ void main() {
         ..sharedBy = '@alice'
         ..sharedWith = '@bob';
       expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
+      // assert the sync status is added to cache map
+      expect(
+          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+              .containsKey(atKey.toString()),
+          true);
     });
 
     test(
@@ -297,6 +307,24 @@ void main() {
         ..sharedWith = '@bob';
       expect(
           await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
+      // assert the sync status is not added to cache map
+      expect(
+          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+              .containsKey(atKey.toString()),
+          false);
+    });
+
+    test(
+        'A test to verify isEncryptedSharedKeyInSync is return from the cache map',
+        () async {
+      var atKey = AtKey()
+        ..key = AT_ENCRYPTION_SHARED_KEY
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
+      sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+          .putIfAbsent(atKey.toString(), () => true);
+      expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
     });
 
     tearDown(() async {
@@ -350,10 +378,10 @@ void main() {
       var value = 'hello';
 
       when(() => mockLocalSecondary
-          .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
       when(() => mockLocalSecondary
-          .executeVerb(any(that: EncryptionPublicKeyMatcher())))
+              .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
 
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);

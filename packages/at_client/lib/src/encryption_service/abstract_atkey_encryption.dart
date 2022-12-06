@@ -1,12 +1,16 @@
+import 'dart:collection';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
 abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
@@ -20,6 +24,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   String get sharedKey => _sharedKey;
 
   AbstractAtKeyEncryption(this._atClient);
+
+  @visibleForTesting
+  final HashMap<String, bool> encryptedSharedKeySyncStatusCacheMap = HashMap();
+
+  SyncUtil syncUtil = SyncUtil();
 
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
@@ -197,6 +206,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   ///
   /// If Synced, returns true; else returns false.
   Future<bool> isEncryptedSharedKeyInSync(AtKey atKey) async {
+    // If key is present in cache, return true
+    if (encryptedSharedKeySyncStatusCacheMap.containsKey(atKey.toString())) {
+      return encryptedSharedKeySyncStatusCacheMap[atKey.toString()]!;
+    }
+    // Set the commit log instance if not already set.
     atCommitLog ??= await AtCommitLogManagerImpl.getInstance()
         .getCommitLog(atKey.sharedBy!);
 
@@ -205,11 +219,14 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..sharedBy = atKey.sharedBy
       ..sharedWith = atKey.sharedWith;
 
-    CommitEntry? sharedKeyCommitEntry =
-        await atCommitLog!.getLatestCommitEntry(llookupVerbBuilder.buildKey());
-    if (sharedKeyCommitEntry?.commitId == null) {
+    CommitEntry sharedKeyCommitEntry = await syncUtil.getLatestCommitEntry(
+        atCommitLog!, llookupVerbBuilder.buildKey());
+    if (sharedKeyCommitEntry.commitId == null) {
       return false;
     }
+    // If key is present, update the status to cache map and return true/
+    encryptedSharedKeySyncStatusCacheMap.putIfAbsent(
+        llookupVerbBuilder.buildKey(), () => true);
     return true;
   }
 
