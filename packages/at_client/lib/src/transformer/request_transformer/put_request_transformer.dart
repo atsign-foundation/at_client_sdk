@@ -9,6 +9,7 @@ import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// Class responsible for transforming the put request from [AtKey] to [VerbBuilder]
 class PutRequestTransformer
@@ -47,8 +48,16 @@ class PutRequestTransformer
       if (encryptionPrivateKey.isNull) {
         throw AtPrivateKeyNotFoundException('Failed to sign the public data');
       }
-      updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
-          updateVerbBuilder.value, encryptionPrivateKey!);
+      //# TODO remove else block once atChops once testing is good
+      if (_atClient.getPreferences()!.useAtChops) {
+        final signingResult = _atClient
+            .getAtChops()!
+            .signString(updateVerbBuilder.value, SigningKeyType.signingSha256);
+        updateVerbBuilder.dataSignature = signingResult.result;
+      } else {
+        updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
+            updateVerbBuilder.value, encryptionPrivateKey!);
+      }
       // Encode the public data if it contains new line characters
       if (updateVerbBuilder.value.contains('\n')) {
         updateVerbBuilder.value =
