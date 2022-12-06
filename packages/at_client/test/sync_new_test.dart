@@ -2381,20 +2381,7 @@ void main() {
       ///    a. SyncStatus? syncStatus = SyncStatus.Complete;
       ///    b. bool isInitialSync = true;
       test('A test to verify "isInitialSync" flag in SyncProgressListener',
-          () async {
-        // // ----------------------- Setup -----------------------
-        // SyncServiceImpl syncServiceimpl = await SyncServiceImpl.create(
-        //     mockAtClient,
-        //     atClientManager: mockAtClientManager,
-        //     notificationService: mockNotificationService,
-        //     remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-
-        // final listener = MySyncProgressListener();
-        // syncServiceimpl.addProgressListener(listener);
-        // syncServiceimpl.sync();
-        // await syncServiceimpl.processSyncRequests(
-        //     respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
-        // syncServiceimpl.removeProgressListener(listener);
+          () {
       });
 
       /// Preconditions:
