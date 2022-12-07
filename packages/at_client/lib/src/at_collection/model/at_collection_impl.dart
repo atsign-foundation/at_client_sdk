@@ -4,6 +4,7 @@ import 'package:at_client/src/at_collection/model/at_collection_model.dart';
 import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
 import 'package:at_client/src/at_collection/model/at_share_operation.dart';
 import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:at_utils/at_logger.dart';
@@ -12,15 +13,26 @@ import 'dart:convert';
 
 import 'package:at_commons/at_commons.dart';
 
+/// implementation of [AtCollectionSpec]
 class AtCollectionImpl<T extends AtCollectionModel>
     implements AtCollectionSpec {
   final _logger = AtSignLogger('AtCollectionImpl');
+
+  /// [collectionName] is a unique name that is given to a class that extends [AtCollectionModel].
+  ///
+  /// For Each instance of [AtCollectionImpl], [T] and [collectionName] are unique.
   late String collectionName;
 
-  /// convert is similar to fromJson, this is used to convert encoded string to object model
+  /// [convert] is function that accepts json encoded [String] and forms an instance of [AtCollectionModel].
   final T Function(String encodedString) convert;
 
-  AtCollectionImpl({required this.collectionName, required this.convert});
+  late String _currentAtsign;
+  late AtClient _atCLient;
+
+  AtCollectionImpl({required this.collectionName, required this.convert}) {
+    _currentAtsign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
+    _atCLient = AtClientManager.getInstance().atClient;
+  }
 
   @override
   Future<List<T>> getAllData() async {
@@ -49,13 +61,14 @@ class AtCollectionImpl<T extends AtCollectionModel>
 
   @override
   Future<T> getById(String id, {String? sharedWith}) async {
-    AtKey selKey = AtCollectionUtil.formAtKey(
+    AtKey atKey = AtCollectionUtil.formAtKey(
       key: '$id.$collectionName',
       sharedWith: sharedWith,
     );
 
     try {
-      var atValue = await AtClientManager.getInstance().atClient.get(selKey);
+      AtValue atValue = await AtClientManager.getInstance().atClient.get(atKey);
+
       var modelData = convert(atValue.value);
       return modelData;
     } catch (e) {
@@ -63,7 +76,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
     }
   }
 
-  Future<Map<String, AtCollectionModel>> getAllDataWithKeys(
+  Future<Map<String, AtCollectionModel>> _getAllDataWithKeys(
       AtCollectionModel Function(String p1) convert) {
     /// fetchStatus = {};
     /// getAllKeys with collectionName
@@ -86,6 +99,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
 
   @override
   Future<List<String>> getSharedWithList(AtCollectionModel model) async {
+    _validateModel(model);
     List<String> sharedWithList = [];
 
     var allKeys =
@@ -102,6 +116,8 @@ class AtCollectionImpl<T extends AtCollectionModel>
 
   @override
   Future<bool> save(AtCollectionModel model, {int? expiryTime}) async {
+    _validateModel(model);
+
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
 
     AtKey selKey = AtCollectionUtil.formAtKey(
@@ -109,6 +125,13 @@ class AtCollectionImpl<T extends AtCollectionModel>
       ttl: expiryTime,
     );
 
+    /// throws exception If key already exists
+    var atvalue = await AtClientManager.getInstance().atClient.get(selKey);
+    if (atvalue.value != null) {
+      throw Exception('${model.id} is already saved.');
+    }
+
+    /// TODO:
     var result = false;
     try {
       result = await AtClientManager.getInstance().atClient.put(
@@ -126,20 +149,25 @@ class AtCollectionImpl<T extends AtCollectionModel>
 
   @override
   Future<List<AtDataStatus>> delete(AtCollectionModel model) async {
+    _validateModel(model);
+
     /// create intent
 
     /// Step 1: delete self key
-    List<AtDataStatus> atDataStatus = [];
+    List<AtDataStatus> atDataStatusList = [];
 
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
     AtKey selfAtKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
 
-    var res = await AtClientManager.getInstance().atClient.delete(selfAtKey);
+    var isSelfKeyDeleted =
+        await AtClientManager.getInstance().atClient.delete(selfAtKey);
+    var selfKeyDeleteStatus = AtDataStatus(
+      atSign: _currentAtsign,
+      key: keyWithCollectionName,
+      complete: isSelfKeyDeleted,
+    );
 
-    if (!res) {
-      /// delete intent
-      return atDataStatus;
-    }
+    atDataStatusList.add(selfKeyDeleteStatus);
 
     var sharedAtKeys = await AtClientManager.getInstance()
         .atClient
@@ -147,17 +175,19 @@ class AtCollectionImpl<T extends AtCollectionModel>
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
-      late AtDataStatus atDataStatus = AtDataStatus(
+      var atDataStatus = AtDataStatus(
         atSign: sharedKey.sharedWith!,
         key: sharedKey.key!,
-        complete: false,
+        complete: null,
       );
 
       try {
-        var res =
-            await AtClientManager.getInstance().atClient.delete(sharedKey);
+        if (isSelfKeyDeleted) {
+          var res =
+              await AtClientManager.getInstance().atClient.delete(sharedKey);
 
-        atDataStatus.complete = res;
+          atDataStatus.complete = res;
+        }
       } on AtClientException catch (e) {
         atDataStatus.complete = false;
         atDataStatus.exception = e;
@@ -165,70 +195,17 @@ class AtCollectionImpl<T extends AtCollectionModel>
         atDataStatus.complete = false;
         atDataStatus.exception = Exception('Could not update shared key');
       }
+      atDataStatusList.add(atDataStatus);
     }
 
     /// delete intent
-    return atDataStatus;
+    return atDataStatusList;
   }
-
-  // Time complexity of share:
-  // ---------------------------
-  // Awaiting on share is tricky. Time it takes for the share depends on following parameters:
-  // 1. Number of atsigns
-  // 2. Atsigns whose publick keys are already cached vs the ones requiring a look on remote secondary
-  // 3. Socket issues that might result in delays (TCP/IP) - Late but happens
-  // 4. Network timeout - Late and does not happen
-
-  // alternate return types
-  //  Map<String, AtException>
-  //  List<ShareFailure>
-  //  List<AllStatusObject>
-
-  // Future<void> share(data, List<String> atSigns, ResponseStream stream) {
-
-  // 	N
-
-  // 	try {
-  // 	i = 1.. N
-  // 		stream.convey(AtSign i successful);
-
-  // 	catch() {
-  // 		stream.convey(AtSign i fail);
-  // 	}
-  // }
-
-  /// accepting id instead of model to avoid conflict between saved and unsaved key
-  ///
-  /// TODO: change return type of [share] in specs and imp file
-  /// return type of stream based share approach
-  /// class ShareOperation {
-  ///     ResponseStream<AtDataStatus> stream;
-  ///     ShareOperationSummary summary;
-  ///     stop();
-  /// }
-
-  /// For eg.
-  /// var _newAtShareOperation = myModelAtCollectionImpl.share(data, ['@kevin', '@colin']);
-  ///  _newAtShareOperation.atShareOperationStream.listen((atDataStatusEvent) {
-  ///    /// current operation
-  ///    print("${atDataStatusEvent.atSign}: ${atDataStatusEvent.status}");
-
-  ///    /// to check if it is completed
-  ///    if(_newAtShareOperation.atShareOperationStatus == AtShareOperationStatus.COMPLETE){
-  ///      /// complete
-  ///    }
-
-  ///    /// all data till now
-  ///    for(var _data in _newAtShareOperation.allData){
-  ///      print("${_data.atSign}: ${_data.status}");
-  ///    }
-  ///  });
-  ///
-  ///  // to stop further shares
-  ///  _newAtShareOperation.stop();
 
   @override
   AtShareOperation share(AtCollectionModel model, List<String> atSignsList) {
+    _validateModel(model);
+
     /// create intent
     /// TODO: throw keyNotFoundException when self key is not formed.
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
@@ -273,6 +250,8 @@ class AtCollectionImpl<T extends AtCollectionModel>
   @override
   AtUnshareOperation unShare(
       AtCollectionModel model, List<String> atSignsList) {
+    _validateModel(model);
+
     /// create intent
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
 
@@ -309,16 +288,21 @@ class AtCollectionImpl<T extends AtCollectionModel>
   @override
   Future<List<AtDataStatus>> update(AtCollectionModel model,
       {int? expiryTime}) async {
-    /// add intent
-    List<AtDataStatus> atDataStatus = [];
+    _validateModel(model);
+
+    ///TODO: add intent
+    List<AtDataStatus> atDataStatusList = [];
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
 
     /// updates the self key
     var isSelfKeyUpdated = await save(model, expiryTime: expiryTime);
-    if (!isSelfKeyUpdated) {
-      /// delete intent
-      return atDataStatus;
-    }
+    var selfKeyUpdateStatus = AtDataStatus(
+      atSign: _currentAtsign,
+      key: keyWithCollectionName,
+      complete: isSelfKeyUpdated,
+    );
+
+    atDataStatusList.add(selfKeyUpdateStatus);
 
     ///updating shared keys
     var sharedAtKeys = await AtClientManager.getInstance()
@@ -327,19 +311,22 @@ class AtCollectionImpl<T extends AtCollectionModel>
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
-      late AtDataStatus atDataStatus = AtDataStatus(
+      var atDataStatus = AtDataStatus(
         atSign: sharedKey.sharedWith!,
         key: sharedKey.key!,
-        complete: false,
+        complete: null,
       );
 
       try {
-        var res = await AtClientManager.getInstance().atClient.put(
-              sharedKey,
-              jsonEncode(model.toJson()),
-            );
+        /// If self key is not updated, we do not update the shared keys
+        if (isSelfKeyUpdated) {
+          var res = await AtClientManager.getInstance().atClient.put(
+                sharedKey,
+                jsonEncode(model.toJson()),
+              );
 
-        atDataStatus.complete = res;
+          atDataStatus.complete = res;
+        }
       } on AtClientException catch (e) {
         atDataStatus.complete = false;
         atDataStatus.exception = e;
@@ -347,17 +334,37 @@ class AtCollectionImpl<T extends AtCollectionModel>
         atDataStatus.complete = false;
         atDataStatus.exception = Exception('Could not update shared key');
       }
+      atDataStatusList.add(atDataStatus);
     }
 
     /// delete intent
-    return atDataStatus;
+    return atDataStatusList;
+  }
+
+  /// Throws exception if id or collectionName is not added.
+  _validateModel(AtCollectionModel model) {
+    if (model.id.trim().isEmpty) {
+      throw Exception('id not found');
+    }
+
+    if (model.collectionName.trim().isEmpty) {
+      throw Exception('collectionName not found');
+    }
+
+    if (model.toJson()['id'] == null) {
+      throw Exception('id not added in toJson');
+    }
+
+    if (model.toJson()['collectionName'] == null) {
+      throw Exception('collectionName not added in toJson');
+    }
   }
 }
 
 class AtDataStatus {
   late String atSign;
   late String key;
-  late bool complete;
+  bool? complete;
   Exception? exception;
 
   AtDataStatus({
