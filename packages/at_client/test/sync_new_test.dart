@@ -11,7 +11,6 @@ import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -57,7 +56,6 @@ class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 /// 3. Recreate = A key that exists previously got deleted and it is being created again
 
 void main() {
-  AtSignLogger.root_level = 'finer';
   String atsign = '@bob';
   // (Client) How items are added to the 'uncommitted' queue on the client side (upon data store operations)
   // (Client) How the client processes that uncommitted queue (while sending updates to server) - e.g. how is the queue ordered, how is it de-duped, etc
@@ -1650,7 +1648,7 @@ void main() {
   group(
       'A group of tests on fetching the local commit id and uncommitted entries',
       () {
-    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+    setUp(() async => await TestResources.setupLocalStorage(atsign));
 
     AtClient mockAtClient = MockAtClient();
     AtClientManager mockAtClientManager = MockAtClientManager();
@@ -1884,9 +1882,7 @@ void main() {
   group(
       'Tests to validate how the client processes updates from the server - can the client reject? under what conditions? what happens upon a rejection?',
       () {
-    setUpAll(() async {
-      await TestResources.setupLocalStorage(atsign);
-    });
+    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
 
     /// Preconditions:
     /// 1. The key already exists in the local keystore
@@ -2776,7 +2772,7 @@ void main() {
     });
 
     group('A group of test to verify onDone callback', () {
-      setUpAll(() => TestResources.setupLocalStorage(atsign));
+      setUp(() async => TestResources.setupLocalStorage(atsign));
 
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
@@ -2899,7 +2895,7 @@ void main() {
     });
 
     group('A group of test on sync progress call back', () {
-      setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+      setUp(() async => await TestResources.setupLocalStorage(atsign));
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
       NotificationServiceImpl mockNotificationService =
@@ -3066,6 +3062,7 @@ void main() {
         expect(
             progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
         expect(progressListener.localSyncProgress?.isInitialSync, true);
+        syncService.removeProgressListener(progressListener);
       });
 
       /// Preconditions:
@@ -3111,32 +3108,10 @@ void onDoneCallback(syncResult) {
   TestResources.flipSwitch();
 }
 
-class MySyncProgressListener1 extends SyncProgressListener {
-  @override
-  void onSyncProgressEvent(SyncProgress syncProgress) {
-    print('received sync progress: $syncProgress');
-    expect(syncProgress.syncStatus, SyncStatus.success);
-    expect(syncProgress.isInitialSync, false);
-    expect(syncProgress.startedAt!.isBefore(DateTime.now()), true);
-    expect(syncProgress.completedAt!.isBefore(DateTime.now()), true);
-    expect(syncProgress.message, isNotNull);
-    expect(syncProgress.keyInfoList, isNotEmpty);
-    expect(syncProgress.isInitialSync, true);
-    var key =
-        syncProgress.keyInfoList?.where((ele) => ele.key.contains('number'));
-    expect(key != null || key!.isNotEmpty, true);
-    expect(syncProgress.localCommitId,
-        greaterThan(syncProgress.localCommitIdBeforeSync!));
-    expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
-  }
-}
-
 class MySyncProgressListener extends SyncProgressListener {
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     print('received sync progress: $syncProgress');
-    expect(syncProgress.syncStatus, SyncStatus.success);
-    expect(syncProgress.isInitialSync, true);
   }
 }
 
@@ -3169,6 +3144,8 @@ class TestResources {
 
   static Future<void> tearDownLocalStorage() async {
     try {
+      await SecondaryPersistenceStoreFactory.getInstance().close();
+      await AtCommitLogManagerImpl.getInstance().close();
       var isExists = await Directory(storageDir).exists();
       if (isExists) {
         Directory(storageDir).deleteSync(recursive: true);
