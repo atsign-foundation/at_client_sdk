@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/at_collection/at_collection_impl.dart';
 
 class AtUnshareOperation {
   /// we store the [selfKey] here, might not be needed

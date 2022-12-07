@@ -1,14 +1,13 @@
 import 'dart:developer';
 
+import 'package:at_client/src/at_collection/at_collection_spec.dart';
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
-import 'package:at_client/src/at_collection/model/at_collection_spec.dart';
 import 'package:at_client/src/at_collection/model/at_share_operation.dart';
 import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:uuid/uuid.dart';
 import 'dart:convert';
 
 import 'package:at_commons/at_commons.dart';
@@ -126,12 +125,15 @@ class AtCollectionImpl<T extends AtCollectionModel>
     );
 
     /// throws exception If key already exists
-    var atvalue = await AtClientManager.getInstance().atClient.get(selKey);
-    if (atvalue.value != null) {
-      throw Exception('${model.id} is already saved.');
+    try {
+      var atvalue = await AtClientManager.getInstance().atClient.get(selKey);
+      if (atvalue.value != null) {
+        throw Exception('${model.id} is already saved.');
+      }
+    } catch (e) {
+      /// If some exceptions happens, key does not exists in keystore.
     }
 
-    /// TODO:
     var result = false;
     try {
       result = await AtClientManager.getInstance().atClient.put(

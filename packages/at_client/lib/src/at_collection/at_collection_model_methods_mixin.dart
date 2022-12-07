@@ -1,38 +1,46 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/at_collection/at_collection_impl.dart';
+import 'package:at_client/src/at_collection/model/at_collection_model.dart';
+import 'package:at_client/src/at_collection/model/at_share_operation.dart';
+import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
 
-abstract class AtCollectionSpec<T extends AtCollectionModel> {
+/// [AtCollectionModelMethods] provides methods that can be performed on an object of [AtCollectionModel]
+///
+/// To use AtCollectionModelMethods methods extend your class with AtCollectionModelMethods
+///
+/// ```
+/// class MyModel extends AtCollectionModel with AtCollectionModelMethods {}
+/// ```
+mixin AtCollectionModelMethods on AtCollectionModel {
+  AtCollectionImpl? atCollectionImpl;
+
+  init() {
+    atCollectionImpl ??= AtCollectionImpl(
+      collectionName: collectionName,
+      convert: convert,
+    );
+  }
+
   /// Saves the object [T] in a self key.
   /// A unique id is generated and stored in [T.id].
   ///
   /// Returns true if operation was successful else returns false.
   ///
   /// [expiryTime] Represents the time in milliseconds beyond which the key expires.
-  Future<bool> save(T model, {int? expiryTime});
+  Future<bool> save({int? expiryTime}) async {
+    init();
+    return await atCollectionImpl!.save(this, expiryTime: expiryTime);
+  }
 
   /// updates object [T] using [T.id] as identifier.
   /// Throws [Exception], if [T.id] or [T.collectionName] is empty.
   ///
   /// [update] also takes care of updating all the associated data with [T.id] if it has been shared with mutiple atSigns.
   ///
-  /// returns List<AtDataStatus>, where AtDataStatus represents update status of individual key.
-  Future<List<AtDataStatus>> update(T model, {int? expiryTime});
-
-  /// returns all unique data for [T.collectionName].
-  ///
-  /// unique data is identified as the self keys which are not shared with any atSign.
-  ///
-  /// If an AtKey (1234.collection@alice) has been shared with bob (@bob:1234.collection@alice)
-  /// [getAllData] will only return single copy of (1234.collection@alice).
-  ///
-  /// we assume all objects with same [T.id] are same.
-  Future<List<T>> getAllData();
-
-  /// returns [T] by finding the value by [id]
-  ///
-  /// throws KeyNotFoundException if id does not exists
-  ///
-  /// [id] should not contains collectionName.
-  Future<T?> getById(String id, {String sharedWith});
+  /// returns List<AtDataStatus>, where AtDataStatus represents update status of individual keys.
+  Future<List<AtDataStatus>> update() async {
+    init();
+    return await atCollectionImpl!.update(this);
+  }
 
   /// deletes all the keys associated with [T.id]
   ///
@@ -48,7 +56,10 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// both the keys will be deleted as they have the same ID (1234.collection)
   ///
   /// returns List<AtDataStatus>, where AtDataStatus represents delete status of individual keys.
-  Future<List<AtDataStatus>> delete(T model);
+  Future<List<AtDataStatus>> delete() async {
+    init();
+    return await atCollectionImpl!.delete(this);
+  }
 
   /// shares object [T] with [atSignsList].
   /// creates a new copy of data for every atSign in the list.
@@ -83,7 +94,10 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   ///  // to stop further shares
   ///  _newAtShareOperation.stop();
   /// ```
-  AtShareOperation share(T model, List<String> atSignsList);
+  AtShareOperation share(List<String> atSignsList) {
+    init();
+    return atCollectionImpl!.share(this, atSignsList);
+  }
 
   /// If [T] is already with @alice, @bob, @john.
   ///
@@ -115,7 +129,10 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   ///  // to stop further unshares
   ///  atUnshareOperation.stop();
   /// ```
-  AtUnshareOperation unShare(T model, List<String> atSignsList);
+  AtUnshareOperation unShare(List<String> atSignsList) {
+    init();
+    return atCollectionImpl!.unShare(this, atSignsList);
+  }
 
   /// returns List of atSign that the data [T] is shared with.
   ///
@@ -124,5 +141,8 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// ```
   /// ['@bob', '@john']
   /// ```
-  Future<List<String>> getSharedWithList(T model);
+  Future<List<String>> getSharedWithList() async {
+    init();
+    return await atCollectionImpl!.getSharedWithList(this);
+  }
 }
