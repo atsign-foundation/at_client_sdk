@@ -65,7 +65,7 @@ void main() {
   group(
       'Tests to validate how items are added to the uncommitted queue on the client side (upon data store operations)',
       () {
-    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+    setUp(() async => await TestResources.setupLocalStorage(atsign));
 
     /// Preconditions:
     /// 1. There should be no entry for the same key in the key store
@@ -222,7 +222,7 @@ void main() {
       // verifying the key in the key store to return the updated value
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, newValue);
-      // verifiyng the createdAt time is less than DateTime.now()
+      // verifying the createdAt time is less than DateTime.now()
       expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
           true);
       List<CommitEntry> commitEntries =
@@ -562,7 +562,7 @@ void main() {
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice@yahoo.com');
-      // verifiyng the createdAt time is less than DateTime.now()
+      // verifying the createdAt time is less than DateTime.now()
       expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
           true);
       // verify the entries in the commit log
@@ -933,7 +933,7 @@ void main() {
       expect(commitEntryResult[0].operation, CommitOp.DELETE);
     });
 
-    tearDownAll(() async {
+    tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();
     });
@@ -942,7 +942,7 @@ void main() {
   group(
       'Tests to validate how the client processes that uncommitted queue (while sending updates to server)'
       'e.g. how is the queue ordered, how is it de-duped, etc', () {
-    setUpAll(() async =>
+    setUp(() async =>
         await TestResources.setupLocalStorage(atsign, enableCommitId: false));
 
     AtClient mockAtClient = MockAtClient();
@@ -1083,7 +1083,7 @@ void main() {
     ///
     /// Assertion:
     ///  1. After sync completion:
-    ///     a. The keystore should have @alice:phone@bob with value: +445-446-4847
+    ///     a. The keystore should have test4_key0 with value: +445-446-4847
     test('A test to verify when an existing key is deleted and then created',
         () async {
       //----------------------------------setup---------------------------------
@@ -1101,8 +1101,7 @@ void main() {
               auth: any(named: "auth")))
           .thenAnswer((invocation) =>
               Future.value('data:[{"id":1,"response":{"data":"21"}},'
-                  '{"id":2,"response":{"data":"22"}},'
-                  '{"id":3,"response":{"data":"23"}}]'));
+                  '{"id":2,"response":{"data":"22"}}]'));
 
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
@@ -1125,17 +1124,17 @@ void main() {
       await syncService.syncUtil.updateCommitEntry(commitEntry, 1, atsign);
 
       await keystore?.remove(key);
-      await keystore?.put(key, AtData()..data = 'test_data1');
+      await keystore?.put(key, AtData()..data = '+445-446-4847');
       int serverCommitId = 1;
       //-------------------------------operation--------------------------------
       await syncService.syncInternal(
           serverCommitId, SyncRequest()..result = SyncResult());
       //------------------------------assertion---------------------------------
       AtData? atData = await TestResources.getHiveKeyStore(atsign)?.get(key);
-      expect(atData?.data, 'test_data1');
+      expect(atData?.data, '+445-446-4847');
     });
 
-    tearDownAll(() async {
+    tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();
     });
@@ -1144,7 +1143,7 @@ void main() {
   group(
       'tests related to sending uncommitted entries to server via the batch verb',
       () {
-    setUpAll(() async =>
+    setUp(() async =>
         await TestResources.setupLocalStorage(atsign, enableCommitId: false));
 
     AtClient mockAtClient = MockAtClient();
@@ -1331,7 +1330,7 @@ void main() {
           await syncService.syncUtil
               .getChangesSinceLastCommit(-1, 'group3test3', atSign: atsign));
       //------------------------------assertion---------------------------------
-      //getUncommitedEntryBatch returns multiple batches of size 5
+      //getUncommittedEntryBatch returns multiple batches of size 5
       //asserting that the first batch is of length 5
       expect(uncommittedEntryBatch[0].length, 5);
     });
@@ -1535,7 +1534,7 @@ void main() {
           'update:public:test_key2.group3test7@bob dummydata');
     });
 
-    tearDownAll(() async {
+    tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();
     });
@@ -1547,7 +1546,7 @@ void main() {
   // Both the entries will added to the sync queue.
   ///********************************
   group('tests related to TTL and TTB', () {
-    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+    setUp(() async => await TestResources.setupLocalStorage(atsign));
 
     test('A test to verify when a key is set with TTL and expired when sync',
         () {
@@ -1639,7 +1638,7 @@ void main() {
       expect(commitLogEntry?.operation, CommitOp.UPDATE_ALL);
     });
 
-    tearDownAll(() async {
+    tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();
     });
@@ -1834,10 +1833,15 @@ void main() {
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
 
+      AtClientPreference preference = AtClientPreference()..syncRegex = 'wavi';
+
+      mockAtClient.setPreferences(preference);
       when(() => mockNetworkUtil.isNetworkAvailable())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
-      when(() => mockRemoteSecondary.executeVerb(any())).thenAnswer(
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: 'auth'))).thenAnswer(
           (_) async => Future.value('data:[{"id":1,"response":{"data":"101"}},'
               '{"id":2,"response":{"data":"102"}},'
               '{"id":3,"response":{"data":"103"}},'
@@ -1873,7 +1877,7 @@ void main() {
       assert(lastSyncedEntry.toString().contains('test_key4.wavi@bob'));
     });
 
-    tearDownAll(() async {
+    tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();
     });
@@ -1882,7 +1886,7 @@ void main() {
   group(
       'Tests to validate how the client processes updates from the server - can the client reject? under what conditions? what happens upon a rejection?',
       () {
-    setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+    setUp(() async => await TestResources.setupLocalStorage(atsign));
 
     /// Preconditions:
     /// 1. The key already exists in the local keystore
@@ -2036,12 +2040,12 @@ void main() {
     });
 
     group('A group of tests when server is ahead of local commit id', () {
-      setUpAll(() async => await TestResources.setupLocalStorage(atsign));
+      setUp(() async => await TestResources.setupLocalStorage(atsign));
 
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
       NotificationServiceImpl mockNotificationService =
-      MockNotificationServiceImpl();
+          MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
       NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
@@ -2056,7 +2060,8 @@ void main() {
       ///
       /// Assertions:
       /// Server and local should be in sync and 5 entries from the server must be synced to local
-      test('A test to verify server commit entries are synced to local', () async {
+      test('A test to verify server commit entries are synced to local',
+          () async {
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(atsign));
 
@@ -2073,44 +2078,63 @@ void main() {
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(true));
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
-        when(() => mockRemoteSecondary.executeVerb(any(),
-            sync: any(named: "sync")))
+        when(() => mockRemoteSecondary.executeVerb(
+                any(that: StatsVerbBuilderMatcher()),
+                sync: any(named: 'sync')))
+            .thenAnswer((invocation) => Future.value('data:[{"value":"15"}]'));
+        when(() => mockRemoteSecondary.executeVerb(
+                any(that: SyncVerbBuilderMatcher()),
+                sync: any(named: "sync")))
             .thenAnswer((invocation) => Future.value('data:['
-            '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
-            '"value":"dummy",'
-            '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-            '"commitId":0,"operation":"*"}'
-            ','
-            '{"atKey":"public:test_key1.demo@bob",'
-            '"value":"dummy",'
-            '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-            '"commitId":1,"operation":"*"}'
-            ','
-            '{"atKey":"public:test_key2.demo@bob",'
-            '"value":"dummy",'
-            '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-            '"commitId":2,"operation":"*"}'
-            ','
-            '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
-            '"value":"dummy",'
-            '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-            '"commitId":3,"operation":"*"}'
-            ','
-            '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
-            '"value":"dummy",'
-            '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-            '"commitId":4,"operation":"*"}]'));
-        await syncService.syncInternal(4, SyncRequest()..result = SyncResult());
-        expect(
-            (await syncService.syncUtil.atCommitLog?.getEntry(0))?.commitId, 0);
-        expect(
-        (await syncService.syncUtil.atCommitLog?.getEntry(1))?.commitId, 1);
-        expect(
-        (await syncService.syncUtil.atCommitLog?.getEntry(2))?.commitId, 2);
-        expect(
-        (await syncService.syncUtil.atCommitLog?.getEntry(3))?.commitId, 3);
-        expect(
-        (await syncService.syncUtil.atCommitLog?.getEntry(4))?.commitId, 4);
+                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":11,"operation":"*"}'
+                ','
+                '{"atKey":"public:test_key1.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":12,"operation":"*"}'
+                ','
+                '{"atKey":"test_key2.demo@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":13,"operation":"*"}'
+                ','
+                '{"atKey":"@bob:phone@alice",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":14,"operation":"*"}'
+                ','
+                '{"atKey":"cached:@bob:test_key@framedmurder69",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":15,"operation":"*"}]'));
+
+        await localSecondary.putValue(
+            'cached:@bob:shared_key@framedmurder', 'fe fi fo fum');
+        //update commitEntry with commitId - 10 to set localCommitId to 10
+        CommitEntry? commitEntry =
+            await syncService.syncUtil.getCommitEntry(0, atsign);
+        await syncService.syncUtil.updateCommitEntry(commitEntry, 10, atsign);
+        int? preSyncSeqNum =
+            (await syncService.syncUtil.getLastSyncedEntry('', atSign: atsign))
+                ?.commitId;
+        expect(preSyncSeqNum, 10);
+
+        await syncService.syncInternal(
+            15, SyncRequest()..result = SyncResult());
+
+        commitEntry = await syncService.syncUtil.getCommitEntry(1, atsign);
+        expect(commitEntry?.atKey, 'cached:@bob:shared_key@guiltytaurus27');
+        commitEntry = await syncService.syncUtil.getCommitEntry(2, atsign);
+        expect(commitEntry?.atKey, 'public:test_key1.demo@bob');
+        commitEntry = await syncService.syncUtil.getCommitEntry(3, atsign);
+        expect(commitEntry?.atKey, 'test_key2.demo@bob');
+        commitEntry = await syncService.syncUtil.getCommitEntry(4, atsign);
+        expect(commitEntry?.atKey, '@bob:phone@alice');
+        commitEntry = await syncService.syncUtil.getCommitEntry(5, atsign);
+        expect(commitEntry?.atKey, 'cached:@bob:test_key@framedmurder69');
       });
       test(
           'A test to verify when invalid keys are returned in sync response from server',
@@ -2242,6 +2266,7 @@ void main() {
                 .getCommitEntry(removeId!, atsign);
         expect(commitEntryResult!.operation, CommitOp.DELETE);
       });
+
       test(
           'A test to verify when local keystore does not contain key which is in delete commit operation',
           () {
@@ -2255,26 +2280,126 @@ void main() {
         /// Assertions:
         /// TODO - Should it throw an exception or have an entry for delete in commit log
       });
-      test('A test to verify sync with regex when server is ahead', () {
-        /// Preconditions:
-        /// 1. The server commitId is at 15 and local commitId is at 5
-        /// 2. The server has keys with and without matching regex between 5 to 10
-        ///    a. keys with .wavi namespace and keys with .atmosphere namespace
-        /// 3. Initiate sync with regex - ".wavi"
-        ///
-        /// Assertions:
-        /// 1. The keys matching the regex should only sync to local secondary
-        /// 2. isInSync should return after sync completion
+
+      /// Preconditions:
+      /// 1. The server commitId is at 15 and local commitId is at 5
+      /// 2. The server has keys with and without matching regex between 5 to 10
+      ///    a. keys with .wavi namespace and keys with .atmosphere namespace
+      /// 3. Initiate sync with regex - ".wavi"
+      ///
+      /// Assertions:
+      /// 1. The keys matching the regex should only sync to local secondary
+      /// 2. isInSync should return after sync completion
+      test('A test to verify sync with regex when server is ahead', () async {
+        LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+            keyStore: TestResources.getHiveKeyStore(atsign));
+        //setting sync regex to 'wavi'. only keys containing 'wavi' will be synced
+        AtClientPreference preference = AtClientPreference()
+          ..syncRegex = 'wavi';
+
+        mockAtClient.setPreferences(preference);
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncService.networkUtil = mockNetworkUtil;
+
+        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+
+        when(() => mockNetworkUtil.isNetworkAvailable())
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((invocation) => Future.value('data:[{"value":"15"}]'));
+        when(() => mockRemoteSecondary.executeVerb(
+                any(that: SyncVerbBuilderMatcher()),
+                sync: any(named: "sync")))
+            .thenAnswer((invocation) => Future.value('data:['
+                '{"atKey":"cached:@bob:shared_key.atmosphere@guiltytaurus27",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":6,"operation":"*"}'
+                ','
+                '{"atKey":"public:test_key1.wavi@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":7,"operation":"*"}'
+                ','
+                '{"atKey":"test_key2.atmosphere@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":8,"operation":"*"}'
+                ','
+                '{"atKey":"@bob:phone123.wavi@alice",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":10,"operation":"*"}'
+                ','
+                '{"atKey":"@bob:phone.atmosphere@alice",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":10,"operation":"*"}'
+                ','
+                '{"atKey":"@charlie:email.wavi@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":11,"operation":"*"}'
+                ','
+                '{"atKey":"public:test_key1.atmosphere@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":12,"operation":"*"}'
+                ','
+                '{"atKey":"test_key2.wavi@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":13,"operation":"*"}'
+                ','
+                '{"atKey":"@bob:phone.atmosphere@alice",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":14,"operation":"*"}'
+                ','
+                '{"atKey":"@charlie:email.atmosphere@bob",'
+                '"value":"dummy",'
+                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+                '"commitId":15,"operation":"*"}]'));
+
+        await localSecondary.putValue(
+            'cached:@bob:shared_key@framedmurder', 'fe fi fo fum');
+        //update commitEntry with commitId - 5 to set localCommitId to 5
+        CommitEntry? commitEntry =
+            await syncService.syncUtil.getCommitEntry(0, atsign);
+        await syncService.syncUtil.updateCommitEntry(commitEntry, 5, atsign);
+
+        syncService.sync();
+        await syncService.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+
+        // commitEntry = await syncService.syncUtil.getCommitEntry(1, atsign);
+        // expect(commitEntry?.atKey, 'public:test_key1.wavi@bob');
+        // commitEntry = await syncService.syncUtil.getCommitEntry(2, atsign);
+        // expect(commitEntry?.atKey, 'public:test_key1.demo@bob');
+        // commitEntry = await syncService.syncUtil.getCommitEntry(3, atsign);
+        // expect(commitEntry?.atKey, 'test_key2.demo@bob');
+        // commitEntry = await syncService.syncUtil.getCommitEntry(4, atsign);
+        // expect(commitEntry?.atKey, '@bob:phone@alice');
+        // commitEntry = await syncService.syncUtil.getCommitEntry(5, atsign);
+        // expect(commitEntry?.atKey, 'cached:@bob:test_key@framedmurder69');
+        //ToDo: sync only keys with regex: 'wavi' (figure out how)
       });
 
-      tearDownAll(() async {
+      tearDown(() async {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();
       });
     });
 
     group('A group of test to verify sync conflict resolution', () {
-      setUpAll(() => TestResources.setupLocalStorage(atsign));
+      setUp(() => TestResources.setupLocalStorage(atsign));
 
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
@@ -2348,7 +2473,7 @@ void main() {
         //expect(progressListener.localSyncProgress.keyInfoList[0].conflictInfo,);
       });
 
-      tearDownAll(() async {
+      tearDown(() async {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();
       });
@@ -2469,7 +2594,7 @@ void main() {
     });
 
     group('A group of tests to verify isSyncInProgress flag', () {
-      setUpAll(() => TestResources.setupLocalStorage(atsign));
+      setUp(() => TestResources.setupLocalStorage(atsign));
 
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
@@ -2555,22 +2680,22 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":0,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key1.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":1,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key2.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":2,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":3,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
@@ -2622,7 +2747,8 @@ void main() {
         /// Assertions:
         /// 1. On catching the exception, the isSyncInProgress flag should be set to false
       });
-      tearDownAll(() async {
+
+      tearDown(() async {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();
       });
@@ -2667,7 +2793,7 @@ void main() {
     group(
         'A group of tests to validate sync command - sync server changes to client',
         () {
-      setUpAll(() => TestResources.setupLocalStorage(atsign));
+      setUp(() => TestResources.setupLocalStorage(atsign));
 
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
@@ -2888,7 +3014,7 @@ void main() {
             progressListener.localSyncProgress?.message, 'network unavailable');
       });
 
-      tearDownAll(() async {
+      tearDown(() async {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();
       });
@@ -2952,19 +3078,23 @@ void main() {
                 '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":11,"operation":"*"}, '
+                '"commitId":11,"operation":"*"}'
+            ','
                 '{"atKey":"public:test_key1.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":12,"operation":"*"},'
+                '"commitId":12,"operation":"*"}'
+            ','
                 '{"atKey":"public:test_key2.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":13,"operation":"*"},'
+                '"commitId":13,"operation":"*"}'
+            ','
                 '{"atKey":"public:test_key3.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":14,"operation":"*"},'
+                '"commitId":14,"operation":"*"}'
+            ','
                 '{"atKey":"public:test_key4.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
@@ -3043,11 +3173,13 @@ void main() {
                 '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":1,"operation":"*"}, '
+                '"commitId":1,"operation":"*"}'
+            ','
                 '{"atKey":"public:test_key1.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":2,"operation":"*"},'
+                '"commitId":2,"operation":"*"}'
+            ','
                 '{"atKey":"public:test_key2.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
@@ -3094,7 +3226,7 @@ void main() {
         await TestResources.tearDownLocalStorage();
       });
 
-      tearDownAll(() async {
+      tearDown(() async {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();
       });
