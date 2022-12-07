@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/at_collection/at_collection_impl.dart';
+import 'package:at_client/src/at_collection/model/at_operation_item_status.dart';
 
 abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// Saves the object [T] in a self key.
@@ -15,8 +16,8 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   ///
   /// [update] also takes care of updating all the associated data with [T.id] if it has been shared with mutiple atSigns.
   ///
-  /// returns List<AtDataStatus>, where AtDataStatus represents update status of individual key.
-  Future<List<AtDataStatus>> update(T model, {int? expiryTime});
+  /// returns List<AtOperationItemStatus>, where AtOperationItemStatus represents update status of individual key.
+  Future<List<AtOperationItemStatus>> update(T model, {int? expiryTime});
 
   /// returns all unique data for [T.collectionName].
   ///
@@ -48,8 +49,8 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   ///
   /// both the keys will be deleted as they have the same ID (1234.collection)
   ///
-  /// returns List<AtDataStatus>, where AtDataStatus represents delete status of individual keys.
-  Future<List<AtDataStatus>> delete(T model);
+  /// returns List<AtOperationItemStatus>, where AtOperationItemStatus represents delete status of individual keys.
+  Future<List<AtOperationItemStatus>> delete(T model);
 
   /// shares object [T] with [atSignsList].
   /// creates a new copy of data for every atSign in the list.
@@ -66,9 +67,9 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// e.g
   /// ```
   ///   var _newAtShareOperation = myModelAtCollectionImpl.share(data, ['@kevin', '@colin']);
-  ///  _newAtShareOperation.atShareOperationStream.listen((atDataStatusEvent) {
+  ///  _newAtShareOperation.atShareOperationStream.listen((AtOperationItemStatusEvent) {
   ///    /// current operation
-  ///    print("${atDataStatusEvent.atSign}: ${atDataStatusEvent.status}");
+  ///    print("${AtOperationItemStatusEvent.atSign}: ${AtOperationItemStatusEvent.status}");
 
   ///    /// to check if it is completed
   ///    if(_newAtShareOperation.atShareOperationStatus == AtShareOperationStatus.COMPLETE){
@@ -97,9 +98,9 @@ abstract class AtCollectionSpec<T extends AtCollectionModel> {
   /// ```
   /// var atUnshareOperation = data.unShare(['@sunglowgenerous', '@hacktheleague']);
 
-  ///   atUnshareOperation.atUnshareOperationStream.listen((atDataStatusEvent) {
+  ///   atUnshareOperation.atUnshareOperationStream.listen((AtOperationItemStatusEvent) {
   ///     /// current operation
-  ///     print("${atDataStatusEvent.atSign}: ${atDataStatusEvent.complete}");
+  ///     print("${AtOperationItemStatusEvent.atSign}: ${AtOperationItemStatusEvent.complete}");
 
   ///     /// to check if it is completed
   ///     if (atUnshareOperation.atUnshareOperationStatus ==

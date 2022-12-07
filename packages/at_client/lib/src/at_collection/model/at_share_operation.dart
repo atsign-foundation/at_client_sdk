@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/at_collection/model/at_operation_item_status.dart';
 
 class AtShareOperation {
   /// we store the [data] here, might not be needed
@@ -12,14 +13,14 @@ class AtShareOperation {
   AtKey selfAtKey;
 
   /// stream, after each successful/unsuccessful share operation
-  /// the [AtDataStatus] is added to [atShareOperationStream]
+  /// the [AtOperationItemStatus] is added to [atShareOperationStream]
   final StreamController _atShareOperationController =
-      StreamController<AtDataStatus>.broadcast();
-  Stream<AtDataStatus> get atShareOperationStream =>
-      _atShareOperationController.stream as Stream<AtDataStatus>;
+      StreamController<AtOperationItemStatus>.broadcast();
+  Stream<AtOperationItemStatus> get atShareOperationStream =>
+      _atShareOperationController.stream as Stream<AtOperationItemStatus>;
 
-  /// will contain list of all AtDataStatus sent to [atShareOperationStream] till now
-  late List<AtDataStatus> allData;
+  /// will contain list of all AtOperationItemStatus sent to [atShareOperationStream] till now
+  late List<AtOperationItemStatus> allData;
 
   /// enum to denote current state of share
   late AtShareOperationStatus atShareOperationStatus;
@@ -42,7 +43,7 @@ class AtShareOperation {
     atShareOperationStatus = AtShareOperationStatus.STOPPED;
   }
 
-  void emitFromStream(AtDataStatus _event) {
+  void emitFromStream(AtOperationItemStatus _event) {
     if (!_stopPendingShares) {
       allData.add(_event);
       _atShareOperationController.sink.add(_event);
@@ -64,7 +65,7 @@ class AtShareOperation {
             .put(sharedAtKey, jsonEncodedData);
         _checkForShareOperationStatus(atSign, atSignsList);
         emitFromStream(
-          AtDataStatus(
+          AtOperationItemStatus(
             atSign: atSign,
             key: sharedAtKey.key!,
             complete: _res,
@@ -74,7 +75,7 @@ class AtShareOperation {
       } catch (e) {
         _checkForShareOperationStatus(atSign, atSignsList);
         emitFromStream(
-          AtDataStatus(
+          AtOperationItemStatus(
             atSign: atSign,
             key: sharedAtKey.key!,
             complete: false,

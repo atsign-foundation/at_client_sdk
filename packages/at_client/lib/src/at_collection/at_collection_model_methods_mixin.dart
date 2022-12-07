@@ -1,5 +1,6 @@
 import 'package:at_client/src/at_collection/at_collection_impl.dart';
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
+import 'package:at_client/src/at_collection/model/at_operation_item_status.dart';
 import 'package:at_client/src/at_collection/model/at_share_operation.dart';
 import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
 
@@ -36,8 +37,8 @@ mixin AtCollectionModelMethods on AtCollectionModel {
   ///
   /// [update] also takes care of updating all the associated data with [T.id] if it has been shared with mutiple atSigns.
   ///
-  /// returns List<AtDataStatus>, where AtDataStatus represents update status of individual keys.
-  Future<List<AtDataStatus>> update() async {
+  /// returns List<AtOperationItemStatus>, where AtOperationItemStatus represents update status of individual keys.
+  Future<List<AtOperationItemStatus>> update() async {
     init();
     return await atCollectionImpl!.update(this);
   }
@@ -55,8 +56,8 @@ mixin AtCollectionModelMethods on AtCollectionModel {
   ///
   /// both the keys will be deleted as they have the same ID (1234.collection)
   ///
-  /// returns List<AtDataStatus>, where AtDataStatus represents delete status of individual keys.
-  Future<List<AtDataStatus>> delete() async {
+  /// returns List<AtOperationItemStatus>, where AtOperationItemStatus represents delete status of individual keys.
+  Future<List<AtOperationItemStatus>> delete() async {
     init();
     return await atCollectionImpl!.delete(this);
   }
@@ -76,9 +77,9 @@ mixin AtCollectionModelMethods on AtCollectionModel {
   /// e.g
   /// ```
   ///   var _newAtShareOperation = myModelAtCollectionImpl.share(data, ['@kevin', '@colin']);
-  ///  _newAtShareOperation.atShareOperationStream.listen((atDataStatusEvent) {
+  ///  _newAtShareOperation.atShareOperationStream.listen((AtOperationItemStatusEvent) {
   ///    /// current operation
-  ///    print("${atDataStatusEvent.atSign}: ${atDataStatusEvent.status}");
+  ///    print("${AtOperationItemStatusEvent.atSign}: ${AtOperationItemStatusEvent.status}");
 
   ///    /// to check if it is completed
   ///    if(_newAtShareOperation.atShareOperationStatus == AtShareOperationStatus.COMPLETE){
@@ -110,9 +111,9 @@ mixin AtCollectionModelMethods on AtCollectionModel {
   /// ```
   /// var atUnshareOperation = data.unShare(['@sunglowgenerous', '@hacktheleague']);
 
-  ///   atUnshareOperation.atUnshareOperationStream.listen((atDataStatusEvent) {
+  ///   atUnshareOperation.atUnshareOperationStream.listen((AtOperationItemStatusEvent) {
   ///     /// current operation
-  ///     print("${atDataStatusEvent.atSign}: ${atDataStatusEvent.complete}");
+  ///     print("${AtOperationItemStatusEvent.atSign}: ${AtOperationItemStatusEvent.complete}");
 
   ///     /// to check if it is completed
   ///     if (atUnshareOperation.atUnshareOperationStatus ==

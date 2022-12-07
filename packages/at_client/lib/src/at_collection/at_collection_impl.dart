@@ -2,6 +2,7 @@ import 'dart:developer';
 
 import 'package:at_client/src/at_collection/at_collection_spec.dart';
 import 'package:at_client/src/at_collection/model/at_collection_model.dart';
+import 'package:at_client/src/at_collection/model/at_operation_item_status.dart';
 import 'package:at_client/src/at_collection/model/at_share_operation.dart';
 import 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -150,20 +151,20 @@ class AtCollectionImpl<T extends AtCollectionModel>
   }
 
   @override
-  Future<List<AtDataStatus>> delete(AtCollectionModel model) async {
+  Future<List<AtOperationItemStatus>> delete(AtCollectionModel model) async {
     _validateModel(model);
 
     /// create intent
 
     /// Step 1: delete self key
-    List<AtDataStatus> atDataStatusList = [];
+    List<AtOperationItemStatus> atDataStatusList = [];
 
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
     AtKey selfAtKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
 
     var isSelfKeyDeleted =
         await AtClientManager.getInstance().atClient.delete(selfAtKey);
-    var selfKeyDeleteStatus = AtDataStatus(
+    var selfKeyDeleteStatus = AtOperationItemStatus(
       atSign: _currentAtsign,
       key: keyWithCollectionName,
       complete: isSelfKeyDeleted,
@@ -177,7 +178,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
-      var atDataStatus = AtDataStatus(
+      var atDataStatus = AtOperationItemStatus(
         atSign: sharedKey.sharedWith!,
         key: sharedKey.key!,
         complete: null,
@@ -220,7 +221,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
     );
 
     /// create intent
-    /// Map<String, AtDataStatus> atDataStatus = {};
+    /// Map<String, AtOperationItemStatus> atDataStatus = {};
 
     /// Step 1:
     /// keyExistsInLocal = check if self key exists in hive
@@ -261,7 +262,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
     return AtUnshareOperation(selfKey: selfKey, atSignsList: atSignsList);
 
     /// create intent
-    /// Map<String, AtDataStatus> atDataStatus = {};
+    /// Map<String, AtOperationItemStatus> atDataStatus = {};
 
     /// Step 1:
     /// keyExistsInLocal = check if self key exists in hive
@@ -288,17 +289,17 @@ class AtCollectionImpl<T extends AtCollectionModel>
   }
 
   @override
-  Future<List<AtDataStatus>> update(AtCollectionModel model,
+  Future<List<AtOperationItemStatus>> update(AtCollectionModel model,
       {int? expiryTime}) async {
     _validateModel(model);
 
     ///TODO: add intent
-    List<AtDataStatus> atDataStatusList = [];
+    List<AtOperationItemStatus> atDataStatusList = [];
     String keyWithCollectionName = '${model.id}.${model.collectionName}';
 
     /// updates the self key
     var isSelfKeyUpdated = await save(model, expiryTime: expiryTime);
-    var selfKeyUpdateStatus = AtDataStatus(
+    var selfKeyUpdateStatus = AtOperationItemStatus(
       atSign: _currentAtsign,
       key: keyWithCollectionName,
       complete: isSelfKeyUpdated,
@@ -313,7 +314,7 @@ class AtCollectionImpl<T extends AtCollectionModel>
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
-      var atDataStatus = AtDataStatus(
+      var atDataStatus = AtOperationItemStatus(
         atSign: sharedKey.sharedWith!,
         key: sharedKey.key!,
         complete: null,
@@ -361,18 +362,4 @@ class AtCollectionImpl<T extends AtCollectionModel>
       throw Exception('collectionName not added in toJson');
     }
   }
-}
-
-class AtDataStatus {
-  late String atSign;
-  late String key;
-  bool? complete;
-  Exception? exception;
-
-  AtDataStatus({
-    required this.atSign,
-    required this.key,
-    required this.complete,
-    this.exception,
-  });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/at_collection/at_collection_impl.dart';
+import 'package:at_client/src/at_collection/model/at_operation_item_status.dart';
 
 class AtUnshareOperation {
   /// we store the [selfKey] here, might not be needed
@@ -11,14 +12,14 @@ class AtUnshareOperation {
   List<String> atSignsList;
 
   /// stream, after each successful/unsuccessful unshare operation
-  /// the [AtDataStatus] is added to [atUnshareOperationStream]
+  /// the [AtOperationItemStatus] is added to [atUnshareOperationStream]
   final StreamController _atUnshareOperationController =
-      StreamController<AtDataStatus>.broadcast();
-  Stream<AtDataStatus> get atUnshareOperationStream =>
-      _atUnshareOperationController.stream as Stream<AtDataStatus>;
+      StreamController<AtOperationItemStatus>.broadcast();
+  Stream<AtOperationItemStatus> get atUnshareOperationStream =>
+      _atUnshareOperationController.stream as Stream<AtOperationItemStatus>;
 
-  /// will contain list of all AtDataStatus sent to [atUnshareOperationStream] till now
-  late List<AtDataStatus> allData;
+  /// will contain list of all AtOperationItemStatus sent to [atUnshareOperationStream] till now
+  late List<AtOperationItemStatus> allData;
 
   /// enum to denote current state of share
   late AtUnshareOperationStatus atUnshareOperationStatus;
@@ -40,7 +41,7 @@ class AtUnshareOperation {
     atUnshareOperationStatus = AtUnshareOperationStatus.STOPPED;
   }
 
-  void emitFromStream(AtDataStatus _event) {
+  void emitFromStream(AtOperationItemStatus _event) {
     if (!_stopPendingUnshares) {
       allData.add(_event);
       _atUnshareOperationController.sink.add(_event);
@@ -64,7 +65,7 @@ class AtUnshareOperation {
 
         _checkForUnhareOperationStatus(atSign, atSignsList);
         emitFromStream(
-          AtDataStatus(
+          AtOperationItemStatus(
             atSign: atSign,
             key: sharedAtKey.key!,
             complete: _res,
@@ -74,7 +75,7 @@ class AtUnshareOperation {
       } catch (e) {
         _checkForUnhareOperationStatus(atSign, atSignsList);
         emitFromStream(
-          AtDataStatus(
+          AtOperationItemStatus(
             atSign: atSign,
             key: sharedAtKey.key!,
             complete: false,
