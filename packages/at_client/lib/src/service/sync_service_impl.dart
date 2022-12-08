@@ -880,6 +880,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   int syncProgressListenerSize(){
     return _syncProgressListeners.length;
   }
+
+  ///Method only for testing
+  ///Clears all in-memory entities belonging to the syncService
+  @visibleForTesting
+  void clearSyncEntities(){
+    _syncRequests.clear();
+    _syncProgressListeners.clear();
+    _syncServiceMap.clear();
+  }
 }
 
 class KeyInfo {

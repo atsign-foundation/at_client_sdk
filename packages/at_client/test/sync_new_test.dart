@@ -1197,6 +1197,8 @@ void main() {
       AtData? atData =
           await TestResources.getHiveKeyStore(TestResources.atsign)?.get(key);
       expect(atData?.data, '+445-446-4847');
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     tearDown(() async {
@@ -1344,6 +1346,8 @@ void main() {
           await syncService.syncUtil.getCommitEntry(9, TestResources.atsign);
       expect(commitEntry?.atKey, 'public:instagram.wavi@alice');
       expect(commitEntry?.commitId, 10);
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     ///***********************************************
@@ -1421,6 +1425,8 @@ void main() {
       //getUncommittedEntryBatch returns multiple batches of size 5
       //asserting that the first batch is of length 5
       expect(uncommittedEntryBatch[0].length, 5);
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     /// Preconditions:
@@ -1486,6 +1492,8 @@ void main() {
         //assert that the actual key is part of the command
         expect(batchRequest[i].command?.contains(keys[i]), true);
       }
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     /// Preconditions:
@@ -1546,6 +1554,8 @@ void main() {
       expect(result?.commitId, 24);
       result = await syncService.syncUtil.atCommitLog?.getEntry(4);
       expect(result?.commitId, 25);
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     ///********************************
@@ -1625,6 +1635,8 @@ void main() {
       expect(batchRequest[3].command, 'delete:test_key1.group3test7@bob');
       expect(batchRequest[4].command,
           'update:public:test_key2.group3test7@bob dummydata');
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     tearDown(() async {
@@ -1948,6 +1960,7 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
+
       mockAtClient.setPreferences(preference);
       when(() => mockNetworkUtil.isNetworkAvailable())
           .thenAnswer((_) => Future.value(true));
@@ -1988,6 +2001,8 @@ void main() {
       var lastSyncedEntry = await syncService.syncUtil
           .getLastSyncedEntry('wavi', atSign: TestResources.atsign);
       assert(lastSyncedEntry.toString().contains('test_key4.wavi@bob'));
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     tearDown(() async {
@@ -2268,6 +2283,8 @@ void main() {
       commitEntry =
           await syncService.syncUtil.getCommitEntry(5, TestResources.atsign);
       expect(commitEntry?.atKey, 'cached:@bob:test_key@framedmurder69');
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     ///***********************************
@@ -2525,6 +2542,8 @@ void main() {
             ?.get('public:conflict_key1@bob');
       expect(progressListener.localSyncProgress?.keyInfoList![1].conflictInfo,
           conflictInfo);
+      //clearing sync objects
+      syncService.clearSyncEntities();
     });
 
     tearDown(() async {
@@ -2626,6 +2645,7 @@ void main() {
         /// Assertions:
         /// Assert that sync process is triggered at 3 seconds
       });
+
       ///***********************************
       ///unable to assert if sync is in process as the process happens extremely fast
       ///ToDo need to figure out a way to pause sync to perform assertions (if that is even possible)
@@ -2716,6 +2736,8 @@ void main() {
         await syncService.processSyncRequests();
         //switch will be flipped for this request as network is now available
         expect(TestResources.switchState, !localSwitchState);
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       /// Preconditions:
@@ -2747,6 +2769,8 @@ void main() {
         await syncService.processSyncRequests();
         //switch will not be flipped for request - 1 as there are no uncommitted entries
         expect(TestResources.switchState, localSwitchState);
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       /// Preconditions:
@@ -2823,6 +2847,8 @@ void main() {
         await syncService.processSyncRequests();
         //switch will be flipped for request - 3 as the request threshold for sync is 3
         expect(TestResources.switchState, !localSwitchState);
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
     });
 
@@ -2838,49 +2864,6 @@ void main() {
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
       NetworkUtil mockNetworkUtil = MockNetworkUtil();
-
-      /// Preconditions:
-      /// 1. Initially the isSyncInProgress is set to false.
-      /// 2. The server commit id and local commit id are equal
-      /// 3. The uncommitted entries are available in local keystore
-      ///
-      /// Assertions:
-      /// 1. when sync is triggered, the isSyncInProgress should be set to true
-      test(
-          'A test to verify isSyncInProgress flag is set to true when sync starts',
-          () async {
-        HiveKeystore? keystore =
-            TestResources.getHiveKeyStore(TestResources.atsign);
-        LocalSecondary? localSecondary =
-            LocalSecondary(mockAtClient, keyStore: keystore);
-
-        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
-            atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-        syncService.networkUtil = mockNetworkUtil;
-
-        registerFallbackValue(FakeSyncVerbBuilder());
-        registerFallbackValue(FakeUpdateVerbBuilder());
-
-        when(() => mockNetworkUtil.isNetworkAvailable())
-            .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient.getLocalSecondary())
-            .thenAnswer((invocation) => localSecondary);
-        when(() => mockRemoteSecondary.executeCommand(any(),
-            auth: any(named: "auth"))).thenAnswer((invocation) {
-          return Future.value('data:[{"id":1,"response":{"data":"1"}},'
-              '{"id":2,"response":{"data":"2"}}]');
-        });
-
-        expect(syncService.isSyncInProgress, false);
-        await localSecondary.putValue('public:test_key1.test1@bob', 'dummy1');
-        await localSecondary.putValue('public:test_key2.test1@bob', 'dummy1');
-        syncService.addProgressListener(MySyncProgressListener());
-        await syncService.syncInternal(
-            -1, SyncRequest()..result = SyncResult());
-        //ToDo: expect isSyncInProgress to true
-      });
 
       /// Preconditions:
       /// 1. Initially the isSyncInProgress is set to false.
@@ -2950,6 +2933,8 @@ void main() {
         expect(
             (await syncService.syncUtil.atCommitLog?.getEntry(4))?.commitId, 4);
         expect(syncService.isSyncInProgress, false);
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       test(
@@ -3141,6 +3126,8 @@ void main() {
         expect(atData?.data, 'dummy_val_new');
         atData = await keystore?.get('cached:@bob:shared_key@framedmurder');
         expect(atData?.data, 'dummy_val_new_1');
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       tearDown(() async {
@@ -3230,6 +3217,8 @@ void main() {
         //that is done by storing the switchState before sync and then checking
         //if the switch state is in the opposite state after sync
         expect(TestResources.switchState, !localSwitchState);
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       /// Preconditions:
@@ -3266,6 +3255,8 @@ void main() {
             progressListener.localSyncProgress?.syncStatus, SyncStatus.failure);
         expect(
             progressListener.localSyncProgress?.message, 'network unavailable');
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       tearDown(() async {
@@ -3398,6 +3389,8 @@ void main() {
         expect(keysList[2].key, 'public:test_key2.demo@bob');
         expect(keysList[3].key, 'public:test_key3.demo@bob');
         expect(keysList[4].key, 'public:test_key4.demo@bob');
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       /// Preconditions:
@@ -3461,6 +3454,8 @@ void main() {
             progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
         expect(progressListener.localSyncProgress?.isInitialSync, true);
         syncService.removeProgressListener(progressListener);
+        //clearing sync objects
+        syncService.clearSyncEntities();
       });
 
       /// Preconditions:
@@ -3488,7 +3483,8 @@ void main() {
         // -------------------Assertions-------------------
         syncQueueSize = syncServiceImpl.syncProgressListenerSize();
         expect(syncQueueSize, 0);
-        await TestResources.tearDownLocalStorage();
+        //clearing sync objects
+        syncServiceImpl.clearSyncEntities();
       });
 
       tearDown(() async {
