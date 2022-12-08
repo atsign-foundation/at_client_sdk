@@ -214,44 +214,31 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key":atKey}));
-    var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic! : false;
-    var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
-    var isNamespaceAware =
-        atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
     // ignore: no_leading_underscores_for_local_identifiers
-    var _deleteResult = _delete(atKey.key!,
-        sharedWith: atKey.sharedWith,
-        sharedBy: atKey.sharedBy,
-        isPublic: isPublic,
-        isCached: isCached,
-        namespaceAware: isNamespaceAware,
-        isLocal: atKey.isLocal);
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete', {"key":atKey, "_deleteResult":_deleteResult}));
+    var _deleteResult = _delete(atKey);
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',{"key":atKey, "_deleteResult": _deleteResult}));
     return _deleteResult;
   }
 
-  Future<bool> _delete(String key,
-      {String? sharedWith,
-      String? sharedBy,
-      bool isPublic = false,
-      bool isCached = false,
-      bool namespaceAware = true,
-      bool isLocal = false}) async {
+  Future<bool> _delete(AtKey atKey) async {
+    // If metadata is null, initialize metadata
+    atKey.metadata ??= Metadata();
     String keyWithNamespace;
-    if (namespaceAware) {
-      keyWithNamespace = _getKeyWithNamespace(key);
+    if (atKey.metadata!.namespaceAware) {
+      keyWithNamespace = AtClientUtil.getKeyWithNameSpace(atKey, _preference!);
     } else {
-      keyWithNamespace = key;
+      keyWithNamespace = atKey.key!;
     }
-    sharedBy ??= currentAtSign;
+    atKey.sharedBy ??= currentAtSign;
     var builder = DeleteVerbBuilder()
-      ..isLocal = isLocal
-      ..isCached = isCached
-      ..isPublic = isPublic
-      ..sharedWith = sharedWith
+      ..isLocal = atKey.isLocal
+      ..isCached = atKey.metadata!.isCached
+      ..isPublic =
+          (atKey.metadata!.isPublic == null) ? false : atKey.metadata!.isPublic!
+      ..sharedWith = atKey.sharedWith
       ..atKey = keyWithNamespace
-      ..sharedBy = sharedBy;
+      ..sharedBy = atKey.sharedBy;
     var deleteResult = await getSecondary().executeVerb(builder, sync: true);
     return deleteResult != null;
   }

@@ -1,3 +1,5 @@
+## 3.0.49
+- fix: Enable AtKey.namespace overrides the namespace in AtClientPreference in AtClient delete method
 ## 3.0.48
 - feat: Added `lib/src/client/request_options.dart` to provide access to the `RequestOptions` and `GetRequestOptions` classes.
 ## 3.0.47

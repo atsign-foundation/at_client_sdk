@@ -140,6 +140,19 @@ void main() {
           (AtClientPreference()));
       expect(atKey, 'phone');
     });
+
+    test(
+        'A test to verify namespace from key overrides the namespace in preference',
+        () {
+      var atClientPreference = AtClientPreference()..namespace = 'buzz';
+      var atKey = AtKey()
+        ..key = 'phone'
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob'
+        ..namespace = 'wavi';
+      String key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference);
+      expect(key, 'phone.wavi');
+    });
   });
   group('A group of tests to check bypass cache flag', () {
     test('A test to verify bypass cache flag in plookup verb builder', () {
