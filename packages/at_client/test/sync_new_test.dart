@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
@@ -2445,7 +2444,7 @@ void main() {
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":1,"operation":"*"}'
                 ','
-                '{"atKey":"@alice:phone@bob.demo@bob",'
+                '{"atKey":"@alice:phone.demo@bob",'
                 '"value":"remoteValue",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":2,"operation":"*"}'
@@ -2460,7 +2459,7 @@ void main() {
                 Future.value('data:[{"id":1,"response":{"data":"3"}},'
                     '{"id":2,"response":{"data":"4"}}]'));
 
-        await localSecondary.putValue('@alice:phone@bob', 'localValue');
+        await localSecondary.putValue('@alice:phone.demo@bob', 'localValue');
         await localSecondary.putValue(
             'public:test_key2.group12test1@bob', 'whatever');
         CustomSyncProgressListener progressListener =
@@ -2477,6 +2476,10 @@ void main() {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();
       });
+    });
+    tearDown(() async {
+      await TestResources.tearDownLocalStorage();
+      resetMocktailState();
     });
   });
 
@@ -2895,6 +2898,10 @@ void main() {
         atData = await keystore?.get('cached:@bob:shared_key@framedmurder');
         expect(atData?.data, 'dummy_val_new_1');
       });
+      tearDown(() async {
+        await TestResources.tearDownLocalStorage();
+        resetMocktailState();
+      });
     });
 
     group('A group of test to verify onDone callback', () {
@@ -3079,22 +3086,22 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":11,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key1.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":12,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key2.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":13,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key3.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":14,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key4.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
@@ -3174,12 +3181,12 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":1,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key1.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":2,"operation":"*"}'
-            ','
+                ','
                 '{"atKey":"public:test_key2.demo@bob",'
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
