@@ -1,9 +1,10 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
-import 'package:at_client/src/util/encryption_util.dart';
-import 'package:at_commons/at_commons.dart';
 
 ///Class responsible for encrypting the value of the SharedKey's
 class SharedKeyEncryption extends AbstractAtKeyEncryption {
+  SharedKeyEncryption(AtClient atClient) : super(atClient);
+
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     if (value is! String) {
