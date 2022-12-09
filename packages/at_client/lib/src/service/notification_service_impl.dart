@@ -49,7 +49,7 @@ class NotificationServiceImpl
 
   late AtClientManager _atClientManager;
   AtClientValidation atClientValidation = AtClientValidation();
-  AtKeyEncryptionManager atKeyEncryptionManager = AtKeyEncryptionManager();
+  late AtKeyEncryptionManager atKeyEncryptionManager;
 
   /// The delay between when a call is made to monitorRetry() - i.e. a monitorRestart is queued -
   /// and when Monitor.start() is subsequently called
@@ -103,6 +103,7 @@ class NotificationServiceImpl
             _atClientManager.atClient.getCurrentAtSign()!,
             namespace: _atClientManager.atClient.getPreferences()!.namespace)
         .build();
+    atKeyEncryptionManager = AtKeyEncryptionManager(_atClient);
   }
 
   /// Simple state to prevent _init() running more than once *concurrently*
@@ -246,9 +247,10 @@ class NotificationServiceImpl
         _streamListeners.forEach((notificationConfig, streamController) async {
           try {
             var transformedNotification =
-                await NotificationResponseTransformer().transform(Tuple()
-                  ..one = atNotification
-                  ..two = notificationConfig);
+                await NotificationResponseTransformer(_atClient)
+                    .transform(Tuple()
+                      ..one = atNotification
+                      ..two = notificationConfig);
 
             if (notificationConfig.regex != emptyRegex) {
               if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {

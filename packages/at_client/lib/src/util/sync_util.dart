@@ -124,4 +124,34 @@ class SyncUtil {
     }
     return true;
   }
+
+  /// Returns the latest [CommitEntry] of the given key from the given atCommitLog instance
+  /// If the key is not found [NullCommitEntry] is returned.
+  Future<CommitEntry> getLatestCommitEntry(
+      AtCommitLog atCommitLog, String key) async {
+    var values = (await atCommitLog.commitLogKeyStore.toMap()).values.toList()
+      ..sort(_compareCommitId);
+    for (CommitEntry commitEntry in values) {
+      if (commitEntry.atKey == key) {
+        return commitEntry;
+      }
+    }
+    return NullCommitEntry();
+  }
+
+  /// Sorts the commit entries in descending order.
+  ///
+  /// The CommitEntries with commitId 'null' comes before the commit entries with commitId
+  int _compareCommitId(commitEntry1, commitEntry2) {
+    if (commitEntry1.commitId == null && commitEntry2.commitId == null) {
+      return 0;
+    }
+    if (commitEntry1.commitId == null && commitEntry2.commitId != null) {
+      return -1;
+    }
+    if (commitEntry1.commitId != null && commitEntry2.commitId == null) {
+      return 1;
+    }
+    return commitEntry2.commitId!.compareTo(commitEntry1.commitId!);
+  }
 }

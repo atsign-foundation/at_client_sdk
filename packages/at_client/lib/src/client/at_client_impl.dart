@@ -882,7 +882,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager()
+          final atKeyEncryption = AtKeyEncryptionManager(this)
               .get(notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
@@ -895,7 +895,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager()
+          final atKeyEncryption = AtKeyEncryptionManager(this)
               .get(notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);

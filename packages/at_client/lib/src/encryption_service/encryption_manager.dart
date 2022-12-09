@@ -1,12 +1,16 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
-import 'package:at_commons/at_commons.dart';
 
 /// The manager class for [AtKeyEncryption]
 class AtKeyEncryptionManager {
   /// Accepts the [AtKey] and currentAtSign and returns the relevant
   /// [AtKeyEncryption] subclass.
+  late final AtClient _atClient;
+
+  AtKeyEncryptionManager(this._atClient);
+
   AtKeyEncryption get(AtKey atKey, String currentAtSign) {
     // If atKey is sharedKey, return sharedKeyEncryption
     // Eg. @bob:phone.wavi@alice. and @alice is currentAtSign.
@@ -19,7 +23,7 @@ class AtKeyEncryptionManager {
             atKey.sharedWith != null &&
             atKey.sharedWith != currentAtSign) ||
         atKey.sharedWith != null && atKey.sharedWith != currentAtSign) {
-      return SharedKeyEncryption();
+      return SharedKeyEncryption(_atClient);
     }
     return SelfKeyEncryption();
   }
