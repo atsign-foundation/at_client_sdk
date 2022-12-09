@@ -101,8 +101,6 @@ void main() {
       expect(keyStoreGetResult.metaData!.version, 0);
       var commitLogEntry = await SyncUtil(atCommitLog: TestResources.commitLog)
           .getCommitEntry(putCommitId, TestResources.atsign);
-      // await SyncUtil(atCommitLog: TestResources.commitLog)
-      // .getLastSyncedEntry('wavi', TestResources.atsign: TestResources.atsign);
       expect(commitLogEntry?.operation, CommitOp.UPDATE);
       expect(commitLogEntry?.commitId, null);
     });
@@ -1505,6 +1503,7 @@ void main() {
     test(
         'A test to verify the commitId is updated against the uncommitted entries on batch response',
         () async {
+      //----------------------------------setup---------------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
@@ -1531,7 +1530,7 @@ void main() {
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.networkUtil = mockNetworkUtil;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-
+      //------------------preconditions setup-----------------------
       await localSecondary.putValue(
           'public:test_key0.group3test5@bob', 'dummydata');
       await localSecondary.putValue(
@@ -1544,6 +1543,7 @@ void main() {
       await syncService.syncInternal(-1, SyncRequest()..result = SyncResult());
       //after sync assert that all the commit entries have commitIds
       //seq_num starts from 0 and the commitIds start from 21 based on server response mocked above
+      // ------------------------------Assertions-------------------------------
       var result = await syncService.syncUtil.atCommitLog?.getEntry(0);
       expect(result?.commitId, 21);
       result = await syncService.syncUtil.atCommitLog?.getEntry(1);
@@ -1734,12 +1734,14 @@ void main() {
           .toString();
       var atData = AtData();
       atData.data = '11122';
+      //----------------------------------operation---------------------------------
       int putCommitId = await keystore!.put(atKey, atData, time_to_born: 10000);
       // key should not be available before 10 seconds
       // Assertion is not possible as the key will be available in the keystore level
       // expect(() async => await keystore.get(atKey),
       //     throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
       var getResult = await keystore.get(atKey);
+      //----------------------------------assertion---------------------------------
       expect(getResult!.data, '11122');
       expect(getResult.metaData!.createdAt!.isBefore(DateTime.now()), true);
       expect(getResult.metaData!.version, 0);
@@ -1933,6 +1935,7 @@ void main() {
         () async {
       var commitLog = TestResources.commitLog;
       var syncUtil = SyncUtil(atCommitLog: commitLog);
+      //----------------------------------Assertions----------------------------
       expect(commitLog?.getSize(), 0);
       expect(
           await syncUtil.getLastSyncedEntry('regex',
@@ -1952,6 +1955,7 @@ void main() {
     /// 1. Server and local should be in sync and 5 uncommitted entries
     ///    must be synced to cloud secondary
     test('A test to verify sync with regex when local is ahead', () async {
+      //----------------------------------Setup-----------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
@@ -1996,6 +2000,7 @@ void main() {
       int serverCommitId = 100;
       SyncResult syncResult = await syncService.syncInternal(
           serverCommitId, SyncRequest()..result = SyncResult());
+      //------------------Assertions-------------------------------
       expect(syncResult.syncStatus, SyncStatus.success);
       expect(syncResult.keyInfoList.length, 5);
       var lastSyncedEntry = await syncService.syncUtil
@@ -2048,6 +2053,7 @@ void main() {
       // Updating the commit entry with commitId to mimic the server behaviour
       await TestResources.setCommitEntry(putCommitId, TestResources.atsign);
       var getResult = await keystore.get(atKey);
+      //------------------ Assertions-----------------------
       expect(getResult!.data, 'sunny');
       expect(getResult.metaData!.updatedAt!.isBefore(DateTime.now()), true);
       var commitEntry = await TestResources.commitLog!.getEntry(putCommitId);
@@ -2065,6 +2071,7 @@ void main() {
     /// 2. An entry created in the commit log with the new commit id
     test('Update from server for a key that does not exist in local secondary',
         () async {
+      //----------------------------------Setup-----------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       var atKey = AtKey.self('season',
@@ -2075,6 +2082,7 @@ void main() {
       // Updating the commit entry with commitId to mimic the server behaviour
       await TestResources.setCommitEntry(putCommitId, TestResources.atsign);
       var getResult = await keystore.get(atKey);
+      //------------------ Assertions-----------------------
       expect(getResult!.data, 'autumn');
       var commitEntry = await TestResources.commitLog!.getEntry(putCommitId);
       expect(commitEntry!.commitId, putCommitId);
@@ -2104,6 +2112,7 @@ void main() {
       // Updating the same key from the server
       int? removeCommitId = await keystore.remove(atKey);
       // Updating the commit entry with commitId to mimic the server behaviour
+      //------------------ Assertions-----------------------
       await TestResources.setCommitEntry(removeCommitId!, TestResources.atsign);
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
@@ -2129,6 +2138,7 @@ void main() {
       int? removeCommitId = await keystore!.remove(atKey);
       // Updating the commit entry with commitId to mimic the server behaviour
       await TestResources.setCommitEntry(removeCommitId!, TestResources.atsign);
+      //------------------ Assertions-----------------------
       expect(() async => await keystore.get(atKey),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
       var commitEntry = await TestResources.commitLog!.getEntry(removeCommitId);
@@ -2205,9 +2215,10 @@ void main() {
     /// Server and local should be in sync and 5 entries from the server must be synced to local
     test('A test to verify server commit entries are synced to local',
         () async {
+      //----------------------------------Setup-----------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
-
+      // ------------------preconditions setup --------------------
       when(() => mockNetworkUtil.isNetworkAvailable())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
@@ -2253,7 +2264,7 @@ void main() {
 
       // registerFallbackValue(FakeSyncVerbBuilder());
       // registerFallbackValue(FakeUpdateVerbBuilder());
-
+      //--------------------------Preconditions setup-----------------------------
       await localSecondary.putValue(
           'cached:@bob:shared_key@framedmurder', 'fe fi fo fum');
       //update commitEntry with commitId - 10 to set localCommitId to 10
@@ -2267,7 +2278,7 @@ void main() {
       expect(preSyncSeqNum, 10);
 
       await syncService.syncInternal(15, SyncRequest()..result = SyncResult());
-
+      //----------------------------------Assertions-----------------------------
       commitEntry =
           await syncService.syncUtil.getCommitEntry(1, TestResources.atsign);
       expect(commitEntry?.atKey, 'cached:@bob:shared_key@guiltytaurus27');
@@ -2484,6 +2495,7 @@ void main() {
     test(
         'A test to verify when sync conflict info when key present in'
         'uncommitted entries and in server response of sync', () async {
+      // --------------------- Setup ---------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
@@ -2499,6 +2511,7 @@ void main() {
       when(() => mockNetworkUtil.isNetworkAvailable())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      // --------------------- preconditions setup ---------------------
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
           .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
@@ -2535,7 +2548,7 @@ void main() {
       syncService.sync(onDone: onDoneCallback);
       await syncService.processSyncRequests(
           respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
-
+      // --------------------- Assertions ---------------------
       ConflictInfo conflictInfo = ConflictInfo()
         ..remoteValue = 'remoteValue_value'
         ..localValue = await TestResources.getHiveKeyStore(TestResources.atsign)
@@ -2670,6 +2683,7 @@ void main() {
       test(
           'A test to verify sync process does not start when network is not available',
           () async {
+        //--------------------- Setup ---------------------
         LocalSecondary localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
@@ -2682,7 +2696,7 @@ void main() {
         syncService.networkUtil = mockNetworkUtil;
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
-
+        //------------------Preconditions setup -------------------
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(false));
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
@@ -2734,6 +2748,7 @@ void main() {
         syncService.sync(onDone: onDoneCallback);
         syncService.sync(onDone: onDoneCallback);
         await syncService.processSyncRequests();
+        //------------------Assertions -------------------
         //switch will be flipped for this request as network is now available
         expect(TestResources.switchState, !localSwitchState);
         //clearing sync objects
@@ -2748,6 +2763,7 @@ void main() {
       test(
           'A test to verify sync process does not start when sync request queue is empty',
           () async {
+        //--------------------- Setup ---------------------
         LocalSecondary localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
@@ -2767,6 +2783,7 @@ void main() {
         bool localSwitchState = TestResources.switchState;
         syncService.sync(onDone: onDoneCallback);
         await syncService.processSyncRequests();
+        //------------------Assertions -------------------
         //switch will not be flipped for request - 1 as there are no uncommitted entries
         expect(TestResources.switchState, localSwitchState);
         //clearing sync objects
@@ -2781,6 +2798,7 @@ void main() {
       test(
           'A test to verify sync process does not start when sync request queue does not meet the threshold',
           () async {
+        //------------------ setup -------------------
         LocalSecondary localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
@@ -2828,7 +2846,7 @@ void main() {
         // await localSecondary.putValue(
         //     'public:test_key2.group12test1@bob', 'whatever');
         bool localSwitchState = TestResources.switchState;
-
+        //------------------Assertions -------------------
         //switch will not be flipped for request - 1
         syncService.sync(onDone: onDoneCallback);
         await syncService.processSyncRequests();
@@ -2876,6 +2894,7 @@ void main() {
       test(
           'A test to verify isSyncInProgress flag is set to false on sync completion',
           () async {
+        //---------------------setup--------------------------
         reset(mockRemoteSecondary);
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2920,7 +2939,7 @@ void main() {
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         syncService.networkUtil = mockNetworkUtil;
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-
+        //----------------- Assertions-----------------
         await syncService.syncInternal(4, SyncRequest()..result = SyncResult());
         expect(
             (await syncService.syncUtil.atCommitLog?.getEntry(0))?.commitId, 0);
@@ -3043,6 +3062,7 @@ void main() {
       /// 1. The server response should contain the changes from commitId 6 to 10
       /// 2. The local keystore should two existing updates, one exising key deleted and two new keys created
       test('A test to verify sync command to delta changes', () async {
+        //----------------- setup-----------------
         HiveKeystore? keystore =
             TestResources.getHiveKeyStore(TestResources.atsign);
         LocalSecondary? localSecondary =
@@ -3097,7 +3117,7 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"3"}},'
                     '{"id":2,"response":{"data":"4"}}]'));
-
+        //-----------------preconditions setup-----------------
         await localSecondary.putValue(
             'public:from_remote_key3.wavi@bob', 'fe fi fo fum');
         await localSecondary.putValue('test_key1.wavi@bob', 'fe fi fo fum');
@@ -3117,6 +3137,7 @@ void main() {
         await syncService.syncInternal(
             10, SyncRequest()..result = SyncResult());
         AtData? atData;
+        //----------------- assertions-----------------
         atData = await keystore?.get('public:self_key.wavi@bob');
         expect(atData?.data, 'dummy');
         atData = await keystore?.get('public:from_remote_key1.demo@bob');
@@ -3164,6 +3185,7 @@ void main() {
       test(
           'A test to verify sync result in onDone callback on successful completion',
           () async {
+        //----------------- setup-----------------
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
@@ -3203,7 +3225,7 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"4"}},'
                     '{"id":2,"response":{"data":"5"}}]'));
-
+        //----------------- preconditions setup-----------------
         await localSecondary.putValue(
             'public:test_key1.group12test1@bob', 'whatever');
         await localSecondary.putValue(
@@ -3216,6 +3238,7 @@ void main() {
         //the below assertion is to check if the switch has been flipped
         //that is done by storing the switchState before sync and then checking
         //if the switch state is in the opposite state after sync
+        //----------------- assertions-----------------
         expect(TestResources.switchState, !localSwitchState);
         //clearing sync objects
         syncService.clearSyncEntities();
@@ -3244,13 +3267,14 @@ void main() {
 
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(false));
-
+        //----------------- preconditions setup-----------------
         CustomSyncProgressListener progressListener =
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
         syncService.sync(onDone: onDoneCallback);
         await syncService.processSyncRequests(
             respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        //----------------- assertions-----------------
         expect(
             progressListener.localSyncProgress?.syncStatus, SyncStatus.failure);
         expect(
@@ -3301,6 +3325,7 @@ void main() {
       test(
           'A test to verify a new listener is added to sync progress call back',
           () async {
+        //----------------- setup-----------------
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
@@ -3360,14 +3385,14 @@ void main() {
             await syncService.syncUtil.getCommitEntry(0, TestResources.atsign);
         await syncService.syncUtil
             .updateCommitEntry(commitEntry, 10, TestResources.atsign);
-
+        //----------------- preconditions setup -----------------
         CustomSyncProgressListener progressListener =
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
         syncService.sync(onDone: onDoneCallback);
         await syncService.processSyncRequests(
             respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
-
+        //----------------- assertions-----------------
         expect(
             progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
         expect(progressListener.localSyncProgress?.isInitialSync, false);
@@ -3406,6 +3431,7 @@ void main() {
       ///    b. bool isInitialSync = true;
       test('A test to verify "isInitialSync" flag in SyncProgressListener',
           () async {
+        // ----------------- setup -----------------
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
             keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
@@ -3443,13 +3469,14 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":3,"operation":"*"}]'));
-
+        // ----------------- preconditions setup -----------------
         CustomSyncProgressListener progressListener =
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
         syncService.sync(onDone: onDoneCallback);
         await syncService.processSyncRequests(
             respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        //----------------- assertions-----------------
         expect(
             progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
         expect(progressListener.localSyncProgress?.isInitialSync, true);
@@ -3473,7 +3500,7 @@ void main() {
         syncServiceImpl.syncUtil =
             SyncUtil(atCommitLog: TestResources.commitLog);
         // -------------------Preconditions-------------------
-        var listener = MySyncProgressListener();
+        var listener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(listener);
         //verify the que size is 1
         var syncQueueSize = syncServiceImpl.syncProgressListenerSize();
@@ -3499,13 +3526,6 @@ void onDoneCallback(syncResult) {
   print(syncResult);
   expect(syncResult.syncStatus, SyncStatus.success);
   TestResources.flipSwitch();
-}
-
-class MySyncProgressListener extends SyncProgressListener {
-  @override
-  void onSyncProgressEvent(SyncProgress syncProgress) {
-    print('received sync progress: $syncProgress');
-  }
 }
 
 class CustomSyncProgressListener extends SyncProgressListener {
