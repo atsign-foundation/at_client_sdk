@@ -362,11 +362,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<List<KeyInfo>> _syncToRemote(
       List<CommitEntry> unCommittedEntries) async {
     List<KeyInfo> keyInfoList = [];
-    var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
+    var uncommittedEntryBatch = getUnCommittedEntryBatch(unCommittedEntries);
     for (var unCommittedEntryList in uncommittedEntryBatch) {
       try {
-        var batchRequests = await _getBatchRequests(unCommittedEntryList);
-        var batchResponse = await _sendBatch(batchRequests);
+        var batchRequests = await getBatchRequests(unCommittedEntryList);
+        var batchResponse = await sendBatch(batchRequests);
         for (var entry in batchResponse) {
           try {
             var batchId = entry['id'];
@@ -531,8 +531,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverEncryptedValue = serverCommitEntry['value'];
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null && serverMetaData[IS_ENCRYPTED] == "true") {
-        final decryptionManager =
-            AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
+        final decryptionManager = AtKeyDecryptionManager(_atClient)
+            .get(atKey, _atClient.getCurrentAtSign()!);
 
         // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue;
@@ -556,7 +556,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
   }
 
-  Future<List<BatchRequest>> _getBatchRequests(
+  @visibleForTesting
+  Future<List<BatchRequest>> getBatchRequests(
       List<CommitEntry> uncommittedEntries) async {
     var batchRequests = <BatchRequest>[];
     var batchId = 1;
@@ -740,7 +741,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return localCommitId;
   }
 
-  dynamic _sendBatch(List<BatchRequest> requests) async {
+  @visibleForTesting
+  dynamic sendBatch(List<BatchRequest> requests) async {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
@@ -775,7 +777,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
   }
 
-  List<dynamic> _getUnCommittedEntryBatch(
+  @visibleForTesting
+  List<dynamic> getUnCommittedEntryBatch(
       List<CommitEntry?> uncommittedEntries) {
     var unCommittedEntryBatch = [];
     var batchSize = _atClient.getPreferences()!.syncBatchSize, i = 0;
@@ -871,6 +874,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @override
   void setOnDone(Function onDone) {
     this.onDone = onDone;
+  }
+
+  @visibleForTesting
+  int syncProgressListenerSize(){
+    return _syncProgressListeners.length;
+  }
+
+  ///Method only for testing
+  ///Clears all in-memory entities belonging to the syncService
+  @visibleForTesting
+  void clearSyncEntities(){
+    _syncRequests.clear();
+    _syncProgressListeners.clear();
+    _syncServiceMap.clear();
   }
 }
 
