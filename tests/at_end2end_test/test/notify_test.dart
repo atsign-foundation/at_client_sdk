@@ -1,49 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:at_end2end_test/src/test_initializers.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
+import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/response/notification_response_parser.dart';
+import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:test/test.dart';
-import 'test_utils.dart';
 
-void main() {
-  var currentAtSign, sharedWithAtSign;
-  AtClientManager? currentAtSignClientManager, sharedWithAtSignClientManager;
-  var namespace = 'wavi';
+void main() async {
+  late AtClientManager currentAtClientManager;
+  late AtClientManager sharedWithAtClientManager;
+  late String currentAtSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 
-    // Create atClient instance for currentAtSign
-    currentAtSignClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(
-            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-    // Set Encryption Keys for currentAtSign
-    await TestUtils.setEncryptionKeys(currentAtSign);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
-    // Create atClient instance for atSign2
-    sharedWithAtSignClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(sharedWithAtSign, namespace,
-            TestUtils.getPreference(sharedWithAtSign));
-    // Set Encryption Keys for sharedWithAtSign
-    await TestUtils.setEncryptionKeys(sharedWithAtSign);
-    isSyncInProgress = true;
-    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(currentAtSign, namespace);
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(sharedWithAtSign, namespace);
   });
 
   test(
@@ -62,17 +46,20 @@ void main() {
     // for each run.
     var value = '+1 100 200 30';
     // Setting currentAtSign atClient instance to context.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-    final notificationResult = await currentAtSignClientManager
-        ?.notificationService
+    currentAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
+    final notificationResult = await currentAtClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(notificationResult, isNotNull);
-    expect(notificationResult!.notificationStatusEnum,
+    expect(notificationResult.notificationStatusEnum,
         NotificationStatusEnum.delivered);
+
     // Setting sharedWithAtSign atClient instance to context.
     await AtClientManager.getInstance().setCurrentAtSign(
-        sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+        sharedWithAtSign,
+        namespace,
+        TestPreferences.getInstance().getPreference(sharedWithAtSign));
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
         .notifyList(regex: 'phone$randomValue');
@@ -104,20 +91,24 @@ void main() {
           () async {
         // Setting the AtClientManager instance to current atsign
         await AtClientManager.getInstance().setCurrentAtSign(
-            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+            currentAtSign,
+            namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
+
+        var epochMillsNow = DateTime.now().millisecondsSinceEpoch;
         var notificationResult = await AtClientManager.getInstance()
             .notificationService
             .notify(input);
         expect(notificationResult.notificationStatusEnum,
             NotificationStatusEnum.delivered);
 
-        await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
-            namespace, TestUtils.getPreference(sharedWithAtSign));
+        sharedWithAtClientManager = await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
+            namespace, TestPreferences.getInstance().getPreference(sharedWithAtSign));
         var atNotification = await AtClientManager.getInstance()
             .notificationService
             .fetch(notificationResult.notificationID);
         atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
-        await NotificationResponseTransformer().transform(Tuple()
+        await NotificationResponseTransformer(sharedWithAtClientManager.atClient).transform(Tuple()
           ..one = atNotification
           ..two = (NotificationConfig()
             ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));
@@ -130,7 +121,7 @@ void main() {
   group('A group of tests for notification fetch', () {
     test('A test to verify non existent notification', () async {
       await AtClientManager.getInstance().setCurrentAtSign(
-          currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+          currentAtSign, namespace, TestPreferences.getInstance().getPreference(currentAtSign));
       var notificationResult = await AtClientManager.getInstance()
           .notificationService
           .fetch('abc-123');
@@ -145,4 +136,51 @@ void main() {
       Directory('test/hive/').deleteSync(recursive: true);
     }
   });
+}
+
+/// Class responsible for getting the notifications from the cloud secondary
+class MonitorForNotification {
+  String notificationId;
+  String atSign;
+  int epochMillsNow;
+  StreamController streamController;
+  Monitor? monitor;
+
+  MonitorForNotification(this.notificationId, this.atSign, this.epochMillsNow,
+      this.streamController);
+
+  Future<void> init() async {
+    monitor = Monitor(
+        _onMonitorSuccess,
+        _onMonitorError,
+        atSign,
+        TestPreferences.getInstance().getPreference(atSign),
+        MonitorPreference()
+          ..lastNotificationTime = epochMillsNow
+          ..keepAlive = false,
+        _onMonitorRetry);
+
+    await monitor?.start(lastNotificationTime: epochMillsNow);
+  }
+
+  Future<void> _onMonitorSuccess(String notificationStr) async {
+    if (notificationStr.contains(notificationId)) {
+      final notificationResponseParser = NotificationResponseParser();
+      final atNotifications =
+          await notificationResponseParser.getAtNotifications(
+              notificationResponseParser.parse(notificationStr));
+      for (var element in atNotifications) {
+        streamController.add(element);
+      }
+      monitor?.stop();
+    }
+  }
+
+  //Dummy implementation for error
+  void _onMonitorError(arg1) {
+    print(arg1);
+  }
+
+  // Dummy implementation for retry callback
+  void _onMonitorRetry() {}
 }

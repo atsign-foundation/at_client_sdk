@@ -1,5 +1,7 @@
 library at_client;
 
+import 'package:meta/meta.dart';
+
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
 export 'package:at_client/src/client/local_secondary.dart';
@@ -26,3 +28,6 @@ export 'package:at_client/src/at_collection/at_collection_spec.dart';
 export 'package:at_client/src/at_collection/at_collection_model_methods_mixin.dart';
 export 'package:at_client/src/at_collection/model/at_share_operation.dart';
 export 'package:at_client/src/at_collection/model/at_unshare_operation.dart';
+@experimental
+export 'package:at_client/src/telemetry/at_client_telemetry.dart';
+export 'package:at_client/src/client/request_options.dart';
