@@ -51,7 +51,7 @@ class PutRequestTransformer
       //# TODO remove else block once atChops once testing is good
       if (_atClient.getPreferences()!.useAtChops) {
         final signingResult = _atClient
-            .getAtChops()!
+            .atChops!
             .signString(updateVerbBuilder.value, SigningKeyType.signingSha256);
         updateVerbBuilder.dataSignature = signingResult.result;
       } else {

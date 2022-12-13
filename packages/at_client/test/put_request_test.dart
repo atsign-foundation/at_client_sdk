@@ -62,7 +62,7 @@ void main() {
             .thenAnswer((_) => atClientPreferenceWithAtChops);
         final atChopsKeys = AtChopsKeys.create(
             AtEncryptionKeyPair.create('', encryptionPrivateKey), null);
-        when(() => mockAtClient.getAtChops())
+        when(() => mockAtClient.atChops)
             .thenAnswer((_) => AtChopsImpl(atChopsKeys));
         putRequestTransformer = PutRequestTransformer(mockAtClient);
         updateVerbBuilder = await putRequestTransformer.transform(tuple,

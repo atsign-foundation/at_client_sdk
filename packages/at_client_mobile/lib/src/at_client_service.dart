@@ -107,7 +107,7 @@ class AtClientService {
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     final atChops = AtChopsImpl(atChopsKeys);
     atLookUp.atChops = atChops;
-    _atClient!.setAtChops(atChops: atChops);
+    _atClient!.atChops = atChops;
     return result;
   }
 

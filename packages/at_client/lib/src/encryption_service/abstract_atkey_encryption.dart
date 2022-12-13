@@ -101,7 +101,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       if (AtClientManager.getInstance().atClient.getPreferences()!.useAtChops) {
         final decryptionResult = AtClientManager.getInstance()
             .atClient
-            .getAtChops()!
+            .atChops!
             .decryptString(key, EncryptionKeyType.rsa2048);
         return decryptionResult.result;
       } else {

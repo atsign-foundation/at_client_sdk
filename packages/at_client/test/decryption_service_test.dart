@@ -81,7 +81,7 @@ void main() {
           .thenAnswer((_) => atClientPreferenceWithAtChops);
       final atChopsKeys = AtChopsKeys.create(
           AtEncryptionKeyPair.create('', encryptionPrivateKey), null);
-      when(() => mockAtClientImpl.getAtChops())
+      when(() => mockAtClientImpl.atChops)
           .thenAnswer((_) => AtChopsImpl(atChopsKeys));
       expect(await sharedKeyDecryption.decrypt(atKey, encryptedValue), 'hello');
     });
@@ -177,7 +177,7 @@ void main() {
           SharedKeyDecryption(atClient: mockAtClientImpl);
       final atChopsKeys =
           AtChopsKeys.create(AtEncryptionKeyPair.create('', ''), null);
-      when(() => mockAtClientImpl.getAtChops())
+      when(() => mockAtClientImpl.atChops)
           .thenAnswer((_) => AtChopsImpl(atChopsKeys));
       expect(
           () async =>

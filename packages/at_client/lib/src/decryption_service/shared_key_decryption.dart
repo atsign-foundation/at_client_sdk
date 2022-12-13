@@ -66,8 +66,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
     try {
       //# TODO remove else block once atChops once testing is good
       if (atClient!.getPreferences()!.useAtChops) {
-        final decryptionResult = atClient!
-            .getAtChops()!
+        final decryptionResult = atClient!.atChops!
             .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
         decryptedValue = EncryptionUtil.decryptValue(
             encryptedValue, decryptionResult.result);

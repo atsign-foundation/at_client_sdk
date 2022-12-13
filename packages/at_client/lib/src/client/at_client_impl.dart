@@ -51,6 +51,8 @@ class AtClientImpl implements AtClient {
   SecondaryKeyStore? _localSecondaryKeyStore;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
+
+  @override
   AtChops? _atChops;
 
   EncryptionService? _encryptionService;
@@ -68,6 +70,14 @@ class AtClientImpl implements AtClient {
   @override
   @experimental
   AtTelemetryService? get telemetry => _telemetry;
+
+  @override
+  set atChops(AtChops? atChops) {
+    _atChops = atChops;
+  }
+
+  @override
+  AtChops? get atChops => _atChops;
 
   @override
   EncryptionService? get encryptionService => _encryptionService;
@@ -123,6 +133,7 @@ class AtClientImpl implements AtClient {
     }
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
+    _atChops = atChops;
   }
 
   Future<void> _init() async {
@@ -145,7 +156,6 @@ class AtClientImpl implements AtClient {
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
     _encryptionService!.localSecondary = _localSecondary;
-
     _cascadeSetTelemetryService();
   }
 
@@ -979,15 +989,7 @@ class AtClientImpl implements AtClient {
     _namespace = namespace;
   }
 
-  @override
-
-  /// Inject an instance of [AtChops]
-  /// if [AtChops] is not injected then pkam and encryption keys should be saved to local secondary before invoking this method.
-  void setAtChops({AtChops? atChops}) async {
-    if (atChops != null) {
-      _atChops = atChops;
-      return;
-    }
+  Future<AtChops> _createAtChopsInstance() async {
     final atEncryptionPublicKey =
         await _localSecondary!.getEncryptionPublicKey(currentAtSign!);
     final atEncryptionPrivateKey =
@@ -1007,11 +1009,6 @@ class AtClientImpl implements AtClient {
     final atPkamKeyPair =
         AtPkamKeyPair.create(atPkamPublicKey, atPkamPrivateKey);
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    _atChops = AtChopsImpl(atChopsKeys);
-  }
-
-  @override
-  AtChops? getAtChops() {
-    return _atChops;
+    return AtChopsImpl(atChopsKeys);
   }
 }
