@@ -13,17 +13,17 @@ jobs:
     name: SSL Renewal for vip.ve.atsign.zone
     steps:
       - name: Set up Python
-        uses: actions/setup-python@13ae5bb136fac2878aff31522b9efb785519f984 # v4.3.0
+        uses: actions/setup-python@2c3dd9e7e29afd70cc0950079bde6c979d1f69f9 # v4.3.1
         with:
           python-version: 3.9 #install the python needed
       - name: setup certinfo
         uses: atsign-company/certinfo-action@e33db584f27bbbc0260af9916aeaefbec0db8ef4 # v1.0.1
       # checkout at_server code
       - name: checkout repo content
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       # Pull ZeroSSL and Letsencrypt keys file from secret
       - name: Pull ACME script
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
         with:
           repository: atsign-company/secondaries-scripts
           path: secondaries-scripts

@@ -1,28 +1,43 @@
+import 'dart:collection';
+
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
-import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 import 'package:at_chops/at_chops.dart';
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
 abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   final _logger = AtSignLogger('AbstractAtKeyEncryption');
   late String _sharedKey;
+  final AtClient _atClient;
+  AtCommitLog? atCommitLog;
+
+  DefaultResponseParser defaultResponseParser = DefaultResponseParser();
 
   String get sharedKey => _sharedKey;
 
+  AbstractAtKeyEncryption(this._atClient);
+
+  @visibleForTesting
+  final HashMap<String, bool> encryptedSharedKeySyncStatusCacheMap = HashMap();
+
+  SyncUtil syncUtil = SyncUtil();
+
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
-    // Get AES Key from the local storage
-    _sharedKey = await getSharedKey(atKey);
-    late String encryptedSharedKey;
-    // Get SharedWith encryption public key
     String sharedWithPublicKey = '';
+    String encryptedSharedKey = '';
+    // 1. Get AES Key from the local storage
+    _sharedKey = await getSharedKey(atKey);
+    // Fetch the encryption public key of the sharedWith atSign
     try {
       sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
     } on AtPublicKeyNotFoundException catch (e) {
@@ -33,23 +48,18 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     // If sharedKey is empty, then -
     // Generate a new sharedKey
     // Encrypt the sharedKey with sharedWith public key
-    // Notify the encryptedSharedKey with sharedWith user
-    // Store the sharedKey for future use.
     if (_sharedKey.isEmpty) {
       // Generate sharedKey
       _sharedKey = EncryptionUtil.generateAESKey();
-      //Encrypt shared key with public key of sharedWith atSign.
+      // Encrypt shared key with public key of sharedWith atSign.
       encryptedSharedKey =
           EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
-      // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atSign
-      // to cache the encryptedSharedKey.
-      await _notifyEncryptedSharedKey(atKey, encryptedSharedKey);
-      // Store the sharedKey for future retrieval.
+      // Update the encrypted sharedKey to local secondary with TTR
+      await updateEncryptedSharedKeyToSecondary(atKey, encryptedSharedKey);
       // Encrypt the sharedKey with currentAtSignPublicKey and store it for future use.
       String? currentAtSignEncryptionPublicKey;
       try {
-        currentAtSignEncryptionPublicKey = await AtClientManager.getInstance()
-            .atClient
+        currentAtSignEncryptionPublicKey = await _atClient
             .getLocalSecondary()!
             .getEncryptionPublicKey(atKey.sharedBy!);
       } on KeyNotFoundException catch (e) {
@@ -62,9 +72,18 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       var encryptedSharedKeyForCurrentAtSign = EncryptionUtil.encryptKey(
           sharedKey, currentAtSignEncryptionPublicKey!);
       _storeSharedKey(atKey, encryptedSharedKeyForCurrentAtSign);
-    } else {
+    }
+    // For the existing shared_key, the encryptedSharedKey has to be fetched
+    // from the local secondary
+    if (encryptedSharedKey.isNull) {
       encryptedSharedKey =
           EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
+    }
+    // Check if the encryptedSharedKey is synced to remote secondary
+    // If not synced, update the key to remote secondary directly
+    if (!(await isEncryptedSharedKeyInSync(atKey))) {
+      await updateEncryptedSharedKeyToSecondary(atKey, encryptedSharedKey,
+          secondary: _atClient.getRemoteSecondary());
     }
     atKey.metadata!.sharedKeyEnc = encryptedSharedKey;
     atKey.metadata!.pubKeyCS = EncryptionUtil.md5CheckSum(sharedWithPublicKey);
@@ -73,174 +92,170 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// Fetches the shared key in the local secondary
   /// If not found, fetches in the remote secondary
   /// If found, returns the decrypted sharedKey.
-  static Future<String> getSharedKey(AtKey atKey) async {
-    String? key = '';
-    var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey =
-          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
-      ..sharedBy = atKey.sharedBy;
+  ///
+  /// If shared_key is not found in local secondary and remote secondary, returns an empty string
+  ///
+  /// Throws [KeyNotFoundException] if the encryptionPrivateKey is not found.
+  Future<String> getSharedKey(AtKey atKey) async {
+    String? encryptedSharedKey;
     try {
-      key = await _getCachedSharedKey(llookupVerbBuilder);
+      // 1. Look for shared key in local secondary
+      encryptedSharedKey =
+          await _getEncryptedSharedKey(_atClient.getLocalSecondary()!, atKey);
     } on KeyNotFoundException {
-      AtSignLogger('AbstractAtKeyEncryption').finer(
-          '${atKey.key}${atKey.sharedBy} not found in local secondary. Fetching from cloud secondary.');
+      _logger.finer(
+          '${atKey.key}${atKey.sharedBy} not found in local secondary. Fetching from remote secondary');
     }
-    // If sharedKey is not found in localSecondary, fetch from remote secondary.
     try {
-      if (key == null || key.isEmpty || key == 'data:null') {
-        key = await _getSharedKeyFromRemote(atKey);
+      // 2. If sharedKey is not found in localSecondary, fetch from remote secondary.
+      if (encryptedSharedKey.isNull || encryptedSharedKey == 'data:null') {
+        encryptedSharedKey = await _getEncryptedSharedKey(
+            _atClient.getRemoteSecondary()!, atKey);
       }
     } on KeyNotFoundException {
-      AtSignLogger('AbstractAtKeyEncryption').finer(
-          '${llookupVerbBuilder.atKey}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
+      _logger.finer(
+          '${atKey.key}${atKey.sharedBy} not found in remote secondary. Generating a new shared key');
     }
-    // If sharedKey is found, decrypt the shared key and return.
-    if (key != null && key.isNotEmpty && key != 'data:null') {
-      key = DefaultResponseParser().parse(key).response;
-      //# TODO remove else once atChops once testing is good
-      if (AtClientManager.getInstance().atClient.getPreferences()!.useAtChops) {
-        final decryptionResult = AtClientManager.getInstance()
-            .atClient
-            .atChops!
-            .decryptString(key, EncryptionKeyType.rsa2048);
-        return decryptionResult.result;
-      } else {
-        try {
-          var encryptionPrivateKey = await AtClientManager.getInstance()
-              .atClient
-              .getLocalSecondary()!
-              .getEncryptionPrivateKey();
-          return EncryptionUtil.decryptKey(key, encryptionPrivateKey!);
-        } on KeyNotFoundException catch (e) {
-          e.stack(AtChainedException(
-              Intent.fetchEncryptionPrivateKey,
-              ExceptionScenario.encryptionFailed,
-              'Failed to decrypt the encrypted shared key'));
-          rethrow;
-        }
+    if (encryptedSharedKey.isNull || encryptedSharedKey == 'data:null') {
+      return '';
+    }
+    encryptedSharedKey =
+        defaultResponseParser.parse(encryptedSharedKey!).response;
+    String? encryptionPrivateKey;
+    try {
+      encryptionPrivateKey =
+          await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
+    } on KeyNotFoundException catch (e) {
+      e.stack(AtChainedException(
+          Intent.fetchEncryptionPrivateKey,
+          ExceptionScenario.encryptionFailed,
+          'Failed to decrypt the encrypted shared key'));
+      rethrow;
+    }
+    if (_atClient.getPreferences()!.useAtChops) {
+      final decryptionResult = _atClient.atChops!
+          .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
+      return decryptionResult.result;
+    } else {
+      try {
+        return EncryptionUtil.decryptKey(
+            encryptedSharedKey, encryptionPrivateKey!);
+      } on KeyNotFoundException catch (e) {
+        e.stack(AtChainedException(
+            Intent.fetchEncryptionPrivateKey,
+            ExceptionScenario.encryptionFailed,
+            'Failed to decrypt the encrypted shared key'));
+        rethrow;
       }
     }
-    return key!;
-  }
-
-  ///Get cached shared key from local storage
-  static Future<String?> _getCachedSharedKey(
-      LLookupVerbBuilder llookupVerbBuilder) async {
-    return await AtClientManager.getInstance()
-        .atClient
-        .getLocalSecondary()!
-        .executeVerb(llookupVerbBuilder);
-  }
-
-  /// Get shared key from cloud secondary and caches it local secondary for
-  /// further use.
-  static Future<String> _getSharedKeyFromRemote(AtKey atKey) async {
-    var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey =
-          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
-      ..sharedBy = atKey.sharedBy;
-
-    var encryptedSharedKey = await AtClientManager.getInstance()
-        .atClient
-        .getRemoteSecondary()!
-        .executeVerb(llookupVerbBuilder);
-    if (encryptedSharedKey.isNotEmpty && encryptedSharedKey != 'data:null') {
-      // Cached the encryptedSharedKey in local secondary for further use.
-      // Setting shouldSync to false because the key is retrieved from cloud secondary
-      // and need to sync back again.
-      encryptedSharedKey = encryptedSharedKey.replaceAll('data:', '');
-      _storeSharedKey(atKey, encryptedSharedKey, shouldSync: false);
-    }
-    return encryptedSharedKey;
   }
 
   /// Returns sharedWith atSign publicKey.
   /// Throws [KeyNotFoundException] if sharedWith atSign publicKey is not found.
   Future<String> _getSharedWithPublicKey(AtKey atKey) async {
-    //local lookup the cached public key of sharedWith atsign.
-    String sharedWithPublicKey = '';
-    var cachedPublicKeyBuilder = LLookupVerbBuilder()
-      ..atKey = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
-      ..sharedBy = atKey.sharedBy;
+    String? sharedWithPublicKey;
     try {
-      sharedWithPublicKey = (await AtClientManager.getInstance()
-          .atClient
+      // 1. Get the cached public key
+      var cachedEncryptionPublicKeyBuilder = LLookupVerbBuilder()
+        ..atKey = 'publickey'
+        ..sharedBy = atKey.sharedWith
+        ..isPublic = true
+        ..isCached = true;
+
+      sharedWithPublicKey = await _atClient
           .getLocalSecondary()!
-          .executeVerb(cachedPublicKeyBuilder))!;
+          .executeVerb(cachedEncryptionPublicKeyBuilder);
     } on KeyNotFoundException {
-      _logger.finer(
-          '${cachedPublicKeyBuilder.atKey}@${atKey.sharedBy} not found in local secondary. Fetching from cloud secondary');
+      _logger.finer('${atKey.sharedWith} encryption public key is not found');
     }
-    if (sharedWithPublicKey.isNotEmpty && sharedWithPublicKey != 'data:null') {
-      return sharedWithPublicKey.replaceAll('data:', '');
-    }
-
-    // Lookup public key of sharedWith atSign in cloud secondary
-    var plookupBuilder = PLookupVerbBuilder()
-      ..atKey = 'publickey'
-      ..sharedBy = atKey.sharedWith?.replaceAll('@', '');
-
     try {
-      sharedWithPublicKey = await AtClientManager.getInstance()
-          .atClient
-          .getRemoteSecondary()!
-          .executeVerb(plookupBuilder);
-    } on AtException catch (e) {
+      if (sharedWithPublicKey.isNull || sharedWithPublicKey == 'data:null') {
+        var encryptionPublicKeyBuilder = PLookupVerbBuilder()
+          ..atKey = 'publickey'
+          ..sharedBy = atKey.sharedWith;
+        sharedWithPublicKey = await _atClient
+            .getRemoteSecondary()!
+            .executeVerb(encryptionPublicKeyBuilder);
+      }
+    } on AtException catch (exception) {
       throw AtPublicKeyNotFoundException(
           'Failed to fetch public key of ${atKey.sharedWith}')
-        ..fromException(e)
-        ..stack(AtChainedException(
-            Intent.shareData, ExceptionScenario.keyNotFound, e.message));
+        ..fromException(exception)
+        ..stack(AtChainedException(Intent.shareData,
+            ExceptionScenario.keyNotFound, exception.message));
     }
-    sharedWithPublicKey =
-        DefaultResponseParser().parse(sharedWithPublicKey).response;
-
-    // If SharedWith PublicKey is not found throw KeyNotFoundException.
-    if (sharedWithPublicKey.isEmpty || sharedWithPublicKey == 'data:null') {
-      throw AtPublicKeyNotFoundException(
-          'public key not found. data sharing is forbidden.');
+    if (sharedWithPublicKey.isNull || sharedWithPublicKey == 'data:null') {
+      return throw AtPublicKeyNotFoundException(
+          'Failed to fetch public key of ${atKey.sharedWith}');
     }
-    //Cache the sharedWithPublicKey and return public key of sharedWith atSign
-    var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
-      ..atKey = 'publickey.${atKey.sharedWith?.replaceAll('@', '')}'
-      ..sharedBy = atKey.sharedBy
-      ..value = sharedWithPublicKey;
-    await AtClientManager.getInstance()
-        .atClient
-        .getLocalSecondary()!
-        .executeVerb(sharedWithPublicKeyBuilder, sync: true);
-    return sharedWithPublicKey;
+    return defaultResponseParser.parse(sharedWithPublicKey!).response;
   }
 
   /// Stores the encryptedSharedKey for future use.
   /// Optionally set shouldSync parameter to false to avoid the key to sync to cloud secondary
   /// Defaulted to sync the key to cloud secondary.
-  static void _storeSharedKey(AtKey atKey, String encryptedSharedKey,
+  void _storeSharedKey(AtKey atKey, String encryptedSharedKey,
       {bool shouldSync = true}) async {
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
       ..atKey =
           '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
       ..sharedBy = atKey.sharedBy
       ..value = encryptedSharedKey;
-    await AtClientManager.getInstance()
-        .atClient
+    await _atClient
         .getLocalSecondary()!
         .executeVerb(updateSharedKeyForCurrentAtSignBuilder, sync: shouldSync);
   }
 
-  /// Stores the encryptedSharedKey in local secondary
-  /// and cache's in the [atKey.sharedWith] atSign.
-  Future<void> _notifyEncryptedSharedKey(
-      AtKey atKey, String encryptedSharedKey) async {
+  /// Gets the encrypted shared key from the given secondary instance - Local Secondary or Remote Secondary
+  ///
+  /// Throws [KeyNotFoundException] is key is not found the secondary
+  Future<String?> _getEncryptedSharedKey(
+      Secondary secondary, AtKey atKey) async {
+    var llookupVerbBuilder = LLookupVerbBuilder()
+      ..atKey =
+          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
+      ..sharedBy = atKey.sharedBy;
+    return await secondary.executeVerb(llookupVerbBuilder);
+  }
+
+  /// Checks if the encryptedSharedKey is synced to the cloud secondary
+  ///
+  /// If Synced, returns true; else returns false.
+  Future<bool> isEncryptedSharedKeyInSync(AtKey atKey) async {
+    // If key is present in cache, return true
+    if (encryptedSharedKeySyncStatusCacheMap.containsKey(atKey.toString())) {
+      return encryptedSharedKeySyncStatusCacheMap[atKey.toString()]!;
+    }
+    // Set the commit log instance if not already set.
+    atCommitLog ??= await AtCommitLogManagerImpl.getInstance()
+        .getCommitLog(atKey.sharedBy!);
+
+    var llookupVerbBuilder = LLookupVerbBuilder()
+      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..sharedBy = atKey.sharedBy
+      ..sharedWith = atKey.sharedWith;
+
+    CommitEntry sharedKeyCommitEntry = await syncUtil.getLatestCommitEntry(
+        atCommitLog!, llookupVerbBuilder.buildKey());
+    if (sharedKeyCommitEntry.commitId == null) {
+      return false;
+    }
+    // If key is present, update the status to cache map and return true/
+    encryptedSharedKeySyncStatusCacheMap.putIfAbsent(
+        llookupVerbBuilder.buildKey(), () => true);
+    return true;
+  }
+
+  Future<String?> updateEncryptedSharedKeyToSecondary(
+      AtKey atKey, String encryptedSharedKeyValue,
+      {Secondary? secondary}) async {
+    secondary ??= _atClient.getLocalSecondary()!;
     var updateSharedKeyBuilder = UpdateVerbBuilder()
       ..atKey = AT_ENCRYPTION_SHARED_KEY
       ..sharedWith = atKey.sharedWith
       ..sharedBy = atKey.sharedBy
       ..ttr = 3888000
-      ..value = encryptedSharedKey;
-    await AtClientManager.getInstance()
-        .atClient
-        .getLocalSecondary()!
-        .executeVerb(updateSharedKeyBuilder, sync: true);
+      ..value = encryptedSharedKeyValue;
+    return await secondary.executeVerb(updateSharedKeyBuilder, sync: true);
   }
 }

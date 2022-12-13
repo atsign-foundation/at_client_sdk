@@ -210,7 +210,9 @@ void main() {
         ..key = 'phone.wavi'
         ..sharedBy = '@alice';
 
-      var decryptionService = AtKeyDecryptionManager.get(atKey, currentAtSign);
+      var decryptionService =
+          AtKeyDecryptionManager(mockAtClientImpl)
+              .get(atKey, currentAtSign);
       expect(decryptionService, isA<SharedKeyDecryption>());
     });
 
@@ -224,7 +226,9 @@ void main() {
         ..sharedBy = '@bob'
         ..metadata = Metadata();
 
-      var decryptionService = AtKeyDecryptionManager.get(atKey, currentAtSign);
+      var decryptionService =
+          AtKeyDecryptionManager(mockAtClientImpl)
+              .get(atKey, currentAtSign);
       expect(decryptionService, isA<LocalKeyDecryption>());
     });
 
@@ -238,7 +242,9 @@ void main() {
         ..sharedBy = '@alice'
         ..metadata = Metadata();
 
-      var decryptionService = AtKeyDecryptionManager.get(atKey, currentAtSign);
+      var decryptionService =
+          AtKeyDecryptionManager(mockAtClientImpl)
+              .get(atKey, currentAtSign);
       expect(decryptionService, isA<SelfKeyDecryption>());
     });
 
@@ -251,7 +257,9 @@ void main() {
         ..sharedBy = '@alice'
         ..metadata = Metadata();
 
-      var decryptionService = AtKeyDecryptionManager.get(atKey, currentAtSign);
+      var decryptionService =
+          AtKeyDecryptionManager(mockAtClientImpl)
+              .get(atKey, currentAtSign);
       expect(decryptionService, isA<SelfKeyDecryption>());
     });
   });
@@ -283,7 +291,7 @@ void main() {
         'Test to verify IllegalArgumentException is thrown when encrypted value is null - LocalKeyDecryption',
         () {
       expect(
-          () => LocalKeyDecryption().decrypt(AtKey(), ''),
+          () => LocalKeyDecryption(mockAtClientImpl).decrypt(AtKey(), ''),
           throwsA(predicate((dynamic e) =>
               e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));
