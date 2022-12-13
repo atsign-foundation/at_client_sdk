@@ -1,15 +1,35 @@
+import 'package:at_client/src/at_collection/model/intent_model.dart';
+
 /// This will help us to get rid of partial success/failure scenarios
 abstract class AtIntent {
 
-  /// Will create an intent for the operationType [operationType]
+  /// Will create an update intent
   /// for the key [dataKeyIdentifier]
   /// 
   /// For eg. When we want to update a value w.r.t a key = "myemail"
-  /// We will create an intent with [dataKeyIdentifier] = "myemail"
-  /// and [operationType] = [IntentOperation.UPDATE]
-  Future<IntentModel?> createIntent(
+  /// We will create an update intent with [dataKeyIdentifier] = "myemail"
+  Future<IntentUpdateModel?> createUpdateIntent(
     String dataKeyIdentifier, 
-    IntentOperation operationType
+    String value,
+  );
+
+  /// Will create an share intent
+  /// for the key [dataKeyIdentifier] and [atsigns]
+  /// 
+  /// For eg. When we want to share data of a key = "myemail"
+  /// We will create a share intent with [dataKeyIdentifier] = "myemail" 
+  /// and [atsigns] = ['atsign1', 'atsign2', 'etc'...]
+  Future<IntentShareModel?> createShareIntent(
+    String dataKeyIdentifier, 
+    List<String> atsigns,
+  );
+
+  /// Will create a delete intent for the key [dataKeyIdentifier]
+  /// 
+  /// For eg. When we want to delete data of a key = "myemail"
+  /// We will create a delete intent with [dataKeyIdentifier] = "myemail" 
+  Future<IntentDeleteModel?> createDeleteIntent(
+    String dataKeyIdentifier, 
   );
 
   /// Will remove the intent with id [intentId]
@@ -31,42 +51,22 @@ abstract class AtIntent {
   /// and delete the intent
   Future<void> checkForPendingIntents();
 
-  /// This will check if the self key and the shared key values are same for [dataKeyIdentifier]
-  /// if not, will make all shared keys value same as self key
-  /// and return true/false if all shared keys == self key
-  Future<bool> checkForDataMismatch(IntentModel _intent);
+  /// This will check if the [_intentUpdateModel.value] is present in 
+  /// all self key and the shared key values for [dataKeyIdentifier]
+  /// if not, it will make all keys value same as the [_intentUpdateModel.value]
+  /// and return true/false if all [keys.value] == [_intentUpdateModel.value]
+  Future<bool> resumeUpdateIntent(IntentUpdateModel _intentUpdateModel);
+
+  /// This will check if the [_intentShareModel.id]' shared keys copies
+  /// are present for all [_intentShareModel.atsigns] 
+  /// if not, it will create all shared keys for the missing [_intentShareModel.atsigns]
+  /// and return true/false if all [_intentShareModel.atsigns] exists
+  Future<bool> resumeShareIntent(IntentShareModel _intentShareModel);
+
+  /// This will check if the [_intentDeleteModel.id] keys are present 
+  /// all self key and the shared keys
+  /// if it exists, then it will delete all [_intentDeleteModel.id] shared and self keys
+  Future<bool> resumedeleteIntent(IntentDeleteModel _intentDeleteModel);
 }
 
-class IntentModel {
-  late String uid;
-  late String dataKeyIdentifier;
-  // late List<IntentItem> items;
-  // late Map<AtKey, IntentState> items;
-  late IntentOperation intentOperation;
-  late DateTime timestamp;
 
-  IntentModel(this.uid, this.dataKeyIdentifier, 
-  // this.items, 
-  this.intentOperation, this.timestamp);
-
-  IntentModel.fromJson(Map json) {
-    uid = json['uid'];
-    dataKeyIdentifier = json['dataKeyIdentifier'];
-    intentOperation = IntentOperation.values.byName(json['intentOperation']);
-    timestamp = DateTime.parse(json['timestamp'].toString());
-  }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = {};
-    data['uid'] = uid;
-    data['dataKeyIdentifier'] = dataKeyIdentifier;
-    data['intentOperation'] = intentOperation.name;
-    data['timestamp'] = timestamp.toString();
-    return data;
-  }
-}
-
-enum IntentOperation { UPDATE, 
-  // NOTIFY, 
-  DELETE 
-}
