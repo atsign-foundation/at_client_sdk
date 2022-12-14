@@ -24,3 +24,6 @@ export 'package:at_client/src/listener/sync_progress_listener.dart';
 @experimental
 export 'package:at_client/src/telemetry/at_client_telemetry.dart';
 export 'package:at_client/src/client/request_options.dart';
+
+export 'package:at_client/at_collection/at_collection_impl.dart';
+export 'package:at_client/at_collection/model/data_operation_model.dart';
