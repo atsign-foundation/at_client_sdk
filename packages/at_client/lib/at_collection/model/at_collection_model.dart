@@ -13,9 +13,11 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 /// [AtCollectionModelMethods] allows to get all the methods available on [AtCollectionModel] like save, update, delete, share, unshare, getSharedWithList.
 ///
 abstract class AtCollectionModelSpec {
-  AtCollectionModelSpec({required this.collectionName, 
-    // required this.convert
+  AtCollectionModelSpec(
+    {required collectionNameParam, 
+    // required this.convert}
   }) {
+    collectionName = collectionNameParam;
     id = Uuid().v4();
   }
 
@@ -37,7 +39,7 @@ abstract class AtCollectionModelSpec {
   /// ```
   ///
   /// All these objects comes under same [collectionName] - house but have a unique [id]
-  late String collectionName;
+  static late String collectionName;
 
   /// [convert] is function that accepts json encoded [String] and forms an instance of [AtCollectionModel].
   // final AtCollectionModelSpec Function(String jsonEncodedString) convert;
@@ -72,6 +74,10 @@ abstract class AtCollectionModelSpec {
   
   void setObjectLifeCycleOptions();
 
+  static Future<List<Map>> getAllData() async {
+    return [];
+  }
+
   // Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
   // However if you want the object to be just saved and want to share later then pass share as false
   // If true is passed for share but the @signs to share with were never given then no share happens.
@@ -90,9 +96,9 @@ abstract class AtCollectionModelSpec {
   // Deletes this object completely and unshares with everyone with whom it is previosly shared with
   DataOperationModel delete();
 
-  toJSON();
+  // toJSON();
 
-  fromJSON();
+  // fromJSON();
 
   getId();
 
