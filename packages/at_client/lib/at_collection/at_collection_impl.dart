@@ -22,16 +22,39 @@ class AtCollectionImpl
   // required convert
   })
       : super(
-          collectionName: 'my_collection',
+          collectionNameParam: collectionName,
           // convert: convert,
           // references: [Address],
         );
+
+  static Future<List<Map>> getAllData() async {
+    List<Map> dataList = [];
+
+    var collectionAtKeys = await AtClientManager.getInstance()
+        .atClient
+        .getAtKeys(regex: AtCollectionModelSpec.collectionName);
+
+    collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
+
+    /// TODO: can there be a scenario when key is available but we can't get data
+    /// In that scenario we might have to give failure results to app.
+    for (var atKey in collectionAtKeys) {
+      try {
+        var atValue = await AtClientManager.getInstance().atClient.get(atKey);
+        dataList.add(jsonDecode(atValue.value));
+      } catch (e) {
+        print('failed to get value of ${atKey.key}');
+      }
+    }
+
+    return dataList;
+  }
 
   @override
   DataOperationModel save({bool share = true, ObjectLifeCycleOptions? options}) {
     _validateModel();
 
-    String keyWithCollectionName = '$id.$collectionName';
+    String keyWithCollectionName = '$id.${AtCollectionModelSpec.collectionName}';
 
     AtKey selKey = AtCollectionUtil.formAtKey(
       key: keyWithCollectionName,
@@ -54,16 +77,15 @@ class AtCollectionImpl
     throw UnimplementedError();
   }
 
-  @override
-  fromJSON() {
-    // TODO: implement fromJSON
-    throw UnimplementedError();
-  }
+  // @override
+  // fromJSON() {
+  //   // TODO: implement fromJSON
+  //   throw UnimplementedError();
+  // }
 
   @override
   getId() {
-    // TODO: implement getId
-    throw UnimplementedError();
+    return id;
   }
 
   @override
@@ -84,11 +106,11 @@ class AtCollectionImpl
     throw UnimplementedError();
   }
 
-  @override
-  toJSON() {
-    // TODO: implement toJSON
-    throw UnimplementedError();
-  }
+  // @override
+  // toJSON() {
+  //   // TODO: implement toJSON
+  //   throw UnimplementedError();
+  // }
 
   @override
   DataOperationModel unshare({List<String>? atSigns}) {
@@ -109,7 +131,7 @@ class AtCollectionImpl
       throw Exception('id not found');
     }
 
-    if (collectionName.trim().isEmpty) {
+    if (AtCollectionModelSpec.collectionName.trim().isEmpty) {
       throw Exception('collectionName not found');
     }
 
