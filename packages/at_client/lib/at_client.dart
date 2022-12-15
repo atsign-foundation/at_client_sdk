@@ -23,3 +23,4 @@ export 'package:at_commons/at_commons.dart';
 export 'package:at_client/src/listener/sync_progress_listener.dart';
 @experimental
 export 'package:at_client/src/telemetry/at_client_telemetry.dart';
+export 'package:at_client/src/client/request_options.dart';

@@ -118,8 +118,10 @@ void main() {
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
               .build());
-      var notifyVerbBuilder = await NotificationRequestTransformer('@alice',
-              AtClientPreference()..namespace = 'wavi', SharedKeyEncryption())
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              SharedKeyEncryption(mockAtClientImpl))
           .transform(notificationParams);
       expect(notifyVerbBuilder.atKey, 'phone.wavi');
       expect(notifyVerbBuilder.sharedWith, '@bob');
@@ -184,6 +186,30 @@ void main() {
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
     });
+
+    test(
+        'A test to verify notification is not sent when encryption service throws exception',
+        () async {
+      registerFallbackValue(FakeAtKey());
+      SharedKeyEncryption mockSharedKeyEncryption = MockSharedKeyEncryption();
+      when(() => mockSharedKeyEncryption.encrypt(any(), any())).thenAnswer(
+          (_) => throw SecondaryConnectException(
+              'Unable to connect to secondary server'));
+      var notificationParams = NotificationParams.forText(
+          'Hi How are you', '@bob',
+          shouldEncrypt: true);
+
+      var notificationRequestTransformer = NotificationRequestTransformer(
+          '@alice',
+          AtClientPreference()..namespace = 'wavi',
+          mockSharedKeyEncryption);
+      expect(
+          () async => await notificationRequestTransformer
+              .transform(notificationParams),
+          throwsA(predicate((dynamic e) =>
+              e is SecondaryConnectException &&
+              e.message == 'Unable to connect to secondary server')));
+    });
   });
 
   group('A group of test to validate notification response transformer', () {
@@ -204,7 +230,8 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.text.toString(),
           isEncrypted);
-      var notificationResponseTransformer = NotificationResponseTransformer();
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
 
       var transformedNotification =
@@ -228,7 +255,8 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.text.toString(),
           isEncrypted);
-      var notificationResponseTransformer = NotificationResponseTransformer();
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
 
       var transformedNotification =
@@ -253,7 +281,8 @@ void main() {
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer();
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
 
       var transformedNotification =
@@ -278,7 +307,8 @@ void main() {
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer();
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
 
       var transformedNotification =
@@ -300,7 +330,8 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted);
-      var notificationResponseTransformer = NotificationResponseTransformer();
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
 
       var transformedNotification =
@@ -322,7 +353,8 @@ void main() {
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer();
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
 
       var transformedNotification =

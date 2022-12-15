@@ -11,6 +11,7 @@ void main() {
   var currentAtSign = '@alice🛠';
   var sharedWithAtSign = '@bob🛠';
   late AtClientManager atClientManager;
+  String namespace = 'wavi';
   setUpAll(() async {
     var preference = TestUtils.getPreference(currentAtSign);
     atClientManager = await AtClientManager.getInstance()
@@ -24,7 +25,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
 
     var result = await atClientManager.notificationService
@@ -51,7 +52,7 @@ void main() {
     var landlineKey = AtKey()
       ..key = 'landline'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '040-238989$lastNumber';
 
     var result = await atClientManager.notificationService
@@ -72,7 +73,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
     await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
@@ -82,7 +83,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var notificationResult = await atClientManager.notificationService
         .notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult.notificationStatusEnum.toString(),
@@ -95,7 +96,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠'
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     await atClientManager.notificationService.notify(
         NotificationParams.forDelete(phoneKey),
         onSuccess: onSuccessCallback);
@@ -129,12 +130,12 @@ void main() {
     await Future.delayed(Duration(seconds: 10));
   });
 
-  test('notify - test deprecated method using notificationservice', () async {
+  test('notify - test deprecated method using notification service', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
     final notifyResult =
@@ -165,7 +166,7 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
     await atClientManager.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));

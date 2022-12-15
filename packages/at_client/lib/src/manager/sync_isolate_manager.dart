@@ -6,6 +6,9 @@ import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_logger.dart';
 
+// coverage:ignore-file
+
+@Deprecated("Only used by deprecated SyncManager")
 class SyncIsolateManager {
   static final SyncIsolateManager _singleton = SyncIsolateManager._internal();
 

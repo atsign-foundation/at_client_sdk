@@ -1,3 +1,10 @@
+## 3.0.49
+- fix: Enable AtKey.namespace overrides the namespace in AtClientPreference in AtClient delete method
+- fix: Fixed a bug where initial notifications fails to decrypt - invalid pad block issue
+## 3.0.48
+- feat: Added `lib/src/client/request_options.dart` to provide access to the `RequestOptions` and `GetRequestOptions` classes.
+## 3.0.47
+- fix: Enable deletion of local keys
 ## 3.0.46
 - fix: Ensure that we handle any and all exceptions related to sending heartbeat request
 - feat: Made NotificationServiceImpl's retry delay into a public instance variable, so it can be set by application code

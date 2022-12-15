@@ -10,5 +10,5 @@ class AtClientConfig {
 
   /// Represents the at_client version.
   /// Must always be the same as the actual version in pubspec.yaml
-  final String atClientVersion = '3.0.46';
+  final String atClientVersion = '3.0.49';
 }
