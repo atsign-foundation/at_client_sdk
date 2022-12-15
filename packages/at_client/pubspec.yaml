@@ -19,7 +19,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: packages/at_lookup
-      ref: trunk
+      ref: gkc-debugging-branch
 
 dependencies:
   path: ^1.8.2
