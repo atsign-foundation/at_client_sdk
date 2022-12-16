@@ -113,7 +113,9 @@ class AtCollectionImpl extends AtCollectionModelSpec {
     List<String> sharedWithList = [];
 
     var allKeys =
-        await _getAtClient().getAtKeys(regex: id);
+        await _getAtClient().getAtKeys(regex: 
+          '$id.${AtCollectionModelSpec.collectionName}'
+        );
 
     for (var atKey in allKeys) {
       if (atKey.sharedWith != null) {
