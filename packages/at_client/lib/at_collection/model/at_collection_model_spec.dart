@@ -79,7 +79,7 @@ abstract class AtCollectionModelSpec {
   // Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
   // However if you want the object to be just saved and want to share later then pass share as false
   // If true is passed for share but the @signs to share with were never given then no share happens.
-  save({bool share = true, ObjectLifeCycleOptions? options});
+  Future<bool> save({bool share = true, ObjectLifeCycleOptions? options});
 
   /// Shares with these additional atSigns. 
   Future<bool>  shareWith(List<String> atSigns, { ObjectLifeCycleOptions? options});

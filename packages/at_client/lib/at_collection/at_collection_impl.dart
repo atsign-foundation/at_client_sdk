@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/at_collection/model/at_collection_model_spec.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -6,15 +7,25 @@ import 'package:at_utils/at_logger.dart';
 import 'dart:convert';
 
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart';
 
 /// implementation of [AtCollectionModelSpec]
 class AtCollectionImpl extends AtCollectionModelSpec {
   final _logger = AtSignLogger('AtCollectionImpl');
 
+  @visibleForTesting
+  AtClient? atClient;
+
   AtCollectionImpl({required collectionName})
       : super(
           collectionNameParam: collectionName,
         );
+
+  AtClient _getAtClient() {
+    atClient ??= AtClientManager.getInstance().atClient;
+
+    return atClient!;
+  }
 
   static Future<List<Map>> getAllData() async {
     List<Map> dataList = [];
@@ -40,7 +51,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
   }
 
   @override
-  save({bool share = true, ObjectLifeCycleOptions? options}) async {
+  Future<bool> save({bool share = true, ObjectLifeCycleOptions? options}) async {
     _validateModel();
 
     String keyWithCollectionName = '$id.${AtCollectionModelSpec.collectionName}';
@@ -51,12 +62,13 @@ class AtCollectionImpl extends AtCollectionModelSpec {
       ttb: options?.timeToBirth?.inMilliseconds,
     );
 
-    print(jsonEncode(toJson()));
-
-    await _save(selfKey, jsonEncode(toJson()));
-    if(share){
-      await _updateSharedKeys(selfKey.key!, jsonEncode(toJson()));
+    var _res = await _save(selfKey, jsonEncode(toJson()));
+    if(_res && share){
+      var _update = await _updateSharedKeys(selfKey.key!, jsonEncode(toJson()));
+      return _update;
     }
+
+    return _res;
   }
 
   Future<bool> _save(AtKey atkey, String jsonEncodedData) async {
@@ -73,9 +85,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
 
   Future<bool> _updateSharedKeys(String keyWithCollectionName, String _jsonEncodedData) async {
     ///updating shared keys
-    var sharedAtKeys = await AtClientManager.getInstance()
-        .atClient
-        .getAtKeys(regex: keyWithCollectionName);
+    var sharedAtKeys = await _getAtClient().getAtKeys(regex: keyWithCollectionName);
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     bool allOpeartionSuccessful = true;
@@ -103,7 +113,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
     List<String> sharedWithList = [];
 
     var allKeys =
-        await AtClientManager.getInstance().atClient.getAtKeys(regex: id);
+        await _getAtClient().getAtKeys(regex: id);
 
     for (var atKey in allKeys) {
       if (atKey.sharedWith != null) {
@@ -150,7 +160,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
     AtKey selfAtKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
 
     var isSelfKeyDeleted =
-        await AtClientManager.getInstance().atClient.delete(selfAtKey);
+        await _getAtClient().delete(selfAtKey);
 
     if (!isSelfKeyDeleted) {
       return false;
@@ -163,8 +173,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
   Future<bool> unshare({List<String>? atSigns}) async {
     String keyWithCollectionName = '$id.${AtCollectionModelSpec.collectionName}';
 
-    var sharedAtKeys = await AtClientManager.getInstance()
-        .atClient
+    var sharedAtKeys = await _getAtClient()
         .getAtKeys(regex: keyWithCollectionName);
 
     if(atSigns == null) {
@@ -178,7 +187,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
     for (var sharedKey in sharedAtKeys) {
       try {
           var res =
-              await AtClientManager.getInstance().atClient.delete(sharedKey);
+              await _getAtClient().delete(sharedKey);
 
           if(!res){
             allOpeartionSuccessful = false;
@@ -228,7 +237,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
   }
 
   Future<bool> _put(AtKey _atKey, String _jsonEncodedData) async {
-    return await AtClientManager.getInstance().atClient.put(
+    return await _getAtClient().put(
       _atKey,
       _jsonEncodedData,
     );

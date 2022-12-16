@@ -1,7 +1,17 @@
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtCollectionUtil {
+
+  static AtClient? atClient;
+
+  static AtClient _getAtClient() {
+    atClient ??= AtClientManager.getInstance().atClient;
+
+    return atClient!;
+  }
+  
   static AtKey formAtKey({
     required String key,
     String? sharedWith,
@@ -15,6 +25,6 @@ class AtCollectionUtil {
       ..sharedWith = sharedWith
       ..metadata!.ttl = ttl
       ..metadata!.ttb = ttb
-      ..sharedBy = AtClientManager.getInstance().atClient.getCurrentAtSign();
+      ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 }
