@@ -62,6 +62,7 @@ class AtClientImpl implements AtClient {
     _telemetry = telemetryService;
     _cascadeSetTelemetryService();
   }
+
   @override
   @experimental
   AtTelemetryService? get telemetry => _telemetry;
@@ -214,10 +215,12 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
     // ignore: no_leading_underscores_for_local_identifiers
     var _deleteResult = _delete(atKey);
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',{"key":atKey, "_deleteResult": _deleteResult}));
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',
+        {"key": atKey, "_deleteResult": _deleteResult}));
     return _deleteResult;
   }
 
@@ -248,7 +251,6 @@ class AtClientImpl implements AtClient {
       {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
     Secondary? secondary;
     try {
-      atKey.lowercase();
       // validate the get request.
       await AtClientValidation().validateAtKey(atKey);
       // Get the verb builder for the atKey
@@ -320,12 +322,10 @@ class AtClientImpl implements AtClient {
         sharedWith: sharedWith,
         showHiddenKeys: showHiddenKeys);
     var result = <AtKey>[];
-    AtKey? atKey;
     if (getKeysResult.isNotEmpty) {
       for (var key in getKeysResult) {
         try {
-          atKey?.lowercase();
-          result.add(atKey!);
+          result.add(AtKey.fromString(key));
         } on InvalidSyntaxException {
           _logger.severe('$key is not a well-formed key');
         } on Exception catch (e) {
@@ -340,20 +340,26 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put called', {"key":atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.put called', {"key": atKey}));
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
           'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
     }
     AtResponse atResponse = AtResponse();
+    if (atKey.key!.contains(r'')) {
+      _logger.info(
+          'AtKey.key ${atKey.key} contains UPPER_CASE characters, converting the key to lower_string');
+    }
     if (value is String) {
       atResponse = await putText(atKey, value);
     }
     if (value is List<int>) {
       atResponse = await putBinary(atKey, value);
     }
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put complete', {"atKey":atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}));
     return atResponse.response.isNotEmpty;
   }
 
@@ -388,7 +394,6 @@ class AtClientImpl implements AtClient {
 
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
     //enforce lowercase conversion on atKey
-    atKey.lowercase();
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -448,7 +453,6 @@ class AtClientImpl implements AtClient {
       int? latestN,
       String? notifier = SYSTEM,
       bool isDedicated = false}) async {
-    atKey.lowercase();
     AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
@@ -468,7 +472,6 @@ class AtClientImpl implements AtClient {
     var returnMap = {};
     var sharedWithList = jsonDecode(atKey.sharedWith!);
     for (var sharedWith in sharedWithList) {
-      atKey.lowercase();
       atKey.sharedWith = sharedWith;
       final notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
@@ -509,7 +512,6 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> putMeta(AtKey atKey) async {
-    atKey.lowercase();
     var updateKey = atKey.key;
     var metadata = atKey.metadata!;
     if (metadata.namespaceAware) {
@@ -570,7 +572,7 @@ class AtClientImpl implements AtClient {
   String _formatResult(String? commandResult) {
     var result = commandResult;
     if (result != null) {
-      result = result.replaceFirst('data:', '').toLowerCase();
+      result = result.replaceFirst('data:', '');
     }
     return result ??= '';
   }
@@ -778,7 +780,8 @@ class AtClientImpl implements AtClient {
     if (fileDownloadResponse.isError) {
       throw Exception('download fail');
     }
-    var encryptedFileList = Directory(fileDownloadResponse.filePath!).listSync();
+    var encryptedFileList =
+        Directory(fileDownloadResponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(
@@ -923,30 +926,6 @@ class AtClientImpl implements AtClient {
   //
   // Everything after this point has been deprecated
   //
-
-  // /// Method to convert keys of type AtKey (or) String to lowercase
-  // /// Returns the same type of AtKey passed into the method
-  // dynamic _toLowerCase(var atKey) {
-  //   if (atKey.runtimeType == AtKey) {
-  //     String localKey = atKey.toString();
-  //     if (localKey.contains(RegExp(r'[A-z]'))) {
-  //       _logger.finer('$localKey has uppercase characters');
-  //       _logger.warning(
-  //           'Converting provided atKey with uppercase characters to lowercase');
-  //     }
-  //     return AtKey.fromString(localKey.toLowerCase());
-  //   } else if (atKey.runtimeType == String) {
-  //     if (atKey.contains(RegExp(r'[A-z]'))) {
-  //       _logger.finer('$atKey has uppercase characters');
-  //       _logger.warning(
-  //           'Converting provided atKey with uppercase characters to lowercase');
-  //     }
-  //     return atKey.toLowerCase();
-  //   }
-  //   _logger.finer(
-  //       'atKey: $atKey type is neither AtKey or String. lowercase enforcement not done');
-  //   return atKey;
-  // }
 
   /// Returns a new instance of [AtClient]. App has to pass the current user atSign
   /// and the client preference.
