@@ -40,7 +40,7 @@ class GetResponseTransformer
     if (!(decodedResponse['key'].startsWith('public:')) &&
         !(decodedResponse['key'].startsWith('cached:public:'))) {
       var decryptionService =
-          AtKeyDecryptionManager.get(tuple.one, _atClient.getCurrentAtSign()!);
+          AtKeyDecryptionManager(_atClient).get(tuple.one, _atClient.getCurrentAtSign()!);
       try {
         atValue.value =
             await decryptionService.decrypt(tuple.one, atValue.value) as String;

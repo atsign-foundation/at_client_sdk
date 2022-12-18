@@ -30,6 +30,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
 
+  /// utility method to reduce code verbosity in this file
+  /// Does nothing if a telemetryService has not been injected
+  void _sendTelemetry(String name, dynamic value) {
+    _atClient.telemetry?.controller.sink.add(SyncTelemetryEvent(name, value));
+  }
+
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
@@ -89,6 +95,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         () async {
       try {
         await processSyncRequests();
+        // If no sync request has ever been made, let's enqueue one now.
+        // See https://github.com/atsign-foundation/at_client_sdk/issues/770
+        if (hasHadNoSyncRequests) {
+          final syncRequest = SyncRequest();
+          syncRequest.onDone = _onDone;
+          syncRequest.onError = _onError;
+          syncRequest.requestSource = SyncRequestSource.system;
+          syncRequest.requestedOn = DateTime.now().toUtc();
+          syncRequest.result = SyncResult();
+          _addSyncRequestToQueue(syncRequest);
+        }
       } on Exception catch (e, trace) {
         var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.finest(trace);
@@ -193,7 +210,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _syncInProgress = true;
       int serverCommitId = await _getServerCommitId();
       final localCommitIdBeforeSync = await _getLocalCommitId();
+
+      // Hint for the casual reader - main sync algorithm is in [syncInternal]
       final syncResult = await syncInternal(serverCommitId, syncRequest);
+
       _syncComplete(syncRequest);
       syncProgress.syncStatus = syncResult.syncStatus;
       syncProgress.keyInfoList = syncResult.keyInfoList;
@@ -281,7 +301,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         .severe('system sync error ${syncResult.atClientException?.message}');
   }
 
+  /// We use this so that after [processSyncRequests] runs, it can enqueue a sync
+  /// request if none have yet been received. This is to address a side-effect
+  /// of the fix for https://github.com/atsign-foundation/at_client_sdk/issues/770
+  @visibleForTesting
+  bool hasHadNoSyncRequests = true;
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
+    hasHadNoSyncRequests = false;
     if (_syncRequests.length == _queueSize) {
       _syncRequests.removeLast();
     }
@@ -310,14 +336,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (serverCommitId > localCommitId) {
       _logger.finer(
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
+
+      // Hint to casual reader: This is where we sync new changes from the server to this this client
       final keyInfoList = await _syncFromServer(
           serverCommitId, localCommitId, unCommittedEntries);
+
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
       _logger.finer(
           'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
+
+      // Hint to casual reader: This is where we sync new changes from this client to the server
       final keyInfoList = await _syncToRemote(unCommittedEntries);
+
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     syncResult.lastSyncedOn = DateTime.now().toUtc();
@@ -330,11 +362,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<List<KeyInfo>> _syncToRemote(
       List<CommitEntry> unCommittedEntries) async {
     List<KeyInfo> keyInfoList = [];
-    var uncommittedEntryBatch = _getUnCommittedEntryBatch(unCommittedEntries);
+    var uncommittedEntryBatch = getUnCommittedEntryBatch(unCommittedEntries);
     for (var unCommittedEntryList in uncommittedEntryBatch) {
       try {
-        var batchRequests = await _getBatchRequests(unCommittedEntryList);
-        var batchResponse = await _sendBatch(batchRequests);
+        var batchRequests = await getBatchRequests(unCommittedEntryList);
+        var batchResponse = await sendBatch(batchRequests);
         for (var entry in batchResponse) {
           try {
             var batchId = entry['id'];
@@ -373,9 +405,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Syncs the cloud secondary changes to local secondary.
   Future<List<KeyInfo>> _syncFromServer(int serverCommitId, int localCommitId,
       List<CommitEntry> uncommittedEntries) async {
-    // Iterates until serverCommitId is greater than localCommitId are equal.
+    // Iterates until serverCommitId is greater than lastReceivedServerCommitId.
+    // replacing localCommitId with lastReceivedServerCommitId fixes infinite loop issue
+    // in certain scenarios e.g server has a commit entry that need not be synced on client side,
+    // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
-    while (serverCommitId > localCommitId) {
+    int lastReceivedServerCommitId = localCommitId;
+    while (serverCommitId > lastReceivedServerCommitId) {
+      _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "lastReceivedServerCommitId":lastReceivedServerCommitId});
+
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
         ..regex = _atClient.getPreferences()!.syncRegex
@@ -403,6 +441,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
+        _sendTelemetry(
+            '_syncFromServer.forEachEntry.start',
+            {
+              "atKey":serverCommitEntry['atKey'],
+              "operation":serverCommitEntry['operation'],
+              "commitId":serverCommitEntry['commitId'],
+            });
+        if (serverCommitEntry['commitId'] is int) {
+          lastReceivedServerCommitId = serverCommitEntry['commitId'];
+        } else {
+          lastReceivedServerCommitId = int.parse(serverCommitEntry['commitId']);
+        }
         try {
           final keyInfo =
               KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
@@ -411,18 +461,27 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
-        } on Exception catch (e) {
-          var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+          _sendTelemetry(
+              '_syncFromServer.forEachEntry.end',
+              {
+                'atKey': keyInfo.key,
+                'syncDirection': keyInfo.syncDirection,
+                'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
+              });
+        } on Exception catch (e, stacktrace) {
+          _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":stacktrace});
           _logger.severe(
-              'exception syncing entry to local $serverCommitEntry - $cause');
-        } on Error catch (e) {
+              'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
+        } on Error catch (e, stacktrace) {
+          _sendTelemetry('_syncFromServer.forEachEntry.error', {"e":e,"st":stacktrace});
           _logger.severe(
-              'error syncing entry to local $serverCommitEntry - ${e.toString()}');
+              'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
         }
       }
       // assigning the lastSynced local commit id.
       localCommitId = await _getLocalCommitId();
-      _logger.finest('**localCommitId $localCommitId');
+      _logger
+          .finest('**lastReceivedServerCommitId $lastReceivedServerCommitId');
     }
     return keyInfoList;
   }
@@ -472,8 +531,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverEncryptedValue = serverCommitEntry['value'];
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null && serverMetaData[IS_ENCRYPTED] == "true") {
-        final decryptionManager =
-            AtKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
+        final decryptionManager = AtKeyDecryptionManager(_atClient)
+            .get(atKey, _atClient.getCurrentAtSign()!);
 
         // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue;
@@ -497,7 +556,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
   }
 
-  Future<List<BatchRequest>> _getBatchRequests(
+  @visibleForTesting
+  Future<List<BatchRequest>> getBatchRequests(
       List<CommitEntry> uncommittedEntries) async {
     var batchRequests = <BatchRequest>[];
     var batchId = 1;
@@ -628,7 +688,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.severe('exception in isInSync $cause');
       throw AtClientException.message(e.toString());
     } finally {
-      remoteSecondary.atLookUp.close();
+      unawaited(remoteSecondary.atLookUp.close());
     }
   }
 
@@ -681,7 +741,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return localCommitId;
   }
 
-  dynamic _sendBatch(List<BatchRequest> requests) async {
+  @visibleForTesting
+  dynamic sendBatch(List<BatchRequest> requests) async {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
@@ -716,7 +777,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
   }
 
-  List<dynamic> _getUnCommittedEntryBatch(
+  @visibleForTesting
+  List<dynamic> getUnCommittedEntryBatch(
       List<CommitEntry?> uncommittedEntries) {
     var unCommittedEntryBatch = [];
     var batchSize = _atClient.getPreferences()!.syncBatchSize, i = 0;
@@ -812,6 +874,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @override
   void setOnDone(Function onDone) {
     this.onDone = onDone;
+  }
+
+  @visibleForTesting
+  int syncProgressListenerSize(){
+    return _syncProgressListeners.length;
+  }
+
+  ///Method only for testing
+  ///Clears all in-memory entities belonging to the syncService
+  @visibleForTesting
+  void clearSyncEntities(){
+    _syncRequests.clear();
+    _syncProgressListeners.clear();
+    _syncServiceMap.clear();
   }
 }
 

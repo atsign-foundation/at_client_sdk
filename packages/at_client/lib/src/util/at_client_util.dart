@@ -99,6 +99,8 @@ class AtClientUtil {
   /// else namespace is not appended
   static String getKeyWithNameSpace(
       AtKey atKey, AtClientPreference atClientPreference) {
+    // If metadata is null, initialize with new Metadata.
+    atKey.metadata ??= Metadata();
     // Do not append namespace for encryption keys.
     if (!(atKey.metadata!.namespaceAware)) {
       return atKey.key!;

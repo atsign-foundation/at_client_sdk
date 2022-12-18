@@ -17,10 +17,10 @@ permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
-  unit_and_functional_tests:
+  unit_tests_and_code_analysis:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
+      - uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3
 
       # Note: This workflow uses the latest stable version of the Dart SDK.
       # You can specify other versions if desired, see documentation here:
@@ -44,17 +44,43 @@ jobs:
         working-directory: packages/at_client
         run: dart test --concurrency=1 --coverage="coverage"
 
-      #     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
-      #      - name: Convert coverage to LCOV format
-      #        working-directory: packages/at_client
-      #        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=lib
-      #
-      #      - name: Upload coverage to Codecov
-      #        uses: codecov/codecov-action@v3.1.0
-      #        with:
-      #          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-      #          file: at_client/coverage.lcov
-      #          flags: unit_tests
+      - name: Convert coverage to LCOV format
+        working-directory: packages/at_client
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
+        with:
+          file: packages/at_client/unit_test_coverage.lcov
+          flags: unit_tests
+
+      # Adding flutter to path
+      - name: Installing Flutter
+        uses: britannio/action-install-flutter@a486b7e3148e54a76390d849100b9dee819ff810 # v1.1
+        with:
+          version: stable
+
+      # Install dependencies of at_client_mobile
+      - name: Installing dependencies
+        working-directory: packages/at_client_mobile
+        run: flutter pub get
+
+      # Analyze at_client_mobile package
+      - name: flutter analyze
+        working-directory: packages/at_client_mobile
+        run: flutter analyze
+
+  functional_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3
+
+      # Note: This workflow uses the latest stable version of the Dart SDK.
+      # You can specify other versions if desired, see documentation here:
+      # https://github.com/dart-lang/setup-dart/blob/main/README.md
+      - uses: dart-lang/setup-dart@6a218f2413a3e78e9087f638a238f6b40893203d # v1.3
+        with:
+          sdk: stable
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
@@ -85,33 +111,15 @@ jobs:
         working-directory: tests/at_functional_test
         run: dart test --concurrency=1 --coverage="coverage"
 
-      #     Commenting out for now, need to investigate and fix but there are hotter fires burning right now
-      #      - name: Convert coverage to LCOV format
-      #        working-directory: tests/at_functional_test
-      #        run: pub run coverage:format_coverage --lcov --in=coverage --out=coverage.lcov --packages=.packages --report-on=../at_client/lib
-      #
-      #      - name: Upload coverage to Codecov
-      #        uses: codecov/codecov-action@v3.1.0
-      #        with:
-      #          token: ${{secrets.CODECOV_TOKEN_AT_CLIENT_SDK}}
-      #          file: tests/at_functional_test/coverage.lcov
-      #          flags: functional_tests
+      - name: Convert coverage to LCOV format
+        working-directory: tests/at_functional_test
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
 
-      # Adding flutter to path
-      - name: Installing Flutter
-        uses: britannio/action-install-flutter@a486b7e3148e54a76390d849100b9dee819ff810 # v1.1
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
         with:
-          version: stable
-
-      # Install dependencies of at_client_mobile
-      - name: Installing dependencies
-        working-directory: packages/at_client_mobile
-        run: flutter pub get
-
-      # Analyze at_client_mobile package
-      - name: flutter analyze
-        working-directory: packages/at_client_mobile
-        run: flutter analyze
+          file: tests/at_functional_test/functional_test_coverage.lcov
+          flags: functional_tests
 
       # stop docker containers
       - name: stop docker containers
@@ -127,7 +135,7 @@ jobs:
       - name: update image on cicd VMs
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: appleboy/ssh-action@f9010ff7f1bbd7db1a0b4bab661437550cea20c0 # v0.1.5
+        uses: appleboy/ssh-action@4a03da89e5c43da56e502053be4bbcb293411883 # v0.1.6
         with:
           host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
           username: ubuntu
@@ -143,7 +151,7 @@ jobs:
     needs: [ end2end_tests_prep ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
+      - uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3
       - uses: dart-lang/setup-dart@6a218f2413a3e78e9087f638a238f6b40893203d # v1.3
         with:
           sdk: stable
@@ -161,7 +169,7 @@ jobs:
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/test/at_credentials.dart
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/lib/src/at_credentials.dart
 
       # Move the config file in-place
       - name: Config for @cicd1/2
@@ -172,14 +180,29 @@ jobs:
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
-        run: dart test --concurrency=1
+        run: dart test --concurrency=1 --coverage="coverage"
+
+      - name: Convert coverage to LCOV format
+        # Needs tests to have run, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
+        working-directory: tests/at_end2end_test
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=end2end_test_coverage.lcov --report-on=lib
+
+      - name: Upload coverage to Codecov
+        # Needs LCOV report to upload, so don't run for Dependabot PRs
+        if: ${{ github.actor != 'dependabot[bot]' }}
+        uses: codecov/codecov-action@d9f34f8cd5cb3b3eb79b3e4b5dae3a16df499a70 # v3.1.1
+        with:
+          file: tests/at_end2end_test/end2end_test_coverage.lcov
+          flags: end2end_tests
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
   end2end_test_14:
     needs: [   end2end_tests ]
+    if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
+      - uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3
       - uses: dart-lang/setup-dart@6a218f2413a3e78e9087f638a238f6b40893203d # v1.3
         with:
           sdk: stable
@@ -197,7 +220,7 @@ jobs:
       - name: Get CICD keys into place
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/test/at_credentials.dart
+        run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/lib/src/at_credentials.dart
 
       # Move the config file in-place
       - name: Config for @cicd1/4

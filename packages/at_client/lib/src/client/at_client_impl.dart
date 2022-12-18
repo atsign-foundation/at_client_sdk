@@ -53,6 +53,19 @@ class AtClientImpl implements AtClient {
 
   EncryptionService? _encryptionService;
 
+  @experimental
+  AtTelemetryService? _telemetry;
+
+  @override
+  @experimental
+  set telemetry(AtTelemetryService? telemetryService) {
+    _telemetry = telemetryService;
+    _cascadeSetTelemetryService();
+  }
+  @override
+  @experimental
+  AtTelemetryService? get telemetry => _telemetry;
+
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
@@ -126,6 +139,17 @@ class AtClientImpl implements AtClient {
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
     _encryptionService!.localSecondary = _localSecondary;
+
+    _cascadeSetTelemetryService();
+  }
+
+  /// Does nothing unless a telemetry service has been injected
+  void _cascadeSetTelemetryService() {
+    if (telemetry != null) {
+      _encryptionService?.telemetry = telemetry;
+      _localSecondary?.telemetry = telemetry;
+      _remoteSecondary?.telemetry = telemetry;
+    }
   }
 
   Secondary getSecondary() {
@@ -190,37 +214,31 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
-    var isPublic = atKey.metadata != null ? atKey.metadata!.isPublic! : false;
-    var isCached = atKey.metadata != null ? atKey.metadata!.isCached : false;
-    var isNamespaceAware =
-        atKey.metadata != null ? atKey.metadata!.namespaceAware : true;
-    return _delete(atKey.key!,
-        sharedWith: atKey.sharedWith,
-        sharedBy: atKey.sharedBy,
-        isPublic: isPublic,
-        isCached: isCached,
-        namespaceAware: isNamespaceAware);
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
+    // ignore: no_leading_underscores_for_local_identifiers
+    var _deleteResult = _delete(atKey);
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',{"key":atKey, "_deleteResult": _deleteResult}));
+    return _deleteResult;
   }
 
-  Future<bool> _delete(String key,
-      {String? sharedWith,
-      String? sharedBy,
-      bool isPublic = false,
-      bool isCached = false,
-      bool namespaceAware = true}) async {
+  Future<bool> _delete(AtKey atKey) async {
+    // If metadata is null, initialize metadata
+    atKey.metadata ??= Metadata();
     String keyWithNamespace;
-    if (namespaceAware) {
-      keyWithNamespace = _getKeyWithNamespace(key);
+    if (atKey.metadata!.namespaceAware) {
+      keyWithNamespace = AtClientUtil.getKeyWithNameSpace(atKey, _preference!);
     } else {
-      keyWithNamespace = key;
+      keyWithNamespace = atKey.key!;
     }
-    sharedBy ??= currentAtSign;
+    atKey.sharedBy ??= currentAtSign;
     var builder = DeleteVerbBuilder()
-      ..isCached = isCached
-      ..isPublic = isPublic
-      ..sharedWith = sharedWith
+      ..isLocal = atKey.isLocal
+      ..isCached = atKey.metadata!.isCached
+      ..isPublic =
+          (atKey.metadata!.isPublic == null) ? false : atKey.metadata!.isPublic!
+      ..sharedWith = atKey.sharedWith
       ..atKey = keyWithNamespace
-      ..sharedBy = sharedBy;
+      ..sharedBy = atKey.sharedBy;
     var deleteResult = await getSecondary().executeVerb(builder, sync: true);
     return deleteResult != null;
   }
@@ -322,6 +340,7 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put called', {"key":atKey}));
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -334,6 +353,7 @@ class AtClientImpl implements AtClient {
     if (value is List<int>) {
       atResponse = await putBinary(atKey, value);
     }
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put complete', {"atKey":atKey}));
     return atResponse.response.isNotEmpty;
   }
 
@@ -753,12 +773,12 @@ class AtClientImpl implements AtClient {
       throw Exception('json decode exception in download file ${e.toString()}');
     }
     var downloadedFiles = <File>[];
-    var fileDownloadReponse = await FileTransferService()
+    var fileDownloadResponse = await FileTransferService()
         .downloadFromFileBin(fileTransferObject, downloadPath);
-    if (fileDownloadReponse.isError) {
+    if (fileDownloadResponse.isError) {
       throw Exception('download fail');
     }
-    var encryptedFileList = Directory(fileDownloadReponse.filePath!).listSync();
+    var encryptedFileList = Directory(fileDownloadResponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(
@@ -774,7 +794,7 @@ class AtClientImpl implements AtClient {
         decryptedFile.deleteSync();
       }
       // deleting temp directory
-      Directory(fileDownloadReponse.filePath!).deleteSync(recursive: true);
+      Directory(fileDownloadResponse.filePath!).deleteSync(recursive: true);
       return downloadedFiles;
     } catch (e) {
       print('error in downloadFile: $e');
@@ -859,7 +879,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith != null &&
           notificationParams.atKey.sharedWith != currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager()
+          final atKeyEncryption = AtKeyEncryptionManager(this)
               .get(notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
@@ -872,7 +892,7 @@ class AtClientImpl implements AtClient {
       if (notificationParams.atKey.sharedWith == null ||
           notificationParams.atKey.sharedWith == currentAtSign) {
         try {
-          final atKeyEncryption = AtKeyEncryptionManager()
+          final atKeyEncryption = AtKeyEncryptionManager(this)
               .get(notificationParams.atKey, currentAtSign!);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
