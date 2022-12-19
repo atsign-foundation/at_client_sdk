@@ -1,74 +1,53 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/model/at_collection_model_spec.dart';
+import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_client/src/util/at_collection_utils.dart';
+import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_logger.dart';
 import 'dart:convert';
-
-import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
 
 /// implementation of [AtCollectionModelSpec]
-class AtCollectionImpl extends AtCollectionModelSpec {
-  final _logger = AtSignLogger('AtCollectionImpl');
+class AtCollectionModel extends AtCollectionModelSpec {
+  final _logger = AtSignLogger('AtCollectionModel');
 
   @visibleForTesting
   AtClient? atClient;
 
-  AtCollectionImpl({required collectionName})
+  late KeyMakerSpec keyMaker;
+
+  AtCollectionModel({required collectionName})
       : super(
           collectionNameParam: collectionName,
-        );
+        ){
+          keyMaker = DefaultKeyMaker();
+        } 
+
+  set setKeyMaker(KeyMakerSpec newKeyMaker){
+    keyMaker = newKeyMaker;
+  }
 
   AtClient _getAtClient() {
     atClient ??= AtClientManager.getInstance().atClient;
-
     return atClient!;
-  }
-
-  static Future<List<Map>> getAllData() async {
-    List<Map> dataList = [];
-
-    var collectionAtKeys = await AtClientManager.getInstance()
-        .atClient
-        .getAtKeys(regex: AtCollectionModelSpec.collectionName);
-
-    collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
-
-    /// TODO: can there be a scenario when key is available but we can't get data
-    /// In that scenario we might have to give failure results to app.
-    for (var atKey in collectionAtKeys) {
-      try {
-        var atValue = await AtClientManager.getInstance().atClient.get(atKey);
-        dataList.add(jsonDecode(atValue.value));
-      } catch (e) {
-        print('failed to get value of ${atKey.key}');
-      }
-    }
-
-    return dataList;
   }
 
   @override
   Future<bool> save({bool share = true, ObjectLifeCycleOptions? options}) async {
     _validateModel();
 
-    String keyWithCollectionName = '$id.${AtCollectionModelSpec.collectionName}';
-
-    AtKey selfKey = AtCollectionUtil.formAtKey(
-      key: keyWithCollectionName,
-      ttl: options?.timeToLive?.inMilliseconds,
-      ttb: options?.timeToBirth?.inMilliseconds,
+    AtKey selfKey = keyMaker.createSelfKey(
+      keyId: id,
+      collectionName: AtCollectionModelSpec.collectionName,
+      objectLifeCycleOptions: options,
     );
 
-    var _res = await _save(selfKey, jsonEncode(toJson()));
-    if(_res && share){
-      var _update = await _updateSharedKeys(selfKey.key!, jsonEncode(toJson()));
-      return _update;
+    var res = await _save(selfKey, jsonEncode(toJson()));
+    if(res && share){
+      var update = await _updateSharedKeys(selfKey.key!, jsonEncode(toJson()));
+      return update;
     }
 
-    return _res;
+    return res;
   }
 
   Future<bool> _save(AtKey atkey, String jsonEncodedData) async {
@@ -83,7 +62,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
     }
   }
 
-  Future<bool> _updateSharedKeys(String keyWithCollectionName, String _jsonEncodedData) async {
+  Future<bool> _updateSharedKeys(String keyWithCollectionName, String jsonEncodedData) async {
     ///updating shared keys
     var sharedAtKeys = await _getAtClient().getAtKeys(regex: keyWithCollectionName);
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
@@ -93,7 +72,7 @@ class AtCollectionImpl extends AtCollectionModelSpec {
     for (var sharedKey in sharedAtKeys) {
       try {
         /// If self key is not updated, we do not update the shared keys
-        var res = await _put(sharedKey, _jsonEncodedData,);
+        var res = await _put(sharedKey, jsonEncodedData,);
         if(!res) {
           allOpeartionSuccessful = false;
         }
@@ -130,11 +109,10 @@ class AtCollectionImpl extends AtCollectionModelSpec {
   Future<bool> shareWith(List<String> atSigns, {ObjectLifeCycleOptions? options}) async{
     _validateModel();
 
-    /// create intent
-    /// TODO: throw keyNotFoundException when self key is not formed.
-    String keyWithCollectionName = '$id.${AtCollectionModelSpec.collectionName}';
-
-    var selfKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
+    var selfKey = keyMaker.createSelfKey(
+      keyId: id,
+      collectionName: AtCollectionModelSpec.collectionName,
+    );
     bool allOpeartionSuccessful = true;
 
     for (var atSign in atSigns) {
@@ -158,8 +136,10 @@ class AtCollectionImpl extends AtCollectionModelSpec {
   Future<bool> delete() async {
     _validateModel();
 
-    String keyWithCollectionName = '$id.${AtCollectionModelSpec.collectionName}';
-    AtKey selfAtKey = AtCollectionUtil.formAtKey(key: keyWithCollectionName);
+    AtKey selfAtKey = keyMaker.createSelfKey(
+      keyId: id,
+      collectionName: AtCollectionModelSpec.collectionName,
+    );
 
     var isSelfKeyDeleted =
         await _getAtClient().delete(selfAtKey);
@@ -238,10 +218,10 @@ class AtCollectionImpl extends AtCollectionModelSpec {
     }
   }
 
-  Future<bool> _put(AtKey _atKey, String _jsonEncodedData) async {
+  Future<bool> _put(AtKey atKey, String jsonEncodedData) async {
     return await _getAtClient().put(
-      _atKey,
-      _jsonEncodedData,
+      atKey,
+      jsonEncodedData,
     );
   }
 }
