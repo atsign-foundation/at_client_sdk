@@ -1,5 +1,4 @@
 import 'package:uuid/uuid.dart';
-import 'package:at_client/at_collection/model/data_operation_model.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 
 /// [AtCollectionModel] sets the base structure of the model that is used to interact with collection methods.
