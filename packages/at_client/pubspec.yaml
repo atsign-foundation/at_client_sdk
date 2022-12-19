@@ -4,7 +4,7 @@ description: The at_client library is the non-platform specific Client SDK which
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 3.0.52
+version: 3.0.50
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -16,21 +16,21 @@ environment:
 
 dependencies:
   path: ^1.8.2
-  hive: ^2.2.3
-  crypton: ^2.1.0
+  hive: ^2.0.4
+  crypton: ^2.0.5
   encrypt: ^5.0.1
-  cron: ^0.5.1
+  cron: ^0.5.0
   convert: ^3.0.2
-  uuid: ^3.0.7
+  uuid: ^3.0.6
   crypto: ^3.0.1
   collection: ^1.16.0
-  archive: ^3.3.5
+  archive: ^3.3.1
   http: ^0.13.5
-  internet_connection_checker: ^1.0.0+1	
+  internet_connection_checker: ^0.0.1+4
   async: ^2.9.0
   at_persistence_spec: ^2.0.10
   at_persistence_secondary_server: ^3.0.44
-  at_lookup: ^3.0.35
+  at_lookup: ^3.0.32
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
   at_commons: ^3.0.34

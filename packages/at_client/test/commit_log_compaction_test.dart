@@ -13,8 +13,6 @@ class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockAtCompactionJob extends Mock implements AtCompactionJob {}
 
-class MockAtClient extends Mock implements AtClient {}
-
 String currentAtSign = '@alice';
 late SecondaryPersistenceStore secondaryPersistenceStore;
 String storageDir = '${Directory.current.path}/test/hive';
@@ -27,15 +25,12 @@ void main() {
       SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
       AtClientManager mockAtClientManager = MockAtClientManager();
       AtCompactionJob mockAtCompactionJob = MockAtCompactionJob();
-      AtClient mockAtClient = MockAtClient();
 
       when(() => mockSecondaryKeyStore.isKeyExists(commitLogCompactionKey))
           .thenAnswer((_) => false);
-      when(()=> mockAtClientManager.atClient).thenAnswer((_) => mockAtClient);
-      when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => currentAtSign);
       AtClientCommitLogCompaction atClientCommitLogCompaction =
           AtClientCommitLogCompaction.create(
-              mockAtClientManager, mockAtCompactionJob);
+              mockAtClientManager, currentAtSign, mockAtCompactionJob);
       atClientCommitLogCompaction.secondaryKeyStore = mockSecondaryKeyStore;
 
       AtCompactionStats atCompactionStats =
@@ -53,12 +48,9 @@ void main() {
       SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
       AtClientManager mockAtClientManager = MockAtClientManager();
       AtCompactionJob mockAtCompactionJob = MockAtCompactionJob();
-      AtClient mockAtClient = MockAtClient();
 
       when(() => mockSecondaryKeyStore.isKeyExists(commitLogCompactionKey))
           .thenAnswer((_) => true);
-      when(()=> mockAtClientManager.atClient).thenAnswer((_) => mockAtClient);
-      when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => currentAtSign);
       when(() => mockSecondaryKeyStore.get(commitLogCompactionKey))
           .thenAnswer((_) async => Future.value(AtData()
             ..data = jsonEncode({
@@ -71,7 +63,7 @@ void main() {
             })));
       AtClientCommitLogCompaction atClientCommitLogCompaction =
           AtClientCommitLogCompaction.create(
-              mockAtClientManager, mockAtCompactionJob);
+              mockAtClientManager, currentAtSign, mockAtCompactionJob);
       atClientCommitLogCompaction.secondaryKeyStore = mockSecondaryKeyStore;
 
       AtCompactionStats atCompactionStats =
