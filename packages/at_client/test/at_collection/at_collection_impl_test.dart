@@ -251,6 +251,58 @@ void main() {
       expect(result, false);
     });
 
+    test('testing series of operations on an object', () async {
+      when(() => mockAtClient.put(
+        any(that: PutSelfKeyMatcher(id: myModelTestObject.id, collectionName: collectionName)), 
+        any(that: PutDataMatcher()),))
+          .thenAnswer((_) async => true);
+
+      when(() => mockAtClient.put(
+        any(that: PutSharedKeyMatcher(id: myModelTestObject.id, collectionName: collectionName,
+            sharedWith: sharedWithAtsign1)), 
+        any(that: PutDataMatcher()),))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClient.put(
+        any(that: PutSharedKeyMatcher(id: myModelTestObject.id, collectionName: collectionName,
+            sharedWith: sharedWithAtsign2)), 
+        any(that: PutDataMatcher()),))
+          .thenAnswer((_) async => true);
+
+      when(() => mockAtClient.delete(
+          any(that: DeleteSharedKeyMatcher(
+            id: myModelTestObject.id, collectionName: collectionName, sharedWith: sharedWithAtsign1
+          ))
+        )).thenAnswer((_) async => true);
+      when(() => mockAtClient.delete(
+          any(that: DeleteSharedKeyMatcher(
+            id: myModelTestObject.id, collectionName: collectionName, sharedWith: sharedWithAtsign2
+          ))
+        )).thenAnswer((_) async => true);
+
+      var savingTheObject = await myModelTestObject.save(share: false);
+      expect(savingTheObject, true);
+
+      var sharingTheObject = await myModelTestObject.shareWith([sharedWithAtsign1, sharedWithAtsign2]);
+      expect(sharingTheObject, true);
+
+      when(() => mockAtClient.getAtKeys(
+          regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
+        ))
+          .thenAnswer((_) async => [sharedKey1, sharedKey2]);
+
+      var unshareTheObject = await myModelTestObject.unshare(atSigns: [sharedWithAtsign1]);
+      expect(unshareTheObject, true);
+
+
+      when(() => mockAtClient.getAtKeys(
+          regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
+        ))
+          .thenAnswer((_) async => [sharedKey2]);
+
+      var currentlySharedWith = await myModelTestObject.getSharedWith();
+      expect(currentlySharedWith, [sharedWithAtsign2]);
+
+    });
   });
 }
 
