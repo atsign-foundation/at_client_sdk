@@ -33,8 +33,8 @@ void main() {
     myModelTestObject1.atClient = mockAtClient;
     myModelTestObject2.atClient = mockAtClient;
 
-    myModelTestObject1.atCollectionGetterRepository.atClient = mockAtClient;
-    myModelTestObject2.atCollectionGetterRepository.atClient = mockAtClient;
+    AtCollectionModel.atCollectionGetterRepository.atClient = mockAtClient;
+    AtCollectionModel.atCollectionGetterRepository.keyMaker = testKeyMaker;
 
     AtCollectionUtil.atClient = mockAtClient;
 
@@ -70,6 +70,20 @@ void main() {
       sharedWith: sharedWithAtsign2,
     );
 
+    test('test getting an object by id', () async {
+      when(() => mockAtClient.get(
+          any(that: GetAtKeyMatcher(keyId: object1ModelId, collectionName: collectionName))
+        ))
+        .thenAnswer((_) async {
+          var atValue = AtValue();
+          atValue.value = jsonEncode(myModelTestObject1.toJson());
+          return atValue;
+        });
+
+      var result = (await MyModelTest.getById(object1ModelId));
+      expect(result, myModelTestObject1);
+    });
+
     test('test getting all objects of a type', () async {
       when(() => mockAtClient.getAtKeys(
           regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
@@ -94,8 +108,7 @@ void main() {
           return atValue;
         });
 
-      var result = (await myModelTestObject1.getAll());
-
+      var result = (await MyModelTest.getAllData());
       expect(result, [myModelTestObject1, myModelTestObject2]);
     });
     
@@ -499,15 +512,21 @@ class MyModelTest extends AtCollectionModel {
           collectionName: collectionName,
         );
 
+  static Future<List<MyModelTest>> getAllData() async {
+    return (await AtCollectionModel.getAll<MyModelTest>());
+  }
+
+  static Future<MyModelTest> getById(String keyId) async {
+    return (await AtCollectionModel.load<MyModelTest>(keyId));
+  }
+
   @override
   MyModelTest fromJson(String jsonEncodedString)
   { 
     var json = jsonDecode(jsonEncodedString);
-    name = json['name'];
-    id = json['id'];
-    email = json['email'];
-    number = int.parse(json['number']);
-    return MyModelTest(number, name, email);
+    var newMyModel = MyModelTest(int.parse(json['number']), json['name'], json['email']);
+    newMyModel.id = json['id'];
+    return newMyModel;
   }
 
   @override

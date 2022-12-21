@@ -16,7 +16,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   late KeyMakerSpec keyMaker;
 
-  late AtCollectionGetterRepository atCollectionGetterRepository;
+  static late AtCollectionGetterRepository atCollectionGetterRepository;
 
   AtCollectionModel({required collectionName})
       : super(
@@ -43,12 +43,17 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
     return fromJson(jsonEncodedData);
   }
 
-  Future<T> load() async {
-    return (await atCollectionGetterRepository.getById(id)) as T;
+  static Future<T> load<T>(String keyId) async {
+    return (await atCollectionGetterRepository.getById(keyId)) as T;
   }
 
-  Future<List<T>> getAll() async {
-    return (await atCollectionGetterRepository.getAll()) as List<T>;
+  static Future<List<T>> getAll<T>() async {
+    List<T> result = [];
+    var dynamicData = await atCollectionGetterRepository.getAll();
+    for (var data in dynamicData){
+      result.add(data as T);
+    }
+    return result;
   }
 
   @override
