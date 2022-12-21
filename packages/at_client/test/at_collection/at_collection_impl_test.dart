@@ -322,7 +322,7 @@ void main() {
       expect(result, false);
     });
 
-    test('testing series of operations on an object', () async {
+    test('testing series of operations on an object 1', () async {
       when(() => mockAtClient.put(
         any(that: PutSelfKeyMatcher(id: myModelTestObject1.id, collectionName: collectionName)), 
         any(that: PutDataMatcher()),))
@@ -372,7 +372,97 @@ void main() {
 
       var currentlySharedWith = await myModelTestObject1.getSharedWith();
       expect(currentlySharedWith, [sharedWithAtsign2]);
+    });
 
+    test('testing series of operations on an object 2', () async {
+      when(() => mockAtClient.put(
+        any(that: PutSelfKeyMatcher(id: myModelTestObject1.id, collectionName: collectionName)), 
+        any(that: PutDataMatcher()),))
+          .thenAnswer((_) async => true);
+      /// no shared keys for now
+      when(() => mockAtClient.getAtKeys(
+          regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
+        ))
+          .thenAnswer((_) async => []);
+      
+      /// it should only save it should not try to update shared keys
+      var savingTheObject = await myModelTestObject1.save();
+      expect(savingTheObject, true);
+
+      when(() => mockAtClient.put(
+        any(that: PutSharedKeyMatcher(id: myModelTestObject1.id, collectionName: collectionName,
+            sharedWith: sharedWithAtsign1)), 
+        any(that: PutDataMatcher()),))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClient.put(
+        any(that: PutSharedKeyMatcher(id: myModelTestObject1.id, collectionName: collectionName,
+            sharedWith: sharedWithAtsign2)), 
+        any(that: PutDataMatcher()),))
+          .thenAnswer((_) async => true);
+
+      /// we share the self key with two atsigns
+      var sharingTheObject = await myModelTestObject1.shareWith([sharedWithAtsign1, sharedWithAtsign2]);
+      expect(sharingTheObject, true);
+
+      /// two shared keys for now
+      when(() => mockAtClient.getAtKeys(
+          regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
+        ))
+          .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
+      
+      /// it should save and update shared keys
+      var savingAndUpdatingTheObject = await myModelTestObject1.save();
+      expect(savingAndUpdatingTheObject, true);
+
+      /// if it fails to update for one of the objects
+      when(() => mockAtClient.put(
+        any(that: PutSharedKeyMatcher(id: myModelTestObject1.id, collectionName: collectionName,
+            sharedWith: sharedWithAtsign2)), 
+        any(that: PutDataMatcher()),))
+          .thenAnswer((_) async => false);
+
+      savingAndUpdatingTheObject = await myModelTestObject1.save();
+      expect(savingAndUpdatingTheObject, false);
+
+      /// should return the two atsigns we shared with
+      var currentlySharedWith = await myModelTestObject1.getSharedWith();
+      expect(currentlySharedWith, [sharedWithAtsign1, sharedWithAtsign2]);
+
+      when(() => mockAtClient.delete(
+          any(that: DeleteSharedKeyMatcher(
+            id: myModelTestObject1.id, collectionName: collectionName, sharedWith: sharedWithAtsign1
+          ))
+        )).thenAnswer((_) async => true);
+
+      /// we unshare with one atsign
+      var unshareTheObject = await myModelTestObject1.unshare(atSigns: [sharedWithAtsign1]);
+      expect(unshareTheObject, true);
+
+      when(() => mockAtClient.getAtKeys(
+          regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
+        ))
+          .thenAnswer((_) async => [object1SharedKey2]);
+
+      /// should return only one atsign we shared with
+      currentlySharedWith = await myModelTestObject1.getSharedWith();
+      expect(currentlySharedWith, [sharedWithAtsign2]);
+
+      when(() => mockAtClient.getAtKeys(
+          regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
+        ))
+          .thenAnswer((_) async => [object1SelfKey]);
+      when(() => mockAtClient.get(
+          any(that: GetAtKeyMatcher(keyId: object1ModelId, collectionName: collectionName))
+        ))
+        .thenAnswer((_) async {
+          var atValue = AtValue();
+          atValue.value = jsonEncode(myModelTestObject1.toJson());
+          return atValue;
+        });
+
+      /// there should only be one shared object
+      var sharedObjects = await MyModelTest.getAllData();
+      expect(sharedObjects, [myModelTestObject1]);
     });
   });
 }
