@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_collection/at_collection_getter_repository.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
@@ -7,7 +8,7 @@ import 'dart:convert';
 import 'package:meta/meta.dart';
 
 /// implementation of [AtCollectionModelSpec]
-class AtCollectionModel extends AtCollectionModelSpec {
+class AtCollectionModel<T> extends AtCollectionModelSpec {
   final _logger = AtSignLogger('AtCollectionModel');
 
   @visibleForTesting
@@ -15,11 +16,18 @@ class AtCollectionModel extends AtCollectionModelSpec {
 
   late KeyMakerSpec keyMaker;
 
+  late AtCollectionGetterRepository atCollectionGetterRepository;
+
   AtCollectionModel({required collectionName})
       : super(
           collectionNameParam: collectionName,
         ){
           keyMaker = DefaultKeyMaker();
+          atCollectionGetterRepository = AtCollectionGetterRepository(
+            collectionName: collectionName,
+            convert: convert,
+            keyMaker: keyMaker,
+          );
         } 
 
   set setKeyMaker(KeyMakerSpec newKeyMaker){
@@ -29,6 +37,18 @@ class AtCollectionModel extends AtCollectionModelSpec {
   AtClient _getAtClient() {
     atClient ??= AtClientManager.getInstance().atClient;
     return atClient!;
+  }
+
+  T convert(String jsonEncodedData) {
+    return fromJson(jsonEncodedData);
+  }
+
+  Future<T> load() async {
+    return (await atCollectionGetterRepository.getById(id)) as T;
+  }
+
+  Future<List<T>> getAll() async {
+    return (await atCollectionGetterRepository.getAll()) as List<T>;
   }
 
   @override
@@ -191,6 +211,12 @@ class AtCollectionModel extends AtCollectionModelSpec {
   @override
   void setObjectLifeCycleOptions() {
     // TODO: implement setObjectLifeCycleOptions
+  }
+
+  @override
+  fromJson(String jsonDecodedData) {
+    // return T();
+    // TODO: implement fromJson
   }
   
   @override
