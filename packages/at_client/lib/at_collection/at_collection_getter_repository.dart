@@ -35,7 +35,6 @@ class AtCollectionGetterRepository<T> {
       try {
         var atValue = await _getAtClient().get(atKey);
         var data = convert(atValue.value);
-        print("data $data");
         dataList.add(data);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
