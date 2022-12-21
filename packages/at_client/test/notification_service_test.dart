@@ -773,7 +773,7 @@ void main() {
           .thenAnswer((_) => false);
 
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
-              any(that: startsWith('_latestNotificationIdv2.wavi@alice'))))
+              any(that: startsWith('_latestnotificationidv2.wavi@alice'))))
           .thenAnswer((_) => true);
 
       when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
@@ -995,7 +995,7 @@ class StatsAtKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.contains('_latestNotificationIdv2')) {
+    if (item is AtKey && item.key!.contains('_latestnotificationidv2')) {
       return true;
     }
     return false;
