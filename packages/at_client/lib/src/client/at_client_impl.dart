@@ -348,9 +348,9 @@ class AtClientImpl implements AtClient {
           'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
     }
     AtResponse atResponse = AtResponse();
-    if (atKey.key!.contains(r'')) {
+    if (atKey.key!.contains(r'^[A-Z]') || atKey.namespace!.contains(r'^[A-Z]')) {
       _logger.info(
-          'AtKey.key ${atKey.key} contains UPPER_CASE characters, converting the key to lower_string');
+          'AtKey ${atKey.toString()} contains UPPER_CASE characters, converting the key to lower_case');
     }
     if (value is String) {
       atResponse = await putText(atKey, value);
