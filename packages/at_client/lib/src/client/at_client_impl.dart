@@ -393,7 +393,6 @@ class AtClientImpl implements AtClient {
   }
 
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
-    //enforce lowercase conversion on atKey
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -538,7 +537,6 @@ class AtClientImpl implements AtClient {
   }
 
   String _getKeyWithNamespace(String key) {
-    key = key.toLowerCase();
     var keyWithNamespace = key;
     if (_namespace != null && _namespace!.isNotEmpty) {
       keyWithNamespace = '$keyWithNamespace.$_namespace';
@@ -663,7 +661,6 @@ class AtClientImpl implements AtClient {
       {DateTime? date}) async {
     var result = <String, FileTransferObject>{};
     for (var sharedWithAtSign in sharedWithAtSigns) {
-      key = key.toLowerCase();
       var fileTransferObject = FileTransferObject(
           key, encryptionKey, fileUrl, sharedWithAtSign, fileStatus,
           date: date);

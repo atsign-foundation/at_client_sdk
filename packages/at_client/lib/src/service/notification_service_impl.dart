@@ -26,8 +26,8 @@ class NotificationServiceImpl
   final Map<NotificationConfig, StreamController> _streamListeners =
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
-  static const notificationIdKey = '_latestNotificationIdv2';
-  static const lastReceivedNotificationKey = 'lastReceivedNotification';
+  static const notificationIdKey = '_latestnotificationidv2';
+  static const lastReceivedNotificationKey = 'lastreceivednotification';
 
   /// Contains a map of created [NotificationServiceImpl]s, keyed by AtSign
   @visibleForTesting

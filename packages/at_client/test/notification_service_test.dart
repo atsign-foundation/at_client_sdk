@@ -162,7 +162,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey, 'Hi How are you');
+      //UPPER_CASE characters in the key will be converted to lower_case
+      expect(notifyVerbBuilder.atKey, 'hi how are you');
       expect(notifyVerbBuilder.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
@@ -215,7 +216,7 @@ void main() {
   group('A group of test to validate notification response transformer', () {
     setUp(() {
       registerFallbackValue(FakeAtKey());
-      when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedValue'))
+      when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedvalue'))
           .thenAnswer((_) => Future.value('decryptedValue'));
     });
     test(
@@ -224,7 +225,7 @@ void main() {
       var isEncrypted = true;
       var atNotification = at_notification.AtNotification(
           '124',
-          '@bob:encryptedValue',
+          '@bob:encryptedvalue',
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
@@ -280,7 +281,7 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
-          value: 'encryptedValue');
+          value: 'encryptedvalue');
       var notificationResponseTransformer =
           NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
@@ -795,12 +796,12 @@ void main() {
               namespace: 'wavi')
           .build();
       expect(lastReceivedNotification.toString(),
-          'local:lastReceivedNotification.wavi@alice');
+          'local:lastreceivednotification.wavi@alice');
     });
 
     test('test to verify lastNotificationReceived fromString', () {
       var lastReceivedNotification =
-          AtKey.fromString('local:lastReceivedNotification.wavi@alice');
+          AtKey.fromString('local:lastreceivednotification.wavi@alice');
       expect(lastReceivedNotification.key,
           NotificationServiceImpl.lastReceivedNotificationKey);
       expect(lastReceivedNotification.namespace, 'wavi');
