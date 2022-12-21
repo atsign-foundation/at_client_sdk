@@ -412,7 +412,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     List<KeyInfo> keyInfoList = [];
     int lastReceivedServerCommitId = localCommitId;
     while (serverCommitId > lastReceivedServerCommitId) {
-      _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "lastReceivedServerCommitId":lastReceivedServerCommitId});
+      _sendTelemetry('_syncFromServer.whileLoop', {
+        "serverCommitId": serverCommitId,
+        "lastReceivedServerCommitId": lastReceivedServerCommitId
+      });
 
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
@@ -441,13 +444,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
-        _sendTelemetry(
-            '_syncFromServer.forEachEntry.start',
-            {
-              "atKey":serverCommitEntry['atKey'],
-              "operation":serverCommitEntry['operation'],
-              "commitId":serverCommitEntry['commitId'],
-            });
+        _sendTelemetry('_syncFromServer.forEachEntry.start', {
+          "atKey": serverCommitEntry['atKey'],
+          "operation": serverCommitEntry['operation'],
+          "commitId": serverCommitEntry['commitId'],
+        });
         if (serverCommitEntry['commitId'] is int) {
           lastReceivedServerCommitId = serverCommitEntry['commitId'];
         } else {
@@ -461,19 +462,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
-          _sendTelemetry(
-              '_syncFromServer.forEachEntry.end',
-              {
-                'atKey': keyInfo.key,
-                'syncDirection': keyInfo.syncDirection,
-                'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
-              });
+          _sendTelemetry('_syncFromServer.forEachEntry.end', {
+            'atKey': keyInfo.key,
+            'syncDirection': keyInfo.syncDirection,
+            'errorOrExceptionMessage':
+                keyInfo.conflictInfo?.errorOrExceptionMessage
+          });
         } on Exception catch (e, stacktrace) {
-          _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":stacktrace});
+          _sendTelemetry('_syncFromServer.forEachEntry.exception',
+              {"e": e, "st": stacktrace});
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
         } on Error catch (e, stacktrace) {
-          _sendTelemetry('_syncFromServer.forEachEntry.error', {"e":e,"st":stacktrace});
+          _sendTelemetry(
+              '_syncFromServer.forEachEntry.error', {"e": e, "st": stacktrace});
           _logger.severe(
               'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
         }
@@ -877,17 +879,45 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @visibleForTesting
-  int syncProgressListenerSize(){
+  int syncProgressListenerSize() {
     return _syncProgressListeners.length;
   }
 
   ///Method only for testing
   ///Clears all in-memory entities belonging to the syncService
   @visibleForTesting
-  void clearSyncEntities(){
+  void clearSyncEntities() {
     _syncRequests.clear();
     _syncProgressListeners.clear();
     _syncServiceMap.clear();
+  }
+
+  @override
+  Future<SyncResult> checkIfClientAndServerInSync() async {
+    var syncResult = SyncResult();
+    // Get lastSynced to fetch the local commitId and uncommitted entries
+    var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
+        _atClient.getPreferences()!.syncRegex,
+        atSign: _atClient.getCurrentAtSign()!);
+    var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
+    var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
+        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
+        atSign: _atClient.getCurrentAtSign()!);
+    var localCommitId =
+        (lastSyncedEntry != null) ? lastSyncedEntry.commitId : -1;
+    var serverCommitId = await _getServerCommitId();
+
+    if (serverCommitId > localCommitId!) {
+      syncResult.syncStatus = SyncStatus.serverAhead;
+    } else if (localCommitId == serverCommitId &&
+        unCommittedEntries.isNotEmpty) {
+      syncResult.syncStatus = SyncStatus.clientAhead;
+    } else if (localCommitId == serverCommitId && unCommittedEntries.isEmpty) {
+      syncResult.syncStatus = SyncStatus.inSync;
+    }
+    syncResult.localCommitId = localCommitId;
+    syncResult.serverCommitId = serverCommitId;
+    return syncResult;
   }
 }
 

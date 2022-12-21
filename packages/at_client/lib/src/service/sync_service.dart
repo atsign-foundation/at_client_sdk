@@ -1,4 +1,6 @@
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/sync_progress_listener.dart';
+import 'package:at_client/src/service/sync/sync_result.dart';
 import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
@@ -38,6 +40,7 @@ abstract class SyncService {
   void setOnDone(Function onDone);
 
   /// Returns true if local and cloud secondary are in sync. false otherwise
+  @Deprecated('Use [SyncService.checkIfClientAndServerInSync]')
   Future<bool> isInSync();
 
   /// Returns true if sync is in-progress; else false.
@@ -48,6 +51,22 @@ abstract class SyncService {
 
   /// Removes a sync progress listener
   void removeProgressListener(SyncProgressListener listener);
+
+  /// Check if the [RemoteSecondary] and [LocalSecondary] are in sync.
+  ///
+  /// Returns [SyncResult] which encapsulates [SyncStatus]
+  ///
+  /// [SyncStatus.serverAhead] is set when server commit id higher than client commit id
+  ///
+  /// [SyncStatus.clientAhead] is set when server commit id and client commit id
+  /// are equal AND client have uncommitted entries.
+  ///
+  /// [SyncStatus.inSync] is set when server commit and client commit id are equal
+  /// AND client do not have uncommitted entries.
+  ///
+  /// Sets [SyncResult.localCommitId] and [SyncResult.serverCommitId] with
+  /// latest commit-id of client and server respectively.
+  Future<SyncResult> checkIfClientAndServerInSync();
 }
 
 @experimental

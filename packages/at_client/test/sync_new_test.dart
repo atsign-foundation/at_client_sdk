@@ -42,11 +42,15 @@ class MockNotificationServiceImpl extends Mock
   }
 }
 
+class MockAtCommitLog extends Mock implements AtCommitLog {}
+
 class MockNetworkUtil extends Mock implements NetworkUtil {}
 
 class FakeSyncVerbBuilder extends Fake implements SyncVerbBuilder {}
 
 class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
+
+class FakeStatsVerbBuilder extends Fake implements StatsVerbBuilder {}
 
 ///Notes:
 /// Description of terminology used in the test cases:
@@ -2581,9 +2585,22 @@ void main() {
 
   group('Tests to validate how the client and server exchange information', () {
     group('A group of test to verify if client and server are in sync', () {
+      late AtCommitLog mockAtCommitLog;
+      late RemoteSecondary mockRemoteSecondary;
+      late SyncServiceImpl syncServiceImpl;
+      late AtClient mockAtClient;
+      late AtClientManager mockAtClientManager;
+      late NotificationService mockNotificationService;
+
       setUp(() async {
         TestResources.atsign = '@jester';
         await TestResources.setupLocalStorage(TestResources.atsign);
+        registerFallbackValue(FakeStatsVerbBuilder());
+        mockAtCommitLog = MockAtCommitLog();
+        mockRemoteSecondary = MockRemoteSecondary();
+        mockAtClient = MockAtClient();
+        mockAtClientManager = MockAtClientManager();
+        mockNotificationService = MockNotificationServiceImpl();
       });
 
       /// Preconditions:
@@ -2600,43 +2617,112 @@ void main() {
         expect(isInSync, true);
       });
 
-      /// Needs Refactoring:
-      /// isInSync should return an enum - ServerAhead
-      /// Enhancement Ticket - https://github.com/TestResources.atsign-foundation/at_client_sdk/issues/832
-      test(
-          'A test to verify serverAhead when serverCommitId is greater than localCommitId',
-          () {
-        /// Preconditions:
-        /// 1. The server commitId is at 15 and local commitId is at 10
-        ///
-        /// Assertions:
-        /// 1. isInSync should return serverAhead
+      test('A test to verify when server is ahead', () async {
+        when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) async =>
+            Future.value(
+                CommitEntry('@bob:phone@alice', CommitOp.UPDATE, DateTime.now())
+                  ..commitId = 5));
+        when(() => mockAtCommitLog.getChanges(null, null))
+            .thenAnswer((_) async => Future.value([]));
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((_) async => Future.value(
+                'data:[{"id":"3","name":"lastCommitID","value":"10"}]'));
+        syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
+
+        var syncResult = await syncServiceImpl.checkIfClientAndServerInSync();
+        expect(syncResult.syncStatus, SyncStatus.serverAhead);
+        expect(syncResult.serverCommitId, 10);
+        expect(syncResult.localCommitId, 5);
       });
 
-      /// Needs Refactoring:
-      /// isInSync should return an enum - ServerAhead
-      /// Enhancement Ticket - https://github.com/TestResources.atsign-foundation/at_client_sdk/issues/832
       test(
-          'A test to verify serverAhead when serverCommitId is greater than localCommitId and localCommitId has uncommitted entries',
-          () {
-        /// Preconditions:
-        /// 1. The server commitId is at 15 and local commitId is at 10
-        /// 2. The local keystore has 5 uncommitted entries
-        ///
-        /// Assertions:
-        /// 1. isInSync should return serverAhead
+          'A test to verify when client is ahead when server and client commit-ids are same and client have uncommitted entries',
+          () async {
+        when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) async =>
+            Future.value(
+                CommitEntry('@bob:phone@alice', CommitOp.UPDATE, DateTime.now())
+                  ..commitId = 10));
+        when(() => mockAtCommitLog.getChanges(null, null)).thenAnswer(
+            (_) async => Future.value([
+                  CommitEntry(
+                      '@bob:mobile@alice', CommitOp.UPDATE, DateTime.now())
+                ]));
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((_) async => Future.value(
+                'data:[{"id":"3","name":"lastCommitID","value":"10"}]'));
+        syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
+
+        var syncResult = await syncServiceImpl.checkIfClientAndServerInSync();
+        expect(syncResult.syncStatus, SyncStatus.clientAhead);
+        expect(syncResult.serverCommitId, 10);
+        expect(syncResult.localCommitId, 10);
       });
 
-      /// Needs Refactoring:
-      /// isInSync should return an enum - ServerAhead
-      /// Enhancement Ticket - https://github.com/TestResources.atsign-foundation/at_client_sdk/issues/832
-      test('A test to verify local secondary has uncommitted entries', () {
-        /// Preconditions:
-        /// 1. The local commitId is at 15 and serverCommitId 25
-        /// 2. The local keystore has 5 uncommitted entries
-        ///
-        /// Assertions:
-        /// 1. isInSync should localAhead
+      test(
+          'A test to verify server ahead when server commit-id is higher than and client commit-id and client have uncommitted entries',
+          () async {
+        when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) async =>
+            Future.value(
+                CommitEntry('@bob:phone@alice', CommitOp.UPDATE, DateTime.now())
+                  ..commitId = 5));
+        when(() => mockAtCommitLog.getChanges(null, null)).thenAnswer(
+            (_) async => Future.value([
+                  CommitEntry(
+                      '@bob:mobile@alice', CommitOp.UPDATE, DateTime.now())
+                ]));
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((_) async => Future.value(
+                'data:[{"id":"3","name":"lastCommitID","value":"10"}]'));
+        syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
+
+        var syncResult = await syncServiceImpl.checkIfClientAndServerInSync();
+        expect(syncResult.syncStatus, SyncStatus.serverAhead);
+        expect(syncResult.serverCommitId, 10);
+        expect(syncResult.localCommitId, 5);
+      });
+
+      test('A test to verify when server and client are in sync', () async {
+        when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) async =>
+            Future.value(
+                CommitEntry('@bob:phone@alice', CommitOp.UPDATE, DateTime.now())
+                  ..commitId = 10));
+        when(() => mockAtCommitLog.getChanges(null, null))
+            .thenAnswer((_) async => Future.value([]));
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: StatsVerbBuilderMatcher())))
+            .thenAnswer((_) async => Future.value(
+                'data:[{"id":"3","name":"lastCommitID","value":"10"}]'));
+        syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
+
+        var syncResult = await syncServiceImpl.checkIfClientAndServerInSync();
+        print('${syncResult.serverCommitId}  ${syncResult.localCommitId}');
+        expect(syncResult.syncStatus, SyncStatus.inSync);
+        expect(syncResult.serverCommitId, 10);
+        expect(syncResult.localCommitId, 10);
+      });
+
+      tearDown(() async {
+        await TestResources.tearDownLocalStorage();
+        resetMocktailState();
       });
     });
 
@@ -3576,6 +3662,7 @@ void onDoneCallback(syncResult) {
 
 class CustomSyncProgressListener extends SyncProgressListener {
   SyncProgress? localSyncProgress;
+
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     localSyncProgress = syncProgress;
@@ -3587,6 +3674,7 @@ class TestResources {
   static AtCommitLog? commitLog;
   static SecondaryPersistenceStore? secondaryPersistenceStore;
   static var storageDir = '${Directory.current.path}/test/hive';
+
   //an object that will be used to assert change of state
   static bool switchState = false;
 
@@ -3663,7 +3751,9 @@ class StatsVerbBuilderMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is StatsVerbBuilder) return true;
+    if (item is StatsVerbBuilder) {
+      return true;
+    }
     return false;
   }
 }

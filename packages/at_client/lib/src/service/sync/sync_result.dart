@@ -9,6 +9,8 @@ class SyncResult {
   DateTime? lastSyncedOn;
   bool dataChange = true;
   List<KeyInfo> keyInfoList = [];
+  late int localCommitId;
+  late int serverCommitId;
 
   @override
   String toString() {

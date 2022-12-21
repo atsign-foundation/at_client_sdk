@@ -1,3 +1,5 @@
+## 3.0.50
+- fix: Add `checkIfClientAndServerInSync` in `SyncService` and deprecate `isInSync`
 ## 3.0.49
 - fix: Enable AtKey.namespace overrides the namespace in AtClientPreference in AtClient delete method
 - fix: Fixed a bug where initial notifications fails to decrypt - invalid pad block issue
