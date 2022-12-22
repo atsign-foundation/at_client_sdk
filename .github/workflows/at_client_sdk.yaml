@@ -12,6 +12,7 @@ on:
   pull_request:
     branches:
       - trunk
+      - lower_case
 
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
