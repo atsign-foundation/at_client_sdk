@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
-
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
-
+import 'package:at_utils/at_logger.dart';
 void main() {
+  AtSignLogger.root_level = 'finer';
+
+  tearDown(() async => await tearDownFunc());
   test('Verify local changes are synced to server - local ahead', () async {
     var atSign = '@alice🛠';
     var preference = TestUtils.getPreference(atSign);
@@ -113,9 +117,10 @@ void main() {
     expect(serverCommitId != null, true);
     // twitter.me@alice🛠
     var waviKey = AtKey()
-      ..key = 'twitter.wavi'
+      ..key = 'quora'
+      ..namespace = 'wavi'
       ..sharedWith = sharedWithAtsign;
-    var value = 'alice.twitter';
+    var value = 'alice.quora';
     var atmosphereKey = AtKey()
       ..key = 'medium'
       ..namespace = 'atmosphere'
@@ -125,24 +130,25 @@ void main() {
     expect(putResult, true);
     putResult = await atClient.put(atmosphereKey, valueAtmosphere);
     expect(putResult, true);
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     // waiting for 15 seconds for sync to complete.
-    await Future.delayed(Duration(seconds: 10));
+    await Future.delayed(Duration(seconds: 15));
     // Getting server commit id after put
     var serverCommitIdAfterPut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     var localEntryAfterSync =
-        await SyncUtil().getLastSyncedEntry('', atSign: atSign);
-    expect(localEntryAfterSync!.atKey, '$sharedWithAtsign:twitter.wavi$atSign');
-    expect(localEntryAfterSync.atKey,
-        isNot('$sharedWithAtsign:medium.atmosphere$atSign'));
+        await SyncUtil().getLastSyncedEntry('.wavi', atSign: atSign);
     print('last synced entry $localEntryAfterSync');
+    expect((localEntryAfterSync?.atKey!.contains('$sharedWithAtsign:medium.atmosphere$atSign')), false);
     print('serverCommitId after put method $serverCommitIdAfterPut');
     // After sync successful, the serverCommitId after put should be greater
     // than server commit before put
     expect(serverCommitIdAfterPut! > serverCommitId!, true);
     // Getting value from remote secondary
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = 'twitter.wavi'
+      ..atKey = 'quora.wavi'
       ..sharedWith = sharedWithAtsign
       ..sharedBy = atSign
       ..operation = 'all';
@@ -170,11 +176,14 @@ void main() {
     await setEncryptionKeys(atSign, preference);
     var atKey = AtKey()
       ..key = 'discord'
+      ..namespace = 'wavi'
       ..sharedWith = sharedWithAtsign;
     var value = 'alice.discord';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
     await Future.delayed(Duration(seconds: 10));
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     atClientManager.syncService.sync(onDone: onDoneCallback);
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'discord.wavi'
@@ -189,6 +198,7 @@ void main() {
           ..two = (getResponse));
     // Decrypting and verifying the value from the remote secondary
     expect(transformedValue.value, value);
+
   });
 
   test('a test to verify that local key is not synced to the cloud', () async {
@@ -202,10 +212,13 @@ void main() {
     atClientManager.syncService.sync();
     var atKey = AtKey()
       ..key = 'localkey'
+      ..namespace = 'wavi'
       ..isLocal = true;
     var value = 'alice.localkey';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     atClientManager.syncService.sync();
     // waiting for 10 seconds for sync to complete.
     await Future.delayed(Duration(seconds: 10));
@@ -234,7 +247,9 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     atClientManager.syncService.sync();
-    var atKey = AtKey()..key = 'key1';
+    var atKey = AtKey()
+    ..key = 'key1' 
+    ..namespace = 'wavi';
     var value1 = 'value1.key1';
     var value2 = 'value2.key1';
     var putResult = await atClient.put(atKey, value1);
@@ -242,6 +257,9 @@ void main() {
     putResult = await atClient.put(atKey, value2);
     expect(putResult, true);
     // waiting for 10 seconds for sync to complete.
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     await Future.delayed(Duration(seconds: 10));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'key1.wavi'
@@ -266,7 +284,10 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     atClientManager.syncService.sync();
-    var atKey = AtKey()..key = 'testkey';
+
+    var atKey = AtKey()
+    ..key = 'testkey'
+    ..namespace = 'wavi';
     var value = 'localvalue';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
@@ -279,6 +300,9 @@ void main() {
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
     // waiting for 10 seconds for sync to complete.
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
+    atClientManager.syncService.sync();
     await Future.delayed(Duration(seconds: 10));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'testkey.wavi'
@@ -292,7 +316,8 @@ void main() {
           ..two = (getResponse));
     // Decrypting and verifying the value from the remote secondary
     expect(transformedValue.value, value);
-    expect(transformedValue.metadata!.updatedAt!.isBefore(DateTime.now()), true);
+    expect(
+        transformedValue.metadata!.updatedAt!.isBefore(DateTime.now()), true);
   });
 }
 
@@ -301,4 +326,11 @@ void onDoneCallback(syncResult) {
   //always assert that the sync is successful when this method is triggered
   expect(syncResult.syncStatus, SyncStatus.success);
   //when this method is triggered always switch state to indicate that sync has been successful
+}
+
+Future<void> tearDownFunc() async {
+  var isExists = await Directory('test/hive').exists();
+  if (isExists) {
+    Directory('test/hive').deleteSync(recursive: true);
+  }
 }
