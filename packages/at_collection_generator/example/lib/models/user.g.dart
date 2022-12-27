@@ -1,37 +1,42 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'user.dart';
-
 // **************************************************************************
 // AtCollectionGenerator
 // **************************************************************************
 
-class UserWidget extends AtCollectionModel {
+import 'dart:convert';
+import 'package:at_client/at_collection/at_collection_model.dart';
+import 'package:at_client/at_collection/model/spec/at_collection_model_spec.dart';
+
+class UserCollection extends AtCollectionModel {
   String name;
   String login;
   int number;
-  UserWidget(
+  String address;
+  UserCollection(
     this.name,
     this.login,
     this.number,
+    this.address,
   ) : super(
           collectionName: "User",
         );
-  static Future<List<UserWidget>> getAllData() async {
-    return (await AtCollectionModel.getAll<UserWidget>());
+  static Future<List<UserCollection>> getAllData() async {
+    return (await AtCollectionModel.getAll<UserCollection>());
   }
 
-  static Future<UserWidget> getById(String keyId) async {
-    return (await AtCollectionModel.load<UserWidget>(keyId));
+  static Future<UserCollection> getById(String keyId) async {
+    return (await AtCollectionModel.load<UserCollection>(keyId));
   }
 
   @override
-  UserWidget fromJson(String jsonDecodedData) {
+  UserCollection fromJson(String jsonDecodedData) {
     var json = jsonDecode(jsonDecodedData);
-    var newModel = UserWidget(
+    var newModel = UserCollection(
       json['name'],
       json['login'],
       int.parse(json['number']),
+      json['address'],
     );
     newModel.id = json['id'];
     return newModel;
@@ -45,6 +50,7 @@ class UserWidget extends AtCollectionModel {
     data['name'] = name;
     data['login'] = login;
     data['number'] = number.toString();
+    data['address'] = address;
     return data;
   }
 }
