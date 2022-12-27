@@ -34,6 +34,9 @@ class AtCollectionGenerator extends GeneratorForAnnotation<AtCollectionAnnotatio
       variablesBuilder.writeln("${(visitor.fields[parameterName]).toString().replaceAll('*', '')} $parameterName;"); 
     }
     sourceBuilder.write(variablesBuilder);
+    
+    /// empty space
+    sourceBuilder.writeln("");
 
     //// Constructor
     sourceBuilder.write("$className (");
@@ -45,6 +48,9 @@ class AtCollectionGenerator extends GeneratorForAnnotation<AtCollectionAnnotatio
     sourceBuilder.writeln("):super(");
     sourceBuilder.writeln("collectionName: \"${visitor.className}\",");
     sourceBuilder.writeln(");");
+
+    /// empty space
+    sourceBuilder.writeln("");
 
     /// static methods
     sourceBuilder.writeln("static Future<List<$className>> getAllData() async {");
@@ -68,6 +74,8 @@ class AtCollectionGenerator extends GeneratorForAnnotation<AtCollectionAnnotatio
         /// TODO: We should use named parameters here for easier use
         if(type == "String"){
           sourceBuilder.write("json['$parameterName'],"); 
+        } else if (type == "bool"){
+          sourceBuilder.write("json['result'] == 'true',"); 
         } else {
           sourceBuilder.write("$type.parse(json['$parameterName']),"); 
         }

@@ -1,3 +1,4 @@
+import 'package:example/models/event.g.dart';
 import 'package:example/models/user.g.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +10,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   var userCollection = UserCollection('name', 'login', 1, 'address');
+  var eventCollection = EventCollection('New year party', 'Church Street', 25, false, 930.50);
 
   @override
   Widget build(BuildContext context) {
@@ -21,28 +23,34 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             TextButton(onPressed: () async {
-              var _saveRes = await userCollection.save();
+              var _saveRes = await eventCollection.save();
               showScaffold(_saveRes.toString());
             }, 
               child: const Text("Save"),
             ),
             TextButton(onPressed: () async {
-              var _saveRes = await userCollection.shareWith(['@colin', '@k']);
+              var _saveRes = await eventCollection.shareWith(['@colin', '@k']);
               showScaffold(_saveRes.toString());
             }, 
               child: const Text("Share"),
             ),
             TextButton(onPressed: () async {
-              var _saveRes = await userCollection.unshare(atSigns: ['@colin']);
+              var _saveRes = await eventCollection.unshare(atSigns: ['@colin']);
               showScaffold(_saveRes.toString());
             }, 
               child: const Text("UnShare"),
             ),
             TextButton(onPressed: () async {
-              var _saveRes = await userCollection.getSharedWith();
+              var _saveRes = await eventCollection.getSharedWith();
               showScaffold(_saveRes.toString());
             }, 
               child: const Text("getSharedWith"),
+            ),
+            TextButton(onPressed: () async {
+              var _saveRes = await EventCollection.getById(eventCollection.id);
+              showScaffold('${_saveRes.title}, ${_saveRes.noOfPeople}, ${_saveRes.cancelled},');
+            }, 
+              child: const Text("get element"),
             ),
           ],
         ),

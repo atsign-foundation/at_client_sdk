@@ -13,6 +13,7 @@ class UserCollection extends AtCollectionModel {
   String login;
   int number;
   String address;
+
   UserCollection(
     this.name,
     this.login,
@@ -21,6 +22,7 @@ class UserCollection extends AtCollectionModel {
   ) : super(
           collectionName: "User",
         );
+
   static Future<List<UserCollection>> getAllData() async {
     return (await AtCollectionModel.getAll<UserCollection>());
   }
