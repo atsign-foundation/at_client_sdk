@@ -6,10 +6,9 @@ targets:
 
 builders:
   at_collection_generator:
-      target: ":at_collection_generator"
-      import: "package:at_collection_generator/builder.dart"
-      builder_factories: ["atCollectionGenerator"]
-      build_extensions: {".dart":[".at_collection.g.part"]}
-      auto_apply: dependents
-      build_to: cache
-      applies_builders: ["source_gen|combining_builder"]
+    target: ":at_collection_generator"
+    import: "package:at_collection_generator/builder.dart"
+    builder_factories: ["atCollectionGenerator"]
+    build_extensions: {".dart": [".at_collection.dart"]}
+    auto_apply: dependents
+    build_to: source

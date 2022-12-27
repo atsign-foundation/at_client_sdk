@@ -5,4 +5,4 @@ import 'src/at_collection_generator_base.dart';
 
 
 Builder atCollectionGenerator(BuilderOptions options) => 
-  SharedPartBuilder([AtCollectionGenerator()],'at_collection_annotation');
+  LibraryBuilder(AtCollectionGenerator());

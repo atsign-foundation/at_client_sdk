@@ -18,8 +18,14 @@ class AtCollectionGenerator extends GeneratorForAnnotation<AtCollectionAnnotatio
     final visitor = ModelVisitor();
     element.visitChildren(visitor);
     final sourceBuilder = StringBuffer();
-    var className = "${visitor.className}Widget";
-    // Class name
+    var className = "${visitor.className}Collection";
+
+    // /// imports
+    sourceBuilder.writeln("import 'dart:convert';");
+    sourceBuilder.writeln("import 'package:at_client/at_collection/at_collection_model.dart';");
+    sourceBuilder.writeln("import 'package:at_client/at_collection/model/spec/at_collection_model_spec.dart';");
+
+    /// Class name
     sourceBuilder.writeln("class $className extends AtCollectionModel{");
 
     /// declare varibales
