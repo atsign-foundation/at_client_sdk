@@ -614,13 +614,16 @@ class MyModelTest extends AtCollectionModel {
   MyModelTest fromJson(String jsonEncodedString)
   { 
     var json = jsonDecode(jsonEncodedString);
-    var newMyModel = MyModelTest(int.parse(json['number']), json['name'], json['email']);
-    newMyModel.id = json['id'];
-    return newMyModel;
+    var newModel = MyModelTest(
+      int.parse(json['number']), json['name'], json['email']
+    );
+    newModel.id = json['id'];
+    return newModel;
   }
 
   @override
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson() 
+  {
     final Map<String, dynamic> data = {};
     data['id'] = id;
     data['name'] = name;
