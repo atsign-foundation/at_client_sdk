@@ -99,6 +99,7 @@ void main() async {
         var notificationResult = await AtClientManager.getInstance()
             .notificationService
             .notify(input);
+
         expect(notificationResult.notificationStatusEnum,
             NotificationStatusEnum.delivered);
 
