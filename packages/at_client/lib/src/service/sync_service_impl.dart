@@ -306,6 +306,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// of the fix for https://github.com/atsign-foundation/at_client_sdk/issues/770
   @visibleForTesting
   bool hasHadNoSyncRequests = true;
+
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
     hasHadNoSyncRequests = false;
     if (_syncRequests.length == _queueSize) {
@@ -385,8 +386,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
             await syncUtil.updateCommitEntry(
                 commitEntry, commitId, _atClient.getCurrentAtSign()!);
-            keyInfoList
-                .add(KeyInfo(commitEntry.atKey, SyncDirection.localToRemote));
+            keyInfoList.add(KeyInfo(commitEntry.atKey,
+                SyncDirection.localToRemote, commitEntry.operation));
           } on Exception catch (e) {
             var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
             _logger.severe(
@@ -455,8 +456,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           lastReceivedServerCommitId = int.parse(serverCommitEntry['commitId']);
         }
         try {
-          final keyInfo =
-              KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
+          final keyInfo = KeyInfo(
+              serverCommitEntry['atKey'],
+              SyncDirection.remoteToLocal,
+              convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
           ConflictInfo? conflictInfo =
               await _checkConflict(serverCommitEntry, uncommittedEntries);
           keyInfo.conflictInfo = conflictInfo;
@@ -902,12 +905,13 @@ class KeyInfo {
   String key;
   SyncDirection syncDirection;
   ConflictInfo? conflictInfo;
+  late CommitOp commitOp;
 
-  KeyInfo(this.key, this.syncDirection);
+  KeyInfo(this.key, this.syncDirection, this.commitOp);
 
   @override
   String toString() {
-    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo}';
+    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo, commitOp: $commitOp}';
   }
 }
 

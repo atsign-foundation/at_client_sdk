@@ -44,9 +44,22 @@ class MockNotificationServiceImpl extends Mock
 
 class MockNetworkUtil extends Mock implements NetworkUtil {}
 
+class MockSyncUtil extends Mock implements SyncUtil {}
+
+class MockLocalSecondary extends Mock implements LocalSecondary {
+  @override
+  SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
+}
+
+class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
+
 class FakeSyncVerbBuilder extends Fake implements SyncVerbBuilder {}
 
 class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
+
+class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
+
+class FakeRemoteSecondary extends Fake implements RemoteSecondary {}
 
 ///Notes:
 /// Description of terminology used in the test cases:
@@ -3557,6 +3570,153 @@ void main() {
         syncServiceImpl.clearSyncEntities();
       });
 
+      test(
+          'A test to verify commit operation is populated in sync progress callback when server is ahead',
+          () async {
+        TestResources.atsign = '@bob';
+
+        registerFallbackValue(FakeRemoteSecondary());
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+        registerFallbackValue(FakeDeleteVerbBuilder());
+
+        LocalSecondary mockLocalSecondary = MockLocalSecondary();
+        SyncUtil mockSyncUtil = MockSyncUtil();
+
+        // Mock response of stats verb returning latest server commit id
+        // Here returning server commit id as 5
+        when(() => mockSyncUtil.getLatestServerCommitId(
+                any(that: RemoteSecondaryMatcher()), null))
+            .thenAnswer((_) async => 5);
+        when(() => mockSyncUtil.getLastSyncedEntry(null,
+            atSign:
+                TestResources.atsign)).thenAnswer((invocation) => Future.value(
+            CommitEntry('@alice:phone@bob', CommitOp.UPDATE_ALL, DateTime.now())
+              ..commitId = 3));
+        // Mock response for uncommitted entries in local secondary
+        // For this scenario, uncommitted entries are not required. Hence returning empty list
+        when(() => mockSyncUtil.getChangesSinceLastCommit(null, null,
+            atSign: TestResources.atsign)).thenAnswer((_) => Future.value([]));
+        when(() => mockSyncUtil.getCommitEntry(5, TestResources.atsign))
+            .thenAnswer((_) => Future.value(null));
+        // Sync response from the cloud secondary
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: SyncVerbBuilderMatcher())))
+            .thenAnswer((invocation) => Future.value(
+                'data:[{"atKey":"@alice:phone@bob","value":"123","metadata":{"createdBy":"@bob","updatedBy":"@bob","createdAt":"2023-01-30 07:48:40.540Z","updatedAt":"2023-01-30 07:48:40.540Z","availableAt":"2023-01-30 07:48:40.540Z","status":"active","version":"0","ttl":"0","ttb":"0","isBinary":"false","isEncrypted":"false"},"commitId":4,"operation":"*"},{"atKey":"@alice:mobile@bob","value":"345","commitId":5,"operation":"+"},{"atKey":"@alice:country@bob","value":"123","metadata":{"createdBy":"@bob","updatedBy":"@bob","createdAt":"2023-01-30 07:48:40.540Z","updatedAt":"2023-01-30 07:48:40.540Z","availableAt":"2023-01-30 07:48:40.540Z","status":"active","version":"0","ttl":"0","ttb":"0","isBinary":"false","isEncrypted":"false"},"commitId":6,"operation":"#"},{"atKey":"@alice:contact@bob","value":null,"metadata":null,"commitId":7,"operation":"-"}]'));
+        when(() => mockAtClient.getLocalSecondary())
+            .thenAnswer((_) => mockLocalSecondary);
+        when(() => mockLocalSecondary.executeVerb(
+            any(that: UpdateDeleteVerbBuilderMatcher()),
+            sync: false)).thenAnswer((_) => Future.value('data:5'));
+
+        var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = mockSyncUtil;
+        var progressListener = CustomSyncProgressListener();
+        syncServiceImpl.addProgressListener(progressListener);
+        syncServiceImpl.sync();
+        await syncServiceImpl.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+
+        expect(progressListener.localSyncProgress?.keyInfoList?.length, 4);
+        progressListener.localSyncProgress?.keyInfoList?.forEach((keyInfo) {
+          if (keyInfo.key == '@alice:phone@bob') {
+            expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+          } else if (keyInfo.key == '@alice:contact@bob') {
+            expect(keyInfo.commitOp, CommitOp.DELETE);
+          } else if (keyInfo.key == '@alice:mobile@bob') {
+            expect(keyInfo.commitOp, CommitOp.UPDATE);
+          } else if (keyInfo.key == '@alice:country@bob') {
+            expect(keyInfo.commitOp, CommitOp.UPDATE_META);
+          }
+          expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
+        });
+      });
+
+      test(
+          'A test to verify commit operation is populated in sync progress callback when client is ahead',
+          () async {
+        TestResources.atsign = '@bob';
+
+        registerFallbackValue(FakeRemoteSecondary());
+        registerFallbackValue(FakeSyncVerbBuilder());
+        registerFallbackValue(FakeUpdateVerbBuilder());
+        registerFallbackValue(FakeDeleteVerbBuilder());
+
+        SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
+        LocalSecondary mockLocalSecondary = MockLocalSecondary();
+        SyncUtil mockSyncUtil = MockSyncUtil();
+
+        mockLocalSecondary.keyStore = mockSecondaryKeyStore;
+
+        // Mock response of stats verb returning latest server commit id
+        // Here returning server commit id as 5
+        when(() => mockSyncUtil.getLatestServerCommitId(
+                any(that: RemoteSecondaryMatcher()), null))
+            .thenAnswer((_) async => 2);
+        when(() => mockSyncUtil.getLastSyncedEntry(null,
+            atSign:
+                TestResources.atsign)).thenAnswer((invocation) => Future.value(
+            CommitEntry('@alice:phone@bob', CommitOp.UPDATE_ALL, DateTime.now())
+              ..commitId = 2));
+        when(() =>
+            mockSyncUtil.getChangesSinceLastCommit(null, null,
+                atSign: TestResources.atsign)).thenAnswer((_) => Future.value([
+              CommitEntry(
+                  '@alice:phone@bob', CommitOp.UPDATE_ALL, DateTime.now()),
+              CommitEntry('@alice:city@bob', CommitOp.UPDATE, DateTime.now()),
+              CommitEntry(
+                  '@alice:country@bob', CommitOp.UPDATE_META, DateTime.now()),
+              CommitEntry('@alice:mobile@bob', CommitOp.DELETE, DateTime.now())
+            ]));
+        when(() => mockSyncUtil.getCommitEntry(5, TestResources.atsign))
+            .thenAnswer((_) => Future.value(null));
+        when(() => mockSyncUtil.updateCommitEntry(any(), any(), '@bob'))
+            .thenAnswer((_) async => {});
+        when(() => mockAtClient.getLocalSecondary())
+            .thenAnswer((_) => mockLocalSecondary);
+        when(() => mockLocalSecondary.keyStore?.get(any()))
+            .thenAnswer((_) => Future.value(AtData()..data = '123'));
+        when(() => mockLocalSecondary.keyStore?.getMeta(any()))
+            .thenAnswer((_) => Future.value(AtMetaData()));
+        when(() => mockLocalSecondary.executeVerb(
+            any(that: UpdateDeleteVerbBuilderMatcher()),
+            sync: false)).thenAnswer((_) => Future.value('data:5'));
+        // Batch verb response from the cloud secondary
+        when(() =>
+            mockRemoteSecondary.executeCommand(any(),
+                auth: any(named: "auth"))).thenAnswer((_) => Future.value(
+            'data:[{"id":1,"response":{"data":"21"}},{"id":2,"response":{"data":"22"}},{"id":3,"response":{"data":"23"}},{"id":4,"response":{"data":"24"}}]'));
+
+        var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = mockSyncUtil;
+        var progressListener = CustomSyncProgressListener();
+        syncServiceImpl.addProgressListener(progressListener);
+        syncServiceImpl.sync();
+        await syncServiceImpl.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+
+        expect(progressListener.localSyncProgress?.keyInfoList?.length, 4);
+        progressListener.localSyncProgress?.keyInfoList?.forEach((keyInfo) {
+          if (keyInfo.key == '@alice:phone@bob') {
+            expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+          } else if (keyInfo.key == '@alice:mobile@bob') {
+            expect(keyInfo.commitOp, CommitOp.DELETE);
+          } else if (keyInfo.key == '@alice:city@bob') {
+            expect(keyInfo.commitOp, CommitOp.UPDATE);
+          } else if (keyInfo.key == '@alice:country@bob') {
+            expect(keyInfo.commitOp, CommitOp.UPDATE_META);
+          }
+          expect(keyInfo.syncDirection, SyncDirection.localToRemote);
+        });
+      });
+
       tearDown(() async {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();
@@ -3576,6 +3736,7 @@ void onDoneCallback(syncResult) {
 
 class CustomSyncProgressListener extends SyncProgressListener {
   SyncProgress? localSyncProgress;
+
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     localSyncProgress = syncProgress;
@@ -3587,6 +3748,7 @@ class TestResources {
   static AtCommitLog? commitLog;
   static SecondaryPersistenceStore? secondaryPersistenceStore;
   static var storageDir = '${Directory.current.path}/test/hive';
+
   //an object that will be used to assert change of state
   static bool switchState = false;
 
@@ -3664,6 +3826,36 @@ class StatsVerbBuilderMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is StatsVerbBuilder) return true;
+    return false;
+  }
+}
+
+class UpdateDeleteVerbBuilderMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description.add('test');
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is UpdateVerbBuilder || item is DeleteVerbBuilder) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class RemoteSecondaryMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description.add('custom remote secondary');
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is RemoteSecondary) {
+      return true;
+    }
     return false;
   }
 }
