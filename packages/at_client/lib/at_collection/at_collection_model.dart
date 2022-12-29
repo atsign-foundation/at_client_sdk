@@ -1,5 +1,5 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/at_collection_getter_repository.dart';
+import 'package:at_client/at_collection/at_collection_repository.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
@@ -16,7 +16,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   static KeyMakerSpec keyMaker = DefaultKeyMaker();
 
-  static AtCollectionGetterRepository atCollectionGetterRepository= AtCollectionGetterRepository(
+  static AtCollectionRepository atCollectionRepository= AtCollectionRepository(
             keyMaker: keyMaker,
           );
 
@@ -40,13 +40,13 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   static Future<T> getById<T extends AtCollectionModel>(String keyId, {String? collectionName})async {
-    return (await atCollectionGetterRepository.getById<T>(
+    return (await atCollectionRepository.getById<T>(
       keyId, collectionName: collectionName
     ));
   }
 
   static Future<List<T>> getAll<T extends AtCollectionModel>({String? collectionName}) async {
-    return (await atCollectionGetterRepository.getAll<T>(collectionName: collectionName));
+    return (await atCollectionRepository.getAll<T>(collectionName: collectionName));
   }
 
   @override
