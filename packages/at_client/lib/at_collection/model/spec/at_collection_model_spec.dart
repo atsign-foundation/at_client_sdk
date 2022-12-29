@@ -1,3 +1,4 @@
+import 'package:at_client/at_client.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 
@@ -13,29 +14,12 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 ///
 abstract class AtCollectionModelSpec<T> {
   AtCollectionModelSpec() {
-    collectionName = T.toString().toLowerCase();
     id = Uuid().v4();
   }
 
   /// [id] is used to uniquely identify a model.
   /// It is auto generated and should not be changed.
   late String id;
-
-  /// [collectionName] is a unique name that is given to a class.
-  /// Each objects of same class will have same collection name.
-  ///
-  /// e.g If alice is creating a class object with id - 123 and collectionName - house.
-  ///
-  /// key will be structured as 123.house@alice
-  ///
-  /// Similarly we can have multiple object instance -
-  /// ```
-  /// 12345.house@alice
-  /// 12346.house@alice
-  /// ```
-  ///
-  /// All these objects comes under same [collectionName] - house but have a unique [id]
-  static late String collectionName;
 
   /// [convert] is function that accepts json encoded [String] and forms an instance of [AtCollectionModel].
   // final AtCollectionModelSpec Function(String jsonEncodedString) convert;
