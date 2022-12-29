@@ -6,23 +6,17 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
 
-//// TODO: Change to AtCollectionRepository
-class AtCollectionGetterRepository
-  /// was not possible as the getAll and the getById functions were called from static methods
-  /// so, they had to accept the types in functions
-  // <T extends AtCollectionModel> 
-  {
-  final _logger = AtSignLogger('AtCollectionGetterRepository');
+class AtCollectionRepository{
+  final _logger = AtSignLogger('AtCollectionRepository');
 
   @visibleForTesting
   AtClient? atClient;
 
   late KeyMakerSpec keyMaker;
 
-  Symbol constructorSymbol = Symbol('staticConstructor');
   late String _collectionName;
 
-  AtCollectionGetterRepository({required this.keyMaker});
+  AtCollectionRepository({required this.keyMaker});
 
   AtClient _getAtClient() {
     atClient ??= AtClientManager.getInstance().atClient;

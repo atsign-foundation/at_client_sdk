@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/at_collection_getter_repository.dart';
+import 'package:at_client/at_collection/at_collection_repository.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -21,17 +21,17 @@ void main() {
     final testKeyMaker = DefaultKeyMaker();
     testKeyMaker.atClient = mockAtClient;
 
-    AtCollectionGetterRepository atCollectionGetterRepository = AtCollectionGetterRepository(
+    AtCollectionRepository atCollectionGetterRepository = AtCollectionRepository(
       keyMaker: testKeyMaker,
     );
 
     atCollectionGetterRepository.atClient = mockAtClient;
     atCollectionGetterRepository.keyMaker = testKeyMaker;
 
-    AtCollectionModel.atCollectionGetterRepository = atCollectionGetterRepository;
+    AtCollectionModel.atCollectionRepository = atCollectionGetterRepository;
 
-    AtCollectionModel.atCollectionGetterRepository.atClient = mockAtClient;
-    AtCollectionModel.atCollectionGetterRepository.keyMaker = testKeyMaker;
+    AtCollectionModel.atCollectionRepository.atClient = mockAtClient;
+    AtCollectionModel.atCollectionRepository.keyMaker = testKeyMaker;
     AtCollectionModel.keyMaker = testKeyMaker;
 
     final myModelTestObject1 = MyModelTest.from(1, 'Alice', 'alice@atsign.com');
@@ -654,7 +654,6 @@ class MyModelTest extends AtCollectionModel{
   MyModelTest();
 
   MyModelTest.from(this.number, this.name, this.email);
-
 
   static Future<List<MyModelTest>> getAll() async {
     return (await AtCollectionModel.getAll<MyModelTest>());
