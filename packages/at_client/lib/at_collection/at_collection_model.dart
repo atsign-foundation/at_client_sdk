@@ -14,21 +14,13 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
   @visibleForTesting
   AtClient? atClient;
 
-  late KeyMakerSpec keyMaker;
+  static KeyMakerSpec keyMaker = DefaultKeyMaker();
 
-  static late AtCollectionGetterRepository atCollectionGetterRepository;
-
-  AtCollectionModel({required collectionName})
-      : super(
-          collectionNameParam: collectionName,
-        ){
-          keyMaker = DefaultKeyMaker();
-          atCollectionGetterRepository = AtCollectionGetterRepository(
-            collectionName: collectionName,
-            convert: convert,
+  static AtCollectionGetterRepository atCollectionGetterRepository= AtCollectionGetterRepository(
             keyMaker: keyMaker,
           );
-        } 
+
+  AtCollectionModel();
 
   set setKeyMaker(KeyMakerSpec newKeyMaker){
     keyMaker = newKeyMaker;
@@ -43,17 +35,12 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
     return fromJson(jsonEncodedData);
   }
 
-  static Future<T> load<T>(String keyId) async {
-    return (await atCollectionGetterRepository.getById(keyId)) as T;
+  static Future<T> getById<T extends AtCollectionModel>(String keyId) async {
+    return (await atCollectionGetterRepository.getById<T>(keyId));
   }
 
-  static Future<List<T>> getAll<T>() async {
-    List<T> result = [];
-    var dynamicData = await atCollectionGetterRepository.getAll();
-    for (var data in dynamicData){
-      result.add(data as T);
-    }
-    return result;
+  static Future<List<T>> getAll<T extends AtCollectionModel>() async {
+    return (await atCollectionGetterRepository.getAll<T>());
   }
 
   @override

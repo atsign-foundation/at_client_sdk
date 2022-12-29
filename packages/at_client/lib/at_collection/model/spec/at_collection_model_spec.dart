@@ -12,9 +12,8 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 /// [AtCollectionModelMethods] allows to get all the methods available on [AtCollectionModel] like save, update, delete, share, unshare, getSharedWithList.
 ///
 abstract class AtCollectionModelSpec<T> {
-  AtCollectionModelSpec(
-    {required collectionNameParam}) {
-    collectionName = collectionNameParam;
+  AtCollectionModelSpec() {
+    collectionName = T.toString().toLowerCase();
     id = Uuid().v4();
   }
 
