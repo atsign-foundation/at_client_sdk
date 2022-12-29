@@ -109,7 +109,7 @@ void main() {
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
     //key is converted to lowercase
-    expect(notificationResult.atKey?.key, 'hello');
+    expect(notificationResult.atKey?.key, 'Hello');
     expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
   });
 
@@ -120,7 +120,7 @@ void main() {
             shouldEncrypt: true));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
-    expect(notificationResult.atKey?.key, 'hello');
+    expect(notificationResult.atKey?.key, 'Hello');
     expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
   });
 

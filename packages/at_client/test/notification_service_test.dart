@@ -162,8 +162,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      //UPPER_CASE characters in the key will be converted to lower_case
-      expect(notifyVerbBuilder.atKey, 'hi how are you');
+      //UPPER_CASE in the forText() method will be preserved
+      expect(notifyVerbBuilder.atKey, 'Hi How are you');
       expect(notifyVerbBuilder.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
@@ -694,16 +694,16 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: mockMonitor) as NotificationServiceImpl;
 
-      when(() => mockAtClientImpl
+      when(() async => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()));
 
-      when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
+      when(() async => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
           .thenAnswer((_) async => Future.value(AtValue()
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
 
-      when(() => mockAtClientImpl.put(any(), any()))
+      when(() async => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
       when(() => mockAtClientImpl
@@ -773,7 +773,7 @@ void main() {
           .thenAnswer((_) => false);
 
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
-              any(that: startsWith('_latestnotificationidv2.wavi@alice'))))
+              any(that: startsWith('_latestNotificationIdv2.wavi@alice'))))
           .thenAnswer((_) => true);
 
       when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
@@ -792,16 +792,16 @@ void main() {
   group('A group of tests for lastNotificationReceived key', () {
     test('test to verify lastNotificationReceived toString', () {
       var lastReceivedNotification = AtKey.local(
-              NotificationServiceImpl.lastReceivedNotificationKey, '@alice',
-              namespace: 'wavi')
+              NotificationServiceImpl.lastReceivedNotificationKey, '@alIce',
+              namespace: 'wAvi')
           .build();
       expect(lastReceivedNotification.toString(),
-          'local:lastreceivednotification.wavi@alice');
+          'local:lastReceivedNotification.wavi@alice');
     });
 
     test('test to verify lastNotificationReceived fromString', () {
       var lastReceivedNotification =
-          AtKey.fromString('local:lastreceivednotification.wavi@alice');
+          AtKey.fromString('local:lastReceivedNotification.wavi@alice');
       expect(lastReceivedNotification.key,
           NotificationServiceImpl.lastReceivedNotificationKey);
       expect(lastReceivedNotification.namespace, 'wavi');
@@ -832,17 +832,21 @@ void main() {
 
     test('Test initial state related to monitorRetry', () async {
       NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
-              as NotificationServiceImpl;
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
       expect(notificationServiceImpl.callsToMonitorRetry, 0);
       expect(notificationServiceImpl.monitorRestartQueued, false);
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 0);
     });
 
-    test('Test that _monitorRetry will queue a call to Monitor.start if monitorRestartQueued is false', () async {
+    test(
+        'Test that _monitorRetry will queue a call to Monitor.start if monitorRestartQueued is false',
+        () async {
       NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
-              as NotificationServiceImpl;
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
 
       // Set monitorIsPaused to false, since it isn't explicitly set to false
       // until NotificationServiceImpl._init runs.
@@ -853,18 +857,21 @@ void main() {
       expect(notificationServiceImpl.callsToMonitorRetry, 1);
       expect(notificationServiceImpl.monitorRestartQueued, true);
       // Let's also verify that Monitor.start hasn't yet been actually called.
-      await(Future.delayed(Duration(milliseconds: 10)));
+      await (Future.delayed(Duration(milliseconds: 10)));
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 0);
       // Let's wait for monitorRetryInterval
-      await(Future.delayed(notificationServiceImpl.monitorRetryInterval));
+      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
       // The call to monitor.start() should now have happened
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 1);
     });
 
-    test('Test that _monitorRetry will NOT queue a call to Monitor.start if monitorRestartQueued is true', () async {
+    test(
+        'Test that _monitorRetry will NOT queue a call to Monitor.start if monitorRestartQueued is true',
+        () async {
       NotificationServiceImpl notificationServiceImpl =
-      await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
-      as NotificationServiceImpl;
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
 
       // Set monitorIsPaused to false, since it isn't explicitly set to false
       // until NotificationServiceImpl._init runs.
@@ -885,10 +892,13 @@ void main() {
       expect(notificationServiceImpl.monitorRestartQueued, true);
     });
 
-    test('Test that _monitorRetry will NOT queue a call to Monitor.start if the monitor has been paused', () async {
+    test(
+        'Test that _monitorRetry will NOT queue a call to Monitor.start if the monitor has been paused',
+        () async {
       NotificationServiceImpl notificationServiceImpl =
-      await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
-      as NotificationServiceImpl;
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
 
       // Set monitorIsPaused to false, since it isn't explicitly set to false
       // until NotificationServiceImpl._init runs.
@@ -911,10 +921,13 @@ void main() {
       expect(notificationServiceImpl.monitorRestartQueued, false);
     });
 
-    test('Test that the delayed future will NOT call Monitor.start if the monitor has since been paused', () async {
+    test(
+        'Test that the delayed future will NOT call Monitor.start if the monitor has since been paused',
+        () async {
       NotificationServiceImpl notificationServiceImpl =
-      await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
-      as NotificationServiceImpl;
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
 
       // Set monitorIsPaused to false, since it isn't explicitly set to false
       // until NotificationServiceImpl._init runs.
@@ -935,16 +948,20 @@ void main() {
       expect(notificationServiceImpl.monitorRestartQueued, true);
 
       // Let's wait for slightly longer than monitorRetryInterval
-      await(Future.delayed(notificationServiceImpl.monitorRetryInterval + Duration(milliseconds: 10)));
+      await (Future.delayed(notificationServiceImpl.monitorRetryInterval +
+          Duration(milliseconds: 10)));
       //
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 0);
       expect(notificationServiceImpl.monitorRestartQueued, false);
     });
 
-    test('Test that _monitorRetry will reset monitorRestartQueued to false when it finally makes its call to Monitor.start', () async {
+    test(
+        'Test that _monitorRetry will reset monitorRestartQueued to false when it finally makes its call to Monitor.start',
+        () async {
       NotificationServiceImpl notificationServiceImpl =
-      await NotificationServiceImpl.create(mockAtClientImpl, atClientManager: mockAtClientManager, monitor: mockMonitor)
-      as NotificationServiceImpl;
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
 
       // Set monitorIsPaused to false, since it isn't explicitly set to false
       // until NotificationServiceImpl._init runs.
@@ -961,14 +978,14 @@ void main() {
       expect(notificationServiceImpl.monitorRestartQueued, true);
 
       // Let's wait for monitorRetryInterval
-      await(Future.delayed(notificationServiceImpl.monitorRetryInterval));
+      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
       // We should have had one call to Monitor.start()
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 1);
       // And we should have no calls queued
       expect(notificationServiceImpl.monitorRestartQueued, false);
 
       // Let's wait for monitorRetryInterval again
-      await(Future.delayed(notificationServiceImpl.monitorRetryInterval));
+      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
       // We should still only have had one call to Monitor.start()
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 1);
       // And we should have no calls queued
@@ -979,7 +996,7 @@ void main() {
       expect(notificationServiceImpl.callsToMonitorRetry, 3);
       expect(notificationServiceImpl.monitorRestartQueued, true);
       // Let's wait for monitorRetryInterval
-      await(Future.delayed(notificationServiceImpl.monitorRetryInterval));
+      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
       // We should have had one more call to Monitor.start()
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 2);
       // And we should have no calls queued
@@ -995,7 +1012,21 @@ class StatsAtKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.contains('_latestnotificationidv2')) {
+    if (item is AtKey && item.key!.contains('_latestNotificationIdV2')) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class LastReceivedNotificationMatcher extends Matcher {
+  @override
+  Description describe(Description description) => description.add(
+      'Custom matcher that matches with the lastReceivedNotification key in NotificationServiceImpl');
+
+  @override
+  bool matches(item, Map matchState){
+    if (item is AtKey && item.key!.contains('lastReceivedNotification')){
       return true;
     }
     return false;
