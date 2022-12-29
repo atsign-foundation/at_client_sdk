@@ -6,7 +6,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
 
-
+//// TODO: Change to AtCollectionRepository
 class AtCollectionGetterRepository
   /// was not possible as the getAll and the getById functions were called from static methods
   /// so, they had to accept the types in functions
@@ -30,12 +30,12 @@ class AtCollectionGetterRepository
   }
 
   T _convert<T extends AtCollectionModel>(String jsonDecodedData) {
-    T t = ClassActivator.createInstance(T, constructorSymbol);
+    T t = ClassActivator.createInstance(T);
     return t.fromJson(jsonDecodedData) as T;
   }
 
-  Future<List<T>> getAll<T extends AtCollectionModel>() async {
-    _collectionName = T.toString().toLowerCase();
+  Future<List<T>> getAll<T extends AtCollectionModel>({String? collectionName}) async {
+    _collectionName = collectionName ?? T.toString().toLowerCase();
 
     List<T> dataList = [];
 
@@ -57,8 +57,8 @@ class AtCollectionGetterRepository
     return dataList;
   }
 
-  Future<T> getById<T extends AtCollectionModel>(String keyId) async {
-    _collectionName = T.toString().toLowerCase();
+  Future<T> getById<T extends AtCollectionModel>(String keyId, {String? collectionName}) async {
+    _collectionName = collectionName ?? T.toString().toLowerCase();
 
     AtKey atKey = keyMaker.createSelfKey(
       keyId: keyId,

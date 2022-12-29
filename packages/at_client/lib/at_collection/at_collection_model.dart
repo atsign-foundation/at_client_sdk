@@ -22,6 +22,10 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   AtCollectionModel();
 
+  String getCollectionName() {
+    return runtimeType.toString().toLowerCase();
+  }
+
   set setKeyMaker(KeyMakerSpec newKeyMaker){
     keyMaker = newKeyMaker;
   }
@@ -35,12 +39,14 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
     return fromJson(jsonEncodedData);
   }
 
-  static Future<T> getById<T extends AtCollectionModel>(String keyId) async {
-    return (await atCollectionGetterRepository.getById<T>(keyId));
+  static Future<T> getById<T extends AtCollectionModel>(String keyId, {String? collectionName})async {
+    return (await atCollectionGetterRepository.getById<T>(
+      keyId, collectionName: collectionName
+    ));
   }
 
-  static Future<List<T>> getAll<T extends AtCollectionModel>() async {
-    return (await atCollectionGetterRepository.getAll<T>());
+  static Future<List<T>> getAll<T extends AtCollectionModel>({String? collectionName}) async {
+    return (await atCollectionGetterRepository.getAll<T>(collectionName: collectionName));
   }
 
   @override
@@ -49,7 +55,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     AtKey selfKey = keyMaker.createSelfKey(
       keyId: id,
-      collectionName: AtCollectionModelSpec.collectionName,
+      collectionName: getCollectionName(),
       objectLifeCycleOptions: options,
     );
 
@@ -105,7 +111,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     var allKeys =
         await _getAtClient().getAtKeys(regex: 
-          '$id.${AtCollectionModelSpec.collectionName}'
+          '$id.${getCollectionName()}'
         );
 
     for (var atKey in allKeys) {
@@ -123,7 +129,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     var selfKey = keyMaker.createSelfKey(
       keyId: id,
-      collectionName: AtCollectionModelSpec.collectionName,
+      collectionName: getCollectionName(),
     );
     bool allOpeartionSuccessful = true;
 
@@ -150,7 +156,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     AtKey selfAtKey = keyMaker.createSelfKey(
       keyId: id,
-      collectionName: AtCollectionModelSpec.collectionName,
+      collectionName: getCollectionName(),
     );
 
     var isSelfKeyDeleted =
@@ -165,7 +171,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> unshare({List<String>? atSigns}) async {
-    String keyWithCollectionName = '$id.${AtCollectionModelSpec.collectionName}';
+    String keyWithCollectionName = '$id.${getCollectionName()}';
 
     var sharedAtKeys = await _getAtClient()
         .getAtKeys(regex: keyWithCollectionName);
@@ -223,7 +229,7 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
       throw Exception('id not found');
     }
 
-    if (AtCollectionModelSpec.collectionName.trim().isEmpty) {
+    if (getCollectionName().trim().isEmpty) {
       throw Exception('collectionName not found');
     }
 
