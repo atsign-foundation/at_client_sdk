@@ -684,7 +684,11 @@ void main() {
     test(
         'getLastNotificationTime() returns the stored value from old key if checkOfflineNotifications is true and there is a stored value',
         () async {
-      registerFallbackValue(FakeAtKey());
+      //mimic the old latestNotificationIdKey
+      String lastNotificationKey = '_latestNotificationIdv2.wavi@alice';
+      AtKey oldNotificationAtKey = AtKey.fromString(lastNotificationKey);
+
+      registerFallbackValue(oldNotificationAtKey);
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
       var atNotification = at_notification.AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
@@ -694,16 +698,16 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: mockMonitor) as NotificationServiceImpl;
 
-      when(() async => mockAtClientImpl
+      when(() => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()));
 
-      when(() async => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
+      when(() => mockAtClientImpl.get(oldNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
 
-      when(() async => mockAtClientImpl.put(any(), any()))
+      when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
       when(() => mockAtClientImpl
@@ -758,7 +762,11 @@ void main() {
     test(
         'test the verifies old key value is fetched when new key does not exist',
         () async {
-      registerFallbackValue(FakeAtKey());
+      //mimic the old latestNotificationIdKey
+      String lastNotificationKey = '_latestNotificationIdv2.wavi@alice';
+      AtKey lastNotificationAtKey = AtKey.fromString(lastNotificationKey);
+
+      registerFallbackValue(lastNotificationAtKey);
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
       var atNotification = at_notification.AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
@@ -772,11 +780,12 @@ void main() {
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
           .thenAnswer((_) => false);
 
-      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
-              any(that: startsWith('_latestNotificationIdv2.wavi@alice'))))
-          .thenAnswer((_) => true);
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(lastNotificationKey)).thenAnswer((_) => true);
 
-      when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
+      when(() => mockAtClientImpl.get(lastNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
@@ -796,7 +805,7 @@ void main() {
               namespace: 'wAvi')
           .build();
       expect(lastReceivedNotification.toString(),
-          'local:lastReceivedNotification.wavi@alice');
+          'local:lastreceivednotification.wavi@alice');
     });
 
     test('test to verify lastNotificationReceived fromString', () {
@@ -1025,8 +1034,8 @@ class LastReceivedNotificationMatcher extends Matcher {
       'Custom matcher that matches with the lastReceivedNotification key in NotificationServiceImpl');
 
   @override
-  bool matches(item, Map matchState){
-    if (item is AtKey && item.key!.contains('lastReceivedNotification')){
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key!.contains('lastReceivedNotification')) {
       return true;
     }
     return false;
