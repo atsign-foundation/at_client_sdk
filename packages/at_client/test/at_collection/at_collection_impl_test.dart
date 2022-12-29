@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_collection/at_collection_getter_repository.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -8,11 +9,6 @@ import 'package:test/test.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 class FakeAtKey extends Fake implements AtKey {}
-
-
-String collectionName = 'my_collection_test';
-String sharedWithAtsign1 = '@colin';
-String sharedWithAtsign2 = '@kevin';
 
 void main() {
   setUpAll(() {
@@ -22,19 +18,32 @@ void main() {
   group('A group of saving/sharing/deleting/unsharing an object tests', () {
     var mockAtClient = MockAtClient();
 
-    final myModelTestObject1 = MyModelTest(1, 'Alice', 'alice@atsign.com');
-    final myModelTestObject2 = MyModelTest(2, 'Bob', 'bob@atsign.com');
-
     final testKeyMaker = DefaultKeyMaker();
     testKeyMaker.atClient = mockAtClient;
-    myModelTestObject1.keyMaker = testKeyMaker;
-    myModelTestObject2.keyMaker = testKeyMaker;
+
+    AtCollectionGetterRepository atCollectionGetterRepository = AtCollectionGetterRepository(
+      keyMaker: testKeyMaker,
+    );
+
+    atCollectionGetterRepository.atClient = mockAtClient;
+    atCollectionGetterRepository.keyMaker = testKeyMaker;
+
+    AtCollectionModel.atCollectionGetterRepository = atCollectionGetterRepository;
+
+    AtCollectionModel.atCollectionGetterRepository.atClient = mockAtClient;
+    AtCollectionModel.atCollectionGetterRepository.keyMaker = testKeyMaker;
+    AtCollectionModel.keyMaker = testKeyMaker;
+
+    final myModelTestObject1 = MyModelTest.from(1, 'Alice', 'alice@atsign.com');
+    final myModelTestObject2 = MyModelTest.from(2, 'Bob', 'bob@atsign.com');
+
+    String collectionName = "MyModelTest".toLowerCase();
+    String sharedWithAtsign1 = '@colin';
+    String sharedWithAtsign2 = '@kevin';
 
     myModelTestObject1.atClient = mockAtClient;
     myModelTestObject2.atClient = mockAtClient;
 
-    AtCollectionModel.atCollectionGetterRepository.atClient = mockAtClient;
-    AtCollectionModel.atCollectionGetterRepository.keyMaker = testKeyMaker;
 
     AtCollectionUtil.atClient = mockAtClient;
 
@@ -70,7 +79,7 @@ void main() {
       sharedWith: sharedWithAtsign2,
     );
 
-    test('test getting an object by id', () async {
+    test('test getting an object by id using AtCollectionModel', () async {
       when(() => mockAtClient.get(
           any(that: GetAtKeyMatcher(keyId: object1ModelId, collectionName: collectionName))
         ))
@@ -80,11 +89,25 @@ void main() {
           return atValue;
         });
 
-      var result = (await MyModelTest.getById(object1ModelId));
+      var result = await AtCollectionModel.getById<MyModelTest>(object1ModelId);
       expect(result, myModelTestObject1);
     });
 
-    test('test getting all objects of a type', () async {
+    test('test getting an object by id using MyModelTest', () async {
+      when(() => mockAtClient.get(
+          any(that: GetAtKeyMatcher(keyId: object2ModelId, collectionName: collectionName))
+        ))
+        .thenAnswer((_) async {
+          var atValue = AtValue();
+          atValue.value = jsonEncode(myModelTestObject2.toJson());
+          return atValue;
+        });
+
+      var result = (await MyModelTest.getById(object2ModelId));
+      expect(result, myModelTestObject2);
+    });
+
+    test('test getting all objects using AtCollectionModel', () async {
       when(() => mockAtClient.getAtKeys(
           regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
         ))
@@ -108,7 +131,35 @@ void main() {
           return atValue;
         });
 
-      var result = (await MyModelTest.getAllData());
+      var result = (await AtCollectionModel.getAll<MyModelTest>());
+      expect(result, [myModelTestObject1, myModelTestObject2]);
+    });
+
+    test('test getting all objects using MyModelTest', () async {
+      when(() => mockAtClient.getAtKeys(
+          regex: any(named: 'regex', that: GetAtKeysMatcher(collectionName: collectionName))
+        ))
+          .thenAnswer((_) async => [object1SelfKey, object2SelfKey]);
+
+      when(() => mockAtClient.get(
+          any(that: GetAtKeyMatcher(keyId: object1ModelId, collectionName: collectionName))
+        ))
+        .thenAnswer((_) async {
+          var atValue = AtValue();
+          atValue.value = jsonEncode(myModelTestObject1.toJson());
+          return atValue;
+        });
+
+      when(() => mockAtClient.get(
+          any(that: GetAtKeyMatcher(keyId: object2ModelId, collectionName: collectionName))
+        ))
+        .thenAnswer((_) async {
+          var atValue = AtValue();
+          atValue.value = jsonEncode(myModelTestObject2.toJson());
+          return atValue;
+        });
+
+      var result = (await MyModelTest.getAll());
       expect(result, [myModelTestObject1, myModelTestObject2]);
     });
     
@@ -461,7 +512,7 @@ void main() {
         });
 
       /// there should only be one shared object
-      var sharedObjects = await MyModelTest.getAllData();
+      var sharedObjects = await AtCollectionModel.getAll<MyModelTest>();
       expect(sharedObjects, [myModelTestObject1]);
     });
   });
@@ -592,29 +643,32 @@ class DeleteSharedKeyMatcher extends Matcher {
   }
 }
 
-class MyModelTest extends AtCollectionModel {
-  int number;
-  String name;
-  String email;
+//// TODO Rules:
+/// 1. Have a no parametrs default constructor
+/// 2. For variables we can have setters / public /or any way app wants
+class MyModelTest extends AtCollectionModel{
+  late int number;
+  late String name;
+  late String email;
 
-  MyModelTest(this.number, this.name, this.email)
-  : super(
-          collectionName: collectionName,
-        );
+  MyModelTest();
 
-  static Future<List<MyModelTest>> getAllData() async {
+  MyModelTest.from(this.number, this.name, this.email);
+
+
+  static Future<List<MyModelTest>> getAll() async {
     return (await AtCollectionModel.getAll<MyModelTest>());
   }
 
   static Future<MyModelTest> getById(String keyId) async {
-    return (await AtCollectionModel.load<MyModelTest>(keyId));
+    return (await AtCollectionModel.getById<MyModelTest>(keyId));
   }
 
   @override
   MyModelTest fromJson(String jsonEncodedString)
   { 
     var json = jsonDecode(jsonEncodedString);
-    var newMyModel = MyModelTest(int.parse(json['number']), json['name'], json['email']);
+    var newMyModel = MyModelTest.from(int.parse(json['number']), json['name'], json['email']);
     newMyModel.id = json['id'];
     return newMyModel;
   }
@@ -626,7 +680,7 @@ class MyModelTest extends AtCollectionModel {
     data['name'] = name;
     data['number'] = number.toString();
     data['email'] = email;
-    data['collectionName'] = AtCollectionModelSpec.collectionName;
+    data['collectionName'] = runtimeType.toString().toLowerCase();
     return data;
   }
 
