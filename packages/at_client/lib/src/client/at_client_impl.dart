@@ -348,10 +348,6 @@ class AtClientImpl implements AtClient {
           'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
     }
     AtResponse atResponse = AtResponse();
-    if (atKey.toString().contains(r'^[A-Z]')) {
-      _logger.info(
-          'AtKey: ${atKey.toString()} contains UPPER_CASE characters, converting the key to lower_case');
-    }
     if (value is String) {
       atResponse = await putText(atKey, value);
     }
@@ -401,6 +397,10 @@ class AtClientImpl implements AtClient {
     }
     if (atKey.metadata!.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
+    }
+    if (atKey.key!.contains(r'^[A-Z]') || atKey.key!.contains(r'^[A-Z]') ) {
+      _logger.info(
+          'AtKey: ${atKey.key}.${atKey.namespace} contains UPPER_CASE characters, converting the key to lower_case');
     }
     // validate the atKey
     // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
