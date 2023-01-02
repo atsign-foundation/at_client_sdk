@@ -282,7 +282,7 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
-          value: 'encryptedvalue');
+          value: 'encryptedValue');
       var notificationResponseTransformer =
           NotificationResponseTransformer(mockAtClientImpl);
       notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
