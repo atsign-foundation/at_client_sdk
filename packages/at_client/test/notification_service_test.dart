@@ -216,16 +216,17 @@ void main() {
   group('A group of test to validate notification response transformer', () {
     setUp(() {
       registerFallbackValue(FakeAtKey());
-      when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedvalue'))
+      when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedValue'))
           .thenAnswer((_) => Future.value('decryptedValue'));
     });
     test(
         'A test to verify notification text is decrypted when isEncrypted is set to true',
         () async {
       var isEncrypted = true;
+
       var atNotification = at_notification.AtNotification(
           '124',
-          '@bob:encryptedvalue',
+          '@bob:encryptedValue',
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
@@ -1022,20 +1023,6 @@ class StatsAtKeyMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is AtKey && item.key!.contains('_latestNotificationIdV2')) {
-      return true;
-    }
-    return false;
-  }
-}
-
-class LastReceivedNotificationMatcher extends Matcher {
-  @override
-  Description describe(Description description) => description.add(
-      'Custom matcher that matches with the lastReceivedNotification key in NotificationServiceImpl');
-
-  @override
-  bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.contains('lastReceivedNotification')) {
       return true;
     }
     return false;
