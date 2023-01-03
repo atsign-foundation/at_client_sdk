@@ -21,23 +21,7 @@ dependencies:
   at_commons: ^3.0.26
   at_utils: ^3.0.11
 
-dependency_overrides:
-  at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: packages/at_client
-      ref: uptake_atchops
-  at_chops:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_chops
-      ref: at_chops
-#    path: ../../../at_libraries/packages/at_chops
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_lookup
-      ref: at_chops
+#dependency_overrides:
 #  at_commons:
 #    git:
 #      url: https://github.com/atsign-foundation/at_tools.git

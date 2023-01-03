@@ -52,9 +52,9 @@ class AtClientService {
     // Get keys from KeyChain manager
     String? pkamPrivateKey = await KeychainUtil.getPkamPrivateKey(atSign);
     String? pkamPublicKey = await KeychainUtil.getPkamPublicKey(atSign);
-    String? encryptionPrivateKey =
+    String? encryptPrivateKey =
         await KeychainUtil.getEncryptionPrivateKey(atSign);
-    String? encryptionPublicKey =
+    String? encryptPublicKey =
         await KeychainUtil.getEncryptionPublicKey(atSign);
     String? selfEncryptionKey = await KeychainUtil.getSelfEncryptionKey(atSign);
 
@@ -66,10 +66,10 @@ class AtClientService {
     if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
-    if (encryptionPrivateKey == null || encryptionPrivateKey.isEmpty) {
+    if (encryptPrivateKey == null || encryptPrivateKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
-    if (encryptionPublicKey == null || encryptionPublicKey.isEmpty) {
+    if (encryptPublicKey == null || encryptPublicKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
     if (selfEncryptionKey == null || selfEncryptionKey.isEmpty) {
@@ -85,12 +85,12 @@ class AtClientService {
         .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptionPrivateKey);
+        .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = 'publickey'
       ..isPublic = true
       ..sharedBy = atSign
-      ..value = encryptionPublicKey;
+      ..value = encryptPublicKey;
     await _atClient!
         .getLocalSecondary()!
         .executeVerb(updateBuilder, sync: true);
@@ -100,14 +100,6 @@ class AtClientService {
 
     // Verify if keys are added to local storage.
     var result = await _getKeysFromLocalSecondary(atSign);
-
-    final atEncryptionKeyPair =
-        AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
-    final atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
-    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    final atChops = AtChopsImpl(atChopsKeys);
-    atLookUp.atChops = atChops;
-    _atClient!.atChops = atChops;
     return result;
   }
 
