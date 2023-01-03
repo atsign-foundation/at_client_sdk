@@ -6,6 +6,7 @@ import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_chops/at_chops.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
@@ -20,6 +21,7 @@ class AtClientService {
   // if pkam is successful, encryption keys will be set for the user./// Will create at client instance for a given atSign.
   Future<bool> _init(String atSign, AtClientPreference preference) async {
     _atClientAuthenticator ??= AtClientAuthenticator();
+    preference.useAtChops = true;
     atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, preference.namespace, preference);
     _atClient = AtClientManager.getInstance().atClient;
@@ -99,6 +101,13 @@ class AtClientService {
 
     // Verify if keys are added to local storage.
     var result = await _getKeysFromLocalSecondary(atSign);
+    final atEncryptionKeyPair =
+        AtEncryptionKeyPair.create(encryptPublicKey, encryptPrivateKey);
+    final atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
+    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    final atChops = AtChopsImpl(atChopsKeys);
+    atLookUp.atChops = atChops;
+    _atClient!.atChops = atChops;
     return result;
   }
 
