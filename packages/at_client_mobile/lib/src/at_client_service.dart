@@ -304,7 +304,6 @@ class AtClientService {
       _logger.severe('PrivateKey not found');
       throw OnboardingStatus.PRIVATE_KEY_NOT_FOUND;
     }
-    // #TODO remove this once onboarding flow is changed to at_chops
     atClientPreference.privateKey = privateKey;
     await _init(atsign, atClientPreference);
     await persistKeys(atsign);
