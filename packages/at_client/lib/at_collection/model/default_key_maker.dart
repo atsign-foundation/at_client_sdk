@@ -9,10 +9,12 @@ class DefaultKeyMaker implements KeyMakerSpec {
     atClient ??= AtClientManager.getInstance().atClient;
     return atClient!;
   }
-  
+
   @override
-  AtKey createSelfKey({required String keyId, required String collectionName, 
-    ObjectLifeCycleOptions? objectLifeCycleOptions}) {
+  AtKey createSelfKey(
+      {required String keyId,
+      required String collectionName,
+      ObjectLifeCycleOptions? objectLifeCycleOptions}) {
     return AtKey()
       ..key = '$keyId.$collectionName'
       ..metadata = Metadata()
@@ -23,16 +25,22 @@ class DefaultKeyMaker implements KeyMakerSpec {
   }
 
   @override
-  AtKey createSharedKey({required String keyId, required String collectionName,  
-      String? sharedWith, ObjectLifeCycleOptions? objectLifeCycleOptions}) {
+  AtKey createSharedKey(
+      {required String keyId,
+      required String collectionName,
+      String? sharedWith,
+      ObjectLifeCycleOptions? objectLifeCycleOptions}) {
+    int? ttrInSeconds =
+        objectLifeCycleOptions?.cacheRefreshIntervalOnRecipient?.inSeconds;
+
     return AtKey()
       ..key = '$keyId.$collectionName'
       ..sharedWith = sharedWith
       ..metadata = Metadata()
-      ..metadata!.ttr = -1
+      ..metadata!.ttr = ttrInSeconds
+      ..metadata!.ccd = ttrInSeconds != null ? true : false
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
       ..sharedBy = _getAtClient().getCurrentAtSign();
   }
-
 }

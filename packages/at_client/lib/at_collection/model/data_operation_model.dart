@@ -28,9 +28,8 @@ class DataOperationModel {
     required this.dataOperationModelType,
     this.jsonEncodedData,
   }) {
-    if((dataOperationModelType == DataOperationModelType.SAVE) || 
-      (dataOperationModelType == DataOperationModelType.SHARE)
-    ){
+    if ((dataOperationModelType == DataOperationModelType.SAVE) ||
+        (dataOperationModelType == DataOperationModelType.SHARE)) {
       assert(jsonEncodedData != null);
     }
     allData = [];
@@ -39,12 +38,12 @@ class DataOperationModel {
   }
 
   void emitFromStream(AtOperationItemStatus _event) {
-      allData.add(_event);
-      _atShareOperationController.sink.add(_event);
+    allData.add(_event);
+    _atShareOperationController.sink.add(_event);
   }
 
-  _init(){
-    switch(dataOperationModelType){
+  _init() {
+    switch (dataOperationModelType) {
       case DataOperationModelType.SAVE:
         _save();
         break;
@@ -67,7 +66,7 @@ class DataOperationModel {
         atSign: AtClientManager.getInstance().atClient.getCurrentAtSign()!,
         key: atkey.key!,
         complete: null,
-      );
+        operation: Operation.save);
 
     /// update self key
     try {
@@ -88,7 +87,8 @@ class DataOperationModel {
     unawaited(_updateSharedKeys(atkey.key!, jsonEncodedData!));
   }
 
-  Future<void> _updateSharedKeys(String keyWithCollectionName, String _jsonEncodedData) async {
+  Future<void> _updateSharedKeys(
+      String keyWithCollectionName, String _jsonEncodedData) async {
     ///updating shared keys
     var sharedAtKeys = await AtClientManager.getInstance()
         .atClient
@@ -97,14 +97,17 @@ class DataOperationModel {
 
     for (var sharedKey in sharedAtKeys) {
       var atDataStatus = AtOperationItemStatus(
-        atSign: sharedKey.sharedWith!,
-        key: sharedKey.key!,
-        complete: null,
-      );
+          atSign: sharedKey.sharedWith!,
+          key: sharedKey.key!,
+          complete: null,
+          operation: Operation.share);
 
       try {
         /// If self key is not updated, we do not update the shared keys
-        var res = await _put(sharedKey, _jsonEncodedData,);
+        var res = await _put(
+          sharedKey,
+          _jsonEncodedData,
+        );
 
         atDataStatus.complete = res;
       } on AtClientException catch (e) {
@@ -114,7 +117,7 @@ class DataOperationModel {
         atDataStatus.complete = false;
         atDataStatus.exception = Exception('Could not update shared key');
       }
-      
+
       /// Add to stream
       emitFromStream(atDataStatus);
     }
@@ -122,19 +125,20 @@ class DataOperationModel {
     _checkStatusForSaveOperation(DataOperationModelStatus.COMPLETE);
   }
 
-  void _checkStatusForSaveOperation(DataOperationModelStatus _dataOperationModelStatus) {
+  void _checkStatusForSaveOperation(
+      DataOperationModelStatus _dataOperationModelStatus) {
     dataOperationModelStatus = _dataOperationModelStatus;
   }
 
   Future<bool> _put(AtKey _atKey, String _jsonEncodedData) async {
     return await AtClientManager.getInstance().atClient.put(
-      _atKey,
-      _jsonEncodedData,
-    );
+          _atKey,
+          _jsonEncodedData,
+        );
   }
 }
 
-enum DataOperationModelType{
+enum DataOperationModelType {
   SAVE,
   DELETE,
   SHARE,
