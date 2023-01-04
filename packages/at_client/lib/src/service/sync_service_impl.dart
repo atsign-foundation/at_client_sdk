@@ -39,8 +39,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
-  /// static because once listeners are added, they should be agnostic to switch atsign event
-  static final Set<SyncProgressListener> _syncProgressListeners = HashSet();
+  final Set<SyncProgressListener> _syncProgressListeners = HashSet();
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
   static final Map<String, SyncService> _syncServiceMap = {};
