@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_collection/model/at_operation_item_status.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 
@@ -8,9 +9,8 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 ///
 /// e.g
 /// ```
-/// class MyModel extends AtCollectionModel with AtCollectionModelMethods {}
+/// class MyModel extends AtCollectionModel {}
 /// ```
-/// [AtCollectionModelMethods] allows to get all the methods available on [AtCollectionModel] like save, update, delete, share, unshare, getSharedWithList.
 ///
 abstract class AtCollectionModelSpec<T> {
   AtCollectionModelSpec() {
@@ -51,34 +51,26 @@ abstract class AtCollectionModelSpec<T> {
 
   T fromJson(String jsonDecodedData);
 
-
   //////////////////////
-  
   void setObjectLifeCycleOptions();
-
-  static Future<List<Map>> getAllData() async {
-    return [];
-  }
 
   // Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
   // However if you want the object to be just saved and want to share later then pass share as false
   // If true is passed for share but the @signs to share with were never given then no share happens.
-  Future<bool> save({bool share = true, ObjectLifeCycleOptions? options});
+  Stream<AtOperationItemStatus> save(
+      {bool share = true, ObjectLifeCycleOptions? options});
 
-  /// Shares with these additional atSigns. 
-  Future<bool>  shareWith(List<String> atSigns, { ObjectLifeCycleOptions? options});
+  /// Shares with these additional atSigns.
+  Stream<AtOperationItemStatus> shareWith(List<String> atSigns,
+      {ObjectLifeCycleOptions? options});
 
-  /// unshares object with the list of atSigns supplied. 
+  /// unshares object with the list of atSigns supplied.
   /// If no @sign is passed it is unshared with every one with whom it was previously shared with
-  Future<bool>  unshare({List<String>? atSigns});
+  Stream<AtOperationItemStatus> unshare({List<String>? atSigns});
 
   // Returns a list of @sign with whom it is previously shared with
   Future<List<String>> getSharedWith();
 
   // Deletes this object completely and unshares with everyone with whom it is previosly shared with
-  Future<bool> delete();
-
-
-  getId();
- 
+  Stream<AtOperationItemStatus> delete();
 }
