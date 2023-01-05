@@ -73,6 +73,12 @@ class NotificationServiceImpl
   @visibleForTesting
   int monitorRetryCallsToMonitorStart = 0;
 
+  @override
+  bool isActive = true;
+
+  /// Returns the currentAtSign associated with the NotificationService
+  String get currentAtSign => _atClient.getCurrentAtSign()!;
+
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
     if (notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
@@ -501,6 +507,9 @@ class NotificationServiceImpl
       stopAllSubscriptions();
       _logger.finer(
           'removing from _notificationServiceMap: ${_atClient.getCurrentAtSign()}');
+      ((notificationServiceMap[_atClient.getCurrentAtSign()])
+              as NotificationServiceImpl)
+          .isActive = false;
       notificationServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }

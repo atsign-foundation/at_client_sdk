@@ -58,6 +58,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @visibleForTesting
   NetworkUtil networkUtil = NetworkUtil();
 
+  @override
+  bool isActive = true;
+
+  /// Returns the currentAtSign associated with the SyncService
+  String get currentAtSign => _atClient.getCurrentAtSign()!;
+
   static Future<SyncService> create(AtClient atClient,
       {required AtClientManager atClientManager,
       required NotificationService notificationService,
@@ -867,6 +873,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _cron.close();
       _logger.finer(
           'removing from _syncServiceMap: ${_atClient.getCurrentAtSign()}');
+      ((_syncServiceMap[_atClient.getCurrentAtSign()]) as SyncServiceImpl)
+          .isActive = false;
       _syncServiceMap.remove(_atClient.getCurrentAtSign());
     }
   }

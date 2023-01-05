@@ -6,6 +6,7 @@ import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:meta/meta.dart';
 
 /// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
 ///
@@ -66,6 +67,7 @@ class AtClientManager {
         atClientManager: this, notificationService: notificationService);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
+    _clearInactiveListeners();
     return this;
   }
 
@@ -77,5 +79,22 @@ class AtClientManager {
     for (var listener in _changeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
     }
+  }
+
+  /// Clears the inactive AtSignChangeListener from the _changeListeners list.
+  void _clearInactiveListeners() {
+    _changeListeners.removeWhere((listener) => listener.isActive == false);
+  }
+
+  /// NOT A PART of API. Added for unit tests
+  @visibleForTesting
+  int getChangeListenersSize() {
+    return _changeListeners.length;
+  }
+
+  /// NOT A PART of API. Added for unit tests
+  @visibleForTesting
+  Iterator<dynamic> getItemsInChangeListeners() {
+    return _changeListeners.iterator;
   }
 }
