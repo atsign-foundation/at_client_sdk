@@ -9,7 +9,7 @@ import 'dart:convert';
 import 'package:meta/meta.dart';
 
 /// implementation of [AtCollectionModelSpec]
-class AtCollectionModel<T> extends AtCollectionModelSpec {
+abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   final _logger = AtSignLogger('AtCollectionModel');
 
   @visibleForTesting
@@ -36,20 +36,15 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
     return atClient!;
   }
 
-  T convert(String jsonEncodedData) {
-    return fromJson(jsonEncodedData);
-  }
-
   static Future<T> getById<T extends AtCollectionModel>(String keyId,
       {String? collectionName}) async {
     return (await atCollectionRepository.getById<T>(keyId,
         collectionName: collectionName));
   }
 
-  static Future<List<T>> getAll<T extends AtCollectionModel>(
-      {String? collectionName}) async {
-    return (await atCollectionRepository.getAll<T>(
-        collectionName: collectionName));
+  static Stream<T> getAll<T extends AtCollectionModel>(
+      {String? collectionName}) async* {
+    yield* atCollectionRepository.getAll<T>(collectionName: collectionName);
   }
 
   @override
@@ -215,28 +210,6 @@ class AtCollectionModel<T> extends AtCollectionModelSpec {
         print("Error in deleting $sharedKey $e");
       }
     }
-  }
-
-  @override
-  getId() {
-    return id;
-  }
-
-  @override
-  void setObjectLifeCycleOptions() {
-    // TODO: implement setObjectLifeCycleOptions
-  }
-
-  @override
-  fromJson(String jsonDecodedData) {
-    // return T();
-    // TODO: implement fromJson
-  }
-
-  @override
-  Map<String, dynamic> toJson() {
-    // TODO: implement toJson
-    throw UnimplementedError();
   }
 
   /// Throws exception if id or collectionName is not added.
