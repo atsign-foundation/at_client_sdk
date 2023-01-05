@@ -33,7 +33,7 @@ class NotificationServiceImpl
   @visibleForTesting
   static final Map<String, NotificationService> notificationServiceMap = {};
 
-  final _logger = AtSignLogger('NotificationServiceImpl');
+  late final AtSignLogger _logger;
 
   /// Controls whether or not the monitor is actually running.
   /// * monitorIsPaused is initially set to true (monitor should not be running)
@@ -90,6 +90,7 @@ class NotificationServiceImpl
       {Monitor? monitor}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
+    _logger = AtSignLogger('NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
     _monitor = monitor ??
         Monitor(
             _internalNotificationCallback,

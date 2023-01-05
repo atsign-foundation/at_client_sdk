@@ -18,6 +18,7 @@ import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -45,7 +46,7 @@ class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
-  String? currentAtSign;
+  late final String _atSign;
   String? _namespace;
   SecondaryKeyStore? _localSecondaryKeyStore;
   LocalSecondary? _localSecondary;
@@ -66,12 +67,28 @@ class AtClientImpl implements AtClient {
   @experimental
   AtTelemetryService? get telemetry => _telemetry;
 
+  late SyncService _syncService;
+  @override
+  set syncService (SyncService syncService) {
+    _syncService = syncService;
+  }
+  @override
+  SyncService get syncService => _syncService;
+
+  late NotificationService _notificationService;
+  @override
+  set notificationService (NotificationService notificationService) {
+    _notificationService = notificationService;
+  }
+  @override
+  NotificationService get notificationService => _notificationService;
+
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
-  AtClientManager? _atClientManager;
+  late final AtClientManager _atClientManager;
 
-  final _logger = AtSignLogger('AtClientImpl');
+  late final AtSignLogger _logger;
 
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
@@ -100,12 +117,13 @@ class AtClientImpl implements AtClient {
     return atClientInstanceMap[currentAtSign];
   }
 
-  AtClientImpl._(String atSign, String? namespace,
+  AtClientImpl._(String theAtSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
       {RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore}) {
-    currentAtSign = AtUtils.formatAtSign(atSign);
+    _atSign = AtUtils.formatAtSign(theAtSign)!;
+    _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
     _namespace = namespace;
@@ -123,21 +141,20 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
         var storageManager = StorageManager(preference);
-        await storageManager.init(currentAtSign!, preference!.keyStoreSecret);
+        await storageManager.init(_atSign, preference!.keyStoreSecret);
       }
 
       _localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
     }
 
     // Now using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(currentAtSign!, _preference!,
+    _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         privateKey: _preference!.privateKey);
 
     // Now using ??= because we may be injecting an EncryptionService
-    _encryptionService ??= EncryptionService();
+    _encryptionService ??= EncryptionService(_atSign);
 
     _encryptionService!.remoteSecondary = _remoteSecondary;
-    _encryptionService!.currentAtSign = currentAtSign;
     _encryptionService!.localSecondary = _localSecondary;
 
     _cascadeSetTelemetryService();
@@ -183,7 +200,7 @@ class AtClientImpl implements AtClient {
   @override
   @Deprecated("Use SyncManager.sync")
   SyncManager? getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(currentAtSign);
+    return SyncManagerImpl.getInstance().getSyncManager(_atSign);
   }
 
   @override
@@ -230,7 +247,7 @@ class AtClientImpl implements AtClient {
     } else {
       keyWithNamespace = atKey.key!;
     }
-    atKey.sharedBy ??= currentAtSign;
+    atKey.sharedBy ??= _atSign;
     var builder = DeleteVerbBuilder()
       ..isLocal = atKey.isLocal
       ..isCached = atKey.metadata!.isCached
@@ -254,7 +271,7 @@ class AtClientImpl implements AtClient {
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      secondary = SecondaryManager.getSecondary(verbBuilder);
+      secondary = SecondaryManager.getSecondary(this, verbBuilder);
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
       if (getResponse == null ||
@@ -388,7 +405,7 @@ class AtClientImpl implements AtClient {
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
     if (atKey.sharedBy.isNull) {
-      atKey.sharedBy = currentAtSign;
+      atKey.sharedBy = _atSign;
     }
     if (atKey.metadata!.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
@@ -404,7 +421,7 @@ class AtClientImpl implements AtClient {
     var validationResult = AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
-          ..atSign = currentAtSign
+          ..atSign = _atSign
           ..validateOwnership = true
           ..enforceNamespace = enforceNamespace);
     // If the validationResult.isValid is false, validation of AtKey failed.
@@ -426,7 +443,7 @@ class AtClientImpl implements AtClient {
     UpdateVerbBuilder verbBuilder = await PutRequestTransformer(this)
         .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
     // Execute the verb builder
-    var putResponse = await SecondaryManager.getSecondary(verbBuilder)
+    var putResponse = await SecondaryManager.getSecondary(this, verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -446,12 +463,12 @@ class AtClientImpl implements AtClient {
     AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
-          ..atSign = currentAtSign
+          ..atSign = _atSign
           ..validateOwnership = true);
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
     final notifyResult =
-        await _atClientManager!.notificationService.notify(notificationParams);
+        await _atClientManager.notificationService.notify(notificationParams);
     return notifyResult.notificationStatusEnum ==
         NotificationStatusEnum.delivered;
   }
@@ -465,7 +482,7 @@ class AtClientImpl implements AtClient {
       atKey.sharedWith = sharedWith;
       final notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
-      final notifyResult = await _atClientManager!.notificationService
+      final notifyResult = await _atClientManager.notificationService
           .notify(notificationParams);
       returnMap.putIfAbsent(
           sharedWith,
@@ -511,7 +528,7 @@ class AtClientImpl implements AtClient {
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = updateKey
-      ..sharedBy = currentAtSign
+      ..sharedBy = _atSign
       ..sharedWith = sharedWith
       ..ttl = metadata.ttl
       ..ttb = metadata.ttb
@@ -580,7 +597,7 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(currentAtSign!, _preference!);
+    var remoteSecondary = RemoteSecondary(_atSign, _preference!);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
@@ -621,7 +638,7 @@ class AtClientImpl implements AtClient {
     var notification = AtStreamNotification()
       ..streamId = streamId
       ..fileName = fileName
-      ..currentAtSign = currentAtSign!
+      ..currentAtSign = _atSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
     _logger.info('Sending ack for stream notification:$notification');
@@ -663,10 +680,10 @@ class AtClientImpl implements AtClient {
           ..metadata!.ttr = -1
           // file transfer key will be deleted after 30 days
           ..metadata!.ttl = 2592000000
-          ..sharedBy = currentAtSign;
+          ..sharedBy = _atSign;
 
         var notificationResult =
-            await _atClientManager!.notificationService.notify(
+            await _atClientManager.notificationService.notify(
           NotificationParams.forUpdate(
             atKey,
             value: jsonEncode(fileTransferObject.toJson()),
@@ -798,9 +815,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  String? getCurrentAtSign() {
-    return currentAtSign;
-  }
+  String? getCurrentAtSign() => _atSign;
 
   @override
   AtClientPreference? getPreferences() {
@@ -815,10 +830,8 @@ class AtClientImpl implements AtClient {
     AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
     // Check if sharedWith AtSign exists
     await AtClientValidation().isAtSignExists(
-        AtClientManager.getInstance().secondaryAddressFinder!,
-        notificationParams.atKey.sharedWith!,
-        _preference!.rootDomain,
-        _preference!.rootPort);
+        _atClientManager.secondaryAddressFinder!,
+        notificationParams.atKey.sharedWith!);
     // validate sharedBy atSign
     if (notificationParams.atKey.sharedBy == null ||
         notificationParams.atKey.sharedBy!.isEmpty) {
@@ -833,7 +846,7 @@ class AtClientImpl implements AtClient {
       ValidationResult validationResult = AtKeyValidators.get().validate(
           notificationParams.atKey.toString(),
           ValidationContext()
-            ..atSign = currentAtSign
+            ..atSign = _atSign
             ..validateOwnership = true);
       if (!validationResult.isValid) {
         throw AtClientException('AT0014', validationResult.failureReason);
@@ -846,7 +859,7 @@ class AtClientImpl implements AtClient {
         notificationParams.atKey.metadata!.namespaceAware) {
       notifyKey = _getKeyWithNamespace(notifyKey!);
     }
-    notificationParams.atKey.sharedBy ??= currentAtSign;
+    notificationParams.atKey.sharedBy ??= _atSign;
 
     var builder = NotifyVerbBuilder()
       ..id = notificationParams.id
@@ -867,10 +880,10 @@ class AtClientImpl implements AtClient {
       // If atKey is being notified to another atSign, encrypt data with other
       // atSign encryption public key.
       if (notificationParams.atKey.sharedWith != null &&
-          notificationParams.atKey.sharedWith != currentAtSign) {
+          notificationParams.atKey.sharedWith != _atSign) {
         try {
           final atKeyEncryption = AtKeyEncryptionManager(this)
-              .get(notificationParams.atKey, currentAtSign!);
+              .get(notificationParams.atKey, _atSign);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
@@ -880,10 +893,10 @@ class AtClientImpl implements AtClient {
       }
       // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
       if (notificationParams.atKey.sharedWith == null ||
-          notificationParams.atKey.sharedWith == currentAtSign) {
+          notificationParams.atKey.sharedWith == _atSign) {
         try {
           final atKeyEncryption = AtKeyEncryptionManager(this)
-              .get(notificationParams.atKey, currentAtSign!);
+              .get(notificationParams.atKey, _atSign);
           builder.value = await atKeyEncryption.encrypt(
               notificationParams.atKey, notificationParams.value!);
         } on KeyNotFoundException catch (e) {
@@ -946,11 +959,10 @@ class AtClientImpl implements AtClient {
 
   @Deprecated("Use [create]")
   AtClientImpl(
-      // ignore: no_leading_underscores_for_local_identifiers
-      String _atSign,
+      String atSign,
       String? namespace,
       AtClientPreference preference) {
-    currentAtSign = AtUtils.formatAtSign(_atSign);
+    _atSign = AtUtils.formatAtSign(atSign)!;
     _preference = preference;
     _namespace = namespace;
   }

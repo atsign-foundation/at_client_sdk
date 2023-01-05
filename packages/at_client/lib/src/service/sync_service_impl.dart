@@ -51,7 +51,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   Function? onDone;
 
-  final _logger = AtSignLogger('SyncService');
+  late final AtSignLogger _logger;
 
   late AtClientManager _atClientManager;
 
@@ -83,6 +83,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       RemoteSecondary remoteSecondary) {
     _atClientManager = atClientManager;
     _atClient = atClient;
+    _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
     _remoteSecondary = remoteSecondary;
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _atClientManager.listenToAtSignChange(this);

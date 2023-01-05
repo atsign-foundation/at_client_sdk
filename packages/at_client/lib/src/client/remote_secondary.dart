@@ -15,7 +15,7 @@ import 'package:meta/meta.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
-  var logger = AtSignLogger('RemoteSecondary');
+  late final AtSignLogger logger;
 
   late String _atSign;
 
@@ -26,6 +26,7 @@ class RemoteSecondary implements Secondary {
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey}) {
     _atSign = AtUtils.formatAtSign(atSign)!;
+    logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     privateKey ??= preference.privateKey;
     SecureSocketConfig secureSocketConfig = SecureSocketConfig();
