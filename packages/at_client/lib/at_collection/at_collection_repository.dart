@@ -5,8 +5,7 @@ import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
-
-class AtCollectionRepository{
+class AtCollectionRepository {
   final _logger = AtSignLogger('AtCollectionRepository');
 
   @visibleForTesting
@@ -28,12 +27,14 @@ class AtCollectionRepository{
     return t.fromJson(jsonDecodedData) as T;
   }
 
-  Future<List<T>> getAll<T extends AtCollectionModel>({String? collectionName}) async {
+  Stream<T> getAll<T extends AtCollectionModel>(
+      {String? collectionName}) async* {
     _collectionName = collectionName ?? T.toString().toLowerCase();
 
     List<T> dataList = [];
 
-    var collectionAtKeys = await _getAtClient().getAtKeys(regex: _collectionName);
+    var collectionAtKeys =
+        await _getAtClient().getAtKeys(regex: _collectionName);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
 
     /// TODO: can there be a scenario when key is available but we can't get data
@@ -42,16 +43,15 @@ class AtCollectionRepository{
       try {
         var atValue = await _getAtClient().get(atKey);
         var data = _convert<T>(atValue.value);
-        dataList.add(data);
+        yield data;
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
       }
     }
-
-    return dataList;
   }
 
-  Future<T> getById<T extends AtCollectionModel>(String keyId, {String? collectionName}) async {
+  Future<T> getById<T extends AtCollectionModel>(String keyId,
+      {String? collectionName}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
 
     AtKey atKey = keyMaker.createSelfKey(
@@ -71,15 +71,18 @@ class AtCollectionRepository{
 }
 
 class ClassActivator {
-  static createInstance(Type type, [Symbol? constructor, List?
-      arguments, Map<Symbol, dynamic>? namedArguments]) {
+  static createInstance(Type type,
+      [Symbol? constructor,
+      List? arguments,
+      Map<Symbol, dynamic>? namedArguments]) {
     constructor ??= const Symbol("");
     arguments ??= const [];
 
     var typeMirror = reflectType(type);
     if (typeMirror is ClassMirror) {
-      return typeMirror.newInstance(constructor, arguments, 
-        (namedArguments ?? {})).reflectee;
+      return typeMirror
+          .newInstance(constructor, arguments, (namedArguments ?? {}))
+          .reflectee;
     } else {
       throw ArgumentError("Cannot create the instance of the type '$type'.");
     }

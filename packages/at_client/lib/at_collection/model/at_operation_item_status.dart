@@ -1,7 +1,7 @@
 class AtOperationItemStatus {
   late String atSign;
   late String key;
-  bool? complete;
+  bool complete;
   Exception? exception;
   Operation? operation;
 

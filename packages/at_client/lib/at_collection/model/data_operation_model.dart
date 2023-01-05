@@ -65,7 +65,7 @@ class DataOperationModel {
     var atDataStatus = AtOperationItemStatus(
         atSign: AtClientManager.getInstance().atClient.getCurrentAtSign()!,
         key: atkey.key!,
-        complete: null,
+        complete: false,
         operation: Operation.save);
 
     /// update self key
@@ -99,7 +99,7 @@ class DataOperationModel {
       var atDataStatus = AtOperationItemStatus(
           atSign: sharedKey.sharedWith!,
           key: sharedKey.key!,
-          complete: null,
+          complete: false,
           operation: Operation.share);
 
       try {
