@@ -18,7 +18,7 @@ import 'package:at_utils/at_utils.dart';
 /// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
 /// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
 class AtClientManager {
-  late String _atSign;
+  String? _atSign;
   AtClient? _previousAtClient;
   late AtClient _currentAtClient;
 
@@ -61,12 +61,12 @@ class AtClientManager {
       return this;
     }
 
-    String previousAtSign = _atSign;
+    String? previousAtSign = _atSign;
 
     _atSign = atSign;
 
     _logger.info("setCurrentAtSign calling AtClientImpl.create for $_atSign");
-    _currentAtClient = await AtClientImpl.create(_atSign, namespace, preference,
+    _currentAtClient = await AtClientImpl.create(_atSign!, namespace, preference,
         atClientManager: this);
     final switchAtSignEvent =
         SwitchAtSignEvent(_previousAtClient, _currentAtClient);
