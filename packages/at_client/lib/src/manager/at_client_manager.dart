@@ -67,7 +67,6 @@ class AtClientManager {
         atClientManager: this, notificationService: notificationService);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
-    _clearInactiveListeners();
     return this;
   }
 
@@ -76,14 +75,15 @@ class AtClientManager {
   }
 
   void _notifyListeners(SwitchAtSignEvent switchAtSignEvent) {
-    for (var listener in _changeListeners) {
+    List changeListenerClone = List.from(_changeListeners);
+    for (var listener in changeListenerClone) {
       listener.listenToAtSignChange(switchAtSignEvent);
     }
   }
 
   /// Clears the inactive AtSignChangeListener from the _changeListeners list.
-  void _clearInactiveListeners() {
-    _changeListeners.removeWhere((listener) => listener.isActive == false);
+  void removeChangeListeners(AtSignChangeListener atSignChangeListener) {
+    _changeListeners.remove((atSignChangeListener));
   }
 
   /// NOT A PART of API. Added for unit tests
