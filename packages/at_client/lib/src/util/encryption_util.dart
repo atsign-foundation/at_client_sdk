@@ -46,6 +46,7 @@ class EncryptionUtil {
     return rsaPublicKey.encrypt(aesKey);
   }
 
+  @Deprecated('Use AtChops package')
   static String decryptKey(String aesKey, String privateKey) {
     var rsaPrivateKey = RSAPrivateKey.fromString(privateKey);
     return rsaPrivateKey.decrypt(aesKey);
