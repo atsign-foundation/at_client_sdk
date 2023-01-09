@@ -77,8 +77,8 @@ class AtClientManager {
         SecondaryPersistenceStoreFactory.getInstance()
             .getSecondaryPersistenceStore(atSign);
     AtClientCommitLogCompaction atClientCommitLogCompaction =
-        AtClientCommitLogCompaction.create(this, atSign,
-            AtCompactionJob(atCommitLog!, secondaryPersistentStore!));
+        AtClientCommitLogCompaction.create(
+            this, AtCompactionJob(atCommitLog!, secondaryPersistentStore!));
     atClientCommitLogCompaction.scheduleCompaction(
         AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins,
         atSign);
