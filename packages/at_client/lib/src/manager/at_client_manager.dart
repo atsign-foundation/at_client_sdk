@@ -75,8 +75,8 @@ class AtClientManager {
   }
 
   void _notifyListeners(SwitchAtSignEvent switchAtSignEvent) {
-    List changeListenerClone = List.from(_changeListeners);
-    for (var listener in changeListenerClone) {
+    List<AtSignChangeListener> copyOfChangeListeners = List.from(_changeListeners);
+    for (var listener in copyOfChangeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
     }
   }
