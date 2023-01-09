@@ -973,27 +973,4 @@ class AtClientImpl implements AtClient {
     _preference = preference;
     _namespace = namespace;
   }
-
-  Future<AtChops> _createAtChopsInstance() async {
-    final atEncryptionPublicKey =
-    await _localSecondary!.getEncryptionPublicKey(currentAtSign!);
-    final atEncryptionPrivateKey =
-    await _localSecondary!.getEncryptionPrivateKey();
-
-    if (atEncryptionPrivateKey == null || atEncryptionPublicKey == null) {
-      throw Exception('AtEncryptionKeyPair cannot be created with a null key');
-    }
-    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        atEncryptionPublicKey, atEncryptionPrivateKey);
-
-    final atPkamPublicKey = await _localSecondary!.getPublicKey();
-    final atPkamPrivateKey = await _localSecondary!.getPrivateKey();
-    if (atPkamPublicKey == null || atPkamPrivateKey == null) {
-      throw Exception('AtPkamKeyPair cannot be created with a null key');
-    }
-    final atPkamKeyPair =
-    AtPkamKeyPair.create(atPkamPublicKey, atPkamPrivateKey);
-    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    return AtChopsImpl(atChopsKeys);
-  }
 }
