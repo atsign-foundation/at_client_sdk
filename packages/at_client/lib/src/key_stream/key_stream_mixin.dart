@@ -457,13 +457,9 @@ class KeyStreamDisposeListener extends AtSignChangeListener {
   KeyStreamDisposeListener(KeyStreamMixin ref) : _ref = ref;
 
   @override
-  bool isActive = true;
-
-  @override
   Future<void> listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) async {
     if (_ref.disposeOnAtsignChange) {
       await _ref.dispose();
-      isActive = false;
     }
   }
 }

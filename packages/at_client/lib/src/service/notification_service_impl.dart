@@ -122,8 +122,7 @@ class NotificationServiceImpl
     }
     try {
       _initializing = true;
-      _logger.finer(
-          '${_atClient.getCurrentAtSign()} notification service _init()');
+      _logger.finer('${_atClient.getCurrentAtSign()} notification service _init()');
       await _startMonitor();
       _logger.finer(
           '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
@@ -134,8 +133,7 @@ class NotificationServiceImpl
         // for example by switching atSigns
         _connectivityListener!.subscribe().listen((isConnected) {
           if (isConnected) {
-            _logger.finer(
-                '${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
+            _logger.finer('${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
             _startMonitor();
           } else {
             _logger.finer('lost network connectivity');
@@ -160,16 +158,14 @@ class NotificationServiceImpl
     try {
       lastNotificationTime = await getLastNotificationTime();
     } catch (e) {
-      _logger.warning(
-          '${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
+      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
       return;
     }
 
     try {
       await _monitor!.start(lastNotificationTime: lastNotificationTime);
     } catch (e) {
-      _logger.warning(
-          '${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
+      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
       return;
     }
   }
@@ -227,8 +223,7 @@ class NotificationServiceImpl
 
   @override
   void stopAllSubscriptions() {
-    _logger.finer(
-        'stopAllSubscriptions() called - setting monitorIsPaused to true');
+    _logger.finer('stopAllSubscriptions() called - setting monitorIsPaused to true');
     monitorIsPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
@@ -279,7 +274,6 @@ class NotificationServiceImpl
   }
 
   @visibleForTesting
-
   /// Called by [NotificationServiceImpl]'s Monitor when the Monitor has detected that it (the Monitor) has
   /// failed and needs to be retried.
   /// * Returns _true_ if a call to Monitor.start() has been queued, _false_ otherwise.
@@ -310,14 +304,11 @@ class NotificationServiceImpl
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
     Future.delayed(monitorRetryInterval, () async {
       monitorRestartQueued = false;
-      if (monitorIsPaused) {
-        // maybe it's been paused during the time since the retry was requested
-        _logger.warning(
-            "monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
+      if (monitorIsPaused) { // maybe it's been paused during the time since the retry was requested
+        _logger.warning("monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
       } else {
         monitorRetryCallsToMonitorStart++;
-        await _monitor!
-            .start(lastNotificationTime: await getLastNotificationTime());
+        await _monitor!.start(lastNotificationTime: await getLastNotificationTime());
         // Note we do not need to handle exceptions as Monitor.start handles all of them.
         // Additionally, we do not need to queue another monitor retry, since Monitor.start
         // will call this function (_monitorRetry) if required
@@ -332,10 +323,8 @@ class NotificationServiceImpl
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
