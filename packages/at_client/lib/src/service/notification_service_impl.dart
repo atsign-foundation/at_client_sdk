@@ -496,6 +496,12 @@ class NotificationServiceImpl
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
+    // Checks if the NotificationServiceImpl instance is associated with
+    // the previousAtClient atSign. If yes, subscriptions on notification
+    // service is stopped, removed the notification service from notificationServiceMap.
+    // If atClient.getCurrentAtSign returns the atSign associated with NotificationService.
+    // The below condition ensures the NotificationService is not stopped on
+    // the new atSign.
     if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
         _atClient.getCurrentAtSign()) {
       // actions for previous atSign

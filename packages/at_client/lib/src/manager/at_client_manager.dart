@@ -75,13 +75,16 @@ class AtClientManager {
   }
 
   void _notifyListeners(SwitchAtSignEvent switchAtSignEvent) {
+    // Copying the items in _changeListener to a new list to avoid
+    // concurrent modification exception when removing the previous
+    // atSign listeners
     List<AtSignChangeListener> copyOfChangeListeners = List.from(_changeListeners);
     for (var listener in copyOfChangeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
     }
   }
 
-  /// Clears the inactive AtSignChangeListener from the _changeListeners list.
+  /// Removes the given listener from the _changeListeners list.
   void removeChangeListeners(AtSignChangeListener atSignChangeListener) {
     _changeListeners.remove((atSignChangeListener));
   }

@@ -66,6 +66,12 @@ void main() {
       expect(atClientManager.getChangeListenersSize(), 2);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign, namespace, atClientPreference);
       expect(atClientManager.getChangeListenersSize(), 2);
       // Verify the listeners in [AtClientManager._changeListeners] list belongs
       // to the new atSign. Here @alice.
@@ -76,6 +82,64 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
+        }
+      }
+    });
+
+    test('A test to verify atSigns switched multiple times', () async {
+      String atSign1 = '@alice';
+      String atSign2 = '@bob';
+      String atSign3 = '@emoji';
+      String namespace = 'wavi';
+      AtClientPreference atClientPreference = AtClientPreference();
+      var atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign1, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign2, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign1, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign2, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign3, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign2, namespace, atClientPreference);
+
+      // Verify the listeners in [AtClientManager._changeListeners] list belongs
+      // to the new atSign. Here @bob.
+      var itr = atClientManager.getItemsInChangeListeners();
+      while (itr.moveNext()) {
+        if (itr.current is NotificationService) {
+          expect(
+              (itr.current as NotificationServiceImpl).currentAtSign, atSign2);
+        } else if (itr.current is SyncService) {
+          expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
+        }
+      }
+    });
+
+    test('A test to verify atSigns switched between three different atSign',
+        () async {
+      String atSign1 = '@alice';
+      String atSign2 = '@bob';
+      String atSign3 = '@emoji';
+      String namespace = 'wavi';
+      AtClientPreference atClientPreference = AtClientPreference();
+      var atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign1, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign2, namespace, atClientPreference);
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign3, namespace, atClientPreference);
+      // Verify the listeners in [AtClientManager._changeListeners] list belongs
+      // to the new atSign. Here @bob.
+      var itr = atClientManager.getItemsInChangeListeners();
+      while (itr.moveNext()) {
+        if (itr.current is NotificationService) {
+          expect(
+              (itr.current as NotificationServiceImpl).currentAtSign, atSign3);
+        } else if (itr.current is SyncService) {
+          expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
         }
       }
     });
