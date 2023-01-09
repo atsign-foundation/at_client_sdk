@@ -84,7 +84,8 @@ class AtClientManager {
     }
   }
 
-  /// Removes the given listener from the _changeListeners list.
+  /// Removes the given listener from the list of listeners,
+  /// that are notified whenever the @sign is switched
   void removeChangeListeners(AtSignChangeListener atSignChangeListener) {
     _changeListeners.remove((atSignChangeListener));
   }
