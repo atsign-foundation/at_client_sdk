@@ -36,6 +36,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
@@ -50,6 +51,9 @@ class AtClientImpl implements AtClient {
   SecondaryKeyStore? _localSecondaryKeyStore;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
+
+  @override
+  AtChops? _atChops;
 
   EncryptionService? _encryptionService;
 
@@ -68,6 +72,14 @@ class AtClientImpl implements AtClient {
   AtTelemetryService? get telemetry => _telemetry;
 
   @override
+  set atChops(AtChops? atChops) {
+    _atChops = atChops;
+  }
+
+  @override
+  AtChops? get atChops => _atChops;
+
+  @override
   EncryptionService? get encryptionService => _encryptionService;
 
   AtClientManager? _atClientManager;
@@ -80,9 +92,10 @@ class AtClientImpl implements AtClient {
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
       {AtClientManager? atClientManager,
-      RemoteSecondary? remoteSecondary,
-      EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore}) async {
+        RemoteSecondary? remoteSecondary,
+        EncryptionService? encryptionService,
+        SecondaryKeyStore? localSecondaryKeyStore,
+        AtChops? atChops}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       return atClientInstanceMap[currentAtSign];
@@ -93,7 +106,8 @@ class AtClientImpl implements AtClient {
         currentAtSign, namespace, preferences, atClientManager,
         remoteSecondary: remoteSecondary,
         encryptionService: encryptionService,
-        localSecondaryKeyStore: localSecondaryKeyStore);
+        localSecondaryKeyStore: localSecondaryKeyStore,
+        atChops: atChops);
 
     await atClientImpl._init();
 
@@ -104,8 +118,9 @@ class AtClientImpl implements AtClient {
   AtClientImpl._(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
       {RemoteSecondary? remoteSecondary,
-      EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore}) {
+        EncryptionService? encryptionService,
+        SecondaryKeyStore? localSecondaryKeyStore,
+        AtChops? atChops}) {
     currentAtSign = AtUtils.formatAtSign(atSign);
     _preference = preference;
     _preference?.namespace ??= namespace;
@@ -118,6 +133,7 @@ class AtClientImpl implements AtClient {
     }
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
+    _atChops = atChops;
   }
 
   Future<void> _init() async {
@@ -140,7 +156,6 @@ class AtClientImpl implements AtClient {
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.currentAtSign = currentAtSign;
     _encryptionService!.localSecondary = _localSecondary;
-
     _cascadeSetTelemetryService();
   }
 
@@ -208,7 +223,7 @@ class AtClientImpl implements AtClient {
 
   Future<String?> getPrivateKey(String atSign) async {
     var privateKeyData =
-        await getLocalSecondary()!.keyStore!.get(AT_PKAM_PRIVATE_KEY);
+    await getLocalSecondary()!.keyStore!.get(AT_PKAM_PRIVATE_KEY);
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
@@ -238,7 +253,7 @@ class AtClientImpl implements AtClient {
       ..isLocal = atKey.isLocal
       ..isCached = atKey.metadata!.isCached
       ..isPublic =
-          (atKey.metadata!.isPublic == null) ? false : atKey.metadata!.isPublic!
+      (atKey.metadata!.isPublic == null) ? false : atKey.metadata!.isPublic!
       ..sharedWith = atKey.sharedWith
       ..atKey = keyWithNamespace
       ..sharedBy = atKey.sharedBy;
@@ -271,7 +286,7 @@ class AtClientImpl implements AtClient {
         ..two = (getResponse);
       // Transform the response and return
       var atValue =
-          await GetResponseTransformer(this).transform(getResponseTuple);
+      await GetResponseTransformer(this).transform(getResponseTuple);
       return atValue;
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
@@ -292,9 +307,9 @@ class AtClientImpl implements AtClient {
   @override
   Future<List<String>> getKeys(
       {String? regex,
-      String? sharedBy,
-      String? sharedWith,
-      bool showHiddenKeys = false}) async {
+        String? sharedBy,
+        String? sharedWith,
+        bool showHiddenKeys = false}) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
@@ -313,9 +328,9 @@ class AtClientImpl implements AtClient {
   @override
   Future<List<AtKey>> getAtKeys(
       {String? regex,
-      String? sharedBy,
-      String? sharedWith,
-      bool showHiddenKeys = false}) async {
+        String? sharedBy,
+        String? sharedWith,
+        bool showHiddenKeys = false}) async {
     var getKeysResult = await getKeys(
         regex: regex,
         sharedBy: sharedBy,
@@ -447,20 +462,20 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
-      PriorityEnum? priority,
-      StrategyEnum? strategy,
-      int? latestN,
-      String? notifier = SYSTEM,
-      bool isDedicated = false}) async {
+        PriorityEnum? priority,
+        StrategyEnum? strategy,
+        int? latestN,
+        String? notifier = SYSTEM,
+        bool isDedicated = false}) async {
     AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
           ..atSign = currentAtSign
           ..validateOwnership = true);
     final notificationParams =
-        NotificationParams.forUpdate(atKey, value: value);
+    NotificationParams.forUpdate(atKey, value: value);
     final notifyResult =
-        await _atClientManager!.notificationService.notify(notificationParams);
+    await _atClientManager!.notificationService.notify(notificationParams);
     return notifyResult.notificationStatusEnum ==
         NotificationStatusEnum.delivered;
   }
@@ -473,12 +488,12 @@ class AtClientImpl implements AtClient {
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
       final notificationParams =
-          NotificationParams.forUpdate(atKey, value: value);
+      NotificationParams.forUpdate(atKey, value: value);
       final notifyResult = await _atClientManager!.notificationService
           .notify(notificationParams);
       returnMap.putIfAbsent(
           sharedWith,
-          () => (notifyResult.notificationStatusEnum ==
+              () => (notifyResult.notificationStatusEnum ==
               NotificationStatusEnum.delivered));
     }
     return jsonEncode(returnMap);
@@ -494,9 +509,9 @@ class AtClientImpl implements AtClient {
   @override
   Future<String> notifyList(
       {String? fromDate,
-      String? toDate,
-      String? regex,
-      bool isDedicated = false}) async {
+        String? toDate,
+        String? regex,
+        bool isDedicated = false}) async {
     try {
       var builder = NotifyListVerbBuilder()
         ..fromDate = fromDate
@@ -585,7 +600,7 @@ class AtClientImpl implements AtClient {
     var fileName = basename(filePath);
     fileName = base64.encode(utf8.encode(fileName));
     var encryptedData =
-        await _encryptionService!.encryptStream(data, sharedWith);
+    await _encryptionService!.encryptStream(data, sharedWith);
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
@@ -670,12 +685,12 @@ class AtClientImpl implements AtClient {
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
           ..metadata!.ttr = -1
-          // file transfer key will be deleted after 30 days
+        // file transfer key will be deleted after 30 days
           ..metadata!.ttl = 2592000000
           ..sharedBy = currentAtSign;
 
         var notificationResult =
-            await _atClientManager!.notificationService.notify(
+        await _atClientManager!.notificationService.notify(
           NotificationParams.forUpdate(
             atKey,
             value: jsonEncode(fileTransferObject.toJson()),
@@ -710,7 +725,7 @@ class AtClientImpl implements AtClient {
         final encryptedFile = await _encryptionService!.encryptFileInChunks(
             file, encryptionKey, _preference!.fileEncryptionChunkSize);
         var response =
-            await FileTransferService().uploadToFileBinWithStreamedRequest(
+        await FileTransferService().uploadToFileBinWithStreamedRequest(
           encryptedFile,
           transferId,
           fileStatus.fileName!,
@@ -726,7 +741,7 @@ class AtClientImpl implements AtClient {
         // storing sent files in a a directory.
         if (preference?.downloadPath != null) {
           var sentFilesDirectory = await Directory(
-                  '${preference!.downloadPath!}${Platform.pathSeparator}sent-files')
+              '${preference!.downloadPath!}${Platform.pathSeparator}sent-files')
               .create();
           await File(file.path).copy(sentFilesDirectory.path +
               Platform.pathSeparator +
@@ -767,7 +782,7 @@ class AtClientImpl implements AtClient {
             error_codes['AtClientException'], 'FileTransferObject is null');
       }
       fileTransferObject =
-          FileTransferObject.fromJson(jsonDecode(result.value))!;
+      FileTransferObject.fromJson(jsonDecode(result.value))!;
     } on Exception catch (e) {
       throw Exception('json decode exception in download file ${e.toString()}');
     }
@@ -778,7 +793,9 @@ class AtClientImpl implements AtClient {
       throw Exception('download fail');
     }
     var encryptedFileList =
-        Directory(fileDownloadResponse.filePath!).listSync();
+
+    Directory(fileDownloadResponse.filePath!).listSync();
+
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(

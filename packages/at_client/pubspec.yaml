@@ -28,20 +28,34 @@ dependencies:
   http: ^0.13.5
   internet_connection_checker: ^0.0.1+4
   async: ^2.9.0
-  at_persistence_spec: ^2.0.9
-  at_persistence_secondary_server: ^3.0.43
-  at_lookup: ^3.0.32
+  at_persistence_spec: ^2.0.10
+  at_persistence_secondary_server: ^3.0.44
+  at_lookup: ^3.0.35
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.32
+  at_commons: ^3.0.34
   at_utils: ^3.0.11
   meta: ^1.8.0
+  at_chops: ^1.0.0
+
 dependency_overrides:
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: packages/at_commons
       ref: atkey_lowercase
+#  at_lookup:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: packages/at_lookup
+#      ref: publish_atlookup
+#  at_chops:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: packages/at_chops
+#      ref: at_chops
+#    path: ../../../at_libraries/packages/at_chops
+
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.21.4

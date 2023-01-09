@@ -16,6 +16,21 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_tools.git
       path: packages/at_commons
       ref: trunk
+#  at_chops:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: packages/at_chops
+#      ref: at_chops
+#  at_client:
+#    git:
+#      url: https://github.com/atsign-foundation/at_client_sdk.git
+#      path: packages/at_client
+#      ref: uptake_atchops
+#  at_lookup:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: packages/at_lookup
+#      ref: publish_atlookup
 
 dev_dependencies:
   test: ^1.21.4
