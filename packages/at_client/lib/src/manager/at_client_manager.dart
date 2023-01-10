@@ -82,18 +82,6 @@ class AtClientManager {
         atSign);
     _previousAtClient = _currentAtClient;
     _notifyListeners(switchAtSignEvent);
-    //Start commit log compaction job
-    var atCommitLog =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-    var secondaryPersistentStore =
-        SecondaryPersistenceStoreFactory.getInstance()
-            .getSecondaryPersistenceStore(atSign);
-    AtClientCommitLogCompaction atClientCommitLogCompaction =
-        AtClientCommitLogCompaction.create(this, atSign,
-            AtCompactionJob(atCommitLog!, secondaryPersistentStore!));
-    atClientCommitLogCompaction.scheduleCompaction(
-        AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins,
-        atSign);
     return this;
   }
 
