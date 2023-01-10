@@ -22,13 +22,13 @@ dependencies:
   at_utils: ^3.0.11
 
 #dependency_overrides:
-#   at_client:
-#     path: ../at_client
 #  at_commons:
 #    git:
 #      url: https://github.com/atsign-foundation/at_tools.git
 #      path: at_commons
 #      ref: trunk
+#   at_client:
+#     path: ../at_client
 #    git:
 #      url: https://github.com/atsign-foundation/at_client_sdk.git
 #      path: at_lookup
