@@ -39,8 +39,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
-  /// static because once listeners are added, they should be agnostic to switch atsign event
-  static final Set<SyncProgressListener> _syncProgressListeners = HashSet();
+  final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
   static final Map<String, SyncService> _syncServiceMap = {};
@@ -414,7 +413,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     List<KeyInfo> keyInfoList = [];
     int lastReceivedServerCommitId = localCommitId;
     while (serverCommitId > lastReceivedServerCommitId) {
-      _sendTelemetry('_syncFromServer.whileLoop', {"serverCommitId":serverCommitId, "lastReceivedServerCommitId":lastReceivedServerCommitId});
+      _sendTelemetry('_syncFromServer.whileLoop', {
+        "serverCommitId": serverCommitId,
+        "lastReceivedServerCommitId": lastReceivedServerCommitId
+      });
 
       var syncBuilder = SyncVerbBuilder()
         ..commitId = localCommitId
@@ -443,13 +445,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       // Iterates over each commit
       for (dynamic serverCommitEntry in syncResponseJson) {
-        _sendTelemetry(
-            '_syncFromServer.forEachEntry.start',
-            {
-              "atKey":serverCommitEntry['atKey'],
-              "operation":serverCommitEntry['operation'],
-              "commitId":serverCommitEntry['commitId'],
-            });
+        _sendTelemetry('_syncFromServer.forEachEntry.start', {
+          "atKey": serverCommitEntry['atKey'],
+          "operation": serverCommitEntry['operation'],
+          "commitId": serverCommitEntry['commitId'],
+        });
         if (serverCommitEntry['commitId'] is int) {
           lastReceivedServerCommitId = serverCommitEntry['commitId'];
         } else {
@@ -463,19 +463,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           keyInfo.conflictInfo = conflictInfo;
           await _syncLocal(serverCommitEntry);
           keyInfoList.add(keyInfo);
-          _sendTelemetry(
-              '_syncFromServer.forEachEntry.end',
-              {
-                'atKey': keyInfo.key,
-                'syncDirection': keyInfo.syncDirection,
-                'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
-              });
+          _sendTelemetry('_syncFromServer.forEachEntry.end', {
+            'atKey': keyInfo.key,
+            'syncDirection': keyInfo.syncDirection,
+            'errorOrExceptionMessage':
+                keyInfo.conflictInfo?.errorOrExceptionMessage
+          });
         } on Exception catch (e, stacktrace) {
-          _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e":e,"st":stacktrace});
+          _sendTelemetry('_syncFromServer.forEachEntry.exception',
+              {"e": e, "st": stacktrace});
           _logger.severe(
               'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
         } on Error catch (e, stacktrace) {
-          _sendTelemetry('_syncFromServer.forEachEntry.error', {"e":e,"st":stacktrace});
+          _sendTelemetry(
+              '_syncFromServer.forEachEntry.error', {"e": e, "st": stacktrace});
           _logger.severe(
               'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
         }
@@ -869,7 +870,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _cron.close();
       _logger.finer(
           'removing from _syncServiceMap: ${_atClient.getCurrentAtSign()}');
-      _syncServiceMap.remove(_atClient.getCurrentAtSign());
+      final previousSyncService =
+          _syncServiceMap.remove(_atClient.getCurrentAtSign());
+      previousSyncService?.removeAllProgressListeners();
     }
   }
 
@@ -879,14 +882,19 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @visibleForTesting
-  int syncProgressListenerSize(){
+  int syncProgressListenerSize() {
     return _syncProgressListeners.length;
+  }
+
+  @override
+  void removeAllProgressListeners() {
+    _syncProgressListeners.clear();
   }
 
   ///Method only for testing
   ///Clears all in-memory entities belonging to the syncService
   @visibleForTesting
-  void clearSyncEntities(){
+  void clearSyncEntities() {
     _syncRequests.clear();
     _syncProgressListeners.clear();
     _syncServiceMap.clear();
