@@ -1,4 +1,4 @@
-##
+## 3.0.51
 - feat: Introduce commit log compaction to keep size of commit log thin
 - fix: Fixed a bug where switch atSign event is notified multiple times
 ## 3.0.50
