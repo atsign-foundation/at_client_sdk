@@ -29,10 +29,6 @@ class NotificationServiceImpl
   static const notificationIdKey = '_latestNotificationIdv2';
   static const lastReceivedNotificationKey = 'lastReceivedNotification';
 
-  /// Contains a map of created [NotificationServiceImpl]s, keyed by AtSign
-  @visibleForTesting
-  static final Map<String, NotificationService> notificationServiceMap = {};
-
   late final AtSignLogger _logger;
 
   /// Controls whether or not the monitor is actually running.
