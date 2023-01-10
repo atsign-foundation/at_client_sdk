@@ -26,7 +26,7 @@ dependencies:
   collection: ^1.16.0
   archive: ^3.3.5
   http: ^0.13.5
-  internet_connection_checker: ^1.0.0+1
+  internet_connection_checker: ^1.0.0+1	
   async: ^2.10.0  
   at_persistence_spec: ^2.0.10
   at_persistence_secondary_server: ^3.0.44
