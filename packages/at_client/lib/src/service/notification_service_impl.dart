@@ -29,10 +29,6 @@ class NotificationServiceImpl
   static const notificationIdKey = '_latestNotificationIdv2';
   static const lastReceivedNotificationKey = 'lastReceivedNotification';
 
-  /// Contains a map of created [NotificationServiceImpl]s, keyed by AtSign
-  @visibleForTesting
-  static final Map<String, NotificationService> notificationServiceMap = {};
-
   final _logger = AtSignLogger('NotificationServiceImpl');
 
   /// Controls whether or not the monitor is actually running.
@@ -78,15 +74,10 @@ class NotificationServiceImpl
 
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
-    if (notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
-      return notificationServiceMap[atClient.getCurrentAtSign()]!;
-    }
-    final notificationService =
-        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
+    final notificationService = NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     // We used to call _init() at this point which would start the monitor, but now we
     // call _init() from the [subscribe] method
-    notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
-    return notificationServiceMap[atClient.getCurrentAtSign()]!;
+    return notificationService;
   }
 
   NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
@@ -496,25 +487,10 @@ class NotificationServiceImpl
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    // Checks if the NotificationServiceImpl instance is associated with
-    // the previousAtClient atSign. If yes, subscriptions on notification
-    // service is stopped, removed the notification service from notificationServiceMap.
-    // If atClient.getCurrentAtSign returns the atSign associated with NotificationService.
-    // The below condition ensures the NotificationService is not stopped on
-    // the new atSign.
-    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
-        _atClient.getCurrentAtSign()) {
-      // actions for previous atSign
-      _logger.finer(
-          'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
-      stopAllSubscriptions();
-      _logger.finer(
-          'removing from _notificationServiceMap: ${_atClient.getCurrentAtSign()}');
-      _atClientManager.removeChangeListeners(
-          (notificationServiceMap[_atClient.getCurrentAtSign()])
-              as NotificationServiceImpl);
-      notificationServiceMap.remove(_atClient.getCurrentAtSign());
-    }
+    _atClientManager.removeChangeListeners(this);
+
+    _logger.finer('stopping notification listeners for ${_atClient.getCurrentAtSign()}');
+    stopAllSubscriptions();
   }
 
   MonitorStatus? getMonitorStatus() {

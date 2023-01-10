@@ -19,11 +19,12 @@ import 'package:meta/meta.dart';
 /// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
 /// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
 class AtClientManager {
-  late String _atSign;
-  AtClient? _previousAtClient;
-  late AtClient _currentAtClient;
+  final AtSignLogger _logger = AtSignLogger('AtClientManager');
 
-  AtClient get atClient => _currentAtClient;
+  late String _atSign;
+  AtClient? _currentAtClient;
+
+  AtClient get atClient => _currentAtClient!;
   late SyncService syncService;
   late NotificationService notificationService;
   SecondaryAddressFinder? secondaryAddressFinder;
@@ -52,26 +53,36 @@ class AtClientManager {
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
-    if (_previousAtClient != null &&
-        _previousAtClient?.getCurrentAtSign() == atSign) {
+    if (_currentAtClient != null &&
+        _currentAtClient?.getCurrentAtSign() == atSign) {
+      _logger.info('previous currentAtSign ${_currentAtClient?.getCurrentAtSign()} is same as new atSign $atSign - doing nothing, returning');
       return this;
     }
+
+    _logger.info('Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
+    var previousAtClient = _currentAtClient;
     _currentAtClient = await AtClientImpl.create(_atSign, namespace, preference,
         atClientManager: this);
     final switchAtSignEvent =
-        SwitchAtSignEvent(_previousAtClient, _currentAtClient);
-    notificationService = await NotificationServiceImpl.create(_currentAtClient,
-        atClientManager: this);
-    syncService = await SyncServiceImpl.create(_currentAtClient,
-        atClientManager: this, notificationService: notificationService);
-    _previousAtClient = _currentAtClient;
+        SwitchAtSignEvent(previousAtClient, _currentAtClient!);
     _notifyListeners(switchAtSignEvent);
+
+    notificationService = await NotificationServiceImpl.create(
+        _currentAtClient!,
+        atClientManager: this);
+    syncService = await SyncServiceImpl.create(
+        _currentAtClient!,
+        atClientManager: this,
+        notificationService: notificationService);
+
     return this;
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {
-    _changeListeners.add(listener);
+    if (! _changeListeners.contains(listener)) {
+      _changeListeners.add(listener);
+    }
   }
 
   void _notifyListeners(SwitchAtSignEvent switchAtSignEvent) {
