@@ -10,7 +10,7 @@ import 'package:meta/meta.dart';
 class NotificationResponseTransformer
     implements
         Transformer<Tuple<AtNotification, NotificationConfig>, AtNotification> {
-  late AtClient _atClient;
+  late final AtClient _atClient;
 
   @visibleForTesting
   AtKeyDecryption? atKeyDecryption;

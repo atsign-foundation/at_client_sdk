@@ -53,6 +53,7 @@ class AtClientImpl implements AtClient {
   RemoteSecondary? _remoteSecondary;
 
   @override
+  // ignore: override_on_non_overriding_member
   AtChops? _atChops;
 
   EncryptionService? _encryptionService;

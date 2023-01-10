@@ -138,6 +138,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       return decryptionResult.result;
     } else {
       try {
+        // ignore: deprecated_member_use_from_same_package
         return EncryptionUtil.decryptKey(
             encryptedSharedKey, encryptionPrivateKey!);
       } on KeyNotFoundException catch (e) {

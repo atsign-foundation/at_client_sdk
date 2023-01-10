@@ -55,6 +55,7 @@ class PutRequestTransformer
             .signString(updateVerbBuilder.value, SigningKeyType.signingSha256);
         updateVerbBuilder.dataSignature = signingResult.result;
       } else {
+        // ignore: deprecated_member_use_from_same_package
         updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
             updateVerbBuilder.value, encryptionPrivateKey!);
       }

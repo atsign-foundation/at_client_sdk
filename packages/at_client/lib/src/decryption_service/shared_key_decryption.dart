@@ -81,6 +81,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
         }
         decryptedValue = EncryptionUtil.decryptValue(
             encryptedValue,
+            // ignore: deprecated_member_use_from_same_package
             EncryptionUtil.decryptKey(
                 encryptedSharedKey, currentAtSignPrivateKey));
       }
