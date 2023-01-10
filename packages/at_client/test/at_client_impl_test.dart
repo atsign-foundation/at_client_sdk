@@ -38,10 +38,10 @@ void main() {
       AtClientPreference atClientPreference = AtClientPreference();
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 2);
+      expect(atClientManager.getChangeListenersSize(), 3);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign('@bob', namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 2);
+      expect(atClientManager.getChangeListenersSize(), 3);
       // Verify the listeners in [AtClientManager._changeListeners] list belongs
       // to the new atSign. Here @bob.
       var itr = atClientManager.getItemsInChangeListeners();
@@ -61,11 +61,9 @@ void main() {
       String atSign = '@alice';
       String namespace = 'wavi';
       AtClientPreference atClientPreference = AtClientPreference();
-
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 2);
-
+      expect(atClientManager.getChangeListenersSize(), 3);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
@@ -74,8 +72,7 @@ void main() {
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-
-      expect(atClientManager.getChangeListenersSize(), 2);
+      expect(atClientManager.getChangeListenersSize(), 3);
       // Verify the listeners in [AtClientManager._changeListeners] list belongs
       // to the new atSign. Here @alice.
       var itr = atClientManager.getItemsInChangeListeners();
