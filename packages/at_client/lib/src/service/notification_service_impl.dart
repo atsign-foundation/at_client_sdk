@@ -73,17 +73,15 @@ class NotificationServiceImpl
   @visibleForTesting
   int monitorRetryCallsToMonitorStart = 0;
 
+  /// Returns the currentAtSign associated with the NotificationService
+  String get currentAtSign => _atClient.getCurrentAtSign()!;
+
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
-    if (notificationServiceMap.containsKey(atClient.getCurrentAtSign())) {
-      return notificationServiceMap[atClient.getCurrentAtSign()]!;
-    }
-    final notificationService =
-        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
+    final notificationService = NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     // We used to call _init() at this point which would start the monitor, but now we
     // call _init() from the [subscribe] method
-    notificationServiceMap[atClient.getCurrentAtSign()!] = notificationService;
-    return notificationServiceMap[atClient.getCurrentAtSign()]!;
+    return notificationService;
   }
 
   NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
@@ -120,7 +118,8 @@ class NotificationServiceImpl
     }
     try {
       _initializing = true;
-      _logger.finer('${_atClient.getCurrentAtSign()} notification service _init()');
+      _logger.finer(
+          '${_atClient.getCurrentAtSign()} notification service _init()');
       await _startMonitor();
       _logger.finer(
           '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
@@ -131,7 +130,8 @@ class NotificationServiceImpl
         // for example by switching atSigns
         _connectivityListener!.subscribe().listen((isConnected) {
           if (isConnected) {
-            _logger.finer('${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
+            _logger.finer(
+                '${_atClient.getCurrentAtSign()} starting monitor through connectivity listener event');
             _startMonitor();
           } else {
             _logger.finer('lost network connectivity');
@@ -156,14 +156,16 @@ class NotificationServiceImpl
     try {
       lastNotificationTime = await getLastNotificationTime();
     } catch (e) {
-      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
+      _logger.warning(
+          '${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
       return;
     }
 
     try {
       await _monitor!.start(lastNotificationTime: lastNotificationTime);
     } catch (e) {
-      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
+      _logger.warning(
+          '${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
       return;
     }
   }
@@ -221,7 +223,8 @@ class NotificationServiceImpl
 
   @override
   void stopAllSubscriptions() {
-    _logger.finer('stopAllSubscriptions() called - setting monitorIsPaused to true');
+    _logger.finer(
+        'stopAllSubscriptions() called - setting monitorIsPaused to true');
     monitorIsPaused = true;
     _monitor?.stop();
     _connectivityListener?.unSubscribe();
@@ -302,11 +305,14 @@ class NotificationServiceImpl
     _logger.finer('monitor retry for ${_atClient.getCurrentAtSign()}');
     Future.delayed(monitorRetryInterval, () async {
       monitorRestartQueued = false;
-      if (monitorIsPaused) { // maybe it's been paused during the time since the retry was requested
-        _logger.warning("monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
+      if (monitorIsPaused) {
+        // maybe it's been paused during the time since the retry was requested
+        _logger.warning(
+            "monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
       } else {
         monitorRetryCallsToMonitorStart++;
-        await _monitor!.start(lastNotificationTime: await getLastNotificationTime());
+        await _monitor!
+            .start(lastNotificationTime: await getLastNotificationTime());
         // Note we do not need to handle exceptions as Monitor.start handles all of them.
         // Additionally, we do not need to queue another monitor retry, since Monitor.start
         // will call this function (_monitorRetry) if required
@@ -494,16 +500,10 @@ class NotificationServiceImpl
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
-        _atClient.getCurrentAtSign()) {
-      // actions for previous atSign
-      _logger.finer(
-          'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
-      stopAllSubscriptions();
-      _logger.finer(
-          'removing from _notificationServiceMap: ${_atClient.getCurrentAtSign()}');
-      notificationServiceMap.remove(_atClient.getCurrentAtSign());
-    }
+    _atClientManager.removeChangeListeners(this);
+
+    _logger.finer('stopping notification listeners for ${_atClient.getCurrentAtSign()}');
+    stopAllSubscriptions();
   }
 
   MonitorStatus? getMonitorStatus() {

@@ -37,6 +37,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
@@ -52,6 +53,10 @@ class AtClientImpl implements AtClient {
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
 
+  @override
+  // ignore: override_on_non_overriding_member
+  AtChops? _atChops;
+
   EncryptionService? _encryptionService;
 
   @experimental
@@ -66,6 +71,14 @@ class AtClientImpl implements AtClient {
   @override
   @experimental
   AtTelemetryService? get telemetry => _telemetry;
+
+  @override
+  set atChops(AtChops? atChops) {
+    _atChops = atChops;
+  }
+
+  @override
+  AtChops? get atChops => _atChops;
 
   late SyncService _syncService;
   @override
@@ -98,7 +111,8 @@ class AtClientImpl implements AtClient {
       {AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore}) async {
+      SecondaryKeyStore? localSecondaryKeyStore,
+      AtChops? atChops}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       return atClientInstanceMap[currentAtSign];
@@ -109,7 +123,8 @@ class AtClientImpl implements AtClient {
         currentAtSign, namespace, preferences, atClientManager,
         remoteSecondary: remoteSecondary,
         encryptionService: encryptionService,
-        localSecondaryKeyStore: localSecondaryKeyStore);
+        localSecondaryKeyStore: localSecondaryKeyStore,
+        atChops: atChops);
 
     await atClientImpl._init();
 
@@ -121,7 +136,8 @@ class AtClientImpl implements AtClient {
       AtClientPreference preference, AtClientManager atClientManager,
       {RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore}) {
+      SecondaryKeyStore? localSecondaryKeyStore,
+      AtChops? atChops}) {
     _atSign = AtUtils.formatAtSign(theAtSign)!;
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -135,6 +151,7 @@ class AtClientImpl implements AtClient {
     }
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
+    _atChops = atChops;
   }
 
   Future<void> _init() async {
@@ -231,10 +248,12 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
     // ignore: no_leading_underscores_for_local_identifiers
     var _deleteResult = _delete(atKey);
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',{"key":atKey, "_deleteResult": _deleteResult}));
+    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',
+        {"key": atKey, "_deleteResult": _deleteResult}));
     return _deleteResult;
   }
 
@@ -354,7 +373,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false}) async {
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put called', {"key":atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.put called', {"key": atKey}));
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -367,7 +387,8 @@ class AtClientImpl implements AtClient {
     if (value is List<int>) {
       atResponse = await putBinary(atKey, value);
     }
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.put complete', {"atKey":atKey}));
+    _telemetry?.controller.sink
+        .add(AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}));
     return atResponse.response.isNotEmpty;
   }
 
@@ -785,7 +806,8 @@ class AtClientImpl implements AtClient {
     if (fileDownloadResponse.isError) {
       throw Exception('download fail');
     }
-    var encryptedFileList = Directory(fileDownloadResponse.filePath!).listSync();
+    var encryptedFileList =
+        Directory(fileDownloadResponse.filePath!).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(

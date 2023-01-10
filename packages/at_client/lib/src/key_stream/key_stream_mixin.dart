@@ -117,7 +117,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     );
 
     for (AtKey key in keys) {
-      atClient
+      await atClient
           .get(key)
           .then(
             // ignore: unnecessary_cast

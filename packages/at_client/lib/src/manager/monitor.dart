@@ -362,7 +362,8 @@ class Monitor {
       _logger.info('Monitor error $e - calling the retryCallback');
       _retryCallBack();
     } else {
-      _logger.severe('Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
+      _logger.severe(
+          'Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
       _onError(e);
     }
   }

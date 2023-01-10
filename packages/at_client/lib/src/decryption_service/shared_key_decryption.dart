@@ -7,6 +7,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// Class responsible for decrypting the value of shared key's that are not owned
 /// by currentAtSign
@@ -62,19 +63,29 @@ class SharedKeyDecryption implements AtKeyDecryption {
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    var currentAtSignPrivateKey =
-        await (atClient.getLocalSecondary()!.getEncryptionPrivateKey());
-    if (currentAtSignPrivateKey == null || currentAtSignPrivateKey.isEmpty) {
-      throw AtPrivateKeyNotFoundException('Encryption private not found',
-          intent: Intent.fetchEncryptionPrivateKey,
-          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
-    }
     String decryptedValue = '';
     try {
-      decryptedValue = EncryptionUtil.decryptValue(
-          encryptedValue,
-          EncryptionUtil.decryptKey(
-              encryptedSharedKey, currentAtSignPrivateKey));
+      //# TODO remove else block once atChops once testing is good
+      if (atClient.getPreferences()!.useAtChops) {
+        final decryptionResult = atClient.atChops!
+            .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
+        decryptedValue = EncryptionUtil.decryptValue(
+            encryptedValue, decryptionResult.result);
+      } else {
+        var currentAtSignPrivateKey =
+            await (atClient.getLocalSecondary()!.getEncryptionPrivateKey());
+        if (currentAtSignPrivateKey == null ||
+            currentAtSignPrivateKey.isEmpty) {
+          throw AtPrivateKeyNotFoundException('Encryption private not found',
+              intent: Intent.fetchEncryptionPrivateKey,
+              exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
+        }
+        decryptedValue = EncryptionUtil.decryptValue(
+            encryptedValue,
+            // ignore: deprecated_member_use_from_same_package
+            EncryptionUtil.decryptKey(
+                encryptedSharedKey, currentAtSignPrivateKey));
+      }
     } on AtKeyException catch (e) {
       e.stack(AtChainedException(
           Intent.decryptData,

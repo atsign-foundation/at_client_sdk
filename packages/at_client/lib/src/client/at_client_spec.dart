@@ -12,6 +12,7 @@ import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -31,6 +32,11 @@ abstract class AtClient {
   RemoteSecondary? getRemoteSecondary();
 
   LocalSecondary? getLocalSecondary();
+
+  /// Set an instance of [AtChops] for data encryption and signing operations
+  set atChops(AtChops? atChops);
+
+  AtChops? get atChops;
 
   set syncService (SyncService syncService);
   SyncService get syncService;

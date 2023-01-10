@@ -299,6 +299,7 @@ class SyncManager {
             dynamic entryKey = message['entry_key'];
             var entry = SyncUtil.getEntry(entryKey, _atSign!);
             logger.info(
+                // ignore: unawaited_futures
                 'received remote push result: $entryKey $entry $entryKey');
             await syncUtil.updateCommitEntry(
                 entry, int.parse(serverCommitId), _atSign!);

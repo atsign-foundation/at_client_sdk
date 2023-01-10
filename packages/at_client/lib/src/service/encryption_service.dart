@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:async/async.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
@@ -13,7 +11,6 @@ import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 import 'package:meta/meta.dart';
 
 class EncryptionService {
@@ -179,6 +176,7 @@ class EncryptionService {
       var currentAtSignPrivateKey =
           await localSecondary!.getEncryptionPrivateKey();
       sharedKey =
+          // ignore: deprecated_member_use_from_same_package
           EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
     }
 
@@ -195,53 +193,6 @@ class EncryptionService {
     //decrypt stream using decrypted aes shared key
     var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey);
     return decryptedValue;
-  }
-
-  Future<bool> verifyPublicDataSignature(
-      String sharedBy, String dataSignature, String value) async {
-    var cachedPublicKeyBuilder = LLookupVerbBuilder()
-      ..atKey = 'publickey.$sharedBy'
-      ..sharedBy = atSign;
-    String? sharedByPublicKey;
-    try {
-      sharedByPublicKey =
-          await localSecondary!.executeVerb(cachedPublicKeyBuilder);
-    } on KeyNotFoundException {
-      logger.finer(
-          '${cachedPublicKeyBuilder.atKey} not found in local secondary');
-    }
-    if (sharedByPublicKey == null || sharedByPublicKey == 'data:null') {
-      var plookupBuilder = PLookupVerbBuilder()
-        ..atKey = 'publickey'
-        ..sharedBy = sharedBy;
-      sharedByPublicKey = await remoteSecondary!.executeVerb(plookupBuilder);
-      sharedByPublicKey =
-          DefaultResponseParser().parse(sharedByPublicKey).response;
-      //4.b store sharedWith public key for future retrieval
-      var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
-        ..atKey = 'publickey.$sharedBy'
-        ..sharedBy = atSign
-        ..value = sharedByPublicKey;
-      await localSecondary!
-          .executeVerb(sharedWithPublicKeyBuilder, sync: false);
-    } else {
-      sharedByPublicKey = sharedByPublicKey.replaceFirst('data:', '');
-    }
-//    if (sharedByPublicKey == null) {
-//      logger.severe('unable to verify public data sharedBy: $sharedBy');
-//      return false;
-//    }
-    var publicKey = RSAPublicKey.fromString(sharedByPublicKey);
-    var isDataValid = publicKey.verifySHA256Signature(
-        utf8.encode(value) as Uint8List, base64Decode(dataSignature));
-    return isDataValid;
-  }
-
-  String signPublicData(String encryptionPrivateKey, dynamic value) {
-    var privateKey = RSAPrivateKey.fromString(encryptionPrivateKey);
-    var dataSignature =
-        privateKey.createSHA256Signature(utf8.encode(value) as Uint8List);
-    return base64Encode(dataSignature);
   }
 
   @Deprecated('Not in use')
@@ -287,11 +238,6 @@ class EncryptionService {
       }
     });
     await atClient.getSyncManager()!.sync();
-  }
-
-  Future<String?> _getSelfEncryptionKey() async {
-    var selfEncryptionKey = await localSecondary!.getEncryptionSelfKey();
-    return selfEncryptionKey;
   }
 
   /// Returns sharedWith atSign publicKey.
@@ -465,10 +411,12 @@ class EncryptionService {
       throw KeyNotFoundException('encryption private not found');
     }
     var sharedKey =
+        // ignore: deprecated_member_use_from_same_package
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
     return sharedKey;
   }
 
+  /// Used in StreamNotificationHandler.
   Future<String> getSharedKeyForDecryption(String sharedBy) async {
     sharedBy = sharedBy.replaceFirst('@', '');
 
@@ -483,22 +431,14 @@ class EncryptionService {
       throw KeyNotFoundException('private encryption key not found');
     }
     var sharedKey =
+        // ignore: deprecated_member_use_from_same_package
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
     return sharedKey;
   }
 
+  /// Used in atmosphere pro
   String generateFileEncryptionKey() {
     return EncryptionUtil.generateAESKey();
-  }
-
-  List<int> encryptFile(List<int> fileContent, String fileEncryptionKey) {
-    return EncryptionUtil.encryptBytes(fileContent, fileEncryptionKey);
-  }
-
-  List<int> decryptFile(List<int> fileContent, String decryptionKey) {
-    var encryptedValue =
-        EncryptionUtil.decryptBytes(fileContent, decryptionKey);
-    return encryptedValue;
   }
 
   Future<File> encryptFileInChunks(
