@@ -19,9 +19,6 @@ import 'package:at_utils/at_logger.dart';
 /// The call to [getCompactionStats] will returns the metric of the previously run compaction
 /// job.
 class AtClientCommitLogCompaction implements AtSignChangeListener {
-  static final Map<String, AtClientCommitLogCompaction>
-      atClientCommitLogCompactionMap = {};
-
   AtCompactionConfig atCompactionConfig = AtCompactionConfig();
 
   final AtCompactionStats _atCompactionStats = AtCompactionStats();
@@ -29,8 +26,6 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
   late AtCompactionJob _atCompactionJob;
 
   late SecondaryKeyStore secondaryKeyStore;
-
-  late String _currentAtSign;
 
   late AtClientManager _atClientManager;
 
@@ -46,23 +41,16 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
   /// and start/resume the compaction job on the new atSign
   static AtClientCommitLogCompaction create(
       AtClientManager atClientManager, AtCompactionJob atCompactionJob) {
-    String atSign = atClientManager.atClient.getCurrentAtSign()!;
-    if (atClientCommitLogCompactionMap.containsKey(atSign)) {
-      return atClientCommitLogCompactionMap[atSign]!;
-    }
     AtClientCommitLogCompaction atClientCommitLogCompaction =
-        AtClientCommitLogCompaction._(atCompactionJob, atClientManager, atSign);
+        AtClientCommitLogCompaction._(atCompactionJob, atClientManager);
     atClientManager.listenToAtSignChange(atClientCommitLogCompaction);
-    atClientCommitLogCompactionMap.putIfAbsent(
-        atSign, () => atClientCommitLogCompaction);
     return atClientCommitLogCompaction;
   }
 
   AtClientCommitLogCompaction._(
-      AtCompactionJob atCompactionJob, AtClientManager atClientManager, String currentAtSign) {
+      AtCompactionJob atCompactionJob, AtClientManager atClientManager) {
     _atCompactionJob = atCompactionJob;
     _atClientManager = atClientManager;
-    _currentAtSign = currentAtSign;
   }
 
   /// The call to [scheduleCompaction] will initiate the commit log compaction. The method
@@ -108,18 +96,10 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
-        _currentAtSign) {
-      _logger.info(
-          'Stopping commit log compaction job for ${switchAtSignEvent.previousAtClient?.getCurrentAtSign()}');
-      AtClientCommitLogCompaction atClientCommitLogCompaction =
-          atClientCommitLogCompactionMap[
-              switchAtSignEvent.previousAtClient?.getCurrentAtSign()]!;
-      atClientCommitLogCompaction._atCompactionJob.stopCompactionJob();
-      _atClientManager.removeChangeListeners(atClientCommitLogCompaction);
-      atClientCommitLogCompactionMap
-          .remove(switchAtSignEvent.previousAtClient?.getCurrentAtSign());
-    }
+    _logger.finer(
+        'Stopping commit log compaction job for ${switchAtSignEvent.previousAtClient?.getCurrentAtSign()}');
+    _atCompactionJob.stopCompactionJob();
+    _atClientManager.removeChangeListeners(this);
   }
 }
 
