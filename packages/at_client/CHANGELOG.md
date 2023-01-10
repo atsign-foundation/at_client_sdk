@@ -8,6 +8,7 @@
 - fix: Reverted back path,async packages to older version
 ## 3.0.50
 - feat: Introduce commit log compaction to keep size of commit log thin
+- feat: changes for at_chops uptake
 - chore: upgrade at_persistence_spec, at_persistence_secondary_server, at_commons version
 ## 3.0.49
 - fix: Enable AtKey.namespace overrides the namespace in AtClientPreference in AtClient delete method
