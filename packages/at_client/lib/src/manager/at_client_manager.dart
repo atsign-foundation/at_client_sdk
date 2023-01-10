@@ -68,8 +68,6 @@ class AtClientManager {
         atClientManager: this);
     syncService = await SyncServiceImpl.create(_currentAtClient,
         atClientManager: this, notificationService: notificationService);
-    _previousAtClient = _currentAtClient;
-    _notifyListeners(switchAtSignEvent);
     //Start commit log compaction job
     var atCommitLog =
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
@@ -82,6 +80,8 @@ class AtClientManager {
     atClientCommitLogCompaction.scheduleCompaction(
         AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins,
         atSign);
+    _previousAtClient = _currentAtClient;
+    _notifyListeners(switchAtSignEvent);
     return this;
   }
 
