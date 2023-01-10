@@ -13,7 +13,7 @@ void main() async {
     final preference = TestUtil.getBobPreference();
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
-    atClientManager.notificationService
+    atClientManager.atClient.notificationService
         .subscribe(regex: 'atmosphere')
         .listen((notification) {
       _notificationCallBack(notification);

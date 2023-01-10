@@ -488,8 +488,7 @@ class AtClientImpl implements AtClient {
           ..validateOwnership = true);
     final notificationParams =
         NotificationParams.forUpdate(atKey, value: value);
-    final notifyResult =
-        await _atClientManager.notificationService.notify(notificationParams);
+    final notifyResult = await notificationService.notify(notificationParams);
     return notifyResult.notificationStatusEnum ==
         NotificationStatusEnum.delivered;
   }
@@ -503,8 +502,7 @@ class AtClientImpl implements AtClient {
       atKey.sharedWith = sharedWith;
       final notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
-      final notifyResult = await _atClientManager.notificationService
-          .notify(notificationParams);
+      final notifyResult = await notificationService.notify(notificationParams);
       returnMap.putIfAbsent(
           sharedWith,
           () => (notifyResult.notificationStatusEnum ==
@@ -704,7 +702,7 @@ class AtClientImpl implements AtClient {
           ..sharedBy = _atSign;
 
         var notificationResult =
-            await _atClientManager.notificationService.notify(
+            await notificationService.notify(
           NotificationParams.forUpdate(
             atKey,
             value: jsonEncode(fileTransferObject.toJson()),

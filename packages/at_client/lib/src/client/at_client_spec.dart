@@ -19,7 +19,7 @@ import 'package:meta/meta.dart';
 abstract class AtClient {
   /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
-  /// [Deprecated] Use [AtClientManager.syncService]
+  /// [Deprecated] Use [AtClient.syncService]
   @Deprecated("Use SyncManager.sync")
   SyncManager? getSyncManager();
 
@@ -361,7 +361,7 @@ abstract class AtClient {
   ///                       latestN:3,
   ///                       Notifier: ‘wavi’);
   ///```
-  ///[Deprecated] Use [AtClientManager.notificationService]
+  ///[Deprecated] Use [AtClient.notificationService]
   @Deprecated("Use NotificationService")
   Future<bool> notify(AtKey key, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,

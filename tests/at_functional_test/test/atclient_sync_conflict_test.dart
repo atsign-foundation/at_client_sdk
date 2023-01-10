@@ -14,7 +14,7 @@ void main() async {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
     final progressListener = MySyncProgressListener();
-    atClientManager.syncService.addProgressListener(progressListener);
+    atClientManager.atClient.syncService.addProgressListener(progressListener);
     final atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
@@ -44,7 +44,7 @@ void main() async {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
     final progressListener = MySyncProgressListener2();
-    atClientManager.syncService.addProgressListener(progressListener);
+    atClientManager.atClient.syncService.addProgressListener(progressListener);
     final atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
