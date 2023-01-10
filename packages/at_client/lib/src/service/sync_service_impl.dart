@@ -867,7 +867,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _cron.close();
 
     _logger.finer('Closing RemoteSecondary.atLookUp connection');
-    _remoteSecondary.atLookUp.connection?.close();
   }
 
   @override
