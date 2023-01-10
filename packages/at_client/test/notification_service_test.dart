@@ -825,10 +825,6 @@ void main() {
           .thenAnswer((_) async => true);
     });
 
-    setUp(() {
-      NotificationServiceImpl.notificationServiceMap.clear();
-    });
-
     test('Test initial state related to monitorRetry', () async {
       NotificationServiceImpl notificationServiceImpl =
           await NotificationServiceImpl.create(mockAtClientImpl,
