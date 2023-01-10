@@ -42,7 +42,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
-  static final Map<String, SyncService> _syncServiceMap = {};
   bool _syncInProgress = false;
 
   @override
@@ -57,22 +56,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @visibleForTesting
   NetworkUtil networkUtil = NetworkUtil();
 
+  /// Returns the currentAtSign associated with the SyncService
+  String get currentAtSign => _atClient.getCurrentAtSign()!;
+
   static Future<SyncService> create(AtClient atClient,
       {required AtClientManager atClientManager,
       required NotificationService notificationService,
       RemoteSecondary? remoteSecondary}) async {
-    if (_syncServiceMap.containsKey(atClient.getCurrentAtSign())) {
-      return _syncServiceMap[atClient.getCurrentAtSign()]!;
-    }
-
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
     await syncService._statsServiceListener();
     syncService._scheduleSyncRun();
-    _syncServiceMap[atClient.getCurrentAtSign()!] = syncService;
-    return _syncServiceMap[atClient.getCurrentAtSign()]!;
+    return syncService;
   }
 
   SyncServiceImpl._(
@@ -337,8 +334,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
 
       // Hint to casual reader: This is where we sync new changes from the server to this this client
-      final keyInfoList = await _syncFromServer(
-          serverCommitId, localCommitId, unCommittedEntries);
+      final keyInfoList = await _syncFromServer(serverCommitId, localCommitId, unCommittedEntries);
 
       syncResult.keyInfoList.addAll(keyInfoList);
     }
@@ -858,20 +854,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
-        _atClient.getCurrentAtSign()) {
-      // actions for previous atSign
-      _syncRequests.clear();
-      _logger.finer(
-          'stopping stats notification listener for ${_atClient.getCurrentAtSign()}');
-      _statsNotificationListener.stopAllSubscriptions();
-      _cron.close();
-      _logger.finer(
-          'removing from _syncServiceMap: ${_atClient.getCurrentAtSign()}');
-      final previousSyncService =
-          _syncServiceMap.remove(_atClient.getCurrentAtSign());
-      previousSyncService?.removeAllProgressListeners();
-    }
+    _atClientManager.removeChangeListeners(this);
+
+    _syncRequests.clear();
+
+    _logger.finer('stopping stats notification listener for ${_atClient.getCurrentAtSign()}');
+    _statsNotificationListener.stopAllSubscriptions();
+
+    _logger.finer('stopping cron');
+    _cron.close();
+
+    removeAllProgressListeners();
   }
 
   @override
@@ -895,7 +888,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void clearSyncEntities() {
     _syncRequests.clear();
     _syncProgressListeners.clear();
-    _syncServiceMap.clear();
   }
 }
 

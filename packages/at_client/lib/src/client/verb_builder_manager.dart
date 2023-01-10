@@ -1,6 +1,5 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/client/request_options.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_utils.dart';
 

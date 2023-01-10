@@ -10,7 +10,7 @@ import 'package:meta/meta.dart';
 class NotificationResponseTransformer
     implements
         Transformer<Tuple<AtNotification, NotificationConfig>, AtNotification> {
-  late AtClient _atClient;
+  late final AtClient _atClient;
 
   @visibleForTesting
   AtKeyDecryption? atKeyDecryption;
@@ -50,8 +50,8 @@ class NotificationResponseTransformer
   }
 
   Future<String> _getDecryptedValue(AtKey atKey, String encryptedValue) async {
-    atKeyDecryption ??= AtKeyDecryptionManager(_atClient)
-        .get(atKey, atKey.sharedWith!);
+    atKeyDecryption ??=
+        AtKeyDecryptionManager(_atClient).get(atKey, atKey.sharedWith!);
     var decryptedValue = await atKeyDecryption?.decrypt(atKey, encryptedValue);
     // Return decrypted value
     return decryptedValue.toString().trim();
