@@ -44,7 +44,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
-  // static final Map<String, SyncService> _syncServiceMap = {};
   bool _syncInProgress = false;
 
   @override
