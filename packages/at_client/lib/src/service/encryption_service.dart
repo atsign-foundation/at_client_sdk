@@ -63,6 +63,7 @@ class EncryptionService {
       var currentAtSignPrivateKey =
           await localSecondary!.getEncryptionPrivateKey();
       sharedKey =
+          // ignore: deprecated_member_use_from_same_package
           EncryptionUtil.decryptKey(sharedKey, currentAtSignPrivateKey!);
     }
 
@@ -297,6 +298,7 @@ class EncryptionService {
       throw KeyNotFoundException('encryption private not found');
     }
     var sharedKey =
+        // ignore: deprecated_member_use_from_same_package
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
     return sharedKey;
   }
@@ -316,6 +318,7 @@ class EncryptionService {
       throw KeyNotFoundException('private encryption key not found');
     }
     var sharedKey =
+        // ignore: deprecated_member_use_from_same_package
         EncryptionUtil.decryptKey(encryptedSharedKey, currentAtSignPrivateKey);
     return sharedKey;
   }
