@@ -32,6 +32,8 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
 
   late String _currentAtSign;
 
+  late AtClientManager _atClientManager;
+
   final _logger = AtSignLogger('AtClientCommitLogCompaction');
 
   /// A static builder method to return an instance of [AtClientCommitLogCompaction]
@@ -49,7 +51,7 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
       return atClientCommitLogCompactionMap[atSign]!;
     }
     AtClientCommitLogCompaction atClientCommitLogCompaction =
-        AtClientCommitLogCompaction._(atCompactionJob, atSign);
+        AtClientCommitLogCompaction._(atCompactionJob, atClientManager, atSign);
     atClientManager.listenToAtSignChange(atClientCommitLogCompaction);
     atClientCommitLogCompactionMap.putIfAbsent(
         atSign, () => atClientCommitLogCompaction);
@@ -57,8 +59,9 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
   }
 
   AtClientCommitLogCompaction._(
-      AtCompactionJob atCompactionJob, String currentAtSign) {
+      AtCompactionJob atCompactionJob, AtClientManager atClientManager, String currentAtSign) {
     _atCompactionJob = atCompactionJob;
+    _atClientManager = atClientManager;
     _currentAtSign = currentAtSign;
   }
 
@@ -113,6 +116,7 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
           atClientCommitLogCompactionMap[
               switchAtSignEvent.previousAtClient?.getCurrentAtSign()]!;
       atClientCommitLogCompaction._atCompactionJob.stopCompactionJob();
+      _atClientManager.removeChangeListeners(atClientCommitLogCompaction);
       atClientCommitLogCompactionMap
           .remove(switchAtSignEvent.previousAtClient?.getCurrentAtSign());
     }
