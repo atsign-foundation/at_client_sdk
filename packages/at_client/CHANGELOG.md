@@ -1,5 +1,7 @@
-## 3.0.50
+##
 - feat: Introduce commit log compaction to keep size of commit log thin
+- fix: Fixed a bug where switch atSign event is notified multiple times
+## 3.0.50
 - feat: changes for at_chops uptake
 - chore: upgrade at_persistence_spec, at_persistence_secondary_server, at_commons version
 ## 3.0.49
