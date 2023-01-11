@@ -11,6 +11,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
 abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
@@ -131,7 +132,23 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
           'Failed to decrypt the encrypted shared key'));
       rethrow;
     }
-    return EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey!);
+    if (_atClient.getPreferences()!.useAtChops) {
+      final decryptionResult = _atClient.atChops!
+          .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
+      return decryptionResult.result;
+    } else {
+      try {
+        // ignore: deprecated_member_use_from_same_package
+        return EncryptionUtil.decryptKey(
+            encryptedSharedKey, encryptionPrivateKey!);
+      } on KeyNotFoundException catch (e) {
+        e.stack(AtChainedException(
+            Intent.fetchEncryptionPrivateKey,
+            ExceptionScenario.encryptionFailed,
+            'Failed to decrypt the encrypted shared key'));
+        rethrow;
+      }
+    }
   }
 
   /// Returns sharedWith atSign publicKey.
