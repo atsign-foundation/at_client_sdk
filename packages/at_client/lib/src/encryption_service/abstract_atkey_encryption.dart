@@ -15,7 +15,7 @@ import 'package:at_chops/at_chops.dart';
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
 abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
-  final _logger = AtSignLogger('AbstractAtKeyEncryption');
+  late final AtSignLogger _logger;
   late String _sharedKey;
   final AtClient _atClient;
   AtCommitLog? atCommitLog;
@@ -24,7 +24,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
   String get sharedKey => _sharedKey;
 
-  AbstractAtKeyEncryption(this._atClient);
+  AbstractAtKeyEncryption(this._atClient) {
+    _logger = AtSignLogger('AbstractAtKeyEncryption (${_atClient.getCurrentAtSign()})');
+  }
 
   @visibleForTesting
   final HashMap<String, bool> encryptedSharedKeySyncStatusCacheMap = HashMap();

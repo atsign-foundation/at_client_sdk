@@ -87,7 +87,7 @@ void main() async {
         currentAtClientManager.atClient.put(key2, randomValue2)
       ]);
       await E2ESyncService.getInstance()
-          .syncData(currentAtClientManager.syncService);
+          .syncData(currentAtClientManager.atClient.syncService);
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,

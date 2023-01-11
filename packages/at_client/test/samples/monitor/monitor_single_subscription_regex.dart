@@ -8,7 +8,7 @@ void main() async {
         .setCurrentAtSign(aliceAtSign, 'wavi', TestUtil.getAlicePreference());
 
     // alice - listen for notification
-    atClientManager.notificationService
+    atClientManager.atClient.notificationService
         .subscribe(regex: '.wavi')
         .listen((notification) {
       _notificationCallback(notification);

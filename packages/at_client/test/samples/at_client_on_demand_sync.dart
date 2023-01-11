@@ -11,7 +11,7 @@ void main() async {
     var preference = TestUtil.getAlicePreference();
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', preference);
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

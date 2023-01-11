@@ -13,7 +13,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     var value = '+1 1111';

@@ -66,7 +66,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     // Get local commit id before put operation
@@ -177,7 +177,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     var atKey = AtKey()

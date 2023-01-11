@@ -14,12 +14,13 @@ import 'package:meta/meta.dart';
 class LocalSecondary implements Secondary {
   final AtClient _atClient;
 
-  final _logger = AtSignLogger('LocalSecondary');
+  late final AtSignLogger _logger;
 
   /// Local keystore used to store data for the current atSign.
   SecondaryKeyStore? keyStore;
 
   LocalSecondary(this._atClient, {this.keyStore}) {
+    _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
     keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();
@@ -47,7 +48,7 @@ class LocalSecondary implements Secondary {
         // 3. sync latest update/delete if strategy is immediate
         if (sync != null && sync) {
           _logger.finer('calling sync immediate from local secondary');
-          AtClientManager.getInstance().syncService.sync();
+          _atClient.syncService.sync();
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);

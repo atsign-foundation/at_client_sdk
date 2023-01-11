@@ -49,7 +49,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   Function? onDone;
 
-  final _logger = AtSignLogger('SyncService');
+  late final AtSignLogger _logger;
 
   late AtClientManager _atClientManager;
 
@@ -79,6 +79,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       RemoteSecondary remoteSecondary) {
     _atClientManager = atClientManager;
     _atClient = atClient;
+    _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
     _remoteSecondary = remoteSecondary;
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _atClientManager.listenToAtSignChange(this);
@@ -237,16 +238,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _informSyncProgress(SyncProgress syncProgress,
       {int? localCommitIdBeforeSync, int? localCommitId, int? serverCommitId}) {
+    if (localCommitIdBeforeSync == -1) {
+      syncProgress.isInitialSync = true;
+    }
+    syncProgress.completedAt = DateTime.now().toUtc();
+    syncProgress.atSign = _atClient.getCurrentAtSign();
+    syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
+    syncProgress.localCommitId = localCommitId;
+    syncProgress.serverCommitId = serverCommitId;
+    _logger.finer("Informing ${_syncProgressListeners.length} listeners of $syncProgress");
     for (var listener in _syncProgressListeners) {
-      if (localCommitIdBeforeSync == -1) {
-        syncProgress.isInitialSync = true;
-      }
       try {
-        syncProgress.completedAt = DateTime.now().toUtc();
-        syncProgress.atSign = _atClient.getCurrentAtSign();
-        syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
-        syncProgress.localCommitId = localCommitId;
-        syncProgress.serverCommitId = serverCommitId;
         listener.onSyncProgressEvent(syncProgress);
       } on Exception catch (e) {
         var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
