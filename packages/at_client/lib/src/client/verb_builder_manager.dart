@@ -57,13 +57,13 @@ class LookUpBuilderManager {
 ///
 /// Basing the verb, the appropriate instance of secondary server is returned.
 class SecondaryManager {
-  static Secondary getSecondary(VerbBuilder verbBuilder) {
+  static Secondary getSecondary(AtClient atClient, VerbBuilder verbBuilder) {
     if (verbBuilder is LookupVerbBuilder ||
         verbBuilder is PLookupVerbBuilder ||
         verbBuilder is NotifyVerbBuilder ||
         verbBuilder is StatsVerbBuilder) {
-      return AtClientManager.getInstance().atClient.getRemoteSecondary()!;
+      return atClient.getRemoteSecondary()!;
     }
-    return AtClientManager.getInstance().atClient.getLocalSecondary()!;
+    return atClient.getLocalSecondary()!;
   }
 }

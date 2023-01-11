@@ -25,8 +25,10 @@ class AtClientManager {
   AtClient? _currentAtClient;
 
   AtClient get atClient => _currentAtClient!;
-  late SyncService syncService;
-  late NotificationService notificationService;
+
+  SyncService get syncService => atClient.syncService;
+  NotificationService get notificationService => atClient.notificationService;
+
   SecondaryAddressFinder? secondaryAddressFinder;
   final _changeListeners = <AtSignChangeListener>[];
 
@@ -50,6 +52,7 @@ class AtClientManager {
 
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference) async {
+    _logger.info("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
@@ -68,13 +71,18 @@ class AtClientManager {
         SwitchAtSignEvent(previousAtClient, _currentAtClient!);
     _notifyListeners(switchAtSignEvent);
 
-    notificationService = await NotificationServiceImpl.create(
+    var notificationService = await NotificationServiceImpl.create(
         _currentAtClient!,
         atClientManager: this);
-    syncService = await SyncServiceImpl.create(
+    _currentAtClient!.notificationService = notificationService;
+
+    var syncService = await SyncServiceImpl.create(
         _currentAtClient!,
         atClientManager: this,
         notificationService: notificationService);
+    _currentAtClient!.syncService = syncService;
+
+    _logger.info("setCurrentAtSign complete");
 
     return this;
   }

@@ -29,7 +29,7 @@ class NotificationServiceImpl
   static const notificationIdKey = '_latestNotificationIdv2';
   static const lastReceivedNotificationKey = 'lastReceivedNotification';
 
-  final _logger = AtSignLogger('NotificationServiceImpl');
+  late final AtSignLogger _logger;
 
   /// Controls whether or not the monitor is actually running.
   /// * monitorIsPaused is initially set to true (monitor should not be running)
@@ -84,6 +84,7 @@ class NotificationServiceImpl
       {Monitor? monitor}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
+    _logger = AtSignLogger('NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
     _monitor = monitor ??
         Monitor(
             _internalNotificationCallback,
@@ -270,7 +271,6 @@ class NotificationServiceImpl
   }
 
   @visibleForTesting
-
   /// Called by [NotificationServiceImpl]'s Monitor when the Monitor has detected that it (the Monitor) has
   /// failed and needs to be retried.
   /// * Returns _true_ if a call to Monitor.start() has been queued, _false_ otherwise.
@@ -323,10 +323,8 @@ class NotificationServiceImpl
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
