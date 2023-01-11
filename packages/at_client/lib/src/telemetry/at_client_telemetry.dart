@@ -22,8 +22,9 @@ import '../../at_client.dart';
 class AtClientTelemetryService extends AtTelemetryService {
   final AtClient atClient;
 
-  AtClientTelemetryService(this.atClient, {StreamController<AtTelemetryEvent>? controller}) :
-        super(controller: controller) {
+  AtClientTelemetryService(this.atClient,
+      {StreamController<AtTelemetryEvent>? controller})
+      : super(controller: controller) {
     atClient.telemetry = this;
   }
 
@@ -56,16 +57,19 @@ class AtClientTelemetryConsumer {
   void startConsuming() {
     _subscription ??= telemetry.stream.listen(eventHandler);
   }
+
   void stopConsuming() {
     _subscription?.cancel();
     _subscription = null;
   }
+
   void eventHandler(event) {
     buffer.addLast(event);
     if (buffer.length > bufferSize) {
       buffer.removeFirst();
     }
   }
+
   void dumpToConsole() {
     while (buffer.isNotEmpty) {
       print(buffer.removeFirst());

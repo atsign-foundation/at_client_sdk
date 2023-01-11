@@ -8,12 +8,12 @@ void main() async {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(aliceAtSign, 'wavi', TestUtil.getAlicePreference());
     // alice - listen for notification
-    atClientManager.notificationService
+    atClientManager.atClient.notificationService
         .subscribe(regex: '.wavi')
         .listen((notification) {
       _waviCallback(notification);
     });
-    atClientManager.notificationService
+    atClientManager.atClient.notificationService
         .subscribe(regex: '.buzz')
         .listen((notification) {
       _buzzCallBack(notification);

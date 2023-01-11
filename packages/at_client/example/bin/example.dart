@@ -16,10 +16,7 @@ void main() async {
   atClient.put(
       AtKey.public('phone', namespace: namespace).build(), '+91 8908901234');
 
-  // Getting the NotificationService instance
-  NotificationService notificationService =
-      AtClientManager.getInstance().notificationService;
   // Invoking the notify method
-  notificationService.notify(NotificationParams.forUpdate(
+  atClient.notificationService.notify(NotificationParams.forUpdate(
       AtKey.shared('phone', namespace: namespace).build()));
 }
