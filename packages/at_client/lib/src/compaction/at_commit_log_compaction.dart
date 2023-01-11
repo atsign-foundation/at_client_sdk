@@ -29,6 +29,8 @@ class AtClientCommitLogCompaction implements AtSignChangeListener {
 
   late AtClientManager _atClientManager;
 
+  String get currentAtSign => _atClientManager.atClient.getCurrentAtSign()!;
+
   final _logger = AtSignLogger('AtClientCommitLogCompaction');
 
   /// A static builder method to return an instance of [AtClientCommitLogCompaction]
