@@ -39,9 +39,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
-  /// static because once listeners are added, they should be agnostic to switch atsign event
-  static final Set<SyncProgressListener> _syncProgressListeners = HashSet();
-
+  final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
   final _syncRequests = ListQueue<SyncRequest>(_queueSize);
   bool _syncInProgress = false;
@@ -866,7 +864,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _logger.finer('stopping cron');
     _cron.close();
 
-    _logger.finer('Closing RemoteSecondary.atLookUp connection');
+    removeAllProgressListeners();
   }
 
   @override
@@ -877,6 +875,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @visibleForTesting
   int syncProgressListenerSize() {
     return _syncProgressListeners.length;
+  }
+
+  @override
+  void removeAllProgressListeners() {
+    _syncProgressListeners.clear();
   }
 
   ///Method only for testing

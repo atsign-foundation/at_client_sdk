@@ -48,6 +48,9 @@ abstract class SyncService {
 
   /// Removes a sync progress listener
   void removeProgressListener(SyncProgressListener listener);
+
+  /// Remove all progress listeners
+  void removeAllProgressListeners();
 }
 
 @experimental
