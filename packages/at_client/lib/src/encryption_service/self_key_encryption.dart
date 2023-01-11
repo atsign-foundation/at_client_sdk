@@ -1,6 +1,5 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/at_client_util.dart';
