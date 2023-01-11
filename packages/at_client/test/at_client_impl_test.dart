@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -51,6 +52,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, '@bob');
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, '@bob');
+        }else if (itr.current is AtClientCommitLogCompaction) {
+          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, '@bob');
         }
       }
     });
@@ -82,6 +85,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
+        }else if (itr.current is AtClientCommitLogCompaction) {
+          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, atSign);
         }
       }
     });
@@ -114,6 +119,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign2);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
+        }else if (itr.current is AtClientCommitLogCompaction) {
+          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, atSign2);
         }
       }
     });
@@ -140,6 +147,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign3);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
+        } else if (itr.current is AtClientCommitLogCompaction) {
+          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, atSign3);
         }
       }
     });
