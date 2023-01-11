@@ -7,17 +7,17 @@ void main() async {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(aliceAtSign, 'wavi', TestUtil.getAlicePreference());
 
-    atClientManager.notificationService.subscribe().listen((notification) {
+    atClientManager.atClient.notificationService.subscribe().listen((notification) {
       _notificationCallback(notification);
     });
-    atClientManager.notificationService
+    atClientManager.atClient.notificationService
         .subscribe(regex: '.wavi')
         .listen((notification) {
       _notificationCallback(notification);
     });
     print('stopping monitor');
     Future.delayed(Duration(seconds: 5),
-        () => atClientManager.notificationService.stopAllSubscriptions());
+        () => atClientManager.atClient.notificationService.stopAllSubscriptions());
   } on Exception catch (e, trace) {
     print(e.toString());
     print(trace);

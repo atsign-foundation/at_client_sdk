@@ -41,8 +41,11 @@ void main() {
       when(() => mockLocalSecondary.getEncryptionSelfKey())
           .thenAnswer((_) => Future.value(''));
 
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => mockLocalSecondary);
+
       var selfKeyEncryption =
-          SelfKeyEncryption(localSecondary: mockLocalSecondary);
+          SelfKeyEncryption(mockAtClient);
 
       expect(
           () => selfKeyEncryption.encrypt(
@@ -63,7 +66,7 @@ void main() {
       when(() => mockLocalSecondary.getEncryptionSelfKey())
           .thenAnswer((_) => Future.value(selfEncryptionKey));
       var selfKeyEncryption =
-          SelfKeyEncryption(localSecondary: mockLocalSecondary);
+          SelfKeyEncryption(mockAtClient);
       var encryptedData = await selfKeyEncryption.encrypt(
           AtKey.self('phone', namespace: 'wavi').build(), value);
       var response =

@@ -9,9 +9,11 @@ import 'package:at_utils/at_logger.dart';
 /// llookup:@alice:phone@bob
 class LocalKeyDecryption extends AbstractAtKeyEncryption
     implements AtKeyDecryption {
-  final _logger = AtSignLogger('LocalKeyDecryption');
+  late final AtSignLogger _logger;
 
-  LocalKeyDecryption(AtClient atClient) : super(atClient);
+  LocalKeyDecryption(AtClient atClient) : super(atClient) {
+    _logger = AtSignLogger('LocalKeyDecryption (${atClient.getCurrentAtSign()})');
+  }
 
   @override
   Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {
