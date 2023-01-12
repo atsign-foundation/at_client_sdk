@@ -1,6 +1,7 @@
-import 'dart:mirrors';
+// import 'dart:mirrors';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_collection/at_collection_model_factory.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -22,13 +23,10 @@ class AtCollectionRepository {
     return atClient!;
   }
 
-  T _convert<T extends AtCollectionModel>(String jsonDecodedData) {
-    T t = ClassActivator.createInstance(T);
-    return t.fromJson(jsonDecodedData) as T;
-  }
-
-  Stream<T> getAll<T extends AtCollectionModel>(
-      {String? collectionName}) async* {
+  Future<List<T>> getAll<T extends AtCollectionModel>(
+      {required String collectionName,
+      required AtCollectionModelFactory collectionModelFactory}) async {
+    /// TODO: needs to discuss
     _collectionName = collectionName ?? T.toString().toLowerCase();
 
     List<T> dataList = [];
@@ -42,16 +40,19 @@ class AtCollectionRepository {
     for (var atKey in collectionAtKeys) {
       try {
         var atValue = await _getAtClient().get(atKey);
-        var data = _convert<T>(atValue.value);
-        yield data;
+        var data = collectionModelFactory.create().fromJson(atValue.value);
+        dataList.add(data);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
       }
     }
+
+    return dataList;
   }
 
   Future<T> getById<T extends AtCollectionModel>(String keyId,
-      {String? collectionName}) async {
+      {required String collectionName,
+      required AtCollectionModelFactory collectionModelFactory}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
 
     AtKey atKey = keyMaker.createSelfKey(
@@ -61,30 +62,11 @@ class AtCollectionRepository {
 
     try {
       AtValue atValue = await _getAtClient().get(atKey);
-      var modelData = _convert<T>(atValue.value);
+      var modelData = collectionModelFactory.create().fromJson(atValue.value);
       return modelData;
     } catch (e) {
       _logger.severe('failed to get value of ${atKey.key}');
       rethrow;
-    }
-  }
-}
-
-class ClassActivator {
-  static createInstance(Type type,
-      [Symbol? constructor,
-      List? arguments,
-      Map<Symbol, dynamic>? namedArguments]) {
-    constructor ??= const Symbol("");
-    arguments ??= const [];
-
-    var typeMirror = reflectType(type);
-    if (typeMirror is ClassMirror) {
-      return typeMirror
-          .newInstance(constructor, arguments, (namedArguments ?? {}))
-          .reflectee;
-    } else {
-      throw ArgumentError("Cannot create the instance of the type '$type'.");
     }
   }
 }
