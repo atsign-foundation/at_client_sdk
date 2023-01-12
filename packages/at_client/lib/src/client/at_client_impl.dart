@@ -83,7 +83,7 @@ class AtClientImpl implements AtClient {
 
   late SyncService _syncService;
   @override
-  set syncService(SyncService syncService) {
+  set syncService (SyncService syncService) {
     _syncService = syncService;
   }
 
@@ -114,8 +114,7 @@ class AtClientImpl implements AtClient {
       {AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore,
-      AtChops? atChops}) async {
+      SecondaryKeyStore? localSecondaryKeyStore,AtChops? atChops}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       return atClientInstanceMap[currentAtSign];
@@ -182,7 +181,7 @@ class AtClientImpl implements AtClient {
 
   /// Does nothing unless a telemetry service has been injected
   void _cascadeSetTelemetryService() {
-    if (telemetry != null) {
+    if(telemetry != null){
       _encryptionService?.telemetry = telemetry;
       _localSecondary?.telemetry = telemetry;
       _remoteSecondary?.telemetry = telemetry;
