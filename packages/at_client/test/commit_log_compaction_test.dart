@@ -35,7 +35,7 @@ void main() {
       when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => currentAtSign);
       AtClientCommitLogCompaction atClientCommitLogCompaction =
           AtClientCommitLogCompaction.create(
-              mockAtClientManager, currentAtSign, mockAtCompactionJob);
+              mockAtClientManager, mockAtCompactionJob);
       atClientCommitLogCompaction.secondaryKeyStore = mockSecondaryKeyStore;
 
       AtCompactionStats atCompactionStats =
@@ -71,7 +71,7 @@ void main() {
             })));
       AtClientCommitLogCompaction atClientCommitLogCompaction =
           AtClientCommitLogCompaction.create(
-              mockAtClientManager, currentAtSign, mockAtCompactionJob);
+              mockAtClientManager, mockAtCompactionJob);
       atClientCommitLogCompaction.secondaryKeyStore = mockSecondaryKeyStore;
 
       AtCompactionStats atCompactionStats =

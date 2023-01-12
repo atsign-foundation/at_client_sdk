@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -32,11 +31,17 @@ void main() {
   });
 
   group('A group of tests on switch atSign event', () {
+    String atSign = '@alice';
+    String namespace = 'wavi';
+    AtClientPreference atClientPreference = AtClientPreference();
+    setUp(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+    });
+    tearDown(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+    });
     test('A test to verify switch atSign event clears the inactive listeners',
         () async {
-      String atSign = '@alice';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference();
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       expect(atClientManager.getChangeListenersSize(), 3);
@@ -52,8 +57,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, '@bob');
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, '@bob');
-        }else if (itr.current is AtClientCommitLogCompaction) {
-          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, '@bob');
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), '@bob');
         }
       }
     });
@@ -85,8 +90,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
-        }else if (itr.current is AtClientCommitLogCompaction) {
-          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, atSign);
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign);
         }
       }
     });
@@ -119,8 +124,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign2);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
-        }else if (itr.current is AtClientCommitLogCompaction) {
-          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, atSign2);
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign2);
         }
       }
     });
@@ -147,8 +152,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign3);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
-        } else if (itr.current is AtClientCommitLogCompaction) {
-          expect((itr.current as AtClientCommitLogCompaction).currentAtSign, atSign3);
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign3);
         }
       }
     });
