@@ -1,8 +1,25 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+class MockAtCompactionJob extends Mock implements AtCompactionJob {
+  bool isCronScheduled = false;
+
+  @override
+  void scheduleCompactionJob(AtCompactionConfig atCompactionConfig) {
+    isCronScheduled = true;
+  }
+
+  @override
+  Future<void> stopCompactionJob() async {
+    isCronScheduled = false;
+  }
+}
 
 void main() {
   group('A group of at client impl create tests', () {
@@ -156,6 +173,19 @@ void main() {
           expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign3);
         }
       }
+    });
+  });
+
+  group('A group of tests related to AtCommitLogCompaction', () {
+    test('A test to verify AtCommitLogCompaction is scheduled and stopped', () {
+      String atSign = '@bob';
+      MockAtCompactionJob mockAtCompactionJob = MockAtCompactionJob();
+      AtClientCommitLogCompaction atClientCommitLogCompaction =
+          AtClientCommitLogCompaction.create(atSign, mockAtCompactionJob);
+      atClientCommitLogCompaction.scheduleCompaction(1);
+      expect(mockAtCompactionJob.isCronScheduled, true);
+      atClientCommitLogCompaction.stopCompactionJob();
+      expect(mockAtCompactionJob.isCronScheduled, false);
     });
   });
 }
