@@ -15,7 +15,7 @@ import 'package:meta/meta.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
-  var logger = AtSignLogger('RemoteSecondary');
+  late final AtSignLogger logger;
 
   late String _atSign;
 
@@ -26,6 +26,7 @@ class RemoteSecondary implements Secondary {
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey}) {
     _atSign = AtUtils.formatAtSign(atSign)!;
+    logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     privateKey ??= preference.privateKey;
     SecureSocketConfig secureSocketConfig = SecureSocketConfig();
@@ -154,8 +155,8 @@ class RemoteSecondary implements Secondary {
       var port = secondaryInfo[1];
       var internetAddress = await InternetAddress.lookup(host);
       //TODO getting first ip for now. explore best solution
-      var addressCheckOptions =
-          AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      var addressCheckOptions = AddressCheckOptions(
+          address: internetAddress[0], port: int.parse(port));
       var addressCheckResult = await InternetConnectionChecker()
           .isHostReachable(addressCheckOptions);
       return addressCheckResult.isSuccess;

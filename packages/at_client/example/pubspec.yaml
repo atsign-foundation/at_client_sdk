@@ -5,6 +5,9 @@ version: 1.0.0
 environment:
   sdk: '>=2.14.4 <3.0.0'
 
+dependency_overrides:
+  at_client:
+    path: ../../at_client
 
 dependencies:
   at_utils: ^3.0.11

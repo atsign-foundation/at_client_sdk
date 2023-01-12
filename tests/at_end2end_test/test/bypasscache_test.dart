@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/request_options.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -33,7 +32,7 @@ void main() async {
   /// 5. lookup with bypass_cache set to false should return the old value
   test('bypass cache test', () async {
     var verificationKey = AtKey()
-      ..key = 'verificationnumber'
+      ..key = 'verificationNumber'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()..ttr = 1000);
     var oldValue = '0873';
@@ -46,16 +45,16 @@ void main() async {
     expect(putResult, true);
     // Sync the data to the remote secondary
     await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.syncService);
+        .syncData(currentAtClientManager.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign));
     await E2ESyncService.getInstance()
-        .syncData(sharedWithAtClientManager.syncService);
+        .syncData(sharedWithAtClientManager.atClient.syncService);
     var getKey = AtKey()
-      ..key = 'verificationnumber'
+      ..key = 'verificationNumber'
       ..sharedBy = currentAtSign;
     var getResult = await sharedWithAtClientManager.atClient.get(getKey);
     expect(getResult.value, oldValue);
@@ -74,21 +73,21 @@ void main() async {
       await Future.delayed(Duration(seconds: 3));
       // Updating the same key with a new value
       var verificationKeyNew = AtKey()
-        ..key = 'verificationnumber'
+        ..key = 'verificationNumber'
         ..sharedWith = sharedWithAtSign;
       var newValue = '9900';
       var newPutResult = await currentAtClientManager.atClient
           .put(verificationKeyNew, newValue);
       expect(newPutResult, true);
       await E2ESyncService.getInstance()
-          .syncData(currentAtClientManager.syncService);
+          .syncData(currentAtClientManager.atClient.syncService);
 
       // Setting sharedWithAtSign atClient instance to context.
       sharedWithAtClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace,
               TestPreferences.getInstance().getPreference(sharedWithAtSign));
       await E2ESyncService.getInstance()
-          .syncData(sharedWithAtClientManager.syncService);
+          .syncData(sharedWithAtClientManager.atClient.syncService);
       //  get result with bypassCache set to true
       // should return the newly updated value
       getResult = await sharedWithAtClientManager.atClient.get(getKey,

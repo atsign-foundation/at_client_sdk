@@ -9,7 +9,7 @@ void main() async {
         .setCurrentAtSign(aliceAtSign, 'wavi', TestUtil.getAlicePreference());
 
     // alice - listen for notification
-    atClientManager.notificationService.subscribe().listen((notification) {
+    atClientManager.atClient.notificationService.subscribe().listen((notification) {
       _notificationCallback(notification);
     });
   } on Exception catch (e, trace) {

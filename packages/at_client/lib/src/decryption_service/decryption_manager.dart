@@ -6,7 +6,7 @@ import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 
 ///The manager class for [AtKeyDecryption]
 class AtKeyDecryptionManager {
-  late final AtClient _atClient;
+  final AtClient _atClient;
 
   AtKeyDecryptionManager(this._atClient);
 
@@ -15,14 +15,14 @@ class AtKeyDecryptionManager {
     // If sharedBy not equals currentAtSign, return SharedKeyDecryption
     // Eg: currentAtSign is @bob and key is phone@alice
     if (atKey.sharedBy != currentAtSign) {
-      return SharedKeyDecryption();
+      return SharedKeyDecryption(_atClient);
     }
     // Return SelfKeyDecryption for self keys.
     // Eg: currentAtSign is @bob and _phone.wavi@bob (or) phone@bob (or) @bob:phone@bob
     if (((atKey.sharedWith == null || atKey.sharedWith == currentAtSign) &&
             atKey.sharedBy == currentAtSign) ||
         atKey.key!.startsWith('_')) {
-      return SelfKeyDecryption();
+      return SelfKeyDecryption(_atClient);
     }
     // Returns LocalKeyDecryption to for the keys present in local storage
     // that are sharedWith other atSign's.

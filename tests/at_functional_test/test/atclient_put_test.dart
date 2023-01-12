@@ -17,7 +17,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -37,7 +37,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -57,7 +57,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -78,7 +78,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -96,7 +96,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -119,7 +119,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -146,7 +146,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠

@@ -8,6 +8,8 @@ import 'package:at_client/src/response/default_response_parser.dart';
 /// llookup:phone.wavi@bob
 /// llookup:@bob:phone@bob
 class SelfKeyDecryption implements AtKeyDecryption {
+  final AtClient _atClient;
+  SelfKeyDecryption(this._atClient);
   @override
   Future<dynamic> decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null ||
@@ -18,8 +20,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
 
-    var selfEncryptionKey = await AtClientManager.getInstance()
-        .atClient
+    var selfEncryptionKey = await _atClient
         .getLocalSecondary()!
         .getEncryptionSelfKey();
     if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
