@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_collection/at_collection_model_stream.dart';
 import 'package:at_client/at_collection/at_collection_repository.dart';
-import 'package:at_client/at_collection/model/at_operation_item_status.dart';
+import 'package:at_client/at_collection/collection_methods_impl.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
@@ -17,18 +20,22 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   static KeyMakerSpec keyMaker = DefaultKeyMaker();
 
+  late AtCollectionModelStream streams = AtCollectionModelStream(
+    atCollectionModel: this,
+    keyMaker: keyMaker,
+  );
+
   static AtCollectionRepository atCollectionRepository = AtCollectionRepository(
     keyMaker: keyMaker,
   );
 
-  AtCollectionModel();
-
-  String getCollectionName() {
-    return runtimeType.toString().toLowerCase();
+  AtCollectionModel() {
+    CollectionMethodImpl.getInstance().atCollectionModel = this;
   }
 
   set setKeyMaker(KeyMakerSpec newKeyMaker) {
     keyMaker = newKeyMaker;
+    CollectionMethodImpl.getInstance().keyMaker = keyMaker;
   }
 
   AtClient _getAtClient() {
@@ -37,77 +44,53 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   static Future<T> getById<T extends AtCollectionModel>(String keyId,
-      {String? collectionName}) async {
-    return (await atCollectionRepository.getById<T>(keyId,
-        collectionName: collectionName));
+      {required String collectionName,
+      required AtCollectionModelFactory collectionModelFactory}) async {
+    return (await atCollectionRepository.getById<T>(
+      keyId,
+      collectionName: collectionName,
+      collectionModelFactory: collectionModelFactory,
+    ));
   }
 
-  static Stream<T> getAll<T extends AtCollectionModel>(
-      {String? collectionName}) async* {
-    yield* atCollectionRepository.getAll<T>(collectionName: collectionName);
+  static Future<List<T>> getAll<T extends AtCollectionModel>(
+      {required String collectionName,
+      required AtCollectionModelFactory collectionModelFactory}) async {
+    return (await atCollectionRepository.getAll<T>(
+      collectionName: collectionName,
+      collectionModelFactory: collectionModelFactory,
+    ));
   }
 
   @override
-  Stream<AtOperationItemStatus> save(
-      {bool share = true, ObjectLifeCycleOptions? options}) async* {
+  Future<bool> save(
+      {bool share = true, ObjectLifeCycleOptions? options}) async {
     _validateModel();
+    final Completer<bool> completer = Completer<bool>();
 
-    AtKey selfKey = keyMaker.createSelfKey(
-      keyId: id,
-      collectionName: getCollectionName(),
-      objectLifeCycleOptions: options,
-    );
+    bool? isSelfKeySaved, isAllKeySaved = true;
 
-    var res = await _save(selfKey, jsonEncode(toJson()));
-    yield AtOperationItemStatus(
-        atSign: selfKey.sharedBy ?? '',
-        key: selfKey.key ?? '',
-        complete: res,
-        operation: Operation.save);
-    if (res && share) {
-      yield* _updateSharedKeys(selfKey.key!, jsonEncode(toJson()));
-    }
-  }
+    await CollectionMethodImpl.getInstance()
+        .save(
+            jsonEncodedData: jsonEncode(toJson()),
+            options: options,
+            share: share)
+        .forEach((AtOperationItemStatus atOperationItemStatus) {
+      /// save will update self key as well as the shared keys
+      /// the first event that will be coming in the stream would be the AtOperationItemStatus of selfKey
+      isSelfKeySaved ??= atOperationItemStatus.complete;
 
-  Future<bool> _save(AtKey atkey, String jsonEncodedData) async {
-    /// update self key
-    try {
-      var result = await _put(atkey, jsonEncodedData);
-      _logger.finer('model saved: ${atkey.key}');
-      return result;
-    } catch (e) {
-      _logger.severe('model update failed: ${atkey.key}');
-      rethrow;
-    }
-  }
-
-  Stream<AtOperationItemStatus> _updateSharedKeys(
-      String keyWithCollectionName, String jsonEncodedData) async* {
-    ///updating shared keys
-    var sharedAtKeys =
-        await _getAtClient().getAtKeys(regex: keyWithCollectionName);
-    sharedAtKeys.retainWhere((element) => element.sharedWith != null);
-
-    for (var sharedKey in sharedAtKeys) {
-      var atOperationItemStatus = AtOperationItemStatus(
-          atSign: sharedKey.sharedWith ?? '',
-          key: sharedKey.key ?? '',
-          complete: false,
-          operation: Operation.share);
-      try {
-        /// If self key is not updated, we do not update the shared keys
-        var res = await _put(
-          sharedKey,
-          jsonEncodedData,
-        );
-
-        atOperationItemStatus.complete = res;
-        yield atOperationItemStatus;
-      } catch (e) {
-        atOperationItemStatus.exception = Exception(e.toString());
-        yield atOperationItemStatus;
+      if (atOperationItemStatus.complete == false) {
+        isAllKeySaved = false;
       }
+    });
+
+    if (share == false) {
+      completer.complete(isSelfKeySaved);
     }
+
+    completer.complete(isAllKeySaved);
+    return completer.future;
   }
 
   @override
@@ -128,88 +111,77 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   @override
-  Stream<AtOperationItemStatus> shareWith(List<String> atSigns,
-      {ObjectLifeCycleOptions? options}) async* {
+  Future<bool> shareWith(List<String> atSigns,
+      {ObjectLifeCycleOptions? options}) async {
     _validateModel();
 
-    var selfKey = keyMaker.createSelfKey(
-      keyId: id,
-      collectionName: getCollectionName(),
-    );
+    List<AtOperationItemStatus> allSharedKeyStatus = [];
+    await CollectionMethodImpl.getInstance()
+        .shareWith(atSigns,
+            jsonEncodedData: jsonEncode(toJson()), options: options)
+        .forEach((element) {
+      allSharedKeyStatus.add(element);
+    });
 
-    for (var atSign in atSigns) {
-      var sharedAtKey = selfKey;
-      sharedAtKey.sharedWith = atSign;
-
-      var atOperationItemStatus = AtOperationItemStatus(
-          atSign: atSign,
-          key: selfKey.key ?? '',
-          complete: false,
-          operation: Operation.share);
-
-      try {
-        var res = await _put(sharedAtKey, jsonEncode(toJson()));
-        atOperationItemStatus.complete = res;
-        yield atOperationItemStatus;
-      } catch (e) {
-        atOperationItemStatus.exception = Exception(e.toString());
-        yield atOperationItemStatus;
-        print("Error in sharing $atSign $e");
+    bool allOpeartionSuccessful = true;
+    for (var sharedKeyStatus in allSharedKeyStatus) {
+      if (sharedKeyStatus.complete == false) {
+        allOpeartionSuccessful = false;
+        break;
       }
     }
+    return allOpeartionSuccessful;
   }
 
   @override
-  Stream<AtOperationItemStatus> delete() async* {
+  Future<bool> delete() async {
     _validateModel();
 
-    AtKey selfAtKey = keyMaker.createSelfKey(
-      keyId: id,
-      collectionName: getCollectionName(),
-    );
+    bool isSelfKeyDeleted = false;
+    await CollectionMethodImpl.getInstance()
+        .delete()
+        .forEach((AtOperationItemStatus operationEvent) {
+      if (operationEvent.complete) {
+        isSelfKeyDeleted = true;
+      }
+    });
 
-    var isSelfKeyDeleted = await _getAtClient().delete(selfAtKey);
+    if (!isSelfKeyDeleted) {
+      return false;
+    }
 
-    yield AtOperationItemStatus(
-        atSign: selfAtKey.sharedWith ?? '',
-        key: selfAtKey.key ?? '',
-        complete: isSelfKeyDeleted,
-        operation: Operation.delete);
+    /// unsharing all shared keys.
+    bool isAllShareKeysUnshared = true;
 
-    yield* unshare();
+    await CollectionMethodImpl.getInstance()
+        .unshare()
+        .forEach((AtOperationItemStatus operationEvent) {
+      if (operationEvent.complete == false) {
+        isAllShareKeysUnshared = false;
+      }
+    });
+
+    return isAllShareKeysUnshared;
   }
 
   @override
-  Stream<AtOperationItemStatus> unshare({List<String>? atSigns}) async* {
-    String keyWithCollectionName = '$id.${getCollectionName()}';
+  Future<bool> unshare({List<String>? atSigns}) async {
+    bool isAllShareKeysUnshared = true;
 
-    var sharedAtKeys =
-        await _getAtClient().getAtKeys(regex: keyWithCollectionName);
-
-    if (atSigns == null) {
-      sharedAtKeys.retainWhere((element) => element.sharedWith != null);
-    } else {
-      sharedAtKeys
-          .retainWhere((element) => atSigns.contains(element.sharedWith));
-    }
-
-    for (var sharedKey in sharedAtKeys) {
-      var atOperationItemStatus = AtOperationItemStatus(
-          atSign: sharedKey.sharedWith ?? '',
-          key: sharedKey.key ?? '',
-          complete: false,
-          operation: Operation.unshare);
-
-      try {
-        var res = await _getAtClient().delete(sharedKey);
-        atOperationItemStatus.complete = res;
-        yield atOperationItemStatus;
-      } catch (e) {
-        atOperationItemStatus.exception = Exception(e.toString());
-        yield atOperationItemStatus;
-        print("Error in deleting $sharedKey $e");
+    await CollectionMethodImpl.getInstance()
+        .unshare(atSigns: atSigns)
+        .forEach((AtOperationItemStatus operationEvent) {
+      if (operationEvent.complete == false) {
+        isAllShareKeysUnshared = false;
       }
-    }
+    });
+
+    return isAllShareKeysUnshared;
+  }
+
+  @override
+  getId() {
+    return id;
   }
 
   /// Throws exception if id or collectionName is not added.

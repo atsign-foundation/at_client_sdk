@@ -28,3 +28,5 @@ export 'package:at_client/src/client/request_options.dart';
 export 'package:at_client/at_collection/at_collection_model.dart';
 export 'package:at_client/at_collection/model/data_operation_model.dart';
 export 'package:at_client/at_collection/model/spec/at_collection_model_spec.dart';
+export 'package:at_client/at_collection/at_collection_model_factory.dart';
+export 'package:at_client/at_collection/model/at_operation_item_status.dart';
