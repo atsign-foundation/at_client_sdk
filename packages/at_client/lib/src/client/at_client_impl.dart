@@ -46,7 +46,10 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
-/// Implementation of [AtClient] interface
+/// Implementation of [AtClient] interface and [AtSignChangeListener] interface
+///
+/// Implements to [AtSignChangeListener] to get notified on switch atSign event. On switch atSign event,
+/// pause's the compaction job on currentAtSign and start/resume the compaction job on the new atSign
 class AtClientImpl implements AtClient, AtSignChangeListener {
   AtClientPreference? _preference;
 
@@ -964,6 +967,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
+    // Checks if the instance of AtClientImpl belongs to previous atSign. If Yes,
+    // the compaction job is stopped and removed from changeListener list.
     if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
         getCurrentAtSign()) {
       _atClientCommitLogCompaction!.stopCompactionJob();
