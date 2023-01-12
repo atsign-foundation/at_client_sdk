@@ -25,7 +25,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   String get sharedKey => _sharedKey;
 
   AbstractAtKeyEncryption(this._atClient) {
-    _logger = AtSignLogger('AbstractAtKeyEncryption (${_atClient.getCurrentAtSign()})');
+    _logger = AtSignLogger(
+        'AbstractAtKeyEncryption (${_atClient.getCurrentAtSign()})');
   }
 
   @visibleForTesting

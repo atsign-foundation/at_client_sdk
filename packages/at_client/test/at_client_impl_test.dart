@@ -81,7 +81,8 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).currentAtSign, atSign);
+          expect(
+              (itr.current as NotificationServiceImpl).currentAtSign, atSign);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
         }

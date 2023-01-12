@@ -19,7 +19,8 @@ class SharedKeyDecryption implements AtKeyDecryption {
   late final AtSignLogger _logger;
 
   SharedKeyDecryption(this.atClient) {
-    _logger = AtSignLogger('SharedKeyDecryption (${atClient.getCurrentAtSign()})');
+    _logger =
+        AtSignLogger('SharedKeyDecryption (${atClient.getCurrentAtSign()})');
   }
 
   @override
