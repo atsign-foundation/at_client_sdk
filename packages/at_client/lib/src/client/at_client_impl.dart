@@ -76,6 +76,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _telemetry = telemetryService;
     _cascadeSetTelemetryService();
   }
+
   @override
   @experimental
   AtTelemetryService? get telemetry => _telemetry;
@@ -90,17 +91,19 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   late SyncService _syncService;
   @override
-  set syncService (SyncService syncService) {
+  set syncService(SyncService syncService) {
     _syncService = syncService;
   }
+
   @override
   SyncService get syncService => _syncService;
 
   late NotificationService _notificationService;
   @override
-  set notificationService (NotificationService notificationService) {
+  set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
   }
+
   @override
   NotificationService get notificationService => _notificationService;
 
@@ -725,8 +728,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           ..metadata!.ttl = 2592000000
           ..sharedBy = _atSign;
 
-        var notificationResult =
-            await notificationService.notify(
+        var notificationResult = await notificationService.notify(
           NotificationParams.forUpdate(
             atKey,
             value: jsonEncode(fileTransferObject.toJson()),
@@ -1003,9 +1005,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @Deprecated("Use [create]")
   AtClientImpl(
-      String atSign,
-      String? namespace,
-      AtClientPreference preference) {
+      String atSign, String? namespace, AtClientPreference preference) {
     _atSign = AtUtils.formatAtSign(atSign)!;
     _preference = preference;
     _namespace = namespace;
