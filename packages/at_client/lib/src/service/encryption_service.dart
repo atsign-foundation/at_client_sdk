@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:async/async.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
@@ -84,51 +83,6 @@ class EncryptionService {
     //decrypt stream using decrypted aes shared key
     var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey);
     return decryptedValue;
-  }
-
-  @Deprecated('Not in use')
-  Future<void> encryptUnencryptedData() async {
-    var atClient = await (AtClientImpl.getClient(atSign));
-    if (atClient == null) {
-      return;
-    }
-    var selfKeys = await atClient.getAtKeys(sharedBy: atSign);
-    // ignore: avoid_function_literals_in_foreach_calls
-    selfKeys.forEach((atKey) async {
-      var key = atKey.key!;
-      if (!(key.startsWith(AT_PKAM_PRIVATE_KEY) ||
-          key.startsWith(AT_PKAM_PUBLIC_KEY) ||
-          key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
-          key.startsWith(AT_SIGNING_PRIVATE_KEY) ||
-          key.startsWith(AT_ENCRYPTION_SHARED_KEY) ||
-          key.startsWith('_'))) {
-        var sharedWith = atKey.sharedWith;
-        var isPublic = false;
-        var isCached = false;
-        if (atKey.metadata != null) {
-          isPublic = atKey.metadata?.isPublic ?? false;
-          isCached = atKey.metadata?.isCached ?? false;
-        }
-        if (!isPublic && !isCached) {
-          if (sharedWith == null || sharedWith == atSign) {
-            var atValue = await atClient.get(atKey);
-            var metadata =
-                (atValue.metadata != null) ? atValue.metadata! : Metadata();
-            var isEncrypted =
-                (metadata.isEncrypted != null) ? metadata.isEncrypted! : false;
-            if (!isEncrypted) {
-              var value = atValue.value;
-              metadata.isEncrypted = true;
-              metadata.isBinary =
-                  (metadata.isBinary != null) ? metadata.isBinary : false;
-              atKey.metadata = metadata;
-              await atClient.put(atKey, value);
-            }
-          }
-        }
-      }
-    });
-    await atClient.getSyncManager()!.sync();
   }
 
   /// Returns sharedWith atSign publicKey.
