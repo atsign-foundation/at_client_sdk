@@ -90,6 +90,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   AtChops? get atChops => _atChops;
 
   late SyncService _syncService;
+
   @override
   set syncService(SyncService syncService) {
     _syncService = syncService;
@@ -99,6 +100,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   SyncService get syncService => _syncService;
 
   late NotificationService _notificationService;
+
   @override
   set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
@@ -117,14 +119,17 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
+  late AtClientConfig _atClientConfig;
+
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
       {AtClientManager? atClientManager,
-        RemoteSecondary? remoteSecondary,
-        EncryptionService? encryptionService,
-        SecondaryKeyStore? localSecondaryKeyStore,
-        AtChops? atChops,
-        AtClientCommitLogCompaction? atClientCommitLogCompaction}) async {
+      RemoteSecondary? remoteSecondary,
+      EncryptionService? encryptionService,
+      SecondaryKeyStore? localSecondaryKeyStore,
+      AtChops? atChops,
+      AtClientCommitLogCompaction? atClientCommitLogCompaction,
+      AtClientConfig? atClientConfig}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       return atClientInstanceMap[currentAtSign];
@@ -137,7 +142,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         encryptionService: encryptionService,
         localSecondaryKeyStore: localSecondaryKeyStore,
         atChops: atChops,
-        atClientCommitLogCompaction: atClientCommitLogCompaction);
+        atClientCommitLogCompaction: atClientCommitLogCompaction,
+        atClientConfig: atClientConfig);
 
     await atClientImpl._init();
 
@@ -148,10 +154,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   AtClientImpl._(String theAtSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
       {RemoteSecondary? remoteSecondary,
-        EncryptionService? encryptionService,
-        SecondaryKeyStore? localSecondaryKeyStore,
-        AtChops? atChops,
-        AtClientCommitLogCompaction? atClientCommitLogCompaction}) {
+      EncryptionService? encryptionService,
+      SecondaryKeyStore? localSecondaryKeyStore,
+      AtChops? atChops,
+      AtClientCommitLogCompaction? atClientCommitLogCompaction,
+      AtClientConfig? atClientConfig}) {
     _atSign = AtUtils.formatAtSign(theAtSign)!;
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -199,9 +206,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _atClientCommitLogCompaction ??=
         AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
     _atClientCommitLogCompaction!.scheduleCompaction(
-        AtClientConfig
-            .getInstance()
-            .commitLogCompactionTimeIntervalInMins);
+        _atClientConfig.commitLogCompactionTimeIntervalInMins);
   }
 
   /// Does nothing unless a telemetry service has been injected
