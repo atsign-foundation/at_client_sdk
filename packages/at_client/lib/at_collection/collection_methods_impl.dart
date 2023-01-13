@@ -28,13 +28,30 @@ class CollectionMethodImpl {
   late KeyMakerSpec keyMaker = DefaultKeyMaker();
   late AtCollectionModel atCollectionModel;
 
+  String _formatId(String id) {
+    String formattedId = id;
+
+    formattedId = formattedId.trim().toLowerCase();
+    formattedId = formattedId.replaceAll(' ', '-');
+
+    for (int i = 0; i < formattedId.length; i++) {
+      /// replacing character with '-' if it's not alphanumeric.
+      if (RegExp(r'^(?!\s*$)[a-zA-Z0-9- ]{1,20}$').hasMatch(formattedId[i]) ==
+          false) {
+        formattedId = formattedId.replaceAll(formattedId[i], '-');
+      }
+    }
+
+    return formattedId;
+  }
+
   Stream<AtOperationItemStatus> save(
       {required String jsonEncodedData,
       ObjectLifeCycleOptions? options,
       bool share = false}) async* {
     AtKey atKey = keyMaker.createSelfKey(
-      keyId: atCollectionModel.id,
-      collectionName: atCollectionModel.getCollectionName(),
+      keyId: _formatId(atCollectionModel.getId()),
+      collectionName: _formatId(atCollectionModel.getCollectionName()),
       objectLifeCycleOptions: options,
     );
 
@@ -90,8 +107,8 @@ class CollectionMethodImpl {
       {ObjectLifeCycleOptions? options,
       required String jsonEncodedData}) async* {
     var selfKey = keyMaker.createSelfKey(
-        keyId: atCollectionModel.id,
-        collectionName: atCollectionModel.getCollectionName(),
+        keyId: _formatId(atCollectionModel.id),
+        collectionName: _formatId(atCollectionModel.getCollectionName()),
         objectLifeCycleOptions: options);
 
     late AtOperationItemStatus selfKeyUpdateStatus;
@@ -131,8 +148,8 @@ class CollectionMethodImpl {
 
   Stream<AtOperationItemStatus> delete() async* {
     AtKey selfAtKey = keyMaker.createSelfKey(
-      keyId: atCollectionModel.id,
-      collectionName: atCollectionModel.getCollectionName(),
+      keyId: _formatId(atCollectionModel.id),
+      collectionName: _formatId(atCollectionModel.getCollectionName()),
     );
 
     var isSelfKeyDeleted = await _getAtClient().delete(selfAtKey);
@@ -178,8 +195,7 @@ class CollectionMethodImpl {
   }
 
   AtClient _getAtClient() {
-    atClient ??= AtClientManager.getInstance().atClient;
-    return atClient!;
+    return AtClientManager.getInstance().atClient;
   }
 
   Future<bool> _put(AtKey atKey, String jsonEncodedData) async {

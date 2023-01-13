@@ -37,7 +37,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   }
 
   @override
-  Stream<AtOperationItemStatus> shareWith(List<String> atSigns,
+  Stream<AtOperationItemStatus> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async* {
     _validateModel();
 
