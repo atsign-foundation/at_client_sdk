@@ -19,16 +19,17 @@ class TestSuiteInitializer {
     return _singleton;
   }
 
-  Future<void> testInitializer(String atSign, String namespace,{AtServiceFactory? atServiceFactory}) async {
+  Future<void> testInitializer(String atSign, String namespace) async {
     try {
       // Create the atClientManager for the atSign
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace,
-              TestPreferences.getInstance().getPreference(atSign), atServiceFactory: atServiceFactory);
+              TestPreferences.getInstance().getPreference(atSign));
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(atClientManager.atClient, atSign);
-      await E2ESyncService.getInstance().syncData(atClientManager.atClient.syncService);
+      await E2ESyncService.getInstance()
+          .syncData(atClientManager.atClient.syncService);
 
       // verify if the local key is set to local secondary
       var result = await atClientManager.atClient
