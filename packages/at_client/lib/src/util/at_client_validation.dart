@@ -55,7 +55,8 @@ class AtClientValidation {
 
   /// Verify if the atSign exists in root server.
   /// Throws [InvalidAtSignException] if atSign does not exist.
-  Future<void> isAtSignExists(SecondaryAddressFinder secondaryAddressFinder, String atSign) async {
+  Future<void> isAtSignExists(
+      SecondaryAddressFinder secondaryAddressFinder, String atSign) async {
     if (atSign.isEmpty) {
       throw AtKeyException('@sign cannot be empty',
           intent: Intent.validateAtSign,
@@ -128,8 +129,7 @@ class AtClientValidation {
     }
     AtUtils.formatAtSign(notificationParams.atKey.sharedWith);
     await isAtSignExists(
-        secondaryAddressFinder,
-        notificationParams.atKey.sharedWith!);
+        secondaryAddressFinder, notificationParams.atKey.sharedWith!);
 
     // For reasons lost in the mists of time, we are overloading use of the 'key' field
     // in the notification so it actually contains the text of 'text' notifications.

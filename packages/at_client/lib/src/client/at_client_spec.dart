@@ -38,10 +38,10 @@ abstract class AtClient {
 
   AtChops? get atChops;
 
-  set syncService (SyncService syncService);
+  set syncService(SyncService syncService);
   SyncService get syncService;
 
-  set notificationService (NotificationService notificationService);
+  set notificationService(NotificationService notificationService);
   NotificationService get notificationService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.

@@ -63,11 +63,13 @@ class AtClientManager {
         preference.rootDomain, preference.rootPort);
     if (_currentAtClient != null &&
         _currentAtClient?.getCurrentAtSign() == atSign) {
-      _logger.info('previous currentAtSign ${_currentAtClient?.getCurrentAtSign()} is same as new atSign $atSign - doing nothing, returning');
+      _logger.info(
+          'previous currentAtSign ${_currentAtClient?.getCurrentAtSign()} is same as new atSign $atSign - doing nothing, returning');
       return this;
     }
 
-    _logger.info('Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
+    _logger.info(
+        'Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
     var previousAtClient = _currentAtClient;
     _currentAtClient = await serviceFactory.atClient(_atSign, namespace, preference, this);
@@ -88,7 +90,7 @@ class AtClientManager {
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {
-    if (! _changeListeners.contains(listener)) {
+    if (!_changeListeners.contains(listener)) {
       _changeListeners.add(listener);
     }
   }
@@ -97,7 +99,8 @@ class AtClientManager {
     // Copying the items in _changeListener to a new list to avoid
     // concurrent modification exception when removing the previous
     // atSign listeners
-    List<AtSignChangeListener> copyOfChangeListeners = List.from(_changeListeners);
+    List<AtSignChangeListener> copyOfChangeListeners =
+        List.from(_changeListeners);
     for (var listener in copyOfChangeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
     }

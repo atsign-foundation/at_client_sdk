@@ -68,6 +68,7 @@ class AtClientImpl implements AtClient {
     _telemetry = telemetryService;
     _cascadeSetTelemetryService();
   }
+
   @override
   @experimental
   AtTelemetryService? get telemetry => _telemetry;
@@ -82,17 +83,19 @@ class AtClientImpl implements AtClient {
 
   late SyncService _syncService;
   @override
-  set syncService (SyncService syncService) {
+  set syncService(SyncService syncService) {
     _syncService = syncService;
   }
+
   @override
   SyncService get syncService => _syncService;
 
   late NotificationService _notificationService;
   @override
-  set notificationService (NotificationService notificationService) {
+  set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
   }
+
   @override
   NotificationService get notificationService => _notificationService;
 
@@ -695,8 +698,7 @@ class AtClientImpl implements AtClient {
           ..metadata!.ttl = 2592000000
           ..sharedBy = _atSign;
 
-        var notificationResult =
-            await notificationService.notify(
+        var notificationResult = await notificationService.notify(
           NotificationParams.forUpdate(
             atKey,
             value: jsonEncode(fileTransferObject.toJson()),

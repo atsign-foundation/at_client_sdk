@@ -14,7 +14,8 @@ class SelfKeyEncryption implements AtKeyEncryption {
   final AtClient atClient;
 
   SelfKeyEncryption(this.atClient) {
-    _logger = AtSignLogger('SelfKeyEncryption (${atClient.getCurrentAtSign()})');
+    _logger =
+        AtSignLogger('SelfKeyEncryption (${atClient.getCurrentAtSign()})');
   }
 
   @override
@@ -26,7 +27,8 @@ class SelfKeyEncryption implements AtKeyEncryption {
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
     // Get AES key for current atSign
-    var selfEncryptionKey = await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
+    var selfEncryptionKey =
+        await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
     selfEncryptionKey =
         DefaultResponseParser().parse(selfEncryptionKey).response;
     // Encrypt value using sharedKey
