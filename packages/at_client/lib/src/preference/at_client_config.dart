@@ -15,5 +15,7 @@ class AtClientConfig {
   /// Represents the client commit log compaction time interval
   ///
   /// Triggers the compaction job for every 11 minutes.
-  final int commitLogCompactionTimeIntervalInMins = 11;
+  // "final" keyword is not set intentionally to enable tests to override the
+  // compaction time interval.
+  int commitLogCompactionTimeIntervalInMins = 11;
 }

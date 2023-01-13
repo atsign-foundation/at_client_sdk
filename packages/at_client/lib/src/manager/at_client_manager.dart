@@ -27,6 +27,7 @@ class AtClientManager {
   AtClient get atClient => _currentAtClient!;
 
   SyncService get syncService => atClient.syncService;
+
   NotificationService get notificationService => atClient.notificationService;
 
   SecondaryAddressFinder? secondaryAddressFinder;
@@ -51,18 +52,23 @@ class AtClientManager {
   }
 
   Future<AtClientManager> setCurrentAtSign(
-      String atSign, String? namespace, AtClientPreference preference) async {
+      String atSign, String? namespace, AtClientPreference preference,
+      {AtServiceFactory? atServiceFactory}) async {
+    atServiceFactory ??= AtServiceFactory();
+
     _logger.info("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
     if (_currentAtClient != null &&
         _currentAtClient?.getCurrentAtSign() == atSign) {
-      _logger.info('previous currentAtSign ${_currentAtClient?.getCurrentAtSign()} is same as new atSign $atSign - doing nothing, returning');
+      _logger.info(
+          'previous currentAtSign ${_currentAtClient?.getCurrentAtSign()} is same as new atSign $atSign - doing nothing, returning');
       return this;
     }
 
-    _logger.info('Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
+    _logger.info(
+        'Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
     var previousAtClient = _currentAtClient;
     _currentAtClient = await AtClientImpl.create(_atSign, namespace, preference,
@@ -76,10 +82,8 @@ class AtClientManager {
         atClientManager: this);
     _currentAtClient!.notificationService = notificationService;
 
-    var syncService = await SyncServiceImpl.create(
-        _currentAtClient!,
-        atClientManager: this,
-        notificationService: notificationService);
+    var syncService = await SyncServiceImpl.create(_currentAtClient!,
+        atClientManager: this, notificationService: notificationService);
     _currentAtClient!.syncService = syncService;
 
     _logger.info("setCurrentAtSign complete");
@@ -88,7 +92,7 @@ class AtClientManager {
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {
-    if (! _changeListeners.contains(listener)) {
+    if (!_changeListeners.contains(listener)) {
       _changeListeners.add(listener);
     }
   }
@@ -97,7 +101,8 @@ class AtClientManager {
     // Copying the items in _changeListener to a new list to avoid
     // concurrent modification exception when removing the previous
     // atSign listeners
-    List<AtSignChangeListener> copyOfChangeListeners = List.from(_changeListeners);
+    List<AtSignChangeListener> copyOfChangeListeners =
+        List.from(_changeListeners);
     for (var listener in copyOfChangeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
     }
@@ -119,5 +124,20 @@ class AtClientManager {
   @visibleForTesting
   Iterator<dynamic> getItemsInChangeListeners() {
     return _changeListeners.iterator;
+  }
+}
+
+class AtServiceFactory {
+  AtClient? atClient;
+
+  Future<AtClient> createAtClientImpl(
+      String atSign,
+      String namespace,
+      AtClientPreference atClientPreference,
+      AtClientManager atClientManager) async {
+    atClient ??= await AtClientImpl.create(
+        atSign, namespace, atClientPreference,
+        atClientManager: atClientManager);
+    return atClient!;
   }
 }

@@ -33,7 +33,7 @@ class AtClientCommitLogCompaction {
   /// The call to [scheduleCompaction] will initiate the commit log compaction. The method
   /// accepts an integer which represents the time interval in minutes.
   void scheduleCompaction(int timeIntervalInMins) {
-    _logger.info('Starting commit log compaction job');
+    _logger.info('Starting commit log compaction job running for every $timeIntervalInMins minute(s)');
     var atClientCommitLogCompaction = AtCompactionConfig()
       ..compactionFrequencyInMins = timeIntervalInMins;
     _atCompactionJob.scheduleCompactionJob(atClientCommitLogCompaction);
