@@ -20,8 +20,8 @@ void main() {
       expect(putResult, startsWith('data:'));
       print('putResult $putResult');
     }
-    expect(await atClientManager.syncService.isInSync(), false);
-    atClientManager.syncService.sync(onDone: onSuccess);
+    expect(await atClient.syncService.isInSync(), false);
+    atClient.syncService.sync(onDone: onSuccess);
     await Future.delayed(Duration(seconds: 10));
   });
 
@@ -31,7 +31,7 @@ void main() {
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'wavi', preference);
     var atClient = atClientManager.atClient;
-    var syncService = atClientManager.syncService;
+    var syncService = atClient.syncService;
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
     // Adding 10 keys to remote secondary

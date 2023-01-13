@@ -17,7 +17,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atsign, 'me', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atsign, preference);
     // phone.me@alice🛠
@@ -26,7 +26,7 @@ void main() {
     var atNotification = AtNotification('123', notificationIdKey, atsign, atsign2, DateTime.now().millisecondsSinceEpoch, 'key',  true);
     var putResult = await atClient.put(notificationKey, jsonEncode(atNotification.toJson()));
     expect(putResult, true);
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     var getResult = await atClient.getAtKeys(regex: notificationIdKey); 
     assert(!getResult.contains(notificationKey));
   });
