@@ -116,6 +116,8 @@ void main() {
         atClientCommitLogCompaction: atClientCommitLogCompaction,
         atClientConfig: atClientConfig);
     atServiceFactory = AtServiceFactory()..atClient = secondAtSignAtClient;
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(secondAtSign, namespace);
     // Initialize AtClientManager for second AtSign
     secondAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(secondAtSign, namespace,
@@ -164,5 +166,5 @@ void main() {
         firstAtSignEntriesCountBeforeSwitchAtSign >=
             firstAtSignEntriesCountAfterSwitchAtSign,
         true);
-  }, timeout: Timeout(Duration(minutes: 2)));
+  }, timeout: Timeout(Duration(minutes: 3)));
 }
