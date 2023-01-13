@@ -1,6 +1,7 @@
-## 3.0.51
+## 3.0.52
 - feat: Introduce commit log compaction to keep size of commit log thin
 - fix: Fixed a bug where switch atSign event is notified multiple times
+## 3.0.51
 - feat: Add atSign to AtSignLoggers' names when relevant, so that log messages are clearer
 - feat: Made notificationService and syncService available via AtClient to enable cleaner simpler code elsewhere
 - fix: Fixed clearing of sync progress listener while switching atsign.
