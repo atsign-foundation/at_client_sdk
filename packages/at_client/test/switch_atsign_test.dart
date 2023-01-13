@@ -24,16 +24,16 @@ void main() {
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference);
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
-      atClientManager.syncService
+      atClientManager.atClient.syncService
           .addProgressListener(AliceSyncProgressListener());
       final bobPreference = AtClientPreference();
       final bobAtSign = '@bob';
       await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
-      atClientManager.syncService
+      atClientManager.atClient.syncService
           .addProgressListener(BobSyncProgressListener());
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
       expect(
-          (atClientManager.syncService as SyncServiceImpl)
+          (atClientManager.atClient.syncService as SyncServiceImpl)
               .syncProgressListenerSize(),
           1);
     });

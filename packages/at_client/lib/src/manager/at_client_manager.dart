@@ -26,7 +26,9 @@ class AtClientManager {
 
   AtClient get atClient => _currentAtClient!;
 
+  @Deprecated('Use atClientManager.atClient.syncService')
   SyncService get syncService => atClient.syncService;
+  @Deprecated('Use atClientManager.atClient.notificationService')
   NotificationService get notificationService => atClient.notificationService;
 
   SecondaryAddressFinder? secondaryAddressFinder;
@@ -50,8 +52,11 @@ class AtClientManager {
     }
   }
 
-  Future<AtClientManager> setCurrentAtSign(
-      String atSign, String? namespace, AtClientPreference preference) async {
+  Future<AtClientManager> setCurrentAtSign(String atSign, String? namespace, AtClientPreference preference,
+      {AtServiceFactory? serviceFactory}) async {
+
+    serviceFactory ??= DefaultAtServiceFactory();
+
     _logger.info("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
@@ -65,21 +70,16 @@ class AtClientManager {
     _logger.info('Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
     var previousAtClient = _currentAtClient;
-    _currentAtClient = await AtClientImpl.create(_atSign, namespace, preference,
-        atClientManager: this);
+    _currentAtClient = await serviceFactory.atClient(_atSign, namespace, preference, this);
+
     final switchAtSignEvent =
         SwitchAtSignEvent(previousAtClient, _currentAtClient!);
     _notifyListeners(switchAtSignEvent);
 
-    var notificationService = await NotificationServiceImpl.create(
-        _currentAtClient!,
-        atClientManager: this);
+    var notificationService = await serviceFactory.notificationService(_currentAtClient!, this);
     _currentAtClient!.notificationService = notificationService;
 
-    var syncService = await SyncServiceImpl.create(
-        _currentAtClient!,
-        atClientManager: this,
-        notificationService: notificationService);
+    var syncService = await serviceFactory.syncService(_currentAtClient!, this, notificationService);
     _currentAtClient!.syncService = syncService;
 
     _logger.info("setCurrentAtSign complete");
@@ -119,5 +119,28 @@ class AtClientManager {
   @visibleForTesting
   Iterator<dynamic> getItemsInChangeListeners() {
     return _changeListeners.iterator;
+  }
+}
+
+abstract class AtServiceFactory {
+  Future<AtClient> atClient(String atSign, String? namespace, AtClientPreference preference, AtClientManager atClientManager);
+  Future<NotificationService> notificationService(AtClient atClient, AtClientManager atClientManager);
+  Future<SyncService> syncService(AtClient atClient, AtClientManager atClientManager, NotificationService notificationService);
+}
+
+class DefaultAtServiceFactory implements AtServiceFactory {
+  @override
+  Future<AtClient> atClient(String atSign, String? namespace, AtClientPreference preference, AtClientManager atClientManager) async {
+    return await AtClientImpl.create(atSign, namespace, preference, atClientManager: atClientManager);
+  }
+
+  @override
+  Future<NotificationService> notificationService(AtClient atClient, AtClientManager atClientManager) async {
+    return await NotificationServiceImpl.create(atClient, atClientManager: atClientManager);
+  }
+
+  @override
+  Future<SyncService> syncService(AtClient atClient, AtClientManager atClientManager, NotificationService notificationService) async {
+    return await SyncServiceImpl.create(atClient, atClientManager: atClientManager, notificationService: notificationService);
   }
 }

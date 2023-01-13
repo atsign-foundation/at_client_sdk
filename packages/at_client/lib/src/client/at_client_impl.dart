@@ -215,12 +215,6 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated("Use SyncManager.sync")
-  SyncManager? getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(_atSign);
-  }
-
-  @override
   void setPreferences(AtClientPreference preference) async {
     _preference = preference;
   }
@@ -829,11 +823,6 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  @Deprecated("Use EncryptionService")
-  Future<void> encryptUnEncryptedData() async {
-    await _encryptionService!.encryptUnencryptedData();
-  }
-
   @override
   String? getCurrentAtSign() => _atSign;
 
@@ -943,47 +932,10 @@ class AtClientImpl implements AtClient {
     return await getRemoteSecondary()?.executeVerb(builder);
   }
 
-  //
-  // Everything after this point has been deprecated
-  //
-
-  /// Returns a new instance of [AtClient]. App has to pass the current user atSign
-  /// and the client preference.
-  @Deprecated("Use AtClientManger to get instance of atClient")
-  static Future<AtClient?> getClient(String? currentAtSign) async {
-    if (atClientInstanceMap.containsKey(currentAtSign)) {
-      return atClientInstanceMap[currentAtSign];
-    }
-    AtSignLogger('AtClientImpl').severe(
-        'Instance of AtClientImpl for $currentAtSign has not been created');
-    return null;
-  }
-
-  @Deprecated("Use [create]")
-
-  /// use [create]
-  static Future<void> createClient(String currentAtSign, String? namespace,
-      AtClientPreference preferences) async {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
-    if (atClientInstanceMap.containsKey(currentAtSign)) {
-      return;
-    }
-    if (preferences.isLocalStoreRequired) {
-      var storageManager = StorageManager(preferences);
-      await storageManager.init(currentAtSign, preferences.keyStoreSecret);
-    }
-    var atClientImpl = AtClientImpl(currentAtSign, namespace, preferences);
-    await atClientImpl._init();
-    atClientInstanceMap[currentAtSign] = atClientImpl;
-  }
-
-  @Deprecated("Use [create]")
-  AtClientImpl(
-      String atSign,
-      String? namespace,
-      AtClientPreference preference) {
-    _atSign = AtUtils.formatAtSign(atSign)!;
-    _preference = preference;
-    _namespace = namespace;
+  // TODO v4 - remove this method in version 4 of at_client package
+  @override
+  @Deprecated("Use AtClient.syncService")
+  SyncManager? getSyncManager() {
+    return SyncManagerImpl.getInstance().getSyncManager(_atSign);
   }
 }
