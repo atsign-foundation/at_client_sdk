@@ -44,7 +44,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   static Future<T> getById<T extends AtCollectionModel>(String keyId,
-      {required String collectionName,
+      {String? collectionName,
       required AtCollectionModelFactory collectionModelFactory}) async {
     return (await atCollectionRepository.getById<T>(
       keyId,
@@ -54,7 +54,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   static Future<List<T>> getAll<T extends AtCollectionModel>(
-      {required String collectionName,
+      {String? collectionName,
       required AtCollectionModelFactory collectionModelFactory}) async {
     return (await atCollectionRepository.getAll<T>(
       collectionName: collectionName,
@@ -111,7 +111,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   @override
-  Future<bool> shareWith(List<String> atSigns,
+  Future<bool> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async {
     _validateModel();
 

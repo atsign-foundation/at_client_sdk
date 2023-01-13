@@ -15,44 +15,14 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 abstract class AtCollectionModelStreamSpec<T> {
   AtCollectionModelStreamSpec();
 
-  /// [convert] is function that accepts json encoded [String] and forms an instance of [AtCollectionModel].
-  // final AtCollectionModelSpec Function(String jsonEncodedString) convert;
-
-  /// [toJson] converts [AtCollectionModel] to a map format.
-  /// App has to override this method and add all class members to it.
-  ///
-  /// e.g We have a class that extends [AtCollectionModel] and has name and description as it's member.
-  ///
-  /// Remember to mention [id] and [collectionName] in toJson.
-  ///
-  /// For such a class toJson would look like:
-  ///
-  /// ```
-  ///   @override
-  ///   Map<String, dynamic> toJson() {
-  ///   final Map<String, dynamic> data = {};
-  ///   data['id'] = id;
-  ///   data['collectionName'] = collectionName;
-  ///
-  ///   data['name'] = name;
-  ///   data['description'] = description;
-  ///
-  //   return data;
-  // }
-  /// ```
-  ///
-  // Map<String, dynamic> toJson();
-
-  // T fromJson(String jsonDecodedData);
-
-  // Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
-  // However if you want the object to be just saved and want to share later then pass share as false
-  // If true is passed for share but the @signs to share with were never given then no share happens.
+  /// Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
+  /// However if you want the object to be just saved and want to share later then pass share as false
+  /// If true is passed for share but the @signs to share with were never given then no share happens.
   Stream<AtOperationItemStatus> save(
       {bool share = true, ObjectLifeCycleOptions? options});
 
   /// Shares with these additional atSigns.
-  Stream<AtOperationItemStatus> shareWith(List<String> atSigns,
+  Stream<AtOperationItemStatus> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options});
 
   /// unshares object with the list of atSigns supplied.

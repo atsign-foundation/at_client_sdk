@@ -24,9 +24,8 @@ class AtCollectionRepository {
   }
 
   Future<List<T>> getAll<T extends AtCollectionModel>(
-      {required String collectionName,
+      {String? collectionName,
       required AtCollectionModelFactory collectionModelFactory}) async {
-    /// TODO: needs to discuss
     _collectionName = collectionName ?? T.toString().toLowerCase();
 
     List<T> dataList = [];
@@ -51,7 +50,7 @@ class AtCollectionRepository {
   }
 
   Future<T> getById<T extends AtCollectionModel>(String keyId,
-      {required String collectionName,
+      {String? collectionName,
       required AtCollectionModelFactory collectionModelFactory}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
 

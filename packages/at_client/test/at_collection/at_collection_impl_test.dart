@@ -328,7 +328,7 @@ void main() {
 
     //   var allSharedData = <AtOperationItemStatus>[];
     //   await myModelTestObject1
-    //       .shareWith([sharedWithAtsign1, sharedWithAtsign2]).forEach((e) {
+    //       .share([sharedWithAtsign1, sharedWithAtsign2]).forEach((e) {
     //     allSharedData.add(e);
     //   });
 
@@ -362,7 +362,7 @@ void main() {
           )).thenAnswer((_) async => true);
 
       var result = await myModelTestObject1
-          .shareWith([sharedWithAtsign1, sharedWithAtsign2]);
+          .share([sharedWithAtsign1, sharedWithAtsign2]);
       expect(result, false);
     });
 
@@ -510,7 +510,7 @@ void main() {
       expect(savingTheObject, true);
 
       var sharingTheObject = await myModelTestObject1
-          .shareWith([sharedWithAtsign1, sharedWithAtsign2]);
+          .share([sharedWithAtsign1, sharedWithAtsign2]);
       expect(sharingTheObject, true);
 
       when(() => mockAtClient.getAtKeys(
@@ -571,7 +571,7 @@ void main() {
 
       /// we share the self key with two atsigns
       var sharingTheObject = await myModelTestObject1
-          .shareWith([sharedWithAtsign1, sharedWithAtsign2]);
+          .share([sharedWithAtsign1, sharedWithAtsign2]);
       expect(sharingTheObject, true);
 
       /// two shared keys for now

@@ -50,23 +50,22 @@ abstract class AtCollectionModelSpec<T> {
 
   T fromJson(String jsonDecodedData);
 
-  // Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
-  // However if you want the object to be just saved and want to share later then pass share as false
-  // If true is passed for share but the @signs to share with were never given then no share happens.
+  /// Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
+  /// However if you want the object to be just saved and want to share later then pass share as false
+  /// If true is passed for share but the @signs to share with were never given then no share happens.
   Future<bool> save({bool share = true, ObjectLifeCycleOptions? options});
 
   /// Shares with these additional atSigns.
-  Future<bool> shareWith(List<String> atSigns,
-      {ObjectLifeCycleOptions? options});
+  Future<bool> share(List<String> atSigns, {ObjectLifeCycleOptions? options});
 
   /// unshares object with the list of atSigns supplied.
-  /// If no @sign is passed it is unshared with every one with whom it was previously shared with
+  /// If no @sign is passed, it is unshared with every one with whom it was previously shared with
   Future<bool> unshare({List<String>? atSigns});
 
-  // Returns a list of @sign with whom it is previously shared with
+  /// Returns a list of @sign with whom it was previously shared with
   Future<List<String>> getSharedWith();
 
-  // Deletes this object completely and unshares with everyone with whom it is previosly shared with
+  /// Deletes this object and unshares with everyone with whom it is previosly shared with
   Future<bool> delete();
 
   String getId();
