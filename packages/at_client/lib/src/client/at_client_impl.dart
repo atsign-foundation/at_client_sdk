@@ -60,6 +60,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
+  AtClientConfig? _atClientConfig;
 
   @override
   // ignore: override_on_non_overriding_member
@@ -119,8 +120,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
-  late AtClientConfig _atClientConfig;
-
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
       {AtClientManager? atClientManager,
@@ -132,6 +131,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtClientConfig? atClientConfig}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
+      // Start the commit log compaction job on the currentAtSign and return the instance.
+      atClientInstanceMap[currentAtSign]
+          ._atClientCommitLogCompaction
+          ?.scheduleCompaction(AtClientConfig.getInstance()
+              .commitLogCompactionTimeIntervalInMins);
       return atClientInstanceMap[currentAtSign];
     }
 
@@ -205,8 +209,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
             .getSecondaryPersistenceStore(_atSign)!);
     _atClientCommitLogCompaction ??=
         AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
+    _atClientConfig ??= AtClientConfig.getInstance();
     _atClientCommitLogCompaction!.scheduleCompaction(
-        _atClientConfig.commitLogCompactionTimeIntervalInMins);
+        _atClientConfig!.commitLogCompactionTimeIntervalInMins);
   }
 
   /// Does nothing unless a telemetry service has been injected
@@ -963,13 +968,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     return await getRemoteSecondary()?.executeVerb(builder);
   }
 
-  // TODO v4 - remove this method in version 4 of at_client package
-  @override
-  @Deprecated("Use AtClient.syncService")
-  SyncManager? getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(_atSign);
-  }
-
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
     // Checks if the instance of AtClientImpl belongs to previous atSign. If Yes,
@@ -979,5 +977,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       _atClientCommitLogCompaction!.stopCompactionJob();
       _atClientManager.removeChangeListeners(this);
     }
+  }
+
+  // TODO v4 - remove this method in version 4 of at_client package
+  @override
+  @Deprecated("Use AtClient.syncService")
+  SyncManager? getSyncManager() {
+    return SyncManagerImpl.getInstance().getSyncManager(_atSign);
   }
 }

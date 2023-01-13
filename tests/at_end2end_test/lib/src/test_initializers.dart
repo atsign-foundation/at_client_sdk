@@ -19,12 +19,12 @@ class TestSuiteInitializer {
     return _singleton;
   }
 
-  Future<void> testInitializer(String atSign, String namespace,{AtServiceFactory? atServiceFactory}) async {
+  Future<void> testInitializer(String atSign, String namespace) async {
     try {
       // Create the atClientManager for the atSign
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace,
-              TestPreferences.getInstance().getPreference(atSign), atServiceFactory: atServiceFactory);
+              TestPreferences.getInstance().getPreference(atSign));
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(atClientManager.atClient, atSign);
