@@ -1,3 +1,5 @@
+## 3.0.52
+- feat: Introduce AtServiceFactory to make AtClientManager more reusable and more testable
 ## 3.0.51
 - feat: Add atSign to AtSignLoggers' names when relevant, so that log messages are clearer
 - feat: Made notificationService and syncService available via AtClient to enable cleaner simpler code elsewhere
