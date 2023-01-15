@@ -49,7 +49,7 @@ void main() async {
         await currentAtClientManager.atClient.put(phoneNumberKey, value);
     expect(putResult, true);
     await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.syncService);
+        .syncData(currentAtClientManager.atClient.syncService);
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
@@ -87,14 +87,14 @@ void main() async {
         await currentAtClientManager.atClient.put(verificationKey, value);
     expect(putResult, true);
     await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.syncService);
+        .syncData(currentAtClientManager.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign));
     await E2ESyncService.getInstance()
-        .syncData(sharedWithAtClientManager.syncService);
+        .syncData(sharedWithAtClientManager.atClient.syncService);
     var getResult = await sharedWithAtClientManager.atClient.getKeys(
         regex:
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
@@ -133,7 +133,7 @@ void main() async {
             auth: true);
     expect(result != null, true);
     await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.syncService);
+        .syncData(currentAtClientManager.atClient.syncService);
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign));

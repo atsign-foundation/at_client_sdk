@@ -94,7 +94,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();
 
-    notificationSubscription = _atClientManager.notificationService
+    notificationSubscription = _atClientManager.atClient.notificationService
         .subscribe(shouldDecrypt: true, regex: regex)
         .listen(_notificationListener);
 
@@ -117,7 +117,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     );
 
     for (AtKey key in keys) {
-      atClient
+      await atClient
           .get(key)
           .then(
             // ignore: unnecessary_cast

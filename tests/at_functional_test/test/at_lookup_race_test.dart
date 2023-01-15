@@ -49,7 +49,7 @@ void main() {
     // Wait for initial sync to complete
     logger.info("Waiting for initial sync");
     syncComplete = false;
-    atClientManager.syncService.sync(onDone: onSyncDone);
+    atClientManager.atClient.syncService.sync(onDone: onSyncDone);
     while (!syncComplete) {
       await Future.delayed(Duration(milliseconds: 100));
     }
@@ -84,7 +84,7 @@ void main() {
     logger.info("Waiting for post-put sync");
     syncComplete = false;
     // Wait for initial sync to complete
-    atClientManager.syncService.sync(onDone: onSyncDone);
+    atClientManager.atClient.syncService.sync(onDone: onSyncDone);
     while (!syncComplete) {
       await Future.delayed(Duration(milliseconds: 100));
     }

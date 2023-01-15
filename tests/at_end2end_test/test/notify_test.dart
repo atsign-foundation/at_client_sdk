@@ -49,7 +49,7 @@ void main() async {
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
             TestPreferences.getInstance().getPreference(currentAtSign));
-    final notificationResult = await currentAtClientManager.notificationService
+    final notificationResult = await currentAtClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(notificationResult, isNotNull);
     expect(notificationResult.notificationStatusEnum,
@@ -95,8 +95,8 @@ void main() async {
             namespace,
             TestPreferences.getInstance().getPreference(currentAtSign));
 
-        var epochMillsNow = DateTime.now().millisecondsSinceEpoch;
         var notificationResult = await AtClientManager.getInstance()
+            .atClient
             .notificationService
             .notify(input);
 
@@ -106,6 +106,7 @@ void main() async {
         sharedWithAtClientManager = await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
             namespace, TestPreferences.getInstance().getPreference(sharedWithAtSign));
         var atNotification = await AtClientManager.getInstance()
+            .atClient
             .notificationService
             .fetch(notificationResult.notificationID);
         atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
@@ -124,6 +125,7 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           currentAtSign, namespace, TestPreferences.getInstance().getPreference(currentAtSign));
       var notificationResult = await AtClientManager.getInstance()
+          .atClient
           .notificationService
           .fetch('abc-123');
       expect(notificationResult.id, 'abc-123');

@@ -33,7 +33,7 @@ class Monitor {
   // Status on the monitor
   MonitorStatus status = MonitorStatus.notStarted;
 
-  final _logger = AtSignLogger('Monitor');
+  late final AtSignLogger _logger;
 
   bool _keepAlive = false;
 
@@ -125,6 +125,7 @@ class Monitor {
       MonitorConnectivityChecker? monitorConnectivityChecker,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
       Duration? monitorHeartbeatInterval}) {
+    _logger = AtSignLogger('Monitor ($atSign)');
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -361,7 +362,8 @@ class Monitor {
       _logger.info('Monitor error $e - calling the retryCallback');
       _retryCallBack();
     } else {
-      _logger.severe('Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
+      _logger.severe(
+          'Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
       _onError(e);
     }
   }

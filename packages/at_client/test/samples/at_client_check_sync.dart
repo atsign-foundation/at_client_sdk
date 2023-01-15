@@ -10,7 +10,7 @@ void main() async {
     var preference = TestUtil.getAlicePreference();
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', preference);
-    var result = await atClientManager.syncService.isInSync();
+    var result = await atClientManager.atClient.syncService.isInSync();
     print('is in sync? $result');
   } on Exception catch (e, trace) {
     print(e.toString());
