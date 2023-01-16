@@ -62,6 +62,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
 
+  @visibleForTesting
+  AtClientCommitLogCompaction? get atClientCommitLogCompaction => _atClientCommitLogCompaction;
+
   @override
   // ignore: override_on_non_overriding_member
   AtChops? _atChops;
@@ -131,11 +134,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtClientConfig? atClientConfig}) async {
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
-      // Start the commit log compaction job on the currentAtSign and return the instance.
-      atClientInstanceMap[currentAtSign]
-          ._atClientCommitLogCompaction
-          ?.scheduleCompaction(AtClientConfig.getInstance()
-              .commitLogCompactionTimeIntervalInMins);
       return atClientInstanceMap[currentAtSign];
     }
 
@@ -976,6 +974,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         getCurrentAtSign()) {
       _atClientCommitLogCompaction!.stopCompactionJob();
       _atClientManager.removeChangeListeners(this);
+      // The existing atClientImpl instance in static map will not have compaction job running and
+      // will be removed from the changeListener.
+      // On switch atSign event, removing the previous atSign from atClientInstanceMap to
+      // refrain from returning the existing atClientImpl instance.
+      atClientInstanceMap.remove(getCurrentAtSign());
     }
   }
 
