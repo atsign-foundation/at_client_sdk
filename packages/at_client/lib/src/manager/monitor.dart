@@ -263,6 +263,7 @@ class Monitor {
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
     if (_preference.useAtChops) {
+      _logger.finer('Using AtChops to do the PKAM signing');
       var signingResult =
       atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
       _logger.finer('Sending command pkam:${signingResult.result}');
