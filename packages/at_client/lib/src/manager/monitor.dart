@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -81,6 +82,8 @@ class Monitor {
 
   get heartbeatInterval => _heartbeatInterval;
 
+  final AtChops? atChops;
+
   ///
   /// Creates a [Monitor] object.
   ///
@@ -124,7 +127,9 @@ class Monitor {
       {RemoteSecondary? remoteSecondary,
       MonitorConnectivityChecker? monitorConnectivityChecker,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-      Duration? monitorHeartbeatInterval}) {
+      Duration? monitorHeartbeatInterval,
+      this.atChops,
+      }) {
     _logger = AtSignLogger('Monitor ($atSign)');
     _onResponse = onResponse;
     _onError = onError;
@@ -133,7 +138,7 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
-    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference);
+    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference, atChops: atChops);
     _retryCallBack = retryCallBack;
     _monitorConnectivityChecker =
         monitorConnectivityChecker ?? MonitorConnectivityChecker();

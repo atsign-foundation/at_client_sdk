@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
@@ -23,8 +24,10 @@ class RemoteSecondary implements Secondary {
 
   late AtLookupImpl atLookUp;
 
+  final AtChops? atChops;
+
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey}) {
+      {String? privateKey, this.atChops}) {
     _atSign = AtUtils.formatAtSign(atSign)!;
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -40,6 +43,7 @@ class RemoteSecondary implements Secondary {
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
         clientConfig: {VERSION: AtClientConfig.getInstance().atClientVersion});
+    atLookUp.atChops = atChops;
   }
 
   @experimental
