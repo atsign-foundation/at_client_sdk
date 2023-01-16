@@ -16,7 +16,7 @@ Future<void> setUpMethod() async {
   var preference = TestUtils.getPreference(currentAtSign);
   atClientManager = await AtClientManager.getInstance()
       .setCurrentAtSign(currentAtSign, 'me', preference);
-  atClientManager.syncService.sync();
+  atClientManager.atClient.syncService.sync();
   // To setup encryption keys
   await setEncryptionKeys(currentAtSign, preference);
 }

@@ -8,17 +8,19 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
   /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
   /// local secondary server and remote secondary server.
-  /// [Deprecated] Use [AtClientManager.syncService]
-  @Deprecated("Use SyncManager.sync")
+  /// [Deprecated] Use [AtClient.syncService]
+  @Deprecated("Use AtClient.syncService")
   SyncManager? getSyncManager();
 
   @experimental
@@ -30,6 +32,17 @@ abstract class AtClient {
   RemoteSecondary? getRemoteSecondary();
 
   LocalSecondary? getLocalSecondary();
+
+  /// Set an instance of [AtChops] for data encryption and signing operations
+  set atChops(AtChops? atChops);
+
+  AtChops? get atChops;
+
+  set syncService(SyncService syncService);
+  SyncService get syncService;
+
+  set notificationService(NotificationService notificationService);
+  NotificationService get notificationService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
@@ -348,7 +361,7 @@ abstract class AtClient {
   ///                       latestN:3,
   ///                       Notifier: ‘wavi’);
   ///```
-  ///[Deprecated] Use [AtClientManager.notificationService]
+  ///[Deprecated] Use [AtClient.notificationService]
   @Deprecated("Use NotificationService")
   Future<bool> notify(AtKey key, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
@@ -527,6 +540,8 @@ abstract class AtClient {
       List<FileStatus> fileStatus,
       {DateTime? date});
 
+  /// Note - this method name is misleading as 'current' implies the atSign
+  /// could change - but an AtClient should only ever have one atSign.
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;

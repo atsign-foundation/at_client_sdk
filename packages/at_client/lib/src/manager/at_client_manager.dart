@@ -6,6 +6,7 @@ import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:meta/meta.dart';
 
 /// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
 ///
@@ -18,13 +19,18 @@ import 'package:at_utils/at_utils.dart';
 /// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
 /// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
 class AtClientManager {
-  late String _atSign;
-  AtClient? _previousAtClient;
-  late AtClient _currentAtClient;
+  final AtSignLogger _logger = AtSignLogger('AtClientManager');
 
-  AtClient get atClient => _currentAtClient;
-  late SyncService syncService;
-  late NotificationService notificationService;
+  late String _atSign;
+  AtClient? _currentAtClient;
+
+  AtClient get atClient => _currentAtClient!;
+
+  @Deprecated('Use atClientManager.atClient.syncService')
+  SyncService get syncService => atClient.syncService;
+  @Deprecated('Use atClientManager.atClient.notificationService')
+  NotificationService get notificationService => atClient.notificationService;
+
   SecondaryAddressFinder? secondaryAddressFinder;
   final _changeListeners = <AtSignChangeListener>[];
 
@@ -46,36 +52,98 @@ class AtClientManager {
     }
   }
 
-  Future<AtClientManager> setCurrentAtSign(
-      String atSign, String? namespace, AtClientPreference preference) async {
+  Future<AtClientManager> setCurrentAtSign(String atSign, String? namespace, AtClientPreference preference,
+      {AtServiceFactory? serviceFactory}) async {
+
+    serviceFactory ??= DefaultAtServiceFactory();
+
+    _logger.info("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
-    if (_previousAtClient != null &&
-        _previousAtClient?.getCurrentAtSign() == atSign) {
+    if (_currentAtClient != null &&
+        _currentAtClient?.getCurrentAtSign() == atSign) {
+      _logger.info(
+          'previous currentAtSign ${_currentAtClient?.getCurrentAtSign()} is same as new atSign $atSign - doing nothing, returning');
       return this;
     }
+
+    _logger.info(
+        'Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
-    _currentAtClient = await AtClientImpl.create(_atSign, namespace, preference,
-        atClientManager: this);
+    var previousAtClient = _currentAtClient;
+    _currentAtClient = await serviceFactory.atClient(_atSign, namespace, preference, this);
+
     final switchAtSignEvent =
-        SwitchAtSignEvent(_previousAtClient, _currentAtClient);
-    notificationService = await NotificationServiceImpl.create(_currentAtClient,
-        atClientManager: this);
-    syncService = await SyncServiceImpl.create(_currentAtClient,
-        atClientManager: this, notificationService: notificationService);
-    _previousAtClient = _currentAtClient;
+        SwitchAtSignEvent(previousAtClient, _currentAtClient!);
     _notifyListeners(switchAtSignEvent);
+
+    var notificationService = await serviceFactory.notificationService(_currentAtClient!, this);
+    _currentAtClient!.notificationService = notificationService;
+
+    var syncService = await serviceFactory.syncService(_currentAtClient!, this, notificationService);
+    _currentAtClient!.syncService = syncService;
+
+    _logger.info("setCurrentAtSign complete");
+
     return this;
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {
-    _changeListeners.add(listener);
+    if (!_changeListeners.contains(listener)) {
+      _changeListeners.add(listener);
+    }
   }
 
   void _notifyListeners(SwitchAtSignEvent switchAtSignEvent) {
-    for (var listener in _changeListeners) {
+    // Copying the items in _changeListener to a new list to avoid
+    // concurrent modification exception when removing the previous
+    // atSign listeners
+    List<AtSignChangeListener> copyOfChangeListeners =
+        List.from(_changeListeners);
+    for (var listener in copyOfChangeListeners) {
       listener.listenToAtSignChange(switchAtSignEvent);
     }
+  }
+
+  /// Removes the given listener from the list of listeners,
+  /// that are notified whenever the @sign is switched
+  void removeChangeListeners(AtSignChangeListener atSignChangeListener) {
+    _changeListeners.remove((atSignChangeListener));
+  }
+
+  /// NOT A PART of API. Added for unit tests
+  @visibleForTesting
+  int getChangeListenersSize() {
+    return _changeListeners.length;
+  }
+
+  /// NOT A PART of API. Added for unit tests
+  @visibleForTesting
+  Iterator<dynamic> getItemsInChangeListeners() {
+    return _changeListeners.iterator;
+  }
+}
+
+abstract class AtServiceFactory {
+  Future<AtClient> atClient(String atSign, String? namespace, AtClientPreference preference, AtClientManager atClientManager);
+  Future<NotificationService> notificationService(AtClient atClient, AtClientManager atClientManager);
+  Future<SyncService> syncService(AtClient atClient, AtClientManager atClientManager, NotificationService notificationService);
+}
+
+class DefaultAtServiceFactory implements AtServiceFactory {
+  @override
+  Future<AtClient> atClient(String atSign, String? namespace, AtClientPreference preference, AtClientManager atClientManager) async {
+    return await AtClientImpl.create(atSign, namespace, preference, atClientManager: atClientManager);
+  }
+
+  @override
+  Future<NotificationService> notificationService(AtClient atClient, AtClientManager atClientManager) async {
+    return await NotificationServiceImpl.create(atClient, atClientManager: atClientManager);
+  }
+
+  @override
+  Future<SyncService> syncService(AtClient atClient, AtClientManager atClientManager, NotificationService notificationService) async {
+    return await SyncServiceImpl.create(atClient, atClientManager: atClientManager, notificationService: notificationService);
   }
 }

@@ -22,6 +22,7 @@ void main() {
       var rsaKeyPair = RSAKeypair.fromRandom();
       var encryptedKey =
           EncryptionUtil.encryptKey(aesKey, rsaKeyPair.publicKey.toString());
+      // ignore: deprecated_member_use_from_same_package
       var decryptedKey = EncryptionUtil.decryptKey(
           encryptedKey, rsaKeyPair.privateKey.toString());
       expect(decryptedKey, aesKey);
