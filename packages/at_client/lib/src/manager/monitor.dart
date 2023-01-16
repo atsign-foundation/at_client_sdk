@@ -254,42 +254,6 @@ class Monitor {
     }
   }
 
-  @override
-  Future<bool> _pkamAuthenticate() async {
-    await createConnection();
-    try {
-      await _pkamAuthenticationMutex.acquire();
-      if (!_connection!.getMetaData()!.isAuthenticated) {
-        await _sendCommand((FromVerbBuilder()
-          ..atSign = _currentAtSign
-          ..clientConfig = _clientConfig)
-            .buildCommand());
-        var fromResponse = await (messageListener.read());
-        logger.finer('from result:$fromResponse');
-        if (fromResponse.isEmpty) {
-          return false;
-        }
-        fromResponse = fromResponse.trim().replaceAll('data:', '');
-        logger.finer('fromResponse $fromResponse');
-        var signingResult =
-        _atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
-        logger.finer('Sending command pkam:${signingResult.result}');
-        await _sendCommand('pkam:${signingResult.result}\n');
-        var pkamResponse = await messageListener.read();
-        if (pkamResponse == 'data:success') {
-          logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
-        } else {
-          throw UnAuthenticatedException(
-              'Failed connecting to $_currentAtSign. $pkamResponse');
-        }
-      }
-      return _connection!.getMetaData()!.isAuthenticated;
-    } finally {
-      _pkamAuthenticationMutex.release();
-    }
-  }
-
   Future<void> _authenticateConnection() async {
     await _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await getQueueResponse();
