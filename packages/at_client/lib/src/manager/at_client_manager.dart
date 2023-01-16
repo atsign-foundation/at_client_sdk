@@ -53,6 +53,10 @@ class AtClientManager {
     }
   }
 
+  /// * Can provide an [AtServiceFactory] to control what types of AtClients, NotificationServices and SyncServices get created
+  /// by this method.
+  /// * Can provide an [AtChops] instance if available; setCurrentAtSign will ensure that it is injected into objects that
+  /// can use it
   Future<AtClientManager> setCurrentAtSign(String atSign, String? namespace, AtClientPreference preference,
       {AtServiceFactory? serviceFactory, AtChops? atChops}) async {
 
