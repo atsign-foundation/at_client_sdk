@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
@@ -53,7 +54,7 @@ class AtClientManager {
   }
 
   Future<AtClientManager> setCurrentAtSign(String atSign, String? namespace, AtClientPreference preference,
-      {AtServiceFactory? serviceFactory}) async {
+      {AtServiceFactory? serviceFactory, AtChops? atChops}) async {
 
     serviceFactory ??= DefaultAtServiceFactory();
 
@@ -73,6 +74,7 @@ class AtClientManager {
     _atSign = atSign;
     var previousAtClient = _currentAtClient;
     _currentAtClient = await serviceFactory.atClient(_atSign, namespace, preference, this);
+    _currentAtClient!.atChops = atChops;
 
     final switchAtSignEvent =
         SwitchAtSignEvent(previousAtClient, _currentAtClient!);
