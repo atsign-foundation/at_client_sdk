@@ -254,6 +254,42 @@ class Monitor {
     }
   }
 
+  @override
+  Future<bool> _pkamAuthenticate() async {
+    await createConnection();
+    try {
+      await _pkamAuthenticationMutex.acquire();
+      if (!_connection!.getMetaData()!.isAuthenticated) {
+        await _sendCommand((FromVerbBuilder()
+          ..atSign = _currentAtSign
+          ..clientConfig = _clientConfig)
+            .buildCommand());
+        var fromResponse = await (messageListener.read());
+        logger.finer('from result:$fromResponse');
+        if (fromResponse.isEmpty) {
+          return false;
+        }
+        fromResponse = fromResponse.trim().replaceAll('data:', '');
+        logger.finer('fromResponse $fromResponse');
+        var signingResult =
+        _atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
+        logger.finer('Sending command pkam:${signingResult.result}');
+        await _sendCommand('pkam:${signingResult.result}\n');
+        var pkamResponse = await messageListener.read();
+        if (pkamResponse == 'data:success') {
+          logger.info('auth success');
+          _connection!.getMetaData()!.isAuthenticated = true;
+        } else {
+          throw UnAuthenticatedException(
+              'Failed connecting to $_currentAtSign. $pkamResponse');
+        }
+      }
+      return _connection!.getMetaData()!.isAuthenticated;
+    } finally {
+      _pkamAuthenticationMutex.release();
+    }
+  }
+
   Future<void> _authenticateConnection() async {
     await _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await getQueueResponse();
@@ -262,12 +298,19 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    var key = RSAPrivateKey.fromString(_preference.privateKey!);
-    var sha256signature =
-        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
-    var signature = base64Encode(sha256signature);
-    _logger.finer('Authenticating the monitor connection: pkam:$signature');
-    await _monitorConnection!.write('pkam:$signature\n');
+    if (_preference.useAtChops) {
+      var signingResult =
+      atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
+      _logger.finer('Sending command pkam:${signingResult.result}');
+      await _monitorConnection!.write('pkam:${signingResult.result}\n');
+    } else {
+      var key = RSAPrivateKey.fromString(_preference.privateKey!);
+      var sha256signature =
+      key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+      var signature = base64Encode(sha256signature);
+      _logger.finer('Authenticating the monitor connection: pkam:$signature');
+      await _monitorConnection!.write('pkam:$signature\n');
+    }
 
     var pkamResponse = await getQueueResponse();
     if (!pkamResponse.contains('success')) {
