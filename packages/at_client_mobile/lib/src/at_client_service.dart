@@ -345,6 +345,7 @@ class AtClientService {
 
   Future<void> _sync(AtClientPreference preference, String? atSign) async {
     if ((preference.privateKey != null || preference.cramSecret != null)) {
+      // ignore: deprecated_member_use
       AtClientManager.getInstance().syncService.sync();
     }
   }
