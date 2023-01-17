@@ -23,8 +23,17 @@ class MockAtCompactionJob extends Mock implements AtCompactionJob {
 
 void main() {
   group('A group of at client impl create tests', () {
+    final String atSign = '@alice';
+    setUp(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
+    tearDown(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
+
     test('test current atsign', () async {
-      final atSign = '@alice';
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()..syncRegex = '.wavi';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
@@ -32,13 +41,11 @@ void main() {
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test current atsign - backward compatibility', () async {
-      final atSign = '@alice';
       final preference = AtClientPreference()..syncRegex = '.wavi';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference);
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test preference', () async {
-      final atSign = '@alice';
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()..syncRegex = '.wavi';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
@@ -53,9 +60,11 @@ void main() {
     AtClientPreference atClientPreference = AtClientPreference();
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
     });
     tearDown(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
     });
     test('A test to verify switch atSign event clears the inactive listeners',
         () async {

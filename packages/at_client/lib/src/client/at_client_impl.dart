@@ -62,7 +62,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
 
-  @visibleForTesting
   AtClientCommitLogCompaction? get atClientCommitLogCompaction => _atClientCommitLogCompaction;
 
   @override
@@ -132,22 +131,29 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) async {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
-    if (atClientInstanceMap.containsKey(currentAtSign)) {
-      return atClientInstanceMap[currentAtSign];
-    }
 
     atClientManager ??= AtClientManager.getInstance();
-    var atClientImpl = AtClientImpl._(
-        currentAtSign, namespace, preferences, atClientManager,
-        remoteSecondary: remoteSecondary,
-        encryptionService: encryptionService,
-        localSecondaryKeyStore: localSecondaryKeyStore,
-        atChops: atChops,
-        atClientCommitLogCompaction: atClientCommitLogCompaction,
-        atClientConfig: atClientConfig);
+    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
 
-    await atClientImpl._init();
+    // Fetch cached AtClientImpl for re-use, or create a new one and init it
+    AtClientImpl? atClientImpl;
+    if (atClientInstanceMap.containsKey(currentAtSign)) {
+      atClientImpl = atClientInstanceMap[currentAtSign];
+    } else {
+      atClientImpl = AtClientImpl._(
+          currentAtSign, namespace, preferences, atClientManager,
+          remoteSecondary: remoteSecondary,
+          encryptionService: encryptionService,
+          localSecondaryKeyStore: localSecondaryKeyStore,
+          atChops: atChops,
+          atClientCommitLogCompaction: atClientCommitLogCompaction,
+          atClientConfig: atClientConfig);
+
+      await atClientImpl._init();
+    }
+
+    await atClientImpl!._startCompactionJob();
+    atClientManager.listenToAtSignChange(atClientImpl);
 
     atClientInstanceMap[currentAtSign] = atClientImpl;
     return atClientInstanceMap[currentAtSign];
@@ -176,7 +182,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
-    atClientManager.listenToAtSignChange(this);
   }
 
   Future<void> _init() async {
@@ -200,16 +205,23 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _encryptionService!.localSecondary = _localSecondary;
 
     _cascadeSetTelemetryService();
+  }
 
+  Future<void> _startCompactionJob() async {
     AtCompactionJob atCompactionJob = AtCompactionJob(
         (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
         SecondaryPersistenceStoreFactory.getInstance()
-            .getSecondaryPersistenceStore(_atSign)!);
+        .getSecondaryPersistenceStore(_atSign)!);
+
     _atClientCommitLogCompaction ??=
-        AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
+    AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
+
     _atClientConfig ??= AtClientConfig.getInstance();
-    _atClientCommitLogCompaction!.scheduleCompaction(
-        _atClientConfig!.commitLogCompactionTimeIntervalInMins);
+
+    if (!_atClientCommitLogCompaction!.isCompactionJobRunning()) {
+      _atClientCommitLogCompaction!.scheduleCompaction(
+          _atClientConfig!.commitLogCompactionTimeIntervalInMins);
+    }
   }
 
   /// Does nothing unless a telemetry service has been injected
@@ -974,11 +986,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         getCurrentAtSign()) {
       _atClientCommitLogCompaction!.stopCompactionJob();
       _atClientManager.removeChangeListeners(this);
-      // The existing atClientImpl instance in static map will not have compaction job running and
-      // will be removed from the changeListener.
-      // On switch atSign event, removing the previous atSign from atClientInstanceMap to
-      // refrain from returning the existing atClientImpl instance.
-      atClientInstanceMap.remove(getCurrentAtSign());
     }
   }
 
