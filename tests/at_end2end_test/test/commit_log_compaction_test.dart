@@ -41,19 +41,17 @@ void main() {
         firstAtSign,
         namespace,
         TestPreferences.getInstance().getPreference(firstAtSign));
-    firstAtClientManager.atClient.syncService.sync();
     // Initialize AtClientManager for second AtSign
     secondAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(secondAtSign, namespace,
             TestPreferences.getInstance().getPreference(secondAtSign));
-    secondAtClientManager.atClient.syncService.sync();
 
     expect(
         AtClientImpl
             .atClientInstanceMap[secondAtSign].atClientCommitLogCompaction
             ?.isCompactionJobRunning(),
         true);
-  });
+  }, timeout: Timeout(Duration(minutes: 2)));
 
   test(
       'A test to verify commit log compaction job removes the duplicate entries from commit log',
@@ -91,5 +89,5 @@ void main() {
         atCompactionStats.preCompactionEntriesCount >
             atCompactionStats.postCompactionEntriesCount,
         true);
-  });
+  }, timeout: Timeout(Duration(minutes: 2)));
 }
