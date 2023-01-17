@@ -36,9 +36,10 @@ void main() {
     }
     atCommitLog =
         await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);
-    // Lets the duplicate entries sync to the cloud secondary.
-    // Client side commit log compaction removes the duplicate entries that
-    // are synced to the cloud secondary.
+
+    // Now, let the duplicate entries sync to the cloud secondary.
+    // Client side commit log compaction removes the duplicate entries only
+    // if they have been synced to the cloud secondary.
     var isSyncInProgress = true;
     atClientManager.atClient.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
@@ -47,12 +48,13 @@ void main() {
       print('Sync in progress...');
       await Future.delayed(Duration(milliseconds: 500));
     }
-    AtCompactionStats atCompactionStats =
-        await AtCompactionService.getInstance().executeCompaction(atCommitLog!);
-    print(atCompactionStats);
-    expect(
-        atCompactionStats.postCompactionEntriesCount <
-            atCompactionStats.preCompactionEntriesCount,
-        true);
+
+    Future<AtCompactionStats> compactionFuture = AtCompactionService.getInstance().executeCompaction(atCommitLog!);
+    // TODO Do a bunch of other keystore operations (creates, updates, deletes) "while" the commitLog compaction is running
+
+    await compactionFuture.then((atCompactionStats) {
+      print(atCompactionStats);
+      expect(atCompactionStats.postCompactionEntriesCount < atCompactionStats.preCompactionEntriesCount, true);
+    });
   });
 }
