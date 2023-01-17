@@ -74,7 +74,8 @@ class NotificationServiceImpl
 
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
-    final notificationService = NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
+    final notificationService =
+        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     // We used to call _init() at this point which would start the monitor, but now we
     // call _init() from the [subscribe] method
     return notificationService;
@@ -84,7 +85,8 @@ class NotificationServiceImpl
       {Monitor? monitor}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
-    _logger = AtSignLogger('NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
+    _logger = AtSignLogger(
+        'NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
     _monitor = monitor ??
         Monitor(
             _internalNotificationCallback,
@@ -92,11 +94,12 @@ class NotificationServiceImpl
             _atClient.getCurrentAtSign()!,
             _atClient.getPreferences()!,
             MonitorPreference()..keepAlive = true,
-            monitorRetry);
+            monitorRetry,
+            atChops: atClient.atChops);
     _atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(lastReceivedNotificationKey,
-            _atClientManager.atClient.getCurrentAtSign()!,
-            namespace: _atClientManager.atClient.getPreferences()!.namespace)
+            _atClient.getCurrentAtSign()!,
+            namespace: _atClient.getPreferences()!.namespace)
         .build();
     atKeyEncryptionManager = AtKeyEncryptionManager(_atClient);
   }
@@ -173,7 +176,7 @@ class NotificationServiceImpl
   /// does not exist.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
-    if (_atClientManager.atClient.getPreferences()!.fetchOfflineNotifications ==
+    if (_atClient.getPreferences()!.fetchOfflineNotifications ==
         false) {
       // fetchOfflineNotifications == false means issue `monitor` command without a lastNotificationTime
       // which will result in the server not sending any previously received notifications
@@ -271,6 +274,7 @@ class NotificationServiceImpl
   }
 
   @visibleForTesting
+
   /// Called by [NotificationServiceImpl]'s Monitor when the Monitor has detected that it (the Monitor) has
   /// failed and needs to be retried.
   /// * Returns _true_ if a call to Monitor.start() has been queued, _false_ otherwise.
@@ -323,8 +327,10 @@ class NotificationServiceImpl
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus =
+          true, // this was the behaviour before introducing this parameter
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -498,7 +504,8 @@ class NotificationServiceImpl
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
     _atClientManager.removeChangeListeners(this);
 
-    _logger.finer('stopping notification listeners for ${_atClient.getCurrentAtSign()}');
+    _logger.finer(
+        'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
     stopAllSubscriptions();
   }
 
