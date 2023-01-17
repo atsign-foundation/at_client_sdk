@@ -48,7 +48,7 @@ void main() {
         auth: true);
     expect(result != null, true);
     var isSyncInProgress = true;
-    atClientManager.syncService.sync(onDone: (syncResult) {
+    atClient.syncService.sync(onDone: (syncResult) {
       isSyncInProgress = false;
     });
     while (isSyncInProgress) {

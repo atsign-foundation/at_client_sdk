@@ -8,7 +8,7 @@ void main() {
   group('A group of file encryption tests', () {
     test('encrypt file - file size less than chunk size', () async {
       final originalFile = File('test/data/encryption/hello.txt');
-      final encryptionService = EncryptionService();
+      final encryptionService = EncryptionService("@testAtSign");
       final fileEncryptionKey = EncryptionUtil.generateAESKey();
       final encryptedFile = await encryptionService.encryptFileInChunks(
           originalFile, fileEncryptionKey, 4096);
@@ -18,7 +18,7 @@ void main() {
 
     test('encrypt file - file size greater than chunk size', () async {
       final originalFile = File('test/data/encryption/dog.jpeg');
-      final encryptionService = EncryptionService();
+      final encryptionService = EncryptionService("@testAtSign");
       final fileEncryptionKey = EncryptionUtil.generateAESKey();
       final encryptedFile = await encryptionService.encryptFileInChunks(
           originalFile, fileEncryptionKey, 4096);
@@ -28,7 +28,7 @@ void main() {
 
     test('decrypt file - text file', () async {
       final originalFile = File('test/data/encryption/hello.txt');
-      final encryptionService = EncryptionService();
+      final encryptionService = EncryptionService("@testAtSign");
       final fileEncryptionKey = EncryptionUtil.generateAESKey();
       final encryptedFile = await encryptionService.encryptFileInChunks(
           originalFile, fileEncryptionKey, 4096);
@@ -41,7 +41,7 @@ void main() {
 
     test('decrypt file - image ', () async {
       final originalFile = File('test/data/encryption/cat.jpeg');
-      final encryptionService = EncryptionService();
+      final encryptionService = EncryptionService("@testAtSign");
       final fileEncryptionKey = EncryptionUtil.generateAESKey();
       final encryptedFile = await encryptionService.encryptFileInChunks(
           originalFile, fileEncryptionKey, 4096);

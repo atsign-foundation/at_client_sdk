@@ -41,8 +41,10 @@ void main() {
       when(() => mockLocalSecondary.getEncryptionSelfKey())
           .thenAnswer((_) => Future.value(''));
 
-      var selfKeyEncryption =
-          SelfKeyEncryption(localSecondary: mockLocalSecondary);
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => mockLocalSecondary);
+
+      var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
 
       expect(
           () => selfKeyEncryption.encrypt(
@@ -62,8 +64,7 @@ void main() {
       var value = 'self_key_value';
       when(() => mockLocalSecondary.getEncryptionSelfKey())
           .thenAnswer((_) => Future.value(selfEncryptionKey));
-      var selfKeyEncryption =
-          SelfKeyEncryption(localSecondary: mockLocalSecondary);
+      var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
       var encryptedData = await selfKeyEncryption.encrypt(
           AtKey.self('phone', namespace: 'wavi').build(), value);
       var response =
@@ -348,7 +349,6 @@ void main() {
     var sharedKey = 'Q58MkV2KwLNZAVS6SxKEzw1okYHtf/9k9EegctSyCqo=';
     var encryptedSharedKey =
         'JZ3fjGxobojMytMhslfcBsJ5R0f5oVFwV7Qyyko1PMB3DhWMWRhlCQFUIZlyGyX0gIBrDBkYGRHDkj00DYAoF1VVJ3jaHL1d45VPpYpPG0QxhA7A8BriU8PnX+3wbUk8LMD7GscW3sOJPJ2mduCM2UKs1TUO3D4AKR7vrEZXRi11ddgQZet6JgTcKG+/uG7ftdMxs1Y+jHvwfHCYlW+w/IfERzoyfPlAyyGAuY/ucZea/9JvSXtgp5Oxk7MKn3IMBa3N6vCb0zYpg+6SUdee0t47zeTaMcPJ9wCOJQ6p5b5ltK7kJxX2ILGHDFUeMUISKG2eMrEeR9HlVKQ3e3eLRw==';
-    var publicKeyCheckSum = '745a800133171a170121e8040e3ebfe7';
 
     setUp(() async {
       registerFallbackValue(FakeLocalLookUpVerbBuilder());
@@ -386,6 +386,7 @@ void main() {
 
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       var decryptedSharedKey =
+          // ignore: deprecated_member_use_from_same_package
           EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue =
@@ -437,7 +438,7 @@ void main() {
     test(
         'test to verify exception is thrown when update command fails to store shared_key to remote secondary',
         () async {
-      atCommitLog!.commitLogKeyStore.add(CommitEntry(
+      await atCommitLog!.commitLogKeyStore.add(CommitEntry(
           '@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now()));
 
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
