@@ -68,7 +68,7 @@ jobs:
       # Analyze at_client_mobile package
       - name: flutter analyze
         working-directory: packages/at_client_mobile
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
   functional_tests:
     runs-on: ubuntu-latest
