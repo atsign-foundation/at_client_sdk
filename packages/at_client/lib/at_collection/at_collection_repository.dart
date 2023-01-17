@@ -1,7 +1,6 @@
 // import 'dart:mirrors';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/at_collection_model_factory.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -18,9 +17,8 @@ class AtCollectionRepository {
 
   AtCollectionRepository({required this.keyMaker});
 
-  AtClient _getAtClient() {
-    atClient ??= AtClientManager.getInstance().atClient;
-    return atClient!;
+  AtClient getAtClient() {
+    return AtClientManager.getInstance().atClient;
   }
 
   Future<List<T>> getAll<T extends AtCollectionModel>(
@@ -31,14 +29,14 @@ class AtCollectionRepository {
     List<T> dataList = [];
 
     var collectionAtKeys =
-        await _getAtClient().getAtKeys(regex: _collectionName);
+        await getAtClient().getAtKeys(regex: _collectionName);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
 
     /// TODO: can there be a scenario when key is available but we can't get data
     /// In that scenario we might have to give failure results to app.
     for (var atKey in collectionAtKeys) {
       try {
-        var atValue = await _getAtClient().get(atKey);
+        var atValue = await getAtClient().get(atKey);
         var data = collectionModelFactory.create().fromJson(atValue.value);
         dataList.add(data);
       } catch (e) {
@@ -60,7 +58,7 @@ class AtCollectionRepository {
     );
 
     try {
-      AtValue atValue = await _getAtClient().get(atKey);
+      AtValue atValue = await getAtClient().get(atKey);
       var modelData = collectionModelFactory.create().fromJson(atValue.value);
       return modelData;
     } catch (e) {

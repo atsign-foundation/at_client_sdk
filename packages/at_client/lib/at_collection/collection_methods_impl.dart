@@ -49,8 +49,10 @@ class CollectionMethodImpl {
       {required String jsonEncodedData,
       ObjectLifeCycleOptions? options,
       bool share = false}) async* {
+    options ??= ObjectLifeCycleOptions();
+
     AtKey atKey = keyMaker.createSelfKey(
-      keyId: _formatId(atCollectionModel.getId()),
+      keyId: _formatId(atCollectionModel.id),
       collectionName: _formatId(atCollectionModel.getCollectionName()),
       objectLifeCycleOptions: options,
     );
@@ -106,10 +108,13 @@ class CollectionMethodImpl {
   Stream<AtOperationItemStatus> shareWith(List<String> atSigns,
       {ObjectLifeCycleOptions? options,
       required String jsonEncodedData}) async* {
+    options ??= ObjectLifeCycleOptions();
+
     var selfKey = keyMaker.createSelfKey(
-        keyId: _formatId(atCollectionModel.id),
-        collectionName: _formatId(atCollectionModel.getCollectionName()),
-        objectLifeCycleOptions: options);
+      keyId: _formatId(atCollectionModel.id),
+      collectionName: _formatId(atCollectionModel.getCollectionName()),
+      objectLifeCycleOptions: options,
+    );
 
     late AtOperationItemStatus selfKeyUpdateStatus;
     await save(jsonEncodedData: jsonEncodedData, options: options, share: false)
