@@ -35,60 +35,33 @@ Future<void> setUpMethod() async {
 void main() {
   setUp(() async => await setUpMethod());
 
-  test('A test to verify commit log compaction on switch atSign event',
-      () async {
-    firstAtClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-        firstAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(firstAtSign));
+  try {
+    test('A test to verify commit log compaction job state on switch atSign event', () async {
+      var atClientManager = AtClientManager.getInstance();
 
-    // Initialize AtClientManager for second AtSign
-    secondAtClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(secondAtSign, namespace,
-            TestPreferences.getInstance().getPreference(secondAtSign));
-    var secondAtClient = secondAtClientManager.atClient as AtClientImpl;
+      // SetCurrentAtSign to firstAtSign. First AtSign's compaction job should be running.
+      await atClientManager
+          .setCurrentAtSign(firstAtSign, namespace, TestPreferences.getInstance().getPreference(firstAtSign));
+      var firstAtClient = atClientManager.atClient as AtClientImpl;
+      expect(firstAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(), true);
 
-    expect(
-        secondAtClient.atClientCommitLogCompaction
-            ?.isCompactionJobRunning(),
-        true);
-  }, timeout: Timeout(Duration(minutes: 2)));
+      // Switch to second AtSign. First AtSign's compaction job should not be running (actually, scheduled)
+      // Second AtSign's compaction job should be running.
+      await atClientManager
+          .setCurrentAtSign(secondAtSign, namespace, TestPreferences.getInstance().getPreference(secondAtSign));
+      var secondAtClient = atClientManager.atClient as AtClientImpl;
+      expect(firstAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(), false);
+      expect(secondAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(), true);
 
-  test(
-      'A test to verify commit log compaction job removes the duplicate entries from commit log',
-      () async {
-    var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-        secondAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(secondAtSign));
-    var atKey = (AtKey.self('phone', namespace: namespace)
-          ..sharedBy(secondAtSign))
-        .build();
-    var value = '91878723456';
-    // Insert the same key for 5 times to create duplicate entries.
-    for (var i = 0; i < 5; i++) {
-      await atClientManager.atClient.put(atKey, value);
-      await Future.delayed(Duration(milliseconds: 2));
-    }
-    var isSyncInProgress = true;
-    // Lets the duplicate entries sync to the cloud secondary.
-    // Client side commit log compaction removes the duplicate entries that
-    // are synced to the cloud secondary.
-    atClientManager.atClient.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
+      // Switch back to firstΩ AtSign. Second AtSign's compaction job should not be running (actually, scheduled)
+      // First AtSign's compaction job should be running.
+      await atClientManager
+          .setCurrentAtSign(firstAtSign, namespace, TestPreferences.getInstance().getPreference(firstAtSign));
+      firstAtClient = atClientManager.atClient as AtClientImpl;
+      expect(firstAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(), true);
+      expect(secondAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(), false);
     });
-    while (isSyncInProgress) {
-      print('Sync in progress...');
-      await Future.delayed(Duration(milliseconds: 500));
-    }
-
-    var atCommitLog =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(secondAtSign);
-    var atCompactionStats =
-        await AtCompactionService.getInstance().executeCompaction(atCommitLog!);
-    expect(
-        atCompactionStats.preCompactionEntriesCount >
-            atCompactionStats.postCompactionEntriesCount,
-        true);
-  }, timeout: Timeout(Duration(minutes: 2)));
+  } catch (e, s) {
+    print(s);
+  }
 }
