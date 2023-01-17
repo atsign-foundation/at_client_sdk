@@ -6,13 +6,16 @@ class ObjectLifeCycleOptions {
   Duration? timeToBirth;
 
   /// If set to true, delete operation will delete recipient's  cached key also
-  bool? cascadeDelete;
+  bool cascadeDelete;
 
-  Duration? cacheRefreshIntervalOnRecipient;
+  Duration cacheRefreshIntervalOnRecipient;
+
+  bool cacheValueOnRecipient;
 
   ObjectLifeCycleOptions(
       {this.timeToBirth,
       this.timeToLive,
-      this.cascadeDelete,
-      this.cacheRefreshIntervalOnRecipient});
+      this.cascadeDelete = true,
+      this.cacheValueOnRecipient = true,
+      this.cacheRefreshIntervalOnRecipient = const Duration(days: 5)});
 }

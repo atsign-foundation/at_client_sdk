@@ -3,11 +3,10 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 
 class DefaultKeyMaker implements KeyMakerSpec {
-  AtClient? atClient;
+  AtClient? testAtClient;
 
-  AtClient _getAtClient() {
-    atClient ??= AtClientManager.getInstance().atClient;
-    return atClient!;
+  AtClient getAtClient() {
+    return testAtClient ?? AtClientManager.getInstance().atClient;
   }
 
   @override
@@ -18,10 +17,10 @@ class DefaultKeyMaker implements KeyMakerSpec {
     return AtKey()
       ..key = '$keyId.$collectionName'
       ..metadata = Metadata()
-      ..metadata!.ttr = -1
+      ..metadata!.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
-      ..sharedBy = _getAtClient().getCurrentAtSign();
+      ..sharedBy = getAtClient().getCurrentAtSign();
   }
 
   @override
@@ -37,10 +36,10 @@ class DefaultKeyMaker implements KeyMakerSpec {
       ..key = '$keyId.$collectionName'
       ..sharedWith = sharedWith
       ..metadata = Metadata()
-      ..metadata!.ttr = ttrInSeconds
+      ..metadata!.ttr = ttrInSeconds ?? -1
       ..metadata!.ccd = ttrInSeconds != null ? true : false
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
-      ..sharedBy = _getAtClient().getCurrentAtSign();
+      ..sharedBy = getAtClient().getCurrentAtSign();
   }
 }

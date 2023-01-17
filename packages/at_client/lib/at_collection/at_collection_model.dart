@@ -43,16 +43,121 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     return atClient!;
   }
 
-  static Future<T> getById<T extends AtCollectionModel>(String keyId,
+  /// The method getById() returns a AtCollectionModel object whose id property matches the specified string.
+  /// The id property is internally matched with an [AtKey] that is used to save the object.
+  ///
+  /// Since element IDs are expected to be unique if specified, they're a useful way to get retrieve a AtCollectionModel quickly.
+  ///
+  /// The id property can be set by assigning a value to [AtCollectionModel.id].
+  ///
+  /// If you do not know the id of your AtCollectionModel, then call getAll static method to get all of the AtCollectionModel objects for a given collectionName.
+  /// collectionName  is an optional parameter when the getById is called with the Type information.
+
+  /// Ex:
+  /// ```
+  /// class Phone extends AtCollectionModel {
+  ///        // Implementation
+  ///
+  ///       Phone();
+  ///
+  ///       Phone.from(String id){
+  ///       id = this.id;
+  ///   }
+  ///
+  /// }
+  /// ```
+  ///
+  /// Creating a phone object with `personal phone` as id
+  ///
+  /// ```
+  /// Phone personaPhone = await Phone.from('personal phone').save();
+  /// ```
+  /// ```
+  /// class PhoneModelFactory extends AtCollectionModelFactory
+  ///  {
+  ///      @override
+  ///       Phone create() {
+  ///         return Phone();
+  ///       }
+  /// }
+  /// ```
+  ///
+  /// Usage without collectionName is being passed:
+  ///
+  /// ```
+  /// PhoneModelFactory phoneFactory = PhoneModelFactory();
+  /// var personalPhone = await AtCollectionModel.getById<Phone>(‘Personal Phone’, phoneFactory);
+  /// ```
+  /// Usage with collectionName is being passed:
+  ///
+  /// ```
+  /// PhoneModelFactory phoneFactory = PhoneModelFactory();
+  /// var personalPhone = AtCollectionModel.getById(‘Personal Phone’, ‘Phone’, phoneFactory);
+  /// ```
+  ///
+  /// An Exception will be thrown if AtCollectionModel object with a given Id can not be found.
+
+  static Future<T> getById<T extends AtCollectionModel>(String id,
       {String? collectionName,
       required AtCollectionModelFactory collectionModelFactory}) async {
     return (await atCollectionRepository.getById<T>(
-      keyId,
+      id,
       collectionName: collectionName,
       collectionModelFactory: collectionModelFactory,
     ));
   }
 
+  /// The [getAll] method of AtCollectionModel returns an list of AtCollectionModels that have a given collection name.
+  ///
+  /// Ex:
+  /// ```
+  /// class Phone extends AtCollectionModel {
+  ///        // Implementation
+  ///
+  ///       Phone();
+  ///
+  ///       Phone.from(String id){
+  ///       id = this.id;
+  ///   }
+  ///
+  /// }
+  /// ```
+  ///
+  /// Creating two phone object with `personal phone` and `office phone` as their respective id.
+  ///
+  /// ```
+  /// Phone personalPhone = await Phone.from('personal phone').save();
+  /// Phone officePhone = await Phone.from('office phone').save();
+  /// ```
+  /// ```
+  /// class PhoneModelFactory extends AtCollectionModelFactory
+  ///  {
+  ///      @override
+  ///       Phone create() {
+  ///         return Phone();
+  ///       }
+  /// }
+  /// ```
+  ///
+  /// Usage without collectionName is being passed:
+  ///
+  /// ```
+  /// PhoneModelFactory phoneFactory = PhoneModelFactory();
+  /// List<Phone> phoneList = await AtCollectionModel.getAll<Phone>(phoneFactory);
+  /// ```
+  ///
+  /// Usage with collectionName is being passed:
+  ///
+  /// ```
+  /// PhoneModelFactory phoneFactory = PhoneModelFactory();
+  /// List<Phone> phoneList = AtCollectionModel.getAll(‘Phone’, phoneFactory);
+  ///
+  /// for(var phone in phoneList){
+  ///   print(phone.id);
+  ///  }
+  /// ```
+  ///
+  /// Returns an empty list when there are no AtCollectionModel objects found for the given collectionName.
   static Future<List<T>> getAll<T extends AtCollectionModel>(
       {String? collectionName,
       required AtCollectionModelFactory collectionModelFactory}) async {
@@ -62,10 +167,18 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     ));
   }
 
+  _initAndValidateJson() {
+    Map<String, dynamic> objectJson = toJson();
+    objectJson['id'] = id;
+    objectJson['collectionName'] = getCollectionName();
+    _validateModel(objectJson);
+  }
+
   @override
   Future<bool> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async {
-    _validateModel();
+    _initAndValidateJson();
+
     final Completer<bool> completer = Completer<bool>();
 
     bool? isSelfKeySaved, isAllKeySaved = true;
@@ -95,7 +208,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<List<String>> getSharedWith() async {
-    _validateModel();
+    _initAndValidateJson();
     List<String> sharedWithList = [];
 
     var allKeys =
@@ -113,7 +226,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<bool> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async {
-    _validateModel();
+    _initAndValidateJson();
 
     List<AtOperationItemStatus> allSharedKeyStatus = [];
     await CollectionMethodImpl.getInstance()
@@ -135,7 +248,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> delete() async {
-    _validateModel();
+    _initAndValidateJson();
 
     bool isSelfKeyDeleted = false;
     await CollectionMethodImpl.getInstance()
@@ -180,12 +293,12 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   @override
-  getId() {
-    return id;
+  String getCollectionName() {
+    return runtimeType.toString().toLowerCase();
   }
 
   /// Throws exception if id or collectionName is not added.
-  _validateModel() {
+  _validateModel(Map<String, dynamic> objectJson) {
     if (id.trim().isEmpty) {
       throw Exception('id not found');
     }
@@ -194,11 +307,11 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
       throw Exception('collectionName not found');
     }
 
-    if (toJson()['id'] == null) {
+    if (objectJson['id'] == null) {
       throw Exception('id not added in toJson');
     }
 
-    if (toJson()['collectionName'] == null) {
+    if (objectJson['collectionName'] == null) {
       throw Exception('collectionName not added in toJson');
     }
   }
