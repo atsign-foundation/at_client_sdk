@@ -1,9 +1,8 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/at_collection_model_factory.dart';
 import 'package:at_client/at_collection/at_collection_repository.dart';
-import 'package:at_client/at_collection/model/at_operation_item_status.dart';
+import 'package:at_client/at_collection/collection_methods_impl.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -12,6 +11,8 @@ import 'package:test/test.dart';
 class MockAtClient extends Mock implements AtClient {}
 
 class FakeAtKey extends Fake implements AtKey {}
+
+class MockAtCLientManager extends Mock implements AtClientManager {}
 
 void main() {
   setUpAll(() {
@@ -22,20 +23,26 @@ void main() {
     var mockAtClient = MockAtClient();
 
     final testKeyMaker = DefaultKeyMaker();
-    testKeyMaker.atClient = mockAtClient;
+    MockAtCLientManager mockAtCLientManager = MockAtCLientManager();
+    testKeyMaker.atClientManager = mockAtCLientManager;
 
     AtCollectionRepository atCollectionRepository = AtCollectionRepository(
       keyMaker: testKeyMaker,
     );
 
-    atCollectionRepository.atClient = mockAtClient;
+    when(() => mockAtCLientManager.atClient).thenAnswer((_) => mockAtClient);
+
+    atCollectionRepository.atClientManager = mockAtCLientManager;
     atCollectionRepository.keyMaker = testKeyMaker;
 
     AtCollectionModel.atCollectionRepository = atCollectionRepository;
 
-    AtCollectionModel.atCollectionRepository.atClient = mockAtClient;
+    AtCollectionModel.atCollectionRepository.atClientManager =
+        mockAtCLientManager;
     AtCollectionModel.atCollectionRepository.keyMaker = testKeyMaker;
     AtCollectionModel.keyMaker = testKeyMaker;
+    CollectionMethodImpl.getInstance().keyMaker = testKeyMaker;
+    CollectionMethodImpl.getInstance().atClientManager = mockAtCLientManager;
 
     final myModelTestObject1 = MyModelTest.from(1, 'Alice', 'alice@atsign.com');
     final myModelTestObject2 = MyModelTest.from(2, 'Bob', 'bob@atsign.com');
@@ -44,8 +51,8 @@ void main() {
     String sharedWithAtsign1 = '@colin';
     String sharedWithAtsign2 = '@kevin';
 
-    myModelTestObject1.atClient = mockAtClient;
-    myModelTestObject2.atClient = mockAtClient;
+    myModelTestObject1.atClientManager = mockAtCLientManager;
+    myModelTestObject2.atClientManager = mockAtCLientManager;
 
     AtCollectionUtil.atClient = mockAtClient;
 
@@ -97,52 +104,50 @@ void main() {
       expect(result, myModelTestObject1);
     });
 
-    // test('test getting an object by id using MyModelTest', () async {
-    //   when(() => mockAtClient.get(any(
-    //       that: GetAtKeyMatcher(
-    //           keyId: object2ModelId,
-    //           collectionName: collectionName)))).thenAnswer((_) async {
-    //     var atValue = AtValue();
-    //     atValue.value = jsonEncode(myModelTestObject2.toJson());
-    //     return atValue;
-    //   });
+    test('test getting an object by id using MyModelTest', () async {
+      when(() => mockAtClient.get(any(
+          that: GetAtKeyMatcher(
+              keyId: object2ModelId,
+              collectionName: collectionName)))).thenAnswer((_) async {
+        var atValue = AtValue();
+        atValue.value = jsonEncode(myModelTestObject2.toJson());
+        return atValue;
+      });
 
-    //   var result = (await MyModelTest.getById(object2ModelId));
-    //   expect(result, myModelTestObject2);
-    // });
+      var result = (await MyModelTest.getById(object2ModelId));
+      expect(result, myModelTestObject2);
+    });
 
-    // test('test getting all objects using AtCollectionModel', () async {
-    //   when(() => mockAtClient.getAtKeys(
-    //           regex: any(
-    //               named: 'regex',
-    //               that: GetAtKeysMatcher(collectionName: collectionName))))
-    //       .thenAnswer((_) async => [object1SelfKey, object2SelfKey]);
+    test('test getting all objects using AtCollectionModel', () async {
+      when(() => mockAtClient.getAtKeys(
+              regex: any(
+                  named: 'regex',
+                  that: GetAtKeysMatcher(collectionName: collectionName))))
+          .thenAnswer((_) async => [object1SelfKey, object2SelfKey]);
 
-    //   when(() => mockAtClient.get(any(
-    //       that: GetAtKeyMatcher(
-    //           keyId: object1ModelId,
-    //           collectionName: collectionName)))).thenAnswer((_) async {
-    //     var atValue = AtValue();
-    //     atValue.value = jsonEncode(myModelTestObject1.toJson());
-    //     return atValue;
-    //   });
+      when(() => mockAtClient.get(any(
+          that: GetAtKeyMatcher(
+              keyId: object1ModelId,
+              collectionName: collectionName)))).thenAnswer((_) async {
+        var atValue = AtValue();
+        atValue.value = jsonEncode(myModelTestObject1.toJson());
+        return atValue;
+      });
 
-    //   when(() => mockAtClient.get(any(
-    //       that: GetAtKeyMatcher(
-    //           keyId: object2ModelId,
-    //           collectionName: collectionName)))).thenAnswer((_) async {
-    //     var atValue = AtValue();
-    //     atValue.value = jsonEncode(myModelTestObject2.toJson());
-    //     return atValue;
-    //   });
+      when(() => mockAtClient.get(any(
+          that: GetAtKeyMatcher(
+              keyId: object2ModelId,
+              collectionName: collectionName)))).thenAnswer((_) async {
+        var atValue = AtValue();
+        atValue.value = jsonEncode(myModelTestObject2.toJson());
+        return atValue;
+      });
 
-    //   var allData = [];
-    //   var getAllStream = AtCollectionModel.getAll<MyModelTest>();
-    //   await getAllStream.forEach((MyModelTest myModelTest) {
-    //     allData.add(myModelTest);
-    //   });
-    //   expect(allData, [myModelTestObject1, myModelTestObject2]);
-    // });
+      var allData = await AtCollectionModel.getAll<MyModelTest>(
+          collectionModelFactory: MyModelTestFactory());
+
+      expect(allData, [myModelTestObject1, myModelTestObject2]);
+    });
 
     test('test getting all objects using MyModelTest', () async {
       when(() => mockAtClient.getAtKeys(
@@ -169,179 +174,141 @@ void main() {
         return atValue;
       });
 
-      var allData = [];
-      var getAllStream = await MyModelTest.getAll();
+      var allData = await MyModelTest.getAll();
 
-      // await getAllStream.forEach((MyModelTest myModelTest) {
-      //   allData.add(myModelTest);
-      // });
-
-      expect(getAllStream, [myModelTestObject1, myModelTestObject2]);
+      expect(allData, [myModelTestObject1, myModelTestObject2]);
     });
 
-    // test('test successfully saving an object', () async {
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSelfKeyMatcher(
-    //                 id: myModelTestObject1.id, collectionName: collectionName)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
+    test('test successfully saving an object', () async {
+      when(() => mockAtClient.put(
+            any(
+                that: PutSelfKeyMatcher(
+                    id: myModelTestObject1.id, collectionName: collectionName)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
 
-    //   Stream<AtOperationItemStatus> saveListener =
-    //       myModelTestObject1.save(share: false);
-    //   saveListener.listen((AtOperationItemStatus atOperationItemStatus) {
-    //     expect(atOperationItemStatus.complete, true);
-    //   });
+      var saveRes1 = await myModelTestObject1.save(share: false);
+      expect(saveRes1, true);
 
-    //   await myModelTestObject1
-    //       .save(share: false)
-    //       .forEach((AtOperationItemStatus atOperationItemStatus) {
-    //     print(
-    //         'atOperationItemStatus atsign: ${atOperationItemStatus.atSign}, key: ${atOperationItemStatus.key}, complete: ${atOperationItemStatus.complete}, ');
+      var saveRes2 = await myModelTestObject1.save(share: false);
+      expect(saveRes2, true);
+    });
 
-    //     expect(atOperationItemStatus.complete, true);
-    //   });
-    // });
+    test('test unsuccessfully saving an object', () async {
+      when(() => mockAtClient.put(
+            any(
+                that: PutSelfKeyMatcher(
+                    id: myModelTestObject1.id, collectionName: collectionName)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => false);
 
-    // test('test unsuccessfully saving an object', () async {
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSelfKeyMatcher(
-    //                 id: myModelTestObject1.id, collectionName: collectionName)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => false);
+      var res = await myModelTestObject1.save(share: false);
+      expect(res, false);
+    });
 
-    //   await myModelTestObject1.save(share: false).forEach((e) {
-    //     expect(e.complete, false);
-    //   });
-    // });
+    test('test successfully saving and updating an object', () async {
+      when(() => mockAtClient.put(
+            any(
+                that: PutSelfKeyMatcher(
+                    id: myModelTestObject1.id, collectionName: collectionName)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
+      when(() => mockAtClient.put(
+            any(
+                that: PutSharedKeyMatcher(
+                    id: myModelTestObject1.id,
+                    collectionName: collectionName,
+                    sharedWith: sharedWithAtsign1)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
+      when(() => mockAtClient.put(
+            any(
+                that: PutSharedKeyMatcher(
+                    id: myModelTestObject1.id,
+                    collectionName: collectionName,
+                    sharedWith: sharedWithAtsign2)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
 
-    // test('test successfully saving and updating an object', () async {
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSelfKeyMatcher(
-    //                 id: myModelTestObject1.id, collectionName: collectionName)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSharedKeyMatcher(
-    //                 id: myModelTestObject1.id,
-    //                 collectionName: collectionName,
-    //                 sharedWith: sharedWithAtsign1)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSharedKeyMatcher(
-    //                 id: myModelTestObject1.id,
-    //                 collectionName: collectionName,
-    //                 sharedWith: sharedWithAtsign2)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
+      when(() => mockAtClient.getAtKeys(
+              regex: any(
+                  named: 'regex',
+                  that: GetAtKeysMatcher(collectionName: collectionName))))
+          .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
 
-    //   when(() => mockAtClient.getAtKeys(
-    //           regex: any(
-    //               named: 'regex',
-    //               that: GetAtKeysMatcher(collectionName: collectionName))))
-    //       .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
+      var res = await myModelTestObject1.save();
+      expect(res, true);
+    });
 
-    //   await myModelTestObject1.save().forEach((e) {
-    //     expect(e.complete, true);
-    //   });
-    // });
+    test('test unsuccessfully saving and updating an object', () async {
+      when(() => mockAtClient.put(
+            any(
+                that: PutSelfKeyMatcher(
+                    id: myModelTestObject1.id, collectionName: collectionName)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
+      when(() => mockAtClient.put(
+            any(
+                that: PutSharedKeyMatcher(
+                    id: myModelTestObject1.id,
+                    collectionName: collectionName,
+                    sharedWith: sharedWithAtsign1)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => false);
+      when(() => mockAtClient.put(
+            any(
+                that: PutSharedKeyMatcher(
+                    id: myModelTestObject1.id,
+                    collectionName: collectionName,
+                    sharedWith: sharedWithAtsign2)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
 
-    // test('test unsuccessfully saving and updating an object', () async {
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSelfKeyMatcher(
-    //                 id: myModelTestObject1.id, collectionName: collectionName)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSharedKeyMatcher(
-    //                 id: myModelTestObject1.id,
-    //                 collectionName: collectionName,
-    //                 sharedWith: sharedWithAtsign1)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => false);
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSharedKeyMatcher(
-    //                 id: myModelTestObject1.id,
-    //                 collectionName: collectionName,
-    //                 sharedWith: sharedWithAtsign2)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
+      when(() => mockAtClient.getAtKeys(
+              regex: any(
+                  named: 'regex',
+                  that: GetAtKeysMatcher(collectionName: collectionName))))
+          .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
 
-    //   when(() => mockAtClient.getAtKeys(
-    //           regex: any(
-    //               named: 'regex',
-    //               that: GetAtKeysMatcher(collectionName: collectionName))))
-    //       .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
+      var isAllDataUpdated = await myModelTestObject1.save();
 
-    //   var allData = <AtOperationItemStatus>[];
-    //   bool isAllDataUpdated = true;
+      expect(isAllDataUpdated, false);
+    });
 
-    //   await myModelTestObject1.save().forEach((result) {
-    //     allData.add(result);
-    //   });
+    test('test retrieving shared with list of an object', () async {
+      when(() => mockAtClient.getAtKeys(
+              regex: any(
+                  named: 'regex',
+                  that: GetAtKeysMatcher(collectionName: collectionName))))
+          .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
 
-    //   for (AtOperationItemStatus data in allData) {
-    //     if (data.complete == false) {
-    //       isAllDataUpdated = false;
-    //     }
-    //   }
+      var result = await myModelTestObject1.getSharedWith();
+      expect(result, [sharedWithAtsign1, sharedWithAtsign2]);
+    });
 
-    //   expect(isAllDataUpdated, false);
-    // });
+    test('test successfully sharing an object with two atsigns', () async {
+      when(() => mockAtClient.put(
+            any(
+                that: PutSharedKeyMatcher(
+                    id: myModelTestObject1.id,
+                    collectionName: collectionName,
+                    sharedWith: sharedWithAtsign1)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
+      when(() => mockAtClient.put(
+            any(
+                that: PutSharedKeyMatcher(
+                    id: myModelTestObject1.id,
+                    collectionName: collectionName,
+                    sharedWith: sharedWithAtsign2)),
+            any(that: PutDataMatcher()),
+          )).thenAnswer((_) async => true);
 
-    // test('test retrieving shared with list of an object', () async {
-    //   when(() => mockAtClient.getAtKeys(
-    //           regex: any(
-    //               named: 'regex',
-    //               that: GetAtKeysMatcher(collectionName: collectionName))))
-    //       .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
+      var isAllShared = await myModelTestObject1
+          .share([sharedWithAtsign1, sharedWithAtsign2]);
 
-    //   var result = await myModelTestObject1.getSharedWith();
-    //   expect(result, [sharedWithAtsign1, sharedWithAtsign2]);
-    // });
-
-    // test('test successfully sharing an object with two atsigns', () async {
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSharedKeyMatcher(
-    //                 id: myModelTestObject1.id,
-    //                 collectionName: collectionName,
-    //                 sharedWith: sharedWithAtsign1)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
-    //   when(() => mockAtClient.put(
-    //         any(
-    //             that: PutSharedKeyMatcher(
-    //                 id: myModelTestObject1.id,
-    //                 collectionName: collectionName,
-    //                 sharedWith: sharedWithAtsign2)),
-    //         any(that: PutDataMatcher()),
-    //       )).thenAnswer((_) async => true);
-
-    //   var allSharedData = <AtOperationItemStatus>[];
-    //   await myModelTestObject1
-    //       .share([sharedWithAtsign1, sharedWithAtsign2]).forEach((e) {
-    //     allSharedData.add(e);
-    //   });
-
-    //   bool isAllShared = true;
-
-    //   for (AtOperationItemStatus data in allSharedData) {
-    //     if (allSharedData.length != 2 || data.complete == false) {
-    //       isAllShared = false;
-    //     }
-    //   }
-
-    //   expect(isAllShared, true);
-    // });
+      expect(isAllShared, true);
+    });
 
     test('test unsuccessfully sharing an object with two atsigns', () async {
       when(() => mockAtClient.put(
@@ -814,12 +781,13 @@ class MyModelTest extends AtCollectionModel {
   }
 
   @override
-  MyModelTest fromJson(String jsonEncodedString) {
+  fromJson(String jsonEncodedString) {
     var json = jsonDecode(jsonEncodedString);
-    var newMyModel = MyModelTest.from(
-        int.parse(json['number']), json['name'], json['email']);
-    newMyModel.id = json['id'];
-    return newMyModel;
+
+    number = int.parse(json['number']);
+    name = json['name'];
+    email = json['email'];
+    id = json['id'];
   }
 
   @override
@@ -857,7 +825,7 @@ class MyModelTest extends AtCollectionModel {
   }
 }
 
-class MyModelTestFactory extends AtCollectionModelFactory {
+class MyModelTestFactory extends AtCollectionModelFactory<MyModelTest> {
   @override
   create() {
     return MyModelTest();
