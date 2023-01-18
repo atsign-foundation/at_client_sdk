@@ -170,6 +170,8 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<bool> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async {
+    _updateCollectionInstance();
+
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: toJson(),
       id: id,
@@ -197,6 +199,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     if (share == false) {
       completer.complete(isSelfKeySaved);
+      return isSelfKeySaved ?? false;
     }
 
     completer.complete(isAllKeySaved);
@@ -229,6 +232,8 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<bool> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async {
+    _updateCollectionInstance();
+
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: toJson(),
       id: id,
@@ -255,6 +260,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> delete() async {
+    _updateCollectionInstance();
     CollectionUtil.validateIdAndCollectionName(id, getCollectionName());
 
     bool isSelfKeyDeleted = false;
@@ -286,6 +292,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> unshare({List<String>? atSigns}) async {
+    _updateCollectionInstance();
     bool isAllShareKeysUnshared = true;
 
     await CollectionMethodImpl.getInstance()
@@ -297,6 +304,10 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     });
 
     return isAllShareKeysUnshared;
+  }
+
+  _updateCollectionInstance() {
+    CollectionMethodImpl.getInstance().atCollectionModel = this;
   }
 
   @override

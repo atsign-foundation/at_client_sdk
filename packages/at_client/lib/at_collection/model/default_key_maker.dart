@@ -31,7 +31,7 @@ class DefaultKeyMaker implements KeyMakerSpec {
       String? sharedWith,
       ObjectLifeCycleOptions? objectLifeCycleOptions}) {
     int? ttrInSeconds =
-        objectLifeCycleOptions?.cacheRefreshIntervalOnRecipient?.inSeconds;
+        objectLifeCycleOptions?.cacheRefreshIntervalOnRecipient.inSeconds;
 
     return AtKey()
       ..key = '$keyId.$collectionName'
