@@ -167,22 +167,14 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     ));
   }
 
-  Map<String, dynamic> _initAndValidateJson() {
-    Map<String, dynamic> objectJson = toJson();
-    objectJson['id'] = id;
-    objectJson['collectionName'] = getCollectionName();
-    CollectionUtil.validateModel(
-      modelJson: objectJson,
-      id: id,
-      collectionName: getCollectionName(),
-    );
-    return objectJson;
-  }
-
   @override
   Future<bool> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async {
-    var jsonEncodedMap = _initAndValidateJson();
+    var jsonObject = CollectionUtil.initAndValidateJson(
+      collectionModelJson: toJson(),
+      id: id,
+      collectionName: getCollectionName(),
+    );
 
     final Completer<bool> completer = Completer<bool>();
 
@@ -190,7 +182,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     await CollectionMethodImpl.getInstance()
         .save(
-            jsonEncodedData: jsonEncode(jsonEncodedMap),
+            jsonEncodedData: jsonEncode(jsonObject),
             options: options,
             share: share)
         .forEach((AtOperationItemStatus atOperationItemStatus) {
@@ -213,7 +205,10 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<List<String>> getSharedWith() async {
-    _initAndValidateJson();
+    CollectionUtil.validateIdAndCollectionName(
+      id,
+      getCollectionName(),
+    );
 
     List<String> sharedWithList = [];
     String formattedId = CollectionUtil.format(id);
@@ -234,12 +229,16 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<bool> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async {
-    var jsonEncodedMap = _initAndValidateJson();
+    var jsonObject = CollectionUtil.initAndValidateJson(
+      collectionModelJson: toJson(),
+      id: id,
+      collectionName: getCollectionName(),
+    );
 
     List<AtOperationItemStatus> allSharedKeyStatus = [];
     await CollectionMethodImpl.getInstance()
         .shareWith(atSigns,
-            jsonEncodedData: jsonEncode(jsonEncodedMap), options: options)
+            jsonEncodedData: jsonEncode(jsonObject), options: options)
         .forEach((element) {
       allSharedKeyStatus.add(element);
     });
@@ -256,7 +255,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> delete() async {
-    _initAndValidateJson();
+    CollectionUtil.validateIdAndCollectionName(id, getCollectionName());
 
     bool isSelfKeyDeleted = false;
     await CollectionMethodImpl.getInstance()

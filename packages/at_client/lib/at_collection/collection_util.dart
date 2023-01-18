@@ -16,19 +16,27 @@ class CollectionUtil {
     return formattedId;
   }
 
+  /// throws exception if id or collectionName is empty
+  static void validateIdAndCollectionName(
+    String? id,
+    String? collectionName,
+  ) {
+    if (id == null || id.trim().isEmpty) {
+      throw Exception('id not found');
+    }
+
+    if (collectionName == null || collectionName.trim().isEmpty) {
+      throw Exception('collectionName not found');
+    }
+  }
+
   /// Throws exception if id or collectionName is not added.
   static void validateModel({
     required Map<String, dynamic> modelJson,
     required String id,
     required String collectionName,
   }) {
-    if (id.trim().isEmpty) {
-      throw Exception('id not found');
-    }
-
-    if (collectionName.trim().isEmpty) {
-      throw Exception('collectionName not found');
-    }
+    validateIdAndCollectionName(id, collectionName);
 
     if (modelJson['id'] == null) {
       throw Exception('id not added in toJson');
@@ -37,5 +45,21 @@ class CollectionUtil {
     if (modelJson['collectionName'] == null) {
       throw Exception('collectionName not added in toJson');
     }
+  }
+
+  /// adds id and collectionName fields in [objectJson]
+  static Map<String, dynamic> initAndValidateJson({
+    required Map<String, dynamic> collectionModelJson,
+    required String id,
+    required String collectionName,
+  }) {
+    collectionModelJson['id'] = id;
+    collectionModelJson['collectionName'] = collectionName;
+    CollectionUtil.validateModel(
+      modelJson: collectionModelJson,
+      id: id,
+      collectionName: collectionName,
+    );
+    return collectionModelJson;
   }
 }
