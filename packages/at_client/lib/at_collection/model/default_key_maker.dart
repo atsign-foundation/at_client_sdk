@@ -1,13 +1,11 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
-import 'package:meta/meta.dart';
 
 class DefaultKeyMaker implements KeyMakerSpec {
-  @visibleForTesting
   AtClientManager? atClientManager;
 
-  AtClient getAtClient() {
+  AtClient _getAtClient() {
     atClientManager ??= AtClientManager.getInstance();
     return atClientManager!.atClient;
   }
@@ -23,7 +21,7 @@ class DefaultKeyMaker implements KeyMakerSpec {
       ..metadata!.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
-      ..sharedBy = getAtClient().getCurrentAtSign();
+      ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 
   @override
@@ -43,6 +41,6 @@ class DefaultKeyMaker implements KeyMakerSpec {
       ..metadata!.ccd = ttrInSeconds != null ? true : false
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
-      ..sharedBy = getAtClient().getCurrentAtSign();
+      ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 }

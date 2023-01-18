@@ -2,6 +2,7 @@
 root_server:
   # The url to connect to root server
   url: 'root.atsign.wtf'
+  # url: 'root.atsign.org'
 
 # cicd atSign details
 atSign:
@@ -11,3 +12,8 @@ atSign:
   # full details.
   firstAtSign: '@ce2e1'
   secondAtSign: '@ce2e2'
+  # used in collection end-to-end testing
+  # firstAtSign: '@local2010'
+  # secondAtSign: '@0living'
+  # thirdAtSign: '@significantredpanda'
+  # fourthAtSign: '@51alooant55'

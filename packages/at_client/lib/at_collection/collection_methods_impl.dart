@@ -24,7 +24,7 @@ class CollectionMethodImpl {
 
   final _logger = AtSignLogger('AtCollectionModelMethodsImpl');
 
-  AtClient? atClient;
+  AtClientManager? atClientManager;
 
   late KeyMakerSpec keyMaker = DefaultKeyMaker();
   late AtCollectionModel atCollectionModel;
@@ -202,7 +202,8 @@ class CollectionMethodImpl {
   }
 
   AtClient _getAtClient() {
-    return AtClientManager.getInstance().atClient;
+    atClientManager ??= AtClientManager.getInstance();
+    return atClientManager!.atClient;
   }
 
   Future<bool> _put(AtKey atKey, String jsonEncodedData) async {
