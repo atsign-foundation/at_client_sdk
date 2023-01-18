@@ -9,14 +9,10 @@ import 'package:at_client/at_collection/model/spec/at_collection_model_stream_sp
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_logger.dart';
 import 'dart:convert';
-import 'package:meta/meta.dart';
 
 /// implementation of [AtCollectionModelStreamSpec]
 class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   final _logger = AtSignLogger('AtCollectionModelStream');
-
-  @visibleForTesting
-  AtClient? atClient;
 
   KeyMakerSpec keyMaker = DefaultKeyMaker();
 

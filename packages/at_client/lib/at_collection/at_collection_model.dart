@@ -16,10 +16,9 @@ import 'package:meta/meta.dart';
 abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   final _logger = AtSignLogger('AtCollectionModel');
 
-  @visibleForTesting
-  AtClient? atClient;
-
   static KeyMakerSpec keyMaker = DefaultKeyMaker();
+
+  AtClientManager? atClientManager;
 
   late AtCollectionModelStream streams = AtCollectionModelStream(
     atCollectionModel: this,
@@ -40,8 +39,8 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   }
 
   AtClient _getAtClient() {
-    atClient ??= AtClientManager.getInstance().atClient;
-    return atClient!;
+    atClientManager ??= AtClientManager.getInstance();
+    return atClientManager!.atClient;
   }
 
   /// The method getById() returns a AtCollectionModel object whose id property matches the specified string.
@@ -221,7 +220,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     String formattedCollectionName = CollectionUtil.format(getCollectionName());
 
     var allKeys = await _getAtClient()
-        .getAtKeys(regex: '$formattedId.$formattedCollectionName}');
+        .getAtKeys(regex: '$formattedId.$formattedCollectionName');
 
     for (var atKey in allKeys) {
       if (atKey.sharedWith != null) {
@@ -304,12 +303,5 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   String getCollectionName() {
     return collectionName ?? runtimeType.toString().toLowerCase();
-  }
-
-  Future<bool> _put(AtKey atKey, String jsonEncodedData) async {
-    return await _getAtClient().put(
-      atKey,
-      jsonEncodedData,
-    );
   }
 }

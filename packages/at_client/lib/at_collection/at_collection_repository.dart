@@ -6,12 +6,10 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_collection/collection_util.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:meta/meta.dart';
 
 class AtCollectionRepository {
   final _logger = AtSignLogger('AtCollectionRepository');
 
-  @visibleForTesting
   AtClientManager? atClientManager;
 
   late KeyMakerSpec keyMaker;
