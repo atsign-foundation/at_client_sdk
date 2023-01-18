@@ -1,6 +1,9 @@
 // import 'dart:mirrors';
 
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_collection/collection_util.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -9,7 +12,7 @@ class AtCollectionRepository {
   final _logger = AtSignLogger('AtCollectionRepository');
 
   @visibleForTesting
-  AtClient? atClient;
+  AtClientManager? atClientManager;
 
   late KeyMakerSpec keyMaker;
 
@@ -18,49 +21,59 @@ class AtCollectionRepository {
   AtCollectionRepository({required this.keyMaker});
 
   AtClient getAtClient() {
-    return AtClientManager.getInstance().atClient;
+    atClientManager ??= AtClientManager.getInstance();
+    return atClientManager!.atClient;
   }
 
   Future<List<T>> getAll<T extends AtCollectionModel>(
       {String? collectionName,
-      required AtCollectionModelFactory collectionModelFactory}) async {
+      required AtCollectionModelFactory<T> collectionModelFactory}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
 
-    List<T> dataList = [];
+    List<T> modelList = [];
 
     var collectionAtKeys =
         await getAtClient().getAtKeys(regex: _collectionName);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
 
-    /// TODO: can there be a scenario when key is available but we can't get data
-    /// In that scenario we might have to give failure results to app.
     for (var atKey in collectionAtKeys) {
       try {
         var atValue = await getAtClient().get(atKey);
-        var data = collectionModelFactory.create().fromJson(atValue.value);
-        dataList.add(data);
+        var atValueJson = jsonDecode(atValue.value);
+        var model = collectionModelFactory.create();
+        model.fromJson(atValue.value);
+        model.id = atValueJson['id'];
+        model.collectionName = atValueJson['collectionName'];
+        modelList.add(model);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
       }
     }
 
-    return dataList;
+    return modelList;
   }
 
   Future<T> getById<T extends AtCollectionModel>(String keyId,
       {String? collectionName,
-      required AtCollectionModelFactory collectionModelFactory}) async {
+      required AtCollectionModelFactory<T> collectionModelFactory}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
 
+    String formattedId = CollectionUtil.format(keyId);
+    String formattedCollectionName = CollectionUtil.format(_collectionName);
+
     AtKey atKey = keyMaker.createSelfKey(
-      keyId: keyId,
-      collectionName: _collectionName,
+      keyId: formattedId,
+      collectionName: formattedCollectionName,
     );
 
     try {
       AtValue atValue = await getAtClient().get(atKey);
-      var modelData = collectionModelFactory.create().fromJson(atValue.value);
-      return modelData;
+      var atValueJson = jsonDecode(atValue.value);
+      var model = collectionModelFactory.create();
+      model.fromJson(atValue.value);
+      model.id = atValueJson['id'];
+      model.collectionName = atValueJson['collectionName'];
+      return model;
     } catch (e) {
       _logger.severe('failed to get value of ${atKey.key}');
       rethrow;

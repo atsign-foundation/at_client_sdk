@@ -21,6 +21,9 @@ abstract class AtCollectionModelSpec<T> {
   /// By default, id is set to UUID.
   late String id;
 
+  /// TODO
+  String? collectionName;
+
   /// [toJson] method returns JSON representation of the object.
   /// The [save] method invokes this method to get the state which will be persisted to the secondary server.
   ///

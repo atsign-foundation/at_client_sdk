@@ -1,4 +1,5 @@
 import 'package:at_client/at_collection/at_collection_model.dart';
+import 'package:at_client/at_collection/collection_util.dart';
 import 'package:at_client/at_collection/model/at_operation_item_status.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
@@ -28,32 +29,19 @@ class CollectionMethodImpl {
   late KeyMakerSpec keyMaker = DefaultKeyMaker();
   late AtCollectionModel atCollectionModel;
 
-  String _formatId(String id) {
-    String formattedId = id;
-
-    formattedId = formattedId.trim().toLowerCase();
-    formattedId = formattedId.replaceAll(' ', '-');
-
-    for (int i = 0; i < formattedId.length; i++) {
-      /// replacing character with '-' if it's not alphanumeric.
-      if (RegExp(r'^(?!\s*$)[a-zA-Z0-9- ]{1,20}$').hasMatch(formattedId[i]) ==
-          false) {
-        formattedId = formattedId.replaceAll(formattedId[i], '-');
-      }
-    }
-
-    return formattedId;
-  }
-
   Stream<AtOperationItemStatus> save(
       {required String jsonEncodedData,
       ObjectLifeCycleOptions? options,
       bool share = false}) async* {
     options ??= ObjectLifeCycleOptions();
+    String formattedId = CollectionUtil.format(atCollectionModel.id);
+    String formattedCollectionName = CollectionUtil.format(
+      atCollectionModel.getCollectionName(),
+    );
 
     AtKey atKey = keyMaker.createSelfKey(
-      keyId: _formatId(atCollectionModel.id),
-      collectionName: _formatId(atCollectionModel.getCollectionName()),
+      keyId: formattedId,
+      collectionName: formattedCollectionName,
       objectLifeCycleOptions: options,
     );
 
@@ -109,10 +97,13 @@ class CollectionMethodImpl {
       {ObjectLifeCycleOptions? options,
       required String jsonEncodedData}) async* {
     options ??= ObjectLifeCycleOptions();
+    String formattedId = CollectionUtil.format(atCollectionModel.id);
+    String formattedCollectionName =
+        CollectionUtil.format(atCollectionModel.getCollectionName());
 
     var selfKey = keyMaker.createSelfKey(
-      keyId: _formatId(atCollectionModel.id),
-      collectionName: _formatId(atCollectionModel.getCollectionName()),
+      keyId: formattedId,
+      collectionName: formattedCollectionName,
       objectLifeCycleOptions: options,
     );
 
@@ -130,8 +121,11 @@ class CollectionMethodImpl {
         continue; // if self key is not saved, we do not share
       }
 
-      var sharedAtKey = selfKey;
-      sharedAtKey.sharedWith = atSign;
+      var sharedAtKey = keyMaker.createSharedKey(
+          keyId: formattedId,
+          collectionName: formattedCollectionName,
+          objectLifeCycleOptions: options,
+          sharedWith: atSign);
 
       var atOperationItemStatus = AtOperationItemStatus(
           atSign: atSign,
@@ -152,9 +146,13 @@ class CollectionMethodImpl {
   }
 
   Stream<AtOperationItemStatus> delete() async* {
+    String formattedId = CollectionUtil.format(atCollectionModel.id);
+    String formattedCollectionName =
+        CollectionUtil.format(atCollectionModel.getCollectionName());
+
     AtKey selfAtKey = keyMaker.createSelfKey(
-      keyId: _formatId(atCollectionModel.id),
-      collectionName: _formatId(atCollectionModel.getCollectionName()),
+      keyId: formattedId,
+      collectionName: formattedCollectionName,
     );
 
     var isSelfKeyDeleted = await _getAtClient().delete(selfAtKey);
@@ -167,8 +165,12 @@ class CollectionMethodImpl {
   }
 
   Stream<AtOperationItemStatus> unshare({List<String>? atSigns}) async* {
-    String keyWithCollectionName =
-        '${atCollectionModel.id}.${atCollectionModel.getCollectionName()}';
+    String formattedId = CollectionUtil.format(atCollectionModel.id);
+    String formattedCollectionName = CollectionUtil.format(
+      atCollectionModel.getCollectionName(),
+    );
+
+    String keyWithCollectionName = '$formattedId.$formattedCollectionName';
 
     var sharedAtKeys =
         await _getAtClient().getAtKeys(regex: keyWithCollectionName);
