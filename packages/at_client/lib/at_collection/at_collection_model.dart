@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_collection/at_collection_model_stream.dart';
 import 'package:at_client/at_collection/at_collection_repository.dart';
 import 'package:at_client/at_collection/collection_methods_impl.dart';
+import 'package:at_client/at_collection/collection_util.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
@@ -99,7 +100,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   static Future<T> getById<T extends AtCollectionModel>(String id,
       {String? collectionName,
-      required AtCollectionModelFactory collectionModelFactory}) async {
+      required AtCollectionModelFactory<T> collectionModelFactory}) async {
     return (await atCollectionRepository.getById<T>(
       id,
       collectionName: collectionName,
@@ -160,24 +161,29 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// Returns an empty list when there are no AtCollectionModel objects found for the given collectionName.
   static Future<List<T>> getAll<T extends AtCollectionModel>(
       {String? collectionName,
-      required AtCollectionModelFactory collectionModelFactory}) async {
+      required AtCollectionModelFactory<T> collectionModelFactory}) async {
     return (await atCollectionRepository.getAll<T>(
       collectionName: collectionName,
       collectionModelFactory: collectionModelFactory,
     ));
   }
 
-  _initAndValidateJson() {
+  Map<String, dynamic> _initAndValidateJson() {
     Map<String, dynamic> objectJson = toJson();
     objectJson['id'] = id;
     objectJson['collectionName'] = getCollectionName();
-    _validateModel(objectJson);
+    CollectionUtil.validateModel(
+      modelJson: objectJson,
+      id: id,
+      collectionName: getCollectionName(),
+    );
+    return objectJson;
   }
 
   @override
   Future<bool> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async {
-    _initAndValidateJson();
+    var jsonEncodedMap = _initAndValidateJson();
 
     final Completer<bool> completer = Completer<bool>();
 
@@ -185,7 +191,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     await CollectionMethodImpl.getInstance()
         .save(
-            jsonEncodedData: jsonEncode(toJson()),
+            jsonEncodedData: jsonEncode(jsonEncodedMap),
             options: options,
             share: share)
         .forEach((AtOperationItemStatus atOperationItemStatus) {
@@ -209,10 +215,13 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<List<String>> getSharedWith() async {
     _initAndValidateJson();
-    List<String> sharedWithList = [];
 
-    var allKeys =
-        await _getAtClient().getAtKeys(regex: '$id.${getCollectionName()}');
+    List<String> sharedWithList = [];
+    String formattedId = CollectionUtil.format(id);
+    String formattedCollectionName = CollectionUtil.format(getCollectionName());
+
+    var allKeys = await _getAtClient()
+        .getAtKeys(regex: '$formattedId.$formattedCollectionName}');
 
     for (var atKey in allKeys) {
       if (atKey.sharedWith != null) {
@@ -226,12 +235,12 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<bool> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async {
-    _initAndValidateJson();
+    var jsonEncodedMap = _initAndValidateJson();
 
     List<AtOperationItemStatus> allSharedKeyStatus = [];
     await CollectionMethodImpl.getInstance()
         .shareWith(atSigns,
-            jsonEncodedData: jsonEncode(toJson()), options: options)
+            jsonEncodedData: jsonEncode(jsonEncodedMap), options: options)
         .forEach((element) {
       allSharedKeyStatus.add(element);
     });
@@ -294,26 +303,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   String getCollectionName() {
-    return runtimeType.toString().toLowerCase();
-  }
-
-  /// Throws exception if id or collectionName is not added.
-  _validateModel(Map<String, dynamic> objectJson) {
-    if (id.trim().isEmpty) {
-      throw Exception('id not found');
-    }
-
-    if (getCollectionName().trim().isEmpty) {
-      throw Exception('collectionName not found');
-    }
-
-    if (objectJson['id'] == null) {
-      throw Exception('id not added in toJson');
-    }
-
-    if (objectJson['collectionName'] == null) {
-      throw Exception('collectionName not added in toJson');
-    }
+    return collectionName ?? runtimeType.toString().toLowerCase();
   }
 
   Future<bool> _put(AtKey atKey, String jsonEncodedData) async {

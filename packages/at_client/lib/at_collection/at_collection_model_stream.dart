@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_collection/collection_methods_impl.dart';
+import 'package:at_client/at_collection/collection_util.dart';
 import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/at_collection_model_stream_spec.dart';
@@ -27,10 +28,10 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   @override
   Stream<AtOperationItemStatus> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async* {
-    _validateModel();
+    var jsonObject = _initAndValidateJson();
 
     yield* CollectionMethodImpl.getInstance().save(
-      jsonEncodedData: jsonEncode(atCollectionModel.toJson()),
+      jsonEncodedData: jsonEncode(jsonObject),
       options: options,
       share: share,
     );
@@ -39,18 +40,18 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   @override
   Stream<AtOperationItemStatus> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async* {
-    _validateModel();
+    var jsonObject = _initAndValidateJson();
 
     yield* CollectionMethodImpl.getInstance().shareWith(
       atSigns,
-      jsonEncodedData: jsonEncode(atCollectionModel.toJson()),
+      jsonEncodedData: jsonEncode(jsonObject),
       options: options,
     );
   }
 
   @override
   Stream<AtOperationItemStatus> delete() async* {
-    _validateModel();
+    _initAndValidateJson();
 
     yield* CollectionMethodImpl.getInstance().delete();
     yield* CollectionMethodImpl.getInstance().unshare();
@@ -61,22 +62,15 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
     yield* CollectionMethodImpl.getInstance().unshare(atSigns: atSigns);
   }
 
-  /// Throws exception if id or collectionName is not added.
-  _validateModel() {
-    if (atCollectionModel.id.trim().isEmpty) {
-      throw Exception('id not found');
-    }
-
-    if (atCollectionModel.getCollectionName().trim().isEmpty) {
-      throw Exception('collectionName not found');
-    }
-
-    if (atCollectionModel.toJson()['id'] == null) {
-      throw Exception('id not added in toJson');
-    }
-
-    if (atCollectionModel.toJson()['collectionName'] == null) {
-      throw Exception('collectionName not added in toJson');
-    }
+  Map<String, dynamic> _initAndValidateJson() {
+    Map<String, dynamic> objectJson = atCollectionModel.toJson();
+    objectJson['id'] = atCollectionModel.id;
+    objectJson['collectionName'] = atCollectionModel.getCollectionName();
+    CollectionUtil.validateModel(
+      modelJson: objectJson,
+      id: atCollectionModel.id,
+      collectionName: atCollectionModel.getCollectionName(),
+    );
+    return objectJson;
   }
 }
