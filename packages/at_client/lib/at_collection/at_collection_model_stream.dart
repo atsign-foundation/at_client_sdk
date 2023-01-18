@@ -24,7 +24,11 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   @override
   Stream<AtOperationItemStatus> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async* {
-    var jsonObject = _initAndValidateJson();
+    var jsonObject = CollectionUtil.initAndValidateJson(
+      collectionModelJson: atCollectionModel.toJson(),
+      id: atCollectionModel.id,
+      collectionName: atCollectionModel.getCollectionName(),
+    );
 
     yield* CollectionMethodImpl.getInstance().save(
       jsonEncodedData: jsonEncode(jsonObject),
@@ -36,7 +40,11 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   @override
   Stream<AtOperationItemStatus> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async* {
-    var jsonObject = _initAndValidateJson();
+    var jsonObject = CollectionUtil.initAndValidateJson(
+      collectionModelJson: atCollectionModel.toJson(),
+      id: atCollectionModel.id,
+      collectionName: atCollectionModel.getCollectionName(),
+    );
 
     yield* CollectionMethodImpl.getInstance().shareWith(
       atSigns,
@@ -47,7 +55,10 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
 
   @override
   Stream<AtOperationItemStatus> delete() async* {
-    _initAndValidateJson();
+    CollectionUtil.validateIdAndCollectionName(
+      atCollectionModel.id,
+      atCollectionModel.getCollectionName(),
+    );
 
     yield* CollectionMethodImpl.getInstance().delete();
     yield* CollectionMethodImpl.getInstance().unshare();
@@ -56,17 +67,5 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   @override
   Stream<AtOperationItemStatus> unshare({List<String>? atSigns}) async* {
     yield* CollectionMethodImpl.getInstance().unshare(atSigns: atSigns);
-  }
-
-  Map<String, dynamic> _initAndValidateJson() {
-    Map<String, dynamic> objectJson = atCollectionModel.toJson();
-    objectJson['id'] = atCollectionModel.id;
-    objectJson['collectionName'] = atCollectionModel.getCollectionName();
-    CollectionUtil.validateModel(
-      modelJson: objectJson,
-      id: atCollectionModel.id,
-      collectionName: atCollectionModel.getCollectionName(),
-    );
-    return objectJson;
   }
 }
