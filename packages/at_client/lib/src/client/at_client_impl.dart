@@ -168,7 +168,7 @@ class AtClientImpl implements AtClient {
     }
 
     // Now using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
+    _remoteSecondary ??= RemoteSecondary(_atSign, _preference!, atChops: atChops,
         privateKey: _preference!.privateKey);
 
     // Now using ??= because we may be injecting an EncryptionService
@@ -617,7 +617,7 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(_atSign, _preference!);
+    var remoteSecondary = RemoteSecondary(_atSign, _preference!, atChops: atChops);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {

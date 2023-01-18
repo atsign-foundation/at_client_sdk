@@ -94,7 +94,8 @@ class NotificationServiceImpl
             _atClient.getCurrentAtSign()!,
             _atClient.getPreferences()!,
             MonitorPreference()..keepAlive = true,
-            monitorRetry);
+            monitorRetry,
+            atChops: atClient.atChops);
     _atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(lastReceivedNotificationKey,
             _atClient.getCurrentAtSign()!,
