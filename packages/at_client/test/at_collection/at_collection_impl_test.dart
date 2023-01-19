@@ -41,11 +41,16 @@ void main() {
         mockAtCLientManager;
     AtCollectionModel.atCollectionRepository.keyMaker = testKeyMaker;
     AtCollectionModel.keyMaker = testKeyMaker;
-    CollectionMethodImpl.getInstance().keyMaker = testKeyMaker;
-    CollectionMethodImpl.getInstance().atClientManager = mockAtCLientManager;
 
     final myModelTestObject1 = MyModelTest.from(1, 'Alice', 'alice@atsign.com');
     final myModelTestObject2 = MyModelTest.from(2, 'Bob', 'bob@atsign.com');
+
+    myModelTestObject1.collectionMethodImpl.keyMaker = testKeyMaker;
+    myModelTestObject2.collectionMethodImpl.keyMaker = testKeyMaker;
+    myModelTestObject1.collectionMethodImpl.atClientManager =
+        mockAtCLientManager;
+    myModelTestObject2.collectionMethodImpl.atClientManager =
+        mockAtCLientManager;
 
     String collectionName = "MyModelTest".toLowerCase();
     String sharedWithAtsign1 = '@colin';
@@ -190,8 +195,14 @@ void main() {
       var saveRes1 = await myModelTestObject1.save(share: false);
       expect(saveRes1, true);
 
-      var saveRes2 = await myModelTestObject1.save(share: false);
-      expect(saveRes2, true);
+      // stream
+      await myModelTestObject1.streams
+          .save(share: false)
+          .forEach((AtOperationItemStatus atOperationItemStatus) {
+        expect(atOperationItemStatus.complete, true);
+        expect(atOperationItemStatus.key,
+            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}');
+      });
     });
 
     test('test unsuccessfully saving an object', () async {
@@ -204,6 +215,14 @@ void main() {
 
       var res = await myModelTestObject1.save(share: false);
       expect(res, false);
+
+      await myModelTestObject1.streams
+          .save(share: false)
+          .forEach((AtOperationItemStatus atOperationItemStatus) {
+        expect(atOperationItemStatus.complete, false);
+        expect(atOperationItemStatus.key,
+            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}');
+      });
     });
 
     test('test successfully saving and updating an object', () async {
@@ -238,6 +257,14 @@ void main() {
 
       var res = await myModelTestObject1.save();
       expect(res, true);
+
+      await myModelTestObject1.streams
+          .save()
+          .forEach((AtOperationItemStatus atOperationItemStatus) {
+        expect(atOperationItemStatus.complete, true);
+        expect(atOperationItemStatus.key,
+            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}');
+      });
     });
 
     test('test unsuccessfully saving and updating an object', () async {
@@ -271,8 +298,21 @@ void main() {
           .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
 
       var isAllDataUpdated = await myModelTestObject1.save();
-
       expect(isAllDataUpdated, false);
+
+      var allData = <AtOperationItemStatus>[];
+      bool isAllStreamsDataUpdated = true;
+      await myModelTestObject1.streams.save().forEach((result) {
+        allData.add(result);
+      });
+
+      for (AtOperationItemStatus data in allData) {
+        if (data.complete == false) {
+          isAllStreamsDataUpdated = false;
+        }
+      }
+
+      expect(isAllStreamsDataUpdated, false);
     });
 
     test('test retrieving shared with list of an object', () async {
@@ -308,6 +348,22 @@ void main() {
           .share([sharedWithAtsign1, sharedWithAtsign2]);
 
       expect(isAllShared, true);
+
+      // var allSharedData = <AtOperationItemStatus>[];
+      // await myModelTestObject1.streams
+      //     .share([sharedWithAtsign1, sharedWithAtsign2]).forEach((e) {
+      //   allSharedData.add(e);
+      // });
+
+      // bool isAllSharedWithStream = true;
+
+      // for (AtOperationItemStatus data in allSharedData) {
+      //   if (allSharedData.length != 2 || data.complete == false) {
+      //     isAllSharedWithStream = false;
+      //   }
+      // }
+
+      // expect(isAllSharedWithStream, true);
     });
 
     test('test unsuccessfully sharing an object with two atsigns', () async {

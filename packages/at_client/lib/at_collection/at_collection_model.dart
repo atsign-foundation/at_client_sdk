@@ -20,22 +20,25 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   AtClientManager? atClientManager;
 
-  late AtCollectionModelStream streams = AtCollectionModelStream(
-    atCollectionModel: this,
-    keyMaker: keyMaker,
-  );
-
+  late AtCollectionModelStream streams;
   static AtCollectionRepository atCollectionRepository = AtCollectionRepository(
     keyMaker: keyMaker,
   );
 
+  late CollectionMethodImpl collectionMethodImpl;
+
   AtCollectionModel() {
-    CollectionMethodImpl.getInstance().atCollectionModel = this;
+    collectionMethodImpl = CollectionMethodImpl(this);
+    streams = AtCollectionModelStream(
+      atCollectionModel: this,
+      keyMaker: keyMaker,
+      collectionMethodImpl: collectionMethodImpl,
+    );
   }
 
   set setKeyMaker(KeyMakerSpec newKeyMaker) {
     keyMaker = newKeyMaker;
-    CollectionMethodImpl.getInstance().keyMaker = keyMaker;
+    collectionMethodImpl.keyMaker = keyMaker;
   }
 
   AtClient _getAtClient() {
@@ -170,8 +173,6 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<bool> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async {
-    _updateCollectionInstance();
-
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: toJson(),
       id: id,
@@ -182,7 +183,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
     bool? isSelfKeySaved, isAllKeySaved = true;
 
-    await CollectionMethodImpl.getInstance()
+    await collectionMethodImpl
         .save(
             jsonEncodedData: jsonEncode(jsonObject),
             options: options,
@@ -232,8 +233,6 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<bool> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options}) async {
-    _updateCollectionInstance();
-
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: toJson(),
       id: id,
@@ -241,7 +240,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     );
 
     List<AtOperationItemStatus> allSharedKeyStatus = [];
-    await CollectionMethodImpl.getInstance()
+    await collectionMethodImpl
         .shareWith(atSigns,
             jsonEncodedData: jsonEncode(jsonObject), options: options)
         .forEach((element) {
@@ -260,11 +259,10 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> delete() async {
-    _updateCollectionInstance();
     CollectionUtil.validateIdAndCollectionName(id, getCollectionName());
 
     bool isSelfKeyDeleted = false;
-    await CollectionMethodImpl.getInstance()
+    await collectionMethodImpl
         .delete()
         .forEach((AtOperationItemStatus operationEvent) {
       if (operationEvent.complete) {
@@ -279,7 +277,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     /// unsharing all shared keys.
     bool isAllShareKeysUnshared = true;
 
-    await CollectionMethodImpl.getInstance()
+    await collectionMethodImpl
         .unshare()
         .forEach((AtOperationItemStatus operationEvent) {
       if (operationEvent.complete == false) {
@@ -292,10 +290,9 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> unshare({List<String>? atSigns}) async {
-    _updateCollectionInstance();
     bool isAllShareKeysUnshared = true;
 
-    await CollectionMethodImpl.getInstance()
+    await collectionMethodImpl
         .unshare(atSigns: atSigns)
         .forEach((AtOperationItemStatus operationEvent) {
       if (operationEvent.complete == false) {
@@ -304,10 +301,6 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     });
 
     return isAllShareKeysUnshared;
-  }
-
-  _updateCollectionInstance() {
-    CollectionMethodImpl.getInstance().atCollectionModel = this;
   }
 
   @override

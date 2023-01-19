@@ -17,9 +17,13 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   KeyMakerSpec keyMaker = DefaultKeyMaker();
 
   late AtCollectionModel atCollectionModel;
+  late CollectionMethodImpl collectionMethodImpl;
 
-  AtCollectionModelStream(
-      {required this.atCollectionModel, required this.keyMaker});
+  AtCollectionModelStream({
+    required this.atCollectionModel,
+    required this.keyMaker,
+    required this.collectionMethodImpl,
+  });
 
   @override
   Stream<AtOperationItemStatus> save(
@@ -30,7 +34,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
       collectionName: atCollectionModel.getCollectionName(),
     );
 
-    yield* CollectionMethodImpl.getInstance().save(
+    yield* collectionMethodImpl.save(
       jsonEncodedData: jsonEncode(jsonObject),
       options: options,
       share: share,
@@ -46,7 +50,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
       collectionName: atCollectionModel.getCollectionName(),
     );
 
-    yield* CollectionMethodImpl.getInstance().shareWith(
+    yield* collectionMethodImpl.shareWith(
       atSigns,
       jsonEncodedData: jsonEncode(jsonObject),
       options: options,
@@ -60,12 +64,12 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
       atCollectionModel.getCollectionName(),
     );
 
-    yield* CollectionMethodImpl.getInstance().delete();
-    yield* CollectionMethodImpl.getInstance().unshare();
+    yield* collectionMethodImpl.delete();
+    yield* collectionMethodImpl.unshare();
   }
 
   @override
   Stream<AtOperationItemStatus> unshare({List<String>? atSigns}) async* {
-    yield* CollectionMethodImpl.getInstance().unshare(atSigns: atSigns);
+    yield* collectionMethodImpl.unshare(atSigns: atSigns);
   }
 }

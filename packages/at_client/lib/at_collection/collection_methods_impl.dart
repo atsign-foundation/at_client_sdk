@@ -13,21 +13,14 @@ import 'package:at_utils/at_logger.dart';
 /// These methods are wrapped with a stream or future return types for the end consumption.
 
 class CollectionMethodImpl {
-  static final CollectionMethodImpl _singleton =
-      CollectionMethodImpl._internal();
-
-  CollectionMethodImpl._internal();
-
-  factory CollectionMethodImpl.getInstance() {
-    return _singleton;
-  }
-
   final _logger = AtSignLogger('AtCollectionModelMethodsImpl');
 
   AtClientManager? atClientManager;
 
   late KeyMakerSpec keyMaker = DefaultKeyMaker();
-  late AtCollectionModel atCollectionModel;
+  AtCollectionModel atCollectionModel;
+
+  CollectionMethodImpl(this.atCollectionModel);
 
   Stream<AtOperationItemStatus> save(
       {required String jsonEncodedData,
