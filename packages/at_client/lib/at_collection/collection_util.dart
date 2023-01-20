@@ -62,4 +62,17 @@ class CollectionUtil {
     );
     return collectionModelJson;
   }
+
+  static String makeRegex({String? formattedId, String? collectionName}) {
+    String regex = formattedId ?? '';
+
+    if (collectionName != null) {
+      regex = "$regex.$collectionName";
+    } else {
+      regex = '$regex.*';
+    }
+
+    regex = '$regex.atcollectionmodel';
+    return regex;
+  }
 }

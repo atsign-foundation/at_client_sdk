@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_collection/collection_util.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -92,8 +93,11 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
 
-    var getResult = await sharedWithAtClientManager.atClient
-        .getKeys(regex: 'personal-phone.phone');
+    var regex = CollectionUtil.makeRegex(
+        formattedId: 'personal-phone', collectionName: 'phone');
+
+    var getResult =
+        await sharedWithAtClientManager.atClient.getKeys(regex: regex);
     expect(getResult.length, 1);
   }, timeout: Timeout(Duration(minutes: 5)));
 
@@ -109,18 +113,18 @@ void main() async {
     await Phone.from('new personal Phone', phoneNumber: '123456789').save();
     await Phone.from('Office Phone', phoneNumber: '9999').save();
 
-    var personalPhoneLoaded = await AtCollectionModel.getById<Phone>(
+    var personalPhoneLoaded = await AtCollectionModel.getModelById<Phone>(
         'new personal Phone',
         collectionModelFactory: PhoneFactory());
 
     expect(personalPhoneLoaded.phoneNumber, '123456789');
 
-    var officePhoneLoaded = await AtCollectionModel.getById<Phone>(
+    var officePhoneLoaded = await AtCollectionModel.getModelById<Phone>(
         'Office Phone',
         collectionModelFactory: PhoneFactory());
     expect(officePhoneLoaded.phoneNumber, '9999');
 
-    var phones = await AtCollectionModel.getAll<Phone>(
+    var phones = await AtCollectionModel.getModelsByCollectionName<Phone>(
         collectionModelFactory: PhoneFactory());
 
     print('phones.length : ${phones.length}');
@@ -158,7 +162,7 @@ void main() async {
     await fourthPhone.delete();
     expect(await fourthPhone.getSharedWith(), []);
     expect(
-      () async => await AtCollectionModel.getById<Phone>('fourth phone',
+      () async => await AtCollectionModel.getModelById<Phone>('fourth phone',
           collectionModelFactory: PhoneFactory()),
       throwsA(isA<Exception>()),
     );
@@ -179,7 +183,7 @@ void main() async {
       await fifthPhone.streams.save().forEach(
         (AtOperationItemStatus element) {
           expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone');
+          expect(element.key, 'fifth-phone.phone.atcollectionmodel');
           expect(element.atSign, currentAtSign);
           expect(element.operation, Operation.save);
         },
@@ -188,7 +192,7 @@ void main() async {
       await fifthPhone.streams.share([sharedWithAtSign]).forEach(
         (AtOperationItemStatus element) {
           expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone');
+          expect(element.key, 'fifth-phone.phone.atcollectionmodel');
         },
       );
 
@@ -197,7 +201,7 @@ void main() async {
       await fifthPhone.streams.share([thirdAtSign]).forEach(
         (AtOperationItemStatus element) {
           expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone');
+          expect(element.key, 'fifth-phone.phone.atcollectionmodel');
         },
       );
 
@@ -206,7 +210,7 @@ void main() async {
       await fifthPhone.streams.share([fourthAtSign]).forEach(
         (AtOperationItemStatus element) {
           expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone');
+          expect(element.key, 'fifth-phone.phone.atcollectionmodel');
         },
       );
 
@@ -217,21 +221,21 @@ void main() async {
           .unshare(atSigns: [thirdAtSign, fourthAtSign]).forEach(
         (AtOperationItemStatus element) {
           expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone');
+          expect(element.key, 'fifth-phone.phone.atcollectionmodel');
         },
       );
 
       await fifthPhone.streams.delete().forEach(
         (AtOperationItemStatus element) {
           expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone');
+          expect(element.key, 'fifth-phone.phone.atcollectionmodel');
         },
       );
 
       expect(await fifthPhone.getSharedWith(), []);
 
       expect(
-        () async => await AtCollectionModel.getById<Phone>('fifth phone',
+        () async => await AtCollectionModel.getModelById<Phone>('fifth phone',
             collectionModelFactory: PhoneFactory()),
         throwsA(isA<Exception>()),
       );

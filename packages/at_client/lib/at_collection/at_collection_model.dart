@@ -100,10 +100,10 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///
   /// An Exception will be thrown if AtCollectionModel object with a given Id can not be found.
 
-  static Future<T> getById<T extends AtCollectionModel>(String id,
+  static Future<T> getModelById<T extends AtCollectionModel>(String id,
       {String? collectionName,
       required AtCollectionModelFactory<T> collectionModelFactory}) async {
-    return (await atCollectionRepository.getById<T>(
+    return (await atCollectionRepository.getModelById<T>(
       id,
       collectionName: collectionName,
       collectionModelFactory: collectionModelFactory,
@@ -161,10 +161,10 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// ```
   ///
   /// Returns an empty list when there are no AtCollectionModel objects found for the given collectionName.
-  static Future<List<T>> getAll<T extends AtCollectionModel>(
+  static Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
       {String? collectionName,
       required AtCollectionModelFactory<T> collectionModelFactory}) async {
-    return (await atCollectionRepository.getAll<T>(
+    return (await atCollectionRepository.getModelsByCollectionName<T>(
       collectionName: collectionName,
       collectionModelFactory: collectionModelFactory,
     ));
@@ -218,8 +218,11 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     String formattedId = CollectionUtil.format(id);
     String formattedCollectionName = CollectionUtil.format(getCollectionName());
 
-    var allKeys = await _getAtClient()
-        .getAtKeys(regex: '$formattedId.$formattedCollectionName');
+    var allKeys = await _getAtClient().getAtKeys(
+        regex: CollectionUtil.makeRegex(
+      formattedId: formattedId,
+      collectionName: formattedCollectionName,
+    ));
 
     for (var atKey in allKeys) {
       if (atKey.sharedWith != null) {

@@ -103,7 +103,8 @@ void main() {
         return atValue;
       });
 
-      var result = await AtCollectionModel.getById<MyModelTest>(object1ModelId,
+      var result = await AtCollectionModel.getModelById<MyModelTest>(
+          object1ModelId,
           collectionName: 'mymodeltest',
           collectionModelFactory: MyModelTestFactory());
       expect(result, myModelTestObject1);
@@ -148,8 +149,9 @@ void main() {
         return atValue;
       });
 
-      var allData = await AtCollectionModel.getAll<MyModelTest>(
-          collectionModelFactory: MyModelTestFactory());
+      var allData =
+          await AtCollectionModel.getModelsByCollectionName<MyModelTest>(
+              collectionModelFactory: MyModelTestFactory());
 
       expect(allData, [myModelTestObject1, myModelTestObject2]);
     });
@@ -825,13 +827,13 @@ class MyModelTest extends AtCollectionModel {
   }
 
   static Future<List<MyModelTest>> getAll() async {
-    return AtCollectionModel.getAll<MyModelTest>(
+    return AtCollectionModel.getModelsByCollectionName<MyModelTest>(
         collectionName: 'mymodeltest',
         collectionModelFactory: MyModelTestFactory());
   }
 
   static Future<MyModelTest> getById(String keyId) async {
-    return (await AtCollectionModel.getById<MyModelTest>(keyId,
+    return (await AtCollectionModel.getModelById<MyModelTest>(keyId,
         collectionName: 'mymodeltest',
         collectionModelFactory: MyModelTestFactory()));
   }

@@ -23,21 +23,33 @@ class AtCollectionRepository {
     return atClientManager!.atClient;
   }
 
-  Future<List<T>> getAll<T extends AtCollectionModel>(
+  Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
       {String? collectionName,
       required AtCollectionModelFactory<T> collectionModelFactory}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
+    _collectionName = CollectionUtil.format(_collectionName);
+    var regex = CollectionUtil.makeRegex(
+      collectionName: _collectionName,
+    );
 
     List<T> modelList = [];
 
-    var collectionAtKeys =
-        await getAtClient().getAtKeys(regex: _collectionName);
+    var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
 
     for (var atKey in collectionAtKeys) {
       try {
         var atValue = await getAtClient().get(atKey);
         var atValueJson = jsonDecode(atValue.value);
+
+        /// Given that id and collectionName attributes are not present, it is not a atcollectionmodel. Ignore it.
+        /// OR there is a collectionName but it is not what is asked hence ignore it.
+        if (atValueJson['id'] == null ||
+            atValueJson['collectionName'] == null ||
+            _collectionName != atValueJson['collectionName']) {
+          continue;
+        }
+
         var model = collectionModelFactory.create();
         model.fromJson(atValue.value);
         model.id = atValueJson['id'];
@@ -51,7 +63,7 @@ class AtCollectionRepository {
     return modelList;
   }
 
-  Future<T> getById<T extends AtCollectionModel>(String keyId,
+  Future<T> getModelById<T extends AtCollectionModel>(String keyId,
       {String? collectionName,
       required AtCollectionModelFactory<T> collectionModelFactory}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();

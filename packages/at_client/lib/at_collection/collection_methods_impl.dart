@@ -54,14 +54,19 @@ class CollectionMethodImpl {
     }
 
     if (share && atOperationItemStatus.complete == true) {
-      yield* updateSharedKeys(atKey.key!, jsonEncodedData);
+      yield* updateSharedKeys(
+          formattedId, formattedCollectionName, jsonEncodedData);
     }
   }
 
-  Stream<AtOperationItemStatus> updateSharedKeys(
-      String keyWithCollectionName, String jsonEncodedData) async* {
-    var sharedAtKeys =
-        await _getAtClient().getAtKeys(regex: keyWithCollectionName);
+  Stream<AtOperationItemStatus> updateSharedKeys(String formattedId,
+      String formattedCollectionName, String jsonEncodedData) async* {
+    var sharedAtKeys = await _getAtClient().getAtKeys(
+        regex: CollectionUtil.makeRegex(
+      formattedId: formattedId,
+      collectionName: formattedCollectionName,
+    ));
+
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
@@ -163,10 +168,12 @@ class CollectionMethodImpl {
       atCollectionModel.getCollectionName(),
     );
 
-    String keyWithCollectionName = '$formattedId.$formattedCollectionName';
-
-    var sharedAtKeys =
-        await _getAtClient().getAtKeys(regex: keyWithCollectionName);
+    var sharedAtKeys = await _getAtClient().getAtKeys(
+      regex: CollectionUtil.makeRegex(
+        formattedId: formattedId,
+        collectionName: formattedCollectionName,
+      ),
+    );
 
     if (atSigns == null) {
       sharedAtKeys.retainWhere((element) => element.sharedWith != null);
