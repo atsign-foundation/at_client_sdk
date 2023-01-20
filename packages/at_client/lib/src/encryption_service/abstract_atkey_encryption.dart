@@ -226,18 +226,17 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   ///
   /// If Synced, returns true; else returns false.
   Future<bool> isEncryptedSharedKeyInSync(AtKey atKey) async {
-    // If key is present in cache, return true
-    if (encryptedSharedKeySyncStatusCacheMap.containsKey(atKey.toString())) {
-      return encryptedSharedKeySyncStatusCacheMap[atKey.toString()]!;
-    }
-    // Set the commit log instance if not already set.
-    atCommitLog ??= await AtCommitLogManagerImpl.getInstance()
-        .getCommitLog(atKey.sharedBy!);
-
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = AT_ENCRYPTION_SHARED_KEY
       ..sharedBy = atKey.sharedBy
       ..sharedWith = atKey.sharedWith;
+    // If key is present in cache, return true
+    if (encryptedSharedKeySyncStatusCacheMap.containsKey(llookupVerbBuilder.buildKey())) {
+      return encryptedSharedKeySyncStatusCacheMap[llookupVerbBuilder.buildKey()]!;
+    }
+    // Set the commit log instance if not already set.
+    atCommitLog ??= await AtCommitLogManagerImpl.getInstance()
+        .getCommitLog(atKey.sharedBy!);
 
     CommitEntry sharedKeyCommitEntry = await syncUtil.getLatestCommitEntry(
         atCommitLog!, llookupVerbBuilder.buildKey());
