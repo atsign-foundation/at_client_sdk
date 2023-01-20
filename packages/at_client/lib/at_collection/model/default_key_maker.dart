@@ -16,7 +16,7 @@ class DefaultKeyMaker implements KeyMakerSpec {
       required String collectionName,
       ObjectLifeCycleOptions? objectLifeCycleOptions}) {
     return AtKey()
-      ..key = '$keyId.$collectionName'
+      ..key = '$keyId.$collectionName.atcollectionmodel'
       ..metadata = Metadata()
       ..metadata!.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
@@ -34,7 +34,7 @@ class DefaultKeyMaker implements KeyMakerSpec {
         objectLifeCycleOptions?.cacheRefreshIntervalOnRecipient.inSeconds;
 
     return AtKey()
-      ..key = '$keyId.$collectionName'
+      ..key = '$keyId.$collectionName.atcollectionmodel'
       ..sharedWith = sharedWith
       ..metadata = Metadata()
       ..metadata!.ttr = ttrInSeconds ?? -1
