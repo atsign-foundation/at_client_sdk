@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -81,6 +82,8 @@ class Monitor {
 
   get heartbeatInterval => _heartbeatInterval;
 
+  final AtChops? atChops;
+
   ///
   /// Creates a [Monitor] object.
   ///
@@ -124,7 +127,9 @@ class Monitor {
       {RemoteSecondary? remoteSecondary,
       MonitorConnectivityChecker? monitorConnectivityChecker,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-      Duration? monitorHeartbeatInterval}) {
+      Duration? monitorHeartbeatInterval,
+      this.atChops,
+      }) {
     _logger = AtSignLogger('Monitor ($atSign)');
     _onResponse = onResponse;
     _onError = onError;
@@ -133,7 +138,7 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
-    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference);
+    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference, atChops: atChops);
     _retryCallBack = retryCallBack;
     _monitorConnectivityChecker =
         monitorConnectivityChecker ?? MonitorConnectivityChecker();
@@ -257,12 +262,20 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    var key = RSAPrivateKey.fromString(_preference.privateKey!);
-    var sha256signature =
-        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
-    var signature = base64Encode(sha256signature);
-    _logger.finer('Authenticating the monitor connection: pkam:$signature');
-    await _monitorConnection!.write('pkam:$signature\n');
+    if (_preference.useAtChops) {
+      _logger.finer('Using AtChops to do the PKAM signing');
+      var signingResult =
+      atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
+      _logger.finer('Sending command pkam:${signingResult.result}');
+      await _monitorConnection!.write('pkam:${signingResult.result}\n');
+    } else {
+      var key = RSAPrivateKey.fromString(_preference.privateKey!);
+      var sha256signature =
+      key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+      var signature = base64Encode(sha256signature);
+      _logger.finer('Authenticating the monitor connection: pkam:$signature');
+      await _monitorConnection!.write('pkam:$signature\n');
+    }
 
     var pkamResponse = await getQueueResponse();
     if (!pkamResponse.contains('success')) {
