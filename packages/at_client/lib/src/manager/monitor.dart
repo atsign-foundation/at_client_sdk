@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -33,7 +34,7 @@ class Monitor {
   // Status on the monitor
   MonitorStatus status = MonitorStatus.notStarted;
 
-  final _logger = AtSignLogger('Monitor');
+  late final AtSignLogger _logger;
 
   bool _keepAlive = false;
 
@@ -81,6 +82,8 @@ class Monitor {
 
   get heartbeatInterval => _heartbeatInterval;
 
+  final AtChops? atChops;
+
   ///
   /// Creates a [Monitor] object.
   ///
@@ -124,7 +127,10 @@ class Monitor {
       {RemoteSecondary? remoteSecondary,
       MonitorConnectivityChecker? monitorConnectivityChecker,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-      Duration? monitorHeartbeatInterval}) {
+      Duration? monitorHeartbeatInterval,
+      this.atChops,
+      }) {
+    _logger = AtSignLogger('Monitor ($atSign)');
     _onResponse = onResponse;
     _onError = onError;
     _preference = preference;
@@ -132,7 +138,7 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
-    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference);
+    _remoteSecondary = remoteSecondary ?? RemoteSecondary(atSign, preference, atChops: atChops);
     _retryCallBack = retryCallBack;
     _monitorConnectivityChecker =
         monitorConnectivityChecker ?? MonitorConnectivityChecker();
@@ -182,7 +188,7 @@ class Monitor {
 
       _scheduleHeartbeat();
       return;
-    } on Exception catch (e) {
+    } catch (e) {
       _handleError(e);
     }
   }
@@ -203,8 +209,6 @@ class Monitor {
       if (status != MonitorStatus.started) {
         _logger.info("status is $status : heartbeat will not be sent");
       } else {
-        // send heartbeat and save the heartbeat sent time
-        _logger.finest("sending heartbeat");
         _lastHeartbeatSentTime = DateTime.now().millisecondsSinceEpoch;
         // schedule a future to check if a timely heartbeat response is received
         Future.delayed(
@@ -222,10 +226,15 @@ class Monitor {
           }
         });
 
-        await _monitorConnection!.write("noop:0\n");
-
-        // schedule the next heartbeat to be sent
-        _scheduleHeartbeat();
+        _logger.finest("sending heartbeat");
+        try {
+          // actually send the heartbeat
+          await _monitorConnection!.write("noop:0\n");
+          // schedule the next heartbeat to be sent
+          _scheduleHeartbeat();
+        } catch (e) {
+          _logger.warning("Exception sending heartbeat: $e");
+        }
       }
     });
   }
@@ -253,12 +262,20 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    var key = RSAPrivateKey.fromString(_preference.privateKey!);
-    var sha256signature =
-        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
-    var signature = base64Encode(sha256signature);
-    _logger.finer('Authenticating the monitor connection: pkam:$signature');
-    await _monitorConnection!.write('pkam:$signature\n');
+    if (_preference.useAtChops) {
+      _logger.finer('Using AtChops to do the PKAM signing');
+      var signingResult =
+      atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
+      _logger.finer('Sending command pkam:${signingResult.result}');
+      await _monitorConnection!.write('pkam:${signingResult.result}\n');
+    } else {
+      var key = RSAPrivateKey.fromString(_preference.privateKey!);
+      var sha256signature =
+      key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+      var signature = base64Encode(sha256signature);
+      _logger.finer('Authenticating the monitor connection: pkam:$signature');
+      await _monitorConnection!.write('pkam:$signature\n');
+    }
 
     var pkamResponse = await getQueueResponse();
     if (!pkamResponse.contains('success')) {
@@ -287,10 +304,13 @@ class Monitor {
 
   ///Returns the response of the monitor verb queue.
   @visibleForTesting
-  Future<String> getQueueResponse({int maxWaitTimeInMills = 6000}) async {
+  Future<String> getQueueResponse({int maxWaitTimeInMillis = 30000}) async {
     dynamic monitorResponse;
-    //waits for 30 seconds
-    for (var i = 0; i < maxWaitTimeInMills; i++) {
+
+    var checkDelayMillis = 5;
+    var checkDelayDuration = Duration(milliseconds: checkDelayMillis);
+    var checkCount = maxWaitTimeInMillis / checkDelayMillis;
+    for (var i = 0; i < checkCount; i++) {
       if (_monitorVerbResponseQueue.isNotEmpty) {
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
@@ -298,11 +318,11 @@ class Monitor {
             .parse(_monitorVerbResponseQueue.removeFirst());
         break;
       }
-      await Future.delayed(Duration(milliseconds: 5));
+      await Future.delayed(checkDelayDuration);
     }
     if (monitorResponse == null) {
       throw AtTimeoutException(
-          'Waited for ${5 * maxWaitTimeInMills} milliseconds and no response received');
+          'Waited for $maxWaitTimeInMillis milliseconds and no response received');
     }
     // If monitor response contains error, return error
     if (monitorResponse.isError) {
@@ -351,14 +371,12 @@ class Monitor {
     _monitorConnection?.close();
     status = MonitorStatus.errored;
     // Pass monitor and error
-    // TBD : If retry = true should the onError needs to be called?
     if (_keepAlive) {
-      // We will use a strategy here
-      _logger.info('Retrying start monitor due to error');
+      _logger.info('Monitor error $e - calling the retryCallback');
       _retryCallBack();
     } else {
-      _logger.warning(
-          '_keepAlive is false : monitor is errored, and NOT calling retryCallback');
+      _logger.severe(
+          'Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
       _onError(e);
     }
   }

@@ -1,8 +1,7 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 
-/// [Deprecated] Use [AtClientManager.syncService]
+/// [Deprecated] Use [AtClient.syncService]
 @Deprecated("Use SyncService")
 class SyncManagerImpl {
   static final SyncManagerImpl _singleton = SyncManagerImpl._internal();

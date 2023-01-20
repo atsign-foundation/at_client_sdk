@@ -1,5 +1,5 @@
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -9,11 +9,14 @@ import 'package:at_utils/at_logger.dart';
 
 ///Class responsible for encrypting the selfKey's
 class SelfKeyEncryption implements AtKeyEncryption {
-  final _logger = AtSignLogger('SelfKeyEncryption');
+  late final AtSignLogger _logger;
 
-  late LocalSecondary? localSecondary;
+  final AtClient atClient;
 
-  SelfKeyEncryption({this.localSecondary});
+  SelfKeyEncryption(this.atClient) {
+    _logger =
+        AtSignLogger('SelfKeyEncryption (${atClient.getCurrentAtSign()})');
+  }
 
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
@@ -23,10 +26,9 @@ class SelfKeyEncryption implements AtKeyEncryption {
       throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
-    localSecondary ??=
-        AtClientManager.getInstance().atClient.getLocalSecondary();
     // Get AES key for current atSign
-    var selfEncryptionKey = await _getSelfEncryptionKey(localSecondary!);
+    var selfEncryptionKey =
+        await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
     selfEncryptionKey =
         DefaultResponseParser().parse(selfEncryptionKey).response;
     // Encrypt value using sharedKey

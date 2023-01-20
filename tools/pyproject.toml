@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "at-client-sdk-tools"
+version = "0.1.0"
+description = ""
+authors = ["Chris Swan <@cpswan>"]
+readme = "README.md"
+packages = [{include = "at_client_sdk_tools"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+requests = "2.28.2"
+dnspython = "2.3.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

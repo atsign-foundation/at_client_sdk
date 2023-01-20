@@ -1,49 +1,32 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_end2end_test/config/config_util.dart';
-import 'package:test/test.dart';
-import 'package:uuid/uuid.dart';
-
 import 'package:at_client/src/key_stream/key_stream_impl.dart';
 import 'package:at_client/src/key_stream/key_stream_iterable_base.dart';
 import 'package:at_client/src/key_stream/key_stream_map_base.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
+import 'package:at_end2end_test/config/config_util.dart';
+import 'package:at_end2end_test/src/sync_initializer.dart';
+import 'package:at_end2end_test/src/test_initializers.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:test/test.dart';
+import 'package:uuid/uuid.dart';
 
-import 'test_utils.dart';
-
-void main() {
-  var currentAtSign, sharedWithAtSign;
-  AtClientManager? currentAtSignClientManager, sharedWithAtSignClientManager;
-  var namespace = 'keyStream';
+void main() async {
+  late AtClientManager currentAtClientManager;
+  late AtClientManager sharedWithAtClientManager;
+  late String currentAtSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    // Create atClient instance for currentAtSign
-    currentAtSignClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-    // Set Encryption Keys for currentAtSign
-    await TestUtils.setEncryptionKeys(currentAtSign);
-    var isSyncInProgress = true;
-    currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
-    // Create atClient instance for atSign2
-    sharedWithAtSignClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-    // Set Encryption Keys for sharedWithAtSign
-    await TestUtils.setEncryptionKeys(sharedWithAtSign);
-    isSyncInProgress = true;
-    sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(currentAtSign, namespace);
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(sharedWithAtSign, namespace);
   });
 
   group('KeyStreamMixin group', () {
@@ -79,27 +62,27 @@ void main() {
     });
 
     test('init', () {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
+          sharedWithAtSign);
       expect(keyStream, isA<KeyStreamMixin<String?>>());
     });
 
     test('getKeys', () async {
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      currentAtClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(currentAtSign, namespace,
+              TestPreferences.getInstance().getPreference(currentAtSign));
       await Future.wait([
-        currentAtSignClientManager!.atClient.put(key, randomValue),
-        currentAtSignClientManager!.atClient.put(key2, randomValue2)
+        currentAtClientManager.atClient.put(key, randomValue),
+        currentAtClientManager.atClient.put(key2, randomValue2)
       ]);
-      var isSyncInProgress = true;
-      currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-        isSyncInProgress = false;
-      });
-      while (isSyncInProgress) {
-        await Future.delayed(Duration(milliseconds: 5));
-      }
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      await E2ESyncService.getInstance()
+          .syncData(currentAtClientManager.atClient.syncService);
+      await AtClientManager.getInstance().setCurrentAtSign(
+          sharedWithAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
+          sharedWithAtSign);
       await keyStream.getKeys();
       expect(keyStream, emitsInAnyOrder([randomValue, randomValue2]));
     }, timeout: Timeout(Duration(minutes: 5)));
@@ -124,8 +107,10 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      await AtClientManager.getInstance().setCurrentAtSign(
+          sharedWithAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = KeyStreamImpl(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -165,8 +150,10 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      await AtClientManager.getInstance().setCurrentAtSign(
+          sharedWithAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = IterableKeyStream<String>(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -177,7 +164,8 @@ void main() {
     });
 
     test('init', () {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
+          sharedWithAtSign);
       expect(keyStream, isA<KeyStreamIterableBase<String, Iterable<String>>>());
     });
 
@@ -212,8 +200,10 @@ void main() {
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
         ..sharedBy = currentAtSign;
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      await AtClientManager.getInstance().setCurrentAtSign(
+          sharedWithAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = MapKeyStream<String, String>(
         regex: namespace + '@',
         convert: (key, value) => MapEntry(key.key!, value.value),
@@ -272,28 +262,14 @@ void main() {
       sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
       // Create atClient instance for currentAtSign
       currentAtSignClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
-      // Set Encryption Keys for currentAtSign
-      await TestUtils.setEncryptionKeys(currentAtSign);
-      var isSyncInProgress = true;
-      currentAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-        isSyncInProgress = false;
-      });
-      while (isSyncInProgress) {
-        await Future.delayed(Duration(milliseconds: 10));
-      }
+          .setCurrentAtSign(currentAtSign, namespace,
+              TestPreferences.getInstance().getPreference(currentAtSign));
+
       // Create atClient instance for atSign2
       sharedWithAtSignClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+          .setCurrentAtSign(sharedWithAtSign, namespace,
+              TestPreferences.getInstance().getPreference(sharedWithAtSign));
       // Set Encryption Keys for sharedWithAtSign
-      await TestUtils.setEncryptionKeys(sharedWithAtSign);
-      isSyncInProgress = true;
-      sharedWithAtSignClientManager?.syncService.sync(onDone: (syncResult) {
-        isSyncInProgress = false;
-      });
-      while (isSyncInProgress) {
-        await Future.delayed(Duration(milliseconds: 10));
-      }
       keyStream = KeyStreamImpl(
         regex: namespace + '@',
         convert: (key, value) => value.value ?? '',
@@ -304,11 +280,14 @@ void main() {
     });
 
     test('', () async {
-      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(), sharedWithAtSign);
+      expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
+          sharedWithAtSign);
       expect(keyStream, isA<KeyStreamMixin<String?>>());
 
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+      await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(currentAtSign));
       await Future.delayed(Duration(milliseconds: 1));
       expect(keyStream.controller.isClosed, true);
 
@@ -322,8 +301,10 @@ void main() {
       keyStream2.handleStreamEvent(key2, AtValue()..value = randomValue2, 'update');
       expect(keyStream2, emitsInOrder([randomValue2]));
 
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace, TestUtils.getPreference(sharedWithAtSign));
+      await AtClientManager.getInstance().setCurrentAtSign(
+          sharedWithAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(sharedWithAtSign));
       await Future.delayed(Duration(milliseconds: 1));
       expect(keyStream2.controller.isClosed, true);
       expect(keyStream.controller.isClosed, true);

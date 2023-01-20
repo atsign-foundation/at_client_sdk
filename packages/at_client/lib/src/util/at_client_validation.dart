@@ -55,8 +55,8 @@ class AtClientValidation {
 
   /// Verify if the atSign exists in root server.
   /// Throws [InvalidAtSignException] if atSign does not exist.
-  Future<void> isAtSignExists(SecondaryAddressFinder secondaryAddressFinder,
-      String atSign, String rootDomain, int rootPort) async {
+  Future<void> isAtSignExists(
+      SecondaryAddressFinder secondaryAddressFinder, String atSign) async {
     if (atSign.isEmpty) {
       throw AtKeyException('@sign cannot be empty',
           intent: Intent.validateAtSign,
@@ -90,9 +90,7 @@ class AtClientValidation {
     if (atKey.sharedWith != null && await NetworkUtil().isNetworkAvailable()) {
       await isAtSignExists(
           AtClientManager.getInstance().secondaryAddressFinder!,
-          atKey.sharedWith!,
-          AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
-          AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
+          atKey.sharedWith!);
     }
   }
 
@@ -131,13 +129,13 @@ class AtClientValidation {
     }
     AtUtils.formatAtSign(notificationParams.atKey.sharedWith);
     await isAtSignExists(
-        secondaryAddressFinder,
-        notificationParams.atKey.sharedWith!,
-        atClientPreference.rootDomain,
-        atClientPreference.rootPort);
+        secondaryAddressFinder, notificationParams.atKey.sharedWith!);
 
-    // For messageType is text, text may contains spaces but key should not have spaces
-    // Hence do not validate the key.
+    // For reasons lost in the mists of time, we are overloading use of the 'key' field
+    // in the notification so it actually contains the text of 'text' notifications.
+    // And the text may of course contain spaces.
+    // However, for validation purposes, 'key' should not have spaces.
+    // Hence we only validate the 'key' if notification type is not 'text'.
     if (notificationParams.messageType != MessageTypeEnum.text) {
       AtClientValidation.validateKey(notificationParams.atKey.key);
       ValidationResult validationResult = AtKeyValidators.get().validate(

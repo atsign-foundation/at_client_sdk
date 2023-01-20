@@ -3,23 +3,27 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '15 2 15 * *' # At 0215 on the 15th day of every odd month
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
 jobs:
   refresh-ACME-cert:
     runs-on: ubuntu-latest
     name: SSL Renewal for vip.ve.atsign.zone
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@d27e3f3d7c64b4bbf8e4abfb9b63b83e846e0435 # v4.5.0
         with:
           python-version: 3.9 #install the python needed
       - name: setup certinfo
-        uses: atsign-company/certinfo-action@v1
+        uses: atsign-company/certinfo-action@e33db584f27bbbc0260af9916aeaefbec0db8ef4 # v1.0.1
       # checkout at_server code
       - name: checkout repo content
-        uses: actions/checkout@v3 # checkout the repository content to github runner.
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
       # Pull ZeroSSL and Letsencrypt keys file from secret
       - name: Pull ACME script
-        uses: actions/checkout@v3
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
         with:
           repository: atsign-company/secondaries-scripts
           path: secondaries-scripts
@@ -36,7 +40,7 @@ jobs:
       # Install Python Libraries
       - name: Install Python Libraries
         run: |-
-          python3 -m pip install requests dnspython
+          python3 -m pip install --require-hashes -r tools/requirements.txt
       # Run Python ACME script
       - name: Run ACME script
         run: |-
@@ -55,7 +59,7 @@ jobs:
       # create PR with renewed certificate
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@2b011faafdcbc9ceb11414d64d0573f37c774b04 # v4.2.3
         with:
           token: ${{ secrets.MY_GITHUB_TOKEN }}
           commit-message: 'chore: New certificates for at_server'

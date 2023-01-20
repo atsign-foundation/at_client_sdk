@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
@@ -11,10 +12,11 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
+import 'package:meta/meta.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
-  var logger = AtSignLogger('RemoteSecondary');
+  late final AtSignLogger logger;
 
   late String _atSign;
 
@@ -22,9 +24,12 @@ class RemoteSecondary implements Secondary {
 
   late AtLookupImpl atLookUp;
 
+  final AtChops? atChops;
+
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey}) {
+      {String? privateKey, this.atChops}) {
     _atSign = AtUtils.formatAtSign(atSign)!;
+    logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     privateKey ??= preference.privateKey;
     SecureSocketConfig secureSocketConfig = SecureSocketConfig();
@@ -38,7 +43,11 @@ class RemoteSecondary implements Secondary {
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
         clientConfig: {VERSION: AtClientConfig.getInstance().atClientVersion});
+    atLookUp.atChops = atChops;
   }
+
+  @experimental
+  AtTelemetryService? telemetry;
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Optionally [privateKey] is passed for verb builders which require authentication.
@@ -150,8 +159,8 @@ class RemoteSecondary implements Secondary {
       var port = secondaryInfo[1];
       var internetAddress = await InternetAddress.lookup(host);
       //TODO getting first ip for now. explore best solution
-      var addressCheckOptions =
-          AddressCheckOptions(internetAddress[0], port: int.parse(port));
+      var addressCheckOptions = AddressCheckOptions(
+          address: internetAddress[0], port: int.parse(port));
       var addressCheckResult = await InternetConnectionChecker()
           .isHostReachable(addressCheckOptions);
       return addressCheckResult.isSuccess;

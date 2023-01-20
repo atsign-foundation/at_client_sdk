@@ -6,6 +6,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:meta/meta.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
 /// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
@@ -13,16 +14,20 @@ import 'package:at_utils/at_utils.dart';
 class LocalSecondary implements Secondary {
   final AtClient _atClient;
 
-  final _logger = AtSignLogger('LocalSecondary');
+  late final AtSignLogger _logger;
 
   /// Local keystore used to store data for the current atSign.
   SecondaryKeyStore? keyStore;
 
   LocalSecondary(this._atClient, {this.keyStore}) {
+    _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
     keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();
   }
+
+  @experimental
+  AtTelemetryService? telemetry;
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.
@@ -43,7 +48,7 @@ class LocalSecondary implements Secondary {
         // 3. sync latest update/delete if strategy is immediate
         if (sync != null && sync) {
           _logger.finer('calling sync immediate from local secondary');
-          AtClientManager.getInstance().syncService.sync();
+          _atClient.syncService.sync();
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
@@ -128,23 +133,7 @@ class LocalSecondary implements Secondary {
 
   Future<String> _delete(DeleteVerbBuilder builder) async {
     try {
-      var deleteKey = '';
-      if (builder.isCached) {
-        deleteKey += 'cached:';
-      }
-      if (builder.isPublic) {
-        deleteKey += 'public:';
-      }
-      if (builder.sharedWith != null && builder.sharedWith!.isNotEmpty) {
-        deleteKey += '${AtUtils.formatAtSign(builder.sharedWith!)}:';
-      }
-      if (builder.sharedBy != null && builder.sharedBy!.isNotEmpty) {
-        deleteKey +=
-            '${builder.atKey}${AtUtils.formatAtSign(builder.sharedBy!)}';
-      } else {
-        deleteKey += builder.atKey!;
-      }
-      var deleteResult = await keyStore!.remove(deleteKey);
+      var deleteResult = await keyStore!.remove(builder.buildKey());
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');

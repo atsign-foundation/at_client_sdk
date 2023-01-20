@@ -11,11 +11,12 @@ void main() {
   var currentAtSign = '@alice🛠';
   var sharedWithAtSign = '@bob🛠';
   late AtClientManager atClientManager;
+  String namespace = 'wavi';
   setUpAll(() async {
     var preference = TestUtils.getPreference(currentAtSign);
     atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, 'wavi', preference);
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(currentAtSign, preference);
   });
@@ -24,10 +25,10 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
 
-    var result = await atClientManager.notificationService
+    var result = await atClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     print('NotificationId : ${result.notificationID}');
     expect(result.notificationStatusEnum.toString(),
@@ -36,7 +37,7 @@ void main() {
     expect(result.atKey?.sharedWith, phoneKey.sharedWith);
     // fetch notification using notify fetch
     var atNotification =
-        await atClientManager.notificationService.fetch(result.notificationID);
+        await atClientManager.atClient.notificationService.fetch(result.notificationID);
     expect(atNotification.key, phoneKey.toString());
     expect(atNotification.status, 'NotificationStatus.delivered');
     expect(atNotification.messageType, 'MessageType.key');
@@ -51,13 +52,13 @@ void main() {
     var landlineKey = AtKey()
       ..key = 'landline'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '040-238989$lastNumber';
 
-    var result = await atClientManager.notificationService
+    var result = await atClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(landlineKey, value: value));
     print('NotificationId : ${result.notificationID}');
-    final notificationStatus = await atClientManager.notificationService
+    final notificationStatus = await atClientManager.atClient.notificationService
         .getStatus(result.notificationID);
     print('Notification status is $notificationStatus');
     expect(notificationStatus.notificationID, result.notificationID);
@@ -72,9 +73,9 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
-    await atClientManager.notificationService
+    await atClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
   });
 
@@ -82,8 +83,8 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
-    var notificationResult = await atClientManager.notificationService
+      ..namespace = namespace;
+    var notificationResult = await atClientManager.atClient.notificationService
         .notify(NotificationParams.forDelete(phoneKey));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
@@ -95,15 +96,15 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠'
-      ..namespace = '.wavi';
-    await atClientManager.notificationService.notify(
+      ..namespace = namespace;
+    await atClientManager.atClient.notificationService.notify(
         NotificationParams.forDelete(phoneKey),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
 
   test('notify text of to sharedWith atSign', () async {
-    var notificationResult = await atClientManager.notificationService
+    var notificationResult = await atClientManager.atClient.notificationService
         .notify(NotificationParams.forText('Hello', sharedWithAtSign));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
@@ -113,7 +114,7 @@ void main() {
 
   test('notify text of to sharedWith atSign with shouldEncrypt set to true',
       () async {
-    var notificationResult = await atClientManager.notificationService.notify(
+    var notificationResult = await atClientManager.atClient.notificationService.notify(
         NotificationParams.forText('Hello', sharedWithAtSign,
             shouldEncrypt: true));
     expect(notificationResult.notificationStatusEnum.toString(),
@@ -123,18 +124,18 @@ void main() {
   });
 
   test('notify text of to sharedWith atSign - callback', () async {
-    await atClientManager.notificationService.notify(
+    await atClientManager.atClient.notificationService.notify(
         NotificationParams.forText('phone', '@bob🛠'),
         onSuccess: onSuccessCallback);
     await Future.delayed(Duration(seconds: 10));
   });
 
-  test('notify - test deprecated method using notificationservice', () async {
+  test('notify - test deprecated method using notification service', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
     final atClient = atClientManager.atClient;
     final notifyResult =
@@ -165,14 +166,14 @@ void main() {
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = sharedWithAtSign
-      ..namespace = '.wavi';
+      ..namespace = namespace;
     var value = '+1 100 200 300';
-    await atClientManager.notificationService
+    await atClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     var preference = TestUtils.getPreference(sharedWithAtSign);
     atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, 'wavi', preference);
-    atClientManager.notificationService
+    atClientManager.atClient.notificationService
         .subscribe(regex: 'phone')
         .listen((event) {
       print('got receiver notification');
@@ -183,7 +184,7 @@ void main() {
 
   test('A test to fetch non existent notification', () async {
     var atNotification =
-        await atClientManager.notificationService.fetch('abc-123');
+        await atClientManager.atClient.notificationService.fetch('abc-123');
     expect(atNotification.id, 'abc-123');
     expect(atNotification.status, 'NotificationStatus.expired');
   });

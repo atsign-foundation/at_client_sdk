@@ -17,7 +17,7 @@ void main() {
       final atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atsign, 'wavi', preference);
       var atClient = atClientManager.atClient;
-      atClientManager.syncService.sync();
+      atClient.syncService.sync();
       // To setup encryption keys
       await setEncryptionKeys(atsign, preference);
       // phone.wavi@alice🛠
@@ -40,7 +40,7 @@ void main() {
       final atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atsign, 'wavi', preference);
       var atClient = atClientManager.atClient;
-      atClientManager.syncService.sync();
+      atClient.syncService.sync();
       // To setup encryption keys
       await setEncryptionKeys(atsign, preference);
       // location.wavi@alice🛠
@@ -61,7 +61,7 @@ void main() {
       final atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atsign, 'wavi', preference);
       var atClient = atClientManager.atClient;
-      atClientManager.syncService.sync();
+      atClient.syncService.sync();
       // To setup encryption keys
       await setEncryptionKeys(atsign, preference);
       // country.wavi@alice🛠
@@ -85,7 +85,7 @@ void main() {
       final atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atsign, 'wavi', preference);
       var atClient = atClientManager.atClient;
-      atClientManager.syncService.sync();
+      atClient.syncService.sync();
       // To setup encryption keys
       await setEncryptionKeys(atsign, preference);
       // mobile.wavi@alice🛠
