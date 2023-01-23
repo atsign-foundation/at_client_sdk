@@ -37,6 +37,98 @@ class PhoneFactory extends AtCollectionModelFactory<Phone> {
   Phone create() {
     return Phone();
   }
+
+  @override
+  bool acceptCollection(String collectionName) {
+    return collectionName == 'phone' ? true : false;
+  }
+}
+
+class A extends AtCollectionModel {
+  String? a;
+
+  A();
+
+  A.from(String id, {String? a}) {
+    this.id = id;
+    this.a = a;
+  }
+
+  @override
+  void fromJson(String jsonEncoded) {
+    var json = jsonDecode(jsonEncoded);
+    a = json['a'];
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    var data = <String, dynamic>{};
+    data['a'] = a;
+    return data;
+  }
+}
+
+class AFactory extends AtCollectionModelFactory<A> {
+  static final AFactory _singleton = AFactory._internal();
+
+  AFactory._internal();
+
+  factory AFactory.getInstance() {
+    return _singleton;
+  }
+  @override
+  A create() {
+    return A();
+  }
+
+  @override
+  bool acceptCollection(String collectionName) {
+    return collectionName == 'a' ? true : false;
+  }
+}
+
+class B extends AtCollectionModel {
+  String? b;
+
+  B();
+
+  B.from(String id, {String? b}) {
+    this.id = id;
+    this.b = b;
+  }
+
+  @override
+  void fromJson(String jsonEncoded) {
+    var json = jsonDecode(jsonEncoded);
+    b = json['b'];
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    var data = <String, dynamic>{};
+    data['b'] = b;
+    return data;
+  }
+}
+
+class BFactory extends AtCollectionModelFactory<B> {
+  static final BFactory _singleton = BFactory._internal();
+
+  BFactory._internal();
+
+  factory BFactory.getInstance() {
+    return _singleton;
+  }
+
+  @override
+  B create() {
+    return B();
+  }
+
+  @override
+  bool acceptCollection(String collectionName) {
+    return collectionName == 'b' ? true : false;
+  }
 }
 
 void main() async {
@@ -242,4 +334,33 @@ void main() async {
     },
     timeout: Timeout(Duration(minutes: 5)),
   );
+
+  test('test getModelsSharedWith method', () async {
+    // Setting currentAtSign atClient instance to context.
+    currentAtClientManager =
+        await AtClientManager.getInstance().setCurrentAtSign(
+      currentAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(currentAtSign),
+    );
+
+    var a = A.from('a1', a: 'a1 value');
+    var shareRes = await a.share([sharedWithAtSign]);
+
+    var b = B.from('b1', b: 'b1 value');
+    await b.share([sharedWithAtSign]);
+
+    AFactory.getInstance();
+    BFactory.getInstance();
+
+    expect(shareRes, true);
+
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
+
+    var res = await AtCollectionModel.getModelsSharedWith(sharedWithAtSign);
+    print(res);
+
+    // expect(getResult.length, 1);
+  }, timeout: Timeout(Duration(minutes: 10)));
 }
