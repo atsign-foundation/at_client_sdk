@@ -888,4 +888,9 @@ class MyModelTestFactory extends AtCollectionModelFactory<MyModelTest> {
   create() {
     return MyModelTest();
   }
+
+  @override
+  bool acceptCollection(String collectionName) {
+    return collectionName == 'mymodeltest' ? true : false;
+  }
 }

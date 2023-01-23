@@ -9,6 +9,7 @@ import 'package:at_client/at_collection/model/default_key_maker.dart';
 import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 import 'dart:convert';
 import 'package:meta/meta.dart';
 
@@ -110,7 +111,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     ));
   }
 
-  /// The [getAll] method of AtCollectionModel returns an list of AtCollectionModels that have a given collection name.
+  /// The [getModelsByCollectionName] method of AtCollectionModel returns an list of AtCollectionModels that have a given collection name.
   ///
   /// Ex:
   /// ```
@@ -168,6 +169,40 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
       collectionName: collectionName,
       collectionModelFactory: collectionModelFactory,
     ));
+  }
+
+  /// returns list of AtCollectionModel shared with the the given [atSign]
+  ///
+  /// e.g
+  ///
+  /// ```
+  /// class Phone extends AtCollectionModel { }
+  /// class Home extends AtCollectionModel { }
+  ///
+  /// var allSharedModels = await AtCollectionModel.getModelsSharedWith(atSign : '@kevin');
+  /// ```
+  ///  allSharedModels will have objects of both Phone and Home
+  static Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
+      String atSign) async {
+    AtUtils.formatAtSign(atSign)!;
+    return (await atCollectionRepository.getModelsSharedWith<T>(atSign));
+  }
+
+  /// returns list of AtCollectionModel shared by the given [atSign].
+  ///
+  /// e.g
+  ///
+  /// ```
+  /// class Phone extends AtCollectionModel { }
+  /// class Home extends AtCollectionModel { }
+  ///
+  /// var allSharedModels = await AtCollectionModel.getModelsSharedBy(atSign : '@kevin');
+  /// ```
+  ///  allSharedModels will have objects of both Phone and Home
+  static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
+      String atSign) async {
+    AtUtils.formatAtSign(atSign)!;
+    return (await atCollectionRepository.getModelsSharedBy<T>(atSign));
   }
 
   @override

@@ -21,7 +21,7 @@ abstract class AtCollectionModelSpec<T> {
   /// By default, id is set to UUID.
   late String id;
 
-  /// TODO
+  /// [collectionName] represents objects of same type.
   String? collectionName;
 
   /// [toJson] method returns JSON representation of the object.
@@ -140,7 +140,6 @@ abstract class AtCollectionModelSpec<T> {
   /// var sahreRes = await personalPhone.share([@kevin, @colin]);
   /// var sharedList = await personalPhone.delete();
   /// ```
-  ///
   Future<bool> delete();
 
   /// [getCollectionName] returns a string that identifies group of object of same kind.

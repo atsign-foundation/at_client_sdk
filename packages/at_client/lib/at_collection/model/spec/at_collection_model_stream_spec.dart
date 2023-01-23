@@ -15,20 +15,95 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 abstract class AtCollectionModelStreamSpec<T> {
   AtCollectionModelStreamSpec();
 
-  /// Saves the object. If it is previously shared with bunch of @sign then it does reshare as well.
-  /// However if you want the object to be just saved and want to share later then pass share as false
-  /// If true is passed for share but the @signs to share with were never given then no share happens.
+  /// Saves the json representaion of the object to the secondary server of the @sign.
+  /// [save] calls [toJson] method to get the json representation.
+  ///
+  /// If [share] is set to true, then the Object will not only be saved but also be shared with the @signs with whom it was previously shared.
+  ///
+  /// If [share] is set to false, then the object is not shared till the [share] method is called.
+  ///
+  /// Pass [options] to control lifecycle of the object.
+  ///
+  /// Usage
+  /// ```
+  /// class Phone extends AtCollectionModel {
+  ///        // Implementation
+  /// }
+  /// ```
+  ///
+  /// Creating phone objects without [options]
+  /// ```
+  /// Phone('personal phone').streams.save().forEach(
+  ///   (AtOperationItemStatus element) {
+  ///    ///
+  ///   },
+  /// );
+  ///
+  /// Phone('office phone').streams.save().forEach(
+  ///   (AtOperationItemStatus element) {
+  ///    ///
+  ///   },
+  /// );
+  /// ```
+  /// Creating a phone objects with [options]
+  ///
+  /// phone object that lives only for 24 hrs.
+  /// ```
+  ///  Phone('temporary phone').streams.save(options : ObjectLifeCycleOptions(timeToLive : Duration(hours : 24))).forEach(
+  ///   (AtOperationItemStatus element) {
+  ///    ///
+  ///   },
+  /// );
+  /// ```
+  /// By default the value shared is cached on the recipient, if this has to changed then set objectLifeCycleOptions [cacheValueOnRecipient] to fasle.
+  /// By default when the object is deleted then the cached values on the recipients are deleted. if this needs to be changed set [objectLifeCycleOptions.cascadeDelete] to false.
+  ///
+  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> save(
       {bool share = true, ObjectLifeCycleOptions? options});
 
-  /// Shares with these additional atSigns.
+  /// [share] shares the AtCollectionModel object with the @signs in [atSigns] list.
+  ///
+  /// ```
+  /// await Phone('personal phone').save();
+  /// personalPhone.streams.share([@kevin, @colin]).forEach(
+  ///   (AtOperationItemStatus element) {
+  ///    ///
+  ///   },
+  /// );
+  /// ```
+  ///
+  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options});
 
-  /// unshares object with the list of atSigns supplied.
-  /// If no @sign is passed it is unshared with every one with whom it was previously shared with
+  /// [unshare] unshares the AtCollectionModel object with the @signs in [atSigns] list.
+  ///
+  /// If [atSigns] is not passed then AtCollectionModel object is unshared with every @sign it was previously shared.
+  ///
+  /// ```
+  /// Phone personalPhone = await Phone('personal phone').save();
+  /// var sahreRes = await personalPhone.share([@kevin, @colin]);
+  /// personalPhone.streams.unshare([@kevin]).forEach(
+  ///   (AtOperationItemStatus element) {
+  ///     ///
+  ///   },
+  /// );
+  /// ```
+  ///
+  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> unshare({List<String>? atSigns});
 
-  // Deletes this object completely and unshares with everyone with whom it is previosly shared with
+  /// Deletes the object and unshares with every @sign it was shared with previously
+  /// ```
+  /// Phone personalPhone = await Phone('personal phone').save();
+  /// var sahreRes = await personalPhone.share([@kevin, @colin]);
+  /// personalPhone.streams.delete().forEach(
+  ///   (AtOperationItemStatus element) {
+  ///    ///
+  ///   },
+  /// );
+  /// ```
+  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> delete();
 }
