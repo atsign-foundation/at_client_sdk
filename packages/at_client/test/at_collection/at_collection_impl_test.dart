@@ -203,7 +203,7 @@ void main() {
           .forEach((AtOperationItemStatus atOperationItemStatus) {
         expect(atOperationItemStatus.complete, true);
         expect(atOperationItemStatus.key,
-            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}');
+            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
       });
     });
 
@@ -223,7 +223,7 @@ void main() {
           .forEach((AtOperationItemStatus atOperationItemStatus) {
         expect(atOperationItemStatus.complete, false);
         expect(atOperationItemStatus.key,
-            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}');
+            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
       });
     });
 
@@ -265,7 +265,7 @@ void main() {
           .forEach((AtOperationItemStatus atOperationItemStatus) {
         expect(atOperationItemStatus.complete, true);
         expect(atOperationItemStatus.key,
-            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}');
+            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
       });
     });
 

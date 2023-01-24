@@ -174,10 +174,12 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// returns list of AtCollectionModel shared with the the given [atSign]
   ///
   /// e.g
-  ///
   /// ```
   /// class Phone extends AtCollectionModel { }
   /// class Home extends AtCollectionModel { }
+  ///
+  /// await Phone().share(['@kevin']);
+  /// await Home().share(['@kevin']);
   ///
   /// var allSharedModels = await AtCollectionModel.getModelsSharedWith(atSign : '@kevin');
   /// ```
@@ -191,12 +193,17 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// returns list of AtCollectionModel shared by the given [atSign].
   ///
   /// e.g
-  ///
   /// ```
   /// class Phone extends AtCollectionModel { }
   /// class Home extends AtCollectionModel { }
   ///
-  /// var allSharedModels = await AtCollectionModel.getModelsSharedBy(atSign : '@kevin');
+  ///```
+  /// If @kevin shares Phone and Home objects with current @sign
+  ///```
+  /// await Phone().share(['@sign']);
+  /// await Home().share(['@sign']);
+  ///
+  /// var allReceivedModels = await AtCollectionModel.getModelsSharedBy(atSign : '@kevin');
   /// ```
   ///  allSharedModels will have objects of both Phone and Home
   static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
