@@ -94,50 +94,25 @@ class AtCollectionRepository {
       String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
-    List<T> modelList = [];
-
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == atSign);
 
-    for (var atKey in collectionAtKeys) {
-      try {
-        var atValue = await getAtClient().get(atKey);
-        var atValueJson = jsonDecode(atValue.value);
-
-        /// Given that id and collectionName attributes are not present, it is not a atcollectionmodel. Ignore it.
-        /// OR there is a collectionName but it is not what is asked hence ignore it.
-        if (atValueJson['id'] == null ||
-            atValueJson['collectionName'] == null) {
-          continue;
-        }
-
-        var factory = AtCollectionModelFactoryManager.getInstance()
-            .get(atValueJson['collectionName']);
-        var model = factory?.create();
-        if (model == null) {
-          continue;
-        }
-
-        model.fromJson(atValue.value);
-        model.id = atValueJson['id'];
-        model.collectionName = atValueJson['collectionName'];
-        modelList.add(model as T);
-      } catch (e) {
-        _logger.severe('failed to get value of ${atKey.key}');
-      }
-    }
-
-    return modelList;
+    return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
   Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
       String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
-    List<T> modelList = [];
-
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedBy == atSign);
+
+    return _getAtCollectionModelsFromAtKey(collectionAtKeys);
+  }
+
+  Future<List<T>> _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
+      List<AtKey> collectionAtKeys) async {
+    List<T> modelList = [];
 
     for (var atKey in collectionAtKeys) {
       try {

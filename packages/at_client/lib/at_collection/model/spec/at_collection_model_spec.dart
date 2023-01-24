@@ -101,7 +101,7 @@ abstract class AtCollectionModelSpec<T> {
   ///
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var res = await personalPhone.share([@kevin, @colin]);
+  /// var res = await personalPhone.share(['@kevin', '@colin']);
   /// ```
   ///
   /// Returns true, if all the share operation is successful else returns false.
@@ -114,8 +114,8 @@ abstract class AtCollectionModelSpec<T> {
   ///
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share([@kevin, @colin]);
-  /// var unshareRes = await personalPhone.unshare([@kevin]);
+  /// var sahreRes = await personalPhone.share(['@kevin', '@colin']);
+  /// var unshareRes = await personalPhone.unshare(['@kevin']);
   /// ```
   ///
   /// Returns true, if all the unshare operation is successful else returns false.
@@ -127,7 +127,7 @@ abstract class AtCollectionModelSpec<T> {
   ///
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share([@kevin, @colin]);
+  /// var sahreRes = await personalPhone.share(['@kevin', '@colin']);
   /// var sharedList = await personalPhone.getSharedWith();
   /// ```
   ///
@@ -137,7 +137,7 @@ abstract class AtCollectionModelSpec<T> {
   /// Deletes the object and unshares with every @sign it was shared with previously
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share([@kevin, @colin]);
+  /// var sahreRes = await personalPhone.share(['@kevin', '@colin']);
   /// var sharedList = await personalPhone.delete();
   /// ```
   Future<bool> delete();
