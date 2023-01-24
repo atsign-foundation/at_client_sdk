@@ -44,10 +44,6 @@ class AtClientService {
           preference.outboundConnectionTimeout;
     }
     atClientAuthenticator!.atLookUp = _atClient!.getRemoteSecondary()!.atLookUp;
-    atClientAuthenticator!.atLookUp.privateKey =
-        atChops.atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey;
-    _atClient!.getRemoteSecondary()!.atLookUp.privateKey =
-        atChops.atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey;
     return true;
   }
 
@@ -202,25 +198,28 @@ class AtClientService {
     // atSign is mandatory to authenticate. So, if atSign is empty return
     // false to indicate authentication is not successful
     if (atsign.isEmpty) {
+      _logger.severe('Authentication failed. Null or empty atSign found.');
       return false;
     }
-
+    AtChops? atChops;
     if (atClientPreference.cramSecret == null) {
       // If JSON data (encrypted keys from .atKeys file) or decrypt key is null or empty,
       // cannot process authentication. Hence return false.
       //
       // "isNull" is an extension on String class that checks if String is null or empty.
       if ((jsonData.isNull) || (decryptKey.isNull)) {
+        _logger.severe('Authentication failed. Encrypted keys from atKeys file not found for the atSign $atsign.');
         return false;
       }
       var decryptedAtKeysMap = _decodeAndDecryptKeys(jsonData!, decryptKey!);
-      // Inside "_validateAtKeys", If the private key is null/empty (or) invalid,
-      // UnAuthenticatedException is returned which is handled in the caller method.
-      await _validateAtKeys(
-          decryptedAtKeysMap[
-              BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE]!,
-          atsign,
-          atClientPreference);
+      atChops = createAtChops(decryptedAtKeysMap);
+      // Inside "_validateAtKeys", performs PKAM auth using atChops.
+      // If PKAM auth fails, UnAuthenticatedException is returned which is handled in the caller method.
+      var isValidAtKeysFile = await _validateAtKeys(atChops, atsign, atClientPreference.rootDomain, atClientPreference.rootPort);
+      if(!isValidAtKeysFile){
+        _logger.severe('Authentication failed. Invalid atKeys file found for the atSign $atsign.');
+        return false;
+      }
       //If atKeys are valid, store keys to keychain manager
       await _storeToKeyChainManager(atsign, decryptedAtKeysMap);
     }
@@ -228,8 +227,8 @@ class AtClientService {
     // If PKAM private key is found, PKAM authentication is already performed and
     // should not perform another time.
     // TODO: Should we throw an exception/warning message if PKAM private key is not null
-    String? pkamPrivateKey = await keyChainManager.getPkamPrivateKey(atsign);
-    if (atClientPreference.cramSecret != null && pkamPrivateKey.isNull) {
+    else if (atClientPreference.cramSecret != null &&
+        (await keyChainManager.getPkamPrivateKey(atsign)).isNull) {
       atClientAuthenticator ??= AtClientAuthenticator();
       var isAuthenticated = await atClientAuthenticator!
           .performInitialAuth(atsign, atClientPreference);
@@ -237,14 +236,13 @@ class AtClientService {
       if (!isAuthenticated) {
         return isAuthenticated;
       }
+      // The "getKeysFromKeyChainManager" fetches PKAM key-pair and encryption key-pair
+      // from the keychain. throws exception if any of the key is null or empty.
+      // The createAtChops method takes PKAM and encryption key-pair map and returns
+      // atChops instance with fields initialized.
+      atChops = createAtChops(await getKeysFromKeyChainManager(atsign));
     }
-
-    // The "getKeysFromKeyChainManager" fetches PKAM key-pair and encryption key-pair
-    // from the keychain. throws exception if any of the key is null or empty.
-    // The createAtChops method takes PKAM and encryption key-pair map and returns
-    // atChops instance with fields initialized.
-    AtChops atChops = createAtChops(await getKeysFromKeyChainManager(atsign));
-    if (atChops.atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey.isNotNull) {
+    if (atChops != null) {
       await _init(atsign, atClientPreference, atChops);
       await _sync();
       // persist keys to the local-keystore
@@ -315,11 +313,13 @@ class AtClientService {
   /// Validates if the provided atKeys file is valid.
   /// Performs PKAM auth on the cloud secondary.
   /// If atKeys are valid returns true; else, returns false.
-  Future<bool> _validateAtKeys(String authenticateKey, String atSign,
-      AtClientPreference atClientPreference) async {
-    _atLookUp ??= AtLookupImpl(
-        atSign, atClientPreference.rootDomain, atClientPreference.rootPort);
-    return await _atLookUp!.authenticate(authenticateKey);
+  Future<bool> _validateAtKeys(AtChops atChops,
+      String atSign, String rootServerDomain, int rootServerPort) async {
+    _atLookUp ??= AtLookupImpl(atSign, rootServerDomain, rootServerPort);
+    _atLookUp!.atChops = atChops;
+    var isAuthSuccessful = await _atLookUp!.pkamAuthenticate();
+    _atLookUp!.close();
+    return isAuthSuccessful;
   }
 
   Future<bool?> isUsingSharedStorage() async {
@@ -345,11 +345,6 @@ class AtClientService {
       _logger.severe('$atsign atSign is not found');
       throw OnboardingStatus.ATSIGN_NOT_FOUND;
     }
-    String? privateKey = await keyChainManager.getPkamPrivateKey(atsign);
-    if (privateKey.isNull) {
-      _logger.severe('PKAM private key not found for $atsign');
-      throw OnboardingStatus.PRIVATE_KEY_NOT_FOUND;
-    }
     atChops = createAtChops(await getKeysFromKeyChainManager(atsign));
     await _init(atsign, atClientPreference, atChops);
     await persistKeys(atsign);
@@ -358,10 +353,8 @@ class AtClientService {
         keyRestorePolicyStatus == OnboardingStatus.RESTORE) {
       throw (keyRestorePolicyStatus);
     }
-    //no need of having pkam auth as unauth error can be thrown by keypolicy.
-    var result = await pkamAuth(privateKey!);
-    if (result) await _sync();
-    return result;
+    await _sync();
+    return true;
   }
 
   ///Returns [OnboardingStatus] of the atsign by checking it with remote server.
