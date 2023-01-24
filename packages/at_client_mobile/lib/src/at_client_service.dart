@@ -345,7 +345,7 @@ class AtClientService {
 
   Future<void> _sync(AtClientPreference preference, String? atSign) async {
     if ((preference.privateKey != null || preference.cramSecret != null)) {
-      AtClientManager.getInstance().syncService.sync();
+      AtClientManager.getInstance().atClient.syncService.sync();
     }
   }
 

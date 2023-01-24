@@ -8,11 +8,15 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
+import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/listener/at_sign_change_listener.dart';
+import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
+import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
@@ -42,8 +46,11 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
-/// Implementation of [AtClient] interface
-class AtClientImpl implements AtClient {
+/// Implementation of [AtClient] interface and [AtSignChangeListener] interface
+///
+/// Implements to [AtSignChangeListener] to get notified on switch atSign event. On switch atSign event,
+/// pause's the compaction job on currentAtSign and start/resume the compaction job on the new atSign
+class AtClientImpl implements AtClient, AtSignChangeListener {
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
@@ -52,6 +59,10 @@ class AtClientImpl implements AtClient {
   SecondaryKeyStore? _localSecondaryKeyStore;
   LocalSecondary? _localSecondary;
   RemoteSecondary? _remoteSecondary;
+  AtClientCommitLogCompaction? _atClientCommitLogCompaction;
+  AtClientConfig? _atClientConfig;
+
+  AtClientCommitLogCompaction? get atClientCommitLogCompaction => _atClientCommitLogCompaction;
 
   @override
   // ignore: override_on_non_overriding_member
@@ -82,6 +93,7 @@ class AtClientImpl implements AtClient {
   AtChops? get atChops => _atChops;
 
   late SyncService _syncService;
+
   @override
   set syncService(SyncService syncService) {
     _syncService = syncService;
@@ -91,6 +103,7 @@ class AtClientImpl implements AtClient {
   SyncService get syncService => _syncService;
 
   late NotificationService _notificationService;
+
   @override
   set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
@@ -115,21 +128,32 @@ class AtClientImpl implements AtClient {
       RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
-      AtChops? atChops}) async {
-    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
-    if (atClientInstanceMap.containsKey(currentAtSign)) {
-      return atClientInstanceMap[currentAtSign];
-    }
+      AtChops? atChops,
+      AtClientCommitLogCompaction? atClientCommitLogCompaction,
+      AtClientConfig? atClientConfig}) async {
 
     atClientManager ??= AtClientManager.getInstance();
-    var atClientImpl = AtClientImpl._(
-        currentAtSign, namespace, preferences, atClientManager,
-        remoteSecondary: remoteSecondary,
-        encryptionService: encryptionService,
-        localSecondaryKeyStore: localSecondaryKeyStore,
-        atChops: atChops);
+    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
 
-    await atClientImpl._init();
+    // Fetch cached AtClientImpl for re-use, or create a new one and init it
+    AtClientImpl? atClientImpl;
+    if (atClientInstanceMap.containsKey(currentAtSign)) {
+      atClientImpl = atClientInstanceMap[currentAtSign];
+    } else {
+      atClientImpl = AtClientImpl._(
+          currentAtSign, namespace, preferences, atClientManager,
+          remoteSecondary: remoteSecondary,
+          encryptionService: encryptionService,
+          localSecondaryKeyStore: localSecondaryKeyStore,
+          atChops: atChops,
+          atClientCommitLogCompaction: atClientCommitLogCompaction,
+          atClientConfig: atClientConfig);
+
+      await atClientImpl._init();
+    }
+
+    await atClientImpl!._startCompactionJob();
+    atClientManager.listenToAtSignChange(atClientImpl);
 
     atClientInstanceMap[currentAtSign] = atClientImpl;
     return atClientInstanceMap[currentAtSign];
@@ -140,7 +164,9 @@ class AtClientImpl implements AtClient {
       {RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
-      AtChops? atChops}) {
+      AtChops? atChops,
+      AtClientCommitLogCompaction? atClientCommitLogCompaction,
+      AtClientConfig? atClientConfig}) {
     _atSign = AtUtils.formatAtSign(theAtSign)!;
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -155,6 +181,7 @@ class AtClientImpl implements AtClient {
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
     _atChops = atChops;
+    _atClientCommitLogCompaction = atClientCommitLogCompaction;
   }
 
   Future<void> _init() async {
@@ -178,6 +205,23 @@ class AtClientImpl implements AtClient {
     _encryptionService!.localSecondary = _localSecondary;
 
     _cascadeSetTelemetryService();
+  }
+
+  Future<void> _startCompactionJob() async {
+    AtCompactionJob atCompactionJob = AtCompactionJob(
+        (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
+        SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(_atSign)!);
+
+    _atClientCommitLogCompaction ??=
+    AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
+
+    _atClientConfig ??= AtClientConfig.getInstance();
+
+    if (!_atClientCommitLogCompaction!.isCompactionJobRunning()) {
+      _atClientCommitLogCompaction!.scheduleCompaction(
+          _atClientConfig!.commitLogCompactionTimeIntervalInMins);
+    }
   }
 
   /// Does nothing unless a telemetry service has been injected
@@ -932,6 +976,17 @@ class AtClientImpl implements AtClient {
       builder.sharedBy = null;
     }
     return await getRemoteSecondary()?.executeVerb(builder);
+  }
+
+  @override
+  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
+    // Checks if the instance of AtClientImpl belongs to previous atSign. If Yes,
+    // the compaction job is stopped and removed from changeListener list.
+    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
+        getCurrentAtSign()) {
+      _atClientCommitLogCompaction!.stopCompactionJob();
+      _atClientManager.removeChangeListeners(this);
+    }
   }
 
   // TODO v4 - remove this method in version 4 of at_client package

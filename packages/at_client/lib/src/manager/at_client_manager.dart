@@ -129,6 +129,12 @@ class AtClientManager {
   Iterator<dynamic> getItemsInChangeListeners() {
     return _changeListeners.iterator;
   }
+
+  /// NOT A PART of API. Added for unit tests
+  @visibleForTesting
+  removeAllChangeListeners() {
+    _changeListeners.clear();
+  }
 }
 
 abstract class AtServiceFactory {
