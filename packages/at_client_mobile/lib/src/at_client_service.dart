@@ -182,6 +182,12 @@ class AtClientService {
   Future<bool> authenticate(
       String atsign, AtClientPreference atClientPreference,
       {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
+    /**ToDo Use OnboardingStatus enum instead of using
+        atClientPreferences.cramSecret == null to know if atSign is new or existing
+        If status == OnboardingStatus.ACTIVATE, then atSign is new, so perform initial auth and
+        generate RSA key-pair
+        If status == OnboardingStatus.RESTORE then use use atKeys file to login into existing atSign
+     */
     /**
      * The authentication is performed either by CRAM authentication or PKAM authentication
      * 1. If AtClientPreference.cramSecret is populated, then atSign is considered as new atSign.
@@ -202,33 +208,33 @@ class AtClientService {
       return false;
     }
     AtChops? atChops;
-    if (atClientPreference.cramSecret == null) {
+    if (atClientPreference.cramSecret.isNull) {
       // If JSON data (encrypted keys from .atKeys file) or decrypt key is null or empty,
       // cannot process authentication. Hence return false.
       //
       // "isNull" is an extension on String class that checks if String is null or empty.
       if ((jsonData.isNull) || (decryptKey.isNull)) {
-        _logger.severe('Authentication failed. Encrypted keys from atKeys file not found for the atSign $atsign.');
+        _logger.severe(
+            'Authentication failed. Encrypted keys from atKeys file not found for the atSign $atsign.');
         return false;
       }
       var decryptedAtKeysMap = _decodeAndDecryptKeys(jsonData!, decryptKey!);
       atChops = createAtChops(decryptedAtKeysMap);
       // Inside "_validateAtKeys", performs PKAM auth using atChops.
       // If PKAM auth fails, UnAuthenticatedException is returned which is handled in the caller method.
-      var isValidAtKeysFile = await _validateAtKeys(atChops, atsign, atClientPreference.rootDomain, atClientPreference.rootPort);
-      if(!isValidAtKeysFile){
-        _logger.severe('Authentication failed. Invalid atKeys file found for the atSign $atsign.');
+      var isValidAtKeysFile = await _validateAtKeys(atChops, atsign,
+          atClientPreference.rootDomain, atClientPreference.rootPort);
+      if (!isValidAtKeysFile) {
+        _logger.severe(
+            'Authentication failed. Invalid atKeys file found for the atSign $atsign.');
         return false;
       }
       //If atKeys are valid, store keys to keychain manager
       await _storeToKeyChainManager(atsign, decryptedAtKeysMap);
     }
-    // Perform initial auth only If pkamPrivateKey is null and CRAM secret is not null.
-    // If PKAM private key is found, PKAM authentication is already performed and
-    // should not perform another time.
-    // TODO: Should we throw an exception/warning message if PKAM private key is not null
-    else if (atClientPreference.cramSecret != null &&
-        (await keyChainManager.getPkamPrivateKey(atsign)).isNull) {
+    // Perform the initial auth using CRAM Secret and then
+    // Generate the PKAM and encryption key-pair and create the atChops instance.
+    else {
       atClientAuthenticator ??= AtClientAuthenticator();
       var isAuthenticated = await atClientAuthenticator!
           .performInitialAuth(atsign, atClientPreference);
@@ -242,12 +248,10 @@ class AtClientService {
       // atChops instance with fields initialized.
       atChops = createAtChops(await getKeysFromKeyChainManager(atsign));
     }
-    if (atChops != null) {
-      await _init(atsign, atClientPreference, atChops);
-      await _sync();
-      // persist keys to the local-keystore
-      await persistKeys(atsign);
-    }
+    await _init(atsign, atClientPreference, atChops);
+    await _sync();
+    // persist keys to the local-keystore
+    await persistKeys(atsign);
     return true;
   }
 
@@ -313,8 +317,8 @@ class AtClientService {
   /// Validates if the provided atKeys file is valid.
   /// Performs PKAM auth on the cloud secondary.
   /// If atKeys are valid returns true; else, returns false.
-  Future<bool> _validateAtKeys(AtChops atChops,
-      String atSign, String rootServerDomain, int rootServerPort) async {
+  Future<bool> _validateAtKeys(AtChops atChops, String atSign,
+      String rootServerDomain, int rootServerPort) async {
     _atLookUp ??= AtLookupImpl(atSign, rootServerDomain, rootServerPort);
     _atLookUp!.atChops = atChops;
     var isAuthSuccessful = await _atLookUp!.pkamAuthenticate();
