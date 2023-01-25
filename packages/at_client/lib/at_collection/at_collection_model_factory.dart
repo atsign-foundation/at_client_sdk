@@ -36,5 +36,23 @@ class AtCollectionModelFactoryManager {
         return collectionFactory;
       }
     }
+    return null;
+  }
+}
+
+// Provides collection framework with the list of factory classes that creates collection models
+class Collections {
+  static final Collections _singleton = Collections._internal();
+
+  Collections._internal();
+
+  factory Collections.getInstance() {
+    return _singleton;
+  }
+
+  bool isInitialized = false;
+
+  void initialize(List<AtCollectionModelFactory> factories) {
+    isInitialized = true;
   }
 }

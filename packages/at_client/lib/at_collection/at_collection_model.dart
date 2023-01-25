@@ -101,14 +101,17 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///
   /// An Exception will be thrown if AtCollectionModel object with a given Id can not be found.
 
-  static Future<T> getModelById<T extends AtCollectionModel>(String id,
-      {String? collectionName,
-      required AtCollectionModelFactory<T> collectionModelFactory}) async {
-    return (await atCollectionRepository.getModelById<T>(
-      id,
-      collectionName: collectionName,
-      collectionModelFactory: collectionModelFactory,
-    ));
+  static Future<T> getModelById<T extends AtCollectionModel>(
+    String id, {
+    String? collectionName,
+  }) async {
+    if (!Collections.getInstance().isInitialized) {
+      throw Exception(
+          'Initialization is required. Invoke initialize method on Collection object');
+    }
+
+    return (await atCollectionRepository.getModelById<T>(id,
+        collectionName: collectionName));
   }
 
   /// The [getModelsByCollectionName] method of AtCollectionModel returns an list of AtCollectionModels that have a given collection name.
@@ -163,11 +166,14 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///
   /// Returns an empty list when there are no AtCollectionModel objects found for the given collectionName.
   static Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
-      {String? collectionName,
-      required AtCollectionModelFactory<T> collectionModelFactory}) async {
+      {String? collectionName}) async {
+    if (!Collections.getInstance().isInitialized) {
+      throw Exception(
+          'Initialization is required. Invoke initialize method on Collection object');
+    }
+
     return (await atCollectionRepository.getModelsByCollectionName<T>(
       collectionName: collectionName,
-      collectionModelFactory: collectionModelFactory,
     ));
   }
 
@@ -186,6 +192,11 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///  allSharedModels will have objects of both Phone and Home
   static Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
       String atSign) async {
+    if (!Collections.getInstance().isInitialized) {
+      throw Exception(
+          'Initialization is required. Invoke initialize method on Collection object');
+    }
+
     AtUtils.formatAtSign(atSign)!;
     return (await atCollectionRepository.getModelsSharedWith<T>(atSign));
   }
@@ -208,6 +219,10 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///  allSharedModels will have objects of both Phone and Home
   static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
       String atSign) async {
+    if (!Collections.getInstance().isInitialized) {
+      throw Exception(
+          'Initialization is required. Invoke initialize method on Collection object');
+    }
     AtUtils.formatAtSign(atSign)!;
     return (await atCollectionRepository.getModelsSharedBy<T>(atSign));
   }

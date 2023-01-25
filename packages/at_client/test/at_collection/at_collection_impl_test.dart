@@ -93,6 +93,10 @@ void main() {
       sharedWith: sharedWithAtsign2,
     );
 
+    Collections.getInstance().initialize(
+      [MyModelTestFactory()],
+    );
+
     test('test getting an object by id using AtCollectionModel', () async {
       when(() => mockAtClient.get(any(
           that: GetAtKeyMatcher(
@@ -104,9 +108,9 @@ void main() {
       });
 
       var result = await AtCollectionModel.getModelById<MyModelTest>(
-          object1ModelId,
-          collectionName: 'mymodeltest',
-          collectionModelFactory: MyModelTestFactory());
+        object1ModelId,
+        collectionName: 'mymodeltest',
+      );
       expect(result, myModelTestObject1);
     });
 
@@ -150,8 +154,7 @@ void main() {
       });
 
       var allData =
-          await AtCollectionModel.getModelsByCollectionName<MyModelTest>(
-              collectionModelFactory: MyModelTestFactory());
+          await AtCollectionModel.getModelsByCollectionName<MyModelTest>();
 
       expect(allData, [myModelTestObject1, myModelTestObject2]);
     });
@@ -828,14 +831,15 @@ class MyModelTest extends AtCollectionModel {
 
   static Future<List<MyModelTest>> getAll() async {
     return AtCollectionModel.getModelsByCollectionName<MyModelTest>(
-        collectionName: 'mymodeltest',
-        collectionModelFactory: MyModelTestFactory());
+      collectionName: 'mymodeltest',
+    );
   }
 
   static Future<MyModelTest> getById(String keyId) async {
-    return (await AtCollectionModel.getModelById<MyModelTest>(keyId,
-        collectionName: 'mymodeltest',
-        collectionModelFactory: MyModelTestFactory()));
+    return (await AtCollectionModel.getModelById<MyModelTest>(
+      keyId,
+      collectionName: 'mymodeltest',
+    ));
   }
 
   @override
