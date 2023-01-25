@@ -24,9 +24,15 @@ class AtCollectionRepository {
   }
 
   Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
-      {String? collectionName,
-      required AtCollectionModelFactory<T> collectionModelFactory}) async {
+      {String? collectionName}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
+    var collectionModelFactory =
+        AtCollectionModelFactoryManager.getInstance().get(_collectionName);
+
+    if (collectionModelFactory == null) {
+      throw Exception('Factory class not found for ${T.toString()}');
+    }
+
     _collectionName = CollectionUtil.format(_collectionName);
     var regex = CollectionUtil.makeRegex(
       collectionName: _collectionName,
@@ -54,7 +60,7 @@ class AtCollectionRepository {
         model.fromJson(atValue.value);
         model.id = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
-        modelList.add(model);
+        modelList.add(model as T);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
       }
@@ -63,10 +69,17 @@ class AtCollectionRepository {
     return modelList;
   }
 
-  Future<T> getModelById<T extends AtCollectionModel>(String keyId,
-      {String? collectionName,
-      required AtCollectionModelFactory<T> collectionModelFactory}) async {
+  Future<T> getModelById<T extends AtCollectionModel>(
+    String keyId, {
+    String? collectionName,
+  }) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
+    var collectionModelFactory =
+        AtCollectionModelFactoryManager.getInstance().get(_collectionName);
+
+    if (collectionModelFactory == null) {
+      throw Exception('Factory class not found for ${T.toString()}');
+    }
 
     String formattedId = CollectionUtil.format(keyId);
     String formattedCollectionName = CollectionUtil.format(_collectionName);
@@ -83,7 +96,7 @@ class AtCollectionRepository {
       model.fromJson(atValue.value);
       model.id = atValueJson['id'];
       model.collectionName = atValueJson['collectionName'];
-      return model;
+      return model as T;
     } catch (e) {
       _logger.severe('failed to get value of ${atKey.key}');
       rethrow;
