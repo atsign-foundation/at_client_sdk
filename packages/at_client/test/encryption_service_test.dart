@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
@@ -91,7 +90,6 @@ void main() {
       assert(updateVerbBuilder.dataSignature != null);
     });
   });
-
   group('A group of test to validate the encryption service manager', () {
     test('Test to verify the encryption of shared key', () async {
       var currentAtSign = '@sitaram';
@@ -260,7 +258,7 @@ void main() {
           await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
       // assert the sync status is not added to cache map when commit id is null.
       expect(
-          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
               .containsKey(atKey.toString()),
           false);
     });
@@ -282,7 +280,7 @@ void main() {
       expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
       // assert the sync status is added to cache map
       expect(
-          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
               .containsKey(atKey.toString()),
           true);
     });
@@ -312,23 +310,21 @@ void main() {
           await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
       // assert the sync status is not added to cache map
       expect(
-          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
               .containsKey(atKey.toString()),
           false);
     });
 
     test(
-        'A test to verify isEncryptedSharedKeyInSync is returned from the cache map',
+        'A test to verify isEncryptedSharedKeyInSync is return from the cache map',
         () async {
       var atKey = AtKey()
         ..key = AT_ENCRYPTION_SHARED_KEY
         ..sharedBy = '@alice'
         ..sharedWith = '@bob';
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-
-      AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+      sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
           .putIfAbsent(atKey.toString(), () => true);
-
       expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
     });
 

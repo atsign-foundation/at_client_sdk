@@ -1,5 +1,4 @@
 import 'dart:collection';
-import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -31,7 +30,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   }
 
   @visibleForTesting
-  static final HashMap<String, bool> encryptedSharedKeySyncStatusCacheMap = HashMap();
+  final HashMap<String, bool> encryptedSharedKeySyncStatusCacheMap = HashMap();
 
   SyncUtil syncUtil = SyncUtil();
 
@@ -232,8 +231,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..sharedBy = atKey.sharedBy
       ..sharedWith = atKey.sharedWith;
     // If key is present in cache, return true
-    stdout.writeln('1-$encryptedSharedKeySyncStatusCacheMap');
-    stdout.writeln(encryptedSharedKeySyncStatusCacheMap.containsKey(llookupVerbBuilder.buildKey()));
     if (encryptedSharedKeySyncStatusCacheMap.containsKey(llookupVerbBuilder.buildKey())) {
       return encryptedSharedKeySyncStatusCacheMap[llookupVerbBuilder.buildKey()]!;
     }
@@ -243,7 +240,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
     CommitEntry sharedKeyCommitEntry = await syncUtil.getLatestCommitEntry(
         atCommitLog!, llookupVerbBuilder.buildKey());
-    stdout.writeln(sharedKeyCommitEntry);
     if (sharedKeyCommitEntry.commitId == null) {
       return false;
     }
