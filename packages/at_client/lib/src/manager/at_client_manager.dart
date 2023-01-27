@@ -29,6 +29,7 @@ class AtClientManager {
 
   @Deprecated('Use atClientManager.atClient.syncService')
   SyncService get syncService => atClient.syncService;
+
   @Deprecated('Use atClientManager.atClient.notificationService')
   NotificationService get notificationService => atClient.notificationService;
 
@@ -77,9 +78,8 @@ class AtClientManager {
         'Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
     var previousAtClient = _currentAtClient;
-    _currentAtClient =
-        await serviceFactory.atClient(_atSign, namespace, preference, this);
-    _currentAtClient!.atChops = atChops;
+    _currentAtClient = await serviceFactory
+        .atClient(_atSign, namespace, preference, this, atChops: atChops);
 
     final switchAtSignEvent =
         SwitchAtSignEvent(previousAtClient, _currentAtClient!);
@@ -142,9 +142,12 @@ class AtClientManager {
 
 abstract class AtServiceFactory {
   Future<AtClient> atClient(String atSign, String? namespace,
-      AtClientPreference preference, AtClientManager atClientManager);
+      AtClientPreference preference, AtClientManager atClientManager,
+      {AtChops? atChops});
+
   Future<NotificationService> notificationService(
       AtClient atClient, AtClientManager atClientManager);
+
   Future<SyncService> syncService(AtClient atClient,
       AtClientManager atClientManager, NotificationService notificationService);
 }
@@ -152,9 +155,10 @@ abstract class AtServiceFactory {
 class DefaultAtServiceFactory implements AtServiceFactory {
   @override
   Future<AtClient> atClient(String atSign, String? namespace,
-      AtClientPreference preference, AtClientManager atClientManager) async {
+      AtClientPreference preference, AtClientManager atClientManager,
+      {AtChops? atChops}) async {
     return await AtClientImpl.create(atSign, namespace, preference,
-        atClientManager: atClientManager);
+        atClientManager: atClientManager, atChops: atChops);
   }
 
   @override
