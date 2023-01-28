@@ -19,6 +19,7 @@ class AtClientService {
 
   AtLookupImpl? _atLookUp;
 
+  @visibleForTesting
   set atLookupImpl(AtLookupImpl atLookupImpl) {
     _atLookUp = atLookupImpl;
   }
