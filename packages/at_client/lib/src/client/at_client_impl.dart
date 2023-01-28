@@ -62,7 +62,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
 
-  AtClientCommitLogCompaction? get atClientCommitLogCompaction => _atClientCommitLogCompaction;
+  AtClientCommitLogCompaction? get atClientCommitLogCompaction =>
+      _atClientCommitLogCompaction;
 
   @override
   // ignore: override_on_non_overriding_member
@@ -131,7 +132,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) async {
-
     atClientManager ??= AtClientManager.getInstance();
     currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
 
@@ -195,8 +195,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
 
     // Now using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(_atSign, _preference!, atChops: atChops,
-        privateKey: _preference!.privateKey);
+    _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
+        atChops: atChops, privateKey: _preference!.privateKey);
 
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
@@ -211,10 +211,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     AtCompactionJob atCompactionJob = AtCompactionJob(
         (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
         SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(_atSign)!);
+            .getSecondaryPersistenceStore(_atSign)!);
 
     _atClientCommitLogCompaction ??=
-    AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
+        AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
 
     _atClientConfig ??= AtClientConfig.getInstance();
 
@@ -657,7 +657,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(_atSign, _preference!, atChops: atChops);
+    var remoteSecondary =
+        RemoteSecondary(_atSign, _preference!, atChops: atChops);
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
