@@ -97,8 +97,8 @@ class NotificationServiceImpl
             monitorRetry,
             atChops: atClient.atChops);
     _atClientManager.listenToAtSignChange(this);
-    lastReceivedNotificationAtKey = AtKey.local(lastReceivedNotificationKey,
-            _atClient.getCurrentAtSign()!,
+    lastReceivedNotificationAtKey = AtKey.local(
+            lastReceivedNotificationKey, _atClient.getCurrentAtSign()!,
             namespace: _atClient.getPreferences()!.namespace)
         .build();
     atKeyEncryptionManager = AtKeyEncryptionManager(_atClient);
@@ -176,8 +176,7 @@ class NotificationServiceImpl
   /// does not exist.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
-    if (_atClient.getPreferences()!.fetchOfflineNotifications ==
-        false) {
+    if (_atClient.getPreferences()!.fetchOfflineNotifications == false) {
       // fetchOfflineNotifications == false means issue `monitor` command without a lastNotificationTime
       // which will result in the server not sending any previously received notifications
       return null;
