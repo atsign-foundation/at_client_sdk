@@ -94,6 +94,7 @@ void main() {
       assert(updateVerbBuilder.dataSignature != null);
     });
   });
+
   group('A group of test to validate the encryption service manager', () {
     test('Test to verify the encryption of shared key', () async {
       var currentAtSign = '@sitaram';
@@ -311,6 +312,7 @@ void main() {
       expect(
           await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
       // assert the sync status is not added to cache map
+
       expect(
           AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
               .containsKey(atKey.toString()), false);
@@ -346,14 +348,17 @@ void main() {
               .containsKey('@bob:shared_key@alice'),
           true);
       //now change the commitId of the respective commitEntry to null
-      //this will make sure that when accessed from the commitLog it would appear that the entry is not synced
-      //for the  isEncryptedSharedKeyInSync() to return true, the cache must contain this key
+      //this will make sure that when accessed from the commitLog
+      // it would appear that the entry is not synced
+      //for isEncryptedSharedKeyInSync() to return true, the cache must contain this key
       keystoreToMap[1]?.commitId = null;
-      //the below assertion has to use the cache
+      //the below assertion will only return true if the key is present in the cache
       expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
     });
 
     tearDown(() async {
+      resetMocktailState();
+      AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap.clear();
       await AtCommitLogManagerImpl.getInstance().close();
       var isExists = await Directory(storageDir).exists();
       if (isExists) {
@@ -481,6 +486,7 @@ void main() {
       when(() => mockLocalSecondary.executeVerb(
           any(that: UpdatedSharedKeyMatcher()),
           sync: true)).thenAnswer((_) => Future.value('data:1'));
+
       when(() => mockRemoteSecondary
               .executeVerb(any(that: UpdatedSharedKeyMatcher()), sync: true))
           .thenAnswer((_) => throw SecondaryConnectException(
@@ -500,6 +506,7 @@ void main() {
     });
 
     tearDown(() async {
+      AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap.clear();
       await AtCommitLogManagerImpl.getInstance().close();
       var isExists = await Directory(storageDir).exists();
       if (isExists) {
