@@ -30,7 +30,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   }
 
   @visibleForTesting
-  final HashMap<String, bool> encryptedSharedKeySyncStatusCacheMap = HashMap();
+  static final HashMap<String, bool> encryptedSharedKeySyncStatusCacheMap =
+      HashMap();
 
   SyncUtil syncUtil = SyncUtil();
 
@@ -231,8 +232,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..sharedBy = atKey.sharedBy
       ..sharedWith = atKey.sharedWith;
     // If key is present in cache, return true
-    if (encryptedSharedKeySyncStatusCacheMap.containsKey(llookupVerbBuilder.buildKey())) {
-      return encryptedSharedKeySyncStatusCacheMap[llookupVerbBuilder.buildKey()]!;
+    if (encryptedSharedKeySyncStatusCacheMap
+        .containsKey(llookupVerbBuilder.buildKey())) {
+      return encryptedSharedKeySyncStatusCacheMap[
+          llookupVerbBuilder.buildKey()]!;
     }
     // Set the commit log instance if not already set.
     atCommitLog ??= await AtCommitLogManagerImpl.getInstance()

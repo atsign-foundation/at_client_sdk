@@ -1,6 +1,8 @@
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
@@ -24,6 +26,8 @@ class MockAtClient extends Mock implements AtClient {
 }
 
 class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
+
+class MockCommitLogKeystore extends Mock implements CommitLogKeyStore {}
 
 void main() {
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
@@ -258,7 +262,7 @@ void main() {
           await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
       // assert the sync status is not added to cache map when commit id is null.
       expect(
-          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
               .containsKey(atKey.toString()),
           false);
     });
@@ -279,10 +283,8 @@ void main() {
         ..sharedWith = '@bob';
       expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
       // assert the sync status is added to cache map
-      expect(
-          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey(atKey.toString()),
-          true);
+      expect(AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+              .containsKey(atKey.toString()), true);
     });
 
     test(
@@ -310,21 +312,44 @@ void main() {
           await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
       // assert the sync status is not added to cache map
       expect(
-          sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey(atKey.toString()),
-          false);
+          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+              .containsKey(atKey.toString()), false);
     });
 
     test(
         'A test to verify isEncryptedSharedKeyInSync is return from the cache map',
         () async {
+      Map<int, CommitEntry> keystoreToMap = HashMap<int, CommitEntry>();
+      keystoreToMap[1] =
+          CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now());
+      keystoreToMap[1]?.commitId = 1;
+
+      var fakeCommitLogKeystore = MockCommitLogKeystore();
+      when(() => fakeCommitLogKeystore.toMap())
+          .thenAnswer((_) => Future.value(keystoreToMap));
+
+      var commitLog = AtCommitLog(fakeCommitLogKeystore);
+
       var atKey = AtKey()
         ..key = AT_ENCRYPTION_SHARED_KEY
         ..sharedBy = '@alice'
         ..sharedWith = '@bob';
+
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      sharedKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-          .putIfAbsent(atKey.toString(), () => true);
+      sharedKeyEncryption.atCommitLog = commitLog;
+      //the line below will access the commitEntry from the commitLog and return true
+      //this will also add the key to the encryptedSharedKeySyncStatusCacheMap
+      expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
+      //assert that the key is present in the cache
+      expect(
+          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+              .containsKey('@bob:shared_key@alice'),
+          true);
+      //now change the commitId of the respective commitEntry to null
+      //this will make sure that when accessed from the commitLog it would appear that the entry is not synced
+      //for the  isEncryptedSharedKeyInSync() to return true, the cache must contain this key
+      keystoreToMap[1]?.commitId = null;
+      //the below assertion has to use the cache
       expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
     });
 
