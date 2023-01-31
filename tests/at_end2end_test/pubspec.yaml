@@ -17,7 +17,24 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: packages/at_commons
-      ref: cached_public
+      ref: trunk
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_secondary_server
+      ref: export_compaction_service
+#dependency_overrides:
+#  at_chops:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: packages/at_chops
+#      ref: at_chops
+#  at_lookup:
+#    git:
+#      url: https://github.com/atsign-foundation/at_libraries.git
+#      path: packages/at_lookup
+#      ref: publish_atlookup
+
 
 dev_dependencies:
   pedantic: ^1.11.1
