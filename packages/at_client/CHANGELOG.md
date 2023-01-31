@@ -1,4 +1,18 @@
+## 3.0.53
+- feat: Introduce commit log compaction to keep size of commit log thin
+- fix: Fixed a bug where switch atSign event is notified multiple times
+- fix: Add AtChops as optional argument to AtServiceFactory.atClient
+## 3.0.52
+- feat: Introduce AtServiceFactory to make AtClientManager more reusable and more testable
+- feat: Make AtChops instance (if any) available everywhere that it can/should be used
+## 3.0.51
+- feat: Add atSign to AtSignLoggers' names when relevant, so that log messages are clearer
+- feat: Made notificationService and syncService available via AtClient to enable cleaner simpler code elsewhere
+- fix: Fixed clearing of sync progress listener while switching atsign.
+- fix: Remove the inactive listeners from AtClientManager._changeListeners list.
+- fix: Reverted back path,async packages to older version
 ## 3.0.50
+- feat: Introduce commit log compaction to keep size of commit log thin
 - feat: changes for at_chops uptake
 - chore: upgrade at_persistence_spec, at_persistence_secondary_server, at_commons version
 ## 3.0.49

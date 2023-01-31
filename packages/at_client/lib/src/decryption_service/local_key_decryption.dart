@@ -12,7 +12,8 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
   late final AtSignLogger _logger;
 
   LocalKeyDecryption(AtClient atClient) : super(atClient) {
-    _logger = AtSignLogger('LocalKeyDecryption (${atClient.getCurrentAtSign()})');
+    _logger =
+        AtSignLogger('LocalKeyDecryption (${atClient.getCurrentAtSign()})');
   }
 
   @override

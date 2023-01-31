@@ -20,9 +20,8 @@ class SelfKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
 
-    var selfEncryptionKey = await _atClient
-        .getLocalSecondary()!
-        .getEncryptionSelfKey();
+    var selfEncryptionKey =
+        await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
     if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
         selfEncryptionKey == 'data:null') {
       throw SelfKeyNotFoundException('Empty or null SelfEncryptionKey found',

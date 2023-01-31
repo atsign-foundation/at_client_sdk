@@ -5,7 +5,8 @@ class SwitchAtSignEvent {
   late AtClient newAtClient;
   SwitchAtSignEvent(this.previousAtClient, this.newAtClient) {
     if (previousAtClient == newAtClient) {
-      throw IllegalArgumentException('previousAtClient may not be the same as newAtClient');
+      throw IllegalArgumentException(
+          'previousAtClient may not be the same as newAtClient');
     }
   }
 }

@@ -1,13 +1,39 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+class MockAtCompactionJob extends Mock implements AtCompactionJob {
+  bool isCronScheduled = false;
+
+  @override
+  void scheduleCompactionJob(AtCompactionConfig atCompactionConfig) {
+    isCronScheduled = true;
+  }
+
+  @override
+  Future<void> stopCompactionJob() async {
+    isCronScheduled = false;
+  }
+}
 
 void main() {
   group('A group of at client impl create tests', () {
+    final String atSign = '@alice';
+    setUp(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
+    tearDown(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
+
     test('test current atsign', () async {
-      final atSign = '@alice';
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()..syncRegex = '.wavi';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
@@ -15,13 +41,11 @@ void main() {
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test current atsign - backward compatibility', () async {
-      final atSign = '@alice';
       final preference = AtClientPreference()..syncRegex = '.wavi';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference);
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test preference', () async {
-      final atSign = '@alice';
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()..syncRegex = '.wavi';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
@@ -31,17 +55,25 @@ void main() {
   });
 
   group('A group of tests on switch atSign event', () {
+    String atSign = '@alice';
+    String namespace = 'wavi';
+    AtClientPreference atClientPreference = AtClientPreference();
+    setUp(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
+    tearDown(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
     test('A test to verify switch atSign event clears the inactive listeners',
         () async {
-      String atSign = '@alice';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference();
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 2);
+      expect(atClientManager.getChangeListenersSize(), 3);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign('@bob', namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 2);
+      expect(atClientManager.getChangeListenersSize(), 3);
       // Verify the listeners in [AtClientManager._changeListeners] list belongs
       // to the new atSign. Here @bob.
       var itr = atClientManager.getItemsInChangeListeners();
@@ -51,6 +83,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, '@bob');
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, '@bob');
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), '@bob');
         }
       }
     });
@@ -61,11 +95,9 @@ void main() {
       String atSign = '@alice';
       String namespace = 'wavi';
       AtClientPreference atClientPreference = AtClientPreference();
-
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 2);
-
+      expect(atClientManager.getChangeListenersSize(), 3);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
@@ -74,16 +106,18 @@ void main() {
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-
-      expect(atClientManager.getChangeListenersSize(), 2);
+      expect(atClientManager.getChangeListenersSize(), 3);
       // Verify the listeners in [AtClientManager._changeListeners] list belongs
       // to the new atSign. Here @alice.
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).currentAtSign, atSign);
+          expect(
+              (itr.current as NotificationServiceImpl).currentAtSign, atSign);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign);
         }
       }
     });
@@ -116,6 +150,8 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign2);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign2);
         }
       }
     });
@@ -142,8 +178,23 @@ void main() {
               (itr.current as NotificationServiceImpl).currentAtSign, atSign3);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
+        } else if (itr.current is AtClientImpl) {
+          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign3);
         }
       }
+    });
+  });
+
+  group('A group of tests related to AtCommitLogCompaction', () {
+    test('A test to verify AtCommitLogCompaction is scheduled and stopped', () {
+      String atSign = '@bob';
+      MockAtCompactionJob mockAtCompactionJob = MockAtCompactionJob();
+      AtClientCommitLogCompaction atClientCommitLogCompaction =
+          AtClientCommitLogCompaction.create(atSign, mockAtCompactionJob);
+      atClientCommitLogCompaction.scheduleCompaction(1);
+      expect(mockAtCompactionJob.isCronScheduled, true);
+      atClientCommitLogCompaction.stopCompactionJob();
+      expect(mockAtCompactionJob.isCronScheduled, false);
     });
   });
 }

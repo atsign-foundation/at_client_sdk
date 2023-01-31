@@ -64,7 +64,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       required NotificationService notificationService,
       RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= RemoteSecondary(
-        atClient.getCurrentAtSign()!, atClient.getPreferences()!);
+        atClient.getCurrentAtSign()!, atClient.getPreferences()!,
+        atChops: atClient.atChops);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
     await syncService._statsServiceListener();
@@ -246,7 +247,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
     syncProgress.localCommitId = localCommitId;
     syncProgress.serverCommitId = serverCommitId;
-    _logger.finer("Informing ${_syncProgressListeners.length} listeners of $syncProgress");
+    _logger.finer(
+        "Informing ${_syncProgressListeners.length} listeners of $syncProgress");
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(syncProgress);
@@ -336,7 +338,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'syncing to local: localCommitId $localCommitId serverCommitId $serverCommitId');
 
       // Hint to casual reader: This is where we sync new changes from the server to this this client
-      final keyInfoList = await _syncFromServer(serverCommitId, localCommitId, unCommittedEntries);
+      final keyInfoList = await _syncFromServer(
+          serverCommitId, localCommitId, unCommittedEntries);
 
       syncResult.keyInfoList.addAll(keyInfoList);
     }
@@ -665,7 +668,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     late RemoteSecondary remoteSecondary;
     try {
       remoteSecondary = RemoteSecondary(
-          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
+          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
+          atChops: _atClient.atChops);
       var serverCommitId =
           await _getServerCommitId(remoteSecondary: remoteSecondary);
 
@@ -860,7 +864,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
     _syncRequests.clear();
 
-    _logger.finer('stopping stats notification listener for ${_atClient.getCurrentAtSign()}');
+    _logger.finer(
+        'stopping stats notification listener for ${_atClient.getCurrentAtSign()}');
     _statsNotificationListener.stopAllSubscriptions();
 
     _logger.finer('stopping cron');
