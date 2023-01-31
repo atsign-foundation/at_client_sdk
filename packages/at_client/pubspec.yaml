@@ -15,11 +15,11 @@ environment:
   sdk: '>=2.12.0 <3.0.0'
 
 dependency_overrides:
-  at_lookup:
+  at_commons:
     git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_lookup
-      ref: gkc-debugging-branch
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: packages/at_commons
+      ref: gkc-additional-encryption-metadata
 
 dependencies:
   path: ^1.8.2
