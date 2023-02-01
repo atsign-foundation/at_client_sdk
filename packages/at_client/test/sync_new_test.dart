@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -2375,7 +2376,7 @@ void main() {
       expect(commitEntryResult!.operation, CommitOp.UPDATE);
     });
 
-    //TODO: Update all the available metadata fields and assert
+    // TODO: Update all the available metadata fields and assert
     /// Preconditions:
     /// 1. There should be an entry for the same key in the key store
     /// 2. There should be an entry for the same key in the commit log
@@ -2522,8 +2523,8 @@ void main() {
     /// Assertions:
     /// 1. The key should be added to the keyListInfo
     test(
-        'A test to verify when sync conflict info when key present in'
-        'uncommitted entries and in server response of sync', () async {
+        'A test to verify when sync conflict info when key present in uncommitted entries and in server response of sync',
+        () async {
       // ------------------------------ Setup ----------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2574,14 +2575,21 @@ void main() {
       CustomSyncProgressListener progressListener =
           CustomSyncProgressListener();
       syncService.addProgressListener(progressListener);
-      syncService.sync(onDone: onDoneCallback);
+      syncService.sync();
       await syncService.processSyncRequests(
           respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
       // ------------------------------ Assertions -----------------------------
-      ConflictInfo? conflictInfo =
-          progressListener.localSyncProgress?.keyInfoList![1].conflictInfo;
-      expect(conflictInfo?.remoteValue, 'remoteValue_value');
-      expect(conflictInfo?.localValue.data, 'localValue');
+      progressListener.streamController.stream
+          .listen(expectAsync1((syncProgress) {
+        expect(syncProgress.syncStatus, SyncStatus.success);
+        syncProgress.keyInfoList?.forEach((keyInfo) {
+          if (keyInfo.key.contains('conflict_key1') &&
+              keyInfo.syncDirection == SyncDirection.remoteToLocal) {
+            expect(keyInfo.conflictInfo?.remoteValue, 'remoteValue_value');
+            expect(keyInfo.conflictInfo?.localValue.data, 'localValue');
+          }
+        });
+      }));
       //clearing sync objects
       syncService.clearSyncEntities();
     });
@@ -2719,6 +2727,10 @@ void main() {
             notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
+        CustomSyncProgressListener syncProgressListener =
+            CustomSyncProgressListener();
+        syncService.addProgressListener(syncProgressListener);
+
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         syncService.networkUtil = mockNetworkUtil;
 
@@ -2760,38 +2772,45 @@ void main() {
             'public:test_key1.group12test1@bob', 'whatever');
         await localSecondary.putValue(
             'public:test_key2.group12test1@bob', 'whatever');
-        bool localSwitchState = TestResources.switchState;
         //call sync 3-times to pass the trigger threshold
-        syncService.sync(onDone: onDoneCallback);
-        syncService.sync(onDone: onDoneCallback);
-        syncService.sync(onDone: onDoneCallback);
+        syncService.sync();
+        syncService.sync();
+        syncService.sync();
         await syncService.processSyncRequests();
-        //onDoneCallback when triggered, flips the switch in TestResources
-        //the below assertion is to check if the switch has been flipped
-        //that is done by storing the switchState before sync and then checking
-        //if the switch state is in the opposite state after sync
-        //
-        //switch will not be flipped as network is unavailable
-        expect(TestResources.switchState, localSwitchState);
 
         //setting mock network as available
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(true));
         //call sync 3-times to pass trigger threshold
-        syncService.sync(onDone: onDoneCallback);
-        syncService.sync(onDone: onDoneCallback);
-        syncService.sync(onDone: onDoneCallback);
+        syncService.sync();
+        syncService.sync();
+        syncService.sync();
         await syncService.processSyncRequests();
         //------------------Assertions -------------------
-        //switch will be flipped for this request as network is now available
-        expect(TestResources.switchState, !localSwitchState);
+        // The syncProgress is notified twice:
+        // 1. When network is down
+        // 2. When network is up.
+        // When network is down, syncStatus will be marked as failure and when network is
+        // up, sync status will be marked success.
+        var counter = 1;
+        syncProgressListener.streamController.stream
+            .listen(expectAsync1((syncProgress) {
+          if (counter == 1) {
+            expect(syncProgress.syncStatus, SyncStatus.failure);
+            counter = counter + 1;
+          } else {
+            expect(syncProgress.syncStatus, SyncStatus.success);
+          }
+          // The count represents the expectAsync1 will wait until the listen method
+          // is triggered twice.
+        }, count: 2));
         //clearing sync objects
         syncService.clearSyncEntities();
       });
 
       /// Preconditions:
       /// 1. There are no uncommitted entries/ requests.
-
+      ///
       /// Assertions:
       /// Assert that sync process is not started till the syncRequestThreshold is met
       test(
@@ -2815,20 +2834,10 @@ void main() {
             .thenAnswer((_) => Future.value(true));
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         //----------------------operation---------------------------------------
-        bool localSwitchState = TestResources.switchState;
-        //call sync only once
         //sync will not be performed as trigger threshold is not met
-        syncService.sync(onDone: onDoneCallback);
+        syncService.sync();
         await syncService.processSyncRequests();
-        //------------------Assertions -----------------------------------------
-        //onDoneCallback when triggered, flips the switch in TestResources
-        //the below assertion is to check if the switch has been flipped
-        //that is done by storing the switchState before sync and then checking
-        //if the switch state is in the opposite state after sync
-        //
-        //switch will not be flipped for request - 1 as there are no uncommitted entries
-        expect(TestResources.switchState, localSwitchState);
-        //clearing sync objects
+        expect(syncService.isSyncInProgress, false);
         syncService.clearSyncEntities();
       });
 
@@ -2848,6 +2857,10 @@ void main() {
             atClientManager: mockAtClientManager,
             notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        CustomSyncProgressListener syncProgressListener =
+            CustomSyncProgressListener();
+        syncService.addProgressListener(syncProgressListener);
+
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
         registerFallbackValue(FakeSyncVerbBuilder());
@@ -2883,7 +2896,6 @@ void main() {
                 Future.value('data:[{"id":1,"response":{"data":"4"}},'
                     '{"id":2,"response":{"data":"5"}}]'));
 
-        bool localSwitchState = TestResources.switchState;
         //------------------Assertions -------------------
         //onDoneCallback when triggered, flips the switch in TestResources
         //the below assertion is to check if the switch has been flipped
@@ -2891,19 +2903,19 @@ void main() {
         //if the switch state is in the opposite state after sync
         //
         //switch will not be flipped for request - 1 as sync will not be performed
-        syncService.sync(onDone: onDoneCallback);
+        syncService.sync();
         await syncService.processSyncRequests();
-        expect(TestResources.switchState, localSwitchState);
-
-        //switch will not be flipped for request - 2 as sync will not be performed
-        syncService.sync(onDone: onDoneCallback);
+        expect(syncService.isSyncInProgress, false);
+        syncService.sync();
         await syncService.processSyncRequests();
-        expect(TestResources.switchState, localSwitchState);
+        expect(syncService.isSyncInProgress, false);
 
-        syncService.sync(onDone: onDoneCallback);
+        syncService.sync();
         await syncService.processSyncRequests();
         //switch will be flipped for request - 3 as the request threshold for sync is 3
-        expect(TestResources.switchState, !localSwitchState);
+        syncProgressListener.streamController.stream.listen((syncProgress) {
+          expect(syncProgress.syncStatus, SyncStatus.success);
+        });
         //clearing sync objects
         syncService.clearSyncEntities();
       });
@@ -3204,144 +3216,6 @@ void main() {
       });
     });
 
-    group('A group of test to verify onDone callback', () {
-      setUp(() async {
-        TestResources.atsign = '@oreo';
-        await TestResources.setupLocalStorage(TestResources.atsign);
-      });
-
-      AtClient mockAtClient = MockAtClient();
-      AtClientManager mockAtClientManager = MockAtClientManager();
-      NotificationServiceImpl mockNotificationService =
-          MockNotificationServiceImpl();
-      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-      NetworkUtil mockNetworkUtil = MockNetworkUtil();
-
-      /// Preconditions:
-      /// 1. The serverCommitId is greater than localCommitId
-      /// 2. Have uncommitted entries on the client side
-      /// 3. SyncResult.syncStatus is set to notStarted
-      ///
-      /// Assertions:
-      /// 1. After the sync is completed verify the following:
-      ///  a. onDone call is triggered
-      ///  b. the direction of keys: For keys pulled from server the direction is "RemoteToLocal"
-      ///     and pushed to server is "LocalToRemote"
-      /// 2. The SyncResult.syncStatus is set to success
-      /// 3. The syncResult.lastSyncedOn is set to sync completion time
-      test(
-          'A test to verify sync result in onDone callback on successful completion',
-          () async {
-        //----------------- setup-----------------
-        LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-            keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
-
-        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
-            atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-        registerFallbackValue(FakeSyncVerbBuilder());
-        registerFallbackValue(FakeUpdateVerbBuilder());
-
-        when(() => mockNetworkUtil.isNetworkAvailable())
-            .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
-        when(() => mockRemoteSecondary
-                .executeVerb(any(that: StatsVerbBuilderMatcher())))
-            .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
-        when(() => mockRemoteSecondary.executeVerb(
-                any(that: SyncVerbBuilderMatcher()),
-                sync: any(named: "sync")))
-            .thenAnswer((invocation) => Future.value('data:['
-                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
-                '"value":"dummy",'
-                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":1,"operation":"*"}, '
-                '{"atKey":"public:test_key1.demo@bob",'
-                '"value":"dummy",'
-                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":2,"operation":"*"},'
-                '{"atKey":"public:test_key2.demo@bob",'
-                '"value":"dummy",'
-                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":3,"operation":"*"}]'));
-        when(() => mockRemoteSecondary.executeCommand(any(),
-                auth: any(named: "auth")))
-            .thenAnswer((invocation) =>
-                Future.value('data:[{"id":1,"response":{"data":"4"}},'
-                    '{"id":2,"response":{"data":"5"}}]'));
-
-        //----------------------- preconditions setup---------------------------
-        await localSecondary.putValue(
-            'public:test_key1.group12test1@bob', 'whatever');
-        await localSecondary.putValue(
-            'public:test_key2.group12test1@bob', 'whatever');
-        bool localSwitchState = TestResources.switchState;
-        //---------------------------operation----------------------------------
-        syncService.sync(onDone: onDoneCallback);
-        await syncService.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
-
-        //onDoneCallback() when triggered, flips the switchState in TestResources
-        //The below assertion is to check if the switch has been flipped as
-        //a result of onDoneCallback being triggered
-        //That is done by storing the switchState before sync and then checking
-        //if the switch state is in the opposite state after sync
-        //----------------- assertions-----------------
-        expect(TestResources.switchState, !localSwitchState);
-        //clearing sync objects
-        syncService.clearSyncEntities();
-      });
-
-      /// Preconditions:
-      /// 1. The serverCommitId is greater than localCommitId
-      /// 2. Have uncommitted entries on the client side
-      /// 3. SyncResult.syncStatus is set to notStarted
-      ///
-      /// Assertions:
-      /// 1. The error is encapsulated in the SyncResult.atClientException
-      /// 2. The SyncResult.syncStatus is set to failure
-      /// 3. The syncResult.lastSyncedOn is set to sync completion time
-      test(
-          'A test to verify sync result in onDone callback when sync failure occur',
-          () async {
-        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
-            atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-
-        syncService.networkUtil = mockNetworkUtil;
-
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-
-        when(() => mockNetworkUtil.isNetworkAvailable())
-            .thenAnswer((_) => Future.value(false));
-        //------------------------- preconditions setup-------------------------
-        CustomSyncProgressListener progressListener =
-            CustomSyncProgressListener();
-        syncService.addProgressListener(progressListener);
-        syncService.sync(onDone: onDoneCallback);
-        //forcefully trigger sync
-        //done by setting respectSyncRequestQueueSizeAndRequestTriggerDuration to false
-        await syncService.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
-        //----------------- assertions-----------------
-        expect(
-            progressListener.localSyncProgress?.syncStatus, SyncStatus.failure);
-        expect(
-            progressListener.localSyncProgress?.message, 'network unavailable');
-        //clearing sync objects
-        syncService.clearSyncEntities();
-      });
-
-      tearDown(() async {
-        await TestResources.tearDownLocalStorage();
-        resetMocktailState();
-      });
-    });
-
     group('A group of test on sync progress call back', () {
       setUp(() async {
         TestResources.atsign = '@poland';
@@ -3442,32 +3316,23 @@ void main() {
         CustomSyncProgressListener progressListener =
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
-        syncService.sync(onDone: onDoneCallback);
+        syncService.sync();
         await syncService.processSyncRequests(
             respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
         //------------------------------ assertions-----------------------------
 
-        expect(
-            progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
-        expect(progressListener.localSyncProgress?.isInitialSync, false);
-        expect(
-            progressListener.localSyncProgress?.atSign, TestResources.atsign);
-        expect(progressListener.localSyncProgress?.localCommitIdBeforeSync, 10);
-        expect(progressListener.localSyncProgress?.localCommitId, 15);
-        expect(progressListener.localSyncProgress?.serverCommitId, 15);
-
-        var keysList = progressListener.localSyncProgress?.keyInfoList;
-        //for all the keys in keysInfoList assert that the sync direction is
-        // remote -> local
-        keysList?.forEach((key) {
-          expect(key.syncDirection, SyncDirection.remoteToLocal);
-        });
-        //assert the keys in keysInfoList based on the mock server response
-        expect(keysList![0].key, 'cached:@bob:shared_key@guiltytaurus27');
-        expect(keysList[1].key, 'public:test_key1.demo@bob');
-        expect(keysList[2].key, 'public:test_key2.demo@bob');
-        expect(keysList[3].key, 'public:test_key3.demo@bob');
-        expect(keysList[4].key, 'public:test_key4.demo@bob');
+        progressListener.streamController.stream
+            .listen(expectAsync1((syncProgress) {
+          expect(syncProgress.syncStatus, SyncStatus.success);
+          expect(syncProgress.isInitialSync, false);
+          expect(syncProgress.atSign, TestResources.atsign);
+          expect(syncProgress.localCommitIdBeforeSync, 10);
+          expect(syncProgress.localCommitId, 15);
+          expect(syncProgress.serverCommitId, 15);
+          syncProgress.keyInfoList?.forEach((keyInfo) {
+            expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
+          });
+        }));
         //clearing sync objects
         syncService.clearSyncEntities();
       });
@@ -3528,14 +3393,16 @@ void main() {
         CustomSyncProgressListener progressListener =
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
-        syncService.sync(onDone: onDoneCallback);
+        syncService.sync();
         await syncService.processSyncRequests(
             respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
 
         //----------------------------- assertions------------------------------
-        expect(
-            progressListener.localSyncProgress?.syncStatus, SyncStatus.success);
-        expect(progressListener.localSyncProgress?.isInitialSync, true);
+        progressListener.streamController.stream
+            .listen(expectAsync1((syncProgress) {
+          expect(syncProgress.syncStatus, SyncStatus.success);
+          expect(syncProgress.isInitialSync, true);
+        }));
         syncService.removeProgressListener(progressListener);
         //clearing sync objects
         syncService.clearSyncEntities();
@@ -3621,19 +3488,22 @@ void main() {
         await syncServiceImpl.processSyncRequests(
             respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
 
-        expect(progressListener.localSyncProgress?.keyInfoList?.length, 4);
-        progressListener.localSyncProgress?.keyInfoList?.forEach((keyInfo) {
-          if (keyInfo.key == '@alice:phone@bob') {
-            expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
-          } else if (keyInfo.key == '@alice:contact@bob') {
-            expect(keyInfo.commitOp, CommitOp.DELETE);
-          } else if (keyInfo.key == '@alice:mobile@bob') {
-            expect(keyInfo.commitOp, CommitOp.UPDATE);
-          } else if (keyInfo.key == '@alice:country@bob') {
-            expect(keyInfo.commitOp, CommitOp.UPDATE_META);
-          }
-          expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
-        });
+        progressListener.streamController.stream
+            .listen(expectAsync1((syncProgress) {
+          expect(syncProgress.keyInfoList?.length, 4);
+          syncProgress.keyInfoList?.forEach((keyInfo) {
+            if (keyInfo.key == '@alice:phone@bob') {
+              expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+            } else if (keyInfo.key == '@alice:contact@bob') {
+              expect(keyInfo.commitOp, CommitOp.DELETE);
+            } else if (keyInfo.key == '@alice:mobile@bob') {
+              expect(keyInfo.commitOp, CommitOp.UPDATE);
+            } else if (keyInfo.key == '@alice:country@bob') {
+              expect(keyInfo.commitOp, CommitOp.UPDATE_META);
+            }
+            expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
+          });
+        }));
       });
 
       test(
@@ -3702,19 +3572,22 @@ void main() {
         await syncServiceImpl.processSyncRequests(
             respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
 
-        expect(progressListener.localSyncProgress?.keyInfoList?.length, 4);
-        progressListener.localSyncProgress?.keyInfoList?.forEach((keyInfo) {
-          if (keyInfo.key == '@alice:phone@bob') {
-            expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
-          } else if (keyInfo.key == '@alice:mobile@bob') {
-            expect(keyInfo.commitOp, CommitOp.DELETE);
-          } else if (keyInfo.key == '@alice:city@bob') {
-            expect(keyInfo.commitOp, CommitOp.UPDATE);
-          } else if (keyInfo.key == '@alice:country@bob') {
-            expect(keyInfo.commitOp, CommitOp.UPDATE_META);
-          }
-          expect(keyInfo.syncDirection, SyncDirection.localToRemote);
-        });
+        progressListener.streamController.stream
+            .listen(expectAsync1((syncProgress) {
+          expect(syncProgress.keyInfoList?.length, 4);
+          syncProgress.keyInfoList?.forEach((keyInfo) {
+            if (keyInfo.key == '@alice:phone@bob') {
+              expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+            } else if (keyInfo.key == '@alice:mobile@bob') {
+              expect(keyInfo.commitOp, CommitOp.DELETE);
+            } else if (keyInfo.key == '@alice:city@bob') {
+              expect(keyInfo.commitOp, CommitOp.UPDATE);
+            } else if (keyInfo.key == '@alice:country@bob') {
+              expect(keyInfo.commitOp, CommitOp.UPDATE_META);
+            }
+            expect(keyInfo.syncDirection, SyncDirection.localToRemote);
+          });
+        }));
       });
 
       tearDown(() async {
@@ -3725,21 +3598,12 @@ void main() {
   });
 }
 
-///default onDoneCallback for all the syncRequests in the above tests
-void onDoneCallback(syncResult) {
-  stdout.writeln(syncResult);
-  //always assert that the sync is successful when this method is triggered
-  expect(syncResult.syncStatus, SyncStatus.success);
-  //when this method is triggered always switch state to indicate that sync has been successful
-  TestResources.flipSwitch();
-}
-
 class CustomSyncProgressListener extends SyncProgressListener {
-  SyncProgress? localSyncProgress;
+  StreamController<SyncProgress> streamController = StreamController();
 
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
-    localSyncProgress = syncProgress;
+    streamController.add(syncProgress);
   }
 }
 
@@ -3748,9 +3612,6 @@ class TestResources {
   static AtCommitLog? commitLog;
   static SecondaryPersistenceStore? secondaryPersistenceStore;
   static var storageDir = '${Directory.current.path}/test/hive';
-
-  //an object that will be used to assert change of state
-  static bool switchState = false;
 
   static Future<void> setupLocalStorage(String atsign,
       {bool enableCommitId = false}) async {
@@ -3794,11 +3655,6 @@ class TestResources {
         .getCommitEntry(commitId, TestResources.atsign);
     await SyncUtil(atCommitLog: commitLog)
         .updateCommitEntry(entry, commitId, TestResources.atsign);
-  }
-
-  //will invert switchState when called, similar to a real-life switch
-  static flipSwitch() {
-    TestResources.switchState = !TestResources.switchState;
   }
 }
 

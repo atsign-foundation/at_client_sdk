@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:test/test.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
+
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
@@ -100,7 +101,7 @@ void main() {
           greaterThan(syncProgress.localCommitIdBeforeSync!));
       expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
       syncProgress.keyInfoList?.forEach((keyInfo) {
-        if(keyInfo.key.contains('username-$uniqueId')) {
+        if (keyInfo.key.contains('username-$uniqueId')) {
           expect(keyInfo.syncDirection, SyncDirection.localToRemote);
           expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
         }
@@ -133,7 +134,7 @@ void main() {
           greaterThan(syncProgress.localCommitIdBeforeSync!));
       expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
       syncProgress.keyInfoList?.forEach((keyInfo) {
-        if(keyInfo.key.contains('twitter-$uniqueId')) {
+        if (keyInfo.key.contains('twitter-$uniqueId')) {
           expect(keyInfo.syncDirection, SyncDirection.localToRemote);
           expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
         }
@@ -171,7 +172,7 @@ void main() {
           greaterThan(syncProgress.localCommitIdBeforeSync!));
       expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
       syncProgress.keyInfoList?.forEach((keyInfo) {
-        if(keyInfo.key.contains('fb_username-$uniqueId') ){
+        if (keyInfo.key.contains('fb_username-$uniqueId')) {
           expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
           expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
         }

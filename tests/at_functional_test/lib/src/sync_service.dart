@@ -4,31 +4,34 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_utils/at_logger.dart';
 
-/// The class represents the sync services for the end to end tests
-class E2ESyncService {
-  static final _logger = AtSignLogger('E2ESyncService');
+/// The class represents the sync services for the functional tests
+class FunctionalTestSyncService {
+  final _logger = AtSignLogger('FunctionalTestSyncService');
 
-  static final E2ESyncService _singleton = E2ESyncService._internal();
+  static final FunctionalTestSyncService _singleton =
+      FunctionalTestSyncService._internal();
 
-  E2ESyncService._internal();
+  FunctionalTestSyncService._internal();
 
-  factory E2ESyncService.getInstance() {
+  factory FunctionalTestSyncService.getInstance() {
     return _singleton;
   }
 
   Future<void> syncData(SyncService syncService) async {
-    var _isSyncInProgress = true;
+    var isSyncInProgress = true;
     var e2eTestSyncProgressListener = E2ETestSyncProgressListener();
     syncService.addProgressListener(e2eTestSyncProgressListener);
     syncService.sync();
     e2eTestSyncProgressListener.streamController.stream
         .listen((syncProgress) async {
+      _logger.info(
+          'Sync process completed. Sync Status: ${syncProgress.syncStatus}');
       if (syncProgress.syncStatus == SyncStatus.success ||
           syncProgress.syncStatus == SyncStatus.failure) {
-        _isSyncInProgress = false;
+        isSyncInProgress = false;
       }
     });
-    while (_isSyncInProgress) {
+    while (isSyncInProgress) {
       await Future.delayed(Duration(milliseconds: 100));
     }
   }

@@ -114,7 +114,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @override
-  void sync({Function? onDone, Function? onError}) {
+  void sync(
+      {@Deprecated('Use SyncProgressListener') Function? onDone,
+      Function? onError}) {
     final syncRequest = SyncRequest();
     syncRequest.onDone = onDone;
     syncRequest.onError = onError;

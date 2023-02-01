@@ -21,7 +21,7 @@ void main() {
       print('putResult $putResult');
     }
     expect(await atClient.syncService.isInSync(), false);
-    atClient.syncService.sync(onDone: onSuccess);
+    atClient.syncService.sync();
     await Future.delayed(Duration(seconds: 10));
   });
 
@@ -43,20 +43,10 @@ void main() {
       print('putResult $putResult');
     }
     expect(await syncService.isInSync(), false);
-    syncService.sync(onDone: (syncResult) async {
-      var isInSync = await syncService.isInSync();
-      expect(isInSync, true);
-      print('Success: $syncResult : isInSync: $isInSync');
-      expect(syncResult.syncStatus, SyncStatus.success);
-    });
-    syncService.sync(onDone: onSuccess);
+    syncService.sync();
+    syncService.sync();
     await Future.delayed(Duration(seconds: 10));
   });
-}
-
-void onSuccess(syncResult) async {
-  print('Success: $syncResult');
-  expect(syncResult.syncStatus, SyncStatus.success);
 }
 
 void onError(syncResult) {
