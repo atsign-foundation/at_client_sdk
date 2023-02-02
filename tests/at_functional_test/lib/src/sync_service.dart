@@ -19,10 +19,10 @@ class FunctionalTestSyncService {
 
   Future<void> syncData(SyncService syncService) async {
     var isSyncInProgress = true;
-    var e2eTestSyncProgressListener = E2ETestSyncProgressListener();
-    syncService.addProgressListener(e2eTestSyncProgressListener);
+    var functionalTestSyncProgressListener = FunctionalTestSyncProgressListener();
+    syncService.addProgressListener(functionalTestSyncProgressListener);
     syncService.sync();
-    e2eTestSyncProgressListener.streamController.stream
+    functionalTestSyncProgressListener.streamController.stream
         .listen((syncProgress) async {
       _logger.info(
           'Sync process completed. Sync Status: ${syncProgress.syncStatus}');
@@ -37,7 +37,7 @@ class FunctionalTestSyncService {
   }
 }
 
-class E2ETestSyncProgressListener extends SyncProgressListener {
+class FunctionalTestSyncProgressListener extends SyncProgressListener {
   StreamController<SyncProgress> streamController = StreamController();
 
   @override

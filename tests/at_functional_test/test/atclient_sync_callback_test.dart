@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -164,6 +165,11 @@ void main() {
     var updateResponse =
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
+    // Calling sync 3 times to met the threshold.
+    atClientManager.atClient.syncService.sync();
+    atClientManager.atClient.syncService.sync();
+    atClientManager.atClient.syncService.sync();
+    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
