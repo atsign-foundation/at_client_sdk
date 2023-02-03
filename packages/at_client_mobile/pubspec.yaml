@@ -12,7 +12,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: packages/at_commons
-      ref: trunk
+      ref: gkc-new-encryption-metadata-2
 
 dependencies:
   path: ^1.8.2
@@ -27,29 +27,6 @@ dependencies:
   at_lookup: ^3.0.31
   at_commons: ^3.0.26
   at_utils: ^3.0.11
-
-#dependency_overrides:
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-#   at_client:
-#     path: ../at_client
-#    git:
-#      url: https://github.com/atsign-foundation/at_client_sdk.git
-#      path: at_lookup
-#      ref: trunk
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: trunk
-#  at_utils:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_utils
-#      ref: trunk
 
 dev_dependencies:
   lints: ^2.0.0

@@ -19,7 +19,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: packages/at_commons
-      ref: trunk
+      ref: gkc-new-encryption-metadata-2
 
 dependencies:
   path: ^1.8.2

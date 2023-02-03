@@ -46,11 +46,6 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_widgets.git
       path: at_onboarding_flutter
       ref: feature/on-boarding-3.0
-#  at_client:
-#    git:
-#      url: https://github.com/atsign-foundation/at_client_sdk.git
-#      ref: trunk
-#      path: at_client
 
 dev_dependencies:
   flutter_test:
