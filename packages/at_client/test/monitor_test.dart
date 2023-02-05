@@ -94,7 +94,7 @@ void main() {
 
     when(() => mockOutboundConnection.write('from:$atSign\n'))
         .thenAnswer((Invocation invocation) async {
-      socketOnDataFn("server challenge\n"
+      socketOnDataFn("@data:server challenge\n"
           .codeUnits); // actual challenge is different, of course, but not important for unit tests
     });
     when(() => mockOutboundConnection.write(any(that: startsWith('pkam:'))))
