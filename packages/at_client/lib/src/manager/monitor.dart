@@ -393,32 +393,21 @@ class Monitor {
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
   Future<void> _messageHandler(data) async {
-    int offset;
-
     // check buffer overflow
     _checkBufferOverFlow(data);
-    // If the data contains a new line character, add until the new line char to buffer
-    if (data.contains(newLineCodeUnit)) {
-      offset = data.lastIndexOf(newLineCodeUnit);
-      var dataSubList = data.getRange(0, offset).toList();
-      _buffer.append(dataSubList);
-    } else {
-      offset = 0;
-    }
 
     // Loop from last index to until the end of data.
     // If a new line character is found, then it is end
     // of server response. process the data.
     // Else add the byte to buffer.
-    for (int element = offset; element < data.length; element++) {
-      // If element is @ character and lastCharacter in the buffer is \n,
-      // then complete data is received. process it.
+    for (int element = 0; element < data.length; element++) {
+      // If it's a '\n' then complete data has been received. process it.
       if (data[element] == newLineCodeUnit) {
         String result = utf8.decode(_buffer.getData().toList());
         result = _stripPrompt(result);
         _logger.finer('RECEIVED $result');
         _handleResponse(result, _onResponse);
-        //clear the buffer after adding result to queue
+
         _buffer.clear();
       } else {
         _buffer.addByte(data[element]);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -103,6 +104,44 @@ void main() {
     });
     when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
         .thenAnswer((Invocation invocation) async {});
+  });
+
+  group('Monitor socket response handling', () {
+    test('Multiple response lines in single call to socket messageHandler', () async {
+      List<String> fromServerList = [
+        'notification:{"id":"1"}\ndata:ok\nnotification:{"id":',
+        '"2"}\nnotification:{"id:"3"}\ndata:',
+        'ok\nnoti',
+        'fication:{"id":"4"}\n'
+      ];
+      String allFromMonitor = '';
+      Monitor monitor = Monitor(
+              (String received) => allFromMonitor += '$received\n',
+              (e) => print('onError: $e'),
+          atSign,
+          atClientPreference,
+          monitorPreference,
+              () => print('onRetry called'),
+          monitorConnectivityChecker: mockMonitorConnectivityChecker,
+          remoteSecondary: mockRemoteSecondary,
+          monitorOutboundConnectionFactory:
+          mockMonitorOutboundConnectionFactory);
+
+      Future<void> monitorStartFuture =
+      monitor.start(lastNotificationTime: null);
+      await monitorStartFuture;
+      expect(monitor.status, MonitorStatus.started);
+
+      String allFromServer = '';
+      for (String fromServer in fromServerList) {
+        socketOnDataFn(utf8.encode(fromServer));
+        allFromServer += fromServer;
+      }
+      // The Monitor response handler should filter out data:ok\n responses (heartbeat responses)
+      // and send only notifications to the Monitor's owner's response handler.
+      allFromServer = allFromServer.replaceAll('data:ok\n', '');
+      expect(allFromMonitor, allFromServer);
+    });
   });
 
   group('Monitor constructor and start tests', () {
