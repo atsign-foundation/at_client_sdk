@@ -64,7 +64,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       required NotificationService notificationService,
       RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= RemoteSecondary(
-        atClient.getCurrentAtSign()!, atClient.getPreferences()!, atChops: atClient.atChops);
+        atClient.getCurrentAtSign()!, atClient.getPreferences()!,
+        atChops: atClient.atChops);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
     await syncService._statsServiceListener();
@@ -668,7 +669,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     late RemoteSecondary remoteSecondary;
     try {
       remoteSecondary = RemoteSecondary(
-          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!, atChops: _atClient.atChops);
+          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
+          atChops: _atClient.atChops);
       var serverCommitId =
           await _getServerCommitId(remoteSecondary: remoteSecondary);
 

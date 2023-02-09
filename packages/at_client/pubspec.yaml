@@ -4,7 +4,7 @@ description: The at_client library is the non-platform specific Client SDK which
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 3.0.52
+version: 3.0.53
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -26,10 +26,10 @@ dependencies:
   collection: ^1.16.0
   archive: ^3.3.5
   http: ^0.13.5
-  internet_connection_checker: ^1.0.0+1	
+  internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
   at_persistence_spec: ^2.0.10
-  at_persistence_secondary_server: ^3.0.44
+  at_persistence_secondary_server: ^3.0.45
   at_lookup: ^3.0.35
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
@@ -37,20 +37,6 @@ dependencies:
   at_utils: ^3.0.11
   meta: ^1.8.0
   at_chops: ^1.0.0
-
-#dependency_overrides:
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: packages/at_lookup
-#      ref: publish_atlookup
-#  at_chops:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: packages/at_chops
-#      ref: at_chops
-#    path: ../../../at_libraries/packages/at_chops
-
 
 dev_dependencies:
   lints: ^2.0.0
