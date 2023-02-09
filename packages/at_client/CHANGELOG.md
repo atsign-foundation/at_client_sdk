@@ -1,3 +1,5 @@
+## 3.0.54
+- fix: encryptedSharedKeySyncStatusCacheMap being maintained but not used
 ## 3.0.53
 - feat: Introduce commit log compaction to keep size of commit log thin
 - fix: Fixed a bug where switch atSign event is notified multiple times
