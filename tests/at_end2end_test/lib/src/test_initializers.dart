@@ -28,7 +28,8 @@ class TestSuiteInitializer {
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(atClientManager.atClient, atSign);
-      await E2ESyncService.getInstance().syncData(atClientManager.atClient.syncService);
+      await E2ESyncService.getInstance()
+          .syncData(atClientManager.atClient.syncService);
 
       // verify if the local key is set to local secondary
       var result = await atClientManager.atClient
