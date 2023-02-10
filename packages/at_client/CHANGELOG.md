@@ -1,3 +1,6 @@
+## 3.0.55
+- build: consume changes in at_commons v3.0.35 that enforce lowercase on AtKey
+- build: upgrade dependency at_persistence_secondary_server to v3.0.46
 ## 3.0.54
 - fix: ensure forText notifications are decrypted successfully when using at_commons 3.0.35 or greater
 ## 3.0.53
