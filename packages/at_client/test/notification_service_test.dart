@@ -805,8 +805,9 @@ void main() {
               NotificationServiceImpl.lastReceivedNotificationKey, '@alIce',
               namespace: 'wAvi')
           .build();
+      //calling toString() on an AtKey will convert it to lowercase
       expect(lastReceivedNotification.toString(),
-          'local:lastreceivednotification.wavi@alice');
+          'local:lastReceivedNotification.wavi@alice'.toLowerCase());
     });
 
     test('test to verify lastNotificationReceived fromString', () {
