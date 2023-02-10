@@ -108,7 +108,6 @@ void main() {
         .notify(NotificationParams.forText('Hello', sharedWithAtSign));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
-    //key is converted to lowercase
     expect(notificationResult.atKey?.key, 'Hello');
     expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
   });

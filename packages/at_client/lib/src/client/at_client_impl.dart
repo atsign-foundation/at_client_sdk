@@ -472,7 +472,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (atKey.metadata!.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
     }
-    if (atKey.key!.contains(r'^[A-Z]') || atKey.key!.contains(r'^[A-Z]') ) {
+    if (atKey.key!.contains(r'^[A-Z]') || atKey.namespace!.contains(r'^[A-Z]') ) {
       _logger.info(
           'AtKey: ${atKey.key}.${atKey.namespace} contains UPPER_CASE characters, converting the key to lower_case');
     }
