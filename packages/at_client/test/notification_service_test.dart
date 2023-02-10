@@ -223,7 +223,6 @@ void main() {
         'A test to verify notification text is decrypted when isEncrypted is set to true',
         () async {
       var isEncrypted = true;
-
       var atNotification = at_notification.AtNotification(
           '124',
           '@bob:encryptedValue',
@@ -685,11 +684,7 @@ void main() {
     test(
         'getLastNotificationTime() returns the stored value from old key if checkOfflineNotifications is true and there is a stored value',
         () async {
-      //mimic the old latestNotificationIdKey
-      String lastNotificationKey = '_latestNotificationIdv2.wavi@alice';
-      AtKey oldNotificationAtKey = AtKey.fromString(lastNotificationKey);
-
-      registerFallbackValue(oldNotificationAtKey);
+      registerFallbackValue(FakeAtKey());
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
       var atNotification = at_notification.AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
@@ -703,7 +698,7 @@ void main() {
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()));
 
-      when(() => mockAtClientImpl.get(oldNotificationAtKey))
+      when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
           .thenAnswer((_) async => Future.value(AtValue()
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
@@ -806,7 +801,7 @@ void main() {
               namespace: 'wAvi')
           .build();
       expect(lastReceivedNotification.toString(),
-          'local:lastreceivednotification.wavi@alice');
+          'local:lastReceivedNotification.wavi@alice'.toLowerCase());
     });
 
     test('test to verify lastNotificationReceived fromString', () {
