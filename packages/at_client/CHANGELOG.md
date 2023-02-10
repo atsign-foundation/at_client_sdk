@@ -1,3 +1,9 @@
+## 3.0.54
+- fix: ensure forText notifications are decrypted successfully when using at_commons 3.0.35 or greater
+## 3.0.53
+- feat: Introduce commit log compaction to keep size of commit log thin
+- fix: Fixed a bug where switch atSign event is notified multiple times
+- fix: Add AtChops as optional argument to AtServiceFactory.atClient
 ## 3.0.52
 - feat: Introduce AtServiceFactory to make AtClientManager more reusable and more testable
 - feat: Make AtChops instance (if any) available everywhere that it can/should be used
@@ -8,6 +14,7 @@
 - fix: Remove the inactive listeners from AtClientManager._changeListeners list.
 - fix: Reverted back path,async packages to older version
 ## 3.0.50
+- feat: Introduce commit log compaction to keep size of commit log thin
 - feat: changes for at_chops uptake
 - chore: upgrade at_persistence_spec, at_persistence_secondary_server, at_commons version
 ## 3.0.49

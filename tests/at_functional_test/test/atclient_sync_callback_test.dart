@@ -28,7 +28,8 @@ void main() {
       await atClient.put(phoneKey, value);
     }
     await Future.delayed(Duration(seconds: 10));
-    atClientManager.atClient.syncService.removeProgressListener(progressListener);
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
   });
 
   test('delete of a key to sharedWith atSign - using await', () async {
@@ -46,7 +47,8 @@ void main() {
     var phoneKey = AtKey()..key = 'number';
     await atClient.delete(phoneKey);
     await Future.delayed(Duration(seconds: 10));
-    atClientManager.atClient.syncService.removeProgressListener(progressListener);
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
   });
 
   test('Verifying keyname exists in key info list', () async {
@@ -65,7 +67,8 @@ void main() {
     var value = 'alice123';
     await atClient.put(usernameKey, value);
     await Future.delayed(Duration(seconds: 10));
-    atClientManager.atClient.syncService.removeProgressListener(progressListener);
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
   });
 
   test('Verifying sync progress - local ahead', () async {
@@ -84,7 +87,8 @@ void main() {
     var value = 'alice_A';
     await atClient.put(twitterKey, value);
     await Future.delayed(Duration(seconds: 10));
-    atClientManager.atClient.syncService.removeProgressListener(progressListener);
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
   });
 
   test('Verifying sync progress - server ahead', () async {
@@ -109,7 +113,8 @@ void main() {
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
     await Future.delayed(Duration(seconds: 10));
-    atClientManager.atClient.syncService.removeProgressListener(progressListener);
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
   });
   tearDown(() async => await tearDownFunc());
 }
