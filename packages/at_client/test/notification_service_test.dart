@@ -1006,3 +1006,17 @@ void main() {
     });
   });
 }
+
+class StatsAtKeyMatcher extends Matcher {
+  @override
+  Description describe(Description description) =>
+      description.add('A custom matcher to match the old statsNotificationKey');
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key!.contains('_latestNotificationIdv2')) {
+      return true;
+    }
+    return false;
+  }
+}
