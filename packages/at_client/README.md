@@ -23,11 +23,12 @@ We call giving people control of access to their data "*flipping the internet*".
 
 ## Get Started
 
-Initially to get a basic overview of the SDK, you must read the [atsign docs](https://docs.atsign.com/).
+> Before using this package for the first time, you should follow the
+> [getting started guide](https://docs.atsign.com/start/)
 
-> To use this package you must have a basic setup. Follow this to [get started](https://atsign.dev/docs/get-started/setup-your-env/).
+You may find it useful to read the [atPlatform overview](https://docs.atsign.com/).
 
-Check how to use this package in the [at_client installation tab](https://pub.dev/packages/at_client/install).
+This package is available on [pub.dev](https://pub.dev) at https://pub.dev/packages/at_client
 
 ## Usage
 
