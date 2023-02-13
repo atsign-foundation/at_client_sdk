@@ -19,7 +19,7 @@ void main() {
       final atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, 'me', preference);
       var atClient = atClientManager.atClient;
-      atClientManager.syncService.sync();
+      atClientManager.atClient.syncService.sync();
       // To setup encryption keys
       await setEncryptionKeys(atSign, preference);
       // Get server commit id before put operation
@@ -34,8 +34,7 @@ void main() {
       var value = 'alice.twitter';
       var putResult = await atClient.put(twitterKey, value);
       expect(putResult, true);
-      // waiting for 15 seconds for sync to complete.
-      await Future.delayed(Duration(seconds: 10));
+      atClientManager.atClient.syncService.sync();
       // Getting server commit id after put
       var serverCommitIdAfterPut = await SyncUtil()
           .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
@@ -83,8 +82,7 @@ void main() {
     var updateResponse =
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
-    // waiting for 15 seconds for sync to complete.
-    await Future.delayed(Duration(seconds: 10));
+    atClientManager.atClient.syncService.sync();
     // Getting server commit id after put
     var localEntryAfterSync =
         await SyncUtil().getLastSyncedEntry('', atSign: atSign);
@@ -109,7 +107,7 @@ void main() {
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', preference);
     var atClient = atClientManager.atClient;
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     // Get server commit id before put operation
@@ -132,11 +130,7 @@ void main() {
     expect(putResult, true);
     putResult = await atClient.put(atmosphereKey, valueAtmosphere);
     expect(putResult, true);
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
-    // waiting for 15 seconds for sync to complete.
-    await Future.delayed(Duration(seconds: 15));
+    atClientManager.atClient.syncService.sync();
     // Getting server commit id after put
     var serverCommitIdAfterPut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
@@ -187,10 +181,7 @@ void main() {
     var value = 'alice.discord';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
-    await Future.delayed(Duration(seconds: 10));
-    atClientManager.syncService.sync(onDone: onDoneCallback);
-    atClientManager.syncService.sync(onDone: onDoneCallback);
-    atClientManager.syncService.sync(onDone: onDoneCallback);
+    atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'discord.wavi'
       ..sharedWith = sharedWithAtsign
@@ -214,7 +205,7 @@ void main() {
     var atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     var atKey = AtKey()
       ..key = 'localkey'
       ..namespace = 'wavi'
@@ -222,11 +213,7 @@ void main() {
     var value = 'alice.localkey';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
-    // waiting for 10 seconds for sync to complete.
-    await Future.delayed(Duration(seconds: 10));
+    atClientManager.atClient.syncService.sync();
     var localEntryAfterSync =
         await SyncUtil().getLastSyncedEntry('', atSign: atSign);
     expect(localEntryAfterSync!.atKey, isNot('local:localkey.wavi$atSign'));
@@ -251,7 +238,7 @@ void main() {
     var atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     var atKey = AtKey()
       ..key = 'key1'
       ..namespace = 'wavi';
@@ -262,9 +249,7 @@ void main() {
     putResult = await atClient.put(atKey, value2);
     expect(putResult, true);
     // waiting for 10 seconds for sync to complete.
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     await Future.delayed(Duration(seconds: 10));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'key1.wavi'
@@ -288,8 +273,7 @@ void main() {
     var atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
-    atClientManager.syncService.sync();
-
+    atClientManager.atClient.syncService.sync();
     var atKey = AtKey()
       ..key = 'testkey'
       ..namespace = 'wavi';
@@ -305,10 +289,7 @@ void main() {
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
     // waiting for 10 seconds for sync to complete.
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
-    atClientManager.syncService.sync();
-    await Future.delayed(Duration(seconds: 10));
+    atClientManager.atClient.syncService.sync();
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'testkey.wavi'
       ..sharedBy = atSign
