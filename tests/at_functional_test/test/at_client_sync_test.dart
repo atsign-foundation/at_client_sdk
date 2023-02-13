@@ -176,6 +176,7 @@ void main() {
     expect(putResult, true);
     atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
     atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
+    atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'discord.wavi'
       ..sharedWith = sharedWithAtSign
@@ -230,6 +231,7 @@ void main() {
     expect(putResult, true);
     // waiting for 10 seconds for sync to complete.
     atClientManager.atClient.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     await Future.delayed(Duration(seconds: 10));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'key1.wavi'
@@ -262,6 +264,8 @@ void main() {
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
     // waiting for 10 seconds for sync to complete.
+    await Future.delayed(Duration(seconds: 10));
+    atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'testkey.wavi'
