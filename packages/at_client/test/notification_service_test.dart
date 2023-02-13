@@ -795,7 +795,7 @@ void main() {
               namespace: 'wavi')
           .build();
       expect(lastReceivedNotification.toString(),
-          'local:lastReceivedNotification.wavi@alice');
+          'local:lastReceivedNotification.wavi@alice'.toLowerCase());
     });
 
     test('test to verify lastNotificationReceived fromString', () {
