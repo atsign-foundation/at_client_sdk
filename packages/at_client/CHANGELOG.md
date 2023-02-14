@@ -1,3 +1,5 @@
+## 3.0.55
+- fix: Expose priority, strategy, notifier, latestN and notificationExpiry in NotificationParams
 ## 3.0.54
 - fix: ensure forText notifications are decrypted successfully when using at_commons 3.0.35 or greater
 ## 3.0.53
