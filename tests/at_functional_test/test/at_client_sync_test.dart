@@ -174,7 +174,8 @@ void main() {
     var value = 'alice.discord';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
-    atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
+    // waiting for 10 seconds for sync to complete.
+    await Future.delayed(Duration(seconds: 10));
     atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
     atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
     var llookupVerbBuilder = LLookupVerbBuilder()
