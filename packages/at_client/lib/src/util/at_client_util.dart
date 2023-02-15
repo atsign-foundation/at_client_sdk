@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
@@ -144,5 +145,20 @@ extension NullCheck on String? {
 extension ParseEncodingTypeToString on EncodingType {
   String toShortString() {
     return toString().split('.').last;
+  }
+}
+
+CommitOp convertCommitOpSymbolToEnum(String commitOpSymbol) {
+  switch (commitOpSymbol) {
+    case '+':
+      return CommitOp.UPDATE;
+    case '#':
+      return CommitOp.UPDATE_META;
+    case '*':
+      return CommitOp.UPDATE_ALL;
+    case '-':
+      return CommitOp.DELETE;
+    default:
+      return throw IllegalArgumentException('$commitOpSymbol is not a valid CommitOperation symbol');
   }
 }
