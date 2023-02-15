@@ -57,6 +57,10 @@ abstract class AtClient {
   /// Additional metadata can be set using [AtKey.metadata]
   ///
   /// [isDedicated] is currently ignored and will be removed in next major version
+  ///
+  /// From at_client v3.0.55 lowercase will be enforced on all AtKey types
+  /// AtKeys will now be actively converted to lowercase in at_client
+  /// The values(AtValue) will however continue to be case-sensitive
   /// ```
   /// update:phone@alice +1 999 9999
   ///   var key = AtKey()..key='phone'
@@ -104,6 +108,8 @@ abstract class AtClient {
   /// has to be shared with another atSign.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
   /// phone.persona@alice where 'persona' is the namespace.
+  /// From at_client v3.0.55 lowercase will be enforced on all AtKey types
+  /// The values(AtValue) will however continue to be case-sensitive
   /// ```
   /// update:phone@alice +1 999 9999
   ///   var key = AtKey.self('phone', namespace: 'wavi').build();

@@ -26,6 +26,7 @@ class NotificationResponseTransformer
       ..key = tuple.one.key
       ..sharedWith = tuple.one.to
       ..sharedBy = tuple.one.from;
+
     if (tuple.one.messageType.isNotNull &&
         tuple.one.messageType!.toLowerCase().contains('text') &&
         (tuple.one.isEncrypted != null && tuple.one.isEncrypted!)) {
