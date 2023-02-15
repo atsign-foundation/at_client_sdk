@@ -159,6 +159,6 @@ CommitOp convertCommitOpSymbolToEnum(String commitOpSymbol) {
     case '-':
       return CommitOp.DELETE;
     default:
-      return CommitOp.UPDATE;
+      return throw IllegalArgumentException('$commitOpSymbol is not a valid CommitOperation symbol');
   }
 }
