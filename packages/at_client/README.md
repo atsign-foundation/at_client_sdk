@@ -81,11 +81,7 @@ print(isDeleted); // true if deleted
 ```dart
 late SyncService _syncService;
 _syncService = atClientManagerInstance.syncService;
-_syncService.sync(onDone: _onSuccessCallback); // prints 'Sync done' on done.
-
-void _onSuccessCallback() {
-  print('Sync done');
-}
+_syncService.sync();
 ```
 
 - Notify the server that the data has changed using the `notify()` method.
