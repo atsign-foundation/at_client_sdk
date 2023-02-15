@@ -1,4 +1,5 @@
 ## 3.0.55
+- fix: Sync to local fails to delete a cached key
 - build: consume changes in at_commons v3.0.35 that enforce lowercase on AtKey
 - build: upgrade dependency at_persistence_secondary_server to v3.0.46
 ## 3.0.54
