@@ -70,6 +70,10 @@ class FakeRemoteSecondary extends Fake implements RemoteSecondary {}
 /// 3. Recreate = A key that exists previously got deleted and it is being created again
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(FakeSyncVerbBuilder());
+    registerFallbackValue(FakeUpdateVerbBuilder());
+  });
   // (Client) How items are added to the 'uncommitted' queue on the client side (upon data store operations)
   // (Client) How the client processes that uncommitted queue (while sending updates to server) - e.g. how is the queue ordered, how is it de-duped, etc
   // (Client) How the client processes updates from the server - can the client reject? under what conditions? what happens upon a rejection?
@@ -2220,17 +2224,23 @@ void main() {
   });
 
   group('A group of tests when server is ahead of local commit id', () {
+    late AtClient mockAtClient;
+    late AtClientManager mockAtClientManager;
+    late NotificationServiceImpl mockNotificationService;
+    late RemoteSecondary mockRemoteSecondary;
+    late NetworkUtil mockNetworkUtil;
+    late SyncUtil mockSyncUtil;
+
     setUp(() async {
       TestResources.atsign = '@gandalf';
       await TestResources.setupLocalStorage(TestResources.atsign);
+      mockAtClient = MockAtClient();
+      mockAtClientManager = MockAtClientManager();
+      mockNotificationService = MockNotificationServiceImpl();
+      mockRemoteSecondary = MockRemoteSecondary();
+      mockNetworkUtil = MockNetworkUtil();
+      mockSyncUtil = MockSyncUtil();
     });
-
-    AtClient mockAtClient = MockAtClient();
-    AtClientManager mockAtClientManager = MockAtClientManager();
-    NotificationServiceImpl mockNotificationService =
-        MockNotificationServiceImpl();
-    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-    NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
     /// The test should contain all types of keys - public key, shared key, self key
     ///
@@ -2433,37 +2443,61 @@ void main() {
     });
 
     /// Preconditions:
-    /// 1. There should be an entry for the same key in the key store
-    /// 2. There should be an entry for the same key in the commit log
+    /// 1. There should be an entry of keys in the keystore
+    /// 2. The server response should contain the same keys with CommitOp.DELETE
     ///
     /// Operation:
     /// CommitOp.DELETE
     ///
     /// Assertions:
     /// 1. The key should be deleted from the key store
-    /// 2. CommitLog should have an entry for the key with commitOp.DELETE
     test(
         'A test to verify existing key is deleted when delete commit operation is received',
         () async {
       // --------------------- Setup ---------------------
+      LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.networkUtil = mockNetworkUtil;
+      syncService.syncUtil = mockSyncUtil;
+
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
-      //------------------Operation-------------
-      //  creating a key in the keystore
-      String atKey = (AtKey.public('message',
-              namespace: 'wavi', sharedBy: TestResources.atsign))
-          .build()
-          .toString();
-      await keystore!.put(atKey, AtData()..data = 'hello');
-      int? removeId = await keystore.remove(atKey);
+      await keystore?.put(
+          '@alice:contact@gandalf', AtData()..data = 'dummy_value');
+      await keystore?.put(
+          'cached:@gandalf:aboutme@bob', AtData()..data = 'dummy_value');
+
+      // Mock Responses
+      when(() => mockSyncUtil.getLastSyncedEntry(null,
+          atSign:
+              TestResources.atsign)).thenAnswer((_) => Future.value(CommitEntry(
+          '@bob:phone@${TestResources.atsign}', CommitOp.UPDATE, DateTime.now())
+        ..commitId = 2));
+      when(() => mockSyncUtil.getChangesSinceLastCommit(null, null,
+          atSign: TestResources.atsign)).thenAnswer((_) => Future.value([]));
+      when(() => mockSyncUtil.getCommitEntry(any(), TestResources.atsign))
+          .thenAnswer((_) => Future.value(null));
+
+      when(() => mockRemoteSecondary.executeVerb(
+          any(
+              that: SyncVerbBuilderMatcher()))).thenAnswer((_) => Future.value(
+          'data:[{"atKey":"@alice:contact@gandalf","value":null,"metadata":null,"commitId":3,"operation":"-"},{"atKey":"cached:@gandalf:aboutme@bob","value":null,"metadata":null,"commitId":4,"operation":"-"}]'));
+
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => localSecondary);
+
+      var syncRequest = SyncRequest()..result = SyncResult();
+      await syncService.syncInternal(4, syncRequest);
       //------------------Assertions-------------
-      expect(() async => await keystore.get(atKey),
+      expect(() async => await keystore?.get('cached:@gandalf:aboutme@bob'),
           throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
-      // verifying the key in the commit log
-      var commitEntryResult =
-          await SyncUtil(atCommitLog: TestResources.commitLog)
-              .getCommitEntry(removeId!, TestResources.atsign);
-      expect(commitEntryResult!.operation, CommitOp.DELETE);
+      expect(() async => await keystore?.get('@alice:contact@gandalf'),
+          throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
     });
 
     test(

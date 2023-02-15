@@ -777,7 +777,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
-        var builder = DeleteVerbBuilder()..atKey = serverCommitEntry['atKey'];
+        var builder = DeleteVerbBuilder()..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
         _logger.finest(
             'syncing to local delete: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
