@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
@@ -26,33 +27,23 @@ void main() {
   });
 
   test('race test - repeated gets without awaits', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
+    var atSign = '@alice🛠';
+    var preference = TestUtils.getPreference(atSign);
     var namespace = 'at_lookup_race_test';
 
     final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, namespace, preference);
+        .setCurrentAtSign(atSign, namespace, preference);
     var atClient = atClientManager.atClient;
 
     // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
+    await setEncryptionKeys(atSign, preference);
 
     Random random = Random();
 
-    bool syncComplete = false;
-    void onSyncDone(syncResult) {
-      logger.info("syncResult.syncStatus: ${syncResult.syncStatus}");
-      logger.info("syncResult.lastSyncedOn ${syncResult.lastSyncedOn}");
-      syncComplete = true;
-    }
-
     // Wait for initial sync to complete
     logger.info("Waiting for initial sync");
-    syncComplete = false;
-    atClientManager.atClient.syncService.sync(onDone: onSyncDone);
-    while (!syncComplete) {
-      await Future.delayed(Duration(milliseconds: 100));
-    }
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
     logger.info("Initial sync complete");
 
     // Create three public keys, then repeatedly get them and check they are as expected
@@ -82,12 +73,8 @@ void main() {
     await atClient.put(bazKey, bazValue);
 
     logger.info("Waiting for post-put sync");
-    syncComplete = false;
-    // Wait for initial sync to complete
-    atClientManager.atClient.syncService.sync(onDone: onSyncDone);
-    while (!syncComplete) {
-      await Future.delayed(Duration(milliseconds: 100));
-    }
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
     logger.info("Post-put sync complete");
 
     var atLookup = atClient.getRemoteSecondary()!.atLookUp;
@@ -98,22 +85,19 @@ void main() {
     List<String> bazGetResponses = [];
     for (int i = 0; i < numRequests; i++) {
       atLookup
-          .lookup('$fooKeyKey.$namespace', atsign, auth: false)
+          .lookup('$fooKeyKey.$namespace', atSign, auth: false)
           .then((value) => fooGetResponses.add(value.toString()));
       await Future.delayed(Duration(milliseconds: random.nextInt(5) + 3));
 
       atLookup
-          .lookup('$barKeyKey.$namespace', atsign, auth: false)
+          .lookup('$barKeyKey.$namespace', atSign, auth: false)
           .then((value) => barGetResponses.add(value.toString()));
       await Future.delayed(Duration(milliseconds: random.nextInt(5) + 3));
 
       atLookup
-          .lookup('$bazKeyKey.$namespace', atsign, auth: false)
+          .lookup('$bazKeyKey.$namespace', atSign, auth: false)
           .then((value) => bazGetResponses.add(value.toString()));
       await Future.delayed(Duration(milliseconds: random.nextInt(5) + 3));
-
-      // Wait 25..50 milliseconds
-      // await Future.delayed(Duration(milliseconds: random.nextInt(26) + 25));
     }
 
     // Wait for size of all responses to equal 10, or time out

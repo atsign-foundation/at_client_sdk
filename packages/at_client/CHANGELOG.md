@@ -1,6 +1,7 @@
 ## 3.0.55
 - fix: Sync to local fails to delete a cached key
-## 3.0.54
+- feat: Introduce CommitOp(CommitOperation) to the KeyInfo to describe key update or delete upon sync
+## 3.0.54 
 - fix: ensure forText notifications are decrypted successfully when using at_commons 3.0.35 or greater
 ## 3.0.53
 - feat: Introduce commit log compaction to keep size of commit log thin
