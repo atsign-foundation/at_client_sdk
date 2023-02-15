@@ -61,7 +61,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
-  static var upperCaseRegex = RegExp(r'[A-Z]');
+  static final upperCaseRegex = RegExp(r'[A-Z]');
 
   AtClientCommitLogCompaction? get atClientCommitLogCompaction =>
       _atClientCommitLogCompaction;
