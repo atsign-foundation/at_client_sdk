@@ -1,6 +1,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 
 import 'at_demo_credentials.dart' as demo_credentials;
@@ -47,13 +48,7 @@ void main() {
         'update:sharedKeyEnc:${phoneKey.metadata?.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata?.pubKeyCS}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
         auth: true);
     expect(result != null, true);
-    var isSyncInProgress = true;
-    atClient.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
     var metadata = await atClient.getMeta(phoneKey);
     expect(metadata?.sharedKeyEnc, isNotEmpty);
     expect(metadata?.pubKeyCS, isNotEmpty);

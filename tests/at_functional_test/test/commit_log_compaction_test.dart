@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
 
@@ -41,14 +42,7 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    var isSyncInProgress = true;
-    atClientManager.atClient.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      print('${DateTime.now()} | Sync in progress...');
-      await Future.delayed(Duration(milliseconds: 500));
-    }
+    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
     // Start the compaction job in async mode
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
@@ -72,14 +66,7 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    isSyncInProgress = true;
-    atClientManager.atClient.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      print('${DateTime.now()} | Sync in progress...');
-      await Future.delayed(Duration(milliseconds: 500));
-    }
+    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
 
     await compactionFuture.then((atCompactionStats) {
       print(atCompactionStats);
@@ -109,14 +96,7 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    var isSyncInProgress = true;
-    atClientManager.atClient.syncService.sync(onDone: (syncResult) {
-      isSyncInProgress = false;
-    });
-    while (isSyncInProgress) {
-      print('Sync in progress...');
-      await Future.delayed(Duration(milliseconds: 500));
-    }
+    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
 
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
