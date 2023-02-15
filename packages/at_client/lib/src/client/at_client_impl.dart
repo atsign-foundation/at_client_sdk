@@ -61,6 +61,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
+  static var upperCaseRegex = RegExp(r'[A-Z]');
 
   AtClientCommitLogCompaction? get atClientCommitLogCompaction =>
       _atClientCommitLogCompaction;
@@ -473,7 +474,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
 
-    var upperCaseRegex = RegExp(r'[A-Z]');
     if (upperCaseRegex.hasMatch(atKey.key!) ||
         upperCaseRegex.hasMatch(atKey.namespace!)) {
       _logger.info(
