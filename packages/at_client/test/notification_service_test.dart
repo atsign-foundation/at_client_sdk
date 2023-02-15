@@ -162,7 +162,7 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      //UPPER_CASE in the forText() method will be preserved
+      //upper case should be preserved in forText notifications
       expect(notifyVerbBuilder.atKey, 'Hi How are you');
       expect(notifyVerbBuilder.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
