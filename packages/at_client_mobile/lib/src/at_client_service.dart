@@ -368,9 +368,7 @@ class AtClientService {
     var localEncryptionPublicKey =
         await keyChainManager.getEncryptionPublicKey(atSign);
     if (_isNullOrEmpty(localEncryptionPublicKey) &&
-            _isNullOrEmpty(serverEncryptionPublicKey) ||
-        (_isNullOrEmpty(serverEncryptionPublicKey) &&
-            !(_isNullOrEmpty(localEncryptionPublicKey)))) {
+        _isNullOrEmpty(serverEncryptionPublicKey)) {
       return OnboardingStatus.ACTIVATE;
     } else if (!_isNullOrEmpty(serverEncryptionPublicKey) &&
         _isNullOrEmpty(localEncryptionPublicKey)) {
@@ -395,15 +393,22 @@ class AtClientService {
 
   ///returns public key for [atsign] if found else returns null.
   Future<String?> _getServerEncryptionPublicKey(String atsign) async {
+    // On an unauthenticated connection the public key of the current user can be
+    // accessed using the lookup verb. On an authenticated connection the public key
+    // should be fetched using llookup verb.
     var command = 'lookup:publickey$atsign\n';
-    var result = await _atLookUp?.executeCommand(command);
-    if (_isNullOrEmpty(result) || _isError(result)) {
-      //checking for an authenticated connection
+    if (_atLookUp?.connection?.metaData?.isAuthenticated == true) {
       command = 'llookup:public:publickey$atsign\n';
+    }
+    String? result;
+    try {
       result = await _atLookUp?.executeCommand(command);
-      if (_isNullOrEmpty(result) || _isError(result)) {
-        return null;
-      }
+    } on Exception catch (e) {
+      _logger.info(
+          'Failed to connect the $atsign to fetch the encryption public key: ${e.toString()}');
+    }
+    if (_isNullOrEmpty(result) || _isError(result)) {
+      return null;
     }
     return result!.replaceFirst('data:', '');
   }

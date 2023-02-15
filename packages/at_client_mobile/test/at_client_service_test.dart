@@ -264,6 +264,24 @@ void main() {
       expect(onboardResult, true);
     });
 
+    test('A test to verify onboard method when device is offline', () async {
+      var atClientService = AtClientService();
+      atClientService.atLookupImpl = mockAtLookupImpl;
+      atClientService.keyChainManager = mockKeyChainManager;
+      atClientService.atClientManager = mockAtClientManager;
+
+      when(() => mockKeyChainManager.getPkamPrivateKey(any()))
+          .thenAnswer((_) => Future.value('dummy_private_key'));
+      // When device is offline, it fails to fetch the encryption public key from
+      // server and throws network not reachable exceptions
+      when(() => mockAtLookupImpl.executeCommand(any()))
+          .thenAnswer((_) => throw Exception('Network not reachable'));
+
+      var onboardResult = await atClientService.onboard(
+          atClientPreference: atClientPreference, atsign: atSign);
+      expect(onboardResult, true);
+    });
+
     test(
         'A test to verify onboard method when atSign is fetched from keychain manager',
         () async {
