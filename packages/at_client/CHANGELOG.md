@@ -1,9 +1,9 @@
 ## 3.0.55
 - fix: Sync to local fails to delete a cached key
+- feat: Introduce CommitOp(CommitOperation) to the KeyInfo to describe key update or delete upon sync
 - build: consume changes in at_commons v3.0.35 that enforce lowercase on AtKey
 - build: upgrade dependency at_persistence_secondary_server to v3.0.46
 ## 3.0.54
-- feat: Introduce CommitOp(CommitOperation) to the KeyInfo to describe key update or delete upon sync
 - fix: ensure forText notifications are decrypted successfully when using at_commons 3.0.35 or greater
 ## 3.0.53
 - feat: Introduce commit log compaction to keep size of commit log thin
