@@ -152,23 +152,11 @@ class NotificationParams {
   String? _value;
   late OperationEnum _operation;
   late MessageTypeEnum _messageType;
-
-  /// Represents the priority of the Notification.
-  /// By default, all the notifications are set to low priority
-  PriorityEnum priority = PriorityEnum.low;
-
-  /// Represents the strategy of the Notification.
-  /// By default, all the notifications are set to strategy - 'all' .
-  StrategyEnum strategy = StrategyEnum.all;
-
-  /// Represents the most recent 'N' notifications to be delivered. Defaults to 1.
-  int latestN = 1;
-
-  /// Groups the notifications
-  String notifier = SYSTEM;
-
-  /// Represents the time for the notification to expire. Defaults to 15 minute
-  Duration notificationExpiry = Duration(minutes: 15);
+  PriorityEnum _priority = PriorityEnum.low;
+  StrategyEnum _strategy = StrategyEnum.all;
+  int _latestN = 1;
+  String _notifier = SYSTEM;
+  Duration _notificationExpiry = Duration(hours: 24);
 
   String get id => _id;
 
@@ -180,14 +168,48 @@ class NotificationParams {
 
   MessageTypeEnum get messageType => _messageType;
 
+  PriorityEnum get priority => _priority;
+
+  StrategyEnum get strategy => _strategy;
+
+  int get latestN => _latestN;
+
+  String get notifier => _notifier;
+
+  Duration get notificationExpiry => _notificationExpiry;
+
   /// Returns [NotificationParams] to send an update notification.
-  static NotificationParams forUpdate(AtKey atKey, {String? value}) {
+  ///
+  /// Optionally accepts the following
+  ///
+  /// * priority: Represents the priority of the notification. The notification marked [PriorityEnum.high] takes precedence over other notifications.
+  ///
+  /// * strategy: When notifications marked with [StrategyEnum.all], all the notifications are sent. For [StrategyEnum.latest], only the [latestN] of a notifier are sent
+  ///
+  /// * latestN: Represents the count of notifications to store that belong to a particular [notifier].
+  ///
+  /// * notifier: Groups the notifications that has the same notifier.
+  ///
+  /// * notificationExpiry: Refers to the amount of time the notification is available in the KeyStore. Beyond which
+  /// the notification is removed from the KeyStore.
+  static NotificationParams forUpdate(AtKey atKey,
+      {String? value,
+      PriorityEnum priority = PriorityEnum.low,
+      StrategyEnum strategy = StrategyEnum.all,
+      int latestN = 1,
+      String notifier = SYSTEM,
+      Duration? notificationExpiry}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
       .._value = value
       .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.key;
+      .._messageType = MessageTypeEnum.key
+      .._priority = priority
+      .._strategy = strategy
+      .._latestN = latestN
+      .._notifier = notifier
+      .._notificationExpiry = notificationExpiry ?? Duration(hours: 24);
   }
 
   /// Returns [NotificationParams] to send a delete notification.
