@@ -81,6 +81,7 @@ abstract class NotificationService {
   ///   await notificationService.notify(NotificationParams.forDelete(key));
   ///```
   ///4. To notify a text message to @bob
+  ///   forText notifications are case sensitive
   ///   await notificationService.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));
   ///
   ///```dart
@@ -199,6 +200,8 @@ class NotificationParams {
   }
 
   /// Returns [NotificationParams] to send a text message to another atSign.
+  /// forText notifications are case-sensitive
+  /// platform level lower case enforcement will not apply to forText notifications
   static NotificationParams forText(String text, String whomToNotify,
       {bool shouldEncrypt = false}) {
     var atKey = AtKey()

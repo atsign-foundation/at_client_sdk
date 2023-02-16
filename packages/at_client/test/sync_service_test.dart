@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/response/at_notification.dart'
-    // ignore: no_leading_underscores_for_library_prefixes
-    as _at_notification;
+import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -58,9 +56,9 @@ class MockAtClientManager extends Mock implements AtClientManager {}
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {
   @override
-  Stream<_at_notification.AtNotification> subscribe(
+  Stream<at_notification.AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
-    return StreamController<_at_notification.AtNotification>().stream;
+    return StreamController<at_notification.AtNotification>().stream;
   }
 }
 

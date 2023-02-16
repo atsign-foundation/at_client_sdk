@@ -61,6 +61,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
+  static final upperCaseRegex = RegExp(r'[A-Z]');
 
   AtClientCommitLogCompaction? get atClientCommitLogCompaction =>
       _atClientCommitLogCompaction;
@@ -471,6 +472,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     if (atKey.metadata!.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
+    }
+
+    if (upperCaseRegex.hasMatch(atKey.key!) ||
+        upperCaseRegex.hasMatch(atKey.namespace!)) {
+      _logger.info(
+          'AtKey: ${atKey.key}.${atKey.namespace} contains upper case characters,'
+          'converting the key to lower case');
     }
     // validate the atKey
     // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
