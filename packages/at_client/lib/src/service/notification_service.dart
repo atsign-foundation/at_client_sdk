@@ -172,9 +172,9 @@ class NotificationParams {
 
   StrategyEnum get strategy => _strategy;
 
-  int get latestN => _latestN;
-
   String get notifier => _notifier;
+
+  int get latestN => _latestN;
 
   Duration get notificationExpiry => _notificationExpiry;
 
@@ -190,8 +190,8 @@ class NotificationParams {
   ///
   /// * notifier: Groups the notifications that has the same notifier.
   ///
-  /// * notificationExpiry: Refers to the amount of time the notification is available in the KeyStore. Beyond which
-  /// the notification is removed from the KeyStore.
+  /// * notificationExpiry: Refers to the amount of time the notification is
+  /// available in the KeyStore. Beyond which the notification is removed from the KeyStore.
   static NotificationParams forUpdate(AtKey atKey,
       {String? value,
       PriorityEnum priority = PriorityEnum.low,
