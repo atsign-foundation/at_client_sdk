@@ -38,7 +38,8 @@ void main() {
     var value = 'alice.twitter';
     var putResult = await atClient.put(twitterKey, value);
     expect(putResult, true);
-    // waiting for 15 seconds for sync to complete.
+    atClientManager.atClient.syncService.sync();
+    // waiting for 10 seconds for sync to complete.
     await Future.delayed(Duration(seconds: 10));
     // Getting server commit id after put
     var serverCommitIdAfterPut = await SyncUtil()
@@ -78,8 +79,8 @@ void main() {
     var updateResponse =
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
-    // waiting for 15 seconds for sync to complete.
-    await Future.delayed(Duration(seconds: 10));
+    atClientManager.atClient.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
     // Getting server commit id after put
     var localEntryAfterSync =
@@ -174,10 +175,10 @@ void main() {
     var value = 'alice.discord';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
+    atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
+    atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
     // waiting for 10 seconds for sync to complete.
     await Future.delayed(Duration(seconds: 10));
-    atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
-    atClientManager.atClient.syncService.sync(onDone: onDoneCallback);
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'discord.wavi'
       ..sharedWith = sharedWithAtSign
@@ -202,6 +203,8 @@ void main() {
     var value = 'alice.localkey';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
+    atClientManager.atClient.syncService.sync();
+    atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
     var localEntryAfterSync =
         await SyncUtil().getLastSyncedEntry('', atSign: atSign);
@@ -230,10 +233,11 @@ void main() {
     expect(putResult, true);
     putResult = await atClient.put(atKey, value2);
     expect(putResult, true);
-    // waiting for 10 seconds for sync to complete.
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
-    await Future.delayed(Duration(seconds: 10));
+    atClientManager.atClient.syncService.sync();
+    // waiting for 5 seconds for sync to complete.
+    await Future.delayed(Duration(seconds: 5));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'key1.wavi'
       ..sharedBy = atSign
@@ -264,10 +268,10 @@ void main() {
     var updateResponse =
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
-    // waiting for 10 seconds for sync to complete.
-    await Future.delayed(Duration(seconds: 10));
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
+    // waiting for 5 seconds for sync to complete.
+    await Future.delayed(Duration(seconds: 5));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = 'testkey.wavi'
       ..sharedBy = atSign
@@ -289,7 +293,6 @@ void onDoneCallback(syncResult) {
   print('sync result $syncResult');
   //always assert that the sync is successful when this method is triggered
   expect(syncResult.syncStatus, SyncStatus.success);
-  //when this method is triggered always switch state to indicate that sync has been successful
 }
 
 tearDown() async {
