@@ -82,6 +82,8 @@ void main() {
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
+    // waiting for 5 seconds for sync to complete.
+    await Future.delayed(Duration(seconds: 5));
     // Getting server commit id after put
     var localEntryAfterSync =
         await SyncUtil().getLastSyncedEntry('', atSign: atSign);
