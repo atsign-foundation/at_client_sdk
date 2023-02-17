@@ -474,12 +474,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
 
-    if (upperCaseRegex.hasMatch(atKey.key!) ||
-        upperCaseRegex.hasMatch(atKey.namespace!)) {
-      _logger.info(
-          'AtKey: ${atKey.key}.${atKey.namespace} contains upper case characters,'
-          'converting the key to lower case');
-    }
+    // if (upperCaseRegex.hasMatch(atKey.key!) ||
+    //     upperCaseRegex.hasMatch(atKey.namespace!)) {
+    //   _logger.info(
+    //       'AtKey: ${atKey.key}.${atKey.namespace} contains upper case characters,'
+    //       'converting the key to lower case');
+    // }
     // validate the atKey
     // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
     // * Setting enforceNamespace to true unless specifically set to false in the AtClientPreference
