@@ -465,13 +465,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @visibleForTesting
   ensureLowerCase(AtKey atKey) {
-    if (
-    (atKey.key != null && upperCaseRegex.hasMatch(atKey.key!)) ||
-        (atKey.namespace != null && upperCaseRegex.hasMatch(atKey.namespace!))
-    ) {
-      _logger.info(
-          'AtKey: ${atKey.toString()} contains upper case characters,'
-              'key has been converted to lower case');
+    if ((atKey.key != null && upperCaseRegex.hasMatch(atKey.key!)) ||
+        (atKey.namespace != null &&
+            upperCaseRegex.hasMatch(atKey.namespace!))) {
+      _logger.info('AtKey: ${atKey.toString()} contains upper case characters,'
+          ' AtKey has been converted to lower case');
+      //AtKey.toString() in the above log will convert the entire key to lower case
     }
   }
 
