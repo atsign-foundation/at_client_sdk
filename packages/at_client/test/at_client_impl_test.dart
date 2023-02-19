@@ -199,17 +199,19 @@ void main() {
   });
 
   group('AtClientImpl.ensureLowerCase() functionality checks', () {
+    late AtClientManager manager;
+    late AtClientImpl client;
     test(
-        'Test for AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
+        'Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
         () async {
       AtKey key = AtKey()
         ..key = 'dummy'
         ..sharedBy = '@sender'
         ..sharedWith = '@receiver';
 
-      var manager = await AtClientManager.getInstance()
+      manager = await AtClientManager.getInstance()
           .setCurrentAtSign('@sender', null, AtClientPreference());
-      var client = manager.atClient as AtClientImpl;
+      client = manager.atClient as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
       //this test is only to ensure that when this method is run
@@ -220,17 +222,27 @@ void main() {
     });
 
     test(
-        'Test for AtClientImpl.ensureLowerCase() of an AtKey with upper case chars in namespace',
+        'Test for AtClientImpl.ensureLowerCase() on an AtKey with upper case chars in namespace',
+            () async {
+          AtKey key = AtKey()
+            ..key = 'lowercase'
+            ..namespace = 'cAsEsEnSiTiVe'
+            ..sharedBy = '@sender'
+            ..sharedWith = '@receiver';
+
+          //AtClientImpl.ensureLowerCase() has a void return type
+          expect(client.ensureLowerCase(key), null); //errorless execution test
+          expect(key.namespace, 'casesensitive'); //namespace should be converted to lower case
+        });
+
+    test(
+        'Test AtClientImpl.ensureLowerCase() on an AtKey with upper case chars in key and namespace',
         () async {
       AtKey key = AtKey()
         ..key = 'uPpErCasE'
         ..namespace = 'cAsEsEnSiTiVe'
         ..sharedBy = '@sender'
         ..sharedWith = '@receiver';
-
-      var manager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@sender', 'dummyNamespace', AtClientPreference());
-      var client = manager.atClient as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
       expect(client.ensureLowerCase(key), null); //errorless execution test
