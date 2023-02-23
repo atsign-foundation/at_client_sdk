@@ -88,7 +88,7 @@ class AtClientPreference {
   bool fetchOfflineNotifications = true;
 
   /// Temporary feature flag. Remove once tests are successful.
-  bool useAtChops = false;
+  bool useAtChops = true;
 }
 
 @Deprecated("Use SyncService")
