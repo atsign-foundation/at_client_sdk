@@ -162,6 +162,7 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
+      //upper case should be preserved in forText notifications
       expect(notifyVerbBuilder.atKey, 'Hi How are you');
       expect(notifyVerbBuilder.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
@@ -757,7 +758,11 @@ void main() {
     test(
         'test the verifies old key value is fetched when new key does not exist',
         () async {
-      registerFallbackValue(FakeAtKey());
+      //mimic the old latestNotificationIdKey
+      String lastNotificationKey = '_latestNotificationIdv2.wavi@alice';
+      AtKey lastNotificationAtKey = AtKey.fromString(lastNotificationKey);
+
+      registerFallbackValue(lastNotificationAtKey);
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
       var atNotification = at_notification.AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
@@ -771,11 +776,12 @@ void main() {
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
           .thenAnswer((_) => false);
 
-      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
-              any(that: startsWith('_latestNotificationIdv2.wavi@alice'))))
-          .thenAnswer((_) => true);
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(lastNotificationKey)).thenAnswer((_) => true);
 
-      when(() => mockAtClientImpl.get(any(that: StatsAtKeyMatcher())))
+      when(() => mockAtClientImpl.get(lastNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
@@ -791,11 +797,12 @@ void main() {
   group('A group of tests for lastNotificationReceived key', () {
     test('test to verify lastNotificationReceived toString', () {
       var lastReceivedNotification = AtKey.local(
-              NotificationServiceImpl.lastReceivedNotificationKey, '@alice',
-              namespace: 'wavi')
+              NotificationServiceImpl.lastReceivedNotificationKey, '@alIce',
+              namespace: 'wAvi')
           .build();
+      //calling toString() on an AtKey will convert it to lowercase
       expect(lastReceivedNotification.toString(),
-          'local:lastReceivedNotification.wavi@alice');
+          'local:lastReceivedNotification.wavi@alice'.toLowerCase());
     });
 
     test('test to verify lastNotificationReceived fromString', () {
