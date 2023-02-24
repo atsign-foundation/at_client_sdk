@@ -570,8 +570,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var batchId = 1;
     for (var entry in uncommittedEntries) {
       String command;
-      //Skipping the cached keys to sync to cloud secondary.
-      if (entry.atKey!.startsWith('cached:')) {
+      // If someone updates cached keys locally, they should never be synced to the cloud
+      // However if they want to delete a cached key, they should be allowed to
+      if (entry.atKey!.startsWith('cached:') &&
+          entry.operation != CommitOp.DELETE) {
         _logger.finer(
             '${entry.atKey} is skipped. cached keys will not be synced to cloud secondary');
         continue;
@@ -777,7 +779,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
-        var builder = DeleteVerbBuilder()..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
+        var builder = DeleteVerbBuilder()
+          ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
         _logger.finest(
             'syncing to local delete: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
