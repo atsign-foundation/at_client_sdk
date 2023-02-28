@@ -55,10 +55,7 @@ class NotificationResponseTransformer
         tuple.one.messageType!.toLowerCase().contains('text') &&
         (tuple.one.isEncrypted != null && tuple.one.isEncrypted!)) {
       // decrypt the text message;
-      // the encrypted text message is a part of notification key. for example
-      // @alice:<text-message>. So split with : to get the encrypted message
-      var encryptedValue = atKey.key!.split(':')[1];
-      var decryptedValue = await _getDecryptedValue(atKey, encryptedValue);
+      var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
       atNotification.key = '${tuple.one.to}:$decryptedValue';
       return atNotification;
     } else if ((tuple.one.value.isNotNull) &&
@@ -74,10 +71,10 @@ class NotificationResponseTransformer
     return atNotification;
   }
 
-  Future<String> _getDecryptedValue(AtKey atKey, String encryptedValue) async {
+  Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
     atKeyDecryption ??=
         AtKeyDecryptionManager(_atClient).get(atKey, atKey.sharedWith!);
-    var decryptedValue = await atKeyDecryption?.decrypt(atKey, encryptedValue);
+    var decryptedValue = await atKeyDecryption?.decrypt(atKey, encryptedValue?.trim());
     // Return decrypted value
     return decryptedValue.toString().trim();
   }
