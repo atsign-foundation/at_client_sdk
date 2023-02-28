@@ -1,5 +1,7 @@
+## 3.0.57
+- fix: Incorrect atKey.toString() in notification_response_transformation.dart
 ## 3.0.56
--fix: AtClient.put() throws null-check error when key's namespace is null
+- fix: AtClient.put() throws null-check error when key's namespace is null
 ## 3.0.55
 - fix: Amend Monitor's socket message handler so that it separates multiple 'simultaneous' responses correctly.
 - fix: Sync to local fails to delete a cached key
