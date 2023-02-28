@@ -453,6 +453,47 @@ class AtClientService {
     final atChops = AtChopsImpl(atChopsKeys);
     return atChops;
   }
+
+  /// Checks if the atSign is already onboarded on a device. If onboarded, returns "true",
+  /// else returns "false".
+  ///
+  /// If atSign is onboarded, AtClient can be used in an offline mode.
+  ///
+  /// Usage:
+  ///  if( isNetworkAvailable == false) {
+  ///     bool isClientReadyForOfflineUsage = await isAtClientReadyForOfflineAccess('@bob', AtClientPreference());
+  ///     if(isClientReadyForOfflineUsage){
+  ///         AtClientManager.getInstance().setCurrentAtSign('@bob', 'wavi', AtClientPreference());
+  ///     }
+  ///  }
+  ///
+  ///  Below is the table representing the AtClient offline mode operations
+  ///
+  /// ```
+  ///   | Offline activity                                             | Can work offline? |
+  ///   ---------------------------------------------------------------|--------------------
+  ///   | list keys                                                    | Yes               |
+  ///   |list keys shared by other @sign                               | No                |
+  ///   |put private key                                               | Yes               |
+  ///   |put self key                                                  | Yes               |
+  ///   |put public key                                                | Yes               |
+  ///   |put shared key with cached encryption public key of recipient | Yes               |
+  ///   |put shared key                                                | No                |
+  ///   |get value for a key                                           | Yes               |
+  ///   |get value from other @sign                                    | No                |
+  ///   |notify                                                        | No                |
+  ///   |sync                                                          | No                |
+  ///```
+  ///
+  Future<bool> isAtClientReadyForOfflineAccess(
+      String atSign, AtClientPreference atClientPreference) async {
+    var isClientOnboarded = await AtClientImpl.verifyStorageForOfflineAccess(
+        atSign, atClientPreference);
+    if (isClientOnboarded == true) {
+      return true;
+    }
+    return false;
+  }
 }
 
 class BackupKeyConstants {

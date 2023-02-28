@@ -882,6 +882,34 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
   }
 
+  /// Initializes the Hive Keystore and fetches encryption public key to ensure
+  /// the atSign is previously onboarded.
+  /// If the key is available, returns false
+  static Future<bool> verifyStorageForOfflineAccess(
+      String atSign, AtClientPreference atClientPreference) async {
+    SecondaryPersistenceStore secondaryPersistenceStore =
+        SecondaryPersistenceStoreFactory.getInstance()
+            .getSecondaryPersistenceStore(atSign)!;
+
+    // Hive box might close when app is killed or device is restarted
+    // Hence initializing the hive box.
+    await secondaryPersistenceStore
+        .getHivePersistenceManager()!
+        .init(atClientPreference.hiveStoragePath!);
+
+    var hiveKeyStore = secondaryPersistenceStore.getSecondaryKeyStore()!;
+    AtData? atData;
+    try {
+      atData = await hiveKeyStore.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
+    } on KeyNotFoundException {
+      return false;
+    }
+    if (atData?.data != 'data:null') {
+      return true;
+    }
+    return false;
+  }
+
   // TODO v4 - remove the follow methods in version 4 of at_client package
 
   @override
