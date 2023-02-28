@@ -5,11 +5,13 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 
+@Deprecated('use AtAuthenticator')
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(
       String atSign, AtClientPreference atClientPreference);
 }
 
+// ignore: deprecated_member_use_from_same_package
 class AtClientAuthenticator implements AtClientAuth {
   KeyChainManager _keyChainManager = KeyChainManager.getInstance();
   late AtLookupImpl atLookUp;
