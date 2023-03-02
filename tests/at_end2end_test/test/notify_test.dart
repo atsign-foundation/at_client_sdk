@@ -99,6 +99,7 @@ void main() async {
             .atClient
             .notificationService
             .notify(input);
+
         expect(notificationResult.notificationStatusEnum,
             NotificationStatusEnum.delivered);
 

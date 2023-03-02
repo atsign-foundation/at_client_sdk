@@ -7,15 +7,10 @@ environment:
   sdk: '>=2.14.4 <3.0.0'
 
 dependencies:
+  uuid: 3.0.7
   at_client:
     path: ../../packages/at_client
 
-dependency_overrides:
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      path: packages/at_persistence_secondary_server
-      ref: export_compaction_service
 #  at_chops:
 #    git:
 #      url: https://github.com/atsign-foundation/at_libraries.git

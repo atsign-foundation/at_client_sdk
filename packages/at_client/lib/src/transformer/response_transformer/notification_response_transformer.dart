@@ -22,18 +22,40 @@ class NotificationResponseTransformer
       Tuple<AtNotification, NotificationConfig> tuple) async {
     // prepare the atKey from the atNotification object.
     var atNotification = tuple.one;
+    String sharedBy = tuple.one.from;
+    String sharedWith = tuple.one.to;
+    var key = tuple.one.key;
+    // AtKeys when sharedBy and sharedWith are populated look like
+    // @alice:something.something.namespace@bob
+    // where @bob is sharedBy and @alice is sharedWith
+
+    // Because of history, the 'key' here sometimes (always?) also contains
+    // the sharedBy and sharedWith and we will end up creating AtKeys which look like
+    // '@alice@alice:something.something.namespace@bob@bob' unless we prevent it here.
+
+    // If we've already got sharedBy in the 'key' part, then strip it off
+    // before creating the AtKey
+    // e.g. ends with '@bob' (note no colon preceding)
+    if (sharedBy.trim().isNotEmpty && key.endsWith(sharedBy)) {
+      key = key.substring(0, key.length - sharedBy.length);
+    }
+    // If we've already got sharedWith in the 'key' part, then strip it off
+    // before creating the AtKey
+    // e.g. starts with '@alice:' (note the colon)
+    if (sharedWith.trim().isNotEmpty && key.startsWith(sharedWith)) {
+      key = key.substring(
+          sharedWith.length + 1); // substring from just after '@alice:'
+    }
     AtKey atKey = AtKey()
-      ..key = tuple.one.key
+      ..key = key
       ..sharedWith = tuple.one.to
       ..sharedBy = tuple.one.from;
+
     if (tuple.one.messageType.isNotNull &&
         tuple.one.messageType!.toLowerCase().contains('text') &&
         (tuple.one.isEncrypted != null && tuple.one.isEncrypted!)) {
       // decrypt the text message;
-      // the encrypted text message is a part of notification key. for example
-      // @alice:<text-message>. So split with : to get the encrypted message
-      var encryptedValue = atKey.key!.split(':')[1];
-      var decryptedValue = await _getDecryptedValue(atKey, encryptedValue);
+      var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
       atNotification.key = '${tuple.one.to}:$decryptedValue';
       return atNotification;
     } else if ((tuple.one.value.isNotNull) &&
@@ -49,10 +71,10 @@ class NotificationResponseTransformer
     return atNotification;
   }
 
-  Future<String> _getDecryptedValue(AtKey atKey, String encryptedValue) async {
+  Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
     atKeyDecryption ??=
         AtKeyDecryptionManager(_atClient).get(atKey, atKey.sharedWith!);
-    var decryptedValue = await atKeyDecryption?.decrypt(atKey, encryptedValue);
+    var decryptedValue = await atKeyDecryption?.decrypt(atKey, encryptedValue?.trim());
     // Return decrypted value
     return decryptedValue.toString().trim();
   }

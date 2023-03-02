@@ -197,4 +197,57 @@ void main() {
       expect(mockAtCompactionJob.isCronScheduled, false);
     });
   });
+
+  group('AtClientImpl.ensureLowerCase() functionality checks', () {
+    late AtClientManager manager;
+    late AtClientImpl client;
+    test(
+        'Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
+        () async {
+      AtKey key = AtKey()
+        ..key = 'dummy'
+        ..sharedBy = '@sender'
+        ..sharedWith = '@receiver';
+
+      manager = await AtClientManager.getInstance()
+          .setCurrentAtSign('@sender', null, AtClientPreference());
+      client = manager.atClient as AtClientImpl;
+
+      //AtClientImpl.ensureLowerCase() has a void return type
+      //this test is only to ensure that when this method is run
+      //with an AtKey with namespace 'null', it does not throw an exception
+      expect(client.ensureLowerCase(key), null);
+      //this test is considered to be passing when the method does not throw
+      // an exception/error while executing
+    });
+
+    test(
+        'Test for AtClientImpl.ensureLowerCase() on an AtKey with upper case chars in namespace',
+            () async {
+          AtKey key = AtKey()
+            ..key = 'lowercase'
+            ..namespace = 'cAsEsEnSiTiVe'
+            ..sharedBy = '@sender'
+            ..sharedWith = '@receiver';
+
+          //AtClientImpl.ensureLowerCase() has a void return type
+          expect(client.ensureLowerCase(key), null); //errorless execution test
+          expect(key.namespace, 'casesensitive'); //namespace should be converted to lower case
+        });
+
+    test(
+        'Test AtClientImpl.ensureLowerCase() on an AtKey with upper case chars in key and namespace',
+        () async {
+      AtKey key = AtKey()
+        ..key = 'uPpErCasE'
+        ..namespace = 'cAsEsEnSiTiVe'
+        ..sharedBy = '@sender'
+        ..sharedWith = '@receiver';
+
+      //AtClientImpl.ensureLowerCase() has a void return type
+      expect(client.ensureLowerCase(key), null); //errorless execution test
+      expect(key.namespace, 'casesensitive'); //namespace should be converted to lower case
+      expect(key.key, 'uppercase'); //key should be converted to lower case
+    });
+  });
 }
