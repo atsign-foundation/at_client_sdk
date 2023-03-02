@@ -106,4 +106,74 @@ void main() {
     // When sync runs the test remains idle and timeout after 30 seconds
     // Adding timeout to allow sync to complete on current atSign and sharedWith atSign.
   }, timeout: Timeout(Duration(minutes: 1)));
+
+  test(
+      'A test to verify cached key is deleted when receiver deletes the cached key in the local',
+      () async {
+    var atKey = AtKey()
+      ..key = 'testcachedkey'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..metadata = (Metadata()..ttr = -1);
+    var value = 'test_cached_value';
+    // notifying a key with ttr to shared with atsign
+    await currentAtClientManager.atClient.notificationService
+        .notify(NotificationParams.forUpdate(atKey, value: '$value'));
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
+
+    sharedWithAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(sharedWithAtSign, namespace,
+            TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await E2ESyncService.getInstance()
+        .syncData(sharedWithAtClientManager.atClient.syncService);
+
+    var cachedAtKey = AtKey()
+      ..key = 'testcachedkey'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..metadata = (Metadata()..isCached = true);
+    // Assert cached key is present in the local storage of the sharedWith atSign
+    var getResponse = await sharedWithAtClientManager.atClient.get(cachedAtKey);
+    expect(getResponse.value, 'test_cached_value');
+
+    // creating another atkey instance to delete the cached key
+    // due to the following bug - https://github.com/atsign-foundation/at_client_sdk/issues/939
+    cachedAtKey = AtKey()
+      ..key = 'testcachedkey'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..metadata = (Metadata()..isCached = true);
+    var scanResultBeforeDelete = await sharedWithAtClientManager.atClient
+        .getRemoteSecondary()!
+        .executeCommand('scan\n', auth: true);
+    expect(
+        scanResultBeforeDelete!.contains(
+            'cached:$sharedWithAtSign:testcachedkey.wavi$currentAtSign'),
+        true);
+    // Delete the cached key in the local secondary of sharedWith atSign
+    var deleteResult =
+        await sharedWithAtClientManager.atClient.delete(cachedAtKey);
+    expect(deleteResult, true);
+
+    // Sync the deleted cached key commit entry to secondary of sharedWith atSign
+    await E2ESyncService.getInstance()
+        .syncData(sharedWithAtClientManager.atClient.syncService);
+    // Asserts cached key is deleted from the local storage in the sharedWith atSign
+    expect(
+        sharedWithAtClientManager.atClient
+            .getLocalSecondary()
+            ?.keyStore
+            ?.isKeyExists(
+                'cached:$sharedWithAtSign:testcachedkey.wavi$currentAtSign}'),
+        false);
+    // Asserts cached key is deleted from the server in the sharedWith atSign
+    var scanResultAfterDelete = await sharedWithAtClientManager.atClient
+        .getRemoteSecondary()!
+        .executeCommand('scan\n', auth: true);
+    expect(
+        scanResultAfterDelete!.contains(
+            'cached:$sharedWithAtSign:testcachedkey.wavi$currentAtSign'),
+        false);
+  }, timeout: Timeout(Duration(minutes: 1)));
 }
