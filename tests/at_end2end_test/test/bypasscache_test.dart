@@ -97,7 +97,7 @@ void main() async {
       // get Result with byPassCache set to false
       // should return the old value
       // adding a delay
-      await Future.delayed(Duration(seconds: 3));
+      await Future.delayed(Duration(seconds: 5));
       var getResultWithFalse = await sharedWithAtClientManager.atClient.get(
           getKey,
           getRequestOptions: GetRequestOptions()..bypassCache = false);
