@@ -63,6 +63,9 @@ void main() {
           ..sharedWith(sharedWithAtSign)
           ..cache(-1, true))
         .build();
+    currentAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
     await currentAtClientManager.atClient.put(atKey, 'dummy_cached_value');
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
@@ -110,15 +113,16 @@ void main() {
   test(
       'A test to verify cached key is deleted when receiver deletes the cached key in the local',
       () async {
-    var atKey = AtKey()
-      ..key = 'testcachedkey'
-      ..sharedWith = sharedWithAtSign
-      ..sharedBy = currentAtSign
-      ..metadata = (Metadata()..ttr = -1);
+    var atKey = (AtKey.shared('testcachedkey', sharedBy: currentAtSign)
+          ..sharedWith(sharedWithAtSign)
+          ..cache(-1, true))
+        .build();
     var value = 'test_cached_value';
+    currentAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
     // notifying a key with ttr to shared with atsign
-    await currentAtClientManager.atClient.notificationService
-        .notify(NotificationParams.forUpdate(atKey, value: '$value'));
+    await currentAtClientManager.atClient.put(atKey,'$value');
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
 
