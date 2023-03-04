@@ -8,21 +8,16 @@ publish_to: none
 environment:
   sdk: '>=2.12.0 <3.0.0'
 
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_secondary_server
+      ref: gkc-fix-AtMetaData.fromJson
+
 dependencies:
   at_client:
     path: ../../packages/at_client
-
-#dependency_overrides:
-#  at_chops:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: packages/at_chops
-#      ref: at_chops
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: packages/at_lookup
-#      ref: publish_atlookup
 
 dev_dependencies:
   pedantic: ^1.11.1
