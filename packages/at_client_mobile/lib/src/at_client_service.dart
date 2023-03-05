@@ -495,7 +495,7 @@ class KeychainUtil {
   }
 
   static Future<String?> getAtSign() async {
-    await _keyChainManager.initialSetup(useSharedStorage: false);
+    // await _keyChainManager.initialSetup(useSharedStorage: false);
     return await _keyChainManager.getAtSign();
   }
 

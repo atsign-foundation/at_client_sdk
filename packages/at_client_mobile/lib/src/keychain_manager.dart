@@ -29,11 +29,28 @@ class KeyChainManager {
     return _singleton;
   }
 
-  Future<AtClientData?> readAtClientData(
-      {bool useSharedStorage = false}) async {
+  Future<AtClientData?> deleteAllData({
+    bool useSharedStorage = false,
+  }) async {
     try {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
-      final value = await _readDataFromStore(store: store);
+      await store.delete();
+    } catch (e, s) {
+      _logger.info('_getAtClientData', e, s);
+      print(s);
+    }
+    return null;
+  }
+
+  Future<AtClientData?> readAtClientData({
+    bool useSharedStorage = false,
+  }) async {
+    try {
+      final store = await _getAppStorage(useSharedStorage: useSharedStorage);
+      final value = await _readDataFromStore(
+        store: store,
+        useSharedStorage: useSharedStorage,
+      );
       final json = jsonDecode(value ?? '{}');
       if (json is Map<String, dynamic>) {
         return AtClientData.fromJson(json);
@@ -561,15 +578,41 @@ class KeyChainManager {
 
   /// Function to delete all values related to the atsign passed from keychain
   Future<bool> resetAtSignFromKeychain(String atsign) async {
-    final atClientData = await readAtClientData(useSharedStorage: false);
-    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    atClientData?.keys.removeWhere((element) => element.atSign == atsign);
-    if (atClientData != null) {
-      await _saveAtClientData(
-          data: atClientData, useSharedStorage: useSharedStorage);
-      return true;
+    AtClientData? atClientData;
+
+    final useSharedStorage = await isUsingSharedStorage();
+
+    if (useSharedStorage == true) {
+      final atClientDataShared = await readAtClientData(useSharedStorage: true);
+
+      atClientDataShared?.keys
+          .removeWhere((element) => element.atSign == atsign);
+
+      atClientData = await readAtClientData(useSharedStorage: false);
+
+      atClientData?.keys.removeWhere((element) => element.atSign == atsign);
+
+      if (atClientData != null && atClientDataShared != null) {
+        await _saveAtClientData(data: atClientData, useSharedStorage: false);
+
+        await _saveAtClientData(
+            data: atClientDataShared, useSharedStorage: true);
+
+        return true;
+      } else {
+        return false;
+      }
     } else {
-      return false;
+      atClientData = await readAtClientData(useSharedStorage: false);
+
+      atClientData?.keys.removeWhere((element) => element.atSign == atsign);
+
+      if (atClientData != null) {
+        await _saveAtClientData(data: atClientData, useSharedStorage: false);
+        return true;
+      } else {
+        return false;
+      }
     }
   }
 
@@ -640,7 +683,11 @@ class KeyChainManager {
     try {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
       final mapList = jsonEncode(data.toJson());
-      await _writeDataToStore(store: store, data: mapList);
+      await _writeDataToStore(
+        store: store,
+        data: mapList,
+        useSharedStorage: useSharedStorage,
+      );
       return true;
     } catch (e, s) {
       _logger.info('_saveClientData', e, s);
@@ -664,6 +711,7 @@ class KeyChainManager {
   Future<void> _writeDataToStore({
     required BiometricStorageFile store,
     required String data,
+    bool useSharedStorage = false,
   }) async {
     if (Platform.isWindows) {
       final dataList = _splitString(data, _kWindowSegmentDataLength);
@@ -673,7 +721,7 @@ class KeyChainManager {
 
       for (int i = 0; i < dataList.length; i++) {
         final dataStore = await BiometricStorage().getStorage(
-          '${packageName}_data_$i',
+          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
           options: StorageFileInitOptions(
             authenticationRequired: false,
           ),
@@ -688,6 +736,7 @@ class KeyChainManager {
   /// The function read String data to BiometricStorageFile
   Future<String?> _readDataFromStore({
     required BiometricStorageFile store,
+    bool useSharedStorage = false,
   }) async {
     if (Platform.isWindows) {
       final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
@@ -696,7 +745,7 @@ class KeyChainManager {
       final results = <String>[];
       for (int i = 0; i < segmentCount; i++) {
         final dataStore = await BiometricStorage().getStorage(
-          '${packageName}_data_$i',
+          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
           options: StorageFileInitOptions(
             authenticationRequired: false,
           ),
