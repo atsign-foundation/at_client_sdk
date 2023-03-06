@@ -11,18 +11,21 @@ class AtNotification {
   String? operation;
   String? messageType;
   bool? isEncrypted;
+  int? expiresAtInEpochMillis;
 
   /// AtNotification instance is created without initializing the fields
   AtNotification.empty();
 
   AtNotification(this.id, this.key, this.from, this.to, this.epochMillis,
       this.messageType, this.isEncrypted,
-      {this.value, this.operation});
+      {this.value, this.operation, this.expiresAtInEpochMillis});
 
   factory AtNotification.fromJson(Map<String, dynamic> json) {
     return AtNotification(json['id'], json['key'], json['from'], json['to'],
         json['epochMillis'], json['messageType'], json[IS_ENCRYPTED],
-        value: json['value'], operation: json['operation']);
+        value: json['value'],
+        operation: json['operation'],
+        expiresAtInEpochMillis: json['expiresAt']);
   }
 
   Map<String, dynamic> toJson() {
@@ -36,7 +39,8 @@ class AtNotification {
       'operation': operation,
       'messageType': messageType,
       IS_ENCRYPTED: isEncrypted,
-      'notificationStatus': status
+      'notificationStatus': status,
+      'expiresAt': expiresAtInEpochMillis
     };
   }
 
@@ -51,6 +55,6 @@ class AtNotification {
 
   @override
   String toString() {
-    return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation, status: $status}';
+    return 'AtNotification{id: $id, key: $key, from: $from, to: $to, epochMillis: $epochMillis, value: $value, operation: $operation, status: $status, expiresAt: $expiresAtInEpochMillis}';
   }
 }

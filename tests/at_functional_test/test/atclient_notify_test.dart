@@ -36,8 +36,8 @@ void main() {
     expect(result.atKey?.key, 'phone');
     expect(result.atKey?.sharedWith, phoneKey.sharedWith);
     // fetch notification using notify fetch
-    var atNotification =
-        await atClientManager.atClient.notificationService.fetch(result.notificationID);
+    var atNotification = await atClientManager.atClient.notificationService
+        .fetch(result.notificationID);
     expect(atNotification.key, phoneKey.toString());
     expect(atNotification.status, 'NotificationStatus.delivered');
     expect(atNotification.messageType, 'MessageType.key');
@@ -58,7 +58,8 @@ void main() {
     var result = await atClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(landlineKey, value: value));
     print('NotificationId : ${result.notificationID}');
-    final notificationStatus = await atClientManager.atClient.notificationService
+    final notificationStatus = await atClientManager
+        .atClient.notificationService
         .getStatus(result.notificationID);
     print('Notification status is $notificationStatus');
     expect(notificationStatus.notificationID, result.notificationID);
@@ -114,8 +115,8 @@ void main() {
 
   test('notify text of to sharedWith atSign with shouldEncrypt set to true',
       () async {
-    var notificationResult = await atClientManager.atClient.notificationService.notify(
-        NotificationParams.forText('Hello', sharedWithAtSign,
+    var notificationResult = await atClientManager.atClient.notificationService
+        .notify(NotificationParams.forText('Hello', sharedWithAtSign,
             shouldEncrypt: true));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
@@ -187,6 +188,33 @@ void main() {
         await atClientManager.atClient.notificationService.fetch('abc-123');
     expect(atNotification.id, 'abc-123');
     expect(atNotification.status, 'NotificationStatus.expired');
+  });
+
+  test('A test to verify the notification expiry', () async {
+    var atKey = (AtKey.shared('test-notification-expiry',
+            namespace: 'wavi', sharedBy: currentAtSign)
+          ..sharedWith(sharedWithAtSign))
+        .build();
+    NotificationResult notificationResult = await atClientManager
+        .atClient.notificationService
+        .notify(NotificationParams.forUpdate(atKey,
+            notificationExpiry: Duration(minutes: 1)));
+
+    AtNotification atNotification = await AtClientManager.getInstance()
+        .atClient
+        .notificationService
+        .fetch(notificationResult.notificationID);
+
+    var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
+            atNotification.expiresAtInEpochMillis!)
+        .toUtc()
+        .millisecondsSinceEpoch;
+    var expectedExpiresAtInEpochMills =
+        DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
+            .toUtc()
+            .add(Duration(minutes: 1))
+            .millisecondsSinceEpoch;
+    expect(actualExpiresAtInEpochMills, expectedExpiresAtInEpochMills);
   });
   tearDownAll(() async => await tearDownFunc());
 }
