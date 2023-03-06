@@ -32,7 +32,7 @@ jobs:
       # Check formatting
       - name: Check that code in packages is correctly formatted
         working-directory: packages
-        run: dart format -o none --set-exit-if-changed
+        run: dart format . -o none --set-exit-if-changed
 
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
