@@ -41,7 +41,7 @@ jobs:
         id: getcert
         run: |
           cd tests/at_functional_test/test/testData
-          CERTURL = 'https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
+          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
           wget -O cert.pem ${CERTURL}
 
       - name: Create Pull Request
