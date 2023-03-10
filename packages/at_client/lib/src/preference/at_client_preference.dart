@@ -43,7 +43,7 @@ class AtClientPreference {
 
   /// Maximum data size a secondary can store. Temporary solution. Have to fetch this from
   /// server using stats verb.
-  int maxDataSize = 512000;
+  int maxDataSize = 10230000;
 
   /// Default path to download stream files
   String? downloadPath;

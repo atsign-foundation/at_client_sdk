@@ -358,6 +358,7 @@ class NotificationServiceImpl
               atKeyEncryption)
           .transform(notificationParams);
 
+      notificationValueValidation(notificationParams, builder);
       // Run the notify verb on the remote secondary instance.
       await _atClient.getRemoteSecondary()?.executeVerb(builder);
       if (onSentToSecondary != null) {
@@ -388,6 +389,32 @@ class NotificationServiceImpl
             notificationParams, notificationResult, onSuccess, onError));
         return notificationResult;
       }
+    }
+  }
+
+  /// Checks the size the notification value. If the size exceeds the [AtClientPreference.maxDataSize]
+  /// [BufferOverFlowException] is thrown.
+  ///
+  @visibleForTesting
+  void notificationValueValidation(
+      NotificationParams notificationParams, NotifyVerbBuilder builder) {
+    switch (notificationParams.messageType) {
+      case MessageTypeEnum.key:
+        // Since value is not mandatory in AtNotification, perform validation only if
+        // value is not null.
+        if (builder.value != null &&
+            builder.value.length > _atClient.getPreferences()!.maxDataSize) {
+          throw BufferOverFlowException(
+              'The length of value exceeds the buffer size. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
+        }
+        break;
+
+      case MessageTypeEnum.text:
+        if (builder.atKey!.length > _atClient.getPreferences()!.maxDataSize) {
+          throw BufferOverFlowException(
+              'The length of value exceeds the buffer size. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
+        }
+        break;
     }
   }
 
