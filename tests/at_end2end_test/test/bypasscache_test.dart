@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
@@ -5,6 +7,7 @@ import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 
 import 'package:test/test.dart';
+import 'package:version/version.dart';
 
 void main() async {
   late AtClient clientOne;
@@ -22,6 +25,16 @@ void main() async {
     await TestSuiteInitializer.getInstance()
         .testInitializer(atSignTwo, namespace);
   });
+
+  Future<Version> getVersion(AtClient atClient) async {
+    var infoResult = await atClient.getRemoteSecondary()!.executeCommand('info\n');
+
+    expect(infoResult, startsWith('data:{'));
+    infoResult = infoResult!.replaceAll('data:', '');
+    // Since secondary version has gha<number> appended, remove the gha number from version
+    // Hence using split.
+    return Version.parse(jsonDecode(infoResult)['version'].split('+')[0]);
+  }
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
     //  reset the autoNotify to true
@@ -134,11 +147,16 @@ void main() async {
       // get Result with byPassCache set to false again
       // should also now return the new value, since cached value will have been updated with the
       // results of the remote lookup, and the cached value will have been synced to the client
-      var getResultWithFalse = await clientTwo.get(
-          getKey,
-          getRequestOptions: GetRequestOptions()..bypassCache = false);
-      print('get result with bypass cache false $getResultWithFalse');
-      expect(getResultWithFalse.value, newValue);
+      // Note: This will only work on server versions which have the fix, from version 3.0.29 onwards
+      Version serverTwoVersion = await getVersion(clientTwo);
+      if (serverTwoVersion >= Version(3, 0, 29)) {
+        var getResultWithFalse = await clientTwo.get(
+            getKey,
+            getRequestOptions: GetRequestOptions()
+              ..bypassCache = false);
+        print('get result with bypass cache false $getResultWithFalse');
+        expect(getResultWithFalse.value, newValue);
+      }
     } finally {
       await setAtSignOneAutoNotify(true);
     }
