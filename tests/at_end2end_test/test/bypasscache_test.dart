@@ -26,14 +26,19 @@ void main() async {
         .testInitializer(atSignTwo, namespace);
   });
 
-  Future<Version> getVersion(AtClient atClient) async {
+  Future<Version> getVersion(AtClient atClient, Version ifNull) async {
     var infoResult = await atClient.getRemoteSecondary()!.executeCommand('info\n');
 
     expect(infoResult, startsWith('data:{'));
     infoResult = infoResult!.replaceAll('data:', '');
-    // Since secondary version has gha<number> appended, remove the gha number from version
-    // Hence using split.
-    return Version.parse(jsonDecode(infoResult)['version'].split('+')[0]);
+    var versionString = jsonDecode(infoResult)['version'];
+    if (versionString == null) {
+      return ifNull;
+    } else {
+      // Since secondary version has gha<number> appended, remove the gha number from version
+      // Hence using split.
+      return Version.parse(versionString.split('+')[0]);
+    }
   }
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
@@ -148,7 +153,7 @@ void main() async {
       // should also now return the new value, since cached value will have been updated with the
       // results of the remote lookup, and the cached value will have been synced to the client
       // Note: This will only work on server versions which have the fix, from version 3.0.29 onwards
-      Version serverTwoVersion = await getVersion(clientTwo);
+      Version serverTwoVersion = await getVersion(clientTwo, Version(3, 0, 29));
       if (serverTwoVersion >= Version(3, 0, 29)) {
         var getResultWithFalse = await clientTwo.get(
             getKey,
