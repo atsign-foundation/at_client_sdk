@@ -22,10 +22,10 @@ import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
-  static const _syncRequestThreshold = 3,
-      _syncRequestTriggerInSeconds = 3,
-      _syncRunIntervalSeconds = 5,
-      _queueSize = 5;
+  static int syncRequestThreshold = 3,
+      syncRequestTriggerInSeconds = 3,
+      syncRunIntervalSeconds = 5,
+      queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
@@ -41,7 +41,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
-  final _syncRequests = ListQueue<SyncRequest>(_queueSize);
+  final _syncRequests = ListQueue<SyncRequest>(queueSize);
   bool _syncInProgress = false;
 
   @override
@@ -89,7 +89,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
 
-    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
+    _cron.schedule(Schedule.parse('*/$syncRunIntervalSeconds * * * * *'),
         () async {
       try {
         await processSyncRequests();
@@ -181,13 +181,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
       if (_syncRequests.isEmpty ||
-          (_syncRequests.length < _syncRequestThreshold &&
+          (_syncRequests.length < syncRequestThreshold &&
               (_syncRequests.isNotEmpty &&
                   DateTime.now()
                           .toUtc()
                           .difference(_syncRequests.elementAt(0).requestedOn)
                           .inSeconds <
-                      _syncRequestTriggerInSeconds))) {
+                      syncRequestTriggerInSeconds))) {
         _logger.finest('skipping sync - queue length ${_syncRequests.length}');
         return;
       }
@@ -311,7 +311,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
     hasHadNoSyncRequests = false;
-    if (_syncRequests.length == _queueSize) {
+    if (_syncRequests.length == queueSize) {
       _syncRequests.removeLast();
     }
     _syncRequests.addLast(syncRequest);
