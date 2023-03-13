@@ -31,7 +31,6 @@ class E2ESyncService {
       if (syncProgress.syncStatus == SyncStatus.success ||
           syncProgress.syncStatus == SyncStatus.failure) {
         _isSyncInProgress = false;
-        print (syncProgress);
       }
     });
     while (_isSyncInProgress) {
