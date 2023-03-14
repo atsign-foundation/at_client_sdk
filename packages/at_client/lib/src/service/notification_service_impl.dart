@@ -410,6 +410,8 @@ class NotificationServiceImpl
         break;
 
       case MessageTypeEnum.text:
+        // When messageType is text, the "text" to notify is added to the key. Hence validating
+        // the key length
         if (builder.atKey!.length > _atClient.getPreferences()!.maxDataSize) {
           throw BufferOverFlowException(
               'The length of value exceeds the buffer size. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
