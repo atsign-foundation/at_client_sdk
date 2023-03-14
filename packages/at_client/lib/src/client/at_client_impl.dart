@@ -463,6 +463,17 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
   }
 
+  @visibleForTesting
+  ensureLowerCase(AtKey atKey) {
+    if ((atKey.key != null && upperCaseRegex.hasMatch(atKey.key!)) ||
+        (atKey.namespace != null &&
+            upperCaseRegex.hasMatch(atKey.namespace!))) {
+      _logger.info('AtKey: ${atKey.toString()} contains upper case characters,'
+          ' AtKey has been converted to lower case');
+      //AtKey.toString() in the above log will convert the entire key to lower case
+    }
+  }
+
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
@@ -474,12 +485,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
 
-    if (upperCaseRegex.hasMatch(atKey.key!) ||
-        upperCaseRegex.hasMatch(atKey.namespace!)) {
-      _logger.info(
-          'AtKey: ${atKey.key}.${atKey.namespace} contains upper case characters,'
-          'converting the key to lower case');
-    }
+    ensureLowerCase(atKey);
+
     // validate the atKey
     // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
     // * Setting enforceNamespace to true unless specifically set to false in the AtClientPreference
