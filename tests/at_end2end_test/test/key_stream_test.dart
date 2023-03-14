@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_typing_uninitialized_variables
+
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
@@ -13,8 +15,7 @@ import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
 void main() async {
-  late AtClientManager currentAtClientManager;
-  late AtClientManager sharedWithAtClientManager;
+  late AtClientManager atClientManager;
   late String currentAtSign;
   late String sharedWithAtSign;
   final namespace = 'wavi';
@@ -79,15 +80,17 @@ void main() async {
     });
 
     test('getKeys', () async {
-      currentAtClientManager = await AtClientManager.getInstance()
+      atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(currentAtSign, namespace,
               TestPreferences.getInstance().getPreference(currentAtSign));
       await Future.wait([
-        currentAtClientManager.atClient.put(key, randomValue),
-        currentAtClientManager.atClient.put(key2, randomValue2)
+        atClientManager.atClient.put(key, randomValue),
+        atClientManager.atClient.put(key2, randomValue2)
       ]);
+
       await E2ESyncService.getInstance()
-          .syncData(currentAtClientManager.atClient.syncService);
+          .syncData(atClientManager.atClient.syncService);
+
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,
@@ -96,7 +99,7 @@ void main() async {
           sharedWithAtSign);
       await keyStream.getKeys();
       expect(keyStream, emitsInAnyOrder([randomValue, randomValue2]));
-    }, timeout: Timeout(Duration(minutes: 5)));
+    });
 
     test('dispose', () async {
       await keyStream.dispose();
@@ -123,7 +126,7 @@ void main() async {
           namespace,
           TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = KeyStreamImpl(
-        regex: namespace + '@',
+        regex: '$namespace@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
@@ -169,7 +172,7 @@ void main() async {
           namespace,
           TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = IterableKeyStream<String>(
-        regex: namespace + '@',
+        regex: '$namespace@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
@@ -221,7 +224,7 @@ void main() async {
           namespace,
           TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = MapKeyStream<String, String>(
-        regex: namespace + '@',
+        regex: '$namespace@',
         convert: (key, value) => MapEntry(key.key!, value.value),
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
@@ -257,7 +260,6 @@ void main() async {
 
   group('Switch atsigns group', () {
     var currentAtSign, sharedWithAtSign;
-    AtClientManager? currentAtSignClientManager, sharedWithAtSignClientManager;
     var namespace = 'keyStream';
     late KeyStreamImpl<String> keyStream, keyStream2, keyStream3;
     var uuid;
@@ -281,17 +283,17 @@ void main() async {
       currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
       sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
       // Create atClient instance for currentAtSign
-      currentAtSignClientManager = await AtClientManager.getInstance()
+      await AtClientManager.getInstance()
           .setCurrentAtSign(currentAtSign, namespace,
               TestPreferences.getInstance().getPreference(currentAtSign));
 
       // Create atClient instance for atSign2
-      sharedWithAtSignClientManager = await AtClientManager.getInstance()
+      await AtClientManager.getInstance()
           .setCurrentAtSign(sharedWithAtSign, namespace,
               TestPreferences.getInstance().getPreference(sharedWithAtSign));
       // Set Encryption Keys for sharedWithAtSign
       keyStream = KeyStreamImpl(
-        regex: namespace + '@',
+        regex: '$namespace@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
@@ -313,7 +315,7 @@ void main() async {
       expect(keyStream.controller.isClosed, true);
 
       keyStream2 = KeyStreamImpl(
-        regex: namespace + '@',
+        regex: '$namespace@',
         convert: (key, value) => value.value ?? '',
         sharedBy: sharedWithAtSign,
         sharedWith: currentAtSign,
@@ -332,7 +334,7 @@ void main() async {
       expect(keyStream.controller.isClosed, true);
 
       keyStream3 = KeyStreamImpl(
-        regex: namespace + '@',
+        regex: '$namespace@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,

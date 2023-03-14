@@ -60,7 +60,7 @@ void main() {
       firstAtClient = atClientManager.atClient as AtClientImpl;
       expect(firstAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(), true);
       expect(secondAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(), false);
-    });
+    }, timeout: Timeout(Duration(minutes: 5)));
   } catch (e, s) {
     print(s);
   }
