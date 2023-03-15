@@ -121,7 +121,8 @@ class AtClientValidation {
   Future<void> validateNotificationRequest(
       SecondaryAddressFinder secondaryAddressFinder,
       NotificationParams notificationParams,
-      AtClientPreference atClientPreference) async {
+      AtClientPreference atClientPreference,
+      String currentAtSign) async {
     // validate the notification request
     if (notificationParams.atKey.sharedWith.isNull) {
       throw AtKeyException(
@@ -146,6 +147,12 @@ class AtClientValidation {
       if (!validationResult.isValid) {
         throw AtClientException('AT0014', validationResult.failureReason);
       }
+    }
+    // Check if the sharedBy atSign is currentAtSign. If yes allow to send notifications
+    // else throw UnAuthorizedException
+    if (notificationParams.atKey.sharedBy != currentAtSign) {
+      throw UnAuthorizedException(
+          '${notificationParams.atKey.sharedBy} is not authorized to send notification as $currentAtSign');
     }
   }
 }
