@@ -23,27 +23,11 @@ dependencies:
   at_chops: ^1.0.0
 
 dependency_overrides:
-#  at_commons:
-#    git:
-#      url: https://github.com/atsign-foundation/at_tools.git
-#      path: at_commons
-#      ref: trunk
-#   at_client:
-#     path: ../at_client
-#    git:
-#      url: https://github.com/atsign-foundation/at_client_sdk.git
-#      path: at_lookup
-#      ref: trunk
-#  at_lookup:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: at_lookup
-#      ref: trunk
- at_utils:
-   git:
-     url: https://github.com/atsign-foundation/at_tools.git
-     path: at_utils
-     ref: deprecate_format_atsign
+  at_utils:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: packages/at_utils
+      ref: deprecate_format_atsign
 
 dev_dependencies:
   lints: ^2.0.0
