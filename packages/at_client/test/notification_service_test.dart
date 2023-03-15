@@ -465,9 +465,10 @@ void main() {
         () async {
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
-
       when(() => mockSecondaryAddressFinder.findSecondary('@colin'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientImpl.notifyStatus(any()))
+          .thenAnswer((_) => Future.value('data:delivered'));
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -479,8 +480,8 @@ void main() {
                 ..sharedWith('@colin'))
               .build());
 
-      var notificationResult = await notificationServiceImpl
-          .notify(notificationParams, waitForFinalDeliveryStatus: false);
+      var notificationResult =
+          await notificationServiceImpl.notify(notificationParams);
       expect(notificationResult.atClientException, isA<AtClientException>());
       expect(notificationResult.atClientException?.message,
           '@bob is not authorized to send notification as @alice');
