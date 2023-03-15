@@ -38,6 +38,12 @@ dependencies:
   meta: ^1.8.0
   at_chops: ^1.0.0
 
+dependency_overrides:
+  at_utils:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: at_utils
+      ref: deprecate_format_atsign
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.21.4
