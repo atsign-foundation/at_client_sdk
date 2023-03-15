@@ -42,7 +42,7 @@ dependency_overrides:
   at_utils:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
-      path: at_utils
+      path: packages/at_utils
       ref: deprecate_format_atsign
 dev_dependencies:
   lints: ^2.0.0
