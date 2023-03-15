@@ -11,11 +11,12 @@ dependencies:
   at_client:
     path: ../../packages/at_client
 
-#  at_chops:
-#    git:
-#      url: https://github.com/atsign-foundation/at_libraries.git
-#      path: packages/at_chops
-#      ref: at_chops
+dependency_overrides:
+  at_utils:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: packages/at_utils
+      ref: deprecate_format_atsign
 #  at_client:
 #    git:
 #      url: https://github.com/atsign-foundation/at_client_sdk.git
