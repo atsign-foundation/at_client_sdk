@@ -16,7 +16,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_tools.git
       path: packages/at_utils
-      ref: deprecate_format_atsign
+      ref: trunk
 #  at_client:
 #    git:
 #      url: https://github.com/atsign-foundation/at_client_sdk.git
