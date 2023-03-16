@@ -594,6 +594,7 @@ class NotificationServiceImpl
       ..value = atNotificationMap['atValue']
       ..operation = atNotificationMap['opType']
       ..messageType = atNotificationMap['messageType']
-      ..expiresAtInEpochMillis = DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
+      ..expiresAtInEpochMillis =
+          DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
   }
 }
