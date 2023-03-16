@@ -1,3 +1,6 @@
+## 3.2.9
+- fix: reverted path dependency to 1.8.2 
+
 ## 3.2.8
 - chore: Upgraded at_client dependency to 3.0.53
 - fix: Uptake at_chops changes
