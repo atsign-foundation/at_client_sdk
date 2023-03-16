@@ -41,8 +41,8 @@ class AtClientPreference {
   /// Idle time in milliseconds of connection to secondary server. Default to 10 minutes.
   int outboundConnectionTimeout = 600000;
 
-  /// Maximum data size a secondary can store. Temporary solution. Have to fetch this from
-  /// server using stats verb.
+  /// The maximum size of the value that a secondary server can store.
+  /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
   int maxDataSize = 10230000;
 
   /// Default path to download stream files
