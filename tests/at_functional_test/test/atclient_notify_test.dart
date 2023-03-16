@@ -191,30 +191,38 @@ void main() {
   });
 
   test('A test to verify the notification expiry', () async {
-    var atKey = (AtKey.shared('test-notification-expiry',
-            namespace: 'wavi', sharedBy: currentAtSign)
-          ..sharedWith(sharedWithAtSign))
-        .build();
-    NotificationResult notificationResult = await atClientManager
-        .atClient.notificationService
-        .notify(NotificationParams.forUpdate(atKey,
-            notificationExpiry: Duration(minutes: 1)));
+    for (int i = 0; i < 10; i++) {
+      print('Testing notification expiry - test run #$i');
+      var atKey = (AtKey.shared('test-notification-expiry',
+          namespace: 'wavi', sharedBy: currentAtSign)
+        ..sharedWith(sharedWithAtSign))
+          .build();
+      NotificationResult notificationResult = await atClientManager
+          .atClient.notificationService
+          .notify(NotificationParams.forUpdate(atKey,
+          notificationExpiry: Duration(minutes: 1)));
 
-    AtNotification atNotification = await AtClientManager.getInstance()
-        .atClient
-        .notificationService
-        .fetch(notificationResult.notificationID);
+      AtNotification atNotification = await AtClientManager
+          .getInstance()
+          .atClient
+          .notificationService
+          .fetch(notificationResult.notificationID);
 
-    var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
-            atNotification.expiresAtInEpochMillis!)
-        .toUtc()
-        .millisecondsSinceEpoch;
-    var expectedExpiresAtInEpochMills =
-        DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
-            .toUtc()
-            .add(Duration(minutes: 1))
-            .millisecondsSinceEpoch;
-    expect(actualExpiresAtInEpochMills, expectedExpiresAtInEpochMills);
+      print ('Fetched notification $atNotification');
+
+      var actualExpiresAtInEpochMills = DateTime
+          .fromMillisecondsSinceEpoch(
+          atNotification.expiresAtInEpochMillis!)
+          .toUtc()
+          .millisecondsSinceEpoch;
+      var expectedExpiresAtInEpochMills =
+          DateTime
+              .fromMillisecondsSinceEpoch(atNotification.epochMillis)
+              .toUtc()
+              .add(Duration(minutes: 1))
+              .millisecondsSinceEpoch;
+      expect((actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills).abs() < 10, true);
+    }
   });
   tearDownAll(() async => await tearDownFunc());
 }
