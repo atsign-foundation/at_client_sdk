@@ -503,6 +503,33 @@ void main() {
               notificationParams, notifyVerbBuilder),
           throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
     });
+
+    test(
+        'A test to verify unauthorized exception is thrown when sharedBy atSign is different from currentAtSign',
+        () async {
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockSecondaryAddressFinder.findSecondary('@colin'))
+          .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
+      when(() => mockAtClientImpl.notifyStatus(any()))
+          .thenAnswer((_) => Future.value('data:delivered'));
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      var notificationParams = NotificationParams.forUpdate(
+          (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
+                ..sharedWith('@colin'))
+              .build());
+
+      var notificationResult =
+          await notificationServiceImpl.notify(notificationParams);
+      expect(notificationResult.atClientException, isA<AtClientException>());
+      expect(notificationResult.atClientException?.message,
+          '@bob is not authorized to send notification as @alice');
+    });
   });
 
   group('A group of tests to validate notification subscribe method', () {

@@ -347,7 +347,8 @@ class NotificationServiceImpl
       await atClientValidation.validateNotificationRequest(
           _atClientManager.secondaryAddressFinder!,
           notificationParams,
-          _atClient.getPreferences()!);
+          _atClient.getPreferences()!,
+          _atClient.getCurrentAtSign()!);
       // Get the EncryptionInstance to encrypt the data.
       var atKeyEncryption = atKeyEncryptionManager.get(
           notificationParams.atKey, _atClient.getCurrentAtSign()!);
