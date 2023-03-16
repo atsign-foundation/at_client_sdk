@@ -284,8 +284,10 @@ void main() {
         ..sharedWith = '@bob';
       expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
       // assert the sync status is added to cache map
-      expect(AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey(atKey.toString()), true);
+      expect(
+          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
+              .containsKey(atKey.toString()),
+          true);
     });
 
     test(
@@ -315,7 +317,8 @@ void main() {
 
       expect(
           AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey(atKey.toString()), false);
+              .containsKey(atKey.toString()),
+          false);
     });
 
     test(
