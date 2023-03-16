@@ -202,6 +202,9 @@ void main() {
           .notify(NotificationParams.forUpdate(atKey,
           notificationExpiry: Duration(days: 7)));
 
+      print ('notificationResult: $notificationResult');
+      print ('notificationResult.atClientException: ${notificationResult.atClientException}');
+
       AtNotification atNotification = await atClientManager
           .atClient
           .notificationService
