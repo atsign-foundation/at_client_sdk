@@ -201,8 +201,7 @@ void main() {
   group('AtClientImpl.ensureLowerCase() functionality checks', () {
     late AtClientManager manager;
     late AtClientImpl client;
-    test(
-        'Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
+    test('Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
         () async {
       AtKey key = AtKey()
         ..key = 'dummy'
@@ -223,17 +222,18 @@ void main() {
 
     test(
         'Test for AtClientImpl.ensureLowerCase() on an AtKey with upper case chars in namespace',
-            () async {
-          AtKey key = AtKey()
-            ..key = 'lowercase'
-            ..namespace = 'cAsEsEnSiTiVe'
-            ..sharedBy = '@sender'
-            ..sharedWith = '@receiver';
+        () async {
+      AtKey key = AtKey()
+        ..key = 'lowercase'
+        ..namespace = 'cAsEsEnSiTiVe'
+        ..sharedBy = '@sender'
+        ..sharedWith = '@receiver';
 
-          //AtClientImpl.ensureLowerCase() has a void return type
-          expect(client.ensureLowerCase(key), null); //errorless execution test
-          expect(key.namespace, 'casesensitive'); //namespace should be converted to lower case
-        });
+      //AtClientImpl.ensureLowerCase() has a void return type
+      expect(client.ensureLowerCase(key), null); //errorless execution test
+      expect(key.namespace,
+          'casesensitive'); //namespace should be converted to lower case
+    });
 
     test(
         'Test AtClientImpl.ensureLowerCase() on an AtKey with upper case chars in key and namespace',
@@ -246,7 +246,8 @@ void main() {
 
       //AtClientImpl.ensureLowerCase() has a void return type
       expect(client.ensureLowerCase(key), null); //errorless execution test
-      expect(key.namespace, 'casesensitive'); //namespace should be converted to lower case
+      expect(key.namespace,
+          'casesensitive'); //namespace should be converted to lower case
       expect(key.key, 'uppercase'); //key should be converted to lower case
     });
   });

@@ -30,7 +30,9 @@ abstract class SyncService {
   ///   print(syncResult.lastSyncedOn);
   /// }
   /// ```
-  void sync({@Deprecated('Use SyncProgressListener') Function? onDone, Function? onError});
+  void sync(
+      {@Deprecated('Use SyncProgressListener') Function? onDone,
+      Function? onError});
 
   /// Call this method to set the Global onDone callback.
   /// This method will be called when a sync is completed.
