@@ -202,8 +202,7 @@ void main() {
           .notify(NotificationParams.forUpdate(atKey,
           notificationExpiry: Duration(days: 7)));
 
-      AtNotification atNotification = await AtClientManager
-          .getInstance()
+      AtNotification atNotification = await atClientManager
           .atClient
           .notificationService
           .fetch(notificationResult.notificationID);
