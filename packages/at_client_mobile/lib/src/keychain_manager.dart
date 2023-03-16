@@ -527,25 +527,16 @@ class KeyChainManager {
   Future<String?> getAtSign() async {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final defaultAtsign = atClientData?.defaultAtsign;
-    if (atClientData?.config?.useSharedStorage == false) {
-      final atsignKeys =
-          (await readAtClientData(useSharedStorage: false))?.keys ?? [];
-      for (var element in atsignKeys) {
-        if (element.atSign == defaultAtsign) {
-          return element.atSign;
-        }
+    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
+    final atsignKeys =
+        (await readAtClientData(useSharedStorage: useSharedStorage))?.keys ??
+            [];
+    for (var element in atsignKeys) {
+      if (element.atSign == defaultAtsign) {
+        return element.atSign;
       }
-      if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
-    } else if (atClientData?.config?.useSharedStorage == true) {
-      final atsignKeys =
-          (await readAtClientData(useSharedStorage: true))?.keys ?? [];
-      for (var element in atsignKeys) {
-        if (element.atSign == defaultAtsign) {
-          return element.atSign;
-        }
-      }
-      if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
     }
+    if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
     return null;
   }
 
