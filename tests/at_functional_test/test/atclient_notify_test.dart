@@ -8,8 +8,8 @@ import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
-  var currentAtSign = '@alice🛠';
-  var sharedWithAtSign = '@bob🛠';
+  final String currentAtSign = '@alice🛠';
+  final String sharedWithAtSign = '@bob🛠';
   late AtClientManager atClientManager;
   String namespace = 'wavi';
   setUpAll(() async {
@@ -197,10 +197,14 @@ void main() {
           namespace: 'wavi', sharedBy: currentAtSign)
         ..sharedWith(sharedWithAtSign))
           .build();
+      print ('atKey: $atKey');
+      atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
+
       NotificationResult notificationResult = await atClientManager
           .atClient.notificationService
           .notify(NotificationParams.forUpdate(atKey,
-          notificationExpiry: Duration(days: 7)));
+          notificationExpiry: Duration(minutes: 1)));
 
       print ('notificationResult: $notificationResult');
       print ('notificationResult.atClientException: ${notificationResult.atClientException}');
