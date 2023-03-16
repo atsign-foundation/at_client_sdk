@@ -7,6 +7,7 @@ import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:biometric_storage/biometric_storage.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -28,6 +29,9 @@ class KeyChainManager {
   factory KeyChainManager.getInstance() {
     return _singleton;
   }
+
+  @visibleForTesting
+  BiometricStorage biometricStorage = BiometricStorage();
 
   Future<AtClientData?> deleteAllData({
     bool useSharedStorage = false,
@@ -523,25 +527,16 @@ class KeyChainManager {
   Future<String?> getAtSign() async {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final defaultAtsign = atClientData?.defaultAtsign;
-    if (atClientData?.config?.useSharedStorage == false) {
-      final atsignKeys =
-          (await readAtClientData(useSharedStorage: false))?.keys ?? [];
-      for (var element in atsignKeys) {
-        if (element.atSign == defaultAtsign) {
-          return element.atSign;
-        }
+    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
+    final atsignKeys =
+        (await readAtClientData(useSharedStorage: useSharedStorage))?.keys ??
+            [];
+    for (var element in atsignKeys) {
+      if (element.atSign == defaultAtsign) {
+        return element.atSign;
       }
-      if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
-    } else if (atClientData?.config?.useSharedStorage == true) {
-      final atsignKeys =
-          (await readAtClientData(useSharedStorage: true))?.keys ?? [];
-      for (var element in atsignKeys) {
-        if (element.atSign == defaultAtsign) {
-          return element.atSign;
-        }
-      }
-      if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
     }
+    if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
     return null;
   }
 
@@ -665,7 +660,8 @@ class KeyChainManager {
     } catch (e, s) {
       _logger.warning('Get PackageInfo', e, s);
     }
-    return BiometricStorage().getStorage(
+
+    final data = await biometricStorage.getStorage(
       useSharedStorage
           ? '$_kDefaultKeystoreAccount:shared'
           : '$_kDefaultKeystoreAccount:$packageName',
@@ -673,6 +669,8 @@ class KeyChainManager {
         authenticationRequired: false,
       ),
     );
+
+    return data;
   }
 
   /// Function to save client data
@@ -744,7 +742,7 @@ class KeyChainManager {
       final packageName = packageInfo.packageName;
       final results = <String>[];
       for (int i = 0; i < segmentCount; i++) {
-        final dataStore = await BiometricStorage().getStorage(
+        final dataStore = await biometricStorage.getStorage(
           useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
           options: StorageFileInitOptions(
             authenticationRequired: false,
