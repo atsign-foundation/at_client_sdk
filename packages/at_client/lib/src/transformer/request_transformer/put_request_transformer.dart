@@ -16,10 +16,12 @@ class PutRequestTransformer
     extends RequestTransformer<Tuple<AtKey, dynamic>, VerbBuilder> {
   late final AtClient _atClient;
 
+  set atClient(AtClient value) {
+    _atClient = value;
+  }
+
   /// the default encoding when the value contains a new line character.
   EncodingType encodingType = EncodingType.base64;
-
-  PutRequestTransformer(this._atClient);
 
   @override
   // ignore: avoid_renaming_method_parameters

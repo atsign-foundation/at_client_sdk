@@ -26,13 +26,6 @@ class MockLocalSecondary extends Mock implements LocalSecondary {
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
-  AtClientPreference mockPreferences = AtClientPreference()..namespace = 'wavi';
-
-  @override
-  AtClientPreference getPreferences() {
-    return mockPreferences;
-  }
-
   @override
   String? getCurrentAtSign() {
     return '@alice';
@@ -373,6 +366,8 @@ void main() {
     late SharedKeyEncryption mockSharedKeyEncryption;
     setUp(() {
       mockSharedKeyEncryption = MockSharedKeyEncryption();
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()..namespace = 'wavi');
     });
     test('A test to validate exception chaining on encryption failure',
         () async {
@@ -458,6 +453,55 @@ void main() {
           'Failed to notifyData caused by\nInvalid syntax exception');
       expect(notificationResult.notificationStatusEnum,
           NotificationStatusEnum.undelivered);
+    });
+
+    test('A test to verify buffer over flow exception for messageType key',
+        () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()..maxDataSize = 1);
+
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
+            ..sharedWith('@alice'))
+          .build();
+      var value = '+91-9856745453';
+
+      NotificationParams notificationParams =
+          NotificationParams.forUpdate(atKey, value: value);
+      NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
+        ..atKey = atKey.toString()
+        ..messageType = MessageTypeEnum.key
+        ..value = 'demo-value';
+
+      expect(
+          () => notificationServiceImpl.notificationValueValidation(
+              notificationParams, notifyVerbBuilder),
+          throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
+    });
+
+    test('A test to verify buffer over flow exception for messageType text',
+        () async {
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()..maxDataSize = 1);
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
+      NotificationParams notificationParams =
+          NotificationParams.forText('Hello bob', '@bob');
+      NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
+        ..atKey = '@bob:Hello bob';
+
+      expect(
+          () => notificationServiceImpl.notificationValueValidation(
+              notificationParams, notifyVerbBuilder),
+          throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
     });
 
     test(
@@ -661,20 +705,22 @@ void main() {
     test(
         'getLastNotificationTime() returns null if checkOfflineNotifications is set to false',
         () async {
-      var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = false);
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
           .keyStore!
           .isKeyExists(any())).thenAnswer((_) => true);
 
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager,
+          monitor: mockMonitor) as NotificationServiceImpl;
+
       notificationServiceImpl.stopAllSubscriptions();
-
-      mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = false;
-
       expect(await notificationServiceImpl.getLastNotificationTime(), null);
     });
 
@@ -682,19 +728,23 @@ void main() {
         'getLastNotificationTime() returns null if checkOfflineNotifications is true but there is no stored value',
         () async {
       registerFallbackValue(FakeAtKey());
+
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((_) => true);
+
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
           monitor: mockMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.stopAllSubscriptions();
-
-      mockAtClientImpl.getPreferences()!.fetchOfflineNotifications = true;
-
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
 
       when(() => mockAtClientImpl.get(any()))
           .thenAnswer((_) async => Future.value(AtValue()));
@@ -712,6 +762,12 @@ void main() {
         'getLastNotificationTime() returns the stored value from old key if checkOfflineNotifications is true and there is a stored value',
         () async {
       registerFallbackValue(FakeAtKey());
+
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
       var atNotification = at_notification.AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);

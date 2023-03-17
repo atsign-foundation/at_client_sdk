@@ -63,6 +63,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   AtClientConfig? _atClientConfig;
   static final upperCaseRegex = RegExp(r'[A-Z]');
 
+  PutRequestTransformer putRequestTransformer = PutRequestTransformer();
+
   AtClientCommitLogCompaction? get atClientCommitLogCompaction =>
       _atClientCommitLogCompaction;
 
@@ -201,9 +203,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
-
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.localSecondary = _localSecondary;
+
+    putRequestTransformer.atClient = this;
 
     _cascadeSetTelemetryService();
   }
@@ -517,8 +520,15 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
-    UpdateVerbBuilder verbBuilder = await PutRequestTransformer(this)
-        .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
+    UpdateVerbBuilder verbBuilder = await putRequestTransformer.transform(tuple,
+        encryptionPrivateKey: encryptionPrivateKey);
+    // Validate the size of the value after encryption/encoding
+    // Since AtClientPreference is mandatory argument in create method, _preference
+    // will not be null.
+    if (verbBuilder.value.length > _preference!.maxDataSize) {
+      throw BufferOverFlowException(
+          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
+    }
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(this, verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
