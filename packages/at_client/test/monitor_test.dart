@@ -107,7 +107,8 @@ void main() {
   });
 
   group('Monitor socket response handling', () {
-    test('Multiple response lines in single call to socket messageHandler', () async {
+    test('Multiple response lines in single call to socket messageHandler',
+        () async {
       List<String> fromServerList = [
         'notification:{"id":"1"}\ndata:ok\nnotification:{"id":',
         '"2"}\nnotification:{"id:"3"}\ndata:',
@@ -116,19 +117,19 @@ void main() {
       ];
       String allFromMonitor = '';
       Monitor monitor = Monitor(
-              (String received) => allFromMonitor += '$received\n',
-              (e) => print('onError: $e'),
+          (String received) => allFromMonitor += '$received\n',
+          (e) => print('onError: $e'),
           atSign,
           atClientPreference,
           monitorPreference,
-              () => print('onRetry called'),
+          () => print('onRetry called'),
           monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-          mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory);
 
       Future<void> monitorStartFuture =
-      monitor.start(lastNotificationTime: null);
+          monitor.start(lastNotificationTime: null);
       await monitorStartFuture;
       expect(monitor.status, MonitorStatus.started);
 

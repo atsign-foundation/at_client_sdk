@@ -74,7 +74,8 @@ class NotificationResponseTransformer
   Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
     atKeyDecryption ??=
         AtKeyDecryptionManager(_atClient).get(atKey, atKey.sharedWith!);
-    var decryptedValue = await atKeyDecryption?.decrypt(atKey, encryptedValue?.trim());
+    var decryptedValue =
+        await atKeyDecryption?.decrypt(atKey, encryptedValue?.trim());
     // Return decrypted value
     return decryptedValue.toString().trim();
   }
