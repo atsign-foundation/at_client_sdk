@@ -61,6 +61,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
+  static final upperCaseRegex = RegExp(r'[A-Z]');
+
+  PutRequestTransformer putRequestTransformer = PutRequestTransformer();
 
   AtClientCommitLogCompaction? get atClientCommitLogCompaction =>
       _atClientCommitLogCompaction;
@@ -200,9 +203,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
-
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.localSecondary = _localSecondary;
+
+    putRequestTransformer.atClient = this;
 
     _cascadeSetTelemetryService();
   }
@@ -462,6 +466,17 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
   }
 
+  @visibleForTesting
+  ensureLowerCase(AtKey atKey) {
+    if ((atKey.key != null && upperCaseRegex.hasMatch(atKey.key!)) ||
+        (atKey.namespace != null &&
+            upperCaseRegex.hasMatch(atKey.namespace!))) {
+      _logger.info('AtKey: ${atKey.toString()} contains upper case characters,'
+          ' AtKey has been converted to lower case');
+      //AtKey.toString() in the above log will convert the entire key to lower case
+    }
+  }
+
   Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
@@ -472,6 +487,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (atKey.metadata!.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
     }
+
+    ensureLowerCase(atKey);
+
     // validate the atKey
     // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
     // * Setting enforceNamespace to true unless specifically set to false in the AtClientPreference
@@ -502,8 +520,15 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
-    UpdateVerbBuilder verbBuilder = await PutRequestTransformer(this)
-        .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
+    UpdateVerbBuilder verbBuilder = await putRequestTransformer.transform(tuple,
+        encryptionPrivateKey: encryptionPrivateKey);
+    // Validate the size of the value after encryption/encoding
+    // Since AtClientPreference is mandatory argument in create method, _preference
+    // will not be null.
+    if (verbBuilder.value.length > _preference!.maxDataSize) {
+      throw BufferOverFlowException(
+          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
+    }
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(this, verbBuilder)
         .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));

@@ -30,11 +30,14 @@ abstract class SyncService {
   ///   print(syncResult.lastSyncedOn);
   /// }
   /// ```
-  void sync({Function? onDone, Function? onError});
+  void sync(
+      {@Deprecated('Use SyncProgressListener') Function? onDone,
+      Function? onError});
 
   /// Call this method to set the Global onDone callback.
   /// This method will be called when a sync is completed.
   /// When a specific onDone function is passed to the sync Function, Then the specific onDone is called.
+  @Deprecated('Use SyncProgressListener')
   void setOnDone(Function onDone);
 
   /// Returns true if local and cloud secondary are in sync. false otherwise

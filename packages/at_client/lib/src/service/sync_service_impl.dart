@@ -22,10 +22,10 @@ import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
-  static const _syncRequestThreshold = 3,
-      _syncRequestTriggerInSeconds = 3,
-      _syncRunIntervalSeconds = 5,
-      _queueSize = 5;
+  static int syncRequestThreshold = 3,
+      syncRequestTriggerInSeconds = 3,
+      syncRunIntervalSeconds = 5,
+      queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
@@ -41,7 +41,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
-  final _syncRequests = ListQueue<SyncRequest>(_queueSize);
+  final _syncRequests = ListQueue<SyncRequest>(queueSize);
   bool _syncInProgress = false;
 
   @override
@@ -89,7 +89,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
 
-    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
+    _cron.schedule(Schedule.parse('*/$syncRunIntervalSeconds * * * * *'),
         () async {
       try {
         await processSyncRequests();
@@ -114,7 +114,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @override
-  void sync({Function? onDone, Function? onError}) {
+  void sync(
+      {@Deprecated('Use SyncProgressListener') Function? onDone,
+      Function? onError}) {
     final syncRequest = SyncRequest();
     syncRequest.onDone = onDone;
     syncRequest.onError = onError;
@@ -179,13 +181,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
       if (_syncRequests.isEmpty ||
-          (_syncRequests.length < _syncRequestThreshold &&
+          (_syncRequests.length < syncRequestThreshold &&
               (_syncRequests.isNotEmpty &&
                   DateTime.now()
                           .toUtc()
                           .difference(_syncRequests.elementAt(0).requestedOn)
                           .inSeconds <
-                      _syncRequestTriggerInSeconds))) {
+                      syncRequestTriggerInSeconds))) {
         _logger.finest('skipping sync - queue length ${_syncRequests.length}');
         return;
       }
@@ -306,9 +308,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// of the fix for https://github.com/atsign-foundation/at_client_sdk/issues/770
   @visibleForTesting
   bool hasHadNoSyncRequests = true;
+
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
     hasHadNoSyncRequests = false;
-    if (_syncRequests.length == _queueSize) {
+    if (_syncRequests.length == queueSize) {
       _syncRequests.removeLast();
     }
     _syncRequests.addLast(syncRequest);
@@ -385,8 +388,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
             await syncUtil.updateCommitEntry(
                 commitEntry, commitId, _atClient.getCurrentAtSign()!);
-            keyInfoList
-                .add(KeyInfo(commitEntry.atKey, SyncDirection.localToRemote));
+            keyInfoList.add(KeyInfo(commitEntry.atKey,
+                SyncDirection.localToRemote, commitEntry.operation));
           } on Exception catch (e) {
             var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
             _logger.severe(
@@ -455,8 +458,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           lastReceivedServerCommitId = int.parse(serverCommitEntry['commitId']);
         }
         try {
-          final keyInfo =
-              KeyInfo(serverCommitEntry['atKey'], SyncDirection.remoteToLocal);
+          final keyInfo = KeyInfo(
+              serverCommitEntry['atKey'],
+              SyncDirection.remoteToLocal,
+              convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
           ConflictInfo? conflictInfo =
               await _checkConflict(serverCommitEntry, uncommittedEntries);
           keyInfo.conflictInfo = conflictInfo;
@@ -565,8 +570,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var batchId = 1;
     for (var entry in uncommittedEntries) {
       String command;
-      //Skipping the cached keys to sync to cloud secondary.
-      if (entry.atKey!.startsWith('cached:')) {
+      // If someone updates cached keys locally, they should never be synced to the cloud
+      // However if they want to delete a cached key, they should be allowed to
+      if (entry.atKey!.startsWith('cached:') &&
+          entry.operation != CommitOp.DELETE) {
         _logger.finer(
             '${entry.atKey} is skipped. cached keys will not be synced to cloud secondary');
         continue;
@@ -772,7 +779,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
-        var builder = DeleteVerbBuilder()..atKey = serverCommitEntry['atKey'];
+        var builder = DeleteVerbBuilder()
+          ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
         _logger.finest(
             'syncing to local delete: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
@@ -902,12 +910,13 @@ class KeyInfo {
   String key;
   SyncDirection syncDirection;
   ConflictInfo? conflictInfo;
+  late CommitOp commitOp;
 
-  KeyInfo(this.key, this.syncDirection);
+  KeyInfo(this.key, this.syncDirection, this.commitOp);
 
   @override
   String toString() {
-    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo}';
+    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo, commitOp: $commitOp}';
   }
 }
 
