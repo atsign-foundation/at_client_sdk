@@ -155,7 +155,6 @@ void main() {
     test(
         'A test to verify encrypted shared key is fetched from local secondary and decrypted successfully',
         () async {
-
       registerFallbackValue(FakeLocalLookUpVerbBuilder());
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
 
