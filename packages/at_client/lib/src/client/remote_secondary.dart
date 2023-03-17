@@ -87,7 +87,7 @@ class RemoteSecondary implements Secondary {
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
     if (atCommand.length > _preference.maxDataSize) {
       throw BufferOverFlowException(
-          'The length of value exceeds the buffer size. Maximum buffer size is ${_preference.maxDataSize} bytes. Found ${atCommand.length} bytes');
+          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference.maxDataSize} bytes. Found ${atCommand.length} bytes');
     }
     try {
       String? verbResult;

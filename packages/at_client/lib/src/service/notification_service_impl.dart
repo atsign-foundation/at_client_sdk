@@ -406,7 +406,7 @@ class NotificationServiceImpl
         if (builder.value != null &&
             builder.value.length > _atClient.getPreferences()!.maxDataSize) {
           throw BufferOverFlowException(
-              'The length of value exceeds the buffer size. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
+              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
         }
         break;
 
@@ -415,7 +415,7 @@ class NotificationServiceImpl
         // the key length
         if (builder.atKey!.length > _atClient.getPreferences()!.maxDataSize) {
           throw BufferOverFlowException(
-              'The length of value exceeds the buffer size. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
+              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
         }
         break;
     }

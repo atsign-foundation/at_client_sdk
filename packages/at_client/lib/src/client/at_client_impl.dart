@@ -527,7 +527,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     // will not be null.
     if (verbBuilder.value.length > _preference!.maxDataSize) {
       throw BufferOverFlowException(
-          'The length of value exceeds the buffer size. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
+          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
     }
     // Execute the verb builder
     var putResponse = await SecondaryManager.getSecondary(this, verbBuilder)
