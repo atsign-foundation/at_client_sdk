@@ -20,6 +20,12 @@ void main() {
     // To setup encryption keys
     await setEncryptionKeys(currentAtSign, preference);
   });
+  // Invoking 'setCurrentAtSign' in setUp method to set currentAtSign before each test.
+  setUp(() async {
+    print('Setting current atSign to $currentAtSign');
+    atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
+  });
   test('notify updating of a key to sharedWith atSign - using await', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()
@@ -194,40 +200,41 @@ void main() {
     for (int i = 0; i < 10; i++) {
       print('Testing notification expiry - test run #$i');
       var atKey = (AtKey.shared('test-notification-expiry',
-          namespace: 'wavi', sharedBy: currentAtSign)
-        ..sharedWith(sharedWithAtSign))
+              namespace: 'wavi', sharedBy: currentAtSign)
+            ..sharedWith(sharedWithAtSign))
           .build();
-      print ('atKey: $atKey');
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
+      print('atKey: $atKey');
+      atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
 
       NotificationResult notificationResult = await atClientManager
           .atClient.notificationService
           .notify(NotificationParams.forUpdate(atKey,
-          notificationExpiry: Duration(minutes: 1)));
+              notificationExpiry: Duration(minutes: 1)));
 
-      print ('notificationResult: $notificationResult');
-      print ('notificationResult.atClientException: ${notificationResult.atClientException}');
+      print('notificationResult: $notificationResult');
+      print(
+          'notificationResult.atClientException: ${notificationResult.atClientException}');
 
       AtNotification atNotification = await atClientManager
-          .atClient
-          .notificationService
+          .atClient.notificationService
           .fetch(notificationResult.notificationID);
 
-      print ('Fetched notification $atNotification');
+      print('Fetched notification $atNotification');
 
-      var actualExpiresAtInEpochMills = DateTime
-          .fromMillisecondsSinceEpoch(
-          atNotification.expiresAtInEpochMillis!)
+      var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
+              atNotification.expiresAtInEpochMillis!)
           .toUtc()
           .millisecondsSinceEpoch;
       var expectedExpiresAtInEpochMills =
-          DateTime
-              .fromMillisecondsSinceEpoch(atNotification.epochMillis)
+          DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
               .toUtc()
               .add(Duration(minutes: 1))
               .millisecondsSinceEpoch;
-      expect((actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills).abs() < 10, true);
+      expect(
+          (actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills).abs() <
+              10,
+          true);
     }
   });
   tearDownAll(() async => await tearDownFunc());
