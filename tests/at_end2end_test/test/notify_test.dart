@@ -131,6 +131,43 @@ void main() async {
       expect(notificationResult.id, 'abc-123');
       expect(notificationResult.status, 'NotificationStatus.expired');
     });
+
+    test('A test to verify the notification expiry', () async {
+      for (int i = 0; i < 10; i++) {
+        print('Testing notification expiry - test run #$i');
+        await AtClientManager.getInstance().setCurrentAtSign(
+            currentAtSign, namespace, TestPreferences.getInstance().getPreference(currentAtSign));
+        var atKey = (AtKey.shared('test-notification-expiry',
+            namespace: 'wavi', sharedBy: currentAtSign)
+          ..sharedWith(sharedWithAtSign))
+            .build();
+        NotificationResult notificationResult = await AtClientManager
+            .getInstance()
+            .atClient
+            .notificationService
+            .notify(NotificationParams.forUpdate(atKey,
+            notificationExpiry: Duration(minutes: 1)));
+
+        AtNotification atNotification = await AtClientManager
+            .getInstance()
+            .atClient
+            .notificationService
+            .fetch(notificationResult.notificationID);
+
+        var actualExpiresAtInEpochMills = DateTime
+            .fromMillisecondsSinceEpoch(
+            atNotification.expiresAtInEpochMillis!)
+            .toUtc()
+            .millisecondsSinceEpoch;
+        var expectedExpiresAtInEpochMills =
+            DateTime
+                .fromMillisecondsSinceEpoch(atNotification.epochMillis)
+                .toUtc()
+                .add(Duration(minutes: 1))
+                .millisecondsSinceEpoch;
+        expect((actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills).abs() < 10, true);
+      }
+    });
   });
 
   tearDownAll(() async {

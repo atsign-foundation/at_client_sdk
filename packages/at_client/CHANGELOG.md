@@ -1,4 +1,5 @@
 ## 3.0.57
+- fix: Expose priority, strategy, notifier, latestN and notificationExpiry in NotificationParams
 - fix: Incorrect atKey.toString() in notification_response_transformation.dart
 ## 3.0.56
 - fix: AtClient.put() throws null-check error when key's namespace is null
