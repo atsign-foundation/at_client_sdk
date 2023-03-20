@@ -10,7 +10,9 @@ import 'package:version/version.dart';
 import 'test_utils/no_op_services.dart';
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-class MockSecondaryAddressFinder extends Mock implements SecondaryAddressFinder {}
+
+class MockSecondaryAddressFinder extends Mock
+    implements SecondaryAddressFinder {}
 
 void main() {
   group('Test with full client stack except mockRemoteSecondary', () {
@@ -29,37 +31,43 @@ void main() {
     RSAKeypair bobsRSAKeyPair = RSAKeypair.fromRandom();
 
     AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        alicesRSAKeyPair.publicKey.toString(), alicesRSAKeyPair.privateKey.toString());
+        alicesRSAKeyPair.publicKey.toString(),
+        alicesRSAKeyPair.privateKey.toString());
 
     var selfEncryptionKey = EncryptionUtil.generateAESKey();
 
     var bobSharedKey = EncryptionUtil.generateAESKey();
-    var myEncryptedBobSharedKey = EncryptionUtil.encryptKey(bobSharedKey, alicesRSAKeyPair.publicKey.toString());
+    var myEncryptedBobSharedKey = EncryptionUtil.encryptKey(
+        bobSharedKey, alicesRSAKeyPair.publicKey.toString());
     var llookupMySharedKeyForBob = LLookupVerbBuilder()
-      ..atKey =
-          '$AT_ENCRYPTION_SHARED_KEY.bob'
+      ..atKey = '$AT_ENCRYPTION_SHARED_KEY.bob'
       ..sharedBy = '@alice';
 
     registerFallbackValue(llookupMySharedKeyForBob);
 
     setUpAll(() async {
       MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-      MockSecondaryAddressFinder mockSecondaryAddressFinder = MockSecondaryAddressFinder();
-      AtClientManager.getInstance().secondaryAddressFinder = mockSecondaryAddressFinder;
+      MockSecondaryAddressFinder mockSecondaryAddressFinder =
+          MockSecondaryAddressFinder();
+      AtClientManager.getInstance().secondaryAddressFinder =
+          mockSecondaryAddressFinder;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
-      .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
-      AtChops atChops = AtChopsImpl(AtChopsKeys.create(atEncryptionKeyPair, null));
-      atClient = await AtClientImpl.create(
-          '@alice', 'gary', fullStackPrefs,
-          remoteSecondary: mockRemoteSecondary,
-          atChops: atChops);
+          .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
+      AtChops atChops =
+          AtChopsImpl(AtChopsKeys.create(atEncryptionKeyPair, null));
+      atClient = await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
+          remoteSecondary: mockRemoteSecondary, atChops: atChops);
       atClient.syncService = NoOpSyncService();
 
       // Create our symmetric 'self' encryption key
-      await atClient.getLocalSecondary()!.putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
+      await atClient
+          .getLocalSecondary()!
+          .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
 
       // Create our symmetric encryption key for sharing with @bob
-      await atClient.getLocalSecondary()!.putValue('shared_key.bob@alice', myEncryptedBobSharedKey);
+      await atClient
+          .getLocalSecondary()!
+          .putValue('shared_key.bob@alice', myEncryptedBobSharedKey);
 
       when(() => mockRemoteSecondary.executeVerb(
           any(that: isA<LLookupVerbBuilder>()))).thenAnswer((invocation) async {
@@ -74,7 +82,8 @@ void main() {
         return bobsRSAKeyPair.publicKey.toString();
       });
       when(() => mockRemoteSecondary.executeVerb(
-          any(that: isA<UpdateVerbBuilder>()), sync: true)).thenAnswer((invocation) async {
+          any(that: isA<UpdateVerbBuilder>()),
+          sync: true)).thenAnswer((invocation) async {
         var builder = invocation.positionalArguments[0];
         print('UpdateVerbBuilder : ${builder.buildCommand()}');
         return 'data:10';
@@ -88,9 +97,11 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata?.ivNonce, isNull);
 
-      var atData = await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
+      var atData =
+          await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
       var cipherText = atData.data;
-      expect(EncryptionUtil.decryptValue(cipherText, selfEncryptionKey), clearText);
+      expect(EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
+          clearText);
 
       var getResult = await atClient.get(atKey);
       expect(getResult.value, clearText);
@@ -103,10 +114,15 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata?.ivNonce, isNotNull);
 
-      var atData = await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
+      var atData =
+          await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
       var cipherText = atData.data;
-      expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey), throwsException);
-      expect(EncryptionUtil.decryptValue(cipherText, selfEncryptionKey, ivBase64:atKey.metadata?.ivNonce), clearText);
+      expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
+          throwsException);
+      expect(
+          EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
+              ivBase64: atKey.metadata?.ivNonce),
+          clearText);
 
       var getResult = await atClient.get(atKey);
       expect(getResult.value, clearText);
@@ -119,7 +135,8 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata?.ivNonce, isNull);
 
-      var atData = await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
+      var atData =
+          await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
       var cipherText = atData.data;
       expect(EncryptionUtil.decryptValue(cipherText, bobSharedKey), clearText);
 
@@ -134,12 +151,21 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata?.ivNonce, isNotNull);
 
-      var atData = await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
+      var atData =
+          await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
       var cipherText = atData.data;
-      expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey), throwsException);
-      expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey, ivBase64: atKey.metadata?.ivNonce), throwsException);
-      expect(() => EncryptionUtil.decryptValue(cipherText, bobSharedKey), throwsException);
-      expect(EncryptionUtil.decryptValue(cipherText, bobSharedKey, ivBase64:atKey.metadata?.ivNonce), clearText);
+      expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
+          throwsException);
+      expect(
+          () => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
+              ivBase64: atKey.metadata?.ivNonce),
+          throwsException);
+      expect(() => EncryptionUtil.decryptValue(cipherText, bobSharedKey),
+          throwsException);
+      expect(
+          EncryptionUtil.decryptValue(cipherText, bobSharedKey,
+              ivBase64: atKey.metadata?.ivNonce),
+          clearText);
 
       var getResult = await atClient.get(atKey);
       expect(getResult.value, clearText);

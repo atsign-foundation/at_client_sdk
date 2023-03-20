@@ -4,9 +4,13 @@ import 'package:at_client/src/service/sync_service.dart';
 
 class ServiceFactoryWithNoOpServices extends DefaultAtServiceFactory {
   @override
-  Future<SyncService> syncService(AtClient atClient, AtClientManager atClientManager, NotificationService notificationService) async {
+  Future<SyncService> syncService(
+      AtClient atClient,
+      AtClientManager atClientManager,
+      NotificationService notificationService) async {
     return NoOpSyncService();
   }
+
   @override
   Future<NotificationService> notificationService(
       AtClient atClient, AtClientManager atClientManager) async {
@@ -28,7 +32,12 @@ class NoOpNotificationService implements NotificationService {
   }
 
   @override
-  Future<NotificationResult> notify(NotificationParams notificationParams, {bool waitForFinalDeliveryStatus = true, bool checkForFinalDeliveryStatus = true, Function(NotificationResult p1)? onSuccess, Function(NotificationResult p1)? onError, Function(NotificationResult p1)? onSentToSecondary}) {
+  Future<NotificationResult> notify(NotificationParams notificationParams,
+      {bool waitForFinalDeliveryStatus = true,
+      bool checkForFinalDeliveryStatus = true,
+      Function(NotificationResult p1)? onSuccess,
+      Function(NotificationResult p1)? onError,
+      Function(NotificationResult p1)? onSentToSecondary}) {
     // TODO: implement notify
     throw UnimplementedError();
   }
@@ -43,7 +52,6 @@ class NoOpNotificationService implements NotificationService {
     // TODO: implement subscribe
     throw UnimplementedError();
   }
-
 }
 
 class NoOpSyncService implements SyncService {
@@ -67,5 +75,4 @@ class NoOpSyncService implements SyncService {
 
   @override
   void sync({Function? onDone, Function? onError}) {}
-
 }

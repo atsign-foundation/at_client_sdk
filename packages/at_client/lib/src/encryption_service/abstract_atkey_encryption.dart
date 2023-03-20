@@ -133,7 +133,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       String? encryptionPrivateKey;
       try {
         encryptionPrivateKey =
-        await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
+            await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
       } on KeyNotFoundException catch (e) {
         e.stack(AtChainedException(
             Intent.fetchEncryptionPrivateKey,
