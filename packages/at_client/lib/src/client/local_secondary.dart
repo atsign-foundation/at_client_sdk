@@ -80,7 +80,7 @@ class LocalSecondary implements Secondary {
             ..sharedKeyEnc = builder.sharedKeyEncrypted
             ..pubKeyCS = builder.pubKeyChecksum
             ..encoding = builder.encoding;
-          var atMetadata = AtMetadataAdapter(metadata);
+          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
@@ -98,7 +98,7 @@ class LocalSecondary implements Secondary {
             ..sharedKeyEnc = builder.sharedKeyEncrypted
             ..pubKeyCS = builder.pubKeyChecksum
             ..encoding = builder.encoding;
-          var atMetadata = AtMetadataAdapter(metadata);
+          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
