@@ -3,25 +3,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_base2e15/at_base2e15.dart';
-import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
-import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -31,13 +25,10 @@ import 'package:at_client/src/transformer/request_transformer/get_request_transf
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
-import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_client/src/util/sync_util.dart';
-import 'package:at_client/src/client/request_options.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
@@ -45,6 +36,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
+import 'package:version/version.dart';
 
 /// Implementation of [AtClient] interface and [AtSignChangeListener] interface
 ///
@@ -136,7 +128,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) async {
     atClientManager ??= AtClientManager.getInstance();
-    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
+    currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
     // Fetch cached AtClientImpl for re-use, or create a new one and init it
     AtClientImpl? atClientImpl;
@@ -170,7 +162,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) {
-    _atSign = AtUtils.formatAtSign(theAtSign)!;
+    _atSign = AtUtils.fixAtSign(theAtSign);
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
@@ -488,6 +480,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
 
+    if (preference!.atProtocolEmitted >= Version(2, 0, 0)) {
+      atKey.metadata!.ivNonce ??= EncryptionUtil.generateIV();
+    }
     ensureLowerCase(atKey);
 
     // validate the atKey
@@ -540,6 +535,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  @Deprecated("Use NotificationService")
   Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
       {MessageTypeEnum? messageType,
       PriorityEnum? priority,
@@ -560,6 +556,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  @Deprecated('Use NotificationService')
   Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation,
       {bool isDedicated = false}) async {
     var returnMap = {};
@@ -877,7 +874,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(
             File(encryptedFile.path),
             fileTransferObject.fileEncryptionKey,
-            _preference!.fileEncryptionChunkSize);
+            _preference!.fileEncryptionChunkSize,
+            ivBase64: fileTransferObject.ivBase64);
         decryptedFile.copySync(downloadPath +
             Platform.pathSeparator +
             encryptedFile.path.split(Platform.pathSeparator).last);
@@ -904,104 +902,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  @Deprecated("Use [NotificationService.notify]")
   Future<String?> notifyChange(NotificationParams notificationParams) async {
-    String? notifyKey = notificationParams.atKey.key;
-
-    // validate sharedWith atSign
-    AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
-    // Check if sharedWith AtSign exists
-    await AtClientValidation().isAtSignExists(
-        _atClientManager.secondaryAddressFinder!,
-        notificationParams.atKey.sharedWith!);
-    // validate sharedBy atSign
-    if (notificationParams.atKey.sharedBy == null ||
-        notificationParams.atKey.sharedBy!.isEmpty) {
-      notificationParams.atKey.sharedBy = getCurrentAtSign();
+    NotificationResult result = await notificationService.notify(notificationParams);
+    if (result.atClientException != null) {
+      throw result.atClientException!;
     }
-    AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
-    // validate atKey
-    // For messageType is text, text may contains spaces but key should not have spaces
-    // Hence do not validate the key.
-    if (notificationParams.messageType != MessageTypeEnum.text) {
-      AtClientValidation.validateKey(notificationParams.atKey.key);
-      ValidationResult validationResult = AtKeyValidators.get().validate(
-          notificationParams.atKey.toString(),
-          ValidationContext()
-            ..atSign = _atSign
-            ..validateOwnership = true);
-      if (!validationResult.isValid) {
-        throw AtClientException('AT0014', validationResult.failureReason);
-      }
-    }
-    // validate metadata
-    AtClientValidation.validateMetadata(notificationParams.atKey.metadata);
-    // If namespaceAware is set to true, append nameSpace to key.
-    if (notificationParams.atKey.metadata != null &&
-        notificationParams.atKey.metadata!.namespaceAware) {
-      notifyKey = _getKeyWithNamespace(notifyKey!);
-    }
-    notificationParams.atKey.sharedBy ??= _atSign;
-
-    var builder = NotifyVerbBuilder()
-      ..id = notificationParams.id
-      ..atKey = notifyKey
-      ..sharedBy = notificationParams.atKey.sharedBy
-      ..sharedWith = notificationParams.atKey.sharedWith
-      ..operation = notificationParams.operation
-      ..messageType = notificationParams.messageType
-      ..priority = notificationParams.priority
-      ..strategy = notificationParams.strategy
-      ..latestN = notificationParams.latestN
-      ..notifier = notificationParams.notifier;
-    // if no metadata is set by the app, init empty metadata
-    notificationParams.atKey.metadata ??= Metadata();
-    // If value is not null, encrypt the value
-    if (notificationParams.value != null &&
-        notificationParams.value!.isNotEmpty) {
-      // If atKey is being notified to another atSign, encrypt data with other
-      // atSign encryption public key.
-      if (notificationParams.atKey.sharedWith != null &&
-          notificationParams.atKey.sharedWith != _atSign) {
-        try {
-          final atKeyEncryption = AtKeyEncryptionManager(this)
-              .get(notificationParams.atKey, _atSign);
-          builder.value = await atKeyEncryption.encrypt(
-              notificationParams.atKey, notificationParams.value!);
-        } on KeyNotFoundException catch (e) {
-          return Future.error(
-              AtClientException(error_codes['AtClientException'], e.message));
-        }
-      }
-      // If sharedWith is currentAtSign, encrypt data with currentAtSign encryption public key.
-      if (notificationParams.atKey.sharedWith == null ||
-          notificationParams.atKey.sharedWith == _atSign) {
-        try {
-          final atKeyEncryption = AtKeyEncryptionManager(this)
-              .get(notificationParams.atKey, _atSign);
-          builder.value = await atKeyEncryption.encrypt(
-              notificationParams.atKey, notificationParams.value!);
-        } on KeyNotFoundException catch (e) {
-          return Future.error(
-              AtClientException(error_codes['AtClientException'], e.message));
-        }
-      }
-    }
-    // If metadata is not null, add metadata to notify builder object.
-    if (notificationParams.atKey.metadata != null) {
-      builder.ttl = notificationParams.atKey.metadata!.ttl;
-      builder.ttb = notificationParams.atKey.metadata!.ttb;
-      builder.ttr = notificationParams.atKey.metadata!.ttr;
-      builder.ccd = notificationParams.atKey.metadata!.ccd;
-      builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
-      builder.sharedKeyEncrypted =
-          notificationParams.atKey.metadata!.sharedKeyEnc;
-      builder.pubKeyChecksum = notificationParams.atKey.metadata!.pubKeyCS;
-    }
-    if (notifyKey!.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        notifyKey.startsWith(AT_PKAM_PUBLIC_KEY)) {
-      builder.sharedBy = null;
-    }
-    return await getRemoteSecondary()?.executeVerb(builder);
+    return result.notificationID;
   }
 
   @override

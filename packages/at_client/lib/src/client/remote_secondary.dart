@@ -28,7 +28,7 @@ class RemoteSecondary implements Secondary {
 
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey, this.atChops}) {
-    _atSign = AtUtils.formatAtSign(atSign)!;
+    _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     privateKey ??= preference.privateKey;

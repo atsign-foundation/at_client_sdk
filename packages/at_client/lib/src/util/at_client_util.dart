@@ -54,7 +54,7 @@ class AtClientUtil {
   }
 
   static Metadata? prepareMetadata(
-      Map<String, dynamic>? metadataMap, bool? isPublic) {
+      Map<String, dynamic>? metadataMap, bool isPublic) {
     if (metadataMap == null) {
       return null;
     }
@@ -89,9 +89,13 @@ class AtClientUtil {
     metadata.sharedKeyEnc = metadataMap[SHARED_KEY_ENCRYPTED];
     metadata.pubKeyCS = metadataMap[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
     metadata.encoding = metadataMap[ENCODING];
-    if (isPublic!) {
-      metadata.isPublic = isPublic;
-    }
+    metadata.encKeyName = metadataMap[ENCRYPTING_KEY_NAME];
+    metadata.encAlgo = metadataMap[ENCRYPTING_ALGO];
+    metadata.ivNonce = metadataMap[IV_OR_NONCE];
+    metadata.skeEncKeyName = metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+    metadata.skeEncAlgo = metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
+    metadata.isPublic = isPublic;
+
     return metadata;
   }
 

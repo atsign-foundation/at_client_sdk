@@ -20,7 +20,7 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockAtClient extends Mock implements AtClient {
   @override
-  AtClientPreference? getPreferences() {
+  AtClientPreference getPreferences() {
     return AtClientPreference()..namespace = 'wavi';
   }
 }
@@ -62,7 +62,7 @@ void main() {
 
   group('A group of tests related positive scenario of encryption', () {
     test(
-        'A test to verify value gets encrypted when self encryption key is available',
+        'A test to verify value gets legacy encrypted when self encryption key is available',
         () async {
       var selfEncryptionKey = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
       var value = 'self_key_value';
@@ -73,6 +73,25 @@ void main() {
           AtKey.self('phone', namespace: 'wavi').build(), value);
       var response =
           EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
+      expect(response, value);
+    });
+
+    test(
+        'A test to verify value gets encrypted when self encryption key is available',
+        () async {
+      var selfEncryptionKey = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
+      var value = 'self_key_value';
+      when(() => mockLocalSecondary.getEncryptionSelfKey())
+          .thenAnswer((_) => Future.value(selfEncryptionKey));
+      var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
+
+      var atKey = AtKey.self('phone', namespace: 'wavi').build();
+      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+
+      var encryptedData = await selfKeyEncryption.encrypt(atKey, value);
+      var response = EncryptionUtil.decryptValue(
+          encryptedData, selfEncryptionKey,
+          ivBase64: atKey.metadata!.ivNonce);
       expect(response, value);
     });
   });
@@ -399,7 +418,7 @@ void main() {
           enableCommitId: false);
     });
 
-    test('test to verify encryption when shared key is available', () async {
+    test('test to verify legacy encryption when shared key is available', () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
       await atCommitLog?.commitLogKeyStore.add(
           // Adding commit id to mock commit entry is synced from server
@@ -424,13 +443,45 @@ void main() {
           EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue =
-          EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey);
+          EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey, ivBase64: null);
       expect(decryptedValue, value);
       expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata?.pubKeyCS.isNotNull, true);
     });
 
-    test('test to verify encryption when a new shared key is generated',
+    test('test to verify encryption when shared key is available', () async {
+      sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
+      await atCommitLog?.commitLogKeyStore.add(
+          // Adding commit id to mock commit entry is synced from server
+          CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
+            ..commitId = 0);
+      sharedKeyEncryption.atCommitLog = atCommitLog;
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+            ..sharedWith('@bob'))
+          .build();
+      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+      var value = 'hello';
+
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value(encryptedSharedKey));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: EncryptionPublicKeyMatcher())))
+          .thenAnswer((_) => Future.value(encryptionPublicKey));
+
+      var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
+      var decryptedSharedKey =
+          // ignore: deprecated_member_use_from_same_package
+          EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
+      expect(decryptedSharedKey, sharedKey);
+      var decryptedValue =
+          EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey, ivBase64: atKey.metadata!.ivNonce);
+      expect(decryptedValue, value);
+      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+    });
+
+    test('test to verify legacy encryption when a new shared key is generated',
         () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
       // Adding commit id to mock that commit entry is synced from server
@@ -463,7 +514,47 @@ void main() {
           await sharedKeyEncryption.encrypt(atKey, originalValue);
       expect(
           EncryptionUtil.decryptValue(
-              encryptedValue, sharedKeyEncryption.sharedKey),
+              encryptedValue, sharedKeyEncryption.sharedKey, ivBase64: null),
+          originalValue);
+      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+    });
+
+    test('test to verify encryption when a new shared key is generated',
+        () async {
+      sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
+      // Adding commit id to mock that commit entry is synced from server
+      await atCommitLog?.commitLogKeyStore.add(
+          CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
+            ..commitId = 0);
+      sharedKeyEncryption.atCommitLog = atCommitLog;
+
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:null'));
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:null'));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: EncryptionPublicKeyMatcher())))
+          .thenAnswer((_) => Future.value(encryptionPublicKey));
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: UpdatedSharedKeyMatcher()),
+          sync: true)).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
+          .thenAnswer((_) => Future.value(encryptionPublicKey));
+
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+            ..sharedWith('@bob'))
+          .build();
+      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+      var originalValue = 'hello';
+
+      var encryptedValue =
+          await sharedKeyEncryption.encrypt(atKey, originalValue);
+      expect(
+          EncryptionUtil.decryptValue(
+              encryptedValue, sharedKeyEncryption.sharedKey, ivBase64: atKey.metadata!.ivNonce),
           originalValue);
       expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata?.pubKeyCS.isNotNull, true);

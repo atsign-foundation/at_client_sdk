@@ -431,6 +431,7 @@ abstract class AtClient {
   ///                                                .._messageType = MessageTypeEnum.key;
   ///   notifyChange(notificationParams);
   ///```
+  @Deprecated("Use [NotificationService.notify]")
   Future<String?> notifyChange(NotificationParams notificationParams);
 
   /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.

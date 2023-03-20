@@ -79,8 +79,13 @@ class LocalSecondary implements Secondary {
             ..isEncrypted = builder.isEncrypted
             ..sharedKeyEnc = builder.sharedKeyEncrypted
             ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding;
-          var atMetadata = AtMetadataAdapter(metadata);
+            ..encoding = builder.encoding
+            ..encKeyName = builder.encKeyName
+            ..encAlgo = builder.encAlgo
+            ..ivNonce = builder.ivNonce
+            ..skeEncKeyName = builder.skeEncKeyName
+            ..skeEncAlgo = builder.skeEncAlgo;
+          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
@@ -97,8 +102,13 @@ class LocalSecondary implements Secondary {
             ..dataSignature = builder.dataSignature
             ..sharedKeyEnc = builder.sharedKeyEncrypted
             ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding;
-          var atMetadata = AtMetadataAdapter(metadata);
+            ..encoding = builder.encoding
+            ..encKeyName = builder.encKeyName
+            ..encAlgo = builder.encAlgo
+            ..ivNonce = builder.ivNonce
+            ..skeEncKeyName = builder.skeEncKeyName
+            ..skeEncAlgo = builder.skeEncAlgo;
+          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
@@ -242,7 +252,7 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String?> getEncryptionPublicKey(String atSign) async {
-    atSign = AtUtils.formatAtSign(atSign)!;
+    atSign = AtUtils.fixAtSign(atSign);
     var privateKeyData =
         await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
     return privateKeyData?.data;

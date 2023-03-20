@@ -509,7 +509,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     final atKey = AtKey.fromString(key);
     // temporary fix to add @ to sharedBy. permanent fix should be in AtKey.fromString
-    atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
+    if (atKey.sharedBy != null) {
+      atKey.sharedBy = AtUtils.fixAtSign(atKey.sharedBy!);
+    }
 
     bool serverCommitEntryKeyExistsInLocalUncommittedEntries = false;
     for (CommitEntry entry in uncommittedEntries) {
@@ -628,7 +630,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return command;
   }
 
-  String _metadataToString(dynamic metadata) {
+  String _metadataToString(AtMetaData? metadata) {
     if (metadata == null) {
       return '';
     }
@@ -648,22 +650,32 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.isEncrypted != null) {
       metadataStr += ':isEncrypted:${metadata.isEncrypted}';
     }
-    // The older key entries will not have metadata.sharedKeyEncrypted and metadata.pubKeyChecksum
-    // Hence handling the NoSuchMethodError.
-    try {
-      if (metadata.sharedKeyEnc != null) {
-        metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
-      }
-      if (metadata.pubKeyCS != null) {
-        metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
-      }
-      if (metadata.encoding != null) {
-        metadataStr += ':encoding:${metadata.encoding}';
-      }
-    } on NoSuchMethodError {
-      // ignore for uncommitted entries added before shared key metadata version
-      _logger.finest('The entry is created with the older metadata');
+
+    if (metadata.sharedKeyEnc != null) {
+      metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
     }
+    if (metadata.pubKeyCS != null) {
+      metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
+    }
+    if (metadata.encoding != null) {
+      metadataStr += ':encoding:${metadata.encoding}';
+    }
+    if (metadata.encKeyName != null) {
+      metadataStr += ':encKeyName:${metadata.encKeyName}';
+    }
+    if (metadata.encAlgo != null) {
+      metadataStr += ':encAlgo:${metadata.encAlgo}';
+    }
+    if (metadata.ivNonce != null) {
+      metadataStr += ':ivNonce:${metadata.ivNonce}';
+    }
+    if (metadata.skeEncKeyName != null) {
+      metadataStr += ':skeEncKeyName:${metadata.skeEncKeyName}';
+    }
+    if (metadata.skeEncAlgo != null) {
+      metadataStr += ':skeEncAlgo:${metadata.skeEncAlgo}';
+    }
+
     return metadataStr;
   }
 
@@ -810,7 +822,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return unCommittedEntryBatch;
   }
 
-  void _setMetaData(builder, serverCommitEntry) {
+  void _setMetaData(UpdateVerbBuilder builder, serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
       if (metaData[AT_TTL] != null) builder.ttl = int.parse(metaData[AT_TTL]);
@@ -842,6 +854,21 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       if (metaData[ENCODING] != null) {
         builder.encoding = metaData[ENCODING];
+      }
+      if (metaData[ENCRYPTING_KEY_NAME] != null) {
+        builder.encKeyName = metaData[ENCRYPTING_KEY_NAME];
+      }
+      if (metaData[ENCRYPTING_ALGO] != null) {
+        builder.encAlgo = metaData[ENCRYPTING_ALGO];
+      }
+      if (metaData[IV_OR_NONCE] != null) {
+        builder.ivNonce = metaData[IV_OR_NONCE];
+      }
+      if (metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME] != null) {
+        builder.skeEncKeyName = metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+      }
+      if (metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO] != null) {
+        builder.skeEncAlgo = metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
       }
     }
   }

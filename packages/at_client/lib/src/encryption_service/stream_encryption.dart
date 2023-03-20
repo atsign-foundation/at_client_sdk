@@ -15,6 +15,6 @@ class StreamEncryption extends AbstractAtKeyEncryption {
     }
     await super.encrypt(atKey, value);
     // Encrypt value using sharedKey
-    return EncryptionUtil.encryptBytes(value, sharedKey);
+    return EncryptionUtil.encryptBytes(value, sharedKey, ivBase64: atKey.metadata?.ivNonce);
   }
 }
