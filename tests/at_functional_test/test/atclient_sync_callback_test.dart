@@ -169,7 +169,8 @@ void main() {
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
@@ -179,7 +180,7 @@ void main() {
       expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
       syncProgress.keyInfoList?.forEach((keyInfo) {
         if (keyInfo.key.contains('fb_username-$uniqueId')) {
-          expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+          expect(keyInfo.commitOp, CommitOp.UPDATE);
           expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
         }
       });
