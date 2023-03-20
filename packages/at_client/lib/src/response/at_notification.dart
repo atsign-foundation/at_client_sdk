@@ -30,9 +30,9 @@ class AtNotification {
       metadata.encAlgo = json['metadata'][ENCRYPTING_ALGO];
       metadata.ivNonce = json['metadata'][IV_OR_NONCE];
       metadata.skeEncKeyName =
-      json['metadata'][SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+          json['metadata'][SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
       metadata.skeEncAlgo =
-      json['metadata'][SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
+          json['metadata'][SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
     }
 
     return AtNotification(json['id'], json['key'], json['from'], json['to'],

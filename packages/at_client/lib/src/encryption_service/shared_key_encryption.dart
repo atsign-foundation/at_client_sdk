@@ -13,6 +13,7 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
     }
     await super.encrypt(atKey, value);
     // Encrypt value using sharedKey
-    return EncryptionUtil.encryptValue(value, sharedKey, ivBase64: atKey.metadata?.ivNonce);
+    return EncryptionUtil.encryptValue(value, sharedKey,
+        ivBase64: atKey.metadata?.ivNonce);
   }
 }

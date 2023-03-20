@@ -9,8 +9,8 @@ class FileTransferObject {
   DateTime? date;
   String? error;
 
-  FileTransferObject(this.transferId, this.fileEncryptionKey,
-      this.fileUrl, this.sharedWith, this.fileStatus,
+  FileTransferObject(this.transferId, this.fileEncryptionKey, this.fileUrl,
+      this.sharedWith, this.fileStatus,
       {this.date, this.error, this.ivBase64}) {
     date ??= DateTime.now();
   }

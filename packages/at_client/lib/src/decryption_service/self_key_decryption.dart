@@ -30,6 +30,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
     }
 
     return EncryptionUtil.decryptValue(encryptedValue,
-        DefaultResponseParser().parse(selfEncryptionKey).response, ivBase64: atKey.metadata?.ivNonce);
+        DefaultResponseParser().parse(selfEncryptionKey).response,
+        ivBase64: atKey.metadata?.ivNonce);
   }
 }

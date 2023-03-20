@@ -865,7 +865,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         builder.ivNonce = metaData[IV_OR_NONCE];
       }
       if (metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME] != null) {
-        builder.skeEncKeyName = metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+        builder.skeEncKeyName =
+            metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
       }
       if (metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO] != null) {
         builder.skeEncAlgo = metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];

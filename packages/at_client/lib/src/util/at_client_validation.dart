@@ -128,7 +128,8 @@ class AtClientValidation {
       throw AtKeyException(
           'shared with cannot be null on notification request');
     }
-    notificationParams.atKey.sharedWith = AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
+    notificationParams.atKey.sharedWith =
+        AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
 
     await isAtSignExists(
         secondaryAddressFinder, notificationParams.atKey.sharedWith!);

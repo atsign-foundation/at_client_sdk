@@ -67,7 +67,8 @@ class NotificationResponseTransformer
         // Hence do not decrypt if key's are reserved keys
         AtKey.getKeyType(atKey.key!) != KeyType.reservedKey) {
       // decrypt the value
-      atNotification.value = await _getDecryptedValue(atKey, atNotification.value!);
+      atNotification.value =
+          await _getDecryptedValue(atKey, atNotification.value!);
       return atNotification;
     }
     return atNotification;

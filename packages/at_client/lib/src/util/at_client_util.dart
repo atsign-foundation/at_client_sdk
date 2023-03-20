@@ -92,7 +92,8 @@ class AtClientUtil {
     metadata.encKeyName = metadataMap[ENCRYPTING_KEY_NAME];
     metadata.encAlgo = metadataMap[ENCRYPTING_ALGO];
     metadata.ivNonce = metadataMap[IV_OR_NONCE];
-    metadata.skeEncKeyName = metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+    metadata.skeEncKeyName =
+        metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
     metadata.skeEncAlgo = metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
     metadata.isPublic = isPublic;
 

@@ -27,7 +27,6 @@ class PutRequestTransformer
   // ignore: avoid_renaming_method_parameters
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
       {String? encryptionPrivateKey, RequestOptions? requestOptions}) async {
-
     AtKey atKey = tuple.one;
 
     // Populate the update verb builder

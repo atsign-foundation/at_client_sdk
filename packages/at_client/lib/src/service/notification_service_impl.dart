@@ -340,7 +340,8 @@ class NotificationServiceImpl
 
     if (_atClient.getPreferences()!.atProtocolEmitted >= Version(2, 0, 0)) {
       notificationParams.atKey.metadata ??= Metadata();
-      notificationParams.atKey.metadata!.ivNonce ??= EncryptionUtil.generateIV();
+      notificationParams.atKey.metadata!.ivNonce ??=
+          EncryptionUtil.generateIV();
     }
 
     try {
@@ -349,7 +350,8 @@ class NotificationServiceImpl
         notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
       }
       // Prepend '@' if not already set.
-      notificationParams.atKey.sharedBy = AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
+      notificationParams.atKey.sharedBy =
+          AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
       // validate notification request
       await atClientValidation.validateNotificationRequest(
           _atClientManager.secondaryAddressFinder!,

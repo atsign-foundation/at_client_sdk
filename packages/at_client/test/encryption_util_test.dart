@@ -22,8 +22,10 @@ void main() {
       var aesKey = EncryptionUtil.generateAESKey();
       var iv = EncryptionUtil.generateIV();
       var valueToEncrypt = 'alice@atsign.com';
-      var encryptedValue = EncryptionUtil.encryptValue(valueToEncrypt, aesKey, ivBase64: iv);
-      var decryptedValue = EncryptionUtil.decryptValue(encryptedValue, aesKey, ivBase64: iv);
+      var encryptedValue =
+          EncryptionUtil.encryptValue(valueToEncrypt, aesKey, ivBase64: iv);
+      var decryptedValue =
+          EncryptionUtil.decryptValue(encryptedValue, aesKey, ivBase64: iv);
       expect(decryptedValue, valueToEncrypt);
 
       expect(
@@ -36,7 +38,8 @@ void main() {
       for (int i = 0; i < 10; i++) {
         var otherIV = EncryptionUtil.generateIV();
         expect(
-            () => EncryptionUtil.decryptValue(encryptedValue, aesKey, ivBase64: otherIV),
+            () => EncryptionUtil.decryptValue(encryptedValue, aesKey,
+                ivBase64: otherIV),
             throwsA(predicate((e) =>
                 e is AtKeyException &&
                 e.message ==

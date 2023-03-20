@@ -26,25 +26,29 @@ class EncryptionUtil {
     return IV.fromSecureRandom(length).base64;
   }
 
-  static String encryptValue(String value, String encryptionKey, {String? ivBase64}) {
+  static String encryptValue(String value, String encryptionKey,
+      {String? ivBase64}) {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
     var encryptedValue = aesEncrypter.encrypt(value, iv: getIV(ivBase64));
     return encryptedValue.base64;
   }
 
-  static String decryptValue(String encryptedValue, String decryptionKey, {String? ivBase64}) {
+  static String decryptValue(String encryptedValue, String decryptionKey,
+      {String? ivBase64}) {
     try {
       var aesKey = AES(Key.fromBase64(decryptionKey));
       var decrypter = Encrypter(aesKey);
       return decrypter.decrypt64(encryptedValue, iv: getIV(ivBase64));
     } on Exception catch (e, trace) {
-      _logger.severe('Exception while decrypting value: ${e.toString()} $trace');
+      _logger
+          .severe('Exception while decrypting value: ${e.toString()} $trace');
       throw AtKeyException(e.toString());
     } on Error catch (e) {
       // Catching error since underlying decryption library may throw Error e.g corrupt pad block
       _logger.severe('Error while decrypting value: ${e.toString()}');
       throw AtKeyException(e.toString(),
-          intent: Intent.decryptData, exceptionScenario: ExceptionScenario.decryptionFailed);
+          intent: Intent.decryptData,
+          exceptionScenario: ExceptionScenario.decryptionFailed);
     }
   }
 
@@ -59,16 +63,19 @@ class EncryptionUtil {
     return rsaPrivateKey.decrypt(aesKey);
   }
 
-  static List<int> encryptBytes(List<int> value, String encryptionKey, {String? ivBase64}) {
+  static List<int> encryptBytes(List<int> value, String encryptionKey,
+      {String? ivBase64}) {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
     var encryptedValue = aesEncrypter.encryptBytes(value, iv: getIV(ivBase64));
     return encryptedValue.bytes;
   }
 
-  static List<int> decryptBytes(List<int> encryptedValue, String decryptionKey, {String? ivBase64}) {
+  static List<int> decryptBytes(List<int> encryptedValue, String decryptionKey,
+      {String? ivBase64}) {
     var aesKey = AES(Key.fromBase64(decryptionKey));
     var decrypter = Encrypter(aesKey);
-    return decrypter.decryptBytes(Encrypted(encryptedValue as Uint8List), iv: getIV(ivBase64));
+    return decrypter.decryptBytes(Encrypted(encryptedValue as Uint8List),
+        iv: getIV(ivBase64));
   }
 
   static String md5CheckSum(String data) {

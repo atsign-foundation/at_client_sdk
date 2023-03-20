@@ -418,7 +418,8 @@ void main() {
           enableCommitId: false);
     });
 
-    test('test to verify legacy encryption when shared key is available', () async {
+    test('test to verify legacy encryption when shared key is available',
+        () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
       await atCommitLog?.commitLogKeyStore.add(
           // Adding commit id to mock commit entry is synced from server
@@ -442,8 +443,9 @@ void main() {
           // ignore: deprecated_member_use_from_same_package
           EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
-      var decryptedValue =
-          EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey, ivBase64: null);
+      var decryptedValue = EncryptionUtil.decryptValue(
+          encryptedValue, decryptedSharedKey,
+          ivBase64: null);
       expect(decryptedValue, value);
       expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata?.pubKeyCS.isNotNull, true);
@@ -474,8 +476,9 @@ void main() {
           // ignore: deprecated_member_use_from_same_package
           EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
-      var decryptedValue =
-          EncryptionUtil.decryptValue(encryptedValue, decryptedSharedKey, ivBase64: atKey.metadata!.ivNonce);
+      var decryptedValue = EncryptionUtil.decryptValue(
+          encryptedValue, decryptedSharedKey,
+          ivBase64: atKey.metadata!.ivNonce);
       expect(decryptedValue, value);
       expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata?.pubKeyCS.isNotNull, true);
@@ -514,7 +517,8 @@ void main() {
           await sharedKeyEncryption.encrypt(atKey, originalValue);
       expect(
           EncryptionUtil.decryptValue(
-              encryptedValue, sharedKeyEncryption.sharedKey, ivBase64: null),
+              encryptedValue, sharedKeyEncryption.sharedKey,
+              ivBase64: null),
           originalValue);
       expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata?.pubKeyCS.isNotNull, true);
@@ -554,7 +558,8 @@ void main() {
           await sharedKeyEncryption.encrypt(atKey, originalValue);
       expect(
           EncryptionUtil.decryptValue(
-              encryptedValue, sharedKeyEncryption.sharedKey, ivBase64: atKey.metadata!.ivNonce),
+              encryptedValue, sharedKeyEncryption.sharedKey,
+              ivBase64: atKey.metadata!.ivNonce),
           originalValue);
       expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata?.pubKeyCS.isNotNull, true);

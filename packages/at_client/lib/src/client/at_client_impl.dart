@@ -904,7 +904,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   @Deprecated("Use [NotificationService.notify]")
   Future<String?> notifyChange(NotificationParams notificationParams) async {
-    NotificationResult result = await notificationService.notify(notificationParams);
+    NotificationResult result =
+        await notificationService.notify(notificationParams);
     if (result.atClientException != null) {
       throw result.atClientException!;
     }

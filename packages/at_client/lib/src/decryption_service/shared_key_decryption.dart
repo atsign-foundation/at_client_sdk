@@ -70,7 +70,8 @@ class SharedKeyDecryption implements AtKeyDecryption {
         final decryptionResult = atClient.atChops!
             .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
         decryptedValue = EncryptionUtil.decryptValue(
-            encryptedValue, decryptionResult.result, ivBase64: atKey.metadata?.ivNonce);
+            encryptedValue, decryptionResult.result,
+            ivBase64: atKey.metadata?.ivNonce);
       } else {
         var currentAtSignPrivateKey =
             await (atClient.getLocalSecondary()!.getEncryptionPrivateKey());
@@ -84,7 +85,8 @@ class SharedKeyDecryption implements AtKeyDecryption {
             encryptedValue,
             // ignore: deprecated_member_use_from_same_package
             EncryptionUtil.decryptKey(
-                encryptedSharedKey, currentAtSignPrivateKey), ivBase64: atKey.metadata?.ivNonce);
+                encryptedSharedKey, currentAtSignPrivateKey),
+            ivBase64: atKey.metadata?.ivNonce);
       }
     } on AtKeyException catch (e) {
       e.stack(AtChainedException(
