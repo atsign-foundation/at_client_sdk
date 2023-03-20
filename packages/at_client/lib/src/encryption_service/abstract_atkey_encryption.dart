@@ -108,7 +108,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
           await _getEncryptedSharedKey(_atClient.getLocalSecondary()!, atKey);
     } on KeyNotFoundException {
       _logger.finer(
-          '${atKey.key}${atKey.sharedBy} not found in local secondary. Fetching from remote secondary');
+          'Encrypted shared key for ${atKey.sharedBy} not found in local secondary. Fetching from remote secondary');
     }
     try {
       // 2. If sharedKey is not found in localSecondary, fetch from remote secondary.
@@ -125,22 +125,22 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
     encryptedSharedKey =
         defaultResponseParser.parse(encryptedSharedKey!).response;
-    String? encryptionPrivateKey;
-    try {
-      encryptionPrivateKey =
-          await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
-    } on KeyNotFoundException catch (e) {
-      e.stack(AtChainedException(
-          Intent.fetchEncryptionPrivateKey,
-          ExceptionScenario.encryptionFailed,
-          'Failed to decrypt the encrypted shared key'));
-      rethrow;
-    }
     if (_atClient.getPreferences()!.useAtChops) {
       final decryptionResult = _atClient.atChops!
           .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
       return decryptionResult.result;
     } else {
+      String? encryptionPrivateKey;
+      try {
+        encryptionPrivateKey =
+        await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
+      } on KeyNotFoundException catch (e) {
+        e.stack(AtChainedException(
+            Intent.fetchEncryptionPrivateKey,
+            ExceptionScenario.encryptionFailed,
+            'Failed to decrypt the encrypted shared key'));
+        rethrow;
+      }
       try {
         // ignore: deprecated_member_use_from_same_package
         return EncryptionUtil.decryptKey(

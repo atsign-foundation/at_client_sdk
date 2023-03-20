@@ -134,7 +134,9 @@ class RemoteSecondary implements Secondary {
     return await atLookUp.executeCommand(atCommand, auth: true);
   }
 
-  ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
+  ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback]
+  ///[Deprecated] Use [AtClient.notificationService]
+  @Deprecated('Use AtClient.notificationService')
   Future<OutboundConnection> monitor(
       String command, Function? notificationCallBack, String privateKey) {
     return MonitorClient(privateKey).executeMonitorVerb(
@@ -181,6 +183,7 @@ class RemoteSecondary implements Secondary {
   Future<void> _restartCallBack(
       String command, Function notificationCallBack, String privateKey) async {
     logger.info('auto restarting monitor');
+    // ignore: deprecated_member_use_from_same_package
     await monitor(command, notificationCallBack, privateKey);
   }
 

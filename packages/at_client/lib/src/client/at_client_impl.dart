@@ -237,17 +237,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<void> startMonitor(String privateKey, Function? notificationCallback,
-      {String? regex}) async {
-    var monitorVerbBuilder = MonitorVerbBuilder();
-    if (regex != null) {
-      monitorVerbBuilder.regex = regex;
-    }
-    await _remoteSecondary!.monitor(
-        monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
-  }
-
-  @override
   LocalSecondary? getLocalSecondary() {
     return _localSecondary;
   }
@@ -532,46 +521,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       return AtResponse()..isError = true;
     }
     return await PutResponseTransformer().transform(putResponse);
-  }
-
-  @override
-  @Deprecated("Use NotificationService")
-  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
-      {MessageTypeEnum? messageType,
-      PriorityEnum? priority,
-      StrategyEnum? strategy,
-      int? latestN,
-      String? notifier = SYSTEM,
-      bool isDedicated = false}) async {
-    AtKeyValidators.get().validate(
-        atKey.toString(),
-        ValidationContext()
-          ..atSign = _atSign
-          ..validateOwnership = true);
-    final notificationParams =
-        NotificationParams.forUpdate(atKey, value: value);
-    final notifyResult = await notificationService.notify(notificationParams);
-    return notifyResult.notificationStatusEnum ==
-        NotificationStatusEnum.delivered;
-  }
-
-  @override
-  @Deprecated('Use NotificationService')
-  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation,
-      {bool isDedicated = false}) async {
-    var returnMap = {};
-    var sharedWithList = jsonDecode(atKey.sharedWith!);
-    for (var sharedWith in sharedWithList) {
-      atKey.sharedWith = sharedWith;
-      final notificationParams =
-          NotificationParams.forUpdate(atKey, value: value);
-      final notifyResult = await notificationService.notify(notificationParams);
-      returnMap.putIfAbsent(
-          sharedWith,
-          () => (notifyResult.notificationStatusEnum ==
-              NotificationStatusEnum.delivered));
-    }
-    return jsonEncode(returnMap);
   }
 
   @override
@@ -902,17 +851,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  @Deprecated("Use [NotificationService.notify]")
-  Future<String?> notifyChange(NotificationParams notificationParams) async {
-    NotificationResult result =
-        await notificationService.notify(notificationParams);
-    if (result.atClientException != null) {
-      throw result.atClientException!;
-    }
-    return result.notificationID;
-  }
-
-  @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
     // Checks if the instance of AtClientImpl belongs to previous atSign. If Yes,
     // the compaction job is stopped and removed from changeListener list.
@@ -923,10 +861,78 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
   }
 
-  // TODO v4 - remove this method in version 4 of at_client package
+  // TODO v4 - remove the follow methods in version 4 of at_client package
+
   @override
   @Deprecated("Use AtClient.syncService")
   SyncManager? getSyncManager() {
     return SyncManagerImpl.getInstance().getSyncManager(_atSign);
+  }
+
+  @override
+
+  ///[Deprecated] Use [AtClient.notificationService]
+  @Deprecated('Use AtClient.notificationService')
+  Future<void> startMonitor(String privateKey, Function? notificationCallback,
+      {String? regex}) async {
+    var monitorVerbBuilder = MonitorVerbBuilder();
+    if (regex != null) {
+      monitorVerbBuilder.regex = regex;
+    }
+    await _remoteSecondary!.monitor(
+        monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
+  }
+
+  @override
+  @Deprecated("Use NotificationService")
+  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
+      {MessageTypeEnum? messageType,
+      PriorityEnum? priority,
+      StrategyEnum? strategy,
+      int? latestN,
+      String? notifier = SYSTEM,
+      bool isDedicated = false}) async {
+    AtKeyValidators.get().validate(
+        atKey.toString(),
+        ValidationContext()
+          ..atSign = _atSign
+          ..validateOwnership = true);
+    final notificationParams =
+        NotificationParams.forUpdate(atKey, value: value);
+    final notifyResult = await notificationService.notify(notificationParams);
+    return notifyResult.notificationStatusEnum ==
+        NotificationStatusEnum.delivered;
+  }
+
+  @override
+  @Deprecated('Use NotificationService')
+  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation,
+      {bool isDedicated = false}) async {
+    var returnMap = {};
+    var sharedWithList = jsonDecode(atKey.sharedWith!);
+    for (var sharedWith in sharedWithList) {
+      atKey.sharedWith = sharedWith;
+      final notificationParams =
+          NotificationParams.forUpdate(atKey, value: value);
+      final notifyResult = await notificationService.notify(notificationParams);
+      returnMap.putIfAbsent(
+          sharedWith,
+          () => (notifyResult.notificationStatusEnum ==
+              NotificationStatusEnum.delivered));
+    }
+    return jsonEncode(returnMap);
+  }
+
+  @override
+
+  ///[Deprecated] Use [NotificationService.notify]
+  @Deprecated("Use [NotificationService.notify]")
+  Future<String?> notifyChange(NotificationParams notificationParams) async {
+    NotificationResult result =
+        await notificationService.notify(notificationParams);
+    if (result.atClientException != null) {
+      throw result.atClientException!;
+    }
+    return result.notificationID;
   }
 }

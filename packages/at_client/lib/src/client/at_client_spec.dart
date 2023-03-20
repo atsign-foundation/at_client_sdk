@@ -431,6 +431,7 @@ abstract class AtClient {
   ///                                                .._messageType = MessageTypeEnum.key;
   ///   notifyChange(notificationParams);
   ///```
+  ///[Deprecated] Use [NotificationService.notify]
   @Deprecated("Use [NotificationService.notify]")
   Future<String?> notifyChange(NotificationParams notificationParams);
 
