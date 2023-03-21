@@ -21,10 +21,11 @@ class NotificationResponseTransformer
   Future<AtNotification> transform(
       Tuple<AtNotification, NotificationConfig> tuple) async {
     // prepare the atKey from the atNotification object.
-    var atNotification = tuple.one;
-    String sharedBy = tuple.one.from;
-    String sharedWith = tuple.one.to;
-    var key = tuple.one.key;
+    AtNotification atNotification = tuple.one;
+    NotificationConfig config = tuple.two;
+    String sharedBy = atNotification.from;
+    String sharedWith = atNotification.to;
+    var key = atNotification.key;
     // AtKeys when sharedBy and sharedWith are populated look like
     // @alice:something.something.namespace@bob
     // where @bob is sharedBy and @alice is sharedWith
@@ -48,24 +49,26 @@ class NotificationResponseTransformer
     }
     AtKey atKey = AtKey()
       ..key = key
-      ..sharedWith = tuple.one.to
-      ..sharedBy = tuple.one.from;
+      ..sharedWith = atNotification.to
+      ..sharedBy = atNotification.from
+      ..metadata = atNotification.metadata;
 
-    if (tuple.one.messageType.isNotNull &&
-        tuple.one.messageType!.toLowerCase().contains('text') &&
-        (tuple.one.isEncrypted != null && tuple.one.isEncrypted!)) {
+    if (atNotification.messageType.isNotNull &&
+        atNotification.messageType!.toLowerCase().contains('text') &&
+        (atNotification.isEncrypted != null && atNotification.isEncrypted!)) {
       // decrypt the text message;
       var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
-      atNotification.key = '${tuple.one.to}:$decryptedValue';
+      atNotification.key = '${atNotification.to}:$decryptedValue';
       return atNotification;
-    } else if ((tuple.one.value.isNotNull) &&
-        (tuple.two.shouldDecrypt && tuple.one.id != '-1') &&
+    } else if ((atNotification.value.isNotNull) &&
+        (config.shouldDecrypt && atNotification.id != '-1') &&
         // The shared_key (which is a reserved key) has different decryption process
         // and is not a user created key.
         // Hence do not decrypt if key's are reserved keys
         AtKey.getKeyType(atKey.key!) != KeyType.reservedKey) {
       // decrypt the value
-      atNotification.value = await _getDecryptedValue(atKey, tuple.one.value!);
+      atNotification.value =
+          await _getDecryptedValue(atKey, atNotification.value!);
       return atNotification;
     }
     return atNotification;

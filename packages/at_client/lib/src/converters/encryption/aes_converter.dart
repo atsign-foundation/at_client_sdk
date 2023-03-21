@@ -4,68 +4,75 @@ import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart';
 
 class AESEncrypter extends Converter<List<int>, List<int>> {
-  final String _encryptionKey;
-  const AESEncrypter(this._encryptionKey);
+  final String encryptionKey;
+  final String? ivBase64;
+
+  const AESEncrypter(this.encryptionKey, {this.ivBase64});
 
   @override
   List<int> convert(List<int> input) {
-    var aesKey = AES(Key.fromBase64(_encryptionKey), padding: null);
+    var aesKey = AES(Key.fromBase64(encryptionKey), padding: null);
 
-    var initializationVector = IV.fromLength(16);
     var aesEncrypter = Encrypter(aesKey);
-    var encryptedValue =
-        aesEncrypter.encryptBytes(input, iv: initializationVector);
+    var encryptedValue = aesEncrypter.encryptBytes(input, iv: getIV(ivBase64));
     return encryptedValue.bytes;
   }
 
   @override
   AESEncryptionSink startChunkedConversion(sink) {
-    return AESEncryptionSink(_encryptionKey, sink);
+    return AESEncryptionSink(encryptionKey, sink, ivBase64: ivBase64);
   }
 }
 
 class AESDecrypter extends Converter<List<int>, List<int>> {
-  final String _encryptionKey;
-  const AESDecrypter(this._encryptionKey);
+  final String encryptionKey;
+  final String? ivBase64;
+
+  const AESDecrypter(this.encryptionKey, {this.ivBase64});
 
   @override
   List<int> convert(List<int> input) {
-    var aesKey = AES(Key.fromBase64(_encryptionKey), padding: null);
+    var aesKey = AES(Key.fromBase64(encryptionKey), padding: null);
     var decrypter = Encrypter(aesKey);
-    var iv2 = IV.fromLength(16);
-    return decrypter.decryptBytes(Encrypted(input as Uint8List), iv: iv2);
+    return decrypter.decryptBytes(Encrypted(input as Uint8List),
+        iv: getIV(ivBase64));
   }
 
   @override
   AESDecryptionSink startChunkedConversion(sink) {
-    return AESDecryptionSink(_encryptionKey, sink);
+    return AESDecryptionSink(encryptionKey, sink, ivBase64: ivBase64);
   }
 }
 
 class AESCodec extends Codec<List<int>, List<int>> {
-  final String _key;
-  const AESCodec(this._key);
+  final String encryptionKey;
+  final String? ivBase64;
+
+  const AESCodec(this.encryptionKey, {this.ivBase64});
 
   @override
   List<int> encode(List<int> input) {
-    return AESEncrypter(_key).convert(input);
+    return AESEncrypter(encryptionKey, ivBase64: ivBase64).convert(input);
   }
 
   @override
   List<int> decode(List<int> encoded) {
-    return AESDecrypter(_key).convert(encoded);
+    return AESDecrypter(encryptionKey, ivBase64: ivBase64).convert(encoded);
   }
 
   @override
-  AESEncrypter get encoder => AESEncrypter(_key);
+  AESEncrypter get encoder => AESEncrypter(encryptionKey, ivBase64: ivBase64);
+
   @override
-  AESDecrypter get decoder => AESDecrypter(_key);
+  AESDecrypter get decoder => AESDecrypter(encryptionKey, ivBase64: ivBase64);
 }
 
 class AESEncryptionSink extends ByteConversionSink {
   final Converter _converter;
   final Sink<List<int>> _outSink;
-  AESEncryptionSink(key, this._outSink) : _converter = AESEncrypter(key);
+
+  AESEncryptionSink(String encryptionKey, this._outSink, {String? ivBase64})
+      : _converter = AESEncrypter(encryptionKey, ivBase64: ivBase64);
 
   @override
   void add(List<int> chunk) {
@@ -87,7 +94,9 @@ class AESEncryptionSink extends ByteConversionSink {
 class AESDecryptionSink extends ChunkedConversionSink<List<int>> {
   final Converter _converter;
   final Sink<List<int>> _outSink;
-  AESDecryptionSink(key, this._outSink) : _converter = AESDecrypter(key);
+
+  AESDecryptionSink(String encryptionKey, this._outSink, {String? ivBase64})
+      : _converter = AESDecrypter(encryptionKey, ivBase64: ivBase64);
 
   @override
   void add(List<int> chunk) {
@@ -97,5 +106,13 @@ class AESDecryptionSink extends ChunkedConversionSink<List<int>> {
   @override
   void close() {
     _outSink.close();
+  }
+}
+
+IV getIV(String? ivBase64) {
+  if (ivBase64 == null) {
+    return IV.fromLength(16);
+  } else {
+    return IV.fromBase64(ivBase64);
   }
 }

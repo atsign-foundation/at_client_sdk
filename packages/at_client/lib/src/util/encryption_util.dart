@@ -9,25 +9,36 @@ import 'package:at_utils/at_logger.dart';
 
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
-  static String generateAESKey() {
-    var aesKey = AES(Key.fromSecureRandom(32));
-    var keyString = aesKey.key.base64;
-    return keyString;
+
+  static IV getIV(String? ivBase64) {
+    if (ivBase64 == null) {
+      return IV.fromLength(16);
+    } else {
+      return IV.fromBase64(ivBase64);
+    }
   }
 
-  static String encryptValue(String value, String encryptionKey) {
+  static String generateAESKey() {
+    return AES(Key.fromSecureRandom(32)).key.base64;
+  }
+
+  static String generateIV({int length = 16}) {
+    return IV.fromSecureRandom(length).base64;
+  }
+
+  static String encryptValue(String value, String encryptionKey,
+      {String? ivBase64}) {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
-    var initializationVector = IV.fromLength(16);
-    var encryptedValue = aesEncrypter.encrypt(value, iv: initializationVector);
+    var encryptedValue = aesEncrypter.encrypt(value, iv: getIV(ivBase64));
     return encryptedValue.base64;
   }
 
-  static String decryptValue(String encryptedValue, String decryptionKey) {
+  static String decryptValue(String encryptedValue, String decryptionKey,
+      {String? ivBase64}) {
     try {
       var aesKey = AES(Key.fromBase64(decryptionKey));
       var decrypter = Encrypter(aesKey);
-      var iv2 = IV.fromLength(16);
-      return decrypter.decrypt64(encryptedValue, iv: iv2);
+      return decrypter.decrypt64(encryptedValue, iv: getIV(ivBase64));
     } on Exception catch (e, trace) {
       _logger
           .severe('Exception while decrypting value: ${e.toString()} $trace');
@@ -52,21 +63,19 @@ class EncryptionUtil {
     return rsaPrivateKey.decrypt(aesKey);
   }
 
-  static List<int> encryptBytes(List<int> value, String encryptionKey) {
+  static List<int> encryptBytes(List<int> value, String encryptionKey,
+      {String? ivBase64}) {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
-    var initializationVector = IV.fromLength(16);
-    var encryptedValue =
-        aesEncrypter.encryptBytes(value, iv: initializationVector);
+    var encryptedValue = aesEncrypter.encryptBytes(value, iv: getIV(ivBase64));
     return encryptedValue.bytes;
   }
 
-  static List<int> decryptBytes(
-      List<int> encryptedValue, String decryptionKey) {
+  static List<int> decryptBytes(List<int> encryptedValue, String decryptionKey,
+      {String? ivBase64}) {
     var aesKey = AES(Key.fromBase64(decryptionKey));
     var decrypter = Encrypter(aesKey);
-    var iv2 = IV.fromLength(16);
     return decrypter.decryptBytes(Encrypted(encryptedValue as Uint8List),
-        iv: iv2);
+        iv: getIV(ivBase64));
   }
 
   static String md5CheckSum(String data) {

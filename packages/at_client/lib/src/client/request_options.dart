@@ -5,3 +5,7 @@ class RequestOptions {}
 class GetRequestOptions extends RequestOptions {
   bool bypassCache = false;
 }
+
+class PutRequestOptions extends RequestOptions {
+  bool storeSharedKeyEncryptedMetadata = true;
+}
