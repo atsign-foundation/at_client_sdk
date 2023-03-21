@@ -101,7 +101,7 @@ abstract class AtClient {
   /// Throws [AtPrivateKeyNotFoundException] if encryption private key is not found
   ///
   /// Throws [AtPublicKeyNotFoundException] if encryption public key is not found
-  Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false});
+  Future<bool> put(AtKey key, dynamic value, {bool isDedicated = false, PutRequestOptions? putRequestOptions});
 
   /// Used to store the textual data into the keystore.
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
@@ -136,10 +136,10 @@ abstract class AtClient {
   ///             sharedWith='@bob'
   ///    put(key, '+1 999 9999');
   /// ```
-  Future<AtResponse> putText(AtKey atKey, String value);
+  Future<AtResponse> putText(AtKey atKey, String value, {PutRequestOptions? putRequestOptions});
 
   /// Used to store the binary data into the keystore. For example: images, files etc.
-  Future<AtResponse> putBinary(AtKey atKey, List<int> value);
+  Future<AtResponse> putBinary(AtKey atKey, List<int> value, {PutRequestOptions? putRequestOptions});
 
   /// Updates the metadata of [AtKey.key] if it is already present. Otherwise creates a new key without a value.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as

@@ -23,10 +23,15 @@ class PutRequestTransformer
   /// the default encoding when the value contains a new line character.
   EncodingType encodingType = EncodingType.base64;
 
+  static final PutRequestOptions defaultOptions = PutRequestOptions();
+
   @override
   // ignore: avoid_renaming_method_parameters
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
       {String? encryptionPrivateKey, RequestOptions? requestOptions}) async {
+    PutRequestOptions options = (requestOptions != null
+        ? requestOptions as PutRequestOptions
+        : defaultOptions);
     AtKey atKey = tuple.one;
 
     // Populate the update verb builder
@@ -40,8 +45,10 @@ class PutRequestTransformer
       var encryptionService = AtKeyEncryptionManager(_atClient)
           .get(atKey, _atClient.getCurrentAtSign()!);
       try {
-        updateVerbBuilder.value =
-            await encryptionService.encrypt(atKey, updateVerbBuilder.value);
+        updateVerbBuilder.value = await encryptionService.encrypt(
+            atKey, updateVerbBuilder.value,
+            storeSharedKeyEncryptedWithData:
+                options.storeSharedKeyEncryptedWithData);
       } on AtException catch (e) {
         e.stack(AtChainedException(Intent.shareData,
             ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));

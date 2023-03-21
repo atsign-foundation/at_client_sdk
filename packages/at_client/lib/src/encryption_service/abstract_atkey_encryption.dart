@@ -36,7 +36,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   SyncUtil syncUtil = SyncUtil();
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value,
+      {bool storeSharedKeyEncryptedWithData = true}) async {
     String sharedWithPublicKey = '';
     String encryptedSharedKey = '';
     // 1. Get AES Key from the local storage
@@ -89,8 +90,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       await updateEncryptedSharedKeyToSecondary(atKey, encryptedSharedKey,
           secondary: _atClient.getRemoteSecondary());
     }
-    atKey.metadata!.sharedKeyEnc = encryptedSharedKey;
-    atKey.metadata!.pubKeyCS = EncryptionUtil.md5CheckSum(sharedWithPublicKey);
+    if (storeSharedKeyEncryptedWithData) {
+      atKey.metadata!.sharedKeyEnc = encryptedSharedKey;
+      atKey.metadata!.pubKeyCS =
+          EncryptionUtil.md5CheckSum(sharedWithPublicKey);
+    }
   }
 
   /// Fetches the shared key in the local secondary

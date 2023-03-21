@@ -118,7 +118,7 @@ void main() {
     });
   });
 
-  group('Test encryption for sharing', () {
+  group('Test encryption for sharing, storing shared encryption key in metadata', () {
     test('Test put shared, then get, no IV, 1.5 to 1.5', () async {
       AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
 
@@ -181,6 +181,90 @@ void main() {
           .build();
       await atClient_1.put(atKey, clearText);
       expect(atKey.metadata?.ivNonce, isNotNull);
+
+      await E2ESyncService.getInstance().syncData(atClient_1.syncService);
+
+      AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
+      await E2ESyncService.getInstance().syncData(atClient_2.syncService);
+
+      var getResult = await atClient_2.get(atKey);
+      expect(getResult.value, clearText);
+    });
+  });
+
+  group('Test encryption for sharing, NOT storing shared encryption key in metadata', () {
+    PutRequestOptions options = PutRequestOptions()..storeSharedKeyEncryptedWithData = false;
+
+    test('Test put shared, then get, no IV, 1.5 to 1.5', () async {
+      AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
+
+      var atKey = (AtKey.shared('test_put.1_5.to.1_5', sharedBy: atSign_1)
+            ..sharedWith(atSign_2))
+          .build();
+      await atClient_1.put(atKey, clearText, putRequestOptions: options);
+      expect(atKey.metadata?.ivNonce, isNull);
+      expect(atKey.metadata?.sharedKeyEnc, isNull);
+      expect(atKey.metadata?.pubKeyCS, isNull);
+
+      await E2ESyncService.getInstance().syncData(atClient_1.syncService);
+
+      AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
+      await E2ESyncService.getInstance().syncData(atClient_2.syncService);
+
+      var getResult = await atClient_2.get(atKey);
+      expect(getResult.value, clearText);
+    }, timeout: Timeout(Duration(minutes: 5)));
+
+    test('Test put shared, then get, no IV, 1.5 to 2.0', () async {
+      AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
+
+      var atKey = (AtKey.shared('test_put.1_5.to.2_0', sharedBy: atSign_1)
+            ..sharedWith(atSign_2))
+          .build();
+      await atClient_1.put(atKey, clearText, putRequestOptions: options);
+      expect(atKey.metadata?.ivNonce, isNull);
+      expect(atKey.metadata?.sharedKeyEnc, isNull);
+      expect(atKey.metadata?.pubKeyCS, isNull);
+
+      await E2ESyncService.getInstance().syncData(atClient_1.syncService);
+
+      AtClient atClient_2 = await getAtClient(atSign_2, Version(2, 0, 0));
+      await E2ESyncService.getInstance().syncData(atClient_2.syncService);
+
+      var getResult = await atClient_2.get(atKey);
+      expect(getResult.value, clearText);
+    });
+
+    test('Test put shared, then get, with IV, 2.0 to 2.0', () async {
+      AtClient atClient_1 = await getAtClient(atSign_1, Version(2, 0, 0));
+
+      var atKey = (AtKey.shared('test_put.2_0.to.2_0', sharedBy: atSign_1)
+            ..sharedWith(atSign_2))
+          .build();
+      await atClient_1.put(atKey, clearText, putRequestOptions: options);
+      expect(atKey.metadata?.ivNonce, isNotNull);
+      expect(atKey.metadata?.sharedKeyEnc, isNull);
+      expect(atKey.metadata?.pubKeyCS, isNull);
+
+      await E2ESyncService.getInstance().syncData(atClient_1.syncService);
+
+      AtClient atClient_2 = await getAtClient(atSign_2, Version(2, 0, 0));
+      await E2ESyncService.getInstance().syncData(atClient_2.syncService);
+
+      var getResult = await atClient_2.get(atKey);
+      expect(getResult.value, clearText);
+    });
+
+    test('Test put shared, then get, with IV, 2.0 to 1.5', () async {
+      AtClient atClient_1 = await getAtClient(atSign_1, Version(2, 0, 0));
+
+      var atKey = (AtKey.shared('test_put.2_0.to.1_5', sharedBy: atSign_1)
+            ..sharedWith(atSign_2))
+          .build();
+      await atClient_1.put(atKey, clearText, putRequestOptions: options);
+      expect(atKey.metadata?.ivNonce, isNotNull);
+      expect(atKey.metadata?.sharedKeyEnc, isNull);
+      expect(atKey.metadata?.pubKeyCS, isNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 

@@ -398,7 +398,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @override
   Future<bool> put(AtKey atKey, dynamic value,
-      {bool isDedicated = false}) async {
+      {bool isDedicated = false, PutRequestOptions? putRequestOptions}) async {
     _telemetry?.controller.sink
         .add(AtTelemetryEvent('AtClient.put called', {"key": atKey}));
     // If the value is neither String nor List<int> throw exception
@@ -408,10 +408,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     AtResponse atResponse = AtResponse();
     if (value is String) {
-      atResponse = await putText(atKey, value);
+      atResponse =
+          await putText(atKey, value, putRequestOptions: putRequestOptions);
     }
     if (value is List<int>) {
-      atResponse = await putBinary(atKey, value);
+      atResponse =
+          await putBinary(atKey, value, putRequestOptions: putRequestOptions);
     }
     _telemetry?.controller.sink
         .add(AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}));
@@ -420,13 +422,14 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   /// put's the text data into the keystore
   @override
-  Future<AtResponse> putText(AtKey atKey, String value) async {
+  Future<AtResponse> putText(AtKey atKey, String value,
+      {PutRequestOptions? putRequestOptions}) async {
     try {
       // Set the default metadata if not already set.
       atKey.metadata ??= Metadata();
       // Setting metadata.isBinary to false for putText
       atKey.metadata!.isBinary = false;
-      return await _putInternal(atKey, value);
+      return await _putInternal(atKey, value, putRequestOptions);
     } on AtException catch (e) {
       throw AtExceptionManager.createException(e);
     }
@@ -434,14 +437,16 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   /// put's the binary data(e.g. images, files etc) into the keystore
   @override
-  Future<AtResponse> putBinary(AtKey atKey, List<int> value) async {
+  Future<AtResponse> putBinary(AtKey atKey, List<int> value,
+      {PutRequestOptions? putRequestOptions}) async {
     try {
       // Set the default metadata if not already set.
       atKey.metadata ??= Metadata();
       // Setting metadata.isBinary to true for putBinary
       atKey.metadata!.isBinary = true;
       // Base2e15.encode method converts the List<int> type to String.
-      return await _putInternal(atKey, Base2e15.encode(value));
+      return await _putInternal(
+          atKey, Base2e15.encode(value), putRequestOptions);
     } on AtException catch (e) {
       throw AtExceptionManager.createException(e);
     }
@@ -458,7 +463,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
   }
 
-  Future<AtResponse> _putInternal(AtKey atKey, dynamic value) async {
+  Future<AtResponse> _putInternal(
+      AtKey atKey, dynamic value, PutRequestOptions? putRequestOptions) async {
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -505,7 +511,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
     UpdateVerbBuilder verbBuilder = await putRequestTransformer.transform(tuple,
-        encryptionPrivateKey: encryptionPrivateKey);
+        encryptionPrivateKey: encryptionPrivateKey,
+        requestOptions: putRequestOptions);
     // Validate the size of the value after encryption/encoding
     // Since AtClientPreference is mandatory argument in create method, _preference
     // will not be null.
