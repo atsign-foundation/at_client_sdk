@@ -4,7 +4,7 @@ import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/encryption_service/signin_public_data.dart';
+import 'package:at_client/src/encryption_service/sign_in_public_data.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -23,29 +23,44 @@ class PutRequestTransformer
   /// the default encoding when the value contains a new line character.
   EncodingType encodingType = EncodingType.base64;
 
+  static final PutRequestOptions defaultOptions = PutRequestOptions();
+
   @override
   // ignore: avoid_renaming_method_parameters
   Future<UpdateVerbBuilder> transform(Tuple<AtKey, dynamic> tuple,
       {String? encryptionPrivateKey, RequestOptions? requestOptions}) async {
+    PutRequestOptions options = (requestOptions != null
+        ? requestOptions as PutRequestOptions
+        : defaultOptions);
+    AtKey atKey = tuple.one;
+
     // Populate the update verb builder
     UpdateVerbBuilder updateVerbBuilder =
-        _populateUpdateVerbBuilder(tuple.one, _atClient.getPreferences()!);
-    // Setting value to updateVerbBuilder
+        _populateUpdateVerbBuilder(atKey, _atClient.getPreferences()!);
+    // Setting updateVerbBuilder.value
     updateVerbBuilder.value = tuple.two;
+
     //Encrypt the data for non public keys
-    if (!tuple.one.metadata!.isPublic!) {
+    if (!atKey.metadata!.isPublic!) {
       var encryptionService = AtKeyEncryptionManager(_atClient)
-          .get(tuple.one, _atClient.getCurrentAtSign()!);
+          .get(atKey, _atClient.getCurrentAtSign()!);
       try {
-        updateVerbBuilder.value =
-            await encryptionService.encrypt(tuple.one, updateVerbBuilder.value);
+        updateVerbBuilder.value = await encryptionService.encrypt(
+            atKey, updateVerbBuilder.value,
+            storeSharedKeyEncryptedWithData:
+                options.storeSharedKeyEncryptedMetadata);
       } on AtException catch (e) {
         e.stack(AtChainedException(Intent.shareData,
             ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
         rethrow;
       }
-      updateVerbBuilder.sharedKeyEncrypted = tuple.one.metadata!.sharedKeyEnc;
-      updateVerbBuilder.pubKeyChecksum = tuple.one.metadata!.pubKeyCS;
+      updateVerbBuilder.sharedKeyEncrypted = atKey.metadata!.sharedKeyEnc;
+      updateVerbBuilder.pubKeyChecksum = atKey.metadata!.pubKeyCS;
+      updateVerbBuilder.encKeyName = atKey.metadata!.encKeyName;
+      updateVerbBuilder.encAlgo = atKey.metadata!.encAlgo;
+      updateVerbBuilder.ivNonce = atKey.metadata!.ivNonce;
+      updateVerbBuilder.skeEncKeyName = atKey.metadata!.skeEncKeyName;
+      updateVerbBuilder.skeEncAlgo = atKey.metadata!.skeEncAlgo;
     } else {
       if (encryptionPrivateKey.isNull) {
         throw AtPrivateKeyNotFoundException('Failed to sign the public data');

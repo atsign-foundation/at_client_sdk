@@ -19,7 +19,8 @@ class SelfKeyEncryption implements AtKeyEncryption {
   }
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value,
+      {bool storeSharedKeyEncryptedWithData = true}) async {
     if (value is! String) {
       _logger.severe(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
@@ -32,7 +33,8 @@ class SelfKeyEncryption implements AtKeyEncryption {
     selfEncryptionKey =
         DefaultResponseParser().parse(selfEncryptionKey).response;
     // Encrypt value using sharedKey
-    return EncryptionUtil.encryptValue(value, selfEncryptionKey);
+    return EncryptionUtil.encryptValue(value, selfEncryptionKey,
+        ivBase64: atKey.metadata?.ivNonce);
   }
 
   Future<String> _getSelfEncryptionKey(LocalSecondary localSecondary) async {

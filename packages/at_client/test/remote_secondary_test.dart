@@ -32,7 +32,7 @@ void main() {
       reset(mockSecondaryAddressFinder);
       reset(mockAtLookUp);
       reset(mockInternetConnectionChecker);
-      when(() => mockSecondaryAddressFinder.findSecondary(atsign))
+      when(() => mockSecondaryAddressFinder.findSecondary(atsign.toLowerCase()))
           .thenAnswer((_) async => fakeSecondaryAddress);
       AtClientManager.getInstance().secondaryAddressFinder =
           mockSecondaryAddressFinder;
