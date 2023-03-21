@@ -67,7 +67,7 @@ class PutRequestTransformer
       //# TODO remove else block once atChops once testing is good
       if (_atClient.getPreferences()!.useAtChops) {
         final signingResult = _atClient.atChops!
-        // ignore: deprecated_member_use
+            // ignore: deprecated_member_use
             .signString(updateVerbBuilder.value, SigningKeyType.signingSha256);
         updateVerbBuilder.dataSignature = signingResult.result;
       } else {

@@ -127,9 +127,8 @@ class AtClientUtil {
     return atKey.key!;
   }
 
-
   // TODO Remove this once AtUtils.fixAtSign accepts and returns String?
-  static String? fixAtSign (String? atSign) {
+  static String? fixAtSign(String? atSign) {
     if (atSign == null) {
       return atSign;
     } else {
