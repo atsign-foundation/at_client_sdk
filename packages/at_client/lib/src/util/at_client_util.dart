@@ -54,7 +54,7 @@ class AtClientUtil {
   }
 
   static Metadata? prepareMetadata(
-      Map<String, dynamic>? metadataMap, bool? isPublic) {
+      Map<String, dynamic>? metadataMap, bool? isPublic, {bool isCached = false}) {
     if (metadataMap == null) {
       return null;
     }
@@ -92,6 +92,7 @@ class AtClientUtil {
     if (isPublic!) {
       metadata.isPublic = isPublic;
     }
+    metadata.isCached = isCached;
     return metadata;
   }
 
