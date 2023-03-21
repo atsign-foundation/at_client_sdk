@@ -214,7 +214,7 @@ void main() {
       'Test encryption for sharing, NOT storing shared encryption key in metadata',
       () {
     PutRequestOptions options = PutRequestOptions()
-      ..storeSharedKeyEncryptedWithData = false;
+      ..storeSharedKeyEncryptedMetadata = false;
 
     test('Test put shared, then get, no IV, 1.5 to 1.5', () async {
       AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));

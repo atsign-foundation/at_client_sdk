@@ -48,7 +48,7 @@ class PutRequestTransformer
         updateVerbBuilder.value = await encryptionService.encrypt(
             atKey, updateVerbBuilder.value,
             storeSharedKeyEncryptedWithData:
-                options.storeSharedKeyEncryptedWithData);
+                options.storeSharedKeyEncryptedMetadata);
       } on AtException catch (e) {
         e.stack(AtChainedException(Intent.shareData,
             ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));

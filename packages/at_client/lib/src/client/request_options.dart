@@ -7,5 +7,5 @@ class GetRequestOptions extends RequestOptions {
 }
 
 class PutRequestOptions extends RequestOptions {
-  bool storeSharedKeyEncryptedWithData = true;
+  bool storeSharedKeyEncryptedMetadata = true;
 }
