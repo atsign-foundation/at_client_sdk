@@ -29,11 +29,6 @@ jobs:
         with:
           sdk: stable
 
-      # Check formatting
-      - name: Check that code in packages is correctly formatted
-        working-directory: packages
-        run: dart format . -o none --set-exit-if-changed
-
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
         working-directory: packages/at_client
@@ -74,6 +69,11 @@ jobs:
       - name: flutter analyze
         working-directory: packages/at_client_mobile
         run: flutter analyze --no-fatal-infos
+
+      # Check formatting
+      - name: Check that code in packages is correctly formatted
+        working-directory: packages
+        run: dart format . -o none --set-exit-if-changed
 
   functional_tests:
     runs-on: ubuntu-latest

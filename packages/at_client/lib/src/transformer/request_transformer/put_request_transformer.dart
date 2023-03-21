@@ -8,7 +8,6 @@ import 'package:at_client/src/encryption_service/sign_in_public_data.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:at_chops/at_chops.dart';
 
 /// Class responsible for transforming the put request from [AtKey] to [VerbBuilder]
@@ -68,6 +67,7 @@ class PutRequestTransformer
       //# TODO remove else block once atChops once testing is good
       if (_atClient.getPreferences()!.useAtChops) {
         final signingResult = _atClient.atChops!
+            // ignore: deprecated_member_use
             .signString(updateVerbBuilder.value, SigningKeyType.signingSha256);
         updateVerbBuilder.dataSignature = signingResult.result;
       } else {
@@ -91,8 +91,8 @@ class PutRequestTransformer
       AtKey atKey, AtClientPreference atClientPreference) {
     UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder()
       ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-      ..sharedWith = AtUtils.formatAtSign(atKey.sharedWith)
-      ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
+      ..sharedWith = AtClientUtil.fixAtSign(atKey.sharedWith)
+      ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
       ..isPublic =
           (atKey.metadata?.isPublic != null) ? atKey.metadata!.isPublic! : false
       ..isEncrypted = (atKey.metadata?.isEncrypted != null)

@@ -5,6 +5,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
@@ -124,6 +125,15 @@ class AtClientUtil {
       return '${atKey.key}.${atClientPreference.namespace}';
     }
     return atKey.key!;
+  }
+
+  // TODO Remove this once AtUtils.fixAtSign accepts and returns String?
+  static String? fixAtSign(String? atSign) {
+    if (atSign == null) {
+      return atSign;
+    } else {
+      return AtUtils.fixAtSign(atSign);
+    }
   }
 }
 
