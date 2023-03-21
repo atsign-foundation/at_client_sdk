@@ -76,6 +76,7 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
   functional_tests:
+    needs: [ unit_tests_and_code_analysis ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@24cb9080177205b6e8c946b17badbe402adc938f # v3.4.0
@@ -132,6 +133,7 @@ jobs:
         run: docker-compose down
 
   end2end_tests_prep:
+    needs: [ unit_tests_and_code_analysis ]
     # Don't run on PRs from a fork as the secrets aren't available
     if: ${{ github.event.pull_request.head.repo.fork == false }}
     runs-on: ubuntu-latest
