@@ -83,6 +83,11 @@ class NotificationRequestTransformer
     builder.sharedKeyEncrypted =
         notificationParams.atKey.metadata?.sharedKeyEnc;
     builder.pubKeyChecksum = notificationParams.atKey.metadata?.pubKeyCS;
+    builder.encKeyName = notificationParams.atKey.metadata?.encKeyName;
+    builder.encAlgo = notificationParams.atKey.metadata?.encAlgo;
+    builder.ivNonce = notificationParams.atKey.metadata?.ivNonce;
+    builder.skeEncKeyName = notificationParams.atKey.metadata?.skeEncKeyName;
+    builder.skeEncAlgo = notificationParams.atKey.metadata?.skeEncAlgo;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {

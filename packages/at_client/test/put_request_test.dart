@@ -82,7 +82,7 @@ void main() {
 
   group('A group of test to validate metadata', () {
     test('A test to verify invalid TTL value throws exception', () {
-      var atKey = (AtKey.shared('@bob:phone@alice', namespace: 'wavi')
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..timeToLive(-1)
             ..sharedWith('@bob'))
           .build();
@@ -98,7 +98,7 @@ void main() {
     });
 
     test('A test to verify invalid TTB value throws exception', () {
-      var atKey = (AtKey.shared('@bob:phone@alice', namespace: 'wavi')
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..timeToBirth(-1)
             ..sharedWith('@bob'))
           .build();
@@ -114,7 +114,7 @@ void main() {
     });
 
     test('A test to verify invalid TTR value throws exception', () {
-      var atKey = (AtKey.shared('@bob:phone@alice', namespace: 'wavi')
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..cache(-2, true)
             ..sharedWith('@bob'))
           .build();

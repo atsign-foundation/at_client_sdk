@@ -32,6 +32,7 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    return EncryptionUtil.decryptValue(encryptedValue, sharedKey);
+    return EncryptionUtil.decryptValue(encryptedValue, sharedKey,
+        ivBase64: atKey.metadata?.ivNonce);
   }
 }
