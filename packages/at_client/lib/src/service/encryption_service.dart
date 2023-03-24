@@ -28,9 +28,11 @@ class EncryptionService {
     logger = AtSignLogger('EncryptionService ($atSign)');
   }
 
-  Future<List<int>> encryptStream(List<int> value, String sharedWith) async {
+  Future<List<int>> encryptStream(List<int> value, String sharedWith,
+      {String? ivBase64}) async {
     return EncryptionUtil.encryptBytes(
-        value, await _getAESKeyForEncryption(sharedWith));
+        value, await _getAESKeyForEncryption(sharedWith),
+        ivBase64: ivBase64);
   }
 
   Future<String> _getAESKeyForEncryption(String sharedWith) async {
@@ -79,9 +81,11 @@ class EncryptionService {
     return sharedKey;
   }
 
-  List<int> decryptStream(List<int> encryptedValue, String sharedKey) {
+  List<int> decryptStream(List<int> encryptedValue, String sharedKey,
+      {String? ivBase64}) {
     //decrypt stream using decrypted aes shared key
-    var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey);
+    var decryptedValue = EncryptionUtil.decryptBytes(encryptedValue, sharedKey,
+        ivBase64: ivBase64);
     return decryptedValue;
   }
 
@@ -288,7 +292,7 @@ class EncryptionService {
 
   Future<File> encryptFileInChunks(
       File inputFile, String fileEncryptionKey, int chunkSize,
-      {String? path}) async {
+      {String? path, String? ivBase64}) async {
     var chunkedStream = ChunkedStreamReader(inputFile.openRead());
     final length = inputFile.lengthSync();
     var readBytes = 0;
@@ -306,8 +310,9 @@ class EncryptionService {
     try {
       while (readBytes < length) {
         final actualBytes = await chunkedStream.readBytes(chunkSize);
-        final encryptedBytes =
-            AESCodec(fileEncryptionKey).encoder.convert(actualBytes);
+        final encryptedBytes = AESCodec(fileEncryptionKey, ivBase64: ivBase64)
+            .encoder
+            .convert(actualBytes);
         encryptedFile.writeAsBytesSync(encryptedBytes, mode: FileMode.append);
         readBytes += chunkSize;
       }
@@ -319,7 +324,8 @@ class EncryptionService {
   }
 
   Future<File> decryptFileInChunks(
-      File encryptedFile, String fileDecryptionKey, int chunkSize) async {
+      File encryptedFile, String fileDecryptionKey, int chunkSize,
+      {String? ivBase64}) async {
     var chunkedStream = ChunkedStreamReader(encryptedFile.openRead());
     // ignore: unused_local_variable
     var startTime = DateTime.now();
@@ -331,8 +337,9 @@ class EncryptionService {
     try {
       while (readBytes < length) {
         final actualBytes = await chunkedStream.readBytes(chunkSize);
-        final decryptedBytes =
-            AESCodec(fileDecryptionKey).decoder.convert(actualBytes);
+        final decryptedBytes = AESCodec(fileDecryptionKey, ivBase64: ivBase64)
+            .decoder
+            .convert(actualBytes);
         decryptedFile.writeAsBytesSync(decryptedBytes, mode: FileMode.append);
         readBytes += chunkSize;
       }

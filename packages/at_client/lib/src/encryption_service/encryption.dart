@@ -11,5 +11,6 @@ abstract class AtKeyEncryption {
   /// Throws [KeyNotFoundException] if any of the encryption keys are not found.
   ///
   /// Throws [AtClientException] if invalid value type is passed.
-  Future<dynamic> encrypt(AtKey atKey, dynamic value);
+  Future<dynamic> encrypt(AtKey atKey, dynamic value,
+      {bool storeSharedKeyEncryptedWithData = true});
 }
