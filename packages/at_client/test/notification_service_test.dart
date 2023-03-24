@@ -900,7 +900,7 @@ void main() {
 
     test('test to verify lastNotificationReceived fromString', () {
       var lastReceivedNotification =
-          AtKey.fromString('local:lastReceivedNotification.wavi@alice');
+          AtKey.fromString('local:lastreceivednotification.wavi@alice');
       expect(lastReceivedNotification.key,
           NotificationServiceImpl.lastReceivedNotificationKey);
       expect(lastReceivedNotification.namespace, 'wavi');
