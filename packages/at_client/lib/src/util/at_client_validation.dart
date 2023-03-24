@@ -128,7 +128,9 @@ class AtClientValidation {
       throw AtKeyException(
           'shared with cannot be null on notification request');
     }
-    AtUtils.formatAtSign(notificationParams.atKey.sharedWith);
+    notificationParams.atKey.sharedWith =
+        AtUtils.fixAtSign(notificationParams.atKey.sharedWith!);
+
     await isAtSignExists(
         secondaryAddressFinder, notificationParams.atKey.sharedWith!);
 
@@ -145,7 +147,7 @@ class AtClientValidation {
             ..atSign = notificationParams.atKey.sharedBy
             ..validateOwnership = true);
       if (!validationResult.isValid) {
-        throw AtClientException('AT0014', validationResult.failureReason);
+        throw InvalidAtKeyException(validationResult.failureReason);
       }
     }
     // Check if the sharedBy atSign is currentAtSign. If yes allow to send notifications

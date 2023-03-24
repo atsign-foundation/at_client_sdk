@@ -98,11 +98,15 @@ void main() async {
     var getResult = await sharedWithAtClientManager.atClient.getKeys(
         regex:
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
-    print(getResult);
     expect(
         getResult.contains(
             'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign'),
         true);
+
+    AtValue getCachedKeyResponse = await sharedWithAtClientManager.atClient
+        .get(AtKey.fromString(getResult.first));
+    expect(getCachedKeyResponse.value, '0873');
+    expect(getCachedKeyResponse.metadata!.isCached, true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
   }, timeout: Timeout(Duration(minutes: 5)));

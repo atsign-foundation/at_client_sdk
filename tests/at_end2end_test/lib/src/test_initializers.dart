@@ -8,8 +8,6 @@ import 'package:at_utils/at_logger.dart';
 import 'at_credentials.dart';
 
 class TestSuiteInitializer {
-  final _logger = AtSignLogger('TestSuiteInitializer');
-
   static final TestSuiteInitializer _singleton =
       TestSuiteInitializer._internal();
 
@@ -31,15 +29,24 @@ class TestSuiteInitializer {
       await E2ESyncService.getInstance()
           .syncData(atClientManager.atClient.syncService);
 
-      // verify if the local key is set to local secondary
+      // verify if the public key is in the local secondary
       var result = await atClientManager.atClient
           .getLocalSecondary()!
           .getEncryptionPublicKey(atSign);
-      _logger.finer('encryption public key set to local key-store: $result');
+      print('testInitializer: $atSign: encryption public key from local key-store: $result');
       assert(result ==
           AtCredentials
               .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
-      _logger.info('Initial setup the $atSign is complete');
+
+      // verify if the private key is in the local secondary
+      result = await atClientManager.atClient
+          .getLocalSecondary()!
+          .getEncryptionPrivateKey();
+      print('testInitializer: $atSign: encryption public key from local key-store: $result');
+      assert(result ==
+          AtCredentials
+              .credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY]);
+      print('testInitializer: $atSign: setup complete');
     } on Exception catch (e) {
       print('Exception in setting the encryption: $e');
     }

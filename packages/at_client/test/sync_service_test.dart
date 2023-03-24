@@ -46,7 +46,7 @@ class MockAtClient extends Mock implements AtClient {
   }
 
   @override
-  AtClientPreference? getPreferences() {
+  AtClientPreference getPreferences() {
     return AtClientPreference();
   }
 }
