@@ -27,7 +27,8 @@ void main() async {
   });
 
   Future<Version> getVersion(AtClient atClient, Version ifNull) async {
-    var infoResult = await atClient.getRemoteSecondary()!.executeCommand('info\n');
+    var infoResult =
+        await atClient.getRemoteSecondary()!.executeCommand('info\n');
 
     expect(infoResult, startsWith('data:{'));
     infoResult = infoResult!.replaceAll('data:', '');
@@ -43,10 +44,9 @@ void main() async {
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
     //  reset the autoNotify to true
-    clientOne = (await AtClientManager.getInstance().setCurrentAtSign(
-        atSignOne,
-        namespace,
-        TestPreferences.getInstance().getPreference(atSignOne))).atClient;
+    clientOne = (await AtClientManager.getInstance().setCurrentAtSign(atSignOne,
+            namespace, TestPreferences.getInstance().getPreference(atSignOne)))
+        .atClient;
 
     var configResult = await clientOne
         .getRemoteSecondary()!
@@ -75,35 +75,37 @@ void main() async {
     await setAtSignOneAutoNotify(true);
 
     // As atSignOne: Put the initial value
-    clientOne = (await AtClientManager.getInstance()
-        .setCurrentAtSign(atSignOne, namespace,
-            TestPreferences.getInstance().getPreference(atSignOne))).atClient;
-    var putResult =
-        await clientOne.put(verificationKey, initialValue);
+    clientOne = (await AtClientManager.getInstance().setCurrentAtSign(atSignOne,
+            namespace, TestPreferences.getInstance().getPreference(atSignOne)))
+        .atClient;
+    var putResult = await clientOne.put(verificationKey, initialValue);
     expect(putResult, true);
     // Sync the data to the remote secondary
-    await E2ESyncService.getInstance()
-        .syncData(clientOne.syncService);
+    await E2ESyncService.getInstance().syncData(clientOne.syncService);
 
     // Give it a couple of seconds to propagate from one atServer to the other
     await Future.delayed(Duration(seconds: 2));
 
     // As atSignTwo: do a sync, and do the get, to verify we have the initial value
-    clientTwo = (await AtClientManager.getInstance()
-        .setCurrentAtSign(atSignTwo, namespace,
-            TestPreferences.getInstance().getPreference(atSignTwo))).atClient;
-    await E2ESyncService.getInstance()
-        .syncData(clientTwo.syncService);
+    clientTwo = (await AtClientManager.getInstance().setCurrentAtSign(atSignTwo,
+            namespace, TestPreferences.getInstance().getPreference(atSignTwo)))
+        .atClient;
+    await E2ESyncService.getInstance().syncData(clientTwo.syncService);
     var getKey = AtKey()
       ..key = 'verificationNumber'
       ..sharedBy = atSignOne;
     var getResult = await clientTwo.get(getKey);
     expect(getResult.value, initialValue);
+    // Since the put request has a ttr in metadata, a cached key will be created.
+    // When a cached key is available, value will be fetched from a cached key.
+    // Hence isCached should be true.
+    expect(getResult.metadata!.isCached, true);
     print('get Result is $getResult');
 
     // As atSignOne
     clientOne = (await AtClientManager.getInstance().setCurrentAtSign(atSignOne,
-        namespace, TestPreferences.getInstance().getPreference(atSignOne))).atClient;
+            namespace, TestPreferences.getInstance().getPreference(atSignOne)))
+        .atClient;
     try {
       // Set autoNotify to false so that the update doesn't propagate to atSignTwo automatically
       await setAtSignOneAutoNotify(false);
@@ -113,41 +115,49 @@ void main() async {
         ..key = 'verificationNumber'
         ..sharedWith = atSignTwo;
       var newValue = '9900';
-      var newPutResult = await clientOne
-          .put(verificationKeyNew, newValue);
+      var newPutResult = await clientOne.put(verificationKeyNew, newValue);
       expect(newPutResult, true);
 
       // Sync the data to the remote secondary
-      await E2ESyncService.getInstance()
-          .syncData(clientOne.syncService);
-
+      await E2ESyncService.getInstance().syncData(clientOne.syncService);
 
       // As atSignTwo
-      clientTwo = (await AtClientManager.getInstance()
-          .setCurrentAtSign(atSignTwo, namespace,
-              TestPreferences.getInstance().getPreference(atSignTwo))).atClient;
+      clientTwo = (await AtClientManager.getInstance().setCurrentAtSign(
+              atSignTwo,
+              namespace,
+              TestPreferences.getInstance().getPreference(atSignTwo)))
+          .atClient;
 
       // Sync - after this we still should have the old value
-      await E2ESyncService.getInstance()
-          .syncData(clientTwo.syncService);
+      await E2ESyncService.getInstance().syncData(clientTwo.syncService);
 
       // get result with bypassCache set to false
       // should still return the initial value
+      var getKey = AtKey()
+        ..key = 'verificationNumber'
+        ..sharedBy = atSignOne;
       getResult = await clientTwo.get(getKey,
           getRequestOptions: GetRequestOptions()..bypassCache = false);
       print('get result with bypass cache false $getResult');
       expect(getResult.value, initialValue);
+      expect(getResult.metadata!.isCached, true);
 
       // get result with bypassCache set to true
       // should return the new value
+      getKey = AtKey()
+        ..key = 'verificationNumber'
+        ..sharedBy = atSignOne;
       getResult = await clientTwo.get(getKey,
           getRequestOptions: GetRequestOptions()..bypassCache = true);
       print('get result with bypass cache true $getResult');
       expect(getResult.value, newValue);
+      // Though a cached key is available, when bypassCache is set to true,
+      // the value will be fetched from the sharedBy atSign secondary server; skipping
+      // the cached key. Hence isCached is false.
+      expect(getResult.metadata!.isCached, false);
 
       // Sync - after this we should now have the new value
-      await E2ESyncService.getInstance()
-          .syncData(clientTwo.syncService);
+      await E2ESyncService.getInstance().syncData(clientTwo.syncService);
 
       // get Result with byPassCache set to false again
       // should also now return the new value, since cached value will have been updated with the
@@ -155,12 +165,11 @@ void main() async {
       // Note: This will only work on server versions which have the fix, from version 3.0.29 onwards
       Version serverTwoVersion = await getVersion(clientTwo, Version(3, 0, 29));
       if (serverTwoVersion >= Version(3, 0, 29)) {
-        var getResultWithFalse = await clientTwo.get(
-            getKey,
-            getRequestOptions: GetRequestOptions()
-              ..bypassCache = false);
+        var getResultWithFalse = await clientTwo.get(getKey,
+            getRequestOptions: GetRequestOptions()..bypassCache = false);
         print('get result with bypass cache false $getResultWithFalse');
         expect(getResultWithFalse.value, newValue);
+        expect(getResult.metadata!.isCached, false);
       }
     } finally {
       await setAtSignOneAutoNotify(true);

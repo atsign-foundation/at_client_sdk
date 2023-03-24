@@ -55,7 +55,8 @@ class AtClientUtil {
   }
 
   static Metadata? prepareMetadata(
-      Map<String, dynamic>? metadataMap, bool isPublic) {
+      Map<String, dynamic>? metadataMap, bool isPublic,
+      {bool isCached = false}) {
     if (metadataMap == null) {
       return null;
     }
@@ -97,6 +98,7 @@ class AtClientUtil {
         metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
     metadata.skeEncAlgo = metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
     metadata.isPublic = isPublic;
+    metadata.isCached = isCached;
 
     return metadata;
   }
