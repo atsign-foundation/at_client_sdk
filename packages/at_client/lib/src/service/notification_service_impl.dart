@@ -27,7 +27,9 @@ class NotificationServiceImpl
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationIdv2';
-  static const lastReceivedNotificationKey = 'lastReceivedNotification';
+  /// [lastReceivedNotificationKey] has been converted to lowercase
+  /// through at_client v3.0.58
+  static const lastReceivedNotificationKey = 'lastreceivednotification';
 
   late final AtSignLogger _logger;
 
@@ -342,7 +344,7 @@ class NotificationServiceImpl
         notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
       }
       // Append '@' if not already set.
-      AtUtils.formatAtSign(notificationParams.atKey.sharedBy!);
+      AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
       // validate notification request
       await atClientValidation.validateNotificationRequest(
           _atClientManager.secondaryAddressFinder!,
