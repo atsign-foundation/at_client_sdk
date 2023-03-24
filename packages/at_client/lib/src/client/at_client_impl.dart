@@ -136,7 +136,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) async {
     atClientManager ??= AtClientManager.getInstance();
-    currentAtSign = AtUtils.formatAtSign(currentAtSign)!;
+    currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
     // Fetch cached AtClientImpl for re-use, or create a new one and init it
     AtClientImpl? atClientImpl;
@@ -170,7 +170,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) {
-    _atSign = AtUtils.formatAtSign(theAtSign)!;
+    _atSign = AtUtils.fixAtSign(theAtSign);
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
@@ -471,8 +471,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if ((atKey.key != null && upperCaseRegex.hasMatch(atKey.key!)) ||
         (atKey.namespace != null &&
             upperCaseRegex.hasMatch(atKey.namespace!))) {
-      _logger.info('AtKey: ${atKey.toString()} contains upper case characters,'
-          ' AtKey has been converted to lower case');
+      _logger.finer('AtKey: ${atKey.toString()} previously contained upper case'
+          ' characters, AtKey has been converted to lower case');
       //AtKey.toString() in the above log will convert the entire key to lower case
     }
   }
