@@ -20,6 +20,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
+import 'package:version/version.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
@@ -336,13 +337,21 @@ class NotificationServiceImpl
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
+
+    if (_atClient.getPreferences()!.atProtocolEmitted >= Version(2, 0, 0)) {
+      notificationParams.atKey.metadata ??= Metadata();
+      notificationParams.atKey.metadata!.ivNonce ??=
+          EncryptionUtil.generateIV();
+    }
+
     try {
       // If sharedBy atSign is null, default to current atSign.
       if (notificationParams.atKey.sharedBy.isNull) {
         notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
       }
-      // Append '@' if not already set.
-      AtUtils.formatAtSign(notificationParams.atKey.sharedBy!);
+      // Prepend '@' if not already set.
+      notificationParams.atKey.sharedBy =
+          AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
       // validate notification request
       await atClientValidation.validateNotificationRequest(
           _atClientManager.secondaryAddressFinder!,
@@ -622,6 +631,8 @@ class NotificationServiceImpl
       ..status = atNotificationMap['notificationStatus']
       ..value = atNotificationMap['atValue']
       ..operation = atNotificationMap['opType']
-      ..messageType = atNotificationMap['messageType'];
+      ..messageType = atNotificationMap['messageType']
+      ..expiresAtInEpochMillis =
+          DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
   }
 }

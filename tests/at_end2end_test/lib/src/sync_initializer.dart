@@ -21,6 +21,7 @@ class E2ESyncService {
   }
 
   Future<void> syncData(SyncService syncService) async {
+    SyncServiceImpl.queueSize = 1;
     SyncServiceImpl.syncRequestThreshold = 1;
     SyncServiceImpl.syncRequestTriggerInSeconds = 1;
     SyncServiceImpl.syncRunIntervalSeconds = 1;

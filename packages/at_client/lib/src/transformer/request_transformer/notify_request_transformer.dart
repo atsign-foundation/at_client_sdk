@@ -50,7 +50,8 @@ class NotificationRequestTransformer
       ..priority = notificationParams.priority
       ..strategy = notificationParams.strategy
       ..latestN = notificationParams.latestN
-      ..notifier = notificationParams.notifier;
+      ..notifier = notificationParams.notifier
+      ..ttln = notificationParams.notificationExpiry.inMilliseconds;
     // Append namespace only to message type key. For message type text do not
     // append namespaces.
     if (notificationParams.messageType == MessageTypeEnum.key) {
@@ -82,6 +83,11 @@ class NotificationRequestTransformer
     builder.sharedKeyEncrypted =
         notificationParams.atKey.metadata?.sharedKeyEnc;
     builder.pubKeyChecksum = notificationParams.atKey.metadata?.pubKeyCS;
+    builder.encKeyName = notificationParams.atKey.metadata?.encKeyName;
+    builder.encAlgo = notificationParams.atKey.metadata?.encAlgo;
+    builder.ivNonce = notificationParams.atKey.metadata?.ivNonce;
+    builder.skeEncKeyName = notificationParams.atKey.metadata?.skeEncKeyName;
+    builder.skeEncAlgo = notificationParams.atKey.metadata?.skeEncAlgo;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {

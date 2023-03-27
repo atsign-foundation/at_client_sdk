@@ -30,7 +30,8 @@ class GetResponseTransformer
     // parse metadata
     if (decodedResponse['metaData'] != null) {
       final metadata = AtClientUtil.prepareMetadata(
-          decodedResponse['metaData'], _isKeyPublic(decodedResponse['key']));
+          decodedResponse['metaData'], _isKeyPublic(decodedResponse['key']),
+          isCached: decodedResponse['key'].startsWith('cached:'));
       atValue.metadata = metadata;
       tuple.one.metadata = metadata;
     }

@@ -269,6 +269,7 @@ class Monitor {
     if (_preference.useAtChops) {
       _logger.finer('Using AtChops to do the PKAM signing');
       var signingResult =
+          // ignore: deprecated_member_use
           atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
       _logger.finer('Sending command pkam:${signingResult.result}');
       await _monitorConnection!.write('pkam:${signingResult.result}\n');

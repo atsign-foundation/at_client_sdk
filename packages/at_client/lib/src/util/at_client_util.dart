@@ -5,6 +5,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
@@ -54,7 +55,8 @@ class AtClientUtil {
   }
 
   static Metadata? prepareMetadata(
-      Map<String, dynamic>? metadataMap, bool? isPublic) {
+      Map<String, dynamic>? metadataMap, bool isPublic,
+      {bool isCached = false}) {
     if (metadataMap == null) {
       return null;
     }
@@ -89,9 +91,15 @@ class AtClientUtil {
     metadata.sharedKeyEnc = metadataMap[SHARED_KEY_ENCRYPTED];
     metadata.pubKeyCS = metadataMap[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
     metadata.encoding = metadataMap[ENCODING];
-    if (isPublic!) {
-      metadata.isPublic = isPublic;
-    }
+    metadata.encKeyName = metadataMap[ENCRYPTING_KEY_NAME];
+    metadata.encAlgo = metadataMap[ENCRYPTING_ALGO];
+    metadata.ivNonce = metadataMap[IV_OR_NONCE];
+    metadata.skeEncKeyName =
+        metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+    metadata.skeEncAlgo = metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
+    metadata.isPublic = isPublic;
+    metadata.isCached = isCached;
+
     return metadata;
   }
 
@@ -119,6 +127,15 @@ class AtClientUtil {
       return '${atKey.key}.${atClientPreference.namespace}';
     }
     return atKey.key!;
+  }
+
+  // TODO Remove this once AtUtils.fixAtSign accepts and returns String?
+  static String? fixAtSign(String? atSign) {
+    if (atSign == null) {
+      return atSign;
+    } else {
+      return AtUtils.fixAtSign(atSign);
+    }
   }
 }
 

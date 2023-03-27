@@ -19,6 +19,6 @@ export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_client/src/service/sync/sync_conflict.dart';
 export 'package:at_commons/at_commons.dart';
 export 'package:at_client/src/listener/sync_progress_listener.dart';
+export 'package:at_client/src/client/request_options.dart';
 @experimental
 export 'package:at_client/src/telemetry/at_client_telemetry.dart';
-export 'package:at_client/src/client/request_options.dart';

@@ -6,13 +6,16 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
   SharedKeyEncryption(AtClient atClient) : super(atClient);
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value,
+      {bool storeSharedKeyEncryptedWithData = true}) async {
     if (value is! String) {
       throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
-    await super.encrypt(atKey, value);
+    await super.encrypt(atKey, value,
+        storeSharedKeyEncryptedWithData: storeSharedKeyEncryptedWithData);
     // Encrypt value using sharedKey
-    return EncryptionUtil.encryptValue(value, sharedKey);
+    return EncryptionUtil.encryptValue(value, sharedKey,
+        ivBase64: atKey.metadata?.ivNonce);
   }
 }
