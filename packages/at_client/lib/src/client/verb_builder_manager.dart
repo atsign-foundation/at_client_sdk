@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_utils.dart';
 
 /// Class responsible for returning the appropriate [VerbBuilder] for given [AtKey]
 class LookUpBuilderManager {
@@ -16,7 +15,7 @@ class LookUpBuilderManager {
             !atKey.metadata!.isCached)) {
       final plookUpVerbBuilder = PLookupVerbBuilder()
         ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-        ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
+        ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
         ..operation = 'all';
       if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
         plookUpVerbBuilder.bypassCache = true;
@@ -30,7 +29,7 @@ class LookUpBuilderManager {
             !atKey.metadata!.isPublic!)) {
       final lookupVerbBuilder = LookupVerbBuilder()
         ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-        ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
+        ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
         ..auth = true
         ..operation = 'all';
       if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
@@ -40,8 +39,8 @@ class LookUpBuilderManager {
     }
     return LLookupVerbBuilder()
       ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-      ..sharedBy = AtUtils.formatAtSign(atKey.sharedBy)
-      ..sharedWith = AtUtils.formatAtSign(atKey.sharedWith)
+      ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
+      ..sharedWith = AtClientUtil.fixAtSign(atKey.sharedWith)
       ..isPublic = (atKey.metadata != null && atKey.metadata?.isPublic != null)
           ? atKey.metadata!.isPublic!
           : false

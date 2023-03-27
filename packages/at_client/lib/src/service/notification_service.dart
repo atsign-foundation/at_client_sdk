@@ -152,10 +152,11 @@ class NotificationParams {
   String? _value;
   late OperationEnum _operation;
   late MessageTypeEnum _messageType;
-  late PriorityEnum _priority;
-  late StrategyEnum _strategy;
-  final int _latestN = 1;
-  final String _notifier = SYSTEM;
+  PriorityEnum _priority = PriorityEnum.low;
+  StrategyEnum _strategy = StrategyEnum.all;
+  int _latestN = 1;
+  String _notifier = SYSTEM;
+  Duration _notificationExpiry = Duration(hours: 24);
 
   String get id => _id;
 
@@ -175,16 +176,40 @@ class NotificationParams {
 
   int get latestN => _latestN;
 
+  Duration get notificationExpiry => _notificationExpiry;
+
   /// Returns [NotificationParams] to send an update notification.
-  static NotificationParams forUpdate(AtKey atKey, {String? value}) {
+  ///
+  /// Optionally accepts the following
+  ///
+  /// * priority: Represents the priority of the notification. The notification marked [PriorityEnum.high] takes precedence over other notifications.
+  ///
+  /// * strategy: When notifications marked with [StrategyEnum.all], all the notifications are sent. For [StrategyEnum.latest], only the [latestN] of a notifier are sent
+  ///
+  /// * latestN: Represents the count of notifications to store that belong to a particular [notifier].
+  ///
+  /// * notifier: Groups the notifications that has the same notifier.
+  ///
+  /// * notificationExpiry: Refers to the amount of time the notification is
+  /// available in the KeyStore. Beyond which the notification is removed from the KeyStore.
+  static NotificationParams forUpdate(AtKey atKey,
+      {String? value,
+      PriorityEnum priority = PriorityEnum.low,
+      StrategyEnum strategy = StrategyEnum.all,
+      int latestN = 1,
+      String notifier = SYSTEM,
+      Duration? notificationExpiry}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
       .._value = value
       .._operation = OperationEnum.update
       .._messageType = MessageTypeEnum.key
-      .._priority = PriorityEnum.low
-      .._strategy = StrategyEnum.all;
+      .._priority = priority
+      .._strategy = strategy
+      .._latestN = latestN
+      .._notifier = notifier
+      .._notificationExpiry = notificationExpiry ?? Duration(hours: 24);
   }
 
   /// Returns [NotificationParams] to send a delete notification.
@@ -193,9 +218,7 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.delete
-      .._messageType = MessageTypeEnum.key
-      .._priority = PriorityEnum.low
-      .._strategy = StrategyEnum.all;
+      .._messageType = MessageTypeEnum.key;
   }
 
   /// Returns [NotificationParams] to send a text message to another atSign.
@@ -211,9 +234,7 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.text
-      .._priority = PriorityEnum.low
-      .._strategy = StrategyEnum.all;
+      .._messageType = MessageTypeEnum.text;
   }
 }
 

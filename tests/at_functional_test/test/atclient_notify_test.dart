@@ -8,8 +8,8 @@ import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
-  var currentAtSign = '@alice🛠';
-  var sharedWithAtSign = '@bob🛠';
+  final String currentAtSign = '@alice🛠';
+  final String sharedWithAtSign = '@bob🛠';
   late AtClientManager atClientManager;
   String namespace = 'wavi';
   setUpAll(() async {
@@ -19,6 +19,12 @@ void main() {
     atClientManager.atClient.syncService.sync();
     // To setup encryption keys
     await setEncryptionKeys(currentAtSign, preference);
+  });
+  // Invoking 'setCurrentAtSign' in setUp method to set currentAtSign before each test.
+  setUp(() async {
+    print('Setting current atSign to $currentAtSign');
+    atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
   });
   test('notify updating of a key to sharedWith atSign - using await', () async {
     // phone.me@alice🛠
@@ -36,8 +42,8 @@ void main() {
     expect(result.atKey?.key, 'phone');
     expect(result.atKey?.sharedWith, phoneKey.sharedWith);
     // fetch notification using notify fetch
-    var atNotification =
-        await atClientManager.atClient.notificationService.fetch(result.notificationID);
+    var atNotification = await atClientManager.atClient.notificationService
+        .fetch(result.notificationID);
     expect(atNotification.key, phoneKey.toString());
     expect(atNotification.status, 'NotificationStatus.delivered');
     expect(atNotification.messageType, 'MessageType.key');
@@ -58,7 +64,8 @@ void main() {
     var result = await atClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(landlineKey, value: value));
     print('NotificationId : ${result.notificationID}');
-    final notificationStatus = await atClientManager.atClient.notificationService
+    final notificationStatus = await atClientManager
+        .atClient.notificationService
         .getStatus(result.notificationID);
     print('Notification status is $notificationStatus');
     expect(notificationStatus.notificationID, result.notificationID);
@@ -114,8 +121,8 @@ void main() {
 
   test('notify text of to sharedWith atSign with shouldEncrypt set to true',
       () async {
-    var notificationResult = await atClientManager.atClient.notificationService.notify(
-        NotificationParams.forText('Hello', sharedWithAtSign,
+    var notificationResult = await atClientManager.atClient.notificationService
+        .notify(NotificationParams.forText('Hello', sharedWithAtSign,
             shouldEncrypt: true));
     expect(notificationResult.notificationStatusEnum.toString(),
         'NotificationStatusEnum.delivered');
@@ -187,6 +194,48 @@ void main() {
         await atClientManager.atClient.notificationService.fetch('abc-123');
     expect(atNotification.id, 'abc-123');
     expect(atNotification.status, 'NotificationStatus.expired');
+  });
+
+  test('A test to verify the notification expiry', () async {
+    for (int i = 0; i < 10; i++) {
+      print('Testing notification expiry - test run #$i');
+      var atKey = (AtKey.shared('test-notification-expiry',
+              namespace: 'wavi', sharedBy: currentAtSign)
+            ..sharedWith(sharedWithAtSign))
+          .build();
+      print('atKey: $atKey');
+      atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
+
+      NotificationResult notificationResult = await atClientManager
+          .atClient.notificationService
+          .notify(NotificationParams.forUpdate(atKey,
+              notificationExpiry: Duration(minutes: 1)));
+
+      print('notificationResult: $notificationResult');
+      print(
+          'notificationResult.atClientException: ${notificationResult.atClientException}');
+
+      AtNotification atNotification = await atClientManager
+          .atClient.notificationService
+          .fetch(notificationResult.notificationID);
+
+      print('Fetched notification $atNotification');
+
+      var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
+              atNotification.expiresAtInEpochMillis!)
+          .toUtc()
+          .millisecondsSinceEpoch;
+      var expectedExpiresAtInEpochMills =
+          DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
+              .toUtc()
+              .add(Duration(minutes: 1))
+              .millisecondsSinceEpoch;
+      expect(
+          (actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills).abs() <
+              10,
+          true);
+    }
   });
   tearDownAll(() async => await tearDownFunc());
 }
