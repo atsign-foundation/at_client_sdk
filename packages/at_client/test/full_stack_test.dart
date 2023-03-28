@@ -14,14 +14,14 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
 
-bool wrappedDecryptSucceeds({
-  required String cipherText,
-  required String aesKey,
-  required String? ivBase64,
-  required String clearText
-}) {
+bool wrappedDecryptSucceeds(
+    {required String cipherText,
+    required String aesKey,
+    required String? ivBase64,
+    required String clearText}) {
   try {
-    var deciphered = EncryptionUtil.decryptValue(cipherText, aesKey, ivBase64: ivBase64);
+    var deciphered =
+        EncryptionUtil.decryptValue(cipherText, aesKey, ivBase64: ivBase64);
     if (deciphered != clearText) {
       return false;
     } else {
@@ -31,6 +31,7 @@ bool wrappedDecryptSucceeds({
     return false;
   }
 }
+
 void main() {
   group('Test with full client stack except mockRemoteSecondary', () {
     final fullStackPrefs = AtClientPreference()
@@ -249,8 +250,7 @@ void main() {
       test('Test put shared, then get, with IV, 2.0 to 2.0', () async {
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
-        var atKey = (AtKey.shared('test_put')
-          ..sharedWith('@bob')).build();
+        var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
         expect(atKey.metadata?.ivNonce, isNotNull);
 
@@ -292,8 +292,7 @@ void main() {
       test('Test put shared, then get, with IV, 2.0 to 1.5', () async {
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
-        var atKey = (AtKey.shared('test_put')
-          ..sharedWith('@bob')).build();
+        var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
         expect(atKey.metadata?.ivNonce, isNotNull);
 
