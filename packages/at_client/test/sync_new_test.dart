@@ -62,6 +62,8 @@ class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 
 class FakeRemoteSecondary extends Fake implements RemoteSecondary {}
 
+class FakeAtKey extends Fake implements AtKey {}
+
 ///Notes:
 /// Description of terminology used in the test cases:
 ///
@@ -1261,6 +1263,7 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
+      registerFallbackValue(FakeAtKey());
 
       when(() => mockNetworkUtil.isNetworkAvailable())
           .thenAnswer((_) => Future.value(true));
@@ -1294,6 +1297,10 @@ void main() {
           (invocation) => Future.value('data:[{"id":1,"response":{"data":"6"}},'
               '{"id":2,"response":{"data":"7"}},'
               '{"id":3,"response":{"data":"8"}}]'));
+
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2255,6 +2262,7 @@ void main() {
     /// Server and local should be in sync and 5 entries from the server must be synced to local
     test('A test to verify server commit entries are synced to local',
         () async {
+      registerFallbackValue(FakeAtKey());
       //----------------------------------Setup---------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2294,6 +2302,9 @@ void main() {
               '"value":"dummy",'
               '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
               '"commitId":15,"operation":"*"}]'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2454,6 +2465,7 @@ void main() {
     test(
         'A test to verify existing key is deleted when delete commit operation is received',
         () async {
+      registerFallbackValue(FakeAtKey());
       // --------------------- Setup ---------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2487,6 +2499,9 @@ void main() {
           any(
               that: SyncVerbBuilderMatcher()))).thenAnswer((_) => Future.value(
           'data:[{"atKey":"@alice:contact@gandalf","value":null,"metadata":null,"commitId":3,"operation":"-"},{"atKey":"cached:@gandalf:aboutme@bob","value":null,"metadata":null,"commitId":4,"operation":"-"}]'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
 
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => localSecondary);
@@ -2571,6 +2586,7 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
+      registerFallbackValue(FakeAtKey());
 
       when(() => mockNetworkUtil.isNetworkAvailable())
           .thenAnswer((_) => Future.value(true));
@@ -2601,6 +2617,9 @@ void main() {
               auth: any(named: "auth"))).thenAnswer(
           (invocation) => Future.value('data:[{"id":1,"response":{"data":"3"}},'
               '{"id":2,"response":{"data":"4"}}]'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
 
       // --------------------- preconditions setup -----------------------------
       await localSecondary.putValue('public:conflict_key1@bob', 'localValue');
@@ -2770,6 +2789,7 @@ void main() {
 
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
+        registerFallbackValue(FakeAtKey());
 
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(false));
@@ -2800,6 +2820,9 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"4"}},'
                     '{"id":2,"response":{"data":"5"}}]'));
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
 
         //----------------------------Preconditions setup ----------------------
         await localSecondary.putValue(
@@ -2986,6 +3009,7 @@ void main() {
 
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
+        registerFallbackValue(FakeAtKey());
 
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(true));
@@ -3017,6 +3041,9 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":4,"operation":"*"}]'));
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3162,6 +3189,7 @@ void main() {
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
+        registerFallbackValue(FakeAtKey());
 
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(true));
@@ -3202,6 +3230,9 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"3"}},'
                     '{"id":2,"response":{"data":"4"}}]'));
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
 
         //-----------------preconditions setup-----------------
         await localSecondary.putValue(
@@ -3299,6 +3330,7 @@ void main() {
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
+        registerFallbackValue(FakeAtKey());
 
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(true));
@@ -3339,6 +3371,9 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"4"}},'
                     '{"id":2,"response":{"data":"5"}}]'));
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
 
         //------------------------ preconditions setup ------------------------
         await localSecondary.putValue(
@@ -3397,6 +3432,7 @@ void main() {
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
+        registerFallbackValue(FakeAtKey());
 
         when(() => mockNetworkUtil.isNetworkAvailable())
             .thenAnswer((_) => Future.value(true));
@@ -3422,6 +3458,9 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":3,"operation":"*"}]'));
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
 
         // ----------------- preconditions setup and operation -----------------
         CustomSyncProgressListener progressListener =
@@ -3480,6 +3519,7 @@ void main() {
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeDeleteVerbBuilder());
+        registerFallbackValue(FakeAtKey());
 
         LocalSecondary mockLocalSecondary = MockLocalSecondary();
         SyncUtil mockSyncUtil = MockSyncUtil();
@@ -3510,6 +3550,12 @@ void main() {
         when(() => mockLocalSecondary.executeVerb(
             any(that: UpdateDeleteVerbBuilderMatcher()),
             sync: false)).thenAnswer((_) => Future.value('data:5'));
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockLocalSecondary.keyStore?.isKeyExists(
+                any(that: startsWith('local:lastreceivedservercommitid'))))
+            .thenAnswer((invocation) => false);
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3549,6 +3595,7 @@ void main() {
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeDeleteVerbBuilder());
+        registerFallbackValue(FakeAtKey());
 
         SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
         LocalSecondary mockLocalSecondary = MockLocalSecondary();
@@ -3594,6 +3641,12 @@ void main() {
             mockRemoteSecondary.executeCommand(any(),
                 auth: any(named: "auth"))).thenAnswer((_) => Future.value(
             'data:[{"id":1,"response":{"data":"21"}},{"id":2,"response":{"data":"22"}},{"id":3,"response":{"data":"23"}},{"id":4,"response":{"data":"24"}}]'));
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockLocalSecondary.keyStore
+                ?.isKeyExists(any(that: startsWith('local:'))))
+            .thenAnswer((invocation) => false);
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3744,6 +3797,21 @@ class RemoteSecondaryMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is RemoteSecondary) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class LastReceivedServerCommitIdMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key!.startsWith('lastreceivedservercommitid')) {
       return true;
     }
     return false;
