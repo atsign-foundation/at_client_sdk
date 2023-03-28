@@ -5,12 +5,12 @@ import 'package:test/test.dart';
 
 bool wrappedDecryptSucceeds(
     {required String cipherText,
-      required String aesKey,
-      required String? ivBase64,
-      required String clearText}) {
+    required String aesKey,
+    required String? ivBase64,
+    required String clearText}) {
   try {
     var deciphered =
-    EncryptionUtil.decryptValue(cipherText, aesKey, ivBase64: ivBase64);
+        EncryptionUtil.decryptValue(cipherText, aesKey, ivBase64: ivBase64);
     if (deciphered != clearText) {
       return false;
     } else {
@@ -46,11 +46,23 @@ void main() {
           EncryptionUtil.decryptValue(encryptedValue, aesKey, ivBase64: iv);
       expect(decryptedValue, valueToEncrypt);
 
-      expect(wrappedDecryptSucceeds(cipherText: encryptedValue, aesKey: aesKey, ivBase64: null, clearText: valueToEncrypt), false);
+      expect(
+          wrappedDecryptSucceeds(
+              cipherText: encryptedValue,
+              aesKey: aesKey,
+              ivBase64: null,
+              clearText: valueToEncrypt),
+          false);
 
       for (int i = 0; i < 10; i++) {
         var otherIV = EncryptionUtil.generateIV();
-        expect(wrappedDecryptSucceeds(cipherText: encryptedValue, aesKey: aesKey, ivBase64: otherIV, clearText: valueToEncrypt), false);
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: encryptedValue,
+                aesKey: aesKey,
+                ivBase64: otherIV,
+                clearText: valueToEncrypt),
+            false);
       }
     });
 
