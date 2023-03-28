@@ -14,6 +14,23 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
 
+bool wrappedDecryptSucceeds({
+  required String cipherText,
+  required String aesKey,
+  required String? ivBase64,
+  required String clearText
+}) {
+  try {
+    var deciphered = EncryptionUtil.decryptValue(cipherText, aesKey, ivBase64: ivBase64);
+    if (deciphered != clearText) {
+      return false;
+    } else {
+      return true;
+    }
+  } catch (e) {
+    return false;
+  }
+}
 void main() {
   group('Test with full client stack except mockRemoteSecondary', () {
     final fullStackPrefs = AtClientPreference()
@@ -142,8 +159,13 @@ void main() {
             .keyStore!
             .get(atKey.toString()));
         var cipherText = atData.data;
-        expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
-            throwsException);
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: selfEncryptionKey,
+                ivBase64: null,
+                clearText: clearText),
+            false);
         expect(
             EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
                 ivBase64: atKey.metadata?.ivNonce),
@@ -167,8 +189,13 @@ void main() {
             .keyStore!
             .get(atKey.toString()));
         var cipherText = atData.data;
-        expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
-            throwsException);
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: selfEncryptionKey,
+                ivBase64: null,
+                clearText: clearText),
+            false);
         expect(
             EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
                 ivBase64: atKey.metadata?.ivNonce),
@@ -222,7 +249,8 @@ void main() {
       test('Test put shared, then get, with IV, 2.0 to 2.0', () async {
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
-        var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
+        var atKey = (AtKey.shared('test_put')
+          ..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
         expect(atKey.metadata?.ivNonce, isNotNull);
 
@@ -231,14 +259,27 @@ void main() {
             .keyStore!
             .get(atKey.toString()));
         var cipherText = atData.data;
-        expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
-            throwsException);
         expect(
-            () => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
-                ivBase64: atKey.metadata?.ivNonce),
-            throwsException);
-        expect(() => EncryptionUtil.decryptValue(cipherText, bobSharedKey),
-            throwsException);
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: selfEncryptionKey,
+                ivBase64: null,
+                clearText: clearText),
+            false);
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: selfEncryptionKey,
+                ivBase64: atKey.metadata?.ivNonce,
+                clearText: clearText),
+            false);
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: bobSharedKey,
+                ivBase64: null,
+                clearText: clearText),
+            false);
         expect(
             EncryptionUtil.decryptValue(cipherText, bobSharedKey,
                 ivBase64: atKey.metadata?.ivNonce),
@@ -251,7 +292,8 @@ void main() {
       test('Test put shared, then get, with IV, 2.0 to 1.5', () async {
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
-        var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
+        var atKey = (AtKey.shared('test_put')
+          ..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
         expect(atKey.metadata?.ivNonce, isNotNull);
 
@@ -261,14 +303,27 @@ void main() {
             .keyStore!
             .get(atKey.toString()));
         var cipherText = atData.data;
-        expect(() => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
-            throwsException);
         expect(
-            () => EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
-                ivBase64: atKey.metadata?.ivNonce),
-            throwsException);
-        expect(() => EncryptionUtil.decryptValue(cipherText, bobSharedKey),
-            throwsException);
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: selfEncryptionKey,
+                ivBase64: null,
+                clearText: clearText),
+            false);
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: selfEncryptionKey,
+                ivBase64: atKey.metadata?.ivNonce,
+                clearText: clearText),
+            false);
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: cipherText,
+                aesKey: bobSharedKey,
+                ivBase64: null,
+                clearText: clearText),
+            false);
         expect(
             EncryptionUtil.decryptValue(cipherText, bobSharedKey,
                 ivBase64: atKey.metadata?.ivNonce),
