@@ -22,10 +22,10 @@ import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService, AtSignChangeListener {
-  static const _syncRequestThreshold = 3,
-      _syncRequestTriggerInSeconds = 3,
-      _syncRunIntervalSeconds = 5,
-      _queueSize = 5;
+  static int syncRequestThreshold = 3,
+      syncRequestTriggerInSeconds = 3,
+      syncRunIntervalSeconds = 5,
+      queueSize = 5;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
@@ -41,7 +41,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
-  final _syncRequests = ListQueue<SyncRequest>(_queueSize);
+  final _syncRequests = ListQueue<SyncRequest>(queueSize);
   bool _syncInProgress = false;
 
   @override
@@ -89,7 +89,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _scheduleSyncRun() {
     _cron = Cron();
 
-    _cron.schedule(Schedule.parse('*/$_syncRunIntervalSeconds * * * * *'),
+    _cron.schedule(Schedule.parse('*/$syncRunIntervalSeconds * * * * *'),
         () async {
       try {
         await processSyncRequests();
@@ -181,13 +181,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
       if (_syncRequests.isEmpty ||
-          (_syncRequests.length < _syncRequestThreshold &&
+          (_syncRequests.length < syncRequestThreshold &&
               (_syncRequests.isNotEmpty &&
                   DateTime.now()
                           .toUtc()
                           .difference(_syncRequests.elementAt(0).requestedOn)
                           .inSeconds <
-                      _syncRequestTriggerInSeconds))) {
+                      syncRequestTriggerInSeconds))) {
         _logger.finest('skipping sync - queue length ${_syncRequests.length}');
         return;
       }
@@ -311,7 +311,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
     hasHadNoSyncRequests = false;
-    if (_syncRequests.length == _queueSize) {
+    if (_syncRequests.length == queueSize) {
       _syncRequests.removeLast();
     }
     _syncRequests.addLast(syncRequest);
@@ -509,7 +509,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     final atKey = AtKey.fromString(key);
     // temporary fix to add @ to sharedBy. permanent fix should be in AtKey.fromString
-    atKey.sharedBy = AtUtils.formatAtSign(atKey.sharedBy);
+    if (atKey.sharedBy != null) {
+      atKey.sharedBy = AtUtils.fixAtSign(atKey.sharedBy!);
+    }
 
     bool serverCommitEntryKeyExistsInLocalUncommittedEntries = false;
     for (CommitEntry entry in uncommittedEntries) {
@@ -570,8 +572,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var batchId = 1;
     for (var entry in uncommittedEntries) {
       String command;
-      //Skipping the cached keys to sync to cloud secondary.
-      if (entry.atKey!.startsWith('cached:')) {
+      // If someone updates cached keys locally, they should never be synced to the cloud
+      // However if they want to delete a cached key, they should be allowed to
+      if (entry.atKey!.startsWith('cached:') &&
+          entry.operation != CommitOp.DELETE) {
         _logger.finer(
             '${entry.atKey} is skipped. cached keys will not be synced to cloud secondary');
         continue;
@@ -626,7 +630,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return command;
   }
 
-  String _metadataToString(dynamic metadata) {
+  String _metadataToString(AtMetaData? metadata) {
     if (metadata == null) {
       return '';
     }
@@ -646,22 +650,32 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.isEncrypted != null) {
       metadataStr += ':isEncrypted:${metadata.isEncrypted}';
     }
-    // The older key entries will not have metadata.sharedKeyEncrypted and metadata.pubKeyChecksum
-    // Hence handling the NoSuchMethodError.
-    try {
-      if (metadata.sharedKeyEnc != null) {
-        metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
-      }
-      if (metadata.pubKeyCS != null) {
-        metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
-      }
-      if (metadata.encoding != null) {
-        metadataStr += ':encoding:${metadata.encoding}';
-      }
-    } on NoSuchMethodError {
-      // ignore for uncommitted entries added before shared key metadata version
-      _logger.finest('The entry is created with the older metadata');
+
+    if (metadata.sharedKeyEnc != null) {
+      metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
     }
+    if (metadata.pubKeyCS != null) {
+      metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
+    }
+    if (metadata.encoding != null) {
+      metadataStr += ':encoding:${metadata.encoding}';
+    }
+    if (metadata.encKeyName != null) {
+      metadataStr += ':encKeyName:${metadata.encKeyName}';
+    }
+    if (metadata.encAlgo != null) {
+      metadataStr += ':encAlgo:${metadata.encAlgo}';
+    }
+    if (metadata.ivNonce != null) {
+      metadataStr += ':ivNonce:${metadata.ivNonce}';
+    }
+    if (metadata.skeEncKeyName != null) {
+      metadataStr += ':skeEncKeyName:${metadata.skeEncKeyName}';
+    }
+    if (metadata.skeEncAlgo != null) {
+      metadataStr += ':skeEncAlgo:${metadata.skeEncAlgo}';
+    }
+
     return metadataStr;
   }
 
@@ -777,7 +791,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
-        var builder = DeleteVerbBuilder()..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
+        var builder = DeleteVerbBuilder()
+          ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
         _logger.finest(
             'syncing to local delete: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
@@ -807,7 +822,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return unCommittedEntryBatch;
   }
 
-  void _setMetaData(builder, serverCommitEntry) {
+  void _setMetaData(UpdateVerbBuilder builder, serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
       if (metaData[AT_TTL] != null) builder.ttl = int.parse(metaData[AT_TTL]);
@@ -839,6 +854,22 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       if (metaData[ENCODING] != null) {
         builder.encoding = metaData[ENCODING];
+      }
+      if (metaData[ENCRYPTING_KEY_NAME] != null) {
+        builder.encKeyName = metaData[ENCRYPTING_KEY_NAME];
+      }
+      if (metaData[ENCRYPTING_ALGO] != null) {
+        builder.encAlgo = metaData[ENCRYPTING_ALGO];
+      }
+      if (metaData[IV_OR_NONCE] != null) {
+        builder.ivNonce = metaData[IV_OR_NONCE];
+      }
+      if (metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME] != null) {
+        builder.skeEncKeyName =
+            metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+      }
+      if (metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO] != null) {
+        builder.skeEncAlgo = metaData[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
       }
     }
   }

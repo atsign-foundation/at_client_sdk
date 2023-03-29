@@ -2,78 +2,65 @@ name: Refreshcerts
 on:
   workflow_dispatch:
   schedule:
-    - cron: '15 2 15 * *' # At 0215 on the 15th day of every odd month
+    - cron: '42 12 * * *' # At 1242 each day
 
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
-  refresh-ACME-cert:
+  checkcert:
     runs-on: ubuntu-latest
-    name: SSL Renewal for vip.ve.atsign.zone
+    outputs:
+      cert: ${{ steps.checkcert.outputs.cert }}
     steps:
-      - name: Set up Python
-        uses: actions/setup-python@d27e3f3d7c64b4bbf8e4abfb9b63b83e846e0435 # v4.5.0
-        with:
-          python-version: 3.9 #install the python needed
-      - name: setup certinfo
-        uses: atsign-company/certinfo-action@e33db584f27bbbc0260af9916aeaefbec0db8ef4 # v1.0.1
-      # checkout at_server code
       - name: checkout repo content
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-      # Pull ZeroSSL and Letsencrypt keys file from secret
-      - name: Pull ACME script
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-        with:
-          repository: atsign-company/secondaries-scripts
-          path: secondaries-scripts
-          token: ${{ secrets.MY_GITHUB_TOKEN }}
-          ref: trunk
-      # Create required directory
-      - name: Create required directory and pull secrets
-        run: |-
-          sudo mkdir -p /gluster/@/api/keys
-          sudo chmod -R 777 /gluster/@/api/keys
-          echo "${{secrets.LETSENCRYPT_PRIVKEY}}" > /gluster/@/api/keys/letsencrypt.key
-          echo "${{secrets.ZEROSSL_PRIVKEY}}" > /gluster/@/api/keys/zerossl.key
-          echo "${{secrets.GOOGLE_PRIVKEY}}" > /gluster/@/api/keys/google.key
-      # Install Python Libraries
-      - name: Install Python Libraries
-        run: |-
-          python3 -m pip install --require-hashes -r tools/requirements.txt
-      # Run Python ACME script
-      - name: Run ACME script
-        run: |-
-          set +e
-          chmod -R 777 secondaries-scripts
-          cd secondaries-scripts && ./create_cert_workflow.sh vip.ve.atsign.zone
-          cp cert.pem ../tests/at_functional_test/test/testData/cert.pem
-          cd .. && rm -rf  vip.ve.atsign.zone* secondaries-scripts
-          git config --global user.name 'Getcert Action'
-          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          set -e
-        env:
-          DO_KEY: ${{ secrets.DO_KEY }}
-          gChat_url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+        uses: actions/checkout@8f4b7f84864484a7bf31766abe9204da3cbe65b3 # v3.5.0
 
-      # create PR with renewed certificate
+      - id: checkcert
+        name: Check for new cert
+        run: |
+          cd tests/at_functional_test/test/testData
+          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
+          wget -O cert.pem ${CERTURL}
+          if [ -z "$(git status --porcelain)" ]; then
+            echo 'No new cert'
+            echo "cert=NOTNEW" >> $GITHUB_OUTPUT
+          else
+            echo "cert=NEW" >> $GITHUB_OUTPUT
+          fi
+
+  update_cert_in_repo:
+    needs: [checkcert]
+    if: ${{ needs.checkcert.outputs.cert == 'NEW' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout_to_update_version
+        uses: actions/checkout@8f4b7f84864484a7bf31766abe9204da3cbe65b3 # v3.5.0
+
+      - name: Update stable version
+        id: getcert
+        run: |
+          cd tests/at_functional_test/test/testData
+          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
+          wget -O cert.pem ${CERTURL}
+
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@2b011faafdcbc9ceb11414d64d0573f37c774b04 # v4.2.3
+        uses: peter-evans/create-pull-request@38e0b6e68b4c852a5500a94740f0e535e0d7ba54 # v4.2.4
         with:
           token: ${{ secrets.MY_GITHUB_TOKEN }}
-          commit-message: 'chore: New certificates for at_server'
+          commit-message: 'chore: Update cert in testdata'
           committer: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           signoff: false
-          add-paths: ./tests/at_functional_test/test/testData
-          branch: bot-new-certs
+          add-paths: .
+          branch: bot-new-cert
           delete-branch: true
-          title: 'chore: New certificates generated'
+          title: 'chore: Update cert in testdata'
           body: |
-            Fresh certificates generated.
+            New cert copied from at_server
           labels: |
             operations
           assignees: cpswan
           reviewers: gkc
-          draft: false          
+          draft: false

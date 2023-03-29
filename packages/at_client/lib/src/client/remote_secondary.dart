@@ -28,7 +28,7 @@ class RemoteSecondary implements Secondary {
 
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey, this.atChops}) {
-    _atSign = AtUtils.formatAtSign(atSign)!;
+    _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     privateKey ??= preference.privateKey;
@@ -85,6 +85,10 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
+    if (atCommand.length > _preference.maxDataSize) {
+      throw BufferOverFlowException(
+          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference.maxDataSize} bytes. Found ${atCommand.length} bytes');
+    }
     try {
       String? verbResult;
       verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
@@ -130,7 +134,9 @@ class RemoteSecondary implements Secondary {
     return await atLookUp.executeCommand(atCommand, auth: true);
   }
 
-  ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback].
+  ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback]
+  ///[Deprecated] Use [AtClient.notificationService]
+  @Deprecated('Use AtClient.notificationService')
   Future<OutboundConnection> monitor(
       String command, Function? notificationCallBack, String privateKey) {
     return MonitorClient(privateKey).executeMonitorVerb(
@@ -177,6 +183,7 @@ class RemoteSecondary implements Secondary {
   Future<void> _restartCallBack(
       String command, Function notificationCallBack, String privateKey) async {
     logger.info('auto restarting monitor');
+    // ignore: deprecated_member_use_from_same_package
     await monitor(command, notificationCallBack, privateKey);
   }
 

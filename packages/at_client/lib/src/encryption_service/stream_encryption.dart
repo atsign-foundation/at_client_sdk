@@ -8,13 +8,16 @@ class StreamEncryption extends AbstractAtKeyEncryption {
   StreamEncryption(AtClient atClient) : super(atClient);
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value,
+      {bool storeSharedKeyEncryptedWithData = true}) async {
     if (value is! List<int>) {
       throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is List<int>');
     }
-    await super.encrypt(atKey, value);
+    await super.encrypt(atKey, value,
+        storeSharedKeyEncryptedWithData: storeSharedKeyEncryptedWithData);
     // Encrypt value using sharedKey
-    return EncryptionUtil.encryptBytes(value, sharedKey);
+    return EncryptionUtil.encryptBytes(value, sharedKey,
+        ivBase64: atKey.metadata?.ivNonce);
   }
 }

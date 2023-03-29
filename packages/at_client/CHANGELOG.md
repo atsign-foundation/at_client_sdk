@@ -1,5 +1,10 @@
+## 3.0.58
+- chore: upgrade dependencies. at_commons to 3.0.43, at_utils to 3.0.12, at_lookup to 3.0.36 and at_chops to 1.0.3
 ## 3.0.57
-- fix: Incorrect atKey.toString() in notification_response_transformation.dart
+- feat: Initial support of additional encryption metadata enabling encryption future-proofing
+- fix: Expose priority, strategy, notifier, latestN and notificationExpiry in NotificationParams
+- fix: Fixed issue where NotificationResponseTransformer would duplicate sharedWith and sharedBy
+  when logging `AtKey`s
 ## 3.0.56
 - fix: AtClient.put() throws null-check error when key's namespace is null
 ## 3.0.55

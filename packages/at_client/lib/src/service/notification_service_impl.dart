@@ -20,6 +20,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
+import 'package:version/version.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
@@ -336,18 +337,27 @@ class NotificationServiceImpl
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
+
+    if (_atClient.getPreferences()!.atProtocolEmitted >= Version(2, 0, 0)) {
+      notificationParams.atKey.metadata ??= Metadata();
+      notificationParams.atKey.metadata!.ivNonce ??=
+          EncryptionUtil.generateIV();
+    }
+
     try {
       // If sharedBy atSign is null, default to current atSign.
       if (notificationParams.atKey.sharedBy.isNull) {
         notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
       }
-      // Append '@' if not already set.
-      AtUtils.formatAtSign(notificationParams.atKey.sharedBy!);
+      // Prepend '@' if not already set.
+      notificationParams.atKey.sharedBy =
+          AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
       // validate notification request
       await atClientValidation.validateNotificationRequest(
           _atClientManager.secondaryAddressFinder!,
           notificationParams,
-          _atClient.getPreferences()!);
+          _atClient.getPreferences()!,
+          _atClient.getCurrentAtSign()!);
       // Get the EncryptionInstance to encrypt the data.
       var atKeyEncryption = atKeyEncryptionManager.get(
           notificationParams.atKey, _atClient.getCurrentAtSign()!);
@@ -358,6 +368,7 @@ class NotificationServiceImpl
               atKeyEncryption)
           .transform(notificationParams);
 
+      notificationValueValidation(notificationParams, builder);
       // Run the notify verb on the remote secondary instance.
       await _atClient.getRemoteSecondary()?.executeVerb(builder);
       if (onSentToSecondary != null) {
@@ -388,6 +399,34 @@ class NotificationServiceImpl
             notificationParams, notificationResult, onSuccess, onError));
         return notificationResult;
       }
+    }
+  }
+
+  /// Checks the size the notification value. If the size exceeds the [AtClientPreference.maxDataSize]
+  /// [BufferOverFlowException] is thrown.
+  ///
+  @visibleForTesting
+  void notificationValueValidation(
+      NotificationParams notificationParams, NotifyVerbBuilder builder) {
+    switch (notificationParams.messageType) {
+      case MessageTypeEnum.key:
+        // Since value is not mandatory in AtNotification, perform validation only if
+        // value is not null.
+        if (builder.value != null &&
+            builder.value.length > _atClient.getPreferences()!.maxDataSize) {
+          throw BufferOverFlowException(
+              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
+        }
+        break;
+
+      case MessageTypeEnum.text:
+        // When messageType is text, the "text" to notify is added to the key. Hence validating
+        // the key length
+        if (builder.atKey!.length > _atClient.getPreferences()!.maxDataSize) {
+          throw BufferOverFlowException(
+              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
+        }
+        break;
     }
   }
 
@@ -592,6 +631,8 @@ class NotificationServiceImpl
       ..status = atNotificationMap['notificationStatus']
       ..value = atNotificationMap['atValue']
       ..operation = atNotificationMap['opType']
-      ..messageType = atNotificationMap['messageType'];
+      ..messageType = atNotificationMap['messageType']
+      ..expiresAtInEpochMillis =
+          DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
   }
 }

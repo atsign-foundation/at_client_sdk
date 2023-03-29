@@ -1,6 +1,25 @@
 import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
+
+bool wrappedDecryptSucceeds(
+    {required String cipherText,
+    required String aesKey,
+    required String? ivBase64,
+    required String clearText}) {
+  try {
+    var deciphered =
+        EncryptionUtil.decryptValue(cipherText, aesKey, ivBase64: ivBase64);
+    if (deciphered != clearText) {
+      return false;
+    } else {
+      return true;
+    }
+  } catch (e) {
+    return false;
+  }
+}
 
 void main() {
   group('A group of encryption util tests', () {
@@ -9,7 +28,7 @@ void main() {
       expect(aesKey, isNotEmpty);
     });
 
-    test('value encrypt/decrypt using aes key', () {
+    test('legacy encrypt/decrypt with AES', () {
       var aesKey = EncryptionUtil.generateAESKey();
       var valueToEncrypt = 'alice@atsign.com';
       var encryptedValue = EncryptionUtil.encryptValue(valueToEncrypt, aesKey);
@@ -17,7 +36,37 @@ void main() {
       expect(decryptedValue, valueToEncrypt);
     });
 
-    test('aes key encrypt/decrypt test', () {
+    test('encrypt/decrypt with AES', () {
+      var aesKey = EncryptionUtil.generateAESKey();
+      var iv = EncryptionUtil.generateIV();
+      var valueToEncrypt = 'alice@atsign.com';
+      var encryptedValue =
+          EncryptionUtil.encryptValue(valueToEncrypt, aesKey, ivBase64: iv);
+      var decryptedValue =
+          EncryptionUtil.decryptValue(encryptedValue, aesKey, ivBase64: iv);
+      expect(decryptedValue, valueToEncrypt);
+
+      expect(
+          wrappedDecryptSucceeds(
+              cipherText: encryptedValue,
+              aesKey: aesKey,
+              ivBase64: null,
+              clearText: valueToEncrypt),
+          false);
+
+      for (int i = 0; i < 10; i++) {
+        var otherIV = EncryptionUtil.generateIV();
+        expect(
+            wrappedDecryptSucceeds(
+                cipherText: encryptedValue,
+                aesKey: aesKey,
+                ivBase64: otherIV,
+                clearText: valueToEncrypt),
+            false);
+      }
+    });
+
+    test('RSA encrypt/decrypt test', () {
       var aesKey = EncryptionUtil.generateAESKey();
       var rsaKeyPair = RSAKeypair.fromRandom();
       var encryptedKey =

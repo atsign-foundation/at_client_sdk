@@ -1,4 +1,6 @@
 import 'package:at_client/at_client.dart';
+import 'package:meta/meta.dart';
+import 'package:version/version.dart';
 
 /// Class to hold attributes for client preferences.
 /// Set the preferences for your application and pass it to [AtClientManager.setCurrentAtSign].
@@ -41,9 +43,9 @@ class AtClientPreference {
   /// Idle time in milliseconds of connection to secondary server. Default to 10 minutes.
   int outboundConnectionTimeout = 600000;
 
-  /// Maximum data size a secondary can store. Temporary solution. Have to fetch this from
-  /// server using stats verb.
-  int maxDataSize = 512000;
+  /// The maximum size of the value that a secondary server can store.
+  /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
+  int maxDataSize = 10230000;
 
   /// Default path to download stream files
   String? downloadPath;
@@ -88,7 +90,16 @@ class AtClientPreference {
   bool fetchOfflineNotifications = true;
 
   /// Temporary feature flag. Remove once tests are successful.
+  @experimental
   bool useAtChops = false;
+
+  /// Which version of the atProtocol this client will use.
+  /// Note that this is different from the version of the
+  /// atProtocol that the client supports, which is set in
+  /// [AtClientConfig]
+  /// This instance variable is experimental, for now
+  @experimental
+  Version atProtocolEmitted = Version(1, 5, 0);
 }
 
 @Deprecated("Use SyncService")
