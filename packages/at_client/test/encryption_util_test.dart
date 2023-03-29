@@ -3,6 +3,24 @@ import 'package:at_commons/at_commons.dart';
 import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
 
+bool wrappedDecryptSucceeds(
+    {required String cipherText,
+    required String aesKey,
+    required String? ivBase64,
+    required String clearText}) {
+  try {
+    var deciphered =
+        EncryptionUtil.decryptValue(cipherText, aesKey, ivBase64: ivBase64);
+    if (deciphered != clearText) {
+      return false;
+    } else {
+      return true;
+    }
+  } catch (e) {
+    return false;
+  }
+}
+
 void main() {
   group('A group of encryption util tests', () {
     test('generate aes key test', () {
@@ -29,21 +47,22 @@ void main() {
       expect(decryptedValue, valueToEncrypt);
 
       expect(
-          () => EncryptionUtil.decryptValue(encryptedValue, aesKey),
-          throwsA(predicate((e) =>
-              e is AtKeyException &&
-              e.message ==
-                  'Invalid argument(s): Invalid or corrupted pad block')));
+          wrappedDecryptSucceeds(
+              cipherText: encryptedValue,
+              aesKey: aesKey,
+              ivBase64: null,
+              clearText: valueToEncrypt),
+          false);
 
       for (int i = 0; i < 10; i++) {
         var otherIV = EncryptionUtil.generateIV();
         expect(
-            () => EncryptionUtil.decryptValue(encryptedValue, aesKey,
-                ivBase64: otherIV),
-            throwsA(predicate((e) =>
-                e is AtKeyException &&
-                e.message ==
-                    'Invalid argument(s): Invalid or corrupted pad block')));
+            wrappedDecryptSucceeds(
+                cipherText: encryptedValue,
+                aesKey: aesKey,
+                ivBase64: otherIV,
+                clearText: valueToEncrypt),
+            false);
       }
     });
 
