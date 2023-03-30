@@ -7,7 +7,7 @@ abstract class AtAuthenticator {
 
 class AtAuthRequest {
   String atSign;
-  AtAuthRequest(this.atSign,this.preference);
+  AtAuthRequest(this.atSign, this.preference);
   AtClientPreference preference;
   AtKeysFileData? atKeysData;
 }
