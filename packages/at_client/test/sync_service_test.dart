@@ -28,6 +28,14 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
   Future<AtData> get(key) async {
     return Future.value(localKeyStore[key]);
   }
+
+  @override
+  bool isKeyExists(String key) {
+    if(key.startsWith('local:lastreceivedservercommitid')){
+      return false;
+    }
+    return true;
+  }
 }
 
 class MockLocalSecondary extends Mock implements LocalSecondary {
@@ -83,6 +91,7 @@ class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
 class FakeStatsVerbBuilder extends Fake implements StatsVerbBuilder {}
 
+class FakeAtKey extends Fake implements AtKey {}
 void main() async {
   AtClient mockAtClient = MockAtClient();
   AtClientManager mockAtClientManager = MockAtClientManager();
@@ -108,7 +117,11 @@ void main() async {
     test('sync server changes to local', () async {
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
+      registerFallbackValue(FakeAtKey());
 
+      when(() => mockAtClient.put(
+          any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:${jsonEncode([
                     {
@@ -160,7 +173,14 @@ void main() async {
     test('A test to validate server responds with AtTimeOutException',
         () async {
       registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeAtKey());
       var localCommitId = -1;
+
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => mockLocalSecondary);
+      when(() => mockAtClient.put(
+          any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
       when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) =>
           Future.value(
               CommitEntry('phone.wavi', CommitOp.UPDATE, DateTime.now())
@@ -208,7 +228,13 @@ void main() async {
     test('invalid batch json from server', () async {
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
+      registerFallbackValue(FakeAtKey());
 
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => mockLocalSecondary);
+      when(() => mockAtClient.put(
+          any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:${jsonEncode([
                     {
@@ -274,6 +300,7 @@ void main() async {
 
 class MySyncProgressListener extends SyncProgressListener {
   bool syncComplete = false;
+
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     if (syncProgress.syncStatus == SyncStatus.failure ||
@@ -281,5 +308,20 @@ class MySyncProgressListener extends SyncProgressListener {
       syncComplete = true;
     }
     return;
+  }
+}
+
+class LastReceivedServerCommitIdMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key!.startsWith('lastreceivedservercommitid')) {
+      return true;
+    }
+    return false;
   }
 }
