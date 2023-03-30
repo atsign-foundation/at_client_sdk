@@ -556,4 +556,11 @@ abstract class AtClient {
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;
+
+  Future<void> persistKeys(
+      String? pkamPrivateKey,
+      String pkamPublicKey,
+      String encryptionPrivateKey,
+      String encryptionPublicKey,
+      String selfEncryptionKey);
 }

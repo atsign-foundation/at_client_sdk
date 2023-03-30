@@ -1,19 +1,23 @@
-
-
-import 'package:at_chops/at_chops.dart';
-import 'package:at_client_mobile/src/auth/at_keys_source.dart';
+import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_lookup/at_lookup.dart';
 
 import 'at_authenticator.dart';
 
 class PkamAuthenticator implements AtAuthenticator {
-  PkamKeySource _pkamKeySource;
-  AtChops? _atChops;
-  PkamAuthenticator(this._pkamKeySource, this._atChops);
+  AtLookUp _atLookup;
+  PkamAuthenticator(this._atLookup);
 
   @override
-  Future<AtAuthResult> authenticate(String atSign) {
-    // TODO: implement authenticate
-    throw UnimplementedError();
+  Future<AtAuthResponse> authenticate(String atSign) async {
+    var authResult = AtAuthResponse(atSign);
+    try {
+      bool pkamResult = await _atLookup.pkamAuthenticate();
+      authResult.isSuccessful = pkamResult;
+    } on UnAuthenticatedException catch (e) {
+      authResult.atClientException = AtClientException(
+          error_codes['UnAuthenticatedException'],
+          'pkam auth failed for $atSign - ${e.toString()}');
+    }
+    return authResult;
   }
-
 }

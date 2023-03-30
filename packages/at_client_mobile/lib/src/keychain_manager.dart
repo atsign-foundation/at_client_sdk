@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
@@ -481,6 +482,10 @@ class KeyChainManager {
   RSAKeypair generateKeyPair() {
     var rsaKeypair = RSAKeypair.fromRandom();
     return rsaKeypair;
+  }
+
+  String generateSelfEncryptionKey() {
+    return EncryptionUtil.generateAESKey();
   }
 
   /// Function to get cram secret from keychain

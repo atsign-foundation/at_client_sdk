@@ -942,4 +942,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     return result.notificationID;
   }
+
+  @override
+  Future<void> persistKeys(String? pkamPrivateKey, String pkamPublicKey, String encryptionPrivateKey, String encryptionPublicKey, String selfEncryptionKey) {
+    // TODO: implement persistKeys
+    throw UnimplementedError();
+  }
 }
