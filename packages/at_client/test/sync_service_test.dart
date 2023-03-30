@@ -31,7 +31,7 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
 
   @override
   bool isKeyExists(String key) {
-    if(key.startsWith('local:lastreceivedservercommitid')){
+    if (key.startsWith('local:lastreceivedservercommitid')) {
       return false;
     }
     return true;
@@ -92,6 +92,7 @@ class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 class FakeStatsVerbBuilder extends Fake implements StatsVerbBuilder {}
 
 class FakeAtKey extends Fake implements AtKey {}
+
 void main() async {
   AtClient mockAtClient = MockAtClient();
   AtClientManager mockAtClientManager = MockAtClientManager();
@@ -120,7 +121,7 @@ void main() async {
       registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClient.put(
-          any(that: LastReceivedServerCommitIdMatcher()), any()))
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:${jsonEncode([
@@ -179,7 +180,7 @@ void main() async {
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => mockLocalSecondary);
       when(() => mockAtClient.put(
-          any(that: LastReceivedServerCommitIdMatcher()), any()))
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) =>
           Future.value(
@@ -233,7 +234,7 @@ void main() async {
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => mockLocalSecondary);
       when(() => mockAtClient.put(
-          any(that: LastReceivedServerCommitIdMatcher()), any()))
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:${jsonEncode([
