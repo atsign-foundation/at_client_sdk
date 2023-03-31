@@ -72,7 +72,7 @@ class CollectionUtil {
       regex = '$regex.*';
     }
 
-    regex = '$regex.atcollectionmodel';
+    // regex = '$regex.atcollectionmodel';
     return regex;
   }
 }

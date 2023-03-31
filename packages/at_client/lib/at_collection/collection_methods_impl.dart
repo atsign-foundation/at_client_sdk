@@ -95,7 +95,8 @@ class CollectionMethodImpl {
       {ObjectLifeCycleOptions? options,
       required String jsonEncodedData}) async* {
     options ??= ObjectLifeCycleOptions();
-    String formattedId = CollectionUtil.format(atCollectionModel.id);
+    // String formattedId = CollectionUtil.format(atCollectionModel.id);
+    String formattedId = atCollectionModel.id;
     String formattedCollectionName =
         CollectionUtil.format(atCollectionModel.getCollectionName());
 
@@ -144,7 +145,8 @@ class CollectionMethodImpl {
   }
 
   Stream<AtOperationItemStatus> delete() async* {
-    String formattedId = CollectionUtil.format(atCollectionModel.id);
+    // String formattedId = CollectionUtil.format(atCollectionModel.id);
+    String formattedId = atCollectionModel.id;
     String formattedCollectionName =
         CollectionUtil.format(atCollectionModel.getCollectionName());
 
@@ -163,7 +165,8 @@ class CollectionMethodImpl {
   }
 
   Stream<AtOperationItemStatus> unshare({List<String>? atSigns}) async* {
-    String formattedId = CollectionUtil.format(atCollectionModel.id);
+    // String formattedId = CollectionUtil.format(atCollectionModel.id);
+    String formattedId = atCollectionModel.id;
     String formattedCollectionName = CollectionUtil.format(
       atCollectionModel.getCollectionName(),
     );
