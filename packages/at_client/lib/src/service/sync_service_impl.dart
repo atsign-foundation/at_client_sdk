@@ -775,17 +775,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<int> _getLastReceivedServerCommitId() async {
     // If "lastReceivedServerCommitId" key exists, fetch the data and return the
     // last received server commit id.
-    var isLastReceivedServerKeyExists = _atClient
-        .getLocalSecondary()!
-        .keyStore!
-        .isKeyExists(_lastReceivedServerCommitIdAtKey.toString());
-    if (isLastReceivedServerKeyExists) {
+    try {
       var response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
       return int.parse(response.value);
+    } on KeyNotFoundException {
+      // If the key does not exist, fall back to previous logic, which is
+      // return last synced commit id.
+      return _getLocalCommitId();
     }
-    // If the key does not exist, fall back to previous logic, which is
-    // return last synced commit id.
-    return _getLocalCommitId();
   }
 
   /// Returns the local commit id. If null, returns -1.
