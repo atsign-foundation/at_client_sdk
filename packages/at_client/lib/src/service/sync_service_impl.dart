@@ -778,7 +778,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     try {
       var response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
       return int.parse(response.value);
-    } on KeyNotFoundException {
+    } on AtKeyNotFoundException {
       // If the key does not exist, fall back to previous logic, which is
       // return last synced commit id.
       return _getLocalCommitId();

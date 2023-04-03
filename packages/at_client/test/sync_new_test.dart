@@ -1186,7 +1186,7 @@ void main() {
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
-              throw KeyNotFoundException('key is not found in keystore'));
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
@@ -1310,7 +1310,7 @@ void main() {
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
-              throw KeyNotFoundException('key is not found in keystore'));
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -1571,7 +1571,7 @@ void main() {
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
-              throw KeyNotFoundException('key is not found in keystore'));
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2035,7 +2035,7 @@ void main() {
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
-              throw KeyNotFoundException('key is not found in keystore'));
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2328,7 +2328,7 @@ void main() {
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
-              throw KeyNotFoundException('key is not found in keystore'));
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2529,7 +2529,7 @@ void main() {
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
-              throw KeyNotFoundException('key is not found in keystore'));
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => localSecondary);
@@ -2651,7 +2651,7 @@ void main() {
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
-              throw KeyNotFoundException('key is not found in keystore'));
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       // --------------------- preconditions setup -----------------------------
       await localSecondary.putValue('public:conflict_key1@bob', 'localValue');
@@ -2858,7 +2858,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         //----------------------------Preconditions setup ----------------------
         await localSecondary.putValue(
@@ -2992,7 +2992,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         //------------------Assertions -------------------
         //onDoneCallback when triggered, flips the switch in TestResources
@@ -3088,7 +3088,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3281,7 +3281,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         //-----------------preconditions setup-----------------
         await localSecondary.putValue(
@@ -3426,7 +3426,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         //------------------------ preconditions setup ------------------------
         await localSecondary.putValue(
@@ -3517,7 +3517,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         // ----------------- preconditions setup and operation -----------------
         CustomSyncProgressListener progressListener =
@@ -3616,7 +3616,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3711,7 +3711,7 @@ void main() {
         when(() => mockAtClient
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
-                throw KeyNotFoundException('key is not found in keystore'));
+                throw AtKeyNotFoundException('key is not found in keystore'));
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
