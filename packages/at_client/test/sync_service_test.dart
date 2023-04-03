@@ -161,6 +161,10 @@ void main() async {
           Future.value(
               CommitEntry('phone.wavi', CommitOp.UPDATE, DateTime.now())
                 ..commitId = localCommitId));
+      when(() =>
+          mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+      throw KeyNotFoundException('key is not found in keystore'));
 
       var serverCommitId = 2;
       var syncRequest = SyncRequest()..result = SyncResult();
@@ -199,6 +203,10 @@ void main() async {
           .thenAnswer((_) => Future.value('data:${jsonEncode([
                     {"id": "3", "name": "lastCommitID", "value": "5"}
                   ])}'));
+      when(() =>
+          mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+      throw KeyNotFoundException('key is not found in keystore'));
 
       syncServiceImpl.networkUtil = mockNetworkUtil;
 
@@ -284,6 +292,10 @@ void main() async {
           Future.value(
               CommitEntry('phone.wavi', CommitOp.UPDATE, DateTime.now())
                 ..commitId = localCommitId));
+      when(() =>
+          mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+      throw KeyNotFoundException('key is not found in keystore'));
 
       var serverCommitId = 2;
       var syncRequest = SyncRequest()..result = SyncResult();
