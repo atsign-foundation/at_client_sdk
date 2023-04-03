@@ -60,7 +60,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   String get currentAtSign => _atClient.getCurrentAtSign()!;
 
   /// A local AtKey to persist the last received server commitId
-  late AtKey _lastReceivedServerCommitIdAtKey;
+  late final AtKey _lastReceivedServerCommitIdAtKey;
 
   static Future<SyncService> create(AtClient atClient,
       {required AtClientManager atClientManager,

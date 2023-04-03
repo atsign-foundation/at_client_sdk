@@ -2206,20 +2206,75 @@ void main() {
       expect(commitEntry!.operation, CommitOp.DELETE);
     });
 
-    // TODO - ENHANCEMENT REQUESTS
-    /// Improve KeyInfo to include description *
-    /// Example - Include info that says 'this happens to be a bad key'
-    /// Enhancement ticket raised - https://github.com/TestResources.atsign-foundation/at_client_sdk/issues/833
-    test('Verify clients handling of bad keys in updates from server', () {
-      /// Precondition:
-      /// Key will be rejected by a put / attempt to write to key store
-      /// Commit log has no entry for this key
-      /// Key store has no entry for this key
+    test('Verify clients handling of bad keys in updates from server',
+        () async {
+      /// Preconditions:
+      /// 1. Initially, no entries in local secondary
+      /// 2. Server is at commit Id 3
+      /// 3. Server CommitId: 2 is an invalid key and server CommitId 3 is a valid key
 
       /// Assertions:
-      /// 1. KeyInfo should inform about a bad key / not able sync this key
-      /// 2. Key store should be in right state
-      /// 3. CommitLog should have an entry along with server commit id
+      /// 1. At the end of sync, the local commit id should be updated to 3
+      await TestResources.setupLocalStorage(TestResources.atsign);
+      AtClient mockAtClient = MockAtClient();
+      AtClientManager mockAtClientManager = MockAtClientManager();
+      NotificationServiceImpl mockNotificationService =
+          MockNotificationServiceImpl();
+      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      NetworkUtil mockNetworkUtil = MockNetworkUtil();
+      SyncUtil syncUtil = SyncUtil();
+
+      registerFallbackValue(FakeAtKey());
+
+      LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary.executeVerb(
+              any(that: StatsVerbBuilderMatcher()),
+              sync: any(named: 'sync')))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"1"}]'));
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(named: "sync"))).thenAnswer((Invocation invocation) async {
+        // The initial batch response contains an invalid key. The key will not be synced
+        // to the local secondary, but the lastReceivedCommitId will be updated to 2
+        // In the next sync,an entry with valid key will be sent which will be synced successfully.`
+        if (invocation.positionalArguments[0].commitId < 2) {
+          return Future.value('data:['
+              '{"atKey":"invalid**)key@dexter",'
+              '"value":"invalid-value",'
+              '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+              '"commitId":2,"operation":"*"}'
+              ']');
+        }
+        return Future.value('data:['
+            '{"atKey":"validkey@dexter",'
+            '"value":"valid-value",'
+            '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+            '"commitId":3,"operation":"*"}'
+            ']');
+      });
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      // The serverCommitId is 3
+      await syncService.syncInternal(3, SyncRequest()..result = SyncResult());
+      var lastSyncedEntry =
+          await syncUtil.getLastSyncedEntry('.*', atSign: '@dexter');
+      expect(lastSyncedEntry?.commitId, 3);
     });
 
     /// TODO - ENHANCEMENT REQUESTS
@@ -2247,6 +2302,10 @@ void main() {
       ///
       /// Assertions;
       /// An entry should be added to commit log to prevent sync imbalance
+    });
+    tearDown(() async {
+      await TestResources.tearDownLocalStorage();
+      resetMocktailState();
     });
   });
 
