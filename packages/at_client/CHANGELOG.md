@@ -1,3 +1,6 @@
+## 3.0.59
+- fix: Redundant logs generated for an internal key[lastReceivedNotification] while sending notifications
+- chore: Reduced log_level of AtKey lower case enforcement message from INFO to FINER
 ## 3.0.58
 - chore: upgrade dependencies. at_commons to 3.0.43, at_utils to 3.0.12, at_lookup to 3.0.36 and at_chops to 1.0.3
 ## 3.0.57
