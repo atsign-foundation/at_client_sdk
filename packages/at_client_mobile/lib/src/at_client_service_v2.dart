@@ -5,8 +5,23 @@ import 'package:at_client_mobile/src/auth/at_keys_source.dart';
 
 abstract class AtClientServiceV2 {
   AtChops? atChops;
-  //#TODO add documentation
-  Future<AtAuthResponse> authenticate(AtAuthRequest atLoginRequest);
+
+  /// Authenticate method is called after an atsign has been onboarded or user has the atKeys file through a prior onboarding
+  /// Step 1. Check if the atsign is onboarded
+  /// Step 1.1 do a pkam authentication
+  /// Step 2. If atsign is not onboarded, read the atkeys data
+  /// Step 2.1 decrypt the keys from atkeys file data
+  /// Step 2.2 Persist the keys to keychain
+  /// Step 2.3 Create an atChops instance if not set by the caller
+  /// Step 2.4 Initialize at_client instance
+  /// Step 2.5 Persist keys to local secondary
+  /// Step 2.6 Perform pkam authenticate through at_client instance
+  /// Set the client preferences in [atAuthRequest.preference]
+  /// AtKeys file data has to be set in [atAuthRequest.atKeysData] if the user has already onboarded
+  /// Set [atAuthRequest.publicKeyId] if pkam auth mode is [PkamAuthMode.sim]
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest);
+
+  //# TODO documentation
   Future<bool> isOnboarded({String? atSign});
 
   /// Onboard method is called when an atsign is activated for the first time in an app.

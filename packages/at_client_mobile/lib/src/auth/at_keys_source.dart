@@ -1,5 +1,5 @@
 class AtKeysFileData {
-  String _jsonData;
-  String _decryptionKey;
-  AtKeysFileData(this._jsonData, this._decryptionKey);
+  String jsonData;
+  String decryptionKey;
+  AtKeysFileData(this.jsonData, this.decryptionKey);
 }

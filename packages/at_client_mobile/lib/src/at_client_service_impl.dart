@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_chops/src/at_chops_base.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
@@ -47,27 +49,74 @@ class AtClientServiceImpl implements AtClientServiceV2 {
 
   @override
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    final atAuthResponse = AtAuthResponse(atAuthRequest.atSign);
     _pkamAuthenticator = PkamAuthenticator(AtLookupImpl(
         atAuthRequest.atSign,
         atAuthRequest.preference.rootDomain,
         atAuthRequest.preference.rootPort));
+    // 1. check if atsign is already onboarded
     if (await isOnboarded(atSign: atAuthRequest.atSign)) {
-      try {
-        final pkamAuthResult =
-            await _pkamAuthenticator.authenticate(atAuthRequest.atSign);
-        atAuthResponse.isSuccessful = pkamAuthResult.isSuccessful;
-      } on AtClientException catch (e) {
-        atAuthResponse.isSuccessful = false;
-        atAuthResponse.atClientException = e;
-      }
-      return atAuthResponse;
+      //#TODO read keys and create at chops for this scenario
+      return _pkamAuth(atAuthRequest.atSign);
     }
-    // read keysfile data
-    // pkamAuthenticator.authenticate(..) calls internal signing or delegates to secure element based on at_chops
-    // persist keys to biometric/local secondary
-    // return loginResponse;
-    throw UnimplementedError();
+    // atsign is not onboarded and atkeys file data not passed
+    if (atAuthRequest.atKeysData == null &&
+        atAuthRequest.authMode == PkamAuthMode.keysFile) {
+      throw AtClientException(error_codes['UnAuthenticatedException'],
+          'atsign ${atAuthRequest.atSign} is not onboarded and atkeys file is not passed. Please call onboard first before trying authenticate');
+    }
+
+    // 2. decrypt the keys from keys data
+    final atSignKey = _decodeAndDecryptKeys(
+        atAuthRequest.atSign,
+        atAuthRequest.atKeysData!.jsonData,
+        atAuthRequest.atKeysData!.decryptionKey);
+
+    // 3. persist keys to keychain
+    await _persistKeysToKeyChain(atSignKey);
+
+    // 4. create at chops instance if not set by the caller
+    atChops ??= _createAtChops(
+        AtEncryptionKeyPair.create(
+            atSignKey.pkamPublicKey!, atSignKey.pkamPrivateKey!),
+        AtPkamKeyPair.create(
+            atSignKey.pkamPublicKey!, atSignKey.pkamPrivateKey!));
+
+    // 5. init at client
+    await _init(atAuthRequest.atSign, atAuthRequest.preference);
+
+    // 6. persist keys to local secondary
+    await _atClientManager.atClient.persistKeys(
+        atSignKey.pkamPrivateKey,
+        atSignKey.pkamPublicKey!,
+        atSignKey.encryptionPrivateKey!,
+        atSignKey.encryptionPrivateKey!,
+        atSignKey.selfEncryptionKey!);
+    var atAuthResponse = AtAuthResponse(atAuthRequest.atSign);
+
+    // 7. pkam auth using the created atClient instance
+    try {
+      atAuthResponse.isSuccessful = await _atClientManager.atClient
+          .getRemoteSecondary()!
+          .atLookUp
+          .pkamAuthenticate();
+    } on UnAuthenticatedException catch (e) {
+      atAuthResponse.isSuccessful = false;
+      atAuthResponse.atClientException = AtClientException(
+          error_codes['UnAuthenticatedException'], 'pkam auth failed for $e');
+    }
+    return atAuthResponse;
+  }
+
+  Future<AtAuthResponse> _pkamAuth(String atSign) async {
+    final atAuthResponse = AtAuthResponse(atSign);
+    try {
+      final pkamAuthResult = await _pkamAuthenticator.authenticate(atSign);
+      atAuthResponse.isSuccessful = pkamAuthResult.isSuccessful;
+    } on AtClientException catch (e) {
+      atAuthResponse.isSuccessful = false;
+      atAuthResponse.atClientException = e;
+    }
+    return atAuthResponse;
   }
 
   @override
@@ -147,13 +196,16 @@ class AtClientServiceImpl implements AtClientServiceV2 {
           encryptionKeyPair.privateKey.toString());
       atChops!.atChopsKeys.symmetricKey = AESKey(selfEncryptionKey);
       await _init(atSign, onboardingRequest.preference);
-      await _persistKeysToKeyChain(
-          atSign,
-          pkamPrivateKey,
-          pkamPublicKey,
-          encryptionKeyPair.privateKey.toString(),
-          encryptionKeyPair.publicKey.toString(),
-          selfEncryptionKey);
+      var atSignKey = await _keyChainManager.readAtsign(name: atSign) ??
+          AtsignKey(atSign: atSign);
+      atSignKey = atSignKey.copyWith(
+        pkamPrivateKey: pkamPrivateKey,
+        pkamPublicKey: pkamPublicKey,
+        encryptionPrivateKey: encryptionKeyPair.privateKey.toString(),
+        encryptionPublicKey: encryptionKeyPair.publicKey.toString(),
+        selfEncryptionKey: selfEncryptionKey,
+      );
+      await _persistKeysToKeyChain(atSignKey);
       // 5. persist keys to local secondary
       await _atClientManager.atClient.persistKeys(
           pkamPrivateKey,
@@ -172,23 +224,10 @@ class AtClientServiceImpl implements AtClientServiceV2 {
     }
   }
 
-  Future<void> _persistKeysToKeyChain(
-      String atSign,
-      String? pkamPrivateKey,
-      String pkamPublicKey,
-      String encryptionPrivateKey,
-      String encryptionPublicKey,
-      String selfEncryptionKey) async {
-    var atSignItem = await _keyChainManager.readAtsign(name: atSign) ??
-        AtsignKey(atSign: atSign);
-    atSignItem = atSignItem.copyWith(
-      pkamPrivateKey: pkamPrivateKey,
-      pkamPublicKey: pkamPublicKey,
-      encryptionPrivateKey: encryptionPrivateKey,
-      encryptionPublicKey: encryptionPublicKey,
-      selfEncryptionKey: selfEncryptionKey,
-    );
-    await _keyChainManager.storeAtSign(atSign: atSignItem);
+  Future<void> _persistKeysToKeyChain(AtsignKey atsignKey) async {
+    //#TODO should we also call _keyChainManager.storePkamKeysToKeychain ?
+    // difference between _keyChainManager.storePkamKeysToKeychain and _keyChainManager.storeCredentialToKeychain
+    await _keyChainManager.storeAtSign(atSign: atsignKey);
   }
 
   bool _isNotEmpty(String? key) {
@@ -214,5 +253,35 @@ class AtClientServiceImpl implements AtClientServiceV2 {
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     final atChops = AtChopsImpl(atChopsKeys);
     return atChops;
+  }
+
+  ///Decodes the [jsonData] with [decryptKey] and returns the original keys in object [AtsignKey]
+  AtsignKey _decodeAndDecryptKeys(
+      String atSign, String jsonData, String decryptKey) {
+    var extractedJsonData = jsonDecode(jsonData);
+
+    var pkamPublicKey = EncryptionUtil.decryptValue(
+        extractedJsonData[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
+        decryptKey);
+
+    var pkamPrivateKey = EncryptionUtil.decryptValue(
+        extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
+        decryptKey);
+
+    var encryptionPublicKey = EncryptionUtil.decryptValue(
+        extractedJsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
+        decryptKey);
+
+    var encryptionPrivateKey = EncryptionUtil.decryptValue(
+        extractedJsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
+        decryptKey);
+
+    return AtsignKey(
+        atSign: atSign,
+        pkamPrivateKey: pkamPrivateKey,
+        pkamPublicKey: pkamPublicKey,
+        encryptionPrivateKey: encryptionPrivateKey,
+        encryptionPublicKey: encryptionPublicKey,
+        selfEncryptionKey: decryptKey);
   }
 }
