@@ -37,6 +37,11 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   LocalSecondary? getLocalSecondary() {
     return mockLocalSecondary;
   }
+
+  @override
+  AtClientPreference? getPreferences() {
+    return AtClientPreference()..namespace = 'wavi';
+  }
 }
 
 class MockMonitor extends Mock implements Monitor {
@@ -898,15 +903,19 @@ void main() {
           .build();
       //calling toString() on an AtKey will convert it to lowercase
       expect(lastReceivedNotification.toString(),
-          'local:lastReceivedNotification.wavi@alice'.toLowerCase());
+          'local:lastreceivednotification.wavi@alice');
     });
 
-    test('test to verify lastNotificationReceived fromString', () {
+    test('test to verify lastNotificationReceived fromString', () async {
       var lastReceivedNotification =
-          AtKey.fromString('local:lastreceivednotification.wavi@alice');
-      expect(lastReceivedNotification.key,
-          NotificationServiceImpl.lastReceivedNotificationKey);
-      expect(lastReceivedNotification.namespace, 'wavi');
+          AtKey.fromString('local:lastReceivedNotification.wavi@alice');
+
+      NotificationServiceImpl service = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+
+      expect(lastReceivedNotification.toString(),
+          service.lastReceivedNotificationAtKey.toString());
       expect(lastReceivedNotification.isLocal, true);
     });
   });
