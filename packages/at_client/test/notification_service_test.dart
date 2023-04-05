@@ -37,11 +37,6 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   LocalSecondary? getLocalSecondary() {
     return mockLocalSecondary;
   }
-
-  @override
-  AtClientPreference? getPreferences() {
-    return AtClientPreference()..namespace = 'wavi';
-  }
 }
 
 class MockMonitor extends Mock implements Monitor {
@@ -905,6 +900,9 @@ void main() {
       expect(lastReceivedNotification.toString(),
           'local:lastreceivednotification.wavi@alice');
     });
+
+    when(() => mockAtClientImpl.getPreferences())
+        .thenReturn(AtClientPreference()..namespace = 'wavi');
 
     test('test to verify lastNotificationReceived fromString', () async {
       var lastReceivedNotification =
