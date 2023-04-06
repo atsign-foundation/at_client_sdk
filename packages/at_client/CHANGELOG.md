@@ -1,4 +1,5 @@
 ## 3.0.59
+- fix: Sync running into infinite loop when an invalid key is present in the entries to sync into client
 - fix: Redundant logs generated for an internal key[lastReceivedNotification] while sending notifications
 - chore: Reduced log_level of AtKey lower case enforcement message from INFO to FINER
 ## 3.0.58
