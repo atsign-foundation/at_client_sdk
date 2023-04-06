@@ -30,7 +30,7 @@ class NotificationServiceImpl
   static const notificationIdKey = '_latestNotificationIdv2';
 
   /// [lastReceivedNotificationKey] has been converted to lowercase
-  /// through at_client v3.0.59
+  /// from at_client v3.0.59
   static const lastReceivedNotificationKey = 'lastreceivednotification';
 
   late final AtSignLogger _logger;
