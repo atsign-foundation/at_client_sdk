@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -35,6 +36,7 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
     waviOtherNonHiddenKey,
     otherWaviOtherNonHiddenKey
   ];
+
   @override
   List<String> getKeys({String? regex}) {
     if (regex != null) {
@@ -701,6 +703,119 @@ void main() {
               MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
           true);
     });
+  });
+
+  group('A group of tests to validate the metadata', () {
+    late LocalSecondary localSecondary;
+    late AtKey atKey;
+    HiveKeystore? keyStore;
+
+    setUp(() async {
+      await setupLocalStorage(storageDir, atSign);
+      AtClientImpl mockAtClientImpl = MockAtClientImpl();
+
+      keyStore = SecondaryPersistenceStoreFactory.getInstance()
+          .getSecondaryPersistenceStore(atSign)
+          ?.getSecondaryKeyStore();
+      localSecondary = LocalSecondary(mockAtClientImpl, keyStore: keyStore);
+      atKey = (AtKey.shared('test_shared_key', sharedBy: atSign)
+            ..sharedWith('@bob'))
+          .build();
+    });
+
+    test(
+        'A test to verify existing metadata is retained when new metadata is set',
+        () async {
+      // Create a new key
+      UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder()
+        ..atKeyObj = atKey
+        ..value = 'dummy_value'
+        ..ttr = 10
+        ..ccd = true
+        ..dataSignature = 'dummy_data_signature'
+        ..skeEncAlgo = 'rsa';
+      await localSecondary.executeVerb(updateVerbBuilder);
+      AtMetaData? atMetaData = await keyStore!.getMeta(atKey.toString());
+      expect(atMetaData?.dataSignature, 'dummy_data_signature');
+      // Update the key and add new metadata
+      updateVerbBuilder = UpdateVerbBuilder()
+        ..atKeyObj = atKey
+        ..value = 'dummy_value'
+        ..sharedKeyEncrypted = 'dummy_encrypted_shared_key'
+        ..pubKeyChecksum = 'dummy_public_key_check_sum';
+      await localSecondary.executeVerb(updateVerbBuilder);
+      atMetaData = await keyStore?.getMeta(atKey.toString());
+      expect(atMetaData?.ttr, 10);
+      expect(atMetaData?.isCascade, true);
+      expect(atMetaData?.dataSignature, 'dummy_data_signature');
+      expect(atMetaData?.skeEncAlgo, 'rsa');
+      expect(atMetaData?.sharedKeyEnc, 'dummy_encrypted_shared_key');
+      expect(atMetaData?.pubKeyCS, 'dummy_public_key_check_sum');
+    });
+
+    test('A test to verify new value is set on the old value', () async {
+      // Create a new key
+      UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder()
+        ..atKeyObj = atKey
+        ..value = 'dummy_value'
+        ..ttr = 10
+        ..ccd = true
+        ..dataSignature = 'dummy_data_signature'
+        ..skeEncAlgo = 'rsa'
+        ..ivNonce = 'some_iv';
+      await localSecondary.executeVerb(updateVerbBuilder);
+      AtMetaData? atMetaData = await keyStore!.getMeta(atKey.toString());
+      expect(atMetaData?.dataSignature, 'dummy_data_signature');
+      // Update the metadata of same attributes
+      updateVerbBuilder = UpdateVerbBuilder()
+        ..atKeyObj = atKey
+        ..value = 'dummy_value'
+        ..ttr = 100
+        ..ccd = false
+        ..dataSignature = 'updated_dummy_data_signature'
+        ..skeEncAlgo = 'updated_rsa'
+        ..ivNonce = 'updated_iv';
+      await localSecondary.executeVerb(updateVerbBuilder);
+      atMetaData = await keyStore?.getMeta(atKey.toString());
+      expect(atMetaData?.ttr, 100);
+      expect(atMetaData?.isCascade, false);
+      expect(atMetaData?.dataSignature, 'updated_dummy_data_signature');
+      expect(atMetaData?.skeEncAlgo, 'updated_rsa');
+      expect(atMetaData?.ivNonce, 'updated_iv');
+    });
+
+    test('A test to verify setting null reset the metadata', () async {
+      // Create a new key
+      UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder()
+        ..atKeyObj = atKey
+        ..value = 'dummy_value'
+        ..ttr = 10
+        ..ccd = true
+        ..dataSignature = 'dummy_data_signature'
+        ..skeEncAlgo = 'rsa'
+        ..ivNonce = 'some_iv';
+      await localSecondary.executeVerb(updateVerbBuilder);
+      AtMetaData? atMetaData = await keyStore!.getMeta(atKey.toString());
+      expect(atMetaData?.dataSignature, 'dummy_data_signature');
+      // Set null to few of the metadata to reset
+      updateVerbBuilder = UpdateVerbBuilder()
+        ..atKeyObj = atKey
+        ..value = 'dummy_value'
+        ..ttr = 100
+        ..ccd = false
+        ..dataSignature = 'null'
+        ..skeEncAlgo = 'null'
+        ..ivNonce = 'null';
+      await localSecondary.executeVerb(updateVerbBuilder);
+      atMetaData = await keyStore?.getMeta(atKey.toString());
+      expect(atMetaData?.ttr, 100);
+      expect(atMetaData?.isCascade, false);
+      expect(atMetaData?.dataSignature, null);
+      expect(atMetaData?.skeEncAlgo, null);
+      expect(atMetaData?.ivNonce, null);
+    });
+
+    tearDown(() async => await tearDownLocalStorage(storageDir));
   });
 }
 

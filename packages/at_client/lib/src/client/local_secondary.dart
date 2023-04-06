@@ -69,46 +69,15 @@ class LocalSecondary implements Secondary {
       var updateKey = builder.buildKey();
       switch (builder.operation) {
         case UPDATE_META:
-          var metadata = Metadata();
-          metadata
-            ..ttl = builder.ttl
-            ..ttb = builder.ttb
-            ..ttr = builder.ttr
-            ..ccd = builder.ccd
-            ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted
-            ..sharedKeyEnc = builder.sharedKeyEncrypted
-            ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding
-            ..encKeyName = builder.encKeyName
-            ..encAlgo = builder.encAlgo
-            ..ivNonce = builder.ivNonce
-            ..skeEncKeyName = builder.skeEncKeyName
-            ..skeEncAlgo = builder.skeEncAlgo;
-          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
+          AtMetaData atMetadata = _getAtMetadataFromVerbBuilder(builder);
+          atMetadata = await _unsetOrRetainAtMetadata(updateKey, atMetadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          var metadata = Metadata();
-          metadata
-            ..ttl = builder.ttl
-            ..ttb = builder.ttb
-            ..ttr = builder.ttr
-            ..ccd = builder.ccd
-            ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted
-            ..dataSignature = builder.dataSignature
-            ..sharedKeyEnc = builder.sharedKeyEncrypted
-            ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding
-            ..encKeyName = builder.encKeyName
-            ..encAlgo = builder.encAlgo
-            ..ivNonce = builder.ivNonce
-            ..skeEncKeyName = builder.skeEncKeyName
-            ..skeEncAlgo = builder.skeEncAlgo;
-          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
+          AtMetaData atMetadata = _getAtMetadataFromVerbBuilder(builder);
+          atMetadata = await _unsetOrRetainAtMetadata(updateKey, atMetadata);
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
@@ -117,6 +86,57 @@ class LocalSecondary implements Secondary {
       _logger.severe('exception in local update:${e.toString()}');
       rethrow;
     }
+  }
+
+  Future<AtMetaData> _unsetOrRetainAtMetadata(
+      String atKey, AtMetaData currentAtMetaData) async {
+    AtMetaData? existingMetadata = await keyStore!.getMeta(atKey);
+    if (existingMetadata == null) {
+      return currentAtMetaData;
+    }
+
+    var atMetaDataJson = currentAtMetaData.toJson();
+    var existingAtMetaDataJson = existingMetadata.toJson();
+
+    atMetaDataJson.forEach((key, value) {
+      switch (value) {
+        // If command does not contains the attributes of a metadata, then regex named
+        // group, inserts null. For a key, if an attribute has a value in previously,
+        // fetch the value and update it.
+        case null:
+          if (existingAtMetaDataJson[key] != null) {
+            atMetaDataJson[key] = existingAtMetaDataJson[key];
+          }
+          break;
+        // In the command, if an attribute is explicitly set to null, then verbParams
+        // contains String value "null". Then reset the metadata. So, set it to null
+        case 'null':
+          atMetaDataJson[key] = null;
+          break;
+      }
+    });
+    return AtMetaData.fromJson(atMetaDataJson);
+  }
+
+  AtMetaData _getAtMetadataFromVerbBuilder(UpdateVerbBuilder builder) {
+    var metadata = Metadata();
+    metadata
+      ..ttl = builder.ttl
+      ..ttb = builder.ttb
+      ..ttr = builder.ttr
+      ..ccd = builder.ccd
+      ..isBinary = builder.isBinary
+      ..isEncrypted = builder.isEncrypted
+      ..dataSignature = builder.dataSignature
+      ..sharedKeyEnc = builder.sharedKeyEncrypted
+      ..pubKeyCS = builder.pubKeyChecksum
+      ..encoding = builder.encoding
+      ..encKeyName = builder.encKeyName
+      ..encAlgo = builder.encAlgo
+      ..ivNonce = builder.ivNonce
+      ..skeEncKeyName = builder.skeEncKeyName
+      ..skeEncAlgo = builder.skeEncAlgo;
+    return AtMetaData.fromCommonsMetadata(metadata);
   }
 
   Future<String> _llookup(LLookupVerbBuilder builder) async {

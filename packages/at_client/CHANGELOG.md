@@ -1,5 +1,6 @@
 ## 3.0.59
 - fix: Sync running into infinite loop when an invalid key is present in the entries to sync into client
+- fix: Enhance the Metadata to preserve the existing metadata when not set. Reset the metadata when explicitly set to null.
 ## 3.0.58
 - chore: upgrade dependencies. at_commons to 3.0.43, at_utils to 3.0.12, at_lookup to 3.0.36 and at_chops to 1.0.3
 ## 3.0.57
