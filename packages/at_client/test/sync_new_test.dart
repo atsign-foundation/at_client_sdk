@@ -1172,6 +1172,7 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
+      registerFallbackValue(FakeAtKey());
 
       when(() => mockNetworkUtil.isNetworkAvailable())
           .thenAnswer((_) => Future.value(true));
@@ -1187,6 +1188,9 @@ void main() {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
 
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
@@ -1693,6 +1697,73 @@ void main() {
       syncService.clearSyncEntities();
     });
 
+    test(
+        'A test to verify lastReceivedServerCommit id is updated when uncommitted entry is updated on the client',
+        () async {
+      registerFallbackValue(FakeAtKey());
+
+      var keyStore = TestResources.getHiveKeyStore(TestResources.atsign);
+      AtClient mockAtClient = MockAtClient();
+      AtClientManager mockAtClientManager = MockAtClientManager();
+      NotificationServiceImpl mockNotificationService =
+          MockNotificationServiceImpl();
+      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keyStore);
+
+      // Insert an uncommitted entry into keystore.
+      await keyStore?.put(
+          '${TestResources.atsign}:uncommittedentry.wavi${TestResources.atsign}',
+          AtData()..data = 'uncommitted-value');
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
+      // Fetch the "lastReceivedServerCommitId" from keystore
+      // If found, return the value, else set the AtValue.value to -1 to
+      // indicate the localCommitId to -1.
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) async {
+        AtData? response;
+        try {
+          response = await keyStore
+              ?.get('local:lastreceivedservercommitid${TestResources.atsign}');
+        } on KeyNotFoundException {
+          return AtValue()..value = '-1';
+        }
+        if (response == null) {
+          return AtValue()..value = '-1';
+        }
+        return AtValue()..value = response.data;
+      });
+
+      // Updating the "lastReceivedServerCommitId" value into keystore.
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((invocation) async {
+        await keyStore?.put(invocation.positionalArguments[0].toString(),
+            AtData()..data = invocation.positionalArguments[1]);
+        return Future.value(true);
+      });
+
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(that: startsWith('batch:')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => Future.value('data:[{"id":1,"response":{"data":"1"}}]'));
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      await syncService.syncInternal(-1, SyncRequest()..result = SyncResult());
+      expect(await syncService.getLastReceivedServerCommitId(), 1);
+    });
+
     tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();
@@ -2036,6 +2107,9 @@ void main() {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
