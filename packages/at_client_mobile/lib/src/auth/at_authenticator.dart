@@ -1,5 +1,4 @@
 import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client_mobile/src/at_client_service_v2.dart';
 import 'package:at_client_mobile/src/auth/at_keys_source.dart';
 
 abstract class AtAuthenticator {

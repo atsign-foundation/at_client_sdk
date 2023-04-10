@@ -1,10 +1,9 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_client_mobile/src/auth/at_authenticator.dart';
 import 'package:at_client_mobile/src/auth/at_keys_source.dart';
 
-abstract class AtClientServiceV2 {
+abstract class AtAuthService {
   AtChops? atChops;
 
   /// Authenticate method is called after an atsign has been onboarded or user has the atKeys file through a prior onboarding

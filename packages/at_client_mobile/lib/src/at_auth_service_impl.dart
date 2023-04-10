@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client_mobile/src/at_client_service_v2.dart';
+import 'package:at_client_mobile/src/at_auth_service.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_client_mobile/src/auth/at_authenticator.dart';
 import 'package:at_client_mobile/src/auth/cram_authenticator.dart';
@@ -11,8 +11,8 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
-class AtClientServiceImpl implements AtClientServiceV2 {
-  final AtSignLogger _logger = AtSignLogger('AtClientServiceImpl');
+class AtAuthServiceImpl implements AtAuthService {
+  final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
 
   @override
   AtChops? atChops;

@@ -9,6 +9,7 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:flutter/cupertino.dart';
 
+@Deprecated('use AtAuthService')
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
   AtClient? _atClient;
@@ -561,3 +562,4 @@ class KeychainUtil {
     return Map<String, String>.from(aesEncryptedKeys);
   }
 }
+
