@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_chops/src/at_chops_base.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/at_client_service_v2.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';

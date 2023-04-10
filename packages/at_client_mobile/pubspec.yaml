@@ -17,9 +17,9 @@ dependencies:
   hive: ^2.0.4
   crypton: ^2.0.3
   at_client: ^3.0.53
-  at_lookup: ^3.0.35
-  at_commons: ^3.0.34
-  at_utils: ^3.0.11
+  at_lookup: ^3.0.36
+  at_commons: ^3.0.44
+  at_utils: ^3.0.12
   at_chops: ^1.0.0
 
 dependency_overrides:

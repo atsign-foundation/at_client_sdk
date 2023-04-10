@@ -1,5 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client_mobile/src/auth/at_authenticator.dart';
 import 'package:at_client_mobile/src/auth/at_keys_source.dart';
 
@@ -53,5 +54,3 @@ class AtOnboardingResponse {
   bool? isSuccessful;
   AtKeysFileData? atKeysData;
 }
-
-enum PkamAuthMode { keysFile, sim }
