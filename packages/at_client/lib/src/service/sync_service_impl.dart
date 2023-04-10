@@ -340,7 +340,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
         lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
         atSign: _atClient.getCurrentAtSign()!);
-    var lastReceivedServerCommitId = await _getLastReceivedServerCommitId();
+    var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     if (serverCommitId > lastReceivedServerCommitId) {
       _logger.finer(
           'syncing to local: localCommitId $lastReceivedServerCommitId serverCommitId $serverCommitId');
@@ -391,6 +391,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
             await syncUtil.updateCommitEntry(
                 commitEntry, commitId, _atClient.getCurrentAtSign()!);
+            // update the last received server commit id
+            // When an invalid key is received, the commit-id is -1, and in this
+            // case the "lastReceivedServerCommitId" must NOT be updated, because
+            // we do not want lose the track of latest server commit id.
+            if (commitId != -1) {
+              await _atClient.put(
+                  _lastReceivedServerCommitIdAtKey, commitId.toString());
+            }
             keyInfoList.add(KeyInfo(commitEntry.atKey,
                 SyncDirection.localToRemote, commitEntry.operation));
           } on Exception catch (e) {
@@ -713,7 +721,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var serverCommitId =
           await _getServerCommitId(remoteSecondary: remoteSecondary);
 
-      var lastReceivedServerCommitId = await _getLastReceivedServerCommitId();
+      var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
 
       var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
           _atClient.getPreferences()!.syncRegex,
@@ -744,7 +752,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     var serverCommitId =
         await _getServerCommitId(remoteSecondary: _remoteSecondary);
-    var lastReceivedServerCommitId = await _getLastReceivedServerCommitId();
+    var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
         atSign: _atClient.getCurrentAtSign()!);
@@ -772,7 +780,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return _serverCommitId;
   }
 
-  Future<int> _getLastReceivedServerCommitId() async {
+  @visibleForTesting
+  Future<int> getLastReceivedServerCommitId() async {
     // If "lastReceivedServerCommitId" key exists, fetch the data and return the
     // last received server commit id.
     try {
