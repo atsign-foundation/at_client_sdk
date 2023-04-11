@@ -8,12 +8,13 @@ import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
-
+import 'package:at_utils/at_logger.dart';
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
   var uniqueId = Uuid().v4();
+  AtSignLogger.root_level = 'finest';
   test('notify updating of a key to sharedWith atSign - using await', () async {
     final atSign = '@alice🛠';
     var preference = TestUtils.getPreference(atSign);
