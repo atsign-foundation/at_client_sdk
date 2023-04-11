@@ -1764,6 +1764,78 @@ void main() {
       expect(await syncService.getLastReceivedServerCommitId(), 1);
     });
 
+    test(
+        'A test to verify lastReceivedServerCommit id is not updated when invalid commit-id is returned for an uncommitted entry',
+        () async {
+      registerFallbackValue(FakeAtKey());
+
+      var keyStore = TestResources.getHiveKeyStore(TestResources.atsign);
+      AtClient mockAtClient = MockAtClient();
+      AtClientManager mockAtClientManager = MockAtClientManager();
+      NotificationServiceImpl mockNotificationService =
+          MockNotificationServiceImpl();
+      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keyStore);
+
+      // Insert an uncommitted entry into keystore.
+      await keyStore?.put(
+          '${TestResources.atsign}:uncommittedentry1.wavi${TestResources.atsign}',
+          AtData()..data = 'uncommitted-value');
+      await keyStore?.put(
+          '${TestResources.atsign}:uncommittedentry2.wavi${TestResources.atsign}',
+          AtData()..data = 'uncommitted-value');
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+
+      // Fetch the "lastReceivedServerCommitId" from keystore
+      // If found, return the value, else set the AtValue.value to -1 to
+      // indicate the localCommitId to -1.
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) async {
+        AtData? response;
+        try {
+          response = await keyStore
+              ?.get('local:lastreceivedservercommitid${TestResources.atsign}');
+        } on KeyNotFoundException {
+          return AtValue()..value = '-1';
+        }
+        if (response == null) {
+          return AtValue()..value = '-1';
+        }
+        return AtValue()..value = response.data;
+      });
+
+      // Updating the "lastReceivedServerCommitId" value into keystore.
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((invocation) async {
+        await keyStore?.put(invocation.positionalArguments[0].toString(),
+            AtData()..data = invocation.positionalArguments[1]);
+        return Future.value(true);
+      });
+
+      // Returning "data:-1" for second entry to simulate no response from the server
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => Future.value('data:[{"id":1,"response":{"data":"1"}},'
+              '{"id":2,"response":{"data":"-1"}}]'));
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      await syncService.syncInternal(-1, SyncRequest()..result = SyncResult());
+      expect(await syncService.getLastReceivedServerCommitId(), 1);
+    });
+
     tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();

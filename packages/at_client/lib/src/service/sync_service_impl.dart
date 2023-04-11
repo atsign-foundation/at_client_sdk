@@ -395,7 +395,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             // When an invalid key is received, the commit-id is -1, and in this
             // case the "lastReceivedServerCommitId" must NOT be updated, because
             // we do not want lose the track of latest server commit id.
-            if(commitId != -1) {
+            if (commitId != -1) {
               await _atClient.put(
                   _lastReceivedServerCommitIdAtKey, commitId.toString());
             }
