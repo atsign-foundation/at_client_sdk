@@ -10,6 +10,7 @@ import 'package:at_client_mobile/src/auth/pkam_authenticator.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:flutter/cupertino.dart';
 
 class AtAuthServiceImpl implements AtAuthService {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
@@ -17,22 +18,24 @@ class AtAuthServiceImpl implements AtAuthService {
   @override
   AtChops? atChops;
 
-  final _keyChainManager = KeyChainManager.getInstance();
+  @visibleForTesting
+  KeyChainManager keyChainManager = KeyChainManager.getInstance();
 
-  late final PkamAuthenticator _pkamAuthenticator;
+  PkamAuthenticator? pkamAuthenticator;
 
-  late final CramAuthenticator _cramAuthenticator;
+  CramAuthenticator? cramAuthenticator;
 
-  final _atClientManager = AtClientManager.getInstance();
+  @visibleForTesting
+  AtClientManager atClientManager = AtClientManager.getInstance();
 
   @override
   Future<bool> isOnboarded({String? atSign}) async {
     // if atSign is not passed, read from keychain manager
-    atSign ??= await _keyChainManager.getAtSign();
+    atSign ??= await keyChainManager.getAtSign();
     if (atSign == null) {
       return false;
     }
-    AtsignKey? atSignKey = await _keyChainManager.readAtsign(name: atSign);
+    AtsignKey? atSignKey = await keyChainManager.readAtsign(name: atSign);
     if (atSignKey == null) {
       return false;
     }
@@ -48,7 +51,7 @@ class AtAuthServiceImpl implements AtAuthService {
 
   @override
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    _pkamAuthenticator = PkamAuthenticator(AtLookupImpl(
+    pkamAuthenticator ??= PkamAuthenticator(AtLookupImpl(
         atAuthRequest.atSign,
         atAuthRequest.preference.rootDomain,
         atAuthRequest.preference.rootPort));
@@ -84,7 +87,7 @@ class AtAuthServiceImpl implements AtAuthService {
     await _init(atAuthRequest.atSign, atAuthRequest.preference);
 
     // 6. persist keys to local secondary
-    await _atClientManager.atClient.persistKeys(
+    await atClientManager.atClient.persistKeys(
         atSignKey.pkamPrivateKey,
         atSignKey.pkamPublicKey!,
         atSignKey.encryptionPrivateKey!,
@@ -94,7 +97,7 @@ class AtAuthServiceImpl implements AtAuthService {
 
     // 7. pkam auth using the created atClient instance
     try {
-      atAuthResponse.isSuccessful = await _atClientManager.atClient
+      atAuthResponse.isSuccessful = await atClientManager.atClient
           .getRemoteSecondary()!
           .atLookUp
           .pkamAuthenticate();
@@ -109,7 +112,7 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<AtAuthResponse> _pkamAuth(String atSign) async {
     final atAuthResponse = AtAuthResponse(atSign);
     try {
-      final pkamAuthResult = await _pkamAuthenticator.authenticate(atSign);
+      final pkamAuthResult = await pkamAuthenticator!.authenticate(atSign);
       atAuthResponse.isSuccessful = pkamAuthResult.isSuccessful;
     } on AtClientException catch (e) {
       atAuthResponse.isSuccessful = false;
@@ -122,13 +125,13 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<AtOnboardingResponse> onboard(
       AtOnboardingRequest atOnboardingRequest) async {
     var atSign = atOnboardingRequest.atSign;
-    _pkamAuthenticator = PkamAuthenticator(AtLookupImpl(
+    pkamAuthenticator ??= PkamAuthenticator(AtLookupImpl(
         atOnboardingRequest.atSign,
         atOnboardingRequest.preference.rootDomain,
         atOnboardingRequest.preference.rootPort));
     var onboardingResponse = AtOnboardingResponse(atSign);
     if (await isOnboarded(atSign: atSign)) {
-      final pkamAuthResult = await _pkamAuthenticator.authenticate(atSign);
+      final pkamAuthResult = await pkamAuthenticator!.authenticate(atSign);
       onboardingResponse.isSuccessful = pkamAuthResult.isSuccessful;
       return onboardingResponse;
     }
@@ -140,7 +143,7 @@ class AtAuthServiceImpl implements AtAuthService {
       onboardingResponse.isSuccessful = false;
       return onboardingResponse;
     }
-
+    onboardingResponse.isSuccessful = true;
     return onboardingResponse;
   }
 
@@ -148,8 +151,11 @@ class AtAuthServiceImpl implements AtAuthService {
     final atSign = onboardingRequest.atSign;
     try {
       // 1. cram auth
+      cramAuthenticator ??= CramAuthenticator(
+          onboardingRequest.preference!.cramSecret!,
+          onboardingRequest.preference);
       final cramAuthResult =
-          await _cramAuthenticator.authenticate(onboardingRequest.atSign);
+          await cramAuthenticator!.authenticate(onboardingRequest.atSign);
       _logger.finer('cram auth result for $atSign : $cramAuthResult');
 
       // 2. generate pkam keypair and update pkam public key to server
@@ -165,7 +171,7 @@ class AtAuthServiceImpl implements AtAuthService {
         }
         pkamPublicKey = atChops!.readPublicKey(onboardingRequest.publicKeyId!);
       } else {
-        pkamKeypair = _keyChainManager.generateKeyPair();
+        pkamKeypair = keyChainManager.generateKeyPair();
         pkamPublicKey = pkamKeypair.publicKey.toString();
         pkamPrivateKey = pkamKeypair.privateKey.toString();
         atChops ??= _createAtChops(
@@ -175,27 +181,27 @@ class AtAuthServiceImpl implements AtAuthService {
       }
       //#TODO test whether this update verb builder will generate the desired command
       var updatePkamPublicKeyResult =
-          await _cramAuthenticator.atLookup!.executeVerb(UpdateVerbBuilder()
+          await cramAuthenticator!.atLookup!.executeVerb(UpdateVerbBuilder()
             ..atKey = AT_PKAM_PUBLIC_KEY
             ..value = pkamPublicKey);
       _logger.finer('updatePkamPublicKeyResult:  $updatePkamPublicKeyResult');
 
       // 3. pkam auth
-      final pkamAuthResult = await _pkamAuthenticator.authenticate(atSign);
+      final pkamAuthResult = await pkamAuthenticator!.authenticate(atSign);
       _logger.finer('pkam auth result for $atSign: $pkamAuthResult');
       if (pkamAuthResult.isSuccessful == false) {
         throw AtClientException(error_codes['UnAuthenticatedException'],
             '_activateNewAtSign - initial pkam failed');
       }
       // 4. Generate encryption and self encryption key pair if pkam auth is successful and keysfile is not passed
-      final encryptionKeyPair = _keyChainManager.generateKeyPair();
-      final selfEncryptionKey = _keyChainManager.generateSelfEncryptionKey();
+      final encryptionKeyPair = keyChainManager.generateKeyPair();
+      final selfEncryptionKey = keyChainManager.generateSelfEncryptionKey();
       atChops!.atChopsKeys.atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionKeyPair.publicKey.toString(),
           encryptionKeyPair.privateKey.toString());
       atChops!.atChopsKeys.symmetricKey = AESKey(selfEncryptionKey);
       await _init(atSign, onboardingRequest.preference);
-      var atSignKey = await _keyChainManager.readAtsign(name: atSign) ??
+      var atSignKey = await keyChainManager.readAtsign(name: atSign) ??
           AtsignKey(atSign: atSign);
       atSignKey = atSignKey.copyWith(
         pkamPrivateKey: pkamPrivateKey,
@@ -206,7 +212,7 @@ class AtAuthServiceImpl implements AtAuthService {
       );
       await _persistKeysToKeyChain(atSignKey);
       // 5. persist keys to local secondary
-      await _atClientManager.atClient.persistKeys(
+      await atClientManager.atClient.persistKeys(
           pkamPrivateKey,
           pkamPublicKey,
           encryptionKeyPair.privateKey.toString(),
@@ -216,7 +222,7 @@ class AtAuthServiceImpl implements AtAuthService {
       //6. delete cram secret from server
       var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
       var deleteResponse =
-          await _cramAuthenticator.atLookup!.executeVerb(deleteBuilder);
+          await cramAuthenticator!.atLookup!.executeVerb(deleteBuilder);
       _logger.finer('delete cram secret response : $deleteResponse');
     } on AtClientException {
       rethrow;
@@ -226,7 +232,7 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<void> _persistKeysToKeyChain(AtsignKey atsignKey) async {
     //#TODO should we also call _keyChainManager.storePkamKeysToKeychain ?
     // difference between _keyChainManager.storePkamKeysToKeychain and _keyChainManager.storeCredentialToKeychain
-    await _keyChainManager.storeAtSign(atSign: atsignKey);
+    await keyChainManager.storeAtSign(atSign: atsignKey);
   }
 
   bool _isNotEmpty(String? key) {
@@ -235,11 +241,11 @@ class AtAuthServiceImpl implements AtAuthService {
 
   Future<bool> _init(String atSign, AtClientPreference preference) async {
     preference.useAtChops = true;
-    await _atClientManager.setCurrentAtSign(
+    await atClientManager.setCurrentAtSign(
         atSign, preference.namespace, preference,
         atChops: atChops);
     if (preference.outboundConnectionTimeout > 0) {
-      _atClientManager.atClient
+      atClientManager.atClient
           .getRemoteSecondary()!
           .atLookUp
           .outboundConnectionTimeout = preference.outboundConnectionTimeout;
