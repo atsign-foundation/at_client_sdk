@@ -28,7 +28,10 @@ class NotificationServiceImpl
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
   static const notificationIdKey = '_latestNotificationIdv2';
-  static const lastReceivedNotificationKey = 'lastReceivedNotification';
+
+  /// [lastReceivedNotificationKey] has been converted to lowercase
+  /// from at_client v3.0.59
+  static const lastReceivedNotificationKey = 'lastreceivednotification';
 
   late final AtSignLogger _logger;
 
