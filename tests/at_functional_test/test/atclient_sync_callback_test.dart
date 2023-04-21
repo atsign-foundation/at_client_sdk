@@ -150,9 +150,9 @@ void main() {
     var preference = TestUtils.getPreference(atSign);
     var atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
+    final atClient = atClientManager.atClient;
     final progressListener = MySyncProgressListener();
     atClientManager.atClient.syncService.addProgressListener(progressListener);
-    final atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
     // username.me@alice🛠
@@ -180,22 +180,27 @@ void main() {
     await FunctionalTestSyncService.getInstance()
         .syncData(atClientManager.atClient.syncService);
 
+    int progressCallbacksReceived = 0;
+    int requiredProgressCallbacks = 2;
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      expect(syncProgress.keyInfoList, isNotEmpty);
-      expect(syncProgress.localCommitId,
-          greaterThan(syncProgress.localCommitIdBeforeSync!));
-      expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
-      syncProgress.keyInfoList?.forEach((keyInfo) {
-        if (keyInfo.key.contains('fb_username-$uniqueId')) {
-          expect(keyInfo.commitOp, CommitOp.UPDATE);
-          expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
-        }
-      });
-      atClientManager.atClient.syncService
-          .removeProgressListener(progressListener);
-    }));
+      progressCallbacksReceived++;
+      if (progressCallbacksReceived == requiredProgressCallbacks) {
+        expect(syncProgress.syncStatus, SyncStatus.success);
+        expect(syncProgress.keyInfoList, isNotEmpty);
+        expect(syncProgress.localCommitId,
+            greaterThan(syncProgress.localCommitIdBeforeSync!));
+        expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
+        syncProgress.keyInfoList?.forEach((keyInfo) {
+          if (keyInfo.key.contains('fb_username-$uniqueId')) {
+            expect(keyInfo.commitOp, CommitOp.UPDATE);
+            expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
+          }
+        });
+        atClientManager.atClient.syncService
+            .removeProgressListener(progressListener);
+      }
+    }, count:2));
   });
   tearDown(() async => await tearDownFunc());
 }
