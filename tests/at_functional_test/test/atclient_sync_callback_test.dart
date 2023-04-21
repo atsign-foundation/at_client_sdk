@@ -165,12 +165,21 @@ void main() {
     var updateResponse =
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
+
     // Calling sync 3 times to met the threshold.
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
     atClientManager.atClient.syncService.sync();
     await FunctionalTestSyncService.getInstance()
         .syncData(atClientManager.atClient.syncService);
+
+    // Calling sync 3 times to met the threshold.
+    atClientManager.atClient.syncService.sync();
+    atClientManager.atClient.syncService.sync();
+    atClientManager.atClient.syncService.sync();
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
+
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
