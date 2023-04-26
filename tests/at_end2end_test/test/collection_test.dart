@@ -14,8 +14,8 @@ class Phone extends AtCollectionModel {
   Phone();
 
   Phone.from(String id, {String? phoneNumber}) {
-    this.id = id;
-    this.phoneNumber = phoneNumber;
+    collectionId = id;
+    phoneNumber = phoneNumber;
   }
 
   @override
@@ -50,8 +50,8 @@ class A extends AtCollectionModel {
   A();
 
   A.from(String id, {String? a}) {
-    this.id = id;
-    this.a = a;
+    collectionId = id;
+    a = a;
   }
 
   @override
@@ -93,8 +93,8 @@ class B extends AtCollectionModel {
   B();
 
   B.from(String id, {String? b}) {
-    this.id = id;
-    this.b = b;
+    collectionId = id;
+    b = b;
   }
 
   @override

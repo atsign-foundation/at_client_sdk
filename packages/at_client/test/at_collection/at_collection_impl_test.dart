@@ -61,7 +61,7 @@ void main() {
 
     AtCollectionUtil.atClient = mockAtClient;
 
-    String object1ModelId = myModelTestObject1.id;
+    String object1ModelId = myModelTestObject1.collectionId;
     AtKey object1SelfKey = testKeyMaker.createSelfKey(
       keyId: object1ModelId,
       collectionName: collectionName,
@@ -77,7 +77,7 @@ void main() {
       sharedWith: sharedWithAtsign2,
     );
 
-    String object2ModelId = myModelTestObject2.id;
+    String object2ModelId = myModelTestObject2.collectionId;
     AtKey object2SelfKey = testKeyMaker.createSelfKey(
       keyId: object2ModelId,
       collectionName: collectionName,
@@ -193,10 +193,12 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSelfKeyMatcher(
-                    id: myModelTestObject1.id, collectionName: collectionName)),
+                    id: myModelTestObject1.collectionId,
+                    collectionName: collectionName)),
             any(that: PutDataMatcher()),
           )).thenAnswer((_) async => true);
 
+      //  myModelTestObject1.setKeyMaker =
       var saveRes1 = await myModelTestObject1.save(share: false);
       expect(saveRes1, true);
 
@@ -206,7 +208,7 @@ void main() {
           .forEach((AtOperationItemStatus atOperationItemStatus) {
         expect(atOperationItemStatus.complete, true);
         expect(atOperationItemStatus.key,
-            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
+            '${myModelTestObject1.collectionId}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
       });
     });
 
@@ -214,7 +216,8 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSelfKeyMatcher(
-                    id: myModelTestObject1.id, collectionName: collectionName)),
+                    id: myModelTestObject1.collectionId,
+                    collectionName: collectionName)),
             any(that: PutDataMatcher()),
           )).thenAnswer((_) async => false);
 
@@ -226,7 +229,7 @@ void main() {
           .forEach((AtOperationItemStatus atOperationItemStatus) {
         expect(atOperationItemStatus.complete, false);
         expect(atOperationItemStatus.key,
-            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
+            '${myModelTestObject1.collectionId}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
       });
     });
 
@@ -234,13 +237,14 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSelfKeyMatcher(
-                    id: myModelTestObject1.id, collectionName: collectionName)),
+                    id: myModelTestObject1.collectionId,
+                    collectionName: collectionName)),
             any(that: PutDataMatcher()),
           )).thenAnswer((_) async => true);
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign1)),
             any(that: PutDataMatcher()),
@@ -248,7 +252,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign2)),
             any(that: PutDataMatcher()),
@@ -268,7 +272,7 @@ void main() {
           .forEach((AtOperationItemStatus atOperationItemStatus) {
         expect(atOperationItemStatus.complete, true);
         expect(atOperationItemStatus.key,
-            '${myModelTestObject1.id}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
+            '${myModelTestObject1.collectionId}.${myModelTestObject1.getCollectionName()}.atcollectionmodel');
       });
     });
 
@@ -276,13 +280,14 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSelfKeyMatcher(
-                    id: myModelTestObject1.id, collectionName: collectionName)),
+                    id: myModelTestObject1.collectionId,
+                    collectionName: collectionName)),
             any(that: PutDataMatcher()),
           )).thenAnswer((_) async => true);
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign1)),
             any(that: PutDataMatcher()),
@@ -290,7 +295,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign2)),
             any(that: PutDataMatcher()),
@@ -335,7 +340,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign1)),
             any(that: PutDataMatcher()),
@@ -343,7 +348,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign2)),
             any(that: PutDataMatcher()),
@@ -375,7 +380,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign1)),
             any(that: PutDataMatcher()),
@@ -383,7 +388,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign2)),
             any(that: PutDataMatcher()),
@@ -397,7 +402,7 @@ void main() {
     test('test successfully deleting an object', () async {
       when(() => mockAtClient.delete(any(
           that: DeleteSelfKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName)))).thenAnswer((_) async => true);
       when(() => mockAtClient.getAtKeys(
               regex: any(
@@ -406,12 +411,12 @@ void main() {
           .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign1)))).thenAnswer((_) async => true);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign2)))).thenAnswer((_) async => true);
 
@@ -423,7 +428,7 @@ void main() {
         () async {
       when(() => mockAtClient.delete(any(
           that: DeleteSelfKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName)))).thenAnswer((_) async => false);
 
       var result = await myModelTestObject1.delete();
@@ -434,7 +439,7 @@ void main() {
         () async {
       when(() => mockAtClient.delete(any(
           that: DeleteSelfKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName)))).thenAnswer((_) async => true);
       when(() => mockAtClient.getAtKeys(
               regex: any(
@@ -443,12 +448,12 @@ void main() {
           .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign1)))).thenAnswer((_) async => false);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign2)))).thenAnswer((_) async => true);
 
@@ -464,12 +469,12 @@ void main() {
           .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign1)))).thenAnswer((_) async => true);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign2)))).thenAnswer((_) async => true);
 
@@ -485,12 +490,12 @@ void main() {
           .thenAnswer((_) async => [object1SharedKey1, object1SharedKey2]);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign1)))).thenAnswer((_) async => false);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign2)))).thenAnswer((_) async => true);
 
@@ -502,14 +507,15 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSelfKeyMatcher(
-                    id: myModelTestObject1.id, collectionName: collectionName)),
+                    id: myModelTestObject1.collectionId,
+                    collectionName: collectionName)),
             any(that: PutDataMatcher()),
           )).thenAnswer((_) async => true);
 
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign1)),
             any(that: PutDataMatcher()),
@@ -517,7 +523,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign2)),
             any(that: PutDataMatcher()),
@@ -525,12 +531,12 @@ void main() {
 
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign1)))).thenAnswer((_) async => true);
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign2)))).thenAnswer((_) async => true);
 
@@ -565,7 +571,8 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSelfKeyMatcher(
-                    id: myModelTestObject1.id, collectionName: collectionName)),
+                    id: myModelTestObject1.collectionId,
+                    collectionName: collectionName)),
             any(that: PutDataMatcher()),
           )).thenAnswer((_) async => true);
 
@@ -583,7 +590,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign1)),
             any(that: PutDataMatcher()),
@@ -591,7 +598,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign2)),
             any(that: PutDataMatcher()),
@@ -617,7 +624,7 @@ void main() {
       when(() => mockAtClient.put(
             any(
                 that: PutSharedKeyMatcher(
-                    id: myModelTestObject1.id,
+                    id: myModelTestObject1.collectionId,
                     collectionName: collectionName,
                     sharedWith: sharedWithAtsign2)),
             any(that: PutDataMatcher()),
@@ -632,7 +639,7 @@ void main() {
 
       when(() => mockAtClient.delete(any(
           that: DeleteSharedKeyMatcher(
-              id: myModelTestObject1.id,
+              id: myModelTestObject1.collectionId,
               collectionName: collectionName,
               sharedWith: sharedWithAtsign1)))).thenAnswer((_) async => true);
 
@@ -849,13 +856,13 @@ class MyModelTest extends AtCollectionModel {
     number = int.parse(json['number']);
     name = json['name'];
     email = json['email'];
-    id = json['id'];
+    collectionId = json['id'];
   }
 
   @override
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = {};
-    data['id'] = id;
+    data['id'] = collectionId;
     data['collectionName'] = runtimeType.toString().toLowerCase();
     data['name'] = name;
     data['number'] = number.toString();
@@ -868,7 +875,7 @@ class MyModelTest extends AtCollectionModel {
       identical(this, other) ||
       other is MyModelTest &&
           runtimeType == other.runtimeType &&
-          id == other.id &&
+          collectionId == other.collectionId &&
           name == other.name &&
           number == other.number &&
           email == other.email;
@@ -878,7 +885,7 @@ class MyModelTest extends AtCollectionModel {
 
   @override
   String toString() {
-    return 'id: $id, name: $name, number: $number, email: $email';
+    return 'id: $collectionId, name: $name, number: $number, email: $email';
   }
 
   @override

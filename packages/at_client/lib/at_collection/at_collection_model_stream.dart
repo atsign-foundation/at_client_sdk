@@ -30,7 +30,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
       {bool share = true, ObjectLifeCycleOptions? options}) async* {
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: atCollectionModel.toJson(),
-      id: atCollectionModel.id,
+      id: atCollectionModel.collectionId,
       collectionName: atCollectionModel.getCollectionName(),
     );
 
@@ -46,7 +46,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
       {ObjectLifeCycleOptions? options}) async* {
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: atCollectionModel.toJson(),
-      id: atCollectionModel.id,
+      id: atCollectionModel.collectionId,
       collectionName: atCollectionModel.getCollectionName(),
     );
 
@@ -60,7 +60,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
   @override
   Stream<AtOperationItemStatus> delete() async* {
     CollectionUtil.validateIdAndCollectionName(
-      atCollectionModel.id,
+      atCollectionModel.collectionId,
       atCollectionModel.getCollectionName(),
     );
 

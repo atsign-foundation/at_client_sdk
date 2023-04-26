@@ -7,7 +7,7 @@ class CollectionUtil {
     formattedId = formattedId.replaceAll(' ', '-');
 
     for (int i = 0; i < formattedId.length; i++) {
-      if (RegExp(r'^(?!\s*$)[a-zA-Z0-9- ]{1,20}$').hasMatch(formattedId[i]) ==
+      if (RegExp(r'^(?!\s*$)[a-zA-Z0-9-_]{1,20}$').hasMatch(formattedId[i]) ==
           false) {
         formattedId = formattedId.replaceAll(formattedId[i], '-');
       }

@@ -232,7 +232,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
       {bool share = true, ObjectLifeCycleOptions? options}) async {
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: toJson(),
-      id: id,
+      id: collectionId,
       collectionName: getCollectionName(),
     );
 
@@ -267,12 +267,12 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   @override
   Future<List<String>> getSharedWith() async {
     CollectionUtil.validateIdAndCollectionName(
-      id,
+      collectionId,
       getCollectionName(),
     );
 
     List<String> sharedWithList = [];
-    String formattedId = CollectionUtil.format(id);
+    String formattedId = CollectionUtil.format(collectionId);
     String formattedCollectionName = CollectionUtil.format(getCollectionName());
 
     var allKeys = await _getAtClient().getAtKeys(
@@ -295,7 +295,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
       {ObjectLifeCycleOptions? options}) async {
     var jsonObject = CollectionUtil.initAndValidateJson(
       collectionModelJson: toJson(),
-      id: id,
+      id: collectionId,
       collectionName: getCollectionName(),
     );
 
@@ -319,7 +319,8 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
 
   @override
   Future<bool> delete() async {
-    CollectionUtil.validateIdAndCollectionName(id, getCollectionName());
+    CollectionUtil.validateIdAndCollectionName(
+        collectionId, getCollectionName());
 
     bool isSelfKeyDeleted = false;
     await collectionMethodImpl

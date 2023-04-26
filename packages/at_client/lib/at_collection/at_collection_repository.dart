@@ -58,7 +58,7 @@ class AtCollectionRepository {
 
         var model = collectionModelFactory.create();
         model.fromJson(atValue.value);
-        model.id = atValueJson['id'];
+        model.collectionId = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
         modelList.add(model as T);
       } catch (e) {
@@ -94,7 +94,7 @@ class AtCollectionRepository {
       var atValueJson = jsonDecode(atValue.value);
       var model = collectionModelFactory.create();
       model.fromJson(atValue.value);
-      model.id = atValueJson['id'];
+      model.collectionId = atValueJson['id'];
       model.collectionName = atValueJson['collectionName'];
       return model as T;
     } catch (e) {
@@ -147,7 +147,7 @@ class AtCollectionRepository {
         }
 
         model.fromJson(atValue.value);
-        model.id = atValueJson['id'];
+        model.collectionId = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
         modelList.add(model as T);
       } catch (e) {

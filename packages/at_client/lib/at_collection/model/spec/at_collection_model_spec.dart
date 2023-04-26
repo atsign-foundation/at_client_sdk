@@ -13,13 +13,13 @@ import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
 ///
 abstract class AtCollectionModelSpec<T> {
   AtCollectionModelSpec() {
-    id = Uuid().v4();
+    collectionId = Uuid().v4();
   }
 
-  /// [id] uniquely identifies this model.
+  /// [collectionId] uniquely identifies this model.
   ///
-  /// By default, id is set to UUID.
-  late String id;
+  /// By default, collectionId is set to UUID.
+  late String collectionId;
 
   /// [collectionName] represents objects of same type.
   String? collectionName;
