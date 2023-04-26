@@ -505,7 +505,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       ..regex = _atClient.getPreferences()!.syncRegex
       ..limit = _atClient.getPreferences()!.syncPageLimit
       ..isPaginated = true;
-    _logger.finer('** syncBuilder ${syncBuilder.buildCommand()}');
+    _logger.finer(
+        '${_atClient.getPreferences()!.atClientParticulars.clientId} | syncBuilder ${syncBuilder.buildCommand()}');
     List syncResponseJson = [];
     try {
       syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
@@ -518,7 +519,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'Exception occurred in fetching sync response : ${e.getTraceMessage()}');
       rethrow;
     }
-    _logger.finest('** syncResponse $syncResponseJson');
+    _logger.finest(
+        '${_atClient.getPreferences()!.atClientParticulars.clientId}|** syncResponse $syncResponseJson');
     return syncResponseJson;
   }
 
@@ -814,8 +816,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
+    _logger.finer(
+        '${_atClient.getPreferences()!.atClientParticulars.clientId}| Sending batch to sync: $command');
     var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
-    _logger.finer('batch result:$verbResult');
+    _logger.finer(
+        '${_atClient.getPreferences()!.atClientParticulars.clientId}| batch result:$verbResult');
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');
     }

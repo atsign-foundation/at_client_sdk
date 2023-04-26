@@ -39,6 +39,13 @@ dependencies:
   at_chops: ^1.0.3
   version: ^3.0.2
 
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: packages/at_commons
+      ref: add_constants
+
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.21.4

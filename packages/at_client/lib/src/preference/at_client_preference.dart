@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:meta/meta.dart';
 import 'package:version/version.dart';
 
@@ -100,6 +101,9 @@ class AtClientPreference {
   /// This instance variable is experimental, for now
   @experimental
   Version atProtocolEmitted = Version(1, 5, 0);
+
+  @experimental
+  AtClientParticulars atClientParticulars = AtClientParticulars.getInstance();
 }
 
 @Deprecated("Use SyncService")
