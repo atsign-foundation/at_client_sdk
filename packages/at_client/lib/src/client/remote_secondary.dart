@@ -95,8 +95,12 @@ class RemoteSecondary implements Secondary {
     // ignore: prefer_typing_uninitialized_variables
     var verbResult;
     try {
+      logger.finer(
+          '${_preference.atClientParticulars.clientId}|Command sent to server: ${builder.buildCommand()}');
       verbResult = await executeVerb(builder);
       verbResult = verbResult.replaceFirst('data:', '');
+      logger.finer(
+          '${_preference.atClientParticulars.clientId}|Response from server: $verbResult');
     } on AtException catch (e) {
       throw e
         ..stack(AtChainedException(Intent.fetchData,

@@ -139,7 +139,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
-      _logger.finer('got stats notification in sync: ${notification.value}');
+      _logger.finer('${_atClient.getPreferences()!.atClientParticulars.clientId}|RCVD: stats notification in sync: ${notification.value}');
       final serverCommitId = notification.value;
       if (serverCommitId != null &&
           int.parse(serverCommitId) > await _getLocalCommitId()) {
@@ -286,7 +286,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
     _logger.info(
-        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource} ; syncRequest.onDone : ${syncRequest.onDone}');
+        '${_atClient.getPreferences()!.atClientParticulars.clientId}|Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource} ; syncRequest.onDone : ${syncRequest.onDone}');
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
@@ -323,7 +323,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   void _clearQueue() {
-    _logger.finer('clearing sync queue');
+    _logger.finer(
+        '${_atClient.getPreferences()!.atClientParticulars.clientId}|Clearing sync queue');
     _syncRequests.clear();
   }
 
@@ -778,7 +779,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
     _serverCommitId ??= -1;
-    _logger.info('Returning the serverCommitId $_serverCommitId');
+    _logger.info(
+        '${_atClient.getPreferences()!.atClientParticulars.clientId}| Returning serverCommitId $_serverCommitId');
     return _serverCommitId;
   }
 
