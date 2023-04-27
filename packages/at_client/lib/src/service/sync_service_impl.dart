@@ -139,7 +139,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
-      _logger.finer('${_atClient.getPreferences()!.atClientParticulars.clientId}|RCVD: stats notification in sync: ${notification.value}');
+      _logger.finer(
+          '${_atClient.getPreferences()!.atClientParticulars.clientId}|RCVD: stats notification in sync: ${notification.value}');
       final serverCommitId = notification.value;
       if (serverCommitId != null &&
           int.parse(serverCommitId) > await _getLocalCommitId()) {
