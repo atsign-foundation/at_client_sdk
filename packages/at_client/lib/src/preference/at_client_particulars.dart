@@ -4,7 +4,6 @@ import 'package:uuid/uuid.dart';
 
 @experimental
 class AtClientParticulars {
-
   final String _clientId = Uuid().v4();
 
   /// A unique identifier to distinguish clients on the server logs.
