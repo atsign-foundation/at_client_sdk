@@ -4,13 +4,6 @@ import 'package:uuid/uuid.dart';
 
 @experimental
 class AtClientParticulars {
-  static final AtClientParticulars _singleton = AtClientParticulars._internal();
-
-  AtClientParticulars._internal();
-
-  factory AtClientParticulars.getInstance() {
-    return _singleton;
-  }
 
   final String _clientId = Uuid().v4();
 

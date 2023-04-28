@@ -11,6 +11,7 @@ import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/util/logger_util.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -139,8 +140,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
-      _logger.finer(
-          '${_atClient.getPreferences()!.atClientParticulars.clientId}|RCVD: stats notification in sync: ${notification.value}');
+      _logger.finer(_logger.getLogMessageWithClientParticulars(
+          _atClient.getPreferences()!.atClientParticulars,
+          'RCVD: stats notification in sync: ${notification.value}'));
       final serverCommitId = notification.value;
       if (serverCommitId != null &&
           int.parse(serverCommitId) > await _getLocalCommitId()) {
@@ -286,8 +288,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
-    _logger.info(
-        '${_atClient.getPreferences()!.atClientParticulars.clientId}|Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource} ; syncRequest.onDone : ${syncRequest.onDone}');
+    _logger.info(_logger.getLogMessageWithClientParticulars(
+        _atClient.getPreferences()!.atClientParticulars,
+        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}'));
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
@@ -324,8 +327,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   void _clearQueue() {
-    _logger.finer(
-        '${_atClient.getPreferences()!.atClientParticulars.clientId}|Clearing sync queue');
+    _logger.finer(_logger.getLogMessageWithClientParticulars(
+        _atClient.getPreferences()!.atClientParticulars,
+        'Clearing sync queue'));
     _syncRequests.clear();
   }
 
@@ -507,8 +511,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       ..regex = _atClient.getPreferences()!.syncRegex
       ..limit = _atClient.getPreferences()!.syncPageLimit
       ..isPaginated = true;
-    _logger.finer(
-        '${_atClient.getPreferences()!.atClientParticulars.clientId} | syncBuilder ${syncBuilder.buildCommand()}');
+    _logger.finer(_logger.getLogMessageWithClientParticulars(
+        _atClient.getPreferences()!.atClientParticulars,
+        'syncBuilder ${syncBuilder.buildCommand()}'));
     List syncResponseJson = [];
     try {
       syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
@@ -521,8 +526,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'Exception occurred in fetching sync response : ${e.getTraceMessage()}');
       rethrow;
     }
-    _logger.finest(
-        '${_atClient.getPreferences()!.atClientParticulars.clientId}|** syncResponse $syncResponseJson');
+    _logger.finest(_logger.getLogMessageWithClientParticulars(
+        _atClient.getPreferences()!.atClientParticulars,
+        'syncResponse $syncResponseJson'));
     return syncResponseJson;
   }
 
@@ -780,8 +786,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
     _serverCommitId ??= -1;
-    _logger.info(
-        '${_atClient.getPreferences()!.atClientParticulars.clientId}| Returning serverCommitId $_serverCommitId');
+    _logger.info(_logger.getLogMessageWithClientParticulars(
+        _atClient.getPreferences()!.atClientParticulars,
+        'Returning serverCommitId $_serverCommitId'));
     return _serverCommitId;
   }
 
@@ -819,11 +826,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
-    _logger.finer(
-        '${_atClient.getPreferences()!.atClientParticulars.clientId}| Sending batch to sync: $command');
+    _logger.finer(_logger.getLogMessageWithClientParticulars(
+        _atClient.getPreferences()!.atClientParticulars,
+        'Sending batch to sync: $command'));
     var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
-    _logger.finer(
-        '${_atClient.getPreferences()!.atClientParticulars.clientId}| batch result:$verbResult');
+    _logger.finer(_logger.getLogMessageWithClientParticulars(
+        _atClient.getPreferences()!.atClientParticulars,
+        'batch result:$verbResult'));
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst('data:', '');
     }

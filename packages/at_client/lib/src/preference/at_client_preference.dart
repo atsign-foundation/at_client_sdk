@@ -103,7 +103,7 @@ class AtClientPreference {
   Version atProtocolEmitted = Version(1, 5, 0);
 
   @experimental
-  AtClientParticulars atClientParticulars = AtClientParticulars.getInstance();
+  AtClientParticulars atClientParticulars = AtClientParticulars();
 }
 
 @Deprecated("Use SyncService")
