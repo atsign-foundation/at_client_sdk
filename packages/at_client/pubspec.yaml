@@ -33,18 +33,11 @@ dependencies:
   at_lookup: ^3.0.36
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.43
+  at_commons: ^3.0.45
   at_utils: ^3.0.12
   meta: ^1.8.0
   at_chops: ^1.0.3
   version: ^3.0.2
-
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: packages/at_commons
-      ref: add_constants
 
 dev_dependencies:
   lints: ^2.0.0

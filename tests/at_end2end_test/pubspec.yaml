@@ -12,12 +12,12 @@ dependencies:
   at_client:
     path: ../../packages/at_client
 
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: packages/at_commons
-      ref: add_constants
+#dependency_overrides:
+#  at_commons:
+#    git:
+#      url: https://github.com/atsign-foundation/at_tools.git
+#      path: packages/at_commons
+#      ref: add_constants
 #  at_chops:
 #    git:
 #      url: https://github.com/atsign-foundation/at_libraries.git
