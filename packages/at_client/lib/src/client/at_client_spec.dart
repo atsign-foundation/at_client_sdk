@@ -518,6 +518,8 @@ abstract class AtClient {
       Function streamCompletionCallBack,
       Function streamReceiveCallBack);
 
+  Future<void> isSecondaryReset();
+
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
   @Deprecated(
