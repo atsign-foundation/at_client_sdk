@@ -868,6 +868,111 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
   }
 
+  @override
+  Future<void> isSecondaryReset() async {
+    _logger.finer('Performing Remote Secondary reset check');
+    var localPublicKey =
+        await getLocalSecondary()?.getEncryptionPublicKey(getCurrentAtSign()!);
+
+    PLookupVerbBuilder lookupBuilder = PLookupVerbBuilder()
+      ..atKey = 'publickey' //AT_ENCRYPTION_PUBLIC_KEY
+      ..sharedBy = getCurrentAtSign();
+    var remotePublicKey =
+        await getRemoteSecondary()?.executeVerb(lookupBuilder);
+    // secondary response is in format 'data:publickey'. Removing 'data:' from response
+    remotePublicKey = remotePublicKey?.replaceFirst('data:', '');
+
+    if (localPublicKey.isNull) {
+      _logger.info('Could not fetch EncryptionPublicKey from LocalSecondary.'
+          ' Unable to complete reset check');
+      return;
+    }
+
+    //TODO should there be a check for remote enc_key being null ?
+
+    if (localPublicKey != remotePublicKey) {
+      _logger.info('EncryptionPublicKey on LocalSecondary: $localPublicKey');
+      _logger.info('EncryptionPublicKey on RemoteSecondary: $remotePublicKey');
+      _logger.shout(
+          'AtEncryptionPublicKey on local secondary and remote secondary are different.'
+          '\nThis indicates remote secondary has been reset.'
+          '\nPlease delete localStorage and restart the client');
+      _logger.info('To delete localSecondary,'
+          ' call AtClientImpl.deleteLocalSecondary() with user consent');
+      throw AtResetException('Remote secondary has been reset');
+    }
+    _logger.finest('Secondary is not reset. Status ok');
+  }
+
+  void deleteLocalSecondaryStorageWithConsent(
+      String commitLogDirectoryPath, String hiveStorageDirectoryPath,
+      {required bool userConsentToDeleteLocalSecondaryStorage}) {
+    _logger.shout(
+        'Consent to delete LocalSecondary storage received: $userConsentToDeleteLocalSecondaryStorage');
+    if (userConsentToDeleteLocalSecondaryStorage) {
+      _logger
+          .info('Deleting CommitLog local storage at: $commitLogDirectoryPath');
+      _deleteLocalCommitLog(commitLogDirectoryPath);
+      _logger.info('Deleting hive local storage at: $hiveStorageDirectoryPath');
+      _deleteLocalHiveStorage(hiveStorageDirectoryPath);
+    }
+  }
+
+  void _deleteLocalCommitLog(String commitLogDirectoryPath) {
+    String fileName =
+        'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
+    String lockFileName =
+        'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
+
+    File commitLogFile = File('$commitLogDirectoryPath/$fileName');
+    File lockFile = File('$commitLogDirectoryPath/$lockFileName');
+
+    if (commitLogFile.existsSync()) {
+      commitLogFile.deleteSync();
+      lockFile.deleteSync();
+      _logger.info('Successfully deleted commitLog storage');
+      // Since recursive delete is true by default, If the directory is empty
+      // the directory will be deleted too
+      Directory(commitLogDirectoryPath).deleteSync();
+      return;
+    }
+    throw AtClientException.message(
+        'CommitLog storage not found at path: $commitLogFile.'
+        ' Please provide a valid CommitLog directory path');
+  }
+
+  void _deleteLocalHiveStorage(String hiveStorageDirectoryPath) {
+    String hashFileName =
+        '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hash';
+    String hiveFileName =
+        '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
+    String hiveLockFileName =
+        '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
+
+    File hiveFile = File('$hiveStorageDirectoryPath/$hiveFileName');
+    File hiveLockFile = File('$hiveStorageDirectoryPath/$hiveLockFileName');
+    File hashFile = File('$hiveStorageDirectoryPath/$hashFileName');
+
+    if (hashFile.existsSync() && hiveFile.existsSync()) {
+      hashFile.deleteSync();
+      hiveFile.deleteSync();
+      hiveLockFile.deleteSync();
+      _logger.info('Successfully deleted hive storage');
+      // Since recursive delete is true by default, If the directory is empty
+      // the directory will be deleted too
+      Directory(hiveStorageDirectoryPath).deleteSync();
+    } else {
+      if (!hiveFile.existsSync()) {
+        throw AtClientException.message(
+            'hive file not found at path: $hiveFile.'
+            ' Please provide a valid hive storage directory path');
+      }
+      throw AtClientException.message(
+          'hive hash file not found at path: $hiveFile.'
+          ' Please provide a valid hive storage directory path');
+    }
+  }
+
   // TODO v4 - remove the follow methods in version 4 of at_client package
 
   @override
