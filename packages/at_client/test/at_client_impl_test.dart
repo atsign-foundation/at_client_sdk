@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -20,6 +23,10 @@ class MockAtCompactionJob extends Mock implements AtCompactionJob {
     isCronScheduled = false;
   }
 }
+
+class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+
+class MockSecondaryKeystore extends Mock implements SecondaryKeyStore {}
 
 void main() {
   group('A group of at client impl create tests', () {
@@ -249,6 +256,46 @@ void main() {
       expect(key.namespace,
           'casesensitive'); //namespace should be converted to lower case
       expect(key.key, 'uppercase'); //key should be converted to lower case
+    });
+  });
+
+  group('Group of tests verify client behaviour on remote secondary reset', () {
+    registerFallbackValue(MockRemoteSecondary());
+    registerFallbackValue(LookupVerbBuilder());
+
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    SecondaryKeyStore mockKeystore = MockSecondaryKeystore();
+    AtClient client;
+
+    test('Verify isSecondaryReset() functionality - negative case', () async {
+      AtData responseObj = AtData()..data = 'incorrectLocalEncPublicKey';
+      when(() => mockRemoteSecondary.executeVerb(any())).thenAnswer(
+              (invocation) => Future.value('data:incorrectRemoteEncPublicKey'));
+      when(() => mockKeystore.get(any())).thenAnswer(
+              (invocation) => Future.value(responseObj));
+
+      client = await AtClientImpl.create('@alice47', 'resetLocalTest',
+          AtClientPreference()..isLocalStoreRequired = true,
+          remoteSecondary: mockRemoteSecondary,
+          localSecondaryKeyStore: mockKeystore);
+      expect(client.isSecondaryReset(),
+          throwsA(predicate((dynamic e) => e is AtResetException)));
+    });
+
+    test('Verify isSecondaryReset() functionality - positive case', () async {
+      AtData responseObj = AtData()..data = 'correctEncPublicKey';
+      when(() => mockRemoteSecondary.executeVerb(any())).thenAnswer(
+              (invocation) => Future.value('data:correctEncPublicKey'));
+      when(() => mockKeystore.get(any())).thenAnswer(
+              (invocation) => Future.value(responseObj));
+
+      client = await AtClientImpl.create('@alice47', 'resetLocalTest',
+          AtClientPreference()..isLocalStoreRequired = true,
+          remoteSecondary: mockRemoteSecondary,
+          localSecondaryKeyStore: mockKeystore);
+      // errorless execution test
+      // if the method call below triggers any errors/exceptions this test will fail
+      await client.isSecondaryReset();
     });
   });
 }
