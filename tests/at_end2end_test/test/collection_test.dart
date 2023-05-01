@@ -553,9 +553,9 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
 
-    //AtCollectionModelFactoryManager.getInstance().register(PreferenceFactory.getInstance());
-   // AtCollectionModelFactoryManager.getInstance().register(ContactFactory.getInstance());
-    //AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
+    AtCollectionModelFactoryManager.getInstance().register(PreferenceFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance().register(ContactFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
