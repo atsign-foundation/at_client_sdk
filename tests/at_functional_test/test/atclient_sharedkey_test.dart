@@ -6,8 +6,6 @@ import 'package:test/test.dart';
 import 'at_demo_credentials.dart' as demo_credentials;
 import 'set_encryption_keys.dart';
 
-int retryCount = 1;
-int maxRetryCount = 3;
 void main() {
   late AtClientManager atClientManager;
   late AtClient atClient;
@@ -60,10 +58,9 @@ void main() {
       atClientManager.atClient.syncService.sync();
       atClientManager.atClient.syncService.sync();
       await Future.delayed(Duration(seconds: 2));
-      retryCount++;
     }
     isInSync = await atClientManager.atClient.syncService.isInSync();
-    if (isInSync == true || retryCount > maxRetryCount) {
+    if (isInSync == true ) {
       var metadata = await atClient.getMeta(phoneKey);
       expect(metadata?.sharedKeyEnc, isNotEmpty);
       expect(metadata?.pubKeyCS, isNotEmpty);
