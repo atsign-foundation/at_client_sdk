@@ -93,9 +93,7 @@ void main() {
       sharedWith: sharedWithAtsign2,
     );
 
-    Collections.getInstance().initialize(
-      [MyModelTestFactory()],
-    );
+    AtCollectionModelFactoryManager.getInstance().register(MyModelTestFactory());
 
     test('test getting an object by id using AtCollectionModel', () async {
       when(() => mockAtClient.get(any(

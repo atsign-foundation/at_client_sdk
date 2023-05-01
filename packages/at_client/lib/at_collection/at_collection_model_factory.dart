@@ -1,16 +1,17 @@
 import 'package:at_client/at_client.dart';
 
 abstract class AtCollectionModelFactory<T extends AtCollectionModel> {
-  AtCollectionModelFactory() {
-    AtCollectionModelFactoryManager.getInstance().register(this);
-  }
-
   /// Expected to return an instance of T
   T create();
 
   /// returns [true] if the factory creates instances of atCollectionModel for the given [collectionName]
   bool acceptCollection(String collectionName) {
     return collectionName == T.toString().toLowerCase();
+  }
+
+  // In case of conflict priority is used to resolve the right factory for a given collection name
+  int priority() {
+    return 10;
   }
 }
 
@@ -27,32 +28,23 @@ class AtCollectionModelFactoryManager {
   List<AtCollectionModelFactory> collectionFactories = [];
 
   register(AtCollectionModelFactory factory) {
-    collectionFactories.add(factory);
+    if(!collectionFactories.contains(factory)) {
+      collectionFactories.add(factory);
+    }
   }
 
   AtCollectionModelFactory? get(String collectionName) {
+    AtCollectionModelFactory? maxPriorityCollectionFactory;
     for (AtCollectionModelFactory collectionFactory in collectionFactories) {
       if (collectionFactory.acceptCollection(collectionName)) {
-        return collectionFactory;
+        if(maxPriorityCollectionFactory != null && collectionFactory.priority() > maxPriorityCollectionFactory.priority()) {
+          maxPriorityCollectionFactory = collectionFactory;
+        } else {
+          maxPriorityCollectionFactory = collectionFactory;
+        }
       }
     }
-    return null;
+    return maxPriorityCollectionFactory;
   }
 }
 
-// Provides collection framework with the list of factory classes that creates collection models
-class Collections {
-  static final Collections _singleton = Collections._internal();
-
-  Collections._internal();
-
-  factory Collections.getInstance() {
-    return _singleton;
-  }
-
-  bool isInitialized = false;
-
-  void initialize(List<AtCollectionModelFactory> factories) {
-    isInitialized = true;
-  }
-}
