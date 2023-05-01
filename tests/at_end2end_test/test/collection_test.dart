@@ -205,7 +205,7 @@ void main() async {
     await Phone.from('new personal Phone', phoneNumber: '123456789').save();
     await Phone.from('Office Phone', phoneNumber: '9999').save();
 
-    Collections.getInstance().initialize([PhoneFactory()]);
+    AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
 
     var personalPhoneLoaded = await AtCollectionModel.getModelById<Phone>(
       'new personal Phone',
@@ -238,7 +238,7 @@ void main() async {
     );
 
     var fourthPhone = Phone.from('fourth phone', phoneNumber: '4444');
-    Collections.getInstance().initialize([PhoneFactory()]);
+    AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
 
     await fourthPhone.save();
     await fourthPhone.share([secondAtSign]);
@@ -273,7 +273,8 @@ void main() async {
         namespace,
         TestPreferences.getInstance().getPreference(firstAtSign),
       );
-      Collections.getInstance().initialize([PhoneFactory()]);
+
+      AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
 
       var fifthPhone = Phone.from('fifth phone', phoneNumber: '55555');
       await fifthPhone.streams.save().forEach(
@@ -355,9 +356,9 @@ void main() async {
     var b = B.from('b1', b: 'b1 value');
     await b.share([secondAtSign]);
 
-    Collections.getInstance().initialize(
-      [AFactory.getInstance(), BFactory.getInstance()],
-    );
+    AtCollectionModelFactoryManager.getInstance().register(AFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance().register(BFactory.getInstance());
+
 
     expect(shareRes, true);
 
@@ -403,9 +404,8 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
 
-    Collections.getInstance().initialize(
-      [AFactory.getInstance(), BFactory.getInstance()],
-    );
+    AtCollectionModelFactoryManager.getInstance().register(AFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance().register(BFactory.getInstance());
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);

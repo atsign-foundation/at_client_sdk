@@ -13,12 +13,14 @@ import 'package:at_utils/at_utils.dart';
 import 'dart:convert';
 import 'package:meta/meta.dart';
 
+import 'at_json_collection_model.dart';
+
 /// implementation of [AtCollectionModelSpec]
 abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   final _logger = AtSignLogger('AtCollectionModel');
 
   static KeyMakerSpec keyMaker = DefaultKeyMaker();
-
+  static AtJsonCollectionModelFactory jsonCollectionModelFactory = AtJsonCollectionModelFactory();
   AtClientManager? atClientManager;
 
   late AtCollectionModelStream streams;
@@ -41,6 +43,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     keyMaker = newKeyMaker;
     collectionMethodImpl.keyMaker = keyMaker;
   }
+
 
   AtClient _getAtClient() {
     atClientManager ??= AtClientManager.getInstance();
@@ -105,11 +108,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
     String id, {
     String? collectionName,
   }) async {
-    if (!Collections.getInstance().isInitialized) {
-      throw Exception(
-          'Initialization is required. Invoke initialize method on Collection object');
-    }
-
+    AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
     return (await atCollectionRepository.getModelById<T>(id,
         collectionName: collectionName));
   }
@@ -167,11 +166,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// Returns an empty list when there are no AtCollectionModel objects found for the given collectionName.
   static Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
       {String? collectionName}) async {
-    if (!Collections.getInstance().isInitialized) {
-      throw Exception(
-          'Initialization is required. Invoke initialize method on Collection object');
-    }
-
+    AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
     return (await atCollectionRepository.getModelsByCollectionName<T>(
       collectionName: collectionName,
     ));
@@ -192,11 +187,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///  allSharedModels will have objects of both Phone and Home
   static Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
       String atSign) async {
-    if (!Collections.getInstance().isInitialized) {
-      throw Exception(
-          'Initialization is required. Invoke initialize method on Collection object');
-    }
-
+    AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
     AtUtils.formatAtSign(atSign)!;
     return (await atCollectionRepository.getModelsSharedWith<T>(atSign));
   }
@@ -219,10 +210,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///  allSharedModels will have objects of both Phone and Home
   static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
       String atSign) async {
-    if (!Collections.getInstance().isInitialized) {
-      throw Exception(
-          'Initialization is required. Invoke initialize method on Collection object');
-    }
+    AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
     AtUtils.formatAtSign(atSign)!;
     return (await atCollectionRepository.getModelsSharedBy<T>(atSign));
   }

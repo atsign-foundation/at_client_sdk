@@ -18,6 +18,7 @@ class AtCollectionRepository {
 
   AtCollectionRepository({required this.keyMaker});
 
+
   AtClient getAtClient() {
     atClientManager ??= AtClientManager.getInstance();
     return atClientManager!.atClient;
