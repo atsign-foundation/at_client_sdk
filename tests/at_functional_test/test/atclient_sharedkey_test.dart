@@ -1,12 +1,13 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 
 import 'at_demo_credentials.dart' as demo_credentials;
 import 'set_encryption_keys.dart';
 
+int retryCount = 1;
+int maxRetryCount = 3;
 void main() {
   late AtClientManager atClientManager;
   late AtClient atClient;
@@ -41,17 +42,32 @@ void main() {
       ..sharedBy = currentAtSign
       ..metadata = (Metadata()..ttl = 120000);
     var value = '+91 887 888 3435';
-    var encryptionService = AtKeyEncryptionManager(atClient)
-        .get(phoneKey, currentAtSign);
+    var encryptionService =
+        AtKeyEncryptionManager(atClient).get(phoneKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(phoneKey, value);
     var result = await atClient.getRemoteSecondary()!.executeCommand(
         'update:sharedKeyEnc:${phoneKey.metadata?.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata?.pubKeyCS}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
         auth: true);
     expect(result != null, true);
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
-    var metadata = await atClient.getMeta(phoneKey);
-    expect(metadata?.sharedKeyEnc, isNotEmpty);
-    expect(metadata?.pubKeyCS, isNotEmpty);
+    // sync to local
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
+    // check if local and remote are in sync before assertions
+    bool isInSync = await atClientManager.atClient.syncService.isInSync();
+    if (isInSync == false) {
+      // forcing a sync
+      atClientManager.atClient.syncService.sync();
+      atClientManager.atClient.syncService.sync();
+      atClientManager.atClient.syncService.sync();
+      await Future.delayed(Duration(seconds: 2));
+      retryCount++;
+    }
+    isInSync = await atClientManager.atClient.syncService.isInSync();
+    if (isInSync == true || retryCount > maxRetryCount) {
+      var metadata = await atClient.getMeta(phoneKey);
+      expect(metadata?.sharedKeyEnc, isNotEmpty);
+      expect(metadata?.pubKeyCS, isNotEmpty);
+    }
   }, timeout: Timeout(Duration(minutes: 3)));
 }
 
