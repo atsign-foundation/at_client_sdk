@@ -24,7 +24,7 @@ class AtCollectionRepository {
     return atClientManager!.atClient;
   }
 
-  Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
+  Future<List<AtCollectionModel>> getModelsByCollectionName<T extends AtCollectionModel>(
       {String? collectionName}) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
     var collectionModelFactory =
@@ -39,7 +39,7 @@ class AtCollectionRepository {
       collectionName: _collectionName,
     );
 
-    List<T> modelList = [];
+    List<AtCollectionModel> modelList = [];
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
@@ -61,7 +61,7 @@ class AtCollectionRepository {
         model.fromJson(atValue.value);
         model.id = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
-        modelList.add(model as T);
+        modelList.add(model);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
       }
@@ -70,8 +70,8 @@ class AtCollectionRepository {
     return modelList;
   }
 
-  Future<T> getModelById<T extends AtCollectionModel>(
-    String keyId, {
+  Future<AtCollectionModel> getModelById<T extends AtCollectionModel>(
+    String keyId, String namespace, {
     String? collectionName,
   }) async {
     _collectionName = collectionName ?? T.toString().toLowerCase();
@@ -88,6 +88,7 @@ class AtCollectionRepository {
     AtKey atKey = keyMaker.createSelfKey(
       keyId: formattedId,
       collectionName: formattedCollectionName,
+        namespace: namespace
     );
 
     try {
@@ -97,14 +98,14 @@ class AtCollectionRepository {
       model.fromJson(atValue.value);
       model.id = atValueJson['id'];
       model.collectionName = atValueJson['collectionName'];
-      return model as T;
+      return model;
     } catch (e) {
       _logger.severe('failed to get value of ${atKey.key}');
       rethrow;
     }
   }
 
-  Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
+  Future<List<AtCollectionModel>> getModelsSharedWith<T extends AtCollectionModel>(
       String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
@@ -114,7 +115,7 @@ class AtCollectionRepository {
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
-  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
+  Future<List<AtCollectionModel>> getModelsSharedBy<T extends AtCollectionModel>(
       String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
@@ -124,9 +125,9 @@ class AtCollectionRepository {
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
-  Future<List<T>> _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
+  Future<List<AtCollectionModel>> _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
       List<AtKey> collectionAtKeys) async {
-    List<T> modelList = [];
+    List<AtCollectionModel> modelList = [];
 
     for (var atKey in collectionAtKeys) {
       try {
@@ -150,7 +151,7 @@ class AtCollectionRepository {
         model.fromJson(atValue.value);
         model.id = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
-        modelList.add(model as T);
+        modelList.add(model);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
       }

@@ -104,12 +104,12 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   ///
   /// An Exception will be thrown if AtCollectionModel object with a given Id can not be found.
 
-  static Future<T> getModelById<T extends AtCollectionModel>(
-    String id, {
+  static Future<AtCollectionModel> getModelById<T extends AtCollectionModel>(
+    String id, String namespace, {
     String? collectionName,
   }) async {
     AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
-    return (await atCollectionRepository.getModelById<T>(id,
+    return (await atCollectionRepository.getModelById<T>(id, namespace,
         collectionName: collectionName));
   }
 
@@ -164,7 +164,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// ```
   ///
   /// Returns an empty list when there are no AtCollectionModel objects found for the given collectionName.
-  static Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
+  static Future<List<AtCollectionModel>> getModelsByCollectionName<T extends AtCollectionModel>(
       {String? collectionName}) async {
     AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
     return (await atCollectionRepository.getModelsByCollectionName<T>(
@@ -185,7 +185,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// var allSharedModels = await AtCollectionModel.getModelsSharedWith(atSign : '@kevin');
   /// ```
   ///  allSharedModels will have objects of both Phone and Home
-  static Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
+  static Future<List<AtCollectionModel>> getModelsSharedWith<T extends AtCollectionModel>(
       String atSign) async {
     AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
     AtUtils.formatAtSign(atSign)!;
@@ -208,7 +208,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
   /// var allReceivedModels = await AtCollectionModel.getModelsSharedBy(atSign : '@kevin');
   /// ```
   ///  allSharedModels will have objects of both Phone and Home
-  static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
+  static Future<List<AtCollectionModel>> getModelsSharedBy<T extends AtCollectionModel>(
       String atSign) async {
     AtCollectionModelFactoryManager.getInstance().register(jsonCollectionModelFactory);
     AtUtils.formatAtSign(atSign)!;
@@ -222,6 +222,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
       collectionModelJson: toJson(),
       id: id,
       collectionName: getCollectionName(),
+      namespace: namespace
     );
 
     final Completer<bool> completer = Completer<bool>();
@@ -267,6 +268,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
         regex: CollectionUtil.makeRegex(
       formattedId: formattedId,
       collectionName: formattedCollectionName,
+          namespace: namespace
     ));
 
     for (var atKey in allKeys) {
@@ -285,6 +287,7 @@ abstract class AtCollectionModel<T> extends AtCollectionModelSpec {
       collectionModelJson: toJson(),
       id: id,
       collectionName: getCollectionName(),
+      namespace: namespace
     );
 
     List<AtOperationItemStatus> allSharedKeyStatus = [];

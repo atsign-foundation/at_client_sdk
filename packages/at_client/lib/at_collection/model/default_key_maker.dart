@@ -13,10 +13,12 @@ class DefaultKeyMaker implements KeyMakerSpec {
   @override
   AtKey createSelfKey(
       {required String keyId,
-      required String collectionName,
+      required String collectionName, required String namespace,
       ObjectLifeCycleOptions? objectLifeCycleOptions}) {
+
     return AtKey()
-      ..key = '$keyId.$collectionName.atcollectionmodel'
+
+      ..key = '$keyId.$collectionName.atcollectionmodel.$namespace'
       ..metadata = Metadata()
       ..metadata!.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
@@ -27,14 +29,14 @@ class DefaultKeyMaker implements KeyMakerSpec {
   @override
   AtKey createSharedKey(
       {required String keyId,
-      required String collectionName,
+      required String collectionName, required String namespace,
       String? sharedWith,
       ObjectLifeCycleOptions? objectLifeCycleOptions}) {
     int? ttrInSeconds =
         objectLifeCycleOptions?.cacheRefreshIntervalOnRecipient.inSeconds;
 
     return AtKey()
-      ..key = '$keyId.$collectionName.atcollectionmodel'
+      ..key = '$keyId.$collectionName.atcollectionmodel.$namespace'
       ..sharedWith = sharedWith
       ..metadata = Metadata()
       ..metadata!.ttr = ttrInSeconds ?? -1
