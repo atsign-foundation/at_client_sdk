@@ -17,7 +17,7 @@ abstract class AtCollectionModelFactory<T extends AtCollectionModel> {
 
 class AtCollectionModelFactoryManager {
   static final AtCollectionModelFactoryManager _singleton =
-      AtCollectionModelFactoryManager._internal();
+  AtCollectionModelFactoryManager._internal();
 
   AtCollectionModelFactoryManager._internal();
 
@@ -28,7 +28,7 @@ class AtCollectionModelFactoryManager {
   List<AtCollectionModelFactory> collectionFactories = [];
 
   register(AtCollectionModelFactory factory) {
-    if(!collectionFactories.contains(factory)) {
+    if (!collectionFactories.contains(factory)) {
       collectionFactories.add(factory);
     }
   }
@@ -37,10 +37,13 @@ class AtCollectionModelFactoryManager {
     AtCollectionModelFactory? maxPriorityCollectionFactory;
     for (AtCollectionModelFactory collectionFactory in collectionFactories) {
       if (collectionFactory.acceptCollection(collectionName)) {
-        if(maxPriorityCollectionFactory != null && collectionFactory.priority() > maxPriorityCollectionFactory.priority()) {
+        if (maxPriorityCollectionFactory == null) {
           maxPriorityCollectionFactory = collectionFactory;
-        } else {
-          maxPriorityCollectionFactory = collectionFactory;
+
+          if (collectionFactory.priority() >
+              maxPriorityCollectionFactory.priority()) {
+            maxPriorityCollectionFactory = collectionFactory;
+          }
         }
       }
     }

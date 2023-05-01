@@ -35,6 +35,7 @@ class CollectionUtil {
     required Map<String, dynamic> modelJson,
     required String id,
     required String collectionName,
+    required String namespace
   }) {
     validateIdAndCollectionName(id, collectionName);
 
@@ -45,6 +46,8 @@ class CollectionUtil {
     if (modelJson['collectionName'] == null) {
       throw Exception('collectionName not added in toJson');
     }
+
+
   }
 
   /// adds id and collectionName fields in [objectJson]
@@ -52,6 +55,7 @@ class CollectionUtil {
     required Map<String, dynamic> collectionModelJson,
     required String id,
     required String collectionName,
+    required String namespace,
   }) {
     collectionModelJson['id'] = id;
     collectionModelJson['collectionName'] = collectionName;
@@ -59,11 +63,12 @@ class CollectionUtil {
       modelJson: collectionModelJson,
       id: id,
       collectionName: collectionName,
+      namespace: namespace
     );
     return collectionModelJson;
   }
 
-  static String makeRegex({String? formattedId, String? collectionName}) {
+  static String makeRegex({String? formattedId, String? collectionName, String? namespace}) {
     String regex = formattedId ?? '';
 
     if (collectionName != null) {
@@ -73,6 +78,11 @@ class CollectionUtil {
     }
 
     regex = '$regex.atcollectionmodel';
+
+    if(namespace != null) {
+      regex = '$regex.$namespace';
+    }
+
     return regex;
   }
 }

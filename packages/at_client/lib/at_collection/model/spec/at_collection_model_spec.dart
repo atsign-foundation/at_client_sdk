@@ -21,8 +21,12 @@ abstract class AtCollectionModelSpec<T> {
   /// By default, id is set to UUID.
   late String id;
 
-  /// [collectionName] represents objects of same type.
+  /// [collectionName] is used to identify collections of same type
+  /// For example, if Preference is a class that extends AtCollectionModelSpec then collectionName can be "preferences"
   String? collectionName;
+
+  /// namespace that should be used to persist the collection model
+  late String namespace;
 
   /// [toJson] method returns JSON representation of the object.
   /// The [save] method invokes this method to get the state which will be persisted to the secondary server.

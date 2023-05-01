@@ -65,15 +65,18 @@ void main() {
     AtKey object1SelfKey = testKeyMaker.createSelfKey(
       keyId: object1ModelId,
       collectionName: collectionName,
+      namespace : "buzz"
     );
     AtKey object1SharedKey1 = testKeyMaker.createSharedKey(
       keyId: object1ModelId,
       collectionName: collectionName,
+      namespace : "buzz",
       sharedWith: sharedWithAtsign1,
     );
     AtKey object1SharedKey2 = testKeyMaker.createSharedKey(
       keyId: object1ModelId,
       collectionName: collectionName,
+      namespace : "buzz",
       sharedWith: sharedWithAtsign2,
     );
 
@@ -81,15 +84,18 @@ void main() {
     AtKey object2SelfKey = testKeyMaker.createSelfKey(
       keyId: object2ModelId,
       collectionName: collectionName,
+        namespace : "buzz"
     );
     AtKey object2SharedKey1 = testKeyMaker.createSharedKey(
       keyId: object2ModelId,
       collectionName: collectionName,
+      namespace : "buzz",
       sharedWith: sharedWithAtsign1,
     );
     AtKey object2SharedKey2 = testKeyMaker.createSharedKey(
       keyId: object2ModelId,
       collectionName: collectionName,
+      namespace : "buzz",
       sharedWith: sharedWithAtsign2,
     );
 
@@ -107,7 +113,9 @@ void main() {
 
       var result = await AtCollectionModel.getModelById<MyModelTest>(
         object1ModelId,
+       "buzz",
         collectionName: 'mymodeltest',
+
       );
       expect(result, myModelTestObject1);
     });
@@ -827,15 +835,16 @@ class MyModelTest extends AtCollectionModel {
     return MyModelTest();
   }
 
-  static Future<List<MyModelTest>> getAll() async {
+  static Future<List<AtCollectionModel>> getAll() async {
     return AtCollectionModel.getModelsByCollectionName<MyModelTest>(
       collectionName: 'mymodeltest',
     );
   }
 
-  static Future<MyModelTest> getById(String keyId) async {
+  static Future<AtCollectionModel> getById(String keyId) async {
     return (await AtCollectionModel.getModelById<MyModelTest>(
       keyId,
+      "buzz",
       collectionName: 'mymodeltest',
     ));
   }

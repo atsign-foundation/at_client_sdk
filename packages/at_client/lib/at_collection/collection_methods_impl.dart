@@ -35,6 +35,7 @@ class CollectionMethodImpl {
     AtKey atKey = keyMaker.createSelfKey(
       keyId: formattedId,
       collectionName: formattedCollectionName,
+      namespace: atCollectionModel.namespace,
       objectLifeCycleOptions: options,
     );
 
@@ -65,6 +66,7 @@ class CollectionMethodImpl {
         regex: CollectionUtil.makeRegex(
       formattedId: formattedId,
       collectionName: formattedCollectionName,
+            namespace: atCollectionModel.namespace
     ));
 
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
@@ -102,6 +104,7 @@ class CollectionMethodImpl {
     var selfKey = keyMaker.createSelfKey(
       keyId: formattedId,
       collectionName: formattedCollectionName,
+      namespace: atCollectionModel.namespace,
       objectLifeCycleOptions: options,
     );
 
@@ -122,6 +125,7 @@ class CollectionMethodImpl {
       var sharedAtKey = keyMaker.createSharedKey(
           keyId: formattedId,
           collectionName: formattedCollectionName,
+          namespace: atCollectionModel.namespace,
           objectLifeCycleOptions: options,
           sharedWith: atSign);
 
@@ -151,6 +155,7 @@ class CollectionMethodImpl {
     AtKey selfAtKey = keyMaker.createSelfKey(
       keyId: formattedId,
       collectionName: formattedCollectionName,
+      namespace: atCollectionModel.namespace,
     );
 
     var isSelfKeyDeleted = await _getAtClient().delete(selfAtKey);
@@ -172,6 +177,7 @@ class CollectionMethodImpl {
       regex: CollectionUtil.makeRegex(
         formattedId: formattedId,
         collectionName: formattedCollectionName,
+          namespace: atCollectionModel.namespace
       ),
     );
 

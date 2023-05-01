@@ -32,6 +32,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
       collectionModelJson: atCollectionModel.toJson(),
       id: atCollectionModel.id,
       collectionName: atCollectionModel.getCollectionName(),
+      namespace: atCollectionModel.namespace
     );
 
     yield* collectionMethodImpl.save(
@@ -48,6 +49,7 @@ class AtCollectionModelStream<T> extends AtCollectionModelStreamSpec {
       collectionModelJson: atCollectionModel.toJson(),
       id: atCollectionModel.id,
       collectionName: atCollectionModel.getCollectionName(),
+        namespace: atCollectionModel.namespace
     );
 
     yield* collectionMethodImpl.shareWith(
