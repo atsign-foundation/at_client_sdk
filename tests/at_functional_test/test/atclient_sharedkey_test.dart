@@ -47,24 +47,11 @@ void main() {
         'update:sharedKeyEnc:${phoneKey.metadata?.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata?.pubKeyCS}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
         auth: true);
     expect(result != null, true);
-    // sync to local
     await FunctionalTestSyncService.getInstance()
         .syncData(atClientManager.atClient.syncService);
-    // check if local and remote are in sync before assertions
-    bool isInSync = await atClientManager.atClient.syncService.isInSync();
-    if (isInSync == false) {
-      // forcing a sync
-      atClientManager.atClient.syncService.sync();
-      atClientManager.atClient.syncService.sync();
-      atClientManager.atClient.syncService.sync();
-      await Future.delayed(Duration(seconds: 2));
-    }
-    isInSync = await atClientManager.atClient.syncService.isInSync();
-    if (isInSync == true ) {
-      var metadata = await atClient.getMeta(phoneKey);
-      expect(metadata?.sharedKeyEnc, isNotEmpty);
-      expect(metadata?.pubKeyCS, isNotEmpty);
-    }
+    var metadata = await atClient.getMeta(phoneKey);
+    expect(metadata?.sharedKeyEnc, isNotEmpty);
+    expect(metadata?.pubKeyCS, isNotEmpty);
   }, timeout: Timeout(Duration(minutes: 3)));
 }
 
