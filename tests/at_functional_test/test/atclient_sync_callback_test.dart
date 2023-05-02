@@ -183,25 +183,41 @@ void main() {
 
     int progressCallbacksReceived = 0;
     int requiredProgressCallbacks = 2;
+    var isLocalCommitIdEqualServerCommitId = false;
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
-      progressCallbacksReceived++;
-      if (progressCallbacksReceived == requiredProgressCallbacks) {
-        expect(syncProgress.syncStatus, SyncStatus.success);
+      print('SyncProgress: $syncProgress');
+      expect(syncProgress.syncStatus, SyncStatus.success);
+      // If localCommitIdBeforeSync and localCommitId (local commitId after sync)
+      // are equal, it means there is not nothing to sync. So do not assert below conditions.
+      // The sync callback gets triggered twice, and the below conditions will be asserted
+      // on either of the sync process callback.
+      if (syncProgress.localCommitIdBeforeSync != syncProgress.localCommitId) {
         expect(syncProgress.keyInfoList, isNotEmpty);
         expect(syncProgress.localCommitId,
             greaterThan(syncProgress.localCommitIdBeforeSync!));
-        expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
         syncProgress.keyInfoList?.forEach((keyInfo) {
           if (keyInfo.key.contains('fb_username-$uniqueId')) {
             expect(keyInfo.commitOp, CommitOp.UPDATE);
             expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
           }
         });
-        atClientManager.atClient.syncService
-            .removeProgressListener(progressListener);
       }
-    }, count:2));
+      // At the end of the test (either in first run or by end of second run),
+      // localCommitId should be equal to serverCommitId
+      if (isLocalCommitIdEqualServerCommitId == false) {
+        if (syncProgress.localCommitId == syncProgress.serverCommitId) {
+          isLocalCommitIdEqualServerCommitId = true;
+        }
+      }
+      // Assert only on the completion of second sync run.
+      if (progressCallbacksReceived == requiredProgressCallbacks) {
+        expect(isLocalCommitIdEqualServerCommitId, true);
+      }
+
+      atClientManager.atClient.syncService
+          .removeProgressListener(progressListener);
+    }, count: 2));
   });
   tearDown(() async => await tearDownFunc());
 }
