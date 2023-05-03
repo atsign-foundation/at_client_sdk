@@ -1,13 +1,14 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
-import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
 
-class DefaultKeyMaker implements KeyMakerSpec {
-  AtClientManager? atClientManager;
+
+
+import '../collections.dart';
+
+class DefaultKeyMaker implements KeyMaker {
+
 
   AtClient _getAtClient() {
-    atClientManager ??= AtClientManager.getInstance();
-    return atClientManager!.atClient;
+    return AtClientManager.getInstance().atClient;
   }
 
   @override

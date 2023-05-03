@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_collection/collection_util.dart';
+import 'package:at_client/at_collection/collections.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -306,9 +307,10 @@ void main() async {
 
     //AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
 
-    var personalPhoneLoaded = await AtCollectionModel.getModelById<Phone>(
-      'new personal Phone',
-      'buzz'
+    var personalPhoneLoaded = await AtCollectionModel.getModelById(
+      id: 'new personal Phone',
+      namespace: 'buzz',
+      collectionName: 'phone'
     );
 
    // expect(personalPhoneLoaded.phoneNumber, '123456789');
@@ -356,9 +358,10 @@ void main() async {
     await fourthPhone.delete();
     expect(await fourthPhone.getSharedWith(), []);
     expect(
-      () async => await AtCollectionModel.getModelById<Phone>(
-        'fourth phone',
-         'buzz'
+      () async => await AtCollectionModel.getModelById(
+        id: 'fourth phone',
+         namespace: 'buzz',
+        collectionName: 'phone'
       ),
       throwsA(isA<Exception>()),
     );
@@ -375,9 +378,14 @@ void main() async {
         TestPreferences.getInstance().getPreference(firstAtSign),
       );
 
+
       AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
 
+
       var fifthPhone = Phone.from('fifth phone', phoneNumber: '55555');
+
+
+
       await fifthPhone.streams.save(share: false).forEach(
         (AtOperationItemStatus element) {
           expect(element.complete, true);
@@ -431,8 +439,9 @@ void main() async {
 
       expect(
         () async => await AtCollectionModel.getModelById<Phone>(
-          'fifth phone',
-          'buzz'
+          id:'fifth phone',
+          namespace: 'buzz',
+          collectionName: 'phone'
         ),
         throwsA(isA<Exception>()),
       );
@@ -553,9 +562,9 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
 
-    AtCollectionModelFactoryManager.getInstance().register(PreferenceFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().register(ContactFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
+    //AtCollectionModelFactoryManager.getInstance().register(PreferenceFactory.getInstance());
+    //AtCollectionModelFactoryManager.getInstance().register(ContactFactory.getInstance());
+    //AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);

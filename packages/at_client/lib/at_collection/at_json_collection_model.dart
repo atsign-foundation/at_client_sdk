@@ -17,6 +17,8 @@ class AtJsonCollectionModel extends AtCollectionModel {
   Map<String, dynamic> toJson() {
     return jsonModel;
   }
+
+
 }
 
 // Factory for creating instance of AtJsonCollectionModel
