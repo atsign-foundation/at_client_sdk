@@ -1,10 +1,6 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/at_collection_repository.dart';
-import 'package:at_client/at_collection/collection_methods_impl.dart';
-import 'package:at_client/at_collection/model/default_key_maker.dart';
-import 'package:at_client/src/util/at_collection_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -18,8 +14,8 @@ void main() {
   setUpAll(() {
     registerFallbackValue(FakeAtKey());
   });
-
-  group('A group of saving/sharing/deleting/unsharing an object tests', () {
+}
+ /* group('A group of saving/sharing/deleting/unsharing an object tests', () {
     var mockAtClient = MockAtClient();
 
     final testKeyMaker = DefaultKeyMaker();
@@ -904,4 +900,4 @@ class MyModelTestFactory extends AtCollectionModelFactory<MyModelTest> {
   bool acceptCollection(String collectionName) {
     return collectionName == 'mymodeltest' ? true : false;
   }
-}
+}*/

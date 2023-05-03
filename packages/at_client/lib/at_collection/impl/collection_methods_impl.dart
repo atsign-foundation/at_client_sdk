@@ -1,26 +1,23 @@
 import 'package:at_client/at_collection/at_collection_model.dart';
 import 'package:at_client/at_collection/collection_util.dart';
-import 'package:at_client/at_collection/model/at_operation_item_status.dart';
-import 'package:at_client/at_collection/model/default_key_maker.dart';
-import 'package:at_client/at_collection/model/object_lifecycle_options.dart';
-import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
+import 'package:at_client/at_collection/impl/default_key_maker.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import '../collections.dart';
 
-/// [CollectionMethodImpl] have the implementation of all the methods available in collections package.
+/// [AtCollectionMethodImpl] have the implementation of all the methods available in collections package.
 /// These methods are wrapped with a stream or future return types for the end consumption.
 
-class CollectionMethodImpl {
+class AtCollectionMethodImpl {
   final _logger = AtSignLogger('AtCollectionModelMethodsImpl');
 
-  AtClientManager? atClientManager;
 
-  late KeyMakerSpec keyMaker = DefaultKeyMaker();
+  late KeyMaker keyMaker = DefaultKeyMaker();
   AtCollectionModel atCollectionModel;
 
-  CollectionMethodImpl(this.atCollectionModel);
+  AtCollectionMethodImpl(this.atCollectionModel);
 
   Stream<AtOperationItemStatus> save(
       {required String jsonEncodedData,
@@ -29,7 +26,7 @@ class CollectionMethodImpl {
     options ??= ObjectLifeCycleOptions();
     String formattedId = CollectionUtil.format(atCollectionModel.id);
     String formattedCollectionName = CollectionUtil.format(
-      atCollectionModel.getCollectionName(),
+      atCollectionModel.collectionName,
     );
 
     AtKey atKey = keyMaker.createSelfKey(
@@ -99,7 +96,7 @@ class CollectionMethodImpl {
     options ??= ObjectLifeCycleOptions();
     String formattedId = CollectionUtil.format(atCollectionModel.id);
     String formattedCollectionName =
-        CollectionUtil.format(atCollectionModel.getCollectionName());
+        CollectionUtil.format(atCollectionModel.collectionName);
 
     var selfKey = keyMaker.createSelfKey(
       keyId: formattedId,
@@ -150,7 +147,7 @@ class CollectionMethodImpl {
   Stream<AtOperationItemStatus> delete() async* {
     String formattedId = CollectionUtil.format(atCollectionModel.id);
     String formattedCollectionName =
-        CollectionUtil.format(atCollectionModel.getCollectionName());
+        CollectionUtil.format(atCollectionModel.collectionName);
 
     AtKey selfAtKey = keyMaker.createSelfKey(
       keyId: formattedId,
@@ -170,7 +167,7 @@ class CollectionMethodImpl {
   Stream<AtOperationItemStatus> unshare({List<String>? atSigns}) async* {
     String formattedId = CollectionUtil.format(atCollectionModel.id);
     String formattedCollectionName = CollectionUtil.format(
-      atCollectionModel.getCollectionName(),
+      atCollectionModel.collectionName,
     );
 
     var sharedAtKeys = await _getAtClient().getAtKeys(
@@ -208,8 +205,7 @@ class CollectionMethodImpl {
   }
 
   AtClient _getAtClient() {
-    atClientManager ??= AtClientManager.getInstance();
-    return atClientManager!.atClient;
+    return AtClientManager.getInstance().atClient;
   }
 
   Future<bool> _put(AtKey atKey, String jsonEncodedData) async {
