@@ -18,20 +18,28 @@ class FunctionalTestSyncService {
   }
 
   Future<void> syncData(SyncService syncService) async {
-    var isSyncInProgress = true;
-    var functionalTestSyncProgressListener = FunctionalTestSyncProgressListener();
+    var isInSyncProgress = true;
+    var functionalTestSyncProgressListener =
+        FunctionalTestSyncProgressListener();
+    // initialise sync and add listener
     syncService.addProgressListener(functionalTestSyncProgressListener);
     syncService.sync();
     functionalTestSyncProgressListener.streamController.stream
         .listen((syncProgress) async {
-      _logger.info(
-          'Sync process completed. Sync Status: ${syncProgress.syncStatus}');
-      if (syncProgress.syncStatus == SyncStatus.success ||
-          syncProgress.syncStatus == SyncStatus.failure) {
-        isSyncInProgress = false;
+      // if syncStatus is success && localCommitId is equal to serverCommitID
+      // or if syncStatus is failure, then sync is false.
+      if (((syncProgress.syncStatus == SyncStatus.success) &&
+              (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
+          (syncProgress.syncStatus == SyncStatus.failure)) {
+        _logger.info('sync completed');
+        isInSyncProgress = false;
       }
     });
-    while (isSyncInProgress) {
+    int startTimeInMS = DateTime.now().millisecondsSinceEpoch;
+    int maxWaitTime = startTimeInMS + 30000;
+    while (isInSyncProgress &&
+        DateTime.now().millisecondsSinceEpoch < maxWaitTime) {
+      _logger.info('sync in progress');
       await Future.delayed(Duration(milliseconds: 100));
     }
   }
