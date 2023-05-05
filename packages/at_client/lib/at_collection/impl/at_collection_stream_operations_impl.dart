@@ -10,7 +10,7 @@ import 'default_key_maker.dart';
 
 class AtCollectionModelStreamOperationsImpl
     extends AtCollectionModelStreamOperations {
-  final _logger = AtSignLogger('AtCollectionModelStream');
+  final _logger = AtSignLogger('AtCollectionModelStreamOperationsImpl');
   final KeyMaker _keyMaker = DefaultKeyMaker();
   late AtCollectionModel atCollectionModel;
   late AtCollectionMethodImpl _collectionMethodImpl;
@@ -53,10 +53,8 @@ class AtCollectionModelStreamOperationsImpl
 
   @override
   Stream<AtOperationItemStatus> delete() async* {
-    CollectionUtil.validateIdAndCollectionName(
-      atCollectionModel.id,
-      atCollectionModel.collectionName,
-    );
+    CollectionUtil.checkForNullOrEmptyValues(atCollectionModel.id,
+        atCollectionModel.collectionName, atCollectionModel.namespace);
 
     yield* _collectionMethodImpl.delete();
     yield* _collectionMethodImpl.unshare();

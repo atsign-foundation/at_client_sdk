@@ -340,7 +340,8 @@ void main() async {
     );
 
     var fourthPhone = Phone.from('fourth phone', phoneNumber: '4444');
-    AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
+
+    AtCollectionModel.registerFactories([PhoneFactory()]);
 
     await fourthPhone.save();
     await fourthPhone.share([secondAtSign]);
@@ -379,7 +380,7 @@ void main() async {
       );
 
 
-      AtCollectionModelFactoryManager.getInstance().register(PhoneFactory());
+      AtCollectionModel.registerFactories([PhoneFactory()]);
 
 
       var fifthPhone = Phone.from('fifth phone', phoneNumber: '55555');
@@ -512,8 +513,8 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
 
-    AtCollectionModelFactoryManager.getInstance().register(AFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().register(BFactory.getInstance());
+    AtCollectionModel.registerFactories([AFactory.getInstance(), BFactory.getInstance()]);
+
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);

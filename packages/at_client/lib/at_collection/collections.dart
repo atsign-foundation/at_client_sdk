@@ -210,7 +210,7 @@ abstract class AtCollectionQueryOperations {
   /// ```
   ///
   /// An Exception will be thrown if AtCollectionModel object with a given Id can not be found.
-  Future<AtCollectionModel> getModelById(String keyId, String namespace, String collectionName);
+  Future<AtCollectionModel> getModel(String id, String namespace, String collectionName);
 
   /// The [getModelsByCollectionName] method of AtCollectionModel returns an list of AtCollectionModels that have a given collection name.
   ///
