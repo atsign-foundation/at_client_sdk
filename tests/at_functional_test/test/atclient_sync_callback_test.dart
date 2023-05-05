@@ -183,11 +183,10 @@ void main() {
           expect(keyInfo.commitOp, CommitOp.UPDATE);
         }
       });
-
       atClientManager.atClient.syncService
           .removeProgressListener(progressListener);
     }));
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
   tearDown(() async => await tearDownFunc());
 }
 
