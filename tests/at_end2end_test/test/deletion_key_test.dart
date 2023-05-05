@@ -4,6 +4,7 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
+import 'package:at_utils/at_logger.dart';
 
 late AtClient sharedByAtClient;
 late AtClient sharedWithAtClient;
@@ -12,6 +13,7 @@ late String sharedWithAtSign;
 final namespace = 'wavi';
 
 void main() {
+  AtSignLogger.root_level = 'finer';
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
