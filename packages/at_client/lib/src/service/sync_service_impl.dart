@@ -348,18 +348,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         atSign: _atClient.getCurrentAtSign()!);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     if (serverCommitId > lastReceivedServerCommitId) {
-      _logger.finer(
-          'syncing to local: localCommitId $lastReceivedServerCommitId serverCommitId $serverCommitId');
-
+      _logger.finer(_logger.getLogMessageWithClientParticulars(
+          _atClient.getPreferences()!.atClientParticulars,
+          'Pulling changes into local secondary | lastReceivedServerCommitId $lastReceivedServerCommitId | serverCommitId $serverCommitId'));
       // Hint to casual reader: This is where we sync new changes from the server to this client
       final keyInfoList = await _syncFromServer(
           serverCommitId, lastReceivedServerCommitId, unCommittedEntries);
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
-      _logger.finer(
-          'syncing to remote. Total uncommitted entries: ${unCommittedEntries.length}');
-
+      _logger.finer(_logger.getLogMessageWithClientParticulars(
+          _atClient.getPreferences()!.atClientParticulars,
+          'Found uncommitted entries to sync to remote. Total uncommitted entries: ${unCommittedEntries.length}'));
       // Hint to casual reader: This is where we sync new changes from this client to the server
       final keyInfoList = await _syncToRemote(unCommittedEntries);
       syncResult.keyInfoList.addAll(keyInfoList);
@@ -397,14 +397,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
             await syncUtil.updateCommitEntry(
                 commitEntry, commitId, _atClient.getCurrentAtSign()!);
-            // update the last received server commit id
-            // When an invalid key is received, the commit-id is -1, and in this
-            // case the "lastReceivedServerCommitId" must NOT be updated, because
-            // we do not want lose the track of latest server commit id.
-            if (commitId != -1) {
-              await _atClient.put(
-                  _lastReceivedServerCommitIdAtKey, commitId.toString());
-            }
+
             keyInfoList.add(KeyInfo(commitEntry.atKey,
                 SyncDirection.localToRemote, commitEntry.operation));
           } on Exception catch (e) {
@@ -441,12 +434,34 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         List<dynamic> listOfCommitEntriesToSync =
             await _getEntriesToSyncFromServer(lastReceivedServerCommitId);
         if (listOfCommitEntriesToSync.isEmpty) {
-          _logger.finer(
-              'sync response is empty: local commitID: $lastReceivedServerCommitId server commitID: $serverCommitId');
+          _logger.finer(_logger.getLogMessageWithClientParticulars(
+              _atClient.getPreferences()!.atClientParticulars,
+              'sync response is empty | local commitID: $lastReceivedServerCommitId | server commitID: $serverCommitId'));
           break;
         }
         // Iterates over each commit entry
+        // If the serverCommitEntry exists in the uncommitted entries list,
+        // ignore the serverCommitEntry.
         for (dynamic serverCommitEntry in listOfCommitEntriesToSync) {
+          bool isServerCommitEntryExistInUncommittedEntries = false;
+          for (CommitEntry entry in uncommittedEntries) {
+            if (entry.atKey!.trim() ==
+                serverCommitEntry['atKey'].toString().trim()) {
+              isServerCommitEntryExistInUncommittedEntries = true;
+              break;
+            }
+          }
+          if (isServerCommitEntryExistInUncommittedEntries) {
+            lastReceivedServerCommitId =
+                _parseToInteger(serverCommitEntry['commitId']);
+            _logger.finer(_logger.getLogMessageWithClientParticulars(
+                _atClient.getPreferences()!.atClientParticulars,
+                'Server commitEntry ${serverCommitEntry['atKey']} exists in '
+                'uncommitted entries. So skipping the commit entry and '
+                'updating the lastReceivedServerCommitId to $lastReceivedServerCommitId'));
+            continue;
+          }
+
           _sendTelemetry('_syncFromServer.forEachEntry.start', {
             "atKey": serverCommitEntry['atKey'],
             "operation": serverCommitEntry['operation'],
@@ -798,11 +813,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // last received server commit id.
     try {
       var response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
+      _logger.finer(_logger.getLogMessageWithClientParticulars(
+          _atClient.getPreferences()!.atClientParticulars,
+          'Returning lastReceivedServerCommitId from AtKey: ${response.value}'));
       return int.parse(response.value);
     } on AtKeyNotFoundException {
       // If the key does not exist, fall back to previous logic, which is
       // return last synced commit id.
-      return _getLocalCommitId();
+      int localCommitId = await _getLocalCommitId();
+      _logger.finer(_logger.getLogMessageWithClientParticulars(
+          _atClient.getPreferences()!.atClientParticulars,
+          'lastReceivedServerCommitId AtKey not found. Returning localCommitId: $localCommitId'));
+      return localCommitId;
     }
   }
 
