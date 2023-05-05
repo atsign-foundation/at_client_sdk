@@ -31,8 +31,12 @@ class E2ESyncService {
     syncService.addProgressListener(e2eTestSyncProgressListener);
     e2eTestSyncProgressListener.streamController.stream
         .listen((SyncProgress syncProgress) async {
-      if (syncProgress.syncStatus == SyncStatus.success ||
-          syncProgress.syncStatus == SyncStatus.failure) {
+    // Exit the sync process when either of the conditions are met,
+     // 1. If syncStatus is success && localCommitId is equal to serverCommitID (or) If syncStatus is failure
+      // 2. When sync process exceeds the max timeoutthat is 30 seconds
+        if (((syncProgress.syncStatus == SyncStatus.success) &&
+              (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
+          (syncProgress.syncStatus == SyncStatus.failure)) {
         isSyncInProgress = false;
       }
       var keyInfoList = syncProgress.keyInfoList;
