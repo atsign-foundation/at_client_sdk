@@ -1,42 +1,37 @@
-// import 'dart:mirrors';
-
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/collection_util.dart';
-import 'package:at_client/at_collection/model/spec/key_maker_spec.dart';
-import 'package:at_utils/at_utils.dart';
 
-class AtCollectionRepository {
-  final _logger = AtSignLogger('AtCollectionRepository');
+import 'package:at_client/at_collection/impl/default_key_maker.dart';
+import 'package:at_utils/at_logger.dart';
+import '../../at_client.dart';
+import '../collection_util.dart';
+import '../collections.dart';
 
+class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
+  final _logger = AtSignLogger('AtCollectionQueryOperationsImpl');
   AtClientManager? atClientManager;
+  final KeyMaker _keyMaker = DefaultKeyMaker();
 
-  late KeyMakerSpec keyMaker;
-
-  late String _collectionName;
-
-  AtCollectionRepository({required this.keyMaker});
-
+  AtCollectionQueryOperationsImpl();
 
   AtClient getAtClient() {
     atClientManager ??= AtClientManager.getInstance();
     return atClientManager!.atClient;
   }
 
-  Future<List<AtCollectionModel>> getModelsByCollectionName<T extends AtCollectionModel>(
-      {String? collectionName}) async {
-    _collectionName = collectionName ?? T.toString().toLowerCase();
+  @override
+  Future<List<AtCollectionModel>> getModelsByCollectionName(
+      String collectionName) async {
     var collectionModelFactory =
-        AtCollectionModelFactoryManager.getInstance().get(_collectionName);
+        AtCollectionModelFactoryManager.getInstance().get(collectionName);
 
     if (collectionModelFactory == null) {
-      throw Exception('Factory class not found for ${T.toString()}');
+      throw Exception('Factory class not found for the given $collectionName');
     }
 
-    _collectionName = CollectionUtil.format(_collectionName);
+    var formattedCollectionName = CollectionUtil.format(collectionName);
     var regex = CollectionUtil.makeRegex(
-      collectionName: _collectionName,
+      collectionName: formattedCollectionName,
     );
 
     List<AtCollectionModel> modelList = [];
@@ -53,7 +48,7 @@ class AtCollectionRepository {
         /// OR there is a collectionName but it is not what is asked hence ignore it.
         if (atValueJson['id'] == null ||
             atValueJson['collectionName'] == null ||
-            _collectionName != atValueJson['collectionName']) {
+            formattedCollectionName != atValueJson['collectionName']) {
           continue;
         }
 
@@ -70,26 +65,23 @@ class AtCollectionRepository {
     return modelList;
   }
 
-  Future<AtCollectionModel> getModelById<T extends AtCollectionModel>(
-    String keyId, String namespace, {
-    String? collectionName,
-  }) async {
-    _collectionName = collectionName ?? T.toString().toLowerCase();
+  @override
+  Future<AtCollectionModel> getModel(
+      String id, String namespace, String collectionName) async {
     var collectionModelFactory =
-        AtCollectionModelFactoryManager.getInstance().get(_collectionName);
+        AtCollectionModelFactoryManager.getInstance().get(collectionName);
 
     if (collectionModelFactory == null) {
-      throw Exception('Factory class not found for ${T.toString()}');
+      throw Exception('Factory class not found for the given $collectionName');
     }
 
-    String formattedId = CollectionUtil.format(keyId);
-    String formattedCollectionName = CollectionUtil.format(_collectionName);
+    String formattedId = CollectionUtil.format(id);
+    String formattedCollectionName = CollectionUtil.format(collectionName);
 
-    AtKey atKey = keyMaker.createSelfKey(
-      keyId: formattedId,
-      collectionName: formattedCollectionName,
-        namespace: namespace
-    );
+    AtKey atKey = _keyMaker.createSelfKey(
+        keyId: formattedId,
+        collectionName: formattedCollectionName,
+        namespace: namespace);
 
     try {
       AtValue atValue = await getAtClient().get(atKey);
@@ -105,8 +97,8 @@ class AtCollectionRepository {
     }
   }
 
-  Future<List<AtCollectionModel>> getModelsSharedWith<T extends AtCollectionModel>(
-      String atSign) async {
+  @override
+  Future<List<AtCollectionModel>> getModelsSharedWith(String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
@@ -115,8 +107,8 @@ class AtCollectionRepository {
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
-  Future<List<AtCollectionModel>> getModelsSharedBy<T extends AtCollectionModel>(
-      String atSign) async {
+  @override
+  Future<List<AtCollectionModel>> getModelsSharedBy(String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
@@ -125,8 +117,9 @@ class AtCollectionRepository {
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
-  Future<List<AtCollectionModel>> _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
-      List<AtKey> collectionAtKeys) async {
+  Future<List<AtCollectionModel>>
+      _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
+          List<AtKey> collectionAtKeys) async {
     List<AtCollectionModel> modelList = [];
 
     for (var atKey in collectionAtKeys) {

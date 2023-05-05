@@ -22,6 +22,7 @@ class AtCollectionModelOperationsImpl
   @override
   Future<bool> save(
       {bool share = true, ObjectLifeCycleOptions? options}) async {
+
     var jsonObject = CollectionUtil.initAndValidateJson(
         collectionModelJson: toJson(),
         id: atCollectionModel.id,
@@ -58,8 +59,8 @@ class AtCollectionModelOperationsImpl
 
   @override
   Future<List<String>> getSharedWith() async {
-    CollectionUtil.validateIdAndCollectionName(
-        atCollectionModel.id, atCollectionModel.collectionName);
+    CollectionUtil.checkForNullOrEmptyValues(
+        atCollectionModel.id, atCollectionModel.collectionName, atCollectionModel.namespace);
 
     List<String> sharedWithList = [];
     String formattedId = CollectionUtil.format(atCollectionModel.id);
@@ -110,8 +111,8 @@ class AtCollectionModelOperationsImpl
 
   @override
   Future<bool> delete() async {
-    CollectionUtil.validateIdAndCollectionName(
-        atCollectionModel.id, atCollectionModel.collectionName);
+    CollectionUtil.checkForNullOrEmptyValues(
+        atCollectionModel.id, atCollectionModel.collectionName, atCollectionModel.namespace);
 
     bool isSelfKeyDeleted = false;
     await collectionMethodImpl

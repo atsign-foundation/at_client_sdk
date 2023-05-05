@@ -11,33 +11,38 @@ import 'impl/at_collection_stream_operations_impl.dart';
 
 abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   final _logger = AtSignLogger('AtCollectionModel');
-
   /// [id] uniquely identifies this model.
   ///
   /// By default, id is set to UUID.
   String id = Uuid().v4();
-
   /// [collectionName] is used to identify collections of same type
   /// For example, if Preference is a class that extends AtCollectionModel then collectionName can be "preferences"
+  /// Defaulted to the name of the dart class in lowercase
   late String collectionName;
-
   /// namespace is used to persist the collection model
   /// Typically namespace is used to identify the app that is used to persist the data.
   late String namespace;
-
   late AtCollectionModelOperations _atCollectionModelOperations;
+  late AtCollectionModelStreamOperationsImpl streams;
 
   static final AtJsonCollectionModelFactory _jsonCollectionModelFactory =
       AtJsonCollectionModelFactory();
   static final AtCollectionQueryOperations _atCollectionQueryOperations =
       AtCollectionQueryOperationsImpl();
 
-  late AtCollectionModelStreamOperationsImpl streams;
+
   AtCollectionModel() {
     _atCollectionModelOperations = AtCollectionModelOperationsImpl(this);
     streams = AtCollectionModelStreamOperationsImpl(this);
     // Default the collectionName to the name of the class extending AtCollectionModel
     collectionName = runtimeType.toString().toLowerCase();
+  }
+
+  static registerFactories(List<AtCollectionModelFactory> factories) {
+    for(var atCollectionModelFactory in factories) {
+      AtCollectionModelFactoryManager.getInstance()
+          .register(atCollectionModelFactory);
+    }
   }
 
   static Future<AtCollectionModel> getModelById<T extends AtCollectionModel>(
@@ -46,7 +51,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
       required String collectionName}) async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
-    return _atCollectionQueryOperations.getModelById(
+    return _atCollectionQueryOperations.getModel(
         id, namespace, collectionName);
   }
 

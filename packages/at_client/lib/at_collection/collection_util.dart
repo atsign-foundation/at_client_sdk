@@ -17,16 +17,21 @@ class CollectionUtil {
   }
 
   /// throws exception if id or collectionName is empty
-  static void validateIdAndCollectionName(
+  static void checkForNullOrEmptyValues(
     String? id,
     String? collectionName,
+      String? namespace,
   ) {
-    if (id == null || id.trim().isEmpty) {
-      throw Exception('id not found');
+    if (id == null || id.isEmpty) {
+      throw Exception('id cannot be null or empty');
     }
 
-    if (collectionName == null || collectionName.trim().isEmpty) {
-      throw Exception('collectionName not found');
+    if (collectionName == null || collectionName.isEmpty) {
+      throw Exception('collectionName cannot be null or empty');
+    }
+
+    if (namespace == null || namespace.isEmpty) {
+      throw Exception('namespace cannot be null or empty');
     }
   }
 
@@ -37,7 +42,7 @@ class CollectionUtil {
     required String collectionName,
     required String namespace
   }) {
-    validateIdAndCollectionName(id, collectionName);
+    checkForNullOrEmptyValues(id, collectionName, namespace);
 
     if (modelJson['id'] == null) {
       throw Exception('id not added in toJson');
