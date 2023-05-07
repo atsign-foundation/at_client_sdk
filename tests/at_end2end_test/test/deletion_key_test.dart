@@ -80,13 +80,16 @@ void main() {
             namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign)))
         .atClient;
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
 
     var cachedAtKey = AtKey()
       ..key = 'deletecachedkey'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = sharedByAtSign
+      ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
+
+    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService, syncParameters: SyncParameters()..key = cachedAtKey.toString());
+
     var getResponse = await sharedWithAtClient.get(cachedAtKey);
     expect(getResponse.value, 'dummy_cached_value');
     // Delete the key

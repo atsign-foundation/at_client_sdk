@@ -7,6 +7,7 @@ import 'package:at_client/src/service/sync_service.dart';
 
 // ignore: implementation_imports
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 
 /// The class represents the sync services for the end to end tests
@@ -22,7 +23,8 @@ class E2ESyncService {
     return _singleton;
   }
 
-  Future<void> syncData(SyncService syncService) async {
+  Future<void> syncData(SyncService syncService,
+      {SyncParameters? syncParameters}) async {
     SyncServiceImpl.queueSize = 1;
     SyncServiceImpl.syncRequestThreshold = 1;
     SyncServiceImpl.syncRequestTriggerInSeconds = 1;
@@ -32,44 +34,52 @@ class E2ESyncService {
     // Call to syncService.sync to expedite the sync progress
     syncService.sync();
 
-    var e2eTestSyncProgressListener = E2ETestSyncProgressListener();
+    E2ETestSyncProgressListener e2eTestSyncProgressListener =
+        E2ETestSyncProgressListener();
     syncService.addProgressListener(e2eTestSyncProgressListener);
+
+    int started = DateTime.now().millisecondsSinceEpoch;
+    int waitUntilThis =
+        started + 30000; // 30 seconds is more than enough time to wait
 
     e2eTestSyncProgressListener.streamController.stream
         .listen((SyncProgress syncProgress) async {
-      // SyncProgress.localCommitId and SyncProgress.serverCommitId can be null
-      // In that case, we have continue to sync. Hence call sync and return.
-      if (syncProgress.localCommitId == null ||
-          syncProgress.serverCommitId == null) {
-        _logger.finer(
-            'SyncProgress localCommitId or serverCommitId is null. Hence continue to sync');
-        syncService.sync();
-        return;
-      }
+      print('SyncService| $syncProgress');
       // Exit the sync process when either of the conditions are met,
       // 1. If syncStatus is success && localCommitId is equal to serverCommitID (or)
       //    If syncStatus is failure
       // 2. When sync process exceeds the max timeout that is 30 seconds
-      if (((syncProgress.syncStatus == SyncStatus.success) &&
-              (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
-          (syncProgress.syncStatus == SyncStatus.failure)) {
-        isSyncInProgress = false;
-      }
-      var keyInfoList = syncProgress.keyInfoList;
-      if (keyInfoList != null) {
-        for (KeyInfo ki in keyInfoList) {
-          _logger.info(ki);
+      if (syncParameters == null) {
+        if (((syncProgress.syncStatus == SyncStatus.success) &&
+                (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
+            (syncProgress.syncStatus == SyncStatus.failure)) {
+          isSyncInProgress = false;
+        }
+      } else if (syncProgress.keyInfoList != null) {
+        for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
+          _logger.info(keyInfo);
+          if (syncParameters.key.isNotNull &&
+              (keyInfo.key == syncParameters.key)) {
+            print(
+                'Found ${syncParameters.key} in key list info | ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
+            isSyncInProgress = false;
+          }
         }
       }
+      print(
+          'Completed sync| ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
     });
-    int started = DateTime.now().millisecondsSinceEpoch;
-    int waitUntilThis =
-        started + 30000; // 30 seconds is more than enough time to wait
+
     while (isSyncInProgress &&
         DateTime.now().millisecondsSinceEpoch < waitUntilThis) {
       await Future.delayed(Duration(milliseconds: 100));
     }
   }
+}
+
+class SyncParameters {
+  String? key;
+  CommitOp? commitOp;
 }
 
 class E2ETestSyncProgressListener extends SyncProgressListener {
