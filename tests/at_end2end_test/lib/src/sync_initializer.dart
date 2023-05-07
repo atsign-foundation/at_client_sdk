@@ -7,7 +7,6 @@ import 'package:at_client/src/service/sync_service.dart';
 
 // ignore: implementation_imports
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 
 /// The class represents the sync services for the end to end tests
@@ -24,7 +23,7 @@ class E2ESyncService {
   }
 
   Future<void> syncData(SyncService syncService,
-      {SyncParameters? syncParameters}) async {
+      {SyncOptions? syncOptions}) async {
     SyncServiceImpl.queueSize = 1;
     SyncServiceImpl.syncRequestThreshold = 1;
     SyncServiceImpl.syncRequestTriggerInSeconds = 1;
@@ -49,25 +48,26 @@ class E2ESyncService {
       // 1. If syncStatus is success && localCommitId is equal to serverCommitID (or)
       //    If syncStatus is failure
       // 2. When sync process exceeds the max timeout that is 30 seconds
-      if (syncParameters == null) {
+      if (syncOptions == null) {
         if (((syncProgress.syncStatus == SyncStatus.success) &&
                 (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
             (syncProgress.syncStatus == SyncStatus.failure)) {
           isSyncInProgress = false;
         }
       } else {
-        print('Found SyncParameters...Waiting until the ${syncParameters.key} is synced to client');
+        print(
+            'Found SyncOptions...Waiting until the ${syncOptions.key} is synced to client');
         // Since the KeyInfoList is empty, wait until the required key is synced.
         // Hence call sync method to expedite the sync progress
-        if(syncProgress.keyInfoList == null || syncProgress.keyInfoList!.isEmpty){
+        if (syncProgress.keyInfoList == null ||
+            syncProgress.keyInfoList!.isEmpty) {
           syncService.sync();
         }
         for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
           _logger.info(keyInfo);
-          if (syncParameters.key.isNotNull &&
-              (keyInfo.key == syncParameters.key)) {
+          if (syncOptions.key.isNotNull && (keyInfo.key == syncOptions.key)) {
             print(
-                'Found ${syncParameters.key} in key list info | ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
+                'Found ${syncOptions.key} in key list info | ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
             isSyncInProgress = false;
           }
         }
@@ -83,9 +83,10 @@ class E2ESyncService {
   }
 }
 
-class SyncParameters {
+/// Additional options for client to wait on sync
+class SyncOptions {
+  /// Waits until the key is sync'ed to the client
   String? key;
-  CommitOp? commitOp;
 }
 
 class E2ETestSyncProgressListener extends SyncProgressListener {

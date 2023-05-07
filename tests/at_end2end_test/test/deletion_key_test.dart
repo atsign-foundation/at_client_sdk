@@ -88,7 +88,8 @@ void main() {
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
 
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService, syncParameters: SyncParameters()..key = cachedAtKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService,
+        syncOptions: SyncOptions()..key = cachedAtKey.toString());
 
     var getResponse = await sharedWithAtClient.get(cachedAtKey);
     expect(getResponse.value, 'dummy_cached_value');
