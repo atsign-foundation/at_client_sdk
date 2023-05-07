@@ -20,9 +20,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
   @override
-  Future<List<AtCollectionModel>> getModelsByCollectionName(
+  Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
       String collectionName) async {
-    var collectionModelFactory =
+    AtCollectionModelFactory<T>? collectionModelFactory  =
         AtCollectionModelFactoryManager.getInstance().get(collectionName);
 
     if (collectionModelFactory == null) {
@@ -34,7 +34,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
       collectionName: formattedCollectionName,
     );
 
-    List<AtCollectionModel> modelList = [];
+    List<T> modelList = [];
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
@@ -52,7 +52,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
           continue;
         }
 
-        var model = collectionModelFactory.create();
+        T model = collectionModelFactory.create();
         model.fromJson(atValue.value);
         model.id = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
@@ -66,9 +66,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
   @override
-  Future<AtCollectionModel> getModel(
+  Future<T> getModel <T extends AtCollectionModel>(
       String id, String namespace, String collectionName) async {
-    var collectionModelFactory =
+    AtCollectionModelFactory<T>? collectionModelFactory =
         AtCollectionModelFactoryManager.getInstance().get(collectionName);
 
     if (collectionModelFactory == null) {
@@ -86,19 +86,19 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
     try {
       AtValue atValue = await getAtClient().get(atKey);
       var atValueJson = jsonDecode(atValue.value);
-      var model = collectionModelFactory.create();
+      T model = collectionModelFactory.create();
       model.fromJson(atValue.value);
       model.id = atValueJson['id'];
       model.collectionName = atValueJson['collectionName'];
       return model;
     } catch (e) {
-      _logger.severe('failed to get value of ${atKey.key}');
-      rethrow;
+      _logger.severe('failed to get value of ${atKey.key} $e');
+      throw Exception('AtCollectionModel is not found for the given id:$id , namespace:$namespace and collectionName: $collectionName');
     }
   }
 
   @override
-  Future<List<AtCollectionModel>> getModelsSharedWith(String atSign) async {
+  Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
@@ -108,7 +108,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
   @override
-  Future<List<AtCollectionModel>> getModelsSharedBy(String atSign) async {
+  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
@@ -117,10 +117,10 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
-  Future<List<AtCollectionModel>>
+  Future<List<T>>
       _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
           List<AtKey> collectionAtKeys) async {
-    List<AtCollectionModel> modelList = [];
+    List<T> modelList = [];
 
     for (var atKey in collectionAtKeys) {
       try {
@@ -134,9 +134,11 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
           continue;
         }
 
-        var factory = AtCollectionModelFactoryManager.getInstance()
+
+        AtCollectionModelFactory<AtCollectionModel>? factory = AtCollectionModelFactoryManager.getInstance()
             .get(atValueJson['collectionName']);
-        var model = factory?.create();
+
+        T? model = factory?.create() as T?;
         if (model == null) {
           continue;
         }
