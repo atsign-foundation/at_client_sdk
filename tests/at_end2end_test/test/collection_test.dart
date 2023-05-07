@@ -56,8 +56,6 @@ class Contact extends AtCollectionModel {
   String? atSign;
   String? nickname;
 
-
-
   @override
   fromJson(String jsonObject) {
     var json = jsonDecode(jsonObject);
@@ -96,8 +94,6 @@ class ContactFactory extends AtCollectionModelFactory<Contact> {
 class Phone extends AtCollectionModel {
   String? phoneNumber;
 
-
-
   @override
   void fromJson(String jsonEncoded) {
     var json = jsonDecode(jsonEncoded);
@@ -113,7 +109,6 @@ class Phone extends AtCollectionModel {
 }
 
 class PhoneFactory extends AtCollectionModelFactory<Phone> {
-
   static final PhoneFactory _singleton = PhoneFactory._internal();
 
   PhoneFactory._internal();
@@ -249,17 +244,20 @@ void main() async {
   test('Model operations - save() test', () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
-    await AtClientManager.getInstance().setCurrentAtSign(
+        await AtClientManager.getInstance().setCurrentAtSign(
       firstAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(firstAtSign),
     );
 
     // Save a photo
-    var phone = Phone()..id = 'personal phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '12345';
+    var phone = Phone()
+      ..id = 'personal phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '12345';
     var shareRes = await phone.save();
     expect(shareRes, true);
-
   }, timeout: Timeout(Duration(minutes: 5)));
 
   test('Model operations - share() test', () async {
@@ -272,7 +270,11 @@ void main() async {
     );
 
     // Share a phone
-    var phone = Phone()..id = 'personal phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '12345';
+    var phone = Phone()
+      ..id = 'personal phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '12345';
     var shareRes = await phone.share([secondAtSign]);
 
     expect(shareRes, true);
@@ -311,29 +313,32 @@ void main() async {
       TestPreferences.getInstance().getPreference(firstAtSign),
     );
 
-    var fourthPhone = Phone()..id = 'personal phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '4444';
+    var fourthPhone = Phone()
+      ..id = 'personal phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '4444';
     await fourthPhone.save();
     await fourthPhone.share([secondAtSign]);
-    expect(await fourthPhone.getSharedWith(), ['@ce2e2']);
+    expect(await fourthPhone.sharedWith(), ['@ce2e2']);
     await fourthPhone.share([thirdAtSign]);
-    expect(await fourthPhone.getSharedWith(), ['@ce2e2', '@ce2e3']);
+    expect(await fourthPhone.sharedWith(), ['@ce2e2', '@ce2e3']);
     await fourthPhone.share([fourthAtSign]);
-    expect(await fourthPhone.getSharedWith(), ['@ce2e2', '@ce2e3', '@ce2e4']);
+    expect(await fourthPhone.sharedWith(), ['@ce2e2', '@ce2e3', '@ce2e4']);
 
     // Unshare now
     await fourthPhone.unshare(atSigns: [thirdAtSign, fourthAtSign]);
-    expect(await fourthPhone.getSharedWith(), ['@ce2e2']);
+    expect(await fourthPhone.sharedWith(), ['@ce2e2']);
 
     await fourthPhone.unshare(atSigns: [secondAtSign]);
     await fourthPhone.delete();
-    expect(await fourthPhone.getSharedWith(), []);
+    expect(await fourthPhone.sharedWith(), []);
     expect(
       () async => await AtCollectionModel.getModel(
           id: 'fourth phone', namespace: 'buzz', collectionName: 'phone'),
       throwsA(isA<Exception>()),
     );
   }, timeout: Timeout(Duration(minutes: 5)));
-
 
   test('Query method - AtCollectionModel.getModel() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -344,8 +349,16 @@ void main() async {
       TestPreferences.getInstance().getPreference(firstAtSign),
     );
 
-    Phone personalPhone = Phone()..id = 'new personal Phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '123456789';
-    Phone officePhone = Phone()..id = 'Office Phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '9999';
+    Phone personalPhone = Phone()
+      ..id = 'new personal Phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '123456789';
+    Phone officePhone = Phone()
+      ..id = 'Office Phone'
+      ..namespace = 'buzz.bz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '9999';
     await personalPhone.save();
     await officePhone.save();
 
@@ -357,14 +370,20 @@ void main() async {
         collectionName: 'phone') as Phone;
 
     expect(personalPhoneLoaded.phoneNumber, '123456789');
-
+    expect(personalPhoneLoaded.collectionName, 'phone');
+    expect(personalPhoneLoaded.namespace, 'buzz');
+    expect(personalPhoneLoaded.id, 'new personal Phone');
     var officePhoneLoaded = await AtCollectionModel.getModel(
         id: 'Office Phone',
-        namespace: 'buzz',
+        namespace: 'buzz.bz',
         collectionName: 'phone') as Phone;
 
     expect(officePhoneLoaded.phoneNumber, '9999');
-    AtCollectionModelFactoryManager.getInstance().unregister(PhoneFactory.getInstance());
+    expect(officePhoneLoaded.collectionName, 'phone');
+    expect(officePhoneLoaded.namespace, 'buzz.bz');
+    expect(officePhoneLoaded.id, 'Office Phone');
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PhoneFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 5)));
 
   test('Query method - AtCollectionModel.getModelsByCollectionName() test',
@@ -377,8 +396,16 @@ void main() async {
       TestPreferences.getInstance().getPreference(firstAtSign),
     );
 
-    Phone personalPhone = Phone()..id = 'new personal Phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '123456789';
-    Phone officePhone = Phone()..id = 'Office Phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '9999';
+    Phone personalPhone = Phone()
+      ..id = 'new personal Phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '123456789';
+    Phone officePhone = Phone()
+      ..id = 'Office Phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '9999';
     await personalPhone.save();
     await officePhone.save();
 
@@ -396,7 +423,8 @@ void main() async {
         await AtCollectionModel.getModelsByCollectionName('phone-dont-exist');
     expect(true, phones.isEmpty,
         reason: 'Expect phones to be empty for an invalid collection name');
-    AtCollectionModelFactoryManager.getInstance().unregister(PhoneFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PhoneFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 5)));
 
   test('Query method - AtCollectionModel.getModelsSharedWith() test', () async {
@@ -428,8 +456,10 @@ void main() async {
 
     expect(false, res.isEmpty,
         reason: 'Expect the models shared to be non-empty');
-    AtCollectionModelFactoryManager.getInstance().unregister(AFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().unregister(BFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(AFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(BFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 10)));
 
   test('Query method - AtCollectionModel.getModelsSharedBy() test', () async {
@@ -470,8 +500,10 @@ void main() async {
     var res = await AtCollectionModel.getModelsSharedBy(firstAtSign);
     expect(false, res.isEmpty,
         reason: 'Expect the models shared by to be non-empty');
-    AtCollectionModelFactoryManager.getInstance().unregister(AFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().unregister(BFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(AFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(BFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 10)));
 
   test(
@@ -490,17 +522,28 @@ void main() async {
     pizzaPreferences['cheeze'] = 'Y';
     pizzaPreferences['topping'] = 'Z';
 
-
-    Preference preference = Preference()..id = 'pizza preference'..namespace='buzz'..collectionName='preference'..preference = pizzaPreferences;
+    Preference preference = Preference()
+      ..id = 'pizza preference'
+      ..namespace = 'buzz'
+      ..collectionName = 'preference'
+      ..preference = pizzaPreferences;
     await preference.save();
 
     var shareRes = await preference.share([secondAtSign]);
 
-    var contact = Contact()..id = 'jagan'..namespace = 'buzz'..collectionName='contact' ..atSign = '@jagan' ..nickname = 'jagan';
+    var contact = Contact()
+      ..id = 'jagan'
+      ..namespace = 'buzz'
+      ..collectionName = 'contact'
+      ..atSign = '@jagan'
+      ..nickname = 'jagan';
     shareRes = await contact.share([secondAtSign]);
 
-
-    Phone phone = Phone()..id = 'my another phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '1122';
+    Phone phone = Phone()
+      ..id = 'my another phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '1122';
     shareRes = await phone.share([secondAtSign]);
 
     /// receiver's end
@@ -519,10 +562,7 @@ void main() async {
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
 
-
-
     var res = await AtCollectionModel.getModelsSharedBy(firstAtSign);
-
 
     for (var model in res) {
       expect(true, model is AtJsonCollectionModel,
@@ -531,7 +571,6 @@ void main() async {
     }
 
     expect(res.isEmpty, false);
-
 
     // Get models with registering the factories
     AtCollectionModel.registerFactories([
@@ -559,11 +598,16 @@ void main() async {
           break;
       }
     }
-    AtCollectionModelFactoryManager.getInstance().unregister(PhoneFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().unregister(ContactFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().unregister(PreferenceFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().unregister(AFactory.getInstance());
-    AtCollectionModelFactoryManager.getInstance().unregister(BFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PhoneFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(ContactFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PreferenceFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(AFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(BFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 10)));
 
   test(
@@ -579,8 +623,11 @@ void main() async {
 
       AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
 
-
-      Phone fifthPhone = Phone()..id = 'fifth phone'..namespace='buzz'..collectionName='phone'..phoneNumber = '55555';
+      Phone fifthPhone = Phone()
+        ..id = 'fifth phone'
+        ..namespace = 'buzz'
+        ..collectionName = 'phone'
+        ..phoneNumber = '55555';
 
       await fifthPhone.streams.save(share: false).forEach(
         (AtOperationItemStatus element) {
@@ -628,9 +675,9 @@ void main() async {
         },
       );
 
-      expect(await fifthPhone.getSharedWith(), []);
-      AtCollectionModelFactoryManager.getInstance().unregister(PhoneFactory.getInstance());
-
+      expect(await fifthPhone.sharedWith(), []);
+      AtCollectionModelFactoryManager.getInstance()
+          .unregister(PhoneFactory.getInstance());
     },
     timeout: Timeout(Duration(minutes: 5)),
   );

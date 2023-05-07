@@ -90,6 +90,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
       model.fromJson(atValue.value);
       model.id = atValueJson['id'];
       model.collectionName = atValueJson['collectionName'];
+      model.namespace = CollectionUtil.getNamespaceFromKey(atKey.toString());
       return model;
     } catch (e) {
       _logger.severe('failed to get value of ${atKey.key} $e');
@@ -146,6 +147,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         model.fromJson(atValue.value);
         model.id = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
+        model.namespace = CollectionUtil.getNamespaceFromKey(atKey.toString());
         modelList.add(model);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');

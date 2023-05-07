@@ -108,8 +108,8 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   }
 
   @override
-  Future<List<String>> getSharedWith() async {
-    return _atCollectionModelOperations.getSharedWith();
+  Future<List<String>> sharedWith() async {
+    return _atCollectionModelOperations.sharedWith();
   }
 
   @override

@@ -90,4 +90,9 @@ class CollectionUtil {
 
     return regex;
   }
+
+  static String getNamespaceFromKey(String atKey) {
+    return atKey.substring(atKey.indexOf("atcollectionmodel.") + "atcollectionmodel.".length, atKey.lastIndexOf('@'));
+
+  }
 }

@@ -58,7 +58,7 @@ class AtCollectionModelOperationsImpl
   }
 
   @override
-  Future<List<String>> getSharedWith() async {
+  Future<List<String>> sharedWith() async {
     CollectionUtil.checkForNullOrEmptyValues(
         atCollectionModel.id, atCollectionModel.collectionName, atCollectionModel.namespace);
 
