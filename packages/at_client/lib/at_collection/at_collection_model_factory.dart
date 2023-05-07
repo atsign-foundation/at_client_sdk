@@ -1,6 +1,6 @@
 import 'package:at_client/at_client.dart';
 
-abstract class AtCollectionModelFactory<T extends AtCollectionModel> {
+abstract class AtCollectionModelFactory <T extends AtCollectionModel>{
   /// Expected to return an instance of T
   T create();
 
@@ -15,7 +15,7 @@ abstract class AtCollectionModelFactory<T extends AtCollectionModel> {
   }
 }
 
-class AtCollectionModelFactoryManager {
+class AtCollectionModelFactoryManager{
   static final AtCollectionModelFactoryManager _singleton =
   AtCollectionModelFactoryManager._internal();
 
@@ -27,27 +27,31 @@ class AtCollectionModelFactoryManager {
 
   List<AtCollectionModelFactory> collectionFactories = [];
 
-  register(AtCollectionModelFactory factory) {
+  register(AtCollectionModelFactory factory)  {
     if (!collectionFactories.contains(factory)) {
       collectionFactories.add(factory);
     }
   }
 
-  AtCollectionModelFactory? get(String collectionName) {
-    AtCollectionModelFactory? maxPriorityCollectionFactory;
+  unregister(AtCollectionModelFactory factory)  {
+    if (collectionFactories.contains(factory)) {
+      collectionFactories.remove(factory);
+    }
+  }
+
+  AtCollectionModelFactory<T>? get<T extends AtCollectionModel>(String collectionName) {
+    AtCollectionModelFactory<T>? maxPriorityCollectionFactory;
     for (AtCollectionModelFactory collectionFactory in collectionFactories) {
       if (collectionFactory.acceptCollection(collectionName)) {
-        if (maxPriorityCollectionFactory == null) {
-          maxPriorityCollectionFactory = collectionFactory;
-
+        maxPriorityCollectionFactory ??= collectionFactory as AtCollectionModelFactory<T>?;
           if (collectionFactory.priority() >
-              maxPriorityCollectionFactory.priority()) {
-            maxPriorityCollectionFactory = collectionFactory;
+              maxPriorityCollectionFactory!.priority()) {
+            maxPriorityCollectionFactory = collectionFactory as AtCollectionModelFactory<T>?;
           }
         }
       }
-    }
     return maxPriorityCollectionFactory;
-  }
+    }
+
 }
 

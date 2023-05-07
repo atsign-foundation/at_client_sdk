@@ -124,132 +124,33 @@ abstract class AtCollectionModelOperations {
 
 /// Contains query methods on [AtCollectionModel]
 abstract class AtCollectionQueryOperations {
-  /// returns list of AtCollectionModel shared by the given [atSign].
+  /// Returns list of AtCollectionModels that are shared by the given [atSign]
+  /// Returns an empty list when nothing has been shared
   ///
-  /// e.g
-  /// ```
-  /// class Phone extends AtCollectionModel { }
-  /// class Home extends AtCollectionModel { }
-  ///
-  ///```
-  /// If @kevin shares Phone and Home objects with current @sign
-  ///```
-  /// await Phone().share(['@sign']);
-  /// await Home().share(['@sign']);
-  ///
-  /// var allReceivedModels = await AtCollectionModel.getModelsSharedBy(atSign : '@kevin');
-  /// ```
-  ///  allSharedModels will have objects of both Phone and Home
-  Future<List<AtCollectionModel>> getModelsSharedBy(String atSign);
+  /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(String atSign);
 
-  /// returns list of AtCollectionModel shared with the the given [atSign]
+  /// Returns list of AtCollectionModels that are shared with the given [atSign]
+  /// Returns an empty list when nothing has been shared
   ///
-  /// e.g
-  /// ```
-  /// class Phone extends AtCollectionModel { }
-  /// class Home extends AtCollectionModel { }
-  ///
-  /// await Phone().share(['@kevin']);
-  /// await Home().share(['@kevin']);
-  ///
-  /// var allSharedModels = await AtCollectionModel.getModelsSharedWith(atSign : '@kevin');
-  /// ```
-  ///  allSharedModels will have objects of both Phone and Home
-  Future<List<AtCollectionModel>> getModelsSharedWith(String atSign);
+  /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(String atSign);
 
-  /// The method getById() returns a AtCollectionModel object whose id property matches the specified string.
-  /// The id property is internally matched with an [AtKey] that is used to save the object.
+  /// Returns an instance of a class extending  [AtCollectionModel] for the given [id], [namespace] and [collectionName]
+  /// An instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   ///
-  /// Since element IDs are expected to be unique if specified, they're a useful way to get retrieve a AtCollectionModel quickly.
-  ///
-  /// The id property can be set by assigning a value to [AtCollectionModel.id].
-  ///
-  /// If you do not know the id of your AtCollectionModel, then call getAll static method to get all of the AtCollectionModel objects for a given collectionName.
-  /// collectionName is an optional parameter when the getById is called with the Type information.
+  /// Throws [Exception] when an AtCollectionModel could not found for the given inputs
+  Future<T> getModel<T extends AtCollectionModel>(String id, String namespace, String collectionName);
 
-  /// Ex:
-  /// ```
-  /// class Phone extends AtCollectionModel {
-  /// // Implementation
+  /// Returns list of AtCollectionModels that are created for the [collectionName] passed
+  /// Returns an empty list when there are no matches
   ///
-  ///       Phone();
-  ///
-  ///       Phone.from(String id){
-  ///       id = this.id;
-  ///   }
-  ///
-  /// }
-  /// ```
-  ///
-  /// Creating a phone object with `personal phone` as id
-  ///
-  /// ```
-  /// Phone personaPhone = await Phone.from('personal phone').save();
-  /// ```
-  /// ```
-  /// class PhoneModelFactory extends AtCollectionModelFactory
-  /// {
-  ///      @override
-  ///   Phone create() {
-  ///     return Phone();
-  ///   }
-  /// }
-  /// ```
-  ///
-  /// Usage without collectionName is being passed:
-  ///
-  /// ```
-  /// PhoneModelFactory phoneFactory = PhoneModelFactory();
-  /// var personalPhone = await AtCollectionModel.getById<Phone>(‘Personal Phone’, phoneFactory);
-  /// ```
-  /// Usage with collectionName is being passed:
-  ///
-  /// ```
-  /// PhoneModelFactory phoneFactory = PhoneModelFactory();
-  /// var personalPhone = AtCollectionModel.getById(‘Personal Phone’, ‘Phone’, phoneFactory);
-  /// ```
-  ///
-  /// An Exception will be thrown if AtCollectionModel object with a given Id can not be found.
-  Future<AtCollectionModel> getModel(String id, String namespace, String collectionName);
-
-  /// The [getModelsByCollectionName] method of AtCollectionModel returns an list of AtCollectionModels that have a given collection name.
-  ///
-  /// Ex:
-  /// ```
-  /// class Phone extends AtCollectionModel {
-  /// // Implementation
-  ///
-  ///       Phone();
-  ///
-  ///       Phone.from(String id){
-  ///       id = this.id;
-  ///   }
-  ///
-  /// }
-  /// ```
-  ///
-  /// Creating two phone object with `personal phone` and `office phone` as their respective id.
-  ///
-  /// ```
-  /// Phone personalPhone = await Phone.from('personal phone').save();
-  /// Phone officePhone = await Phone.from('office phone').save();
-  /// ```
-  /// ```
-  /// class PhoneModelFactory extends AtCollectionModelFactory
-  /// {
-  ///      @override
-  /// Phone create() {
-  ///  return Phone();
-  /// }
-  /// }
-  /// ```
-  ///
-  /// var phoneModels = getModelsByCollectionName('phone');
-  /// ```
-  ///  phoneModels will have personalPhone and officePhone
-  ///
-  /// Returns an empty list when there are no AtCollectionModel objects found for the given collectionName.
-  Future<List<AtCollectionModel>> getModelsByCollectionName(String collectionName);
+  /// An instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(String collectionName);
 }
 
 /// [AtCollectionModel] sets the base structure of the model that is used to interact with collection methods.

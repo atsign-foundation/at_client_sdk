@@ -38,6 +38,8 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     collectionName = runtimeType.toString().toLowerCase();
   }
 
+  /// Registers list of AtCollectionModelFactory instances.
+  /// These factories will be used while creating specific sub classes of [AtCollectionModel] for a given collection
   static registerFactories(List<AtCollectionModelFactory> factories) {
     for(var atCollectionModelFactory in factories) {
       AtCollectionModelFactoryManager.getInstance()
@@ -45,7 +47,12 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     }
   }
 
-  static Future<AtCollectionModel> getModelById<T extends AtCollectionModel>(
+  /// Returns an instance of a class extending  [AtCollectionModel] for the given [id], [namespace] and [collectionName]
+  /// An instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  ///
+  /// Throws [Exception] when an AtCollectionModel could not found for the given inputs
+  static Future<T> getModel<T extends AtCollectionModel>(
       {required String id,
       required String namespace,
       required String collectionName}) async {
@@ -55,7 +62,12 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
         id, namespace, collectionName);
   }
 
-  static Future<List<AtCollectionModel>> getModelsByCollectionName(
+  /// Returns list of AtCollectionModels that are created for the [collectionName] passed
+  /// Returns an empty list when there are no matches
+  ///
+  /// An instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  static Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
       String collectionName) async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
@@ -63,7 +75,12 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
         .getModelsByCollectionName(collectionName);
   }
 
-  static Future<List<AtCollectionModel>>
+  /// Returns list of AtCollectionModels that are shared with the given [atSign]
+  /// Returns an empty list when nothing has been shared
+  ///
+  /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  static Future<List<T>>
       getModelsSharedWith<T extends AtCollectionModel>(String atSign) async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
@@ -71,7 +88,12 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     return _atCollectionQueryOperations.getModelsSharedWith(atSign);
   }
 
-  static Future<List<AtCollectionModel>> getModelsSharedBy(
+  /// Returns list of AtCollectionModels that are shared by the given [atSign]
+  /// Returns an empty list when nothing has been shared
+  ///
+  /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
       String atSign) async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
