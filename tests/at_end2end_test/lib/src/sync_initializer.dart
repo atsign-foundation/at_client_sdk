@@ -59,7 +59,7 @@ class E2ESyncService {
         print('Found SyncParameters...Waiting until the ${syncParameters.key} is synced to client');
         // Since the KeyInfoList is empty, wait until the required key is synced.
         // Hence call sync method to expedite the sync progress
-        if(syncProgress.keyInfoList == null && syncProgress.keyInfoList!.isEmpty){
+        if(syncProgress.keyInfoList == null || syncProgress.keyInfoList!.isEmpty){
           syncService.sync();
         }
         for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
