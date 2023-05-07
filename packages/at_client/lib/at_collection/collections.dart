@@ -72,7 +72,7 @@ abstract class AtCollectionModelOperations {
   /// ```
   ///
   /// Returns an empty list when object is not shared.
-  Future<List<String>> getSharedWith();
+  Future<List<String>> sharedWith();
 
   /// Deletes the object and unshares with every @sign it was shared with previously
   /// ```
