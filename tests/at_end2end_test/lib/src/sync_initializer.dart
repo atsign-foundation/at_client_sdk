@@ -43,7 +43,7 @@ class E2ESyncService {
 
     e2eTestSyncProgressListener.streamController.stream
         .listen((SyncProgress syncProgress) async {
-      print('SyncService| $syncProgress');
+      _logger.info('SyncService| $syncProgress');
       // Exit the sync process when either of the conditions are met,
       // 1. If syncStatus is success && localCommitId is equal to serverCommitID (or)
       //    If syncStatus is failure
@@ -55,24 +55,25 @@ class E2ESyncService {
           isSyncInProgress = false;
         }
       } else {
-        print(
+        _logger.info(
             'Found SyncOptions...Waiting until the ${syncOptions.key} is synced to client');
         // Since the KeyInfoList is empty, wait until the required key is synced.
         // Hence call sync method to expedite the sync progress
         if (syncProgress.keyInfoList == null ||
             syncProgress.keyInfoList!.isEmpty) {
           syncService.sync();
+          return;
         }
         for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
           _logger.info(keyInfo);
           if (syncOptions.key.isNotNull && (keyInfo.key == syncOptions.key)) {
-            print(
+            _logger.info(
                 'Found ${syncOptions.key} in key list info | ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
             isSyncInProgress = false;
           }
         }
       }
-      print(
+      _logger.info(
           'Completed sync| ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
     });
 

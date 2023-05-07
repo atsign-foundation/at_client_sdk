@@ -108,7 +108,8 @@ void main() {
             namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign)))
         .atClient;
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
+    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService,
+        syncOptions: SyncOptions()..key = cachedAtKey.toString());
 
     // Asserts cached key is deleted from the local storage in the sharedWith atSign
     expect(
