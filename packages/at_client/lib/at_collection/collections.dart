@@ -125,11 +125,12 @@ abstract class AtCollectionModelOperations {
 /// Contains query methods on [AtCollectionModel]
 abstract class AtCollectionQueryOperations {
   /// Returns list of AtCollectionModels that are shared by the given [atSign]
+  /// [atSign] is an optional argument and if not passed returns all of the AtCollectionModels shared by any atSign
   /// Returns an empty list when nothing has been shared
   ///
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
-  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(String atSign);
+  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>([String? atSign]);
 
   /// Returns list of AtCollectionModels that are shared with the given [atSign]
   /// Returns an empty list when nothing has been shared
@@ -293,9 +294,13 @@ class ObjectLifeCycleOptions {
   /// If set to true, delete operation will delete recipient's  cached key also
   bool cascadeDelete;
 
+  /// Set value to true if the shared value needs to be cached on the recipient.
+  bool cacheValueOnRecipient;
+
+  // Time after which the recipient has to refresh the cached value that was shared by someone
   Duration cacheRefreshIntervalOnRecipient;
 
-  bool cacheValueOnRecipient;
+
 
   ObjectLifeCycleOptions(
       {this.timeToBirth,

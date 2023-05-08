@@ -41,7 +41,7 @@ class DefaultKeyMaker implements KeyMaker {
       ..sharedWith = sharedWith
       ..metadata = Metadata()
       ..metadata!.ttr = ttrInSeconds ?? -1
-      ..metadata!.ccd = ttrInSeconds != null ? true : false
+      ..metadata!.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
       ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
       ..sharedBy = _getAtClient().getCurrentAtSign();

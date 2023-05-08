@@ -109,11 +109,13 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
   @override
-  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(String atSign) async {
+  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>([String? atSign]) async {
     var regex = CollectionUtil.makeRegex();
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
-    collectionAtKeys.retainWhere((atKey) => atKey.sharedBy == atSign);
+    if(atSign != null) {
+      collectionAtKeys.retainWhere((atKey) => atKey.sharedBy == atSign);
+    }
 
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }

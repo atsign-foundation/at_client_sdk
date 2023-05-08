@@ -22,6 +22,9 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   /// namespace is used to persist the collection model
   /// Typically namespace is used to identify the app that is used to persist the data.
   late String namespace;
+
+  /// Metadata of the AtKey
+  late Metadata _matada;
   late AtCollectionModelOperations _atCollectionModelOperations;
   late AtCollectionModelStreamOperationsImpl streams;
 
@@ -77,6 +80,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
         .getModelsByCollectionName(collectionName);
   }
 
+
   /// Returns list of AtCollectionModels that are shared with the given [atSign]
   /// Returns an empty list when nothing has been shared
   ///
@@ -92,16 +96,17 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   }
 
   /// Returns list of AtCollectionModels that are shared by the given [atSign]
+  /// [atSign] is an optional argument and if not passed returns all of the AtCollectionModels shared by any atSign
   /// Returns an empty list when nothing has been shared
   ///
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
-      String atSign) async {
+      [String? atSign]) async {
     _logger.finer('get models shared by atSign:$atSign');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
-    AtUtils.formatAtSign(atSign)!;
+    AtUtils.formatAtSign(atSign);
     return _atCollectionQueryOperations.getModelsSharedBy(atSign);
   }
 
@@ -130,5 +135,10 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   @override
   Future<bool> unshare({List<String>? atSigns}) async {
     return _atCollectionModelOperations.unshare(atSigns: atSigns);
+  }
+
+  // Sets Metadata. This will be used while saving and sharing the model.
+  setMetadata(Metadata metadata) {
+    this._matada = metadata;
   }
 }
