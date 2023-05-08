@@ -133,9 +133,8 @@ class A extends AtCollectionModel {
 
   A();
 
-  A.from(String id, {String? a}) {
+  A.from(String id, {this.a}) {
     this.id = id;
-    a = a;
     namespace = 'buzz';
   }
 
@@ -177,9 +176,8 @@ class B extends AtCollectionModel {
 
   B();
 
-  B.from(String id, {String? b}) {
+  B.from(String id, {this.b}) {
     this.id = id;
-    b = b;
     namespace = 'buzz';
   }
 
@@ -556,6 +554,77 @@ void main() async {
     var res = await AtCollectionModel.getModelsSharedBy(firstAtSign);
     expect(false, res.isEmpty,
         reason: 'Expect the models shared by to be non-empty');
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(AFactory.getInstance());
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(BFactory.getInstance());
+  }, timeout: Timeout(Duration(minutes: 10)));
+
+  test('Query method - AtCollectionModel.getModelsSharedBy any atSign test', () async {
+    // Setting firstAtSign atClient instance to context.
+    currentAtClientManager =
+    await AtClientManager.getInstance().setCurrentAtSign(
+      firstAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(firstAtSign),
+    );
+
+    /// Share at Collections models from first atSign to second atSign
+    var a = A.from('a11', a: 'a11 value');
+    var shareRes = await a.share([secondAtSign]);
+
+    var b = B.from('b11', b: 'b11 value');
+    await b.share([secondAtSign]);
+
+
+    /// Share at Collections models from third atSign to second atSign
+    sharedWithAtClientManager =
+    await AtClientManager.getInstance().setCurrentAtSign(
+      thirdAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(thirdAtSign),
+    );
+
+    await E2ESyncService.getInstance().syncData(
+      sharedWithAtClientManager.atClient.syncService,
+    );
+
+    a = A.from('a22', a: 'a22 value');
+    await a.share([secondAtSign]);
+
+    b = B.from('b22', b: 'b22 value');
+    await b.share([secondAtSign]);
+
+    /// SSwitch to second atSign and get AtCollectionModels shared by any atSign
+    sharedWithAtClientManager =
+    await AtClientManager.getInstance().setCurrentAtSign(
+      secondAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(secondAtSign),
+    );
+
+    await E2ESyncService.getInstance().syncData(
+      sharedWithAtClientManager.atClient.syncService,
+    );
+
+    AtCollectionModel.registerFactories(
+        [AFactory.getInstance(), BFactory.getInstance()]);
+
+
+    var res = await AtCollectionModel.getModelsSharedBy();
+    expect(false, res.isEmpty,
+        reason: 'Expect the models shared by to be non-empty');
+    expect(true, res.length >= 4,
+        reason: 'Expect a minimum of 4 shared models');
+    for(AtCollectionModel model in res) {
+      print(model.collectionName);
+      if(model is A) {
+        print(model.a);
+      }
+      if(model is B) {
+        print(model.b);
+      }
+    }
     AtCollectionModelFactoryManager.getInstance()
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
