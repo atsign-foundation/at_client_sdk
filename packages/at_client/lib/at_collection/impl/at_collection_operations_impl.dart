@@ -75,6 +75,7 @@ class AtCollectionModelOperationsImpl
 
     for (var atKey in allKeys) {
       if (atKey.sharedWith != null) {
+        _logger.finest('Adding shared with of $atKey');
         sharedWithList.add(atKey.sharedWith!);
       }
     }

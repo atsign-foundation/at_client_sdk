@@ -260,6 +260,60 @@ void main() async {
     expect(shareRes, true);
   }, timeout: Timeout(Duration(minutes: 5)));
 
+  test('Model operations - save() with reshare() as true test', () async {
+    // Setting firstAtSign atClient instance to context.
+    currentAtClientManager =
+    await AtClientManager.getInstance().setCurrentAtSign(
+      firstAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(firstAtSign),
+    );
+
+    // Share a phone
+    var phone = Phone()
+      ..id = 'personal phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '12345';
+    var shareRes = await phone.share([secondAtSign]);
+
+    expect(shareRes, true);
+
+    // Have the phone number changed
+    phone.phoneNumber = '12345-9999';
+    // Now call a save with reshare as true
+    await phone.save(share: true);
+
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
+
+    /// receiver's end - Varify that the phone has been shared
+    sharedWithAtClientManager =
+    await AtClientManager.getInstance().setCurrentAtSign(
+      secondAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(secondAtSign),
+    );
+
+    await E2ESyncService.getInstance().syncData(
+      sharedWithAtClientManager.atClient.syncService,
+    );
+
+    var regex = CollectionUtil.makeRegex(
+        formattedId: 'personal-phone',
+        collectionName: 'phone',
+        namespace: 'buzz');
+
+
+    List<String> keys = await sharedWithAtClientManager.atClient.getKeys(regex: regex);
+    expect(1, keys.length, reason: 'On the recipient side expecting a single keys with the regex supplied');
+
+    AtValue atValue = await sharedWithAtClientManager.atClient.get(AtKey.fromString(keys[0]));
+    expect('12345-9999', jsonDecode(atValue.value)['phoneNumber'], reason: 'Since the value is reshared the phone number should be the new modified one');
+
+
+  }, timeout: Timeout(Duration(minutes: 5)));
+
   test('Model operations - share() test', () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
@@ -304,7 +358,9 @@ void main() async {
     expect(getResult.length, 1);
   }, timeout: Timeout(Duration(minutes: 5)));
 
-  test('Model operations - all methods test', () async {
+
+
+  test('Model operations - unshare() and delete() test', () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
