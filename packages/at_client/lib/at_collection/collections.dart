@@ -3,10 +3,10 @@ import '../at_client.dart';
 
 /// Contains CRUD operations that can be performed on [AtCollectionModel]
 abstract class AtCollectionModelOperations {
-  /// Saves the json representaion of the object to the secondary server of the @sign.
+  /// Saves the json representaion of [AtCollectionModel] to the secondary server of a atSign.
   /// [save] calls [toJson] method to get the json representation of a [AtCollectionModel].
   ///
-  /// If [share] is set to true, then the Object will not only be saved but also be shared with the @signs with whom it was previously shared.
+  /// If [share] is set to true, then the Object will not only be saved but also be shared with the atSigns with whom it was previously shared.
   ///
   /// If [share] is set to false, then the object is not shared till the [share] method is called.
   ///
@@ -37,7 +37,7 @@ abstract class AtCollectionModelOperations {
   /// If fine grained information on individual operations that happens within [save] is desired then use [streams.save]
   Future<bool> save({bool share = true, ObjectLifeCycleOptions? options});
 
-  /// [share] shares the AtCollectionModel object with the @signs in [atSigns] list.
+  /// [share] shares the AtCollectionModel object with the atSigns in [atSigns] list.
   ///
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
@@ -48,7 +48,7 @@ abstract class AtCollectionModelOperations {
   /// If fine grained information on individual operations that happens within [share] is desired then use [streams.share]
   Future<bool> share(List<String> atSigns, {ObjectLifeCycleOptions? options});
 
-  /// [unshare] unshares the AtCollectionModel object with the @signs in [atSigns] list.
+  /// [unshare] unshares the AtCollectionModel object with the atSigns in [atSigns] list.
   ///
   /// If [atSigns] is not passed then AtCollectionModel object is unshared with every @sign it was previously shared.
   ///

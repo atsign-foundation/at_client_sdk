@@ -10,7 +10,7 @@ import 'impl/at_collection_query_operations_impl.dart';
 import 'impl/at_collection_stream_operations_impl.dart';
 
 abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
-  final _logger = AtSignLogger('AtCollectionModel');
+  static final _logger = AtSignLogger('AtCollectionModel');
   /// [id] uniquely identifies this model.
   ///
   /// By default, id is set to UUID.
@@ -56,6 +56,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
       {required String id,
       required String namespace,
       required String collectionName}) async {
+    _logger.finer('get model for id:$id namespace:$namespace collectionName:$collectionName');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
     return _atCollectionQueryOperations.getModel(
@@ -69,6 +70,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   static Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
       String collectionName) async {
+    _logger.finer('get models for collectionName:$collectionName');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
     return _atCollectionQueryOperations
@@ -82,6 +84,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   static Future<List<T>>
       getModelsSharedWith<T extends AtCollectionModel>(String atSign) async {
+    _logger.finer('get models shared with atSign:$atSign');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
     AtUtils.formatAtSign(atSign)!;
@@ -95,6 +98,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
       String atSign) async {
+    _logger.finer('get models shared by atSign:$atSign');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
     AtUtils.formatAtSign(atSign)!;

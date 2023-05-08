@@ -23,11 +23,13 @@ class AtCollectionMethodImpl {
       {required String jsonEncodedData,
       ObjectLifeCycleOptions? options,
       bool share = false}) async* {
+    _logger.finer('Save jsonObject: $jsonEncodedData');
     options ??= ObjectLifeCycleOptions();
     String formattedId = CollectionUtil.format(atCollectionModel.id);
     String formattedCollectionName = CollectionUtil.format(
       atCollectionModel.collectionName,
     );
+    _logger.finest('formatted id: $formattedId --  formatted collectionName: $formattedCollectionName');
 
     AtKey atKey = keyMaker.createSelfKey(
       keyId: formattedId,
@@ -36,6 +38,7 @@ class AtCollectionMethodImpl {
       objectLifeCycleOptions: options,
     );
 
+    _logger.finest('Self key to be used : $atKey');
     var atOperationItemStatus = AtOperationItemStatus(
         atSign: atKey.sharedBy ?? '',
         key: atKey.key ?? '',
@@ -59,6 +62,7 @@ class AtCollectionMethodImpl {
 
   Stream<AtOperationItemStatus> updateSharedKeys(String formattedId,
       String formattedCollectionName, String jsonEncodedData) async* {
+    _logger.finest('Update shared keys for id:$formattedId collectionName:$formattedCollectionName');
     var sharedAtKeys = await _getAtClient().getAtKeys(
         regex: CollectionUtil.makeRegex(
       formattedId: formattedId,
@@ -69,6 +73,7 @@ class AtCollectionMethodImpl {
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
+      _logger.finest('Update shared key $sharedKey');
       var atOperationItemStatus = AtOperationItemStatus(
           atSign: sharedKey.sharedWith ?? '',
           key: sharedKey.key ?? '',
