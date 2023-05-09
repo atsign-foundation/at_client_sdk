@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_utils/at_logger.dart';
 
 /// The class represents the sync services for the functional tests
@@ -19,6 +20,10 @@ class FunctionalTestSyncService {
 
   Future<void> syncData(SyncService syncService) async {
     // Setting sync request threshold to 1 to expedite sync process
+    SyncServiceImpl.syncRequestThreshold = 1;
+    SyncServiceImpl.queueSize = 1;
+    SyncServiceImpl.syncRequestTriggerInSeconds = 1;
+    SyncServiceImpl.syncRunIntervalSeconds = 1;
     var isInSyncProgress = true;
     var functionalTestSyncProgressListener =
         FunctionalTestSyncProgressListener();
