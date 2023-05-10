@@ -131,6 +131,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
 
+  @override
   Future<List<T>>
       getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
     var regex = CollectionUtil.makeRegex();

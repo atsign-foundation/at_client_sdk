@@ -122,6 +122,11 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     return _atCollectionQueryOperations.getModelsSharedByAnyAtSign();
   }
 
+  /// Returns list of AtCollectionModels that are shared with any atSign
+  /// Returns an empty list when nothing has been shared
+  ///
+  /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   static Future<List<T>> getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
