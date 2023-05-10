@@ -58,6 +58,8 @@ abstract class AtClient {
   ///
   /// [isDedicated] is currently ignored and will be removed in next major version
   ///
+  /// [putRequestOptions] allows additional options to be provided. See [PutRequestOptions]
+  ///
   /// From at_client v3.0.55 lowercase will be enforced on all AtKey types
   /// AtKeys will now be actively converted to lowercase in at_client
   /// The values(AtValue) will however continue to be case-sensitive
@@ -109,6 +111,11 @@ abstract class AtClient {
   /// has to be shared with another atSign.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
   /// phone.persona@alice where 'persona' is the namespace.
+  ///
+  /// [isDedicated] is currently ignored and will be removed in next major version
+  ///
+  /// [putRequestOptions] allows additional options to be provided. See [PutRequestOptions]
+  ///
   /// From at_client v3.0.55 lowercase will be enforced on all AtKey types
   /// The values(AtValue) will however continue to be case-sensitive
   /// ```
@@ -140,7 +147,8 @@ abstract class AtClient {
   Future<AtResponse> putText(AtKey atKey, String value,
       {PutRequestOptions? putRequestOptions});
 
-  /// Used to store the binary data into the keystore. For example: images, files etc.
+  /// Used when storing binary data - e.g. images, files etc.
+  /// See also [AtClient.put] and [AtClient.putText]
   Future<AtResponse> putBinary(AtKey atKey, List<int> value,
       {PutRequestOptions? putRequestOptions});
 
@@ -258,6 +266,8 @@ abstract class AtClient {
   /// to false.
   ///
   /// [isDedicated] is currently ignored and will be removed in next major version
+  ///
+  /// [deleteRequestOptions] allows additional options to be provided. See [DeleteRequestOptions]
   /// ```
   /// e.g alice is current atsign
   /// delete:phone@alice
