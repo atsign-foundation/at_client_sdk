@@ -273,17 +273,17 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<bool> delete(AtKey atKey, {bool isDedicated = false}) {
+  Future<bool> delete(AtKey atKey, {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions}) {
     _telemetry?.controller.sink
         .add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
     // ignore: no_leading_underscores_for_local_identifiers
-    var _deleteResult = _delete(atKey);
+    var _deleteResult = _delete(atKey, deleteRequestOptions: deleteRequestOptions);
     _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',
         {"key": atKey, "_deleteResult": _deleteResult}));
     return _deleteResult;
   }
 
-  Future<bool> _delete(AtKey atKey) async {
+  Future<bool> _delete(AtKey atKey, {DeleteRequestOptions? deleteRequestOptions}) async {
     // If metadata is null, initialize metadata
     atKey.metadata ??= Metadata();
     String keyWithNamespace;
@@ -301,7 +301,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       ..sharedWith = atKey.sharedWith
       ..atKey = keyWithNamespace
       ..sharedBy = atKey.sharedBy;
-    var deleteResult = await getSecondary().executeVerb(builder, sync: true);
+    var secondary = getSecondary();
+    if (deleteRequestOptions != null && deleteRequestOptions.useRemoteAtServer) {
+      secondary = getRemoteSecondary()!;
+    }
+    var deleteResult = await secondary.executeVerb(builder, sync: true);
+
     return deleteResult != null;
   }
 
@@ -520,9 +525,14 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       throw BufferOverFlowException(
           'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
     }
+
+    Secondary secondary = SecondaryManager.getSecondary(this, verbBuilder);
+    if (putRequestOptions != null && putRequestOptions.useRemoteAtServer) {
+      secondary = getRemoteSecondary()!;
+    }
     // Execute the verb builder
-    var putResponse = await SecondaryManager.getSecondary(this, verbBuilder)
-        .executeVerb(verbBuilder, sync: SyncUtil.shouldSync(atKey.key!));
+    var putResponse = await secondary.executeVerb(verbBuilder,
+        sync: SyncUtil.shouldSync(atKey.key!));
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
       return AtResponse()..isError = true;

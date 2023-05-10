@@ -33,14 +33,16 @@ bool wrappedDecryptSucceeds(
 }
 
 void main() {
+  var namespace = 'full_stack_tests';
   group('Test with full client stack except mockRemoteSecondary', () {
     final fullStackPrefs = AtClientPreference()
-      ..namespace = 'full_stack_tests'
+      ..namespace = namespace
       ..useAtChops = true
       ..isLocalStoreRequired = true
-      ..hiveStoragePath = 'full_stack_tests/put/hive'
-      ..commitLogPath = 'full_stack_tests/put/commitLog';
+      ..hiveStoragePath = '$namespace/put/hive'
+      ..commitLogPath = '$namespace/put/commitLog';
 
+    late MockRemoteSecondary mockRemoteSecondary;
     late AtClient atClient;
 
     var clearText = 'Some clear text';
@@ -64,7 +66,7 @@ void main() {
     registerFallbackValue(llookupMySharedKeyForBob);
 
     setUpAll(() async {
-      MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      mockRemoteSecondary = MockRemoteSecondary();
       MockSecondaryAddressFinder mockSecondaryAddressFinder =
           MockSecondaryAddressFinder();
       AtClientManager.getInstance().secondaryAddressFinder =
@@ -330,6 +332,79 @@ void main() {
 
         var getResult = await atClient.get(atKey);
         expect(getResult.value, clearText);
+      });
+    });
+
+    group('Tests for PutRequestOptions.useRemoteAtServer', () {
+      test('PutRequestOptions.useRemoteAtServer defaults to false', () {
+        PutRequestOptions pro = PutRequestOptions();
+        expect(pro.useRemoteAtServer, false);
+      });
+      checkPutBehaviour (bool useRemoteAtServer) async {
+        bool executedRemotely = false;
+        var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
+        when(() => mockRemoteSecondary.executeVerb(
+            any(that: isA<UpdateVerbBuilder>()),
+            sync: true)).thenAnswer((invocation) async {
+          var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
+          if (builder.atKeyObj.toString() == atKey.toString()) {
+            print ('mockRemoteSecondary.executeVerb with UpdateVerbBuilder for ${builder.atKeyObj.toString()} as expected');
+            executedRemotely = true;
+            return 'data:10';
+          } else if (builder.atKeyObj.toString() != '@bob:shared_key@alice'){
+            print (builder.buildCommand());
+            throw Exception('mockRemoteSecondary.executeVerb called with unexpected UpdateVerbBuilder');
+          } else {
+            return 'data:10';
+          }
+        });
+        await atClient.put(atKey, clearText,
+            putRequestOptions: PutRequestOptions()..useRemoteAtServer = useRemoteAtServer);
+        expect (executedRemotely, useRemoteAtServer);
+      }
+      test('put behaviour when useRemoteAtServer set to true', () async {
+        await checkPutBehaviour(true);
+      });
+      test('put behaviour when useRemoteAtServer set to false', () async {
+        await checkPutBehaviour(false);
+      });
+    });
+
+    group('Tests for DeleteRequestOptions.useRemoteAtServer', () {
+      test('DeleteRequestOptions.useRemoteAtServer defaults to false', () {
+        DeleteRequestOptions dro = DeleteRequestOptions();
+        expect(dro.useRemoteAtServer, false);
+      });
+      checkDeleteBehaviour(bool useRemoteAtServer) async {
+        bool executedRemotely = false;
+        var atKey = (AtKey.shared('test_put',
+            namespace: namespace, sharedBy: atClient.getCurrentAtSign()!)
+          ..sharedWith('@bob'))
+            .build();
+        print(atKey.toString());
+        when(() => mockRemoteSecondary.executeVerb(
+            any(that: isA<DeleteVerbBuilder>()),
+            sync: true)).thenAnswer((invocation) async {
+          var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+          print('DeleteVerbBuilder: ${builder.buildCommand()}');
+          if (builder.buildKey() == atKey.toString()) {
+            print ('mockRemoteSecondary.executeVerb with DeleteVerbBuilder for ${builder.atKeyObj.toString()} as expected');
+            executedRemotely = true;
+            return 'data:10';
+          } else {
+            print(builder.buildCommand());
+            throw Exception(
+                'mockRemoteSecondary.executeVerb called with unexpected DeleteVerbBuilder');
+          }
+        });
+        await atClient.delete(atKey, deleteRequestOptions: DeleteRequestOptions()..useRemoteAtServer = useRemoteAtServer);
+        expect (executedRemotely, useRemoteAtServer);
+      }
+      test('delete behaviour when useRemoteAtServer set to true', () async {
+        await checkDeleteBehaviour(true);
+      });
+      test('delete behaviour when useRemoteAtServer set to false', () async {
+        await checkDeleteBehaviour(false);
       });
     });
   });
