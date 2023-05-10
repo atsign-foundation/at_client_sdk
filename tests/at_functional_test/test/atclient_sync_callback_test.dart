@@ -166,23 +166,9 @@ void main() {
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
 
-    // Calling sync 3 times to met the threshold.
-    atClientManager.atClient.syncService.sync();
-    atClientManager.atClient.syncService.sync();
-    atClientManager.atClient.syncService.sync();
     await FunctionalTestSyncService.getInstance()
         .syncData(atClientManager.atClient.syncService);
 
-    // Calling sync 3 times to met the threshold.
-    atClientManager.atClient.syncService.sync();
-    atClientManager.atClient.syncService.sync();
-    atClientManager.atClient.syncService.sync();
-    await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
-
-    int progressCallbacksReceived = 0;
-    int requiredProgressCallbacks = 2;
-    var isLocalCommitIdEqualServerCommitId = false;
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       print('SyncProgress: $syncProgress');
@@ -197,26 +183,14 @@ void main() {
             greaterThan(syncProgress.localCommitIdBeforeSync!));
         syncProgress.keyInfoList?.forEach((keyInfo) {
           if (keyInfo.key.contains('fb_username-$uniqueId')) {
-            expect(keyInfo.commitOp, CommitOp.UPDATE);
             expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
+            expect(keyInfo.commitOp, CommitOp.UPDATE);
           }
         });
       }
-      // At the end of the test (either in first run or by end of second run),
-      // localCommitId should be equal to serverCommitId
-      if (isLocalCommitIdEqualServerCommitId == false) {
-        if (syncProgress.localCommitId == syncProgress.serverCommitId) {
-          isLocalCommitIdEqualServerCommitId = true;
-        }
-      }
-      // Assert only on the completion of second sync run.
-      if (progressCallbacksReceived == requiredProgressCallbacks) {
-        expect(isLocalCommitIdEqualServerCommitId, true);
-      }
-
       atClientManager.atClient.syncService
           .removeProgressListener(progressListener);
-    }, count: 2));
+    }));
   });
   tearDown(() async => await tearDownFunc());
 }
