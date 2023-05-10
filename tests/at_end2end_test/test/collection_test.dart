@@ -280,7 +280,7 @@ void main() async {
     // Have the phone number changed
     phone.phoneNumber = '12345-9999';
     // Now call a save with reshare as true
-    await phone.save(share: true);
+    await phone.save(autoReshare: true);
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
@@ -560,7 +560,7 @@ void main() async {
         .unregister(BFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 10)));
 
-  test('Query method - AtCollectionModel.getModelsSharedBy any atSign test', () async {
+  test('Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test', () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
     await AtClientManager.getInstance().setCurrentAtSign(
@@ -611,13 +611,14 @@ void main() async {
         [AFactory.getInstance(), BFactory.getInstance()]);
 
 
-    var res = await AtCollectionModel.getModelsSharedBy();
+    var res = await AtCollectionModel.getModelsSharedByAnyAtSign();
     expect(false, res.isEmpty,
         reason: 'Expect the models shared by to be non-empty');
     expect(true, res.length >= 4,
         reason: 'Expect a minimum of 4 shared models');
     for(AtCollectionModel model in res) {
       print(model.collectionName);
+      print(model.sharedByAtSign);
       if(model is A) {
         print(model.a);
       }

@@ -23,8 +23,9 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   /// Typically namespace is used to identify the app that is used to persist the data.
   late String namespace;
 
-  /// Metadata of the AtKey
-  late Metadata _matada;
+  // This is populated when a [AtCollectionModel] that has been shared by some other atSign is loaded from the secondary store
+  late String sharedByAtSign;
+
   late AtCollectionModelOperations _atCollectionModelOperations;
   late AtCollectionModelStreamOperationsImpl streams;
 
@@ -102,7 +103,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   static Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
-      [String? atSign]) async {
+      String atSign) async {
     _logger.finer('get models shared by atSign:$atSign');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
@@ -110,10 +111,28 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     return _atCollectionQueryOperations.getModelsSharedBy(atSign);
   }
 
+  /// Returns list of AtCollectionModels that are shared any atSign
+  /// Returns an empty list when nothing has been shared
+  ///
+  /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  static Future<List<T>> getModelsSharedByAnyAtSign<T extends AtCollectionModel>() async {
+    AtCollectionModelFactoryManager.getInstance()
+        .register(_jsonCollectionModelFactory);
+    return _atCollectionQueryOperations.getModelsSharedByAnyAtSign();
+  }
+
+  static Future<List<T>> getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
+    AtCollectionModelFactoryManager.getInstance()
+        .register(_jsonCollectionModelFactory);
+    return _atCollectionQueryOperations.getModelsSharedByAnyAtSign();
+  }
+
+  // autoReshare
   @override
   Future<bool> save(
-      {bool share = true, ObjectLifeCycleOptions? options}) async {
-    return _atCollectionModelOperations.save(share: share, options: options);
+      {bool autoReshare = true, ObjectLifeCycleOptions? options}) async {
+    return _atCollectionModelOperations.save(autoReshare: autoReshare, options: options);
   }
 
   @override
@@ -137,8 +156,4 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     return _atCollectionModelOperations.unshare(atSigns: atSigns);
   }
 
-  // Sets Metadata. This will be used while saving and sharing the model.
-  setMetadata(Metadata metadata) {
-    this._matada = metadata;
-  }
 }

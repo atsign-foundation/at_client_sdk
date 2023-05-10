@@ -21,7 +21,7 @@ class AtCollectionModelOperationsImpl
 
   @override
   Future<bool> save(
-      {bool share = true, ObjectLifeCycleOptions? options}) async {
+      {bool autoReshare = true, ObjectLifeCycleOptions? options}) async {
 
     var jsonObject = CollectionUtil.initAndValidateJson(
         collectionModelJson: toJson(),
@@ -37,7 +37,7 @@ class AtCollectionModelOperationsImpl
         .save(
             jsonEncodedData: jsonEncode(jsonObject),
             options: options,
-            share: share)
+            share: autoReshare)
         .forEach((AtOperationItemStatus atOperationItemStatus) {
       /// save will update self key as well as the shared keys
       /// the first event that will be coming in the stream would be the AtOperationItemStatus of selfKey
@@ -48,7 +48,7 @@ class AtCollectionModelOperationsImpl
       }
     });
 
-    if (share == false) {
+    if (autoReshare == false) {
       completer.complete(isSelfKeySaved);
       return isSelfKeySaved ?? false;
     }
