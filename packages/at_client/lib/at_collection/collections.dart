@@ -145,6 +145,8 @@ abstract class AtCollectionQueryOperations {
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(String atSign);
 
+  Future<List<T>> getModelsSharedWithAnyAtSign<T extends AtCollectionModel>();
+
   /// Returns an instance of a class extending  [AtCollectionModel] for the given [id], [namespace] and [collectionName]
   /// An instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
