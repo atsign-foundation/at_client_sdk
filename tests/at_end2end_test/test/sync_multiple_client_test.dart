@@ -141,7 +141,9 @@ void main() async {
     var testResult = assertCommitEntries(
         serverCommitLog, clientOneCommitLog, clientTwoCommitLog);
     expect(testResult, true);
-  },skip: Skip('The test needs changes in at_server. Skipping this test until server changes are merged'));
+  },
+      skip:
+          'The test needs changes in at_server. Skipping this test until server changes are merged');
 }
 
 /// Reads the message from [isolateResponseQueue] and returns
