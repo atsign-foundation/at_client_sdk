@@ -109,16 +109,27 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
   @override
-  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>([String? atSign]) async {
+  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(String atSign) async {
     var regex = CollectionUtil.makeRegex();
-
+    // Get all collection model keys
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
-    if(atSign != null) {
-      collectionAtKeys.retainWhere((atKey) => atKey.sharedBy == atSign);
-    }
+    // Just keep the ones where shared by is the atSign passed
+    collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null && atKey.sharedBy == atSign));
+
 
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
+
+  @override
+  Future<List<T>> getModelsSharedByAnyAtSign<T extends AtCollectionModel>() async {
+    var regex = CollectionUtil.makeRegex();
+    // Get all collection model keys
+    var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
+    // From all of the shared collection keys retain the ones where sharedBy is not null and it not the current atSign
+    collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null && atKey.sharedBy != getAtClient().getCurrentAtSign()));
+    return _getAtCollectionModelsFromAtKey(collectionAtKeys);
+  }
+
 
   Future<List<T>>
       _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
@@ -150,6 +161,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         model.id = atValueJson['id'];
         model.collectionName = atValueJson['collectionName'];
         model.namespace = CollectionUtil.getNamespaceFromKey(atKey.toString());
+        model.sharedByAtSign = atKey.sharedBy!;
         modelList.add(model);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');

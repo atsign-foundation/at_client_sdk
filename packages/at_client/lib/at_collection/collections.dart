@@ -6,9 +6,9 @@ abstract class AtCollectionModelOperations {
   /// Saves the json representaion of [AtCollectionModel] to the secondary server of a atSign.
   /// [save] calls [toJson] method to get the json representation of a [AtCollectionModel].
   ///
-  /// If [share] is set to true, then the Object will not only be saved but also be shared with the atSigns with whom it was previously shared.
+  /// If [autoReshare] is set to true, then the Object will not only be saved but also be shared with the atSigns with whom it was previously shared.
   ///
-  /// If [share] is set to false, then the object is not shared till the [share] method is called.
+  /// If [autoReshare] is set to false, then the object is not shared till the [autoReshare] method is called.
   ///
   /// Pass [options] to control lifecycle of the object.
   ///
@@ -35,7 +35,7 @@ abstract class AtCollectionModelOperations {
   ///
   /// Returns a true if save is successful else returns a false.
   /// If fine grained information on individual operations that happens within [save] is desired then use [streams.save]
-  Future<bool> save({bool share = true, ObjectLifeCycleOptions? options});
+  Future<bool> save({bool autoReshare = true, ObjectLifeCycleOptions? options});
 
   /// [share] shares the AtCollectionModel object with the atSigns in [atSigns] list.
   ///
@@ -125,12 +125,18 @@ abstract class AtCollectionModelOperations {
 /// Contains query methods on [AtCollectionModel]
 abstract class AtCollectionQueryOperations {
   /// Returns list of AtCollectionModels that are shared by the given [atSign]
-  /// [atSign] is an optional argument and if not passed returns all of the AtCollectionModels shared by any atSign
   /// Returns an empty list when nothing has been shared
   ///
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
-  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>([String? atSign]);
+  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(String atSign);
+
+  /// Returns list of AtCollectionModels that are shared any atSign
+  /// Returns an empty list when nothing has been shared
+  ///
+  /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
+  /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
+  Future<List<T>> getModelsSharedByAnyAtSign<T extends AtCollectionModel>();
 
   /// Returns list of AtCollectionModels that are shared with the given [atSign]
   /// Returns an empty list when nothing has been shared
