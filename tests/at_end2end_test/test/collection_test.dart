@@ -736,6 +736,44 @@ void main() async {
         .unregister(BFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 10)));
 
+  test('Query methods - Test retrieval of sharedWithAnyAtSign', () async {
+    // Setting firstAtSign atClient instance to context.
+    currentAtClientManager =
+        await AtClientManager.getInstance().setCurrentAtSign(
+      firstAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(firstAtSign),
+    );
+
+    // Share a phone
+    var p1 = Phone()
+      ..id = 'p1'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '12345';
+    await p1.save();
+
+    var p2 = Phone()
+      ..id = 'p2'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '12345';
+    await p2.save();
+
+    var a = A.from('aId',a: 'aId');
+    await a.save();
+    await a.share([secondAtSign]);
+
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
+
+    var response = await AtCollectionModel.getModelsSharedWithAnyAtSign();
+    expect(response.length, greaterThan(1));
+    for (var key in response) {
+      print(key.id);
+    }
+  });
+
   test(
     'Model operations - save and incremental share with stream',
     () async {

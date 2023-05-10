@@ -132,8 +132,27 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
 
 
   Future<List<T>>
-      _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
-          List<AtKey> collectionAtKeys) async {
+      getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
+    var regex = CollectionUtil.makeRegex();
+    // Get all collection model keys
+    List<AtKey> collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
+    // Just keep the keys that current atSign has shared
+    collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null &&
+        atKey.sharedBy == getAtClient().getCurrentAtSign() &&
+        atKey.sharedWith != null));
+    Set<AtKey> uniqueSelfKeys = {};
+    // Add distinct keys that are shared to the other atSigns.
+    // Removing the sharedWith atSign and adding each key to set to fetch the
+    // distinct keys.
+    for (AtKey atKey in collectionAtKeys) {
+      atKey.sharedWith = null;
+      uniqueSelfKeys.add(atKey);
+    }
+    return _getAtCollectionModelsFromAtKey(uniqueSelfKeys.toList());
+  }
+
+  Future<List<T>> _getAtCollectionModelsFromAtKey<T extends AtCollectionModel>(
+      List<AtKey> collectionAtKeys) async {
     List<T> modelList = [];
 
     for (var atKey in collectionAtKeys) {

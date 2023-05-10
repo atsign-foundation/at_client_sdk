@@ -125,10 +125,10 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   static Future<List<T>> getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
-    return _atCollectionQueryOperations.getModelsSharedByAnyAtSign();
+    return _atCollectionQueryOperations.getModelsSharedWithAnyAtSign();
   }
 
-  // autoReshare
+
   @override
   Future<bool> save(
       {bool autoReshare = true, ObjectLifeCycleOptions? options}) async {
