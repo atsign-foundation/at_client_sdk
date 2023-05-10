@@ -340,7 +340,7 @@ void main() {
         PutRequestOptions pro = PutRequestOptions();
         expect(pro.useRemoteAtServer, false);
       });
-      checkPutBehaviour (bool useRemoteAtServer) async {
+      checkPutBehaviour(bool useRemoteAtServer) async {
         bool executedRemotely = false;
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         when(() => mockRemoteSecondary.executeVerb(
@@ -348,20 +348,24 @@ void main() {
             sync: true)).thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
           if (builder.atKeyObj.toString() == atKey.toString()) {
-            print ('mockRemoteSecondary.executeVerb with UpdateVerbBuilder for ${builder.atKeyObj.toString()} as expected');
+            print(
+                'mockRemoteSecondary.executeVerb with UpdateVerbBuilder for ${builder.atKeyObj.toString()} as expected');
             executedRemotely = true;
             return 'data:10';
-          } else if (builder.atKeyObj.toString() != '@bob:shared_key@alice'){
-            print (builder.buildCommand());
-            throw Exception('mockRemoteSecondary.executeVerb called with unexpected UpdateVerbBuilder');
+          } else if (builder.atKeyObj.toString() != '@bob:shared_key@alice') {
+            print(builder.buildCommand());
+            throw Exception(
+                'mockRemoteSecondary.executeVerb called with unexpected UpdateVerbBuilder');
           } else {
             return 'data:10';
           }
         });
         await atClient.put(atKey, clearText,
-            putRequestOptions: PutRequestOptions()..useRemoteAtServer = useRemoteAtServer);
-        expect (executedRemotely, useRemoteAtServer);
+            putRequestOptions: PutRequestOptions()
+              ..useRemoteAtServer = useRemoteAtServer);
+        expect(executedRemotely, useRemoteAtServer);
       }
+
       test('put behaviour when useRemoteAtServer set to true', () async {
         await checkPutBehaviour(true);
       });
@@ -378,8 +382,8 @@ void main() {
       checkDeleteBehaviour(bool useRemoteAtServer) async {
         bool executedRemotely = false;
         var atKey = (AtKey.shared('test_put',
-            namespace: namespace, sharedBy: atClient.getCurrentAtSign()!)
-          ..sharedWith('@bob'))
+                namespace: namespace, sharedBy: atClient.getCurrentAtSign()!)
+              ..sharedWith('@bob'))
             .build();
         print(atKey.toString());
         when(() => mockRemoteSecondary.executeVerb(
@@ -388,7 +392,8 @@ void main() {
           var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
           print('DeleteVerbBuilder: ${builder.buildCommand()}');
           if (builder.buildKey() == atKey.toString()) {
-            print ('mockRemoteSecondary.executeVerb with DeleteVerbBuilder for ${builder.atKeyObj.toString()} as expected');
+            print(
+                'mockRemoteSecondary.executeVerb with DeleteVerbBuilder for ${builder.atKeyObj.toString()} as expected');
             executedRemotely = true;
             return 'data:10';
           } else {
@@ -397,9 +402,12 @@ void main() {
                 'mockRemoteSecondary.executeVerb called with unexpected DeleteVerbBuilder');
           }
         });
-        await atClient.delete(atKey, deleteRequestOptions: DeleteRequestOptions()..useRemoteAtServer = useRemoteAtServer);
-        expect (executedRemotely, useRemoteAtServer);
+        await atClient.delete(atKey,
+            deleteRequestOptions: DeleteRequestOptions()
+              ..useRemoteAtServer = useRemoteAtServer);
+        expect(executedRemotely, useRemoteAtServer);
       }
+
       test('delete behaviour when useRemoteAtServer set to true', () async {
         await checkDeleteBehaviour(true);
       });
