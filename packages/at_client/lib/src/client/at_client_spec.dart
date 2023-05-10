@@ -308,7 +308,8 @@ abstract class AtClient {
   ///             ..metadata = metaData
   ///   delete(key);
   ///```
-  Future<bool> delete(AtKey key, {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions});
+  Future<bool> delete(AtKey key,
+      {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions});
 
   /// Get all the keys stored in user's secondary in [AtKey] format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.

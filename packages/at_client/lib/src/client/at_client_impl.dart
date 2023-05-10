@@ -273,17 +273,20 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<bool> delete(AtKey atKey, {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions}) {
+  Future<bool> delete(AtKey atKey,
+      {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions}) {
     _telemetry?.controller.sink
         .add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
     // ignore: no_leading_underscores_for_local_identifiers
-    var _deleteResult = _delete(atKey, deleteRequestOptions: deleteRequestOptions);
+    var _deleteResult =
+        _delete(atKey, deleteRequestOptions: deleteRequestOptions);
     _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',
         {"key": atKey, "_deleteResult": _deleteResult}));
     return _deleteResult;
   }
 
-  Future<bool> _delete(AtKey atKey, {DeleteRequestOptions? deleteRequestOptions}) async {
+  Future<bool> _delete(AtKey atKey,
+      {DeleteRequestOptions? deleteRequestOptions}) async {
     // If metadata is null, initialize metadata
     atKey.metadata ??= Metadata();
     String keyWithNamespace;
@@ -302,7 +305,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       ..atKey = keyWithNamespace
       ..sharedBy = atKey.sharedBy;
     var secondary = getSecondary();
-    if (deleteRequestOptions != null && deleteRequestOptions.useRemoteAtServer) {
+    if (deleteRequestOptions != null &&
+        deleteRequestOptions.useRemoteAtServer) {
       secondary = getRemoteSecondary()!;
     }
     var deleteResult = await secondary.executeVerb(builder, sync: true);
