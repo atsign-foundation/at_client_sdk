@@ -12,7 +12,7 @@ repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://docs.atsign.com/
 
 environment:
-  sdk: '>=2.15.0 <3.0.0'
+  sdk: '>=2.15.0 <4.0.0'
 
 dependencies:
   path: ^1.8.2
@@ -28,16 +28,57 @@ dependencies:
   http: ^0.13.5
   internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
-  at_persistence_spec: ^2.0.12
-  at_persistence_secondary_server: ^3.0.52
-  at_lookup: ^3.0.36
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
   at_commons: ^3.0.45
   at_utils: ^3.0.12
-  meta: ^1.8.0
   at_chops: ^1.0.3
+  at_lookup: ^3.0.36
+  at_persistence_spec: ^2.0.12
+  at_persistence_secondary_server: ^3.0.52
+  meta: ^1.8.0
   version: ^3.0.2
+
+dependency_overrides:
+  at_utf7:
+    git:
+      url: https://github.com/atsign-foundation/at-dart-utf7.git
+      ref: trunk
+  at_base2e15:
+    git:
+      url: https://github.com/atsign-foundation/at_base2e15.git
+      path: dart
+      ref: dart-3
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: packages/at_commons
+      ref: dart-3
+  at_utils:
+    git:
+      url: https://github.com/atsign-foundation/at_tools.git
+      path: packages/at_utils
+      ref: dart-3
+  at_chops:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_chops
+      ref: dart-3
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: dart-3
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_spec
+      ref: dart-3
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_secondary_server
+      ref: dart-3
 
 dev_dependencies:
   lints: ^2.0.0
