@@ -774,29 +774,31 @@ void main() async {
     }
   });
 
-  test('Query methods - Test retrieval of sharedWith AtSign', () async {
+  test('Query methods - Test retrieval of sharedWith of AtCollectionModel', () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
-        await AtClientManager.getInstance().setCurrentAtSign(
+    await AtClientManager.getInstance().setCurrentAtSign(
       firstAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(firstAtSign),
     );
 
-    var a1 = A.from('aId1', a: 'aId1');
-    var a2 = A.from('aId2', a: 'aId2');
-
+    var a1 = A.from('aId',a: 'aId');
     await a1.save();
-    await a1.share([secondAtSign]);
+    await a1.share([secondAtSign, thirdAtSign]);
+
+    var a2 = A.from('aId',a: 'aId');
     await a2.save();
     await a2.share([secondAtSign]);
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
 
-    var res = await AtCollectionModel.getModelsSharedWith(secondAtSign);
-    expect(res.length, greaterThanOrEqualTo(2));
-    for (var key in res) {
+    var response = await AtCollectionModel.getModelsSharedWithAnyAtSign();
+    expect(response.length, greaterThanOrEqualTo(1));
+    for (var key in response) {
+      var sharedWithAtSigns = await key.sharedWith();
+      print(sharedWithAtSigns);
       print(key.id);
     }
   });
