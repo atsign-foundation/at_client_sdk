@@ -18,6 +18,7 @@ class PreferenceFactory extends AtCollectionModelFactory<Preference> {
   factory PreferenceFactory.getInstance() {
     return _singleton;
   }
+
   @override
   Preference create() {
     return Preference();
@@ -80,6 +81,7 @@ class ContactFactory extends AtCollectionModelFactory<Contact> {
   factory ContactFactory.getInstance() {
     return _singleton;
   }
+
   @override
   Contact create() {
     return Contact();
@@ -160,6 +162,7 @@ class AFactory extends AtCollectionModelFactory<A> {
   factory AFactory.getInstance() {
     return _singleton;
   }
+
   @override
   A create() {
     return A();
@@ -233,10 +236,10 @@ void main() async {
         .testInitializer(firstAtSign, namespace);
     await TestSuiteInitializer.getInstance()
         .testInitializer(secondAtSign, namespace);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(thirdAtSign, namespace);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(fourthAtSign, namespace);
+    // await TestSuiteInitializer.getInstance()
+    //     .testInitializer(thirdAtSign, namespace);
+    // await TestSuiteInitializer.getInstance()
+    //     .testInitializer(fourthAtSign, namespace);
   });
 
   test('Model operations - save() test', () async {
@@ -261,7 +264,7 @@ void main() async {
   test('Model operations - save() with reshare() as true test', () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
-    await AtClientManager.getInstance().setCurrentAtSign(
+        await AtClientManager.getInstance().setCurrentAtSign(
       firstAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(firstAtSign),
@@ -287,7 +290,7 @@ void main() async {
 
     /// receiver's end - Varify that the phone has been shared
     sharedWithAtClientManager =
-    await AtClientManager.getInstance().setCurrentAtSign(
+        await AtClientManager.getInstance().setCurrentAtSign(
       secondAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(secondAtSign),
@@ -302,14 +305,17 @@ void main() async {
         collectionName: 'phone',
         namespace: 'buzz');
 
+    List<String> keys =
+        await sharedWithAtClientManager.atClient.getKeys(regex: regex);
+    expect(1, keys.length,
+        reason:
+            'On the recipient side expecting a single keys with the regex supplied');
 
-    List<String> keys = await sharedWithAtClientManager.atClient.getKeys(regex: regex);
-    expect(1, keys.length, reason: 'On the recipient side expecting a single keys with the regex supplied');
-
-    AtValue atValue = await sharedWithAtClientManager.atClient.get(AtKey.fromString(keys[0]));
-    expect('12345-9999', jsonDecode(atValue.value)['phoneNumber'], reason: 'Since the value is reshared the phone number should be the new modified one');
-
-
+    AtValue atValue =
+        await sharedWithAtClientManager.atClient.get(AtKey.fromString(keys[0]));
+    expect('12345-9999', jsonDecode(atValue.value)['phoneNumber'],
+        reason:
+            'Since the value is reshared the phone number should be the new modified one');
   }, timeout: Timeout(Duration(minutes: 5)));
 
   test('Model operations - share() test', () async {
@@ -355,8 +361,6 @@ void main() async {
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
     expect(getResult.length, 1);
   }, timeout: Timeout(Duration(minutes: 5)));
-
-
 
   test('Model operations - unshare() and delete() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -560,10 +564,11 @@ void main() async {
         .unregister(BFactory.getInstance());
   }, timeout: Timeout(Duration(minutes: 10)));
 
-  test('Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test', () async {
+  test('Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test',
+      () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
-    await AtClientManager.getInstance().setCurrentAtSign(
+        await AtClientManager.getInstance().setCurrentAtSign(
       firstAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(firstAtSign),
@@ -576,10 +581,9 @@ void main() async {
     var b = B.from('b11', b: 'b11 value');
     await b.share([secondAtSign]);
 
-
     /// Share at Collections models from third atSign to second atSign
     sharedWithAtClientManager =
-    await AtClientManager.getInstance().setCurrentAtSign(
+        await AtClientManager.getInstance().setCurrentAtSign(
       thirdAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(thirdAtSign),
@@ -597,7 +601,7 @@ void main() async {
 
     /// SSwitch to second atSign and get AtCollectionModels shared by any atSign
     sharedWithAtClientManager =
-    await AtClientManager.getInstance().setCurrentAtSign(
+        await AtClientManager.getInstance().setCurrentAtSign(
       secondAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(secondAtSign),
@@ -610,19 +614,18 @@ void main() async {
     AtCollectionModel.registerFactories(
         [AFactory.getInstance(), BFactory.getInstance()]);
 
-
     var res = await AtCollectionModel.getModelsSharedByAnyAtSign();
     expect(false, res.isEmpty,
         reason: 'Expect the models shared by to be non-empty');
     expect(true, res.length >= 4,
         reason: 'Expect a minimum of 4 shared models');
-    for(AtCollectionModel model in res) {
+    for (AtCollectionModel model in res) {
       print(model.collectionName);
       print(model.sharedByAtSign);
-      if(model is A) {
+      if (model is A) {
         print(model.a);
       }
-      if(model is B) {
+      if (model is B) {
         print(model.b);
       }
     }
@@ -759,47 +762,28 @@ void main() async {
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     await p2.save();
+    await p2.share([secondAtSign]);
 
-    var a = A.from('aId',a: 'aId');
+    var a = A.from('aId', a: 'aId');
     await a.save();
-    await a.share([secondAtSign]);
+    await a.share([secondAtSign, thirdAtSign]);
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
 
-    var response = await AtCollectionModel.getModelsSharedWithAnyAtSign();
-    expect(response.length, greaterThanOrEqualTo(1));
-    for (var key in response) {
-      print(key.id);
-    }
-  });
+    var atCollectionModelList =
+        await AtCollectionModel.getModelsSharedWithAnyAtSign();
+    expect(atCollectionModelList.length, greaterThanOrEqualTo(1));
 
-  test('Query methods - Test retrieval of sharedWith of AtCollectionModel', () async {
-    // Setting firstAtSign atClient instance to context.
-    currentAtClientManager =
-    await AtClientManager.getInstance().setCurrentAtSign(
-      firstAtSign,
-      namespace,
-      TestPreferences.getInstance().getPreference(firstAtSign),
-    );
-
-    var a1 = A.from('aId',a: 'aId');
-    await a1.save();
-    await a1.share([secondAtSign, thirdAtSign]);
-
-    var a2 = A.from('aId',a: 'aId');
-    await a2.save();
-    await a2.share([secondAtSign]);
-
-    await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.atClient.syncService);
-
-    var response = await AtCollectionModel.getModelsSharedWithAnyAtSign();
-    expect(response.length, greaterThanOrEqualTo(1));
-    for (var key in response) {
-      var sharedWithAtSigns = await key.sharedWith();
-      print(sharedWithAtSigns);
-      print(key.id);
+    for (AtCollectionModel atCollection in atCollectionModelList) {
+      List sharedWithAtSigns = await atCollection.sharedWith();
+      if (atCollection.id == 'aId') {
+        expect(sharedWithAtSigns.contains(secondAtSign), true);
+        expect(sharedWithAtSigns.contains(thirdAtSign), true);
+      }
+      if (atCollection.id == 'p2') {
+        expect(sharedWithAtSigns.contains(secondAtSign), true);
+      }
     }
   });
 
