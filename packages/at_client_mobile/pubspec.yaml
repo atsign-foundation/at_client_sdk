@@ -22,30 +22,6 @@ dependencies:
   at_lookup: ^3.0.35
   at_client: ^3.0.53
 
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: packages/at_commons
-      ref: dart-3
-  at_utils:
-    git:
-      url: https://github.com/atsign-foundation/at_tools.git
-      path: packages/at_utils
-      ref: dart-3
-  at_chops:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_chops
-      ref: dart-3
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_lookup
-      ref: dart-3
-  at_client:
-    path: ../at_client
-
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.6.0
