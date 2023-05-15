@@ -378,12 +378,11 @@ bool assertCommitEntries(
       continue;
     }
     // Compare server commit id with both client's commit log
-    if ((serverCommitLogMap[mapEntry.key]['commitId'] !=
-            mapEntry.value['commitId']) ||
-        (serverCommitLogMap[mapEntry.key]['commitId'] !=
+    if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
+        (serverCommitLogMap[mapEntry.key][0] !=
             clientTwoCommitLog[mapEntry.key]!['commitId'])) {
       _logger.severe('Assertion failed: Key: ${mapEntry.key} '
-          'Server CommitId: ${serverCommitLogMap[mapEntry.key]['commitId']} '
+          'Server CommitId: ${serverCommitLogMap[mapEntry.key][0]} '
           'Client-One CommitId: ${mapEntry.value['commitId']} '
           'Client-Two CommitId: ${clientTwoCommitLog[mapEntry.key]!['commitId']}');
       return false;
