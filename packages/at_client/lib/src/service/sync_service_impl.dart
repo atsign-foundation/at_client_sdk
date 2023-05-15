@@ -431,9 +431,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           "serverCommitId": serverCommitId,
           "lastReceivedServerCommitId": lastReceivedServerCommitId
         });
-        List<dynamic> listOfCommitEntriesToSync =
+        List<dynamic> listOfCommitEntriesFromServer =
             await _getEntriesToSyncFromServer(lastReceivedServerCommitId);
-        if (listOfCommitEntriesToSync.isEmpty) {
+        if (listOfCommitEntriesFromServer.isEmpty) {
           _logger.finer(_logger.getLogMessageWithClientParticulars(
               _atClient.getPreferences()!.atClientParticulars,
               'sync response is empty | local commitID: $lastReceivedServerCommitId | server commitID: $serverCommitId'));
@@ -442,7 +442,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         // Iterates over each commit entry
         // If the serverCommitEntry exists in the uncommitted entries list,
         // ignore the serverCommitEntry.
-        for (dynamic serverCommitEntry in listOfCommitEntriesToSync) {
+        for (dynamic serverCommitEntry in listOfCommitEntriesFromServer) {
           bool isServerCommitEntryExistInUncommittedEntries = false;
           for (CommitEntry entry in uncommittedEntries) {
             if (entry.atKey!.trim() ==
