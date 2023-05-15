@@ -518,6 +518,8 @@ abstract class AtClient {
       Function streamCompletionCallBack,
       Function streamReceiveCallBack);
 
+  /// Performs a check to see if RemoteSecondary has been reset
+  /// throws [AtResetException] if the RemoteSecondary has been reset
   Future<void> isSecondaryReset();
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
