@@ -4,7 +4,6 @@ import 'package:at_app_flutter/at_app_flutter.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
-import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 class ClientSdkService {
@@ -102,8 +101,7 @@ class ClientSdkService {
     atsign = null;
     Navigator.pop(context);
   }
-
-  Future<void> sync(Function callBack) async {
-    atClientInstance.syncService.sync(onDone: callBack);
-  }
+  // Future<void> sync(Function callBack) async {
+  //   atClientInstance.atClient.syncService.sync(onDone: callBack);
+  // }
 }
