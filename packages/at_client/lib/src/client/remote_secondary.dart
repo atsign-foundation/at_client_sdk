@@ -7,6 +7,7 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/util/logger_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -42,8 +43,25 @@ class RemoteSecondary implements Secondary {
         secondaryAddressFinder:
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
-        clientConfig: {VERSION: AtClientConfig.getInstance().atClientVersion});
+        clientConfig: _getClientConfig());
+
     atLookUp.atChops = atChops;
+  }
+
+  Map<String, String> _getClientConfig() {
+    var clientConfig = <String, String>{};
+    clientConfig[VERSION] = AtClientConfig.getInstance().atClientVersion;
+    clientConfig[CLIENT_ID] = _preference.atClientParticulars.clientId;
+    if (_preference.atClientParticulars.appName.isNotNull) {
+      clientConfig[APP_NAME] = _preference.atClientParticulars.appName!;
+    }
+    if (_preference.atClientParticulars.appVersion.isNotNull) {
+      clientConfig[APP_VERSION] = _preference.atClientParticulars.appVersion!;
+    }
+    if (_preference.atClientParticulars.platform.isNotNull) {
+      clientConfig[PLATFORM] = _preference.atClientParticulars.platform!;
+    }
+    return clientConfig;
   }
 
   @experimental
@@ -56,7 +74,13 @@ class RemoteSecondary implements Secondary {
   Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
     try {
       String verbResult;
+      logger.finer(logger.getLogMessageWithClientParticulars(
+          _preference.atClientParticulars,
+          'Command sent to server: ${builder.buildCommand()}'));
       verbResult = await atLookUp.executeVerb(builder);
+      logger.finer(logger.getLogMessageWithClientParticulars(
+          _preference.atClientParticulars,
+          'Response from server: $verbResult'));
       return verbResult;
     } on AtException catch (e) {
       throw e
@@ -74,8 +98,14 @@ class RemoteSecondary implements Secondary {
     // ignore: prefer_typing_uninitialized_variables
     var verbResult;
     try {
+      logger.finer(logger.getLogMessageWithClientParticulars(
+          _preference.atClientParticulars,
+          'Command sent to server: ${builder.buildCommand()}'));
       verbResult = await executeVerb(builder);
       verbResult = verbResult.replaceFirst('data:', '');
+      logger.finer(logger.getLogMessageWithClientParticulars(
+          _preference.atClientParticulars,
+          'Response from server: $verbResult'));
     } on AtException catch (e) {
       throw e
         ..stack(AtChainedException(Intent.fetchData,
