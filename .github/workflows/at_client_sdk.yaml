@@ -27,7 +27,7 @@ jobs:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
       - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
         with:
-          sdk: 2.19.6
+          sdk: stable
 
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
@@ -85,7 +85,7 @@ jobs:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
       - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
         with:
-          sdk: 2.19.6
+          sdk: stable
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
       - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
         with:
-          sdk: 2.19.6
+          sdk: stable
 
       - name: Install dependencies in at_client
         working-directory: packages/at_client
@@ -210,7 +210,7 @@ jobs:
       - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
       - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
         with:
-          sdk: 2.19.6
+          sdk: stable
 
       - name: Install dependencies in at_client
         working-directory: packages/at_client

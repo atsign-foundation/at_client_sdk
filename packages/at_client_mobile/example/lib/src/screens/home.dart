@@ -1,4 +1,4 @@
-import 'package:example/src/services/sdk.service.dart';
+import 'package:at_client_mobile_example/src/services/sdk.service.dart';
 import 'package:flutter/material.dart';
 import 'package:at_commons/at_commons.dart';
 

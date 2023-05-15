@@ -1,6 +1,8 @@
+## 3.2.10
+- fix: Fixed incorrect import statements in at_client_mobile/example which are
+  causing analysis errors in dart 3
 ## 3.2.9
-- fix: reverted path dependency to 1.8.2 
-
+- fix: reverted path dependency to 1.8.2
 ## 3.2.8
 - chore: Upgraded at_client dependency to 3.0.53
 - fix: Uptake at_chops changes

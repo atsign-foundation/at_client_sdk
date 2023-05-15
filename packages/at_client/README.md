@@ -1,4 +1,4 @@
-<img width=250px src="https://atsign.dev/assets/img/atPlatform_logo_gray.svg?sanitize=true">
+<img width=250px src="https://atsign.dev/assets/img/atPlatform_logo_gray.svg?sanitize=true" alt="The atPlatform logo">
 
 ## Now for some internet optimism.
 
@@ -16,7 +16,7 @@ SDK that provides the essential methods for building an app using [The atProtoco
 atPlatform's decentralized, edge computing model with the following features: 
 - Cryptographic control of data access through personal data stores
 - No application backend needed
-- End to end encryption where only the data owner has the keys
+- End-to-end encryption where only the data owner has the keys
 - Private and surveillance free connectivity
 
 We call giving people control of access to their data "*flipping the internet*".

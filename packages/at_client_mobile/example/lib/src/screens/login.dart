@@ -1,10 +1,8 @@
-import 'package:example/src/screens/home.dart';
+import 'package:at_client_mobile_example/src/screens/home.dart';
+import 'package:at_client_mobile_example/src/services/sdk.service.dart';
 import 'package:flutter/material.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:at_app_flutter/at_app_flutter.dart' show AtEnv;
-import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:example/src/services/sdk.service.dart';
 
 class LoginScreen extends StatefulWidget {
   /// Login screen id.
@@ -18,7 +16,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreen extends State<LoginScreen> {
-  final AtSignLogger _logger = AtSignLogger(AtEnv.appNamespace);
   bool showSpinner = false;
   String? atSign;
   ClientSdkService clientSDKInstance = ClientSdkService.getInstance();
