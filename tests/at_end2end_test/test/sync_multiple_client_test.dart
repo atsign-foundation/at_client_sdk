@@ -14,6 +14,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:at_client/at_client.dart';
+import 'package:version/version.dart';
 
 /// The purpose of this test is to run multiple clients in Isolate and inject
 /// bulk data.
@@ -138,12 +139,12 @@ void main() async {
     var serverCommitLog = await _getServerCommitEntries();
     _logger.info('Server commit log: $serverCommitLog');
 
-    var testResult = assertCommitEntries(
-        serverCommitLog, clientOneCommitLog, clientTwoCommitLog);
-    expect(testResult, true);
-  },
-      skip:
-          'The test needs changes in at_server. Skipping this test until server changes are merged');
+    if (serverCommitLog != null) {
+      var testResult = assertCommitEntries(
+          serverCommitLog, clientOneCommitLog, clientTwoCommitLog);
+      expect(testResult, true);
+    }
+  }, timeout: Timeout(Duration(minutes: 5)));
 }
 
 /// Reads the message from [isolateResponseQueue] and returns
@@ -329,12 +330,20 @@ Future<dynamic> _getServerCommitEntries() async {
             .credentialsMap[currentAtSign]![TestConstants.PKAM_PRIVATE_KEY]
         ..isLocalStoreRequired = false
         ..rootDomain = ConfigUtil.getYaml()['root_server']['url']);
-  var serverCommitLogResponse = await atClientManager.atClient
+  var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
-      ?.executeCommand('stats:15\n', auth: true);
-  var serverCommitLogMap = jsonDecode(
-      jsonDecode(serverCommitLogResponse!.replaceAll('data:', ''))[0]['value']);
-  return serverCommitLogMap;
+      ?.executeCommand('info:brief\n');
+  infoResponse = infoResponse?.replaceAll('data:', '');
+  var serverVersion = await jsonDecode(infoResponse!)['version'];
+  if (Version.parse(serverVersion.split('+')[0]) >= Version(3, 0, 32)) {
+    var serverCommitLogResponse = await atClientManager.atClient
+        .getRemoteSecondary()
+        ?.executeCommand('stats:15\n', auth: true);
+    var serverCommitLogMap = jsonDecode(
+        jsonDecode(serverCommitLogResponse!.replaceAll('data:', ''))[0]
+            ['value']);
+    return serverCommitLogMap;
+  }
 }
 
 Future<Map<String, Map<String, dynamic>>> _getLocalCommitEntries(
