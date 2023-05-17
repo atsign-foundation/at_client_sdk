@@ -9,8 +9,8 @@ class AtJsonCollectionModel extends AtCollectionModel {
   late Map<String, dynamic> jsonModel;
 
   @override
-  fromJson(String jsonObject) {
-    jsonModel = jsonDecode(jsonObject);
+  fromJson(Map<String, dynamic> jsonObject) {
+    jsonModel = jsonObject;
   }
 
   @override

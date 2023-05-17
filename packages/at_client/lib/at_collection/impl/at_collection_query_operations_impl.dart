@@ -53,9 +53,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         }
 
         T model = collectionModelFactory.create();
-        model.fromJson(atValue.value);
-        model.id = atValueJson['id'];
-        model.collectionName = atValueJson['collectionName'];
+        _populateModel(model, atValueJson, atKey);
         modelList.add(model);
       } catch (e) {
         _logger.severe('failed to get value of ${atKey.key}');
@@ -87,10 +85,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
       AtValue atValue = await getAtClient().get(atKey);
       var atValueJson = jsonDecode(atValue.value);
       T model = collectionModelFactory.create();
-      model.fromJson(atValue.value);
-      model.id = atValueJson['id'];
-      model.collectionName = atValueJson['collectionName'];
-      model.namespace = CollectionUtil.getNamespaceFromKey(atKey.toString());
+      _populateModel(model, jsonDecode(atValue.value), atKey);
       return model;
     } catch (e) {
       _logger.severe('failed to get value of ${atKey.key} $e');
@@ -177,10 +172,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
           continue;
         }
 
-        model.fromJson(atValue.value);
-        model.id = atValueJson['id'];
-        model.collectionName = atValueJson['collectionName'];
-        model.namespace = CollectionUtil.getNamespaceFromKey(atKey.toString());
+        _populateModel(model, atValueJson, atKey);
         model.sharedByAtSign = atKey.sharedBy!;
         modelList.add(model);
       } catch (e) {
@@ -190,4 +182,13 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
 
     return modelList;
   }
+
+  void _populateModel(AtCollectionModel model, Map<String, dynamic> atValueJson, AtKey atKey) {
+    model.id = atValueJson['id'];
+    model.collectionName = atValueJson['collectionName'];
+    model.namespace = CollectionUtil.getNamespaceFromKey(atKey.toString());
+    model.fromJson(atValueJson);
+  }
 }
+
+
