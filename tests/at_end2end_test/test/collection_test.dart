@@ -34,9 +34,8 @@ class Preference extends AtCollectionModel {
   Map<String, dynamic>? preference;
 
   @override
-  fromJson(String jsonObject) {
-    var json = jsonDecode(jsonObject);
-    preference = json;
+  fromJson(Map<String, dynamic> jsonObject) {
+    preference = jsonObject;
   }
 
   @override
@@ -58,10 +57,9 @@ class Contact extends AtCollectionModel {
   String? nickname;
 
   @override
-  fromJson(String jsonObject) {
-    var json = jsonDecode(jsonObject);
-    atSign = json['atSign'];
-    nickname = json['nickname'];
+  fromJson(Map<String, dynamic> jsonObject) {
+    atSign = jsonObject['atSign'];
+    nickname = jsonObject['nickname'];
   }
 
   @override
@@ -97,9 +95,8 @@ class Phone extends AtCollectionModel {
   String? phoneNumber;
 
   @override
-  void fromJson(String jsonEncoded) {
-    var json = jsonDecode(jsonEncoded);
-    phoneNumber = json['phoneNumber'];
+  void fromJson(Map<String, dynamic> jsonModel) {
+    phoneNumber = jsonModel['phoneNumber'];
   }
 
   @override
@@ -141,8 +138,7 @@ class A extends AtCollectionModel {
   }
 
   @override
-  void fromJson(String jsonEncoded) {
-    var json = jsonDecode(jsonEncoded);
+  void fromJson(Map<String, dynamic> json) {
     a = json['a'];
   }
 
@@ -185,8 +181,7 @@ class B extends AtCollectionModel {
   }
 
   @override
-  void fromJson(String jsonEncoded) {
-    var json = jsonDecode(jsonEncoded);
+  void fromJson(Map<String, dynamic> json) {
     b = json['b'];
   }
 

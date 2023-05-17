@@ -162,7 +162,7 @@ class AtCollectionModelOperationsImpl
   }
 
   @override
-  fromJson(String jsonObject) {
+  fromJson(Map<String, dynamic> jsonObject) {
     return atCollectionModel.fromJson(jsonObject);
   }
 

@@ -119,7 +119,7 @@ abstract class AtCollectionModelOperations {
   /// ```
   ///
   /// [fromJson] will be internally used by [getById], [getAll] methods
-  fromJson(String jsonObject);
+  fromJson(Map<String, dynamic> jsonObject);
 }
 
 /// Contains query methods on [AtCollectionModel]
