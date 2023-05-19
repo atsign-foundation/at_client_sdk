@@ -73,7 +73,7 @@ jobs:
       # Run unit tests
       - name: Run at_client_mobile unit tests, with code coverage measurement
         working-directory: packages/at_client_mobile
-        run: flutter test --concurrency=1 --coverage="coverage"
+        run: flutter test --concurrency=1 --coverage
 
       - name: Convert at_client_mobile coverage to LCOV format
         working-directory: packages/at_client_mobile
