@@ -123,7 +123,7 @@ class AtClientService {
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
-        
+
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
@@ -131,7 +131,7 @@ class AtClientService {
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
-    
+
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = 'publickey'
       ..isPublic = true
