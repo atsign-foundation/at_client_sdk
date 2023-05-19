@@ -123,20 +123,30 @@ class AtClientService {
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
+        
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
+
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
+    
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = 'publickey'
       ..isPublic = true
       ..sharedBy = atSign
-      ..value = encryptPublicKey;
+      ..value = encryptPublicKey
+      ..metadata.ttr = -1;
+
+    void updateBUilder(){
+      return;
+    }
+
     await _atClient!
         .getLocalSecondary()!
         .executeVerb(updateBuilder, sync: true);
+
     await _atClient!
         .getLocalSecondary()!
         .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
