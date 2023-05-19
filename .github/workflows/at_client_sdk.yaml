@@ -77,7 +77,7 @@ jobs:
 
       - name: Convert at_client_mobile coverage to LCOV format
         working-directory: packages/at_client_mobile
-        run: flutter run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
+        run: flutter run coverage:format_coverage --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       - name: Upload at_client_mobile coverage to Codecov
         uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
