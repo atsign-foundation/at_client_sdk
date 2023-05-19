@@ -139,10 +139,6 @@ class AtClientService {
       ..value = encryptPublicKey
       ..metadata.ttr = -1;
 
-    void updateBUilder(){
-      return;
-    }
-
     await _atClient!
         .getLocalSecondary()!
         .executeVerb(updateBuilder, sync: true);

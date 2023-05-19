@@ -309,8 +309,7 @@ void main() {
         return 'data:1';
       });
 
-      var onboardResult =
-          await atClientService.onboard(atClientPreference: atClientPreference);
+      await atClientService.onboard(atClientPreference: atClientPreference);
       expect(ttrOfPublicKeyFromUpdateVerbBuilder, -1);
       });
 
