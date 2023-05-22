@@ -108,6 +108,13 @@ void main() {
         print('UpdateVerbBuilder : ${builder.buildCommand()}');
         return 'data:10';
       });
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: isA<UpdateVerbBuilder>()),
+          sync: false)).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0];
+        print('UpdateVerbBuilder : ${builder.buildCommand()}');
+        return 'data:10';
+      });
     });
 
     group('Test encryption for self', () {
