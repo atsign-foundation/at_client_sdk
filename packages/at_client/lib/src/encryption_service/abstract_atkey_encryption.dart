@@ -70,12 +70,13 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       encryptedSharedKey = await _getMyEncryptedCopyOfSharedSymmetricKey(
           _atClient.getLocalSecondary()!, atKey);
     } on KeyNotFoundException {
-      _logger.info(
-          'Encrypted shared key for ${atKey.sharedBy} not found in local storage. Fetching from atServer');
+      encryptedSharedKey = null;
     }
     try {
       /// If not found in local storage, look in atServer
       if (encryptedSharedKey.isNull || encryptedSharedKey == 'data:null') {
+        _logger.info(
+            'Encrypted shared key for ${atKey.sharedBy} not found in local storage. Fetching from atServer');
         encryptedSharedKey = await _getMyEncryptedCopyOfSharedSymmetricKey(
             _atClient.getRemoteSecondary()!, atKey);
         if (encryptedSharedKey != null && encryptedSharedKey != 'data:null') {
@@ -182,25 +183,55 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     return newSymmetricKeyBase64;
   }
 
-  /// - Verifies that 'their' copy is in local storage
-  /// - If not in local, save to atServer, then save to local
+  /// - Verifies that 'their' copy is where it should be
+  /// - Check if encrypted copy exists in local storage
+  /// - If not in local storage, check atServer
+  /// - If in atServer, save to local storage
+  /// - If not in atServer
+  ///   - (a) encrypt the unencrypted copy with their public key
+  ///   - (b) save encrypted copy to atServer
+  ///   - (c) save encrypted copy to local storage, and return
   Future<String> verifyTheirCopyOfSharedSymmetricKey(
       AtKey atKey, String symmetricKeyBase64) async {
-    /// Look first in local storage
+
+    /// - Check if encrypted copy exists in local storage
     String? theirEncryptedCopy =
         await _getTheirEncryptedCopyOfSharedSymmetricKey(
             _atClient.getLocalSecondary()!, atKey);
-
+    // Found it in local storage. Return it.
     if (theirEncryptedCopy != null) {
       return theirEncryptedCopy;
     }
 
-    // TODO Not in local?
+    /// - If not in local storage, check atServer
     _logger.info(
-        "'Their' copy of shared symmetric key for ${atKey.sharedWith} not found in local storage");
-    // (1) encrypt it with their public key
+        "'Their' copy of shared symmetric key for ${atKey.sharedWith}"
+            " not found in local storage - will check atServer");
+    theirEncryptedCopy = await _getTheirEncryptedCopyOfSharedSymmetricKey(
+        _atClient.getRemoteSecondary()!, atKey);
+
+    /// - If in atServer, save to local storage and return
+    if (theirEncryptedCopy != null) {
+      _logger.info(
+          "Found 'their' copy of shared symmetric key for ${atKey.sharedWith}"
+              " in atServer - saving to local storage");
+      await storeTheirCopyOfEncryptedSharedKeyToSecondary(atKey, theirEncryptedCopy,
+          secondary: _atClient.getLocalSecondary()!);
+
+      return theirEncryptedCopy;
+    }
+
+    /// - If not in atServer
+    ///   - (a) encrypt the unencrypted copy with their public key
+    ///         (i) Fetch their public key
+    ///         (ii) Encrypt the symmetric key with their public key
+    ///   - (b) save encrypted copy to atServer
+    ///   - (c) save encrypted copy to local storage and return
+
+
+    ///   - (a) encrypt the unencrypted copy with their public key
+    ///         (i) Fetch their public key
     late String sharedWithPublicKey;
-    // Fetch the encryption public key of the sharedWith atSign
     try {
       sharedWithPublicKey = await _getSharedWithPublicKey(atKey);
     } on AtPublicKeyNotFoundException catch (e) {
@@ -208,20 +239,20 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
           Intent.shareData, ExceptionScenario.encryptionFailed, e.message));
       rethrow;
     }
-    // Encrypt shared key with public key of sharedWith atSign.
+    ///         (ii) Encrypt the symmetric key with their public key
     theirEncryptedCopy =
         EncryptionUtil.encryptKey(symmetricKeyBase64, sharedWithPublicKey);
 
-    // (2) save to atServer
+    ///   - (b) save encrypted copy to atServer
     _logger.info(
         "Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to atServer");
-    await updateEncryptedSharedKeyToSecondary(atKey, theirEncryptedCopy,
+    await storeTheirCopyOfEncryptedSharedKeyToSecondary(atKey, theirEncryptedCopy,
         secondary: _atClient.getRemoteSecondary()!);
 
-    // (3) save to local
+    ///   - (c) save encrypted copy to local storage and return
     _logger.info(
         "Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to local storage");
-    await updateEncryptedSharedKeyToSecondary(atKey, theirEncryptedCopy,
+    await storeTheirCopyOfEncryptedSharedKeyToSecondary(atKey, theirEncryptedCopy,
         secondary: _atClient.getLocalSecondary()!);
 
     return theirEncryptedCopy;
@@ -327,7 +358,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     return theirCopy;
   }
 
-  Future<String?> updateEncryptedSharedKeyToSecondary(
+  Future<String?> storeTheirCopyOfEncryptedSharedKeyToSecondary(
       AtKey atKey, String encryptedSharedKeyValue,
       {Secondary? secondary}) async {
     secondary ??= _atClient.getLocalSecondary()!;

@@ -1,4 +1,5 @@
 ## 3.0.60
+- fix: ensure key exchange functions properly when no sync service is being used
 - feat: Add `useRemoteAtServer` to PutRequestOptions. When set, the update
   request will be sent directly to the remote atServer
 - feat: Introduce DeleteRequestOptions
@@ -7,7 +8,8 @@
     request will be sent directly to the remote atServer
 ## 3.0.59
 - fix: Sync running into infinite loop when an invalid key is present in the entries to sync into client
-- fix: Redundant logs generated for an internal key[lastReceivedNotification] while sending notifications
+- fix: Redundant logs generated for an internal key (lastReceivedNotification)
+  while sending notifications
 - chore: Reduced log_level of AtKey lower case enforcement message from INFO to FINER
 - feat: Introduce clientId, appName, appVersion and platform to distinguish requests from several clients in server logs.
 ## 3.0.58
