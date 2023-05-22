@@ -140,7 +140,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   ///   [getMyCopyOfSharedSymmetricKey] again and return that value
   @visibleForTesting
   Future<String> createMyCopyOfSharedSymmetricKey(AtKey atKey) async {
-    _logger.info("Creating new shared symmetric key as ${atKey.sharedBy} for ${atKey.sharedWith}");
+    _logger.info(
+        "Creating new shared symmetric key as ${atKey.sharedBy} for ${atKey.sharedWith}");
     // Fetch our encryption public key
     String? currentAtSignEncryptionPublicKey;
     try {
@@ -195,7 +196,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
 
     // TODO Not in local?
-    _logger.info("'Their' copy of shared symmetric key for ${atKey.sharedWith} not found in local storage");
+    _logger.info(
+        "'Their' copy of shared symmetric key for ${atKey.sharedWith} not found in local storage");
     // (1) encrypt it with their public key
     late String sharedWithPublicKey;
     // Fetch the encryption public key of the sharedWith atSign
@@ -211,12 +213,14 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         EncryptionUtil.encryptKey(symmetricKeyBase64, sharedWithPublicKey);
 
     // (2) save to atServer
-    _logger.info("Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to atServer");
+    _logger.info(
+        "Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to atServer");
     await updateEncryptedSharedKeyToSecondary(atKey, theirEncryptedCopy,
         secondary: _atClient.getRemoteSecondary()!);
 
     // (3) save to local
-    _logger.info("Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to local storage");
+    _logger.info(
+        "Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to local storage");
     await updateEncryptedSharedKeyToSecondary(atKey, theirEncryptedCopy,
         secondary: _atClient.getLocalSecondary()!);
 
