@@ -289,7 +289,18 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..atKey =
           '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
       ..sharedBy = atKey.sharedBy;
-    return await secondary.executeVerb(llookupVerbBuilder);
+    String? myCopy;
+
+    try {
+      myCopy = await secondary.executeVerb(llookupVerbBuilder);
+    } on KeyNotFoundException catch (ignore) {}
+    if (myCopy == 'data:null') {
+      myCopy = null;
+    }
+    if (myCopy !=null && myCopy.startsWith('data:')) {
+      myCopy = myCopy.replaceFirst('data:', '');
+    }
+    return myCopy;
   }
 
   /// Gets the encrypted shared key from the given secondary instance - Local Secondary or Remote Secondary
@@ -308,6 +319,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     } on KeyNotFoundException catch (ignore) {}
     if (theirCopy == 'data:null') {
       theirCopy = null;
+    }
+    if (theirCopy !=null && theirCopy.startsWith('data:')) {
+      theirCopy = theirCopy.replaceFirst('data:', '');
     }
     return theirCopy;
   }
