@@ -15,7 +15,7 @@ void main() async {
   var uuid = Uuid();
 
   setUpAll(() async {
-    AtSignLogger.root_level = 'finer';
+    AtSignLogger.root_level = 'info';
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 
