@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
@@ -7,48 +5,33 @@ import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 
 import 'package:test/test.dart';
-import 'package:version/version.dart';
+import 'package:uuid/uuid.dart';
+import 'package:at_utils/at_logger.dart';
 
 void main() async {
-  late AtClient clientOne;
-  late AtClient clientTwo;
-  late String atSignOne;
-  late String atSignTwo;
+  late String sharedByAtSign;
+  late String sharedWithAtSign;
   final namespace = 'wavi';
+  var uuid = Uuid();
 
   setUpAll(() async {
-    atSignOne = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atSignTwo = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    AtSignLogger.root_level = 'finer';
+    sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(atSignOne, namespace);
+        .testInitializer(sharedByAtSign, namespace);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(atSignTwo, namespace);
+        .testInitializer(sharedWithAtSign, namespace);
   });
-
-  Future<Version> getVersion(AtClient atClient, Version ifNull) async {
-    var infoResult =
-        await atClient.getRemoteSecondary()!.executeCommand('info\n');
-
-    expect(infoResult, startsWith('data:{'));
-    infoResult = infoResult!.replaceAll('data:', '');
-    var versionString = jsonDecode(infoResult)['version'];
-    if (versionString == null) {
-      return ifNull;
-    } else {
-      // Since secondary version has gha<number> appended, remove the gha number from version
-      // Hence using split.
-      return Version.parse(versionString.split('+')[0]);
-    }
-  }
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
     //  reset the autoNotify to true
-    clientOne = (await AtClientManager.getInstance().setCurrentAtSign(atSignOne,
-            namespace, TestPreferences.getInstance().getPreference(atSignOne)))
-        .atClient;
+    await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
+        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
 
-    var configResult = await clientOne
+    var configResult = await AtClientManager.getInstance()
+        .atClient
         .getRemoteSecondary()!
         .executeCommand('config:set:autoNotify=$autoNotify\n', auth: true);
     if (configResult == null) {
@@ -58,119 +41,138 @@ void main() async {
   }
 
   /// The purpose of this test is to verify the following:
-  /// 1. Share a key from atsign_1 to atsign_2 with ttr, with autoNotify:true
-  /// 2. lookup from atsign_2 returns the correct value
-  /// 3.  Set the autoNotify to false using the config verb
+  /// 1. Share a key from sharedByAtSign to sharedWithAtSign with ttr, with autoNotify:true
+  /// 2. Perform lookup from sharedWithAtSign  and assert on value - initial value should be returned.
+  /// 3. Set the autoNotify to false using the config verb
   /// 4. Update the existing key to a new value
   /// 4. lookup with bypass_cache set to true should return the updated value
   /// 5. lookup with bypass_cache set to false should return the old value
-  test('bypass cache test', () async {
-    var verificationKey = AtKey()
-      ..key = 'verificationNumber'
-      ..sharedWith = atSignTwo
-      ..metadata = (Metadata()..ttr = 1000);
-    var initialValue = '0873';
+  test('A test to verify bypassCache', () async {
+    int uniqueId = uuid.v4().hashCode;
+    String keyEntity = 'test_bypass_cached_key-$uniqueId';
+    String initialValue = 'initial_value-$uniqueId';
+    String updatedValue = 'updated_value-$uniqueId';
+
+    AtKey testByPassCacheAtKey = AtKey()
+      ..key = keyEntity
+      ..sharedWith = sharedWithAtSign
+      ..namespace = namespace
+      ..sharedBy = sharedByAtSign
+      ..metadata = (Metadata()
+        ..ttr = 1000
+        ..ttl = 900000);
 
     // Ensure autoNotify is set to true to begin with
     await setAtSignOneAutoNotify(true);
 
-    // As atSignOne: Put the initial value
-    clientOne = (await AtClientManager.getInstance().setCurrentAtSign(atSignOne,
-            namespace, TestPreferences.getInstance().getPreference(atSignOne)))
-        .atClient;
-    var putResult = await clientOne.put(verificationKey, initialValue);
+    // Set sharedBy atSign as currentAtSign and Put the initial value
+    await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
+        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+
+    var putResult = await AtClientManager.getInstance()
+        .atClient
+        .put(testByPassCacheAtKey, initialValue);
     expect(putResult, true);
     // Sync the data to the remote secondary
-    await E2ESyncService.getInstance().syncData(clientOne.syncService);
+    await E2ESyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()..key = testByPassCacheAtKey.toString());
 
     // Give it a couple of seconds to propagate from one atServer to the other
     await Future.delayed(Duration(seconds: 2));
 
-    // As atSignTwo: do a sync, and do the get, to verify we have the initial value
-    clientTwo = (await AtClientManager.getInstance().setCurrentAtSign(atSignTwo,
-            namespace, TestPreferences.getInstance().getPreference(atSignTwo)))
-        .atClient;
-    await E2ESyncService.getInstance().syncData(clientTwo.syncService);
+    // Switch to sharedWithAtSign
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign,
+        namespace,
+        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+
+    var cachedTestByPassCacheAtKey = AtKey()
+      ..key = keyEntity
+      ..sharedWith = sharedWithAtSign
+      ..namespace = namespace
+      ..sharedBy = sharedByAtSign
+      ..metadata = (Metadata()..isCached = true);
+    await E2ESyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()
+          ..key = cachedTestByPassCacheAtKey.toString());
+
     var getKey = AtKey()
-      ..key = 'verificationNumber'
-      ..sharedBy = atSignOne;
-    var getResult = await clientTwo.get(getKey);
+      ..key = keyEntity
+      ..sharedBy = sharedByAtSign;
+    var getResult = await AtClientManager.getInstance().atClient.get(getKey);
     expect(getResult.value, initialValue);
     // Since the put request has a ttr in metadata, a cached key will be created.
     // When a cached key is available, value will be fetched from a cached key.
     // Hence isCached should be true.
     expect(getResult.metadata!.isCached, true);
-    print('get Result is $getResult');
 
-    // As atSignOne
-    clientOne = (await AtClientManager.getInstance().setCurrentAtSign(atSignOne,
-            namespace, TestPreferences.getInstance().getPreference(atSignOne)))
-        .atClient;
+    // Switch back to sharedByAtSign to update the value of the key.
+    await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
+        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+
     try {
-      // Set autoNotify to false so that the update doesn't propagate to atSignTwo automatically
+      // Set autoNotify to false so that the update doesn't propagate to sharedWith AtSign automatically
       await setAtSignOneAutoNotify(false);
 
-      // Put a new value
-      var verificationKeyNew = AtKey()
-        ..key = 'verificationNumber'
-        ..sharedWith = atSignTwo;
-      var newValue = '9900';
-      var newPutResult = await clientOne.put(verificationKeyNew, newValue);
+      var newPutResult = await AtClientManager.getInstance()
+          .atClient
+          .put(testByPassCacheAtKey, updatedValue);
       expect(newPutResult, true);
-
       // Sync the data to the remote secondary
-      await E2ESyncService.getInstance().syncData(clientOne.syncService);
+      await E2ESyncService.getInstance().syncData(
+          AtClientManager.getInstance().atClient.syncService,
+          syncOptions: SyncOptions()..key = testByPassCacheAtKey.toString());
 
       // As atSignTwo
-      clientTwo = (await AtClientManager.getInstance().setCurrentAtSign(
-              atSignTwo,
-              namespace,
-              TestPreferences.getInstance().getPreference(atSignTwo)))
-          .atClient;
+      await AtClientManager.getInstance().setCurrentAtSign(
+          sharedWithAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(sharedWithAtSign));
 
       // Sync - after this we still should have the old value
-      await E2ESyncService.getInstance().syncData(clientTwo.syncService);
+      await E2ESyncService.getInstance()
+          .syncData(AtClientManager.getInstance().atClient.syncService);
 
-      // get result with bypassCache set to false
-      // should still return the initial value
-      var getKey = AtKey()
-        ..key = 'verificationNumber'
-        ..sharedBy = atSignOne;
-      getResult = await clientTwo.get(getKey,
+      // Get result with bypassCache set to false
+      // Since bypassCache is set to false, the value from the returned from the
+      // cached key. So the initial value should be returned.
+      getKey = AtKey()
+        ..key = keyEntity
+        ..sharedBy = sharedByAtSign;
+      getResult = await AtClientManager.getInstance().atClient.get(getKey,
           getRequestOptions: GetRequestOptions()..bypassCache = false);
-      print('get result with bypass cache false $getResult');
       expect(getResult.value, initialValue);
       expect(getResult.metadata!.isCached, true);
 
-      // get result with bypassCache set to true
-      // should return the new value
+      // Get result with bypassCache set to true
+      // Since bypassCache is set to true, a lookup should be performed to the
+      // sharedBy AtSign and updated value should be fetched.
       getKey = AtKey()
-        ..key = 'verificationNumber'
-        ..sharedBy = atSignOne;
-      getResult = await clientTwo.get(getKey,
+        ..key = keyEntity
+        ..sharedBy = sharedByAtSign;
+      getResult = await AtClientManager.getInstance().atClient.get(getKey,
           getRequestOptions: GetRequestOptions()..bypassCache = true);
-      print('get result with bypass cache true $getResult');
-      expect(getResult.value, newValue);
-      // Though a cached key is available, when bypassCache is set to true,
-      // the value will be fetched from the sharedBy atSign secondary server; skipping
-      // the cached key. Hence isCached is false.
+      expect(getResult.value, updatedValue);
       expect(getResult.metadata!.isCached, false);
-
       // Sync - after this we should now have the new value
-      await E2ESyncService.getInstance().syncData(clientTwo.syncService);
+      await E2ESyncService.getInstance().syncData(
+          AtClientManager.getInstance().atClient.syncService,
+          syncOptions: SyncOptions()
+            ..key = cachedTestByPassCacheAtKey.toString());
 
-      // get Result with byPassCache set to false again
+      // Get Result with byPassCache set to false again
       // should also now return the new value, since cached value will have been updated with the
       // results of the remote lookup, and the cached value will have been synced to the client
-      // Note: This will only work on server versions which have the fix, from version 3.0.29 onwards
-      Version serverTwoVersion = await getVersion(clientTwo, Version(3, 0, 29));
-      if (serverTwoVersion >= Version(3, 0, 29)) {
-        var getResultWithFalse = await clientTwo.get(getKey,
-            getRequestOptions: GetRequestOptions()..bypassCache = false);
-        print('get result with bypass cache false $getResultWithFalse');
-        expect(getResultWithFalse.value, newValue);
-        expect(getResult.metadata!.isCached, false);
-      }
+      getKey = AtKey()
+        ..key = keyEntity
+        ..sharedBy = sharedByAtSign;
+      var getResultWithFalse = await AtClientManager.getInstance().atClient.get(
+          getKey,
+          getRequestOptions: GetRequestOptions()..bypassCache = false);
+      expect(getResultWithFalse.value, updatedValue);
+      expect(getResultWithFalse.metadata!.isCached, true);
     } finally {
       await setAtSignOneAutoNotify(true);
     }

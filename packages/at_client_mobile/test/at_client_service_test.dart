@@ -284,6 +284,35 @@ void main() {
           await atClientService.onboard(atClientPreference: atClientPreference);
       expect(onboardResult, true);
     });
+
+    test('A test to verify ttr is -1 when storing the public encryption key',
+        () async {
+      var atClientService = AtClientService();
+      int? ttrOfPublicKeyFromUpdateVerbBuilder;
+      atClientService.atLookupImpl = mockAtLookupImpl;
+      atClientService.keyChainManager = mockKeyChainManager;
+      atClientService.atClientManager = mockAtClientManager;
+
+      when(() => mockKeyChainManager.getPkamPrivateKey(any()))
+          .thenAnswer((_) => Future.value('dummy_private_key'));
+      when(() => mockKeyChainManager.getAtSign())
+          .thenAnswer((_) => Future.value(atSign));
+
+      when(() => mockAtLookupImpl.executeCommand(any()))
+          .thenAnswer((_) => Future.value('data:dummy_encryption_public_key'));
+      when(() => mockLocalSecondary.executeVerb(any(that: CustomVerbBuilder()),
+          sync: true)).thenAnswer((invocation) async {
+        var verbBuilder = invocation.positionalArguments[0];
+        if (verbBuilder is UpdateVerbBuilder &&
+            verbBuilder.atKeyObj.toString() == 'public:publickey$atSign') {
+          ttrOfPublicKeyFromUpdateVerbBuilder = verbBuilder.metadata.ttr;
+        }
+        return 'data:1';
+      });
+
+      await atClientService.onboard(atClientPreference: atClientPreference);
+      expect(ttrOfPublicKeyFromUpdateVerbBuilder, -1);
+    });
   });
 
   group('A group of negative tests to validate authenticate method', () {
