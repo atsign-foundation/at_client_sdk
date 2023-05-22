@@ -293,11 +293,12 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
     try {
       myCopy = await secondary.executeVerb(llookupVerbBuilder);
+      // ignore: unused_catch_clause, empty_catches
     } on KeyNotFoundException catch (ignore) {}
     if (myCopy == 'data:null') {
       myCopy = null;
     }
-    if (myCopy !=null && myCopy.startsWith('data:')) {
+    if (myCopy != null && myCopy.startsWith('data:')) {
       myCopy = myCopy.replaceFirst('data:', '');
     }
     return myCopy;
@@ -320,7 +321,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     if (theirCopy == 'data:null') {
       theirCopy = null;
     }
-    if (theirCopy !=null && theirCopy.startsWith('data:')) {
+    if (theirCopy != null && theirCopy.startsWith('data:')) {
       theirCopy = theirCopy.replaceFirst('data:', '');
     }
     return theirCopy;
