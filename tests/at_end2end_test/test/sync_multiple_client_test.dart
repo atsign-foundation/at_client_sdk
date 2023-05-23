@@ -15,6 +15,7 @@ import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:at_client/at_client.dart';
 import 'package:version/version.dart';
+import 'package:uuid/uuid.dart';
 
 /// The purpose of this test is to run multiple clients in Isolate and inject
 /// bulk data.
@@ -26,6 +27,7 @@ class ChildIsolatePreferences {
   late String hiveStoragePath;
   late String commitLogPath;
   late SendPort sendPort;
+  late List<String> localKeysList;
 }
 
 class IsolateAtClientResponse {
@@ -50,14 +52,6 @@ String namespace = 'wavi';
 bool isSyncCompleted = false;
 final _logger = AtSignLogger('Sync System Test');
 
-List<String> atKeyEntity = [
-  'country',
-  'phone',
-  'location',
-  'worknumber',
-  'city'
-];
-
 var isolateResponseQueue = Queue();
 
 var childIsolateSendPortMap = <ClientId, SendPort>{};
@@ -65,24 +59,33 @@ bool isClientOneCompleted = false;
 bool isClientTwoCompleted = false;
 
 void main() async {
-  AtSignLogger.root_level = 'finest';
   var mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
   SyncServiceImpl.syncRequestThreshold = 1;
   SyncServiceImpl.syncRequestTriggerInSeconds = 1;
   SyncServiceImpl.syncRunIntervalSeconds = 1;
   SyncServiceImpl.queueSize = 1;
+  String uniqueId = Uuid().v4().hashCode.toString();
+  List<String> atKeyEntityList = [
+    'country-$uniqueId',
+    'phone-$uniqueId',
+    'location-$uniqueId',
+    'worknumber-$uniqueId',
+    'city-$uniqueId'
+  ];
 
   var clientInitializationParameters = {
     'client1': ChildIsolatePreferences()
       ..clientId = ClientId.client1
       ..hiveStoragePath = 'test/hive/client'
       ..commitLogPath = 'test/hive/client/commit'
-      ..sendPort = mainIsolateReceivePort.sendPort,
+      ..sendPort = mainIsolateReceivePort.sendPort
+      ..localKeysList = atKeyEntityList,
     'client2': ChildIsolatePreferences()
       ..clientId = ClientId.client2
       ..hiveStoragePath = 'test/hive/client2'
       ..commitLogPath = 'test/hive/client2/commit'
       ..sendPort = mainIsolateReceivePort.sendPort
+      ..localKeysList = atKeyEntityList
   };
 
   test('A test to verify the commit log entries', () async {
@@ -136,12 +139,12 @@ void main() async {
 
     // Fetch the server commit log.
     _logger.info('Fetching Server commitLog...');
-    var serverCommitLog = await _getServerCommitEntries();
+    var serverCommitLog = await _getServerCommitEntries(uniqueId);
     _logger.info('Server commit log: $serverCommitLog');
 
     if (serverCommitLog != null) {
-      var testResult = assertCommitEntries(
-          serverCommitLog, clientOneCommitLog, clientTwoCommitLog);
+      var testResult = assertCommitEntries(atKeyEntityList, serverCommitLog,
+          clientOneCommitLog, clientTwoCommitLog);
       expect(testResult, true);
     }
   }, timeout: Timeout(Duration(minutes: 5)));
@@ -186,10 +189,10 @@ void mainIsolateMessageListener(data) {
 }
 
 Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
-  AtSignLogger.root_level = 'finer';
   int numberOfRepetitions = 5;
   int counter = 0;
   var random = Random();
+
   var clientReceivePort = ReceivePort(clientParameters.clientId.name);
   // Send isolate's sendPort to mainIsolate for communication
   clientParameters.sendPort.send(IsolateAtClientResponse(
@@ -201,7 +204,7 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
         .info('${clientParameters.clientId}: RCVD from main isolate: $message');
     if (message is String && message == 'localCommitLog') {
       Map<String, Map<String, dynamic>> localCommitLogMap =
-          await _getLocalCommitEntries(
+          await _getLocalCommitEntries(clientParameters.localKeysList,
               clientId: clientParameters.clientId.name);
       _logger.info(
           '${clientParameters.clientId}SENT: LocalCommitLog: $localCommitLogMap');
@@ -228,8 +231,14 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
 
   // Execute Update/delete operation on the client
   for (counter = 0; counter < numberOfRepetitions; counter++) {
+    AtKey atKey = (AtKey.shared(
+            clientParameters.localKeysList[random.nextInt(5)],
+            namespace: namespace,
+            sharedBy: currentAtSign)
+          ..sharedWith(sharedWithAtSign))
+        .build();
     _logger.info('(${clientParameters.clientId}) Counter: $counter');
-    await updateDeleteKey(random.nextInt(3), random.nextInt(5),
+    await updateDeleteKey(atKey, random.nextInt(3),
         clientId: clientParameters.clientId.name);
     await Future.delayed(Duration(milliseconds: 100));
   }
@@ -294,34 +303,23 @@ Future<void> waitForSyncToComplete({String clientId = ''}) async {
   await Future.delayed(Duration(seconds: 60));
 }
 
-Future<void> updateDeleteKey(int randomValueForOperation, int randomValueForKey,
+Future<void> updateDeleteKey(AtKey atKey, int randomValueForOperation,
     {String clientId = ''}) async {
   switch (randomValueForOperation) {
     case 1:
-      _logger
-          .info('($clientId) Key to delete: ${atKeyEntity[randomValueForKey]}');
-      await atClientManager.atClient.delete((AtKey.shared(
-              atKeyEntity[randomValueForKey],
-              namespace: namespace,
-              sharedBy: currentAtSign)
-            ..sharedWith(sharedWithAtSign))
-          .build());
+      _logger.info('($clientId) Key to delete: ${atKey.toString()}');
+      await atClientManager.atClient.delete(atKey);
       break;
     case 2:
     default:
-      _logger
-          .info('($clientId) Key to update: ${atKeyEntity[randomValueForKey]}');
-      await atClientManager.atClient.put(
-          (AtKey.shared(atKeyEntity[randomValueForKey],
-                  namespace: namespace, sharedBy: currentAtSign)
-                ..sharedWith(sharedWithAtSign))
-              .build(),
-          randomValueForKey.toString());
+      _logger.info('($clientId) Key to update: ${atKey.toString()}');
+      await atClientManager.atClient
+          .put(atKey, '${clientId.hashCode}-${atKey.hashCode}');
       break;
   }
 }
 
-Future<dynamic> _getServerCommitEntries() async {
+Future<dynamic> _getServerCommitEntries(String regex) async {
   atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
       currentAtSign,
       namespace,
@@ -338,7 +336,7 @@ Future<dynamic> _getServerCommitEntries() async {
   if (Version.parse(serverVersion.split('+')[0]) >= Version(3, 0, 32)) {
     var serverCommitLogResponse = await atClientManager.atClient
         .getRemoteSecondary()
-        ?.executeCommand('stats:15\n', auth: true);
+        ?.executeCommand('stats:15:$regex\n', auth: true);
     var serverCommitLogMap = jsonDecode(
         jsonDecode(serverCommitLogResponse!.replaceAll('data:', ''))[0]
             ['value']);
@@ -347,6 +345,7 @@ Future<dynamic> _getServerCommitEntries() async {
 }
 
 Future<Map<String, Map<String, dynamic>>> _getLocalCommitEntries(
+    List<String> atKeyList,
     {String clientId = ''}) async {
   var commitLog =
       await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);
@@ -357,7 +356,7 @@ Future<Map<String, Map<String, dynamic>>> _getLocalCommitEntries(
     if (mapEntry.value.commitId == null) {
       continue;
     }
-    if (atKeyEntity.contains(AtKey.fromString(mapEntry.value.atKey!).key)) {
+    if (atKeyList.contains(AtKey.fromString(mapEntry.value.atKey!).key)) {
       _logger.finest(
           '($clientId) Commit-Entry from local: Key: ${mapEntry.value.atKey!}, CommitId: ${mapEntry.value.commitId!}, CommitOp. ${mapEntry.value.operation.toString()}');
       if (commitLogEntriesMap.containsKey(mapEntry.value.atKey) &&
@@ -378,12 +377,13 @@ Future<Map<String, Map<String, dynamic>>> _getLocalCommitEntries(
 }
 
 bool assertCommitEntries(
+    List<String> atKeyList,
     serverCommitLogMap,
     Map<String, Map<String, dynamic>> clientOneCommitLog,
     Map<String, Map<String, dynamic>> clientTwoCommitLog) {
   for (MapEntry<String, Map<String, dynamic>> mapEntry
       in clientOneCommitLog.entries) {
-    if (!(atKeyEntity.contains(AtKey.fromString(mapEntry.key).key))) {
+    if (!(atKeyList.contains(AtKey.fromString(mapEntry.key).key))) {
       continue;
     }
     // Compare server commit id with both client's commit log
