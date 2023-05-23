@@ -1,5 +1,6 @@
 ## 3.0.60
-- fix: ensure key exchange functions properly when no sync service is being used
+- fix: ensure key exchange functions properly when the sync service is not 
+  being used
 - feat: Add `useRemoteAtServer` to PutRequestOptions. When set, the update
   request will be sent directly to the remote atServer
 - feat: Introduce DeleteRequestOptions
