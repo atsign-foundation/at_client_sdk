@@ -1,6 +1,6 @@
 name: at_client_sdk
 
 packages:
-- packages/**
+- packages/*
 
-- tests/**
+- tests/*
