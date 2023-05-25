@@ -611,7 +611,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     List<CommitEntry> removeUncommittedEntriesList = [];
     for (var entry in uncommittedEntries) {
       String command;
-      // If someone updates cached keys locally, they should never be synced to the cloud
+      // The update on a cached key is prevented. The logic in "validatePutRequest"
+      // throws exception if a user tries to update a cached key.
+      // The below check is for the older data. The cached keys that are updated
+      // before the "validatePutRequest" is in-place.
       // However if they want to delete a cached key, they should be allowed to
       if (entry.atKey!.startsWith('cached:') &&
           entry.operation != CommitOp.DELETE) {
@@ -620,6 +623,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         removeUncommittedEntriesList.add(entry);
         continue;
       }
+      // For CommitOp.Update, _getCommand fetches the data from the local keystore to sync to the server.
+      // When getCommand is called for an entry where key is created/updated and then deleted,
+      // a KeyNotFoundException will be thrown because the data does not exist in the keystore.
       try {
         command = await _getCommand(entry);
       } on KeyNotFoundException {
