@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
@@ -8,27 +9,32 @@ import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
-
 import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
+  final atSign = '@alice🛠';
+  late AtClientManager atClientManager;
+  late MySyncProgressListener progressListener;
   var uniqueId = Uuid().v4();
-  test('notify updating of a key to sharedWith atSign - using await', () async {
-    final atSign = '@alice🛠';
+
+  setUp(() async {
     var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
-    final progressListener = MySyncProgressListener();
+    preference.syncBatchSize = 15;
+    atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atSign, 'wavi', preference);
+    progressListener = MySyncProgressListener();
     atClientManager.atClient.syncService.addProgressListener(progressListener);
-    final atClient = atClientManager.atClient;
     // To setup encryption keys
     await setEncryptionKeys(atSign, preference);
+  });
+
+  test('notify updating of a key to sharedWith atSign - using await', () async {
     // phone.me@alice🛠
     for (var i = 0; i < 5; i++) {
       var phoneKey = AtKey()..key = 'phone-$uniqueId-$i';
       var value = '$i';
-      await atClient.put(phoneKey, value);
+      await atClientManager.atClient.put(phoneKey, value);
     }
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
@@ -50,18 +56,9 @@ void main() {
   });
 
   test('delete of a key to sharedWith atSign - using await', () async {
-    final atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
-    final progressListener = MySyncProgressListener();
-    atClientManager.atClient.syncService.addProgressListener(progressListener);
-    final atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
     // phone.me@alice🛠
     var phoneKey = AtKey()..key = 'number-$uniqueId';
-    await atClient.delete(phoneKey);
+    await atClientManager.atClient.delete(phoneKey);
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
@@ -81,19 +78,10 @@ void main() {
   });
 
   test('Verifying keyname exists in key info list', () async {
-    final atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
-    final progressListener = MySyncProgressListener();
-    atClientManager.atClient.syncService.addProgressListener(progressListener);
-    final atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
     // username.wavi@alice🛠
     var usernameKey = AtKey()..key = 'username-$uniqueId';
     var value = 'alice123';
-    await atClient.put(usernameKey, value);
+    await atClientManager.atClient.put(usernameKey, value);
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
@@ -113,19 +101,10 @@ void main() {
   });
 
   test('Verifying sync progress - local ahead', () async {
-    final atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
-    final progressListener = MySyncProgressListener();
-    atClientManager.atClient.syncService.addProgressListener(progressListener);
-    final atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
     // twitter.me@alice🛠
     var twitterKey = AtKey()..key = 'twitter-$uniqueId';
     var value = 'alice_A';
-    await atClient.put(twitterKey, value);
+    await atClientManager.atClient.put(twitterKey, value);
 
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
@@ -146,15 +125,6 @@ void main() {
   });
 
   test('Verifying sync progress - server ahead', () async {
-    final atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
-    final atClient = atClientManager.atClient;
-    final progressListener = MySyncProgressListener();
-    atClientManager.atClient.syncService.addProgressListener(progressListener);
-    // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
     // username.me@alice🛠
     var value = 'alice_1231';
     var updateVerbBuilder = UpdateVerbBuilder()
@@ -162,8 +132,9 @@ void main() {
       ..sharedBy = atSign
       ..isPublic = true
       ..value = value;
-    var updateResponse =
-        await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
+    var updateResponse = await atClientManager.atClient
+        .getRemoteSecondary()!
+        .executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
 
     await FunctionalTestSyncService.getInstance()
@@ -192,7 +163,70 @@ void main() {
           .removeProgressListener(progressListener);
     }));
   });
-  tearDown(() async => await tearDownFunc());
+
+  test(
+      'A test to verify latest commit entry is updated when same key is updated and deleted',
+      () async {
+    var uniqueId = Uuid().v4();
+    final atSign = '@alice🛠';
+    final sharedWithAtSign = '@bob🛠';
+    String namespace = 'wavi';
+
+    AtKey firstAtKey = (AtKey.shared('firstKey-$uniqueId',
+            namespace: namespace, sharedBy: atSign)
+          ..sharedWith(sharedWithAtSign))
+        .build();
+    AtKey secondAtKey = (AtKey.shared('secondKey-$uniqueId',
+            namespace: namespace, sharedBy: atSign)
+          ..sharedWith(sharedWithAtSign))
+        .build();
+
+    await AtClientManager.getInstance().atClient.put(firstAtKey, 'value-1');
+    await AtClientManager.getInstance().atClient.put(secondAtKey, 'value-2');
+    await AtClientManager.getInstance().atClient.delete(firstAtKey);
+    await FunctionalTestSyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()..key = firstAtKey.toString());
+
+    progressListener.streamController.stream.listen((syncProgress) {
+      expect(syncProgress.syncStatus, SyncStatus.success);
+    });
+
+    // Get Commit Entries from server
+    var serverCommitEntries = await AtClientManager.getInstance()
+        .atClient
+        .getRemoteSecondary()
+        ?.executeCommand('stats:15:$uniqueId\n', auth: true);
+    var serverCommitLogMap = jsonDecode(
+        jsonDecode(serverCommitEntries!.replaceAll('data:', ''))[0]['value']);
+
+    //Get Commit Entries from local
+    var atCommitLog =
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    var localCommitEntries = await atCommitLog?.commitLogKeyStore.toMap();
+
+    for (var commitEntry in localCommitEntries!.values) {
+      if (commitEntry.atKey == firstAtKey.toString()) {
+        expect(
+            commitEntry.commitId, serverCommitLogMap[firstAtKey.toString()][0]);
+        expect(commitEntry.operation.name,
+            serverCommitLogMap[firstAtKey.toString()][1]);
+      }
+      if (commitEntry.atKey == secondAtKey.toString()) {
+        expect(commitEntry.commitId,
+            serverCommitLogMap[secondAtKey.toString()][0]);
+        expect(commitEntry.operation.name,
+            serverCommitLogMap[secondAtKey.toString()][1]);
+      }
+    }
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
+  });
+
+  tearDown(() async {
+    await progressListener.streamController.close();
+    await tearDownFunc();
+  });
 }
 
 class MySyncProgressListener extends SyncProgressListener {

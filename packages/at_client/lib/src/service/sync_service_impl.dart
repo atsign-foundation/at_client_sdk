@@ -10,7 +10,6 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/logger_util.dart';
 import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -609,6 +608,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       List<CommitEntry> uncommittedEntries) async {
     var batchRequests = <BatchRequest>[];
     var batchId = 1;
+    List<CommitEntry> removeUncommittedEntriesList = [];
     for (var entry in uncommittedEntries) {
       String command;
       // If someone updates cached keys locally, they should never be synced to the cloud
@@ -617,6 +617,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           entry.operation != CommitOp.DELETE) {
         _logger.finer(
             '${entry.atKey} is skipped. cached keys will not be synced to cloud secondary');
+        removeUncommittedEntriesList.add(entry);
         continue;
       }
       try {
@@ -624,6 +625,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       } on KeyNotFoundException {
         _logger.severe(
             '${entry.atKey} is not found in keystore. Skipping to entry to sync');
+        removeUncommittedEntriesList.add(entry);
         continue;
       }
       command = VerbUtil.replaceNewline(command);
@@ -632,6 +634,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       batchRequests.add(batchRequest);
       batchId++;
     }
+    // The commit-id's in the batch response are updated to the appropriate commit-entry
+    // in the uncommitted entries by iterating the uncommitted entries list.
+    // If an entry is skipped in the batch request, then size of batch response
+    // will be less than the size of uncommitted entries and so the commit-id gets
+    // updated against the wrong uncommitted entry.
+    // So, remove the commit entry from the uncommitted entries list.
+    for (CommitEntry commitEntry in removeUncommittedEntriesList) {
+      uncommittedEntries.remove(commitEntry);
+      // Removing the entry from the commit log keystore to prevent stale entries
+      await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
+    }
+    removeUncommittedEntriesList.clear();
     return batchRequests;
   }
 
