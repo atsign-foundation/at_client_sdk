@@ -268,11 +268,15 @@ class Monitor {
         'Authenticating the monitor connection: from result:$fromResponse');
     if (_preference.useAtChops) {
       _logger.finer('Using AtChops to do the PKAM signing');
-      var signingResult =
-          // ignore: deprecated_member_use
-          atChops!.signString(fromResponse, SigningKeyType.pkamSha256);
-      _logger.finer('Sending command pkam:${signingResult.result}');
-      await _monitorConnection!.write('pkam:${signingResult.result}\n');
+      final atSigningInput = AtSigningInput(fromResponse)
+        ..signingAlgoType = _preference.signingAlgoType
+        ..hashingAlgoType = _preference.hashingAlgoType
+        ..signingMode = AtSigningMode.pkam;
+      var signingResult = atChops!.sign(atSigningInput);
+      var pkamCommand =
+          'pkam:signingAlgo:${_preference.signingAlgoType.name}:hashingAlgo:${_preference.hashingAlgoType.name}:${signingResult.result}\n';
+      _logger.finer('Sending command $pkamCommand');
+      await _monitorConnection!.write(pkamCommand);
     } else {
       var key = RSAPrivateKey.fromString(_preference.privateKey!);
       var sha256signature =

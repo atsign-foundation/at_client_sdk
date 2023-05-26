@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
@@ -35,6 +36,10 @@ class MockOutboundConnection extends Mock implements OutboundConnection {}
 class MockMonitorOutboundConnectionFactory extends Mock
     implements MonitorOutboundConnectionFactory {}
 
+class MockAtChops extends Mock implements AtChops {}
+
+class FakeAtSigningInput extends Fake implements AtSigningInput {}
+
 /// Note: The test code here prioritizes brevity over isolation
 /// So while, right now, the tests are all passing despite sharing their mock objects, at some point
 /// we will add a test where that assumption doesn't hold any more, and the tests will start failing
@@ -47,6 +52,7 @@ void main() {
   OutboundConnection mockOutboundConnection = MockOutboundConnection();
   SecureSocket mockSocket = MockSecureSocket();
   MonitorPreference monitorPreference = MonitorPreference()..keepAlive = true;
+  AtChops mockAtChops = MockAtChops();
   late Function(dynamic data) socketOnDataFn;
   late Function() socketOnDoneFn;
   late Function(Exception e) socketOnErrorFn;
@@ -69,8 +75,9 @@ void main() {
     reset(mockSocket);
     reset(mockOutboundConnection);
     reset(mockMonitorOutboundConnectionFactory);
+    reset(mockAtChops);
     mockMonitorConnectivityChecker.shouldFail = false;
-
+    atClientPreference.useAtChops = false;
     when(() => mockRemoteSecondary.isAvailable()).thenAnswer((_) async => true);
     when(() => mockRemoteSecondary.findSecondaryUrl())
         .thenAnswer((_) async => fakeSecondaryUrl);
@@ -675,6 +682,33 @@ void main() {
       expect(
           () async => await monitor.getQueueResponse(maxWaitTimeInMillis: 10),
           throwsA(predicate((dynamic e) => e is AtClientException)));
+    });
+    group('A group of tests for monitor when useAtChops is true', () {
+      test('test monitor start when useAtChops is true', () async {
+        AtSigningResult mockSigningResult = AtSigningResult()
+          ..result = 'mock_signing_result';
+        atClientPreference.useAtChops = true;
+        registerFallbackValue(FakeAtSigningInput());
+        when(() => mockAtChops.sign(any()))
+            .thenAnswer((_) => mockSigningResult);
+        Monitor monitor = Monitor(
+            (String received) => print('onResponse: $json'),
+            (e) => print('onError: $e'),
+            atSign,
+            atClientPreference,
+            monitorPreference,
+            () => print('onRetry called'),
+            monitorConnectivityChecker: mockMonitorConnectivityChecker,
+            remoteSecondary: mockRemoteSecondary,
+            monitorOutboundConnectionFactory:
+                mockMonitorOutboundConnectionFactory,
+            atChops: mockAtChops);
+
+        Future<void> monitorStartFuture =
+            monitor.start(lastNotificationTime: null);
+        await monitorStartFuture;
+        expect(monitor.status, MonitorStatus.started);
+      });
     });
   });
 }
