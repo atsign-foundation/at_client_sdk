@@ -130,7 +130,7 @@ void main() {
     });
   });
 
-  group('A group of test to validate value length', () {
+  group('A group of tests to validate value length', () {
     test(
         'A test to verify the exception is thrown when value exceeds the maxDataLimit',
         () async {

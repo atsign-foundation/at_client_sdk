@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_end2end_test/config/config_util.dart';
@@ -13,6 +15,7 @@ void main() async {
   late String currentAtSign;
   late String sharedWithAtSign;
   final namespace = 'wavi';
+  var uuid = Uuid();
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -34,28 +37,30 @@ void main() async {
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
             TestPreferences.getInstance().getPreference(currentAtSign));
-    var uuid = Uuid();
     // Generate  uuid
-    var randomValue = uuid.v4();
+    var uniqueId = uuid.v4().hashCode;
     var phoneNumberKey = AtKey()
-      ..key = 'phoneNumber$randomValue'
+      ..key = 'phoneNumber-$uniqueId'
       ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
       ..metadata = (Metadata()..ttl = 120000);
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
-    var value = '+91 901920192';
+    var value = '+91 901920192${Random().nextInt(9)}';
     var putResult =
         await currentAtClientManager.atClient.put(phoneNumberKey, value);
     expect(putResult, true);
-    await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.atClient.syncService);
+    await E2ESyncService.getInstance().syncData(
+        currentAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()..key = phoneNumberKey.toString());
+
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign));
     var getResult = await sharedWithAtClientManager.atClient.get(AtKey()
-      ..key = 'phoneNumber$randomValue'
+      ..key = 'phoneNumber-$uniqueId'
       ..sharedBy = currentAtSign);
     expect(getResult.value, value);
     expect(getResult.metadata?.sharedKeyEnc != null, true);
@@ -75,9 +80,12 @@ void main() async {
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
             TestPreferences.getInstance().getPreference(currentAtSign));
+    var uniqueId = uuid.v4().hashCode;
     var verificationKey = AtKey()
-      ..key = 'verificationnumber'
+      ..key = 'verificationnumber-$uniqueId'
       ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..namespace = namespace
       ..metadata = (Metadata()
         ..ttr = 1000
         ..ccd = true
@@ -86,22 +94,27 @@ void main() async {
     var putResult =
         await currentAtClientManager.atClient.put(verificationKey, value);
     expect(putResult, true);
-    await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.atClient.syncService);
+    await E2ESyncService.getInstance().syncData(
+        currentAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()..key = verificationKey.toString());
 
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign));
-    await E2ESyncService.getInstance()
-        .syncData(sharedWithAtClientManager.atClient.syncService);
-    var getResult = await sharedWithAtClientManager.atClient.getKeys(
-        regex:
-            'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign');
-    expect(
-        getResult.contains(
-            'cached:$sharedWithAtSign:${verificationKey.key}.$namespace$currentAtSign'),
-        true);
+    var cachedVerificationKey = AtKey()
+      ..key = 'verificationnumber-$uniqueId'
+      ..sharedWith = sharedWithAtSign
+      ..sharedBy = currentAtSign
+      ..namespace = namespace
+      ..metadata = (Metadata()..isCached = true);
+    await E2ESyncService.getInstance().syncData(
+        sharedWithAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()..key = cachedVerificationKey.toString());
+
+    var getResult = await sharedWithAtClientManager.atClient
+        .getKeys(regex: cachedVerificationKey.toString());
+    expect(getResult.contains(cachedVerificationKey.toString()), true);
 
     AtValue getCachedKeyResponse = await sharedWithAtClientManager.atClient
         .get(AtKey.fromString(getResult.first));
@@ -120,11 +133,15 @@ void main() async {
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
             TestPreferences.getInstance().getPreference(currentAtSign));
+    var uniqueId = uuid.v4().hashCode;
+
     var locationKey = AtKey()
-      ..key = 'location'
+      ..key = 'location-$uniqueId'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign
+      ..namespace = namespace
       ..metadata = Metadata();
+
     var value = 'New Jersey';
     var encryptionService =
         AtKeyEncryptionManager(currentAtClientManager.atClient)
@@ -133,17 +150,19 @@ void main() async {
     var result = await currentAtClientManager.atClient
         .getRemoteSecondary()!
         .executeCommand(
-            'update:ttl:300000:$sharedWithAtSign:location.$namespace$currentAtSign $encryptedValue\n',
+            'update:ttl:300000:${locationKey.toString()} $encryptedValue\n',
             auth: true);
     expect(result != null, true);
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
+
     sharedWithAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(sharedWithAtSign, namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign));
+
     var getResult = await sharedWithAtClientManager.atClient.get(AtKey()
-      ..key = 'location'
+      ..key = 'location-$uniqueId'
       ..sharedBy = currentAtSign);
     expect(getResult.value, value);
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 }

@@ -3,7 +3,6 @@ import 'package:at_end2end_test/src/at_encryption_key_initializers.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_utils/at_logger.dart';
 
 import 'at_credentials.dart';
 
