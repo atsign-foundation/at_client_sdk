@@ -70,8 +70,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops);
-    remoteSecondary.atLookUp.signingAlgoType = atClient.getPreferences()!.signingAlgoType;
-    remoteSecondary.atLookUp.hashingAlgoType = atClient.getPreferences()!.hashingAlgoType;
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
 
