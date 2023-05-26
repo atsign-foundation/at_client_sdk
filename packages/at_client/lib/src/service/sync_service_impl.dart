@@ -178,7 +178,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           true}) async {
     final syncProgress = SyncProgress()..syncStatus = SyncStatus.started;
     syncProgress.startedAt = DateTime.now().toUtc();
-    _logger.finest('in _processSyncRequests');
+    _logger.finest('inside _processSyncRequests');
     if (_syncInProgress) {
       _logger.finer('**** another sync in progress');
       syncProgress.message = 'another sync in progress';
