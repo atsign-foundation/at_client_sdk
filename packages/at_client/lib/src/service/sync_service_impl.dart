@@ -72,7 +72,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         atChops: atClient.atChops);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
-
     await syncService._statsServiceListener();
     syncService._scheduleSyncRun();
     return syncService;

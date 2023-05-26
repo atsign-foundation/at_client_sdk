@@ -192,6 +192,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     // Now using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops, privateKey: _preference!.privateKey);
+
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
     _encryptionService!.remoteSecondary = _remoteSecondary;
