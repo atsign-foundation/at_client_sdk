@@ -177,8 +177,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
-    _logger.finer('before remote secondary creation - signingalgo type: ${_preference!.signingAlgoType}');
-    _logger.finer('before remote secondary creation - hashingalgo type: ${_preference!.hashingAlgoType}');
   }
 
   Future<void> _init() async {
@@ -192,7 +190,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
 
     // Now using ??= because we may be injecting a RemoteSecondary
-    _logger.finer('before creating RemoteSecondary $_remoteSecondary');
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops, privateKey: _preference!.privateKey);
     // Now using ??= because we may be injecting an EncryptionService

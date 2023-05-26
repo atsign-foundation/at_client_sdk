@@ -87,8 +87,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _atClient = atClient;
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
     _remoteSecondary = remoteSecondary;
-    _logger.finer('after remote secondary creation signingalgotype: ${_remoteSecondary.atLookUp.signingAlgoType}');
-    _logger.finer('after remote secondary creation hashingalgotype: ${_remoteSecondary.atLookUp.hashingAlgoType}');
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
@@ -176,7 +174,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           true}) async {
     final syncProgress = SyncProgress()..syncStatus = SyncStatus.started;
     syncProgress.startedAt = DateTime.now().toUtc();
-    _logger.finest('inside _processSyncRequests');
+    _logger.finest('in _processSyncRequests');
     if (_syncInProgress) {
       _logger.finer('**** another sync in progress');
       syncProgress.message = 'another sync in progress';

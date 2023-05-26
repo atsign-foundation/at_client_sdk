@@ -45,9 +45,7 @@ class RemoteSecondary implements Secondary {
         secureSocketConfig: secureSocketConfig,
         clientConfig: _getClientConfig());
     logger.finer(
-        'remote secondary signingAlgoType: ${preference.signingAlgoType}');
-    logger.finer(
-        'remote secondary hashingAlgoType: ${preference.hashingAlgoType}');
+        'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
     atLookUp.signingAlgoType = preference.signingAlgoType;
     atLookUp.hashingAlgoType = preference.hashingAlgoType;
     atLookUp.atChops = atChops;
