@@ -1820,6 +1820,7 @@ void main() {
     setUp(() async {
       TestResources.atsign = '@fuller';
       await TestResources.setupLocalStorage(TestResources.atsign);
+      registerFallbackValue(FakeAtKey());
     });
 
     AtClient mockAtClient = MockAtClient();
@@ -2076,6 +2077,79 @@ void main() {
       assert(lastSyncedEntry.toString().contains('test_key4.wavi@bob'));
       //clearing sync objects
       syncService.clearSyncEntities();
+    });
+
+    test('A test to verify update and delete of same key in a single batch',
+        () async {
+      int serverCommitId = 1;
+      String localCommitId = '1';
+      SyncRequest syncRequest = SyncRequest()..result = SyncResult();
+      HiveKeystore? keystore =
+          TestResources.getHiveKeyStore(TestResources.atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      // Create uncommitted entries in local storage
+      await localSecondary.executeVerb(UpdateVerbBuilder()
+        ..atKey = 'firstKey'
+        ..sharedBy = TestResources.atsign
+        ..sharedWith = '@bob'
+        ..value = 'value1');
+
+      UpdateVerbBuilder updateBuilderForSecondKey = UpdateVerbBuilder()
+        ..atKey = 'secondKey'
+        ..sharedBy = TestResources.atsign
+        ..sharedWith = '@bob'
+        ..value = 'value1';
+      await localSecondary.executeVerb(updateBuilderForSecondKey);
+
+      DeleteVerbBuilder deleteBuilderForThirdKey = DeleteVerbBuilder()
+        ..atKey = 'firstKey'
+        ..sharedBy = TestResources.atsign
+        ..sharedWith = '@bob';
+      await localSecondary.executeVerb(deleteBuilderForThirdKey);
+
+      // Mock Responses
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => localSecondary);
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = localCommitId));
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth"))).thenAnswer((_) => Future.value(
+          'data:[{"id":1,"response":{"data":"2"}},{"id":2,"response":{"data":"3"}}]'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.networkUtil = mockNetworkUtil;
+
+      var syncResult =
+          await syncService.syncInternal(serverCommitId, syncRequest);
+
+      // Assertions
+      expect(syncResult.keyInfoList.first.key,
+          updateBuilderForSecondKey.buildKey());
+      expect(syncResult.keyInfoList.first.commitOp, CommitOp.UPDATE_ALL);
+      expect(syncResult.keyInfoList.first.syncDirection,
+          SyncDirection.localToRemote);
+
+      expect(
+          syncResult.keyInfoList[1].key, deleteBuilderForThirdKey.buildKey());
+      expect(syncResult.keyInfoList[1].commitOp, CommitOp.DELETE);
+      expect(
+          syncResult.keyInfoList[1].syncDirection, SyncDirection.localToRemote);
+
+      CommitEntry? commitEntry =
+          await TestResources.commitLog?.lastSyncedEntry();
+      expect(commitEntry?.atKey, deleteBuilderForThirdKey.buildKey());
+      expect(commitEntry?.operation, CommitOp.DELETE);
+      expect(commitEntry?.commitId, 3);
     });
 
     tearDown(() async {

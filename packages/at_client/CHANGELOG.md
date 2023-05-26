@@ -5,6 +5,7 @@
   - Add new optional named parameter `deleteRequestOptions` to AtClient.delete
   - Add `useRemoteAtServer` to DeleteRequestOptions. When set, the delete
     request will be sent directly to the remote atServer
+- fix: Incorrect commitId gets updated against commit entry when a sync-batch skips an entry
 ## 3.0.59
 - fix: Sync running into infinite loop when an invalid key is present in the entries to sync into client
 - fix: Redundant logs generated for an internal key[lastReceivedNotification] while sending notifications

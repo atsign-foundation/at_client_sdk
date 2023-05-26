@@ -139,6 +139,12 @@ class SyncUtil {
     return NullCommitEntry();
   }
 
+  Future<void> removeCommitEntry(dynamic key, String atSign) async {
+    atCommitLog ??=
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    await atCommitLog!.commitLogKeyStore.remove(key);
+  }
+
   /// Sorts the commit entries in descending order.
   ///
   /// The CommitEntries with commitId 'null' comes before the commit entries with commitId
