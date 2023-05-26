@@ -70,8 +70,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops);
+    remoteSecondary.atLookUp.signingAlgoType = atClient.getPreferences()!.signingAlgoType;
+    remoteSecondary.atLookUp.hashingAlgoType = atClient.getPreferences()!.hashingAlgoType;
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
+
     await syncService._statsServiceListener();
     syncService._scheduleSyncRun();
     return syncService;
@@ -86,6 +89,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _atClient = atClient;
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
     _remoteSecondary = remoteSecondary;
+    _logger.finer('after remote secondary creation signingalgotype: ${_remoteSecondary.atLookUp.signingAlgoType}');
+    _logger.finer('after remote secondary creation hashingalgotype: ${_remoteSecondary.atLookUp.hashingAlgoType}');
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
