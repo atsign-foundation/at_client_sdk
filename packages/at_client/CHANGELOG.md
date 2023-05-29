@@ -1,3 +1,5 @@
+## 3.0.61
+- fix: Sync/Monitor bug while running onboarding_cli with at_chops using pkam from secure element
 ## 3.0.60
 - feat: Add `useRemoteAtServer` to PutRequestOptions. When set, the update
   request will be sent directly to the remote atServer

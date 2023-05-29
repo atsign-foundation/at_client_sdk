@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:meta/meta.dart';
@@ -104,6 +105,12 @@ class AtClientPreference {
 
   @experimental
   AtClientParticulars atClientParticulars = AtClientParticulars();
+
+  //signing algorithm to use for pkam authentication
+  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
+
+  //hashing algorithm to use for pkam authentication
+  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 }
 
 @Deprecated("Use SyncService")
