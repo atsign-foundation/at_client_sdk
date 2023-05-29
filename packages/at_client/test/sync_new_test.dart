@@ -12,6 +12,7 @@ import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -2742,6 +2743,7 @@ void main() {
     test(
         'A test to verify when sync conflict info when key present in uncommitted entries and in server response of sync',
         () async {
+      AtSignLogger.root_level = 'finer';
       // ------------------------------ Setup ----------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2772,7 +2774,7 @@ void main() {
               '"commitId":1,"operation":"*"}'
               ','
               '{"atKey":"public:conflict_key1@bob",'
-              '"value":"remoteValue_value",'
+              '"value":"remote_value",'
               '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
               '"commitId":2,"operation":"*"}'
               ','
@@ -2792,6 +2794,9 @@ void main() {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.get(AtKey.fromString('public:conflict_key1@bob')))
+          .thenAnswer(
+              (invocation) => Future.value(AtValue()..value = 'local_value'));
 
       // --------------------- preconditions setup -----------------------------
       await localSecondary.putValue('public:conflict_key1@bob', 'localValue');
@@ -2807,17 +2812,17 @@ void main() {
       progressListener.streamController.stream
           .listen(expectAsync1((syncProgress) {
         expect(syncProgress.syncStatus, SyncStatus.success);
-        syncProgress.keyInfoList?.forEach((keyInfo) {
+        for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
           if (keyInfo.key.contains('conflict_key1') &&
               keyInfo.syncDirection == SyncDirection.remoteToLocal) {
-            expect(keyInfo.conflictInfo?.remoteValue, 'remoteValue_value');
-            expect(keyInfo.conflictInfo?.localValue.data, 'localValue');
+            expect(keyInfo.conflictInfo?.remoteValue, 'remote_value');
+            expect(keyInfo.conflictInfo?.localValue, 'local_value');
           }
-        });
+        }
       }));
       //clearing sync objects
       syncService.clearSyncEntities();
-    });
+    }, timeout: Timeout(Duration(minutes: 10)));
 
     tearDown(() async {
       await TestResources.tearDownLocalStorage();

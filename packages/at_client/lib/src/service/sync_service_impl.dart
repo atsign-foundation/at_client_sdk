@@ -458,6 +458,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
                 'Server commitEntry ${serverCommitEntry['atKey']} exists in '
                 'uncommitted entries. So skipping the commit entry and '
                 'updating the lastReceivedServerCommitId to $lastReceivedServerCommitId'));
+            ConflictInfo? conflictInfo =
+                await _setConflictInfo(serverCommitEntry);
+            final keyInfo = KeyInfo(
+                serverCommitEntry['atKey'],
+                SyncDirection.remoteToLocal,
+                convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
+            keyInfo.conflictInfo = conflictInfo;
+            keyInfoList.add(keyInfo);
             continue;
           }
 
@@ -493,9 +501,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           serverCommitEntry['atKey'],
           SyncDirection.remoteToLocal,
           convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
-      ConflictInfo? conflictInfo =
-          await _checkConflict(serverCommitEntry, uncommittedEntries);
-      keyInfo.conflictInfo = conflictInfo;
+      // ConflictInfo? conflictInfo =
+      //     await _checkConflict(serverCommitEntry, uncommittedEntries);
+      //keyInfo.conflictInfo = conflictInfo;
       await _syncLocal(serverCommitEntry);
       keyInfoList.add(keyInfo);
       _sendTelemetry('_syncFromServer.forEachEntry.end', {
@@ -546,10 +554,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return syncResponseJson;
   }
 
-  Future<ConflictInfo?> _checkConflict(
-      final serverCommitEntry, List<CommitEntry> uncommittedEntries) async {
+  Future<ConflictInfo?> _setConflictInfo(final serverCommitEntry) async {
     final key = serverCommitEntry['atKey'];
-
     // publickey.<atsign>@<currentatsign> is used to store the public key of
     // other atsign. The value is not encrypted.
     // The keys starting with publickey. and shared_key. are the reserved keys
@@ -565,27 +571,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (atKey.sharedBy != null) {
       atKey.sharedBy = AtUtils.fixAtSign(atKey.sharedBy!);
     }
-
-    bool serverCommitEntryKeyExistsInLocalUncommittedEntries = false;
-    for (CommitEntry entry in uncommittedEntries) {
-      if (key == entry.atKey) {
-        serverCommitEntryKeyExistsInLocalUncommittedEntries = true;
-      }
-    }
-
-    if (!serverCommitEntryKeyExistsInLocalUncommittedEntries) {
-      return null;
-    }
-
     final conflictInfo = ConflictInfo();
-
     try {
-      final localValue =
-          await _atClient.getLocalSecondary()!.keyStore!.get(key);
+      final localAtValue = await _atClient.get(atKey);
       if (atKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
-        if (localValue != serverValue) {
-          conflictInfo.localValue = localValue;
+        if (localAtValue.value != serverValue) {
+          conflictInfo.localValue = localAtValue.value;
           conflictInfo.remoteValue = serverValue;
         }
         return conflictInfo;
@@ -595,17 +587,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (serverMetaData != null && serverMetaData[IS_ENCRYPTED] == "true") {
         final decryptionManager = AtKeyDecryptionManager(_atClient)
             .get(atKey, _atClient.getCurrentAtSign()!);
-
         // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue;
-
         if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {
           serverDecryptedValue =
               await decryptionManager.decrypt(atKey, serverEncryptedValue);
         }
-        final localDecryptedValue = await _atClient.get(atKey);
-        if (localDecryptedValue.value != serverDecryptedValue) {
-          conflictInfo.localValue = localDecryptedValue.value;
+        //final localDecryptedValue = await _atClient.get(atKey);
+        if (localAtValue.value != serverDecryptedValue) {
+          conflictInfo.localValue = localAtValue.value;
           conflictInfo.remoteValue = serverDecryptedValue;
         }
       }
