@@ -42,7 +42,9 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
+    await FunctionalTestSyncService.getInstance().syncData(
+        atClientManager.atClient.syncService,
+        syncOptions: SyncOptions()..key = atKey.toString());
     // Start the compaction job in async mode
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
@@ -66,7 +68,9 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
+    await FunctionalTestSyncService.getInstance().syncData(
+        atClientManager.atClient.syncService,
+        syncOptions: SyncOptions()..key = mobileAtKey.toString());
 
     await compactionFuture.then((atCompactionStats) {
       print(atCompactionStats);
@@ -96,7 +100,8 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
 
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
