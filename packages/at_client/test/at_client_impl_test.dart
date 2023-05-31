@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
