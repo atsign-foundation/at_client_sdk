@@ -1,5 +1,3 @@
-## 3.0.61
-- fix: Sync/Monitor bug while running onboarding_cli with at_chops using pkam from secure element
 ## 3.0.60
 - feat: Add `useRemoteAtServer` to PutRequestOptions. When set, the update
   request will be sent directly to the remote atServer
@@ -8,6 +6,7 @@
   - Add `useRemoteAtServer` to DeleteRequestOptions. When set, the delete
     request will be sent directly to the remote atServer
 - fix: Incorrect commitId gets updated against commit entry when a sync-batch skips an entry
+- fix: Sync/Monitor bug while running onboarding_cli with at_chops using pkam from secure element
 ## 3.0.59
 - fix: Sync running into infinite loop when an invalid key is present in the entries to sync into client
 - fix: Redundant logs generated for an internal key[lastReceivedNotification] while sending notifications
