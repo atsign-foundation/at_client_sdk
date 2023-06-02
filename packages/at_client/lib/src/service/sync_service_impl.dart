@@ -29,6 +29,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
+  @visibleForTesting
+  late AtKeyDecryptionManager atKeyDecryptionManager;
 
   /// utility method to reduce code verbosity in this file
   /// Does nothing if a telemetryService has not been injected
@@ -88,6 +90,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
+    atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
     _atClientManager.listenToAtSignChange(this);
   }
 
@@ -501,9 +504,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           serverCommitEntry['atKey'],
           SyncDirection.remoteToLocal,
           convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
-      // ConflictInfo? conflictInfo =
-      //     await _checkConflict(serverCommitEntry, uncommittedEntries);
-      //keyInfo.conflictInfo = conflictInfo;
       await _syncLocal(serverCommitEntry);
       keyInfoList.add(keyInfo);
       _sendTelemetry('_syncFromServer.forEachEntry.end', {
@@ -585,15 +585,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverEncryptedValue = serverCommitEntry['value'];
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null && serverMetaData[IS_ENCRYPTED] == "true") {
-        final decryptionManager = AtKeyDecryptionManager(_atClient)
-            .get(atKey, _atClient.getCurrentAtSign()!);
+        final atKeyDecryption =
+            atKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
         // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue;
         if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {
           serverDecryptedValue =
-              await decryptionManager.decrypt(atKey, serverEncryptedValue);
+              await atKeyDecryption.decrypt(atKey, serverEncryptedValue);
         }
-        //final localDecryptedValue = await _atClient.get(atKey);
         if (localAtValue.value != serverDecryptedValue) {
           conflictInfo.localValue = localAtValue.value;
           conflictInfo.remoteValue = serverDecryptedValue;
@@ -602,7 +601,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return conflictInfo;
     } catch (e, st) {
       conflictInfo.errorOrExceptionMessage =
-          '_checkConflict for $atKey encountered exception $e';
+          'Exception occurred when setting conflict info for $atKey | $e';
       _logger.warning(conflictInfo.errorOrExceptionMessage, e, st);
       return conflictInfo;
     }
