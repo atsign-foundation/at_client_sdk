@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/decryption_service/decryption_manager.dart';
+import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
@@ -12,6 +14,7 @@ import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -42,6 +45,11 @@ class MockLocalSecondary extends Mock implements LocalSecondary {
 }
 
 class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
+
+class MockAtKeyDecryptionManager extends Mock
+    implements AtKeyDecryptionManager {}
+
+class MockSharedKeyDecryption extends Mock implements SharedKeyDecryption {}
 
 class FakeSyncVerbBuilder extends Fake implements SyncVerbBuilder {}
 
@@ -1696,132 +1704,6 @@ void main() {
       syncService.clearSyncEntities();
     });
 
-    test(
-        'A test to verify lastReceivedServerCommit id is updated when uncommitted entry is updated on the client',
-        () async {
-      registerFallbackValue(FakeAtKey());
-
-      var keyStore = TestResources.getHiveKeyStore(TestResources.atsign);
-
-      LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keyStore);
-
-      // Insert an uncommitted entry into keystore.
-      await keyStore?.put(
-          '${TestResources.atsign}:uncommittedentry.wavi${TestResources.atsign}',
-          AtData()..data = 'uncommitted-value');
-
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
-      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
-
-      // Fetch the "lastReceivedServerCommitId" from keystore
-      // If found, return the value, else set the AtValue.value to -1 to
-      // indicate the localCommitId to -1.
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((_) async {
-        AtData? response;
-        try {
-          response = await keyStore
-              ?.get('local:lastreceivedservercommitid${TestResources.atsign}');
-        } on KeyNotFoundException {
-          return AtValue()..value = '-1';
-        }
-        if (response == null) {
-          return AtValue()..value = '-1';
-        }
-        return AtValue()..value = response.data;
-      });
-
-      // Updating the "lastReceivedServerCommitId" value into keystore.
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((invocation) async {
-        await keyStore?.put(invocation.positionalArguments[0].toString(),
-            AtData()..data = invocation.positionalArguments[1]);
-        return Future.value(true);
-      });
-
-      when(() =>
-          mockRemoteSecondary.executeCommand(any(that: startsWith('batch:')),
-              auth: any(named: 'auth'))).thenAnswer(
-          (_) async => Future.value('data:[{"id":1,"response":{"data":"1"}}]'));
-
-      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
-          atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-
-      await syncService.syncInternal(-1, SyncRequest()..result = SyncResult());
-      expect(await syncService.getLastReceivedServerCommitId(), 1);
-    });
-
-    test(
-        'A test to verify lastReceivedServerCommit id is not updated when invalid commit-id is returned for an uncommitted entry',
-        () async {
-      registerFallbackValue(FakeAtKey());
-
-      var keyStore = TestResources.getHiveKeyStore(TestResources.atsign);
-      LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keyStore);
-
-      // Insert an uncommitted entry into keystore.
-      await keyStore?.put(
-          '${TestResources.atsign}:uncommittedentry1.wavi${TestResources.atsign}',
-          AtData()..data = 'uncommitted-value');
-      await keyStore?.put(
-          '${TestResources.atsign}:uncommittedentry2.wavi${TestResources.atsign}',
-          AtData()..data = 'uncommitted-value');
-
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
-      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
-
-      // Fetch the "lastReceivedServerCommitId" from keystore
-      // If found, return the value, else set the AtValue.value to -1 to
-      // indicate the localCommitId to -1.
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((_) async {
-        AtData? response;
-        try {
-          response = await keyStore
-              ?.get('local:lastreceivedservercommitid${TestResources.atsign}');
-        } on KeyNotFoundException {
-          return AtValue()..value = '-1';
-        }
-        if (response == null) {
-          return AtValue()..value = '-1';
-        }
-        return AtValue()..value = response.data;
-      });
-
-      // Updating the "lastReceivedServerCommitId" value into keystore.
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((invocation) async {
-        await keyStore?.put(invocation.positionalArguments[0].toString(),
-            AtData()..data = invocation.positionalArguments[1]);
-        return Future.value(true);
-      });
-
-      // Returning "data:-1" for second entry to simulate no response from the server
-      when(() =>
-          mockRemoteSecondary.executeCommand(any(),
-              auth: any(named: 'auth'))).thenAnswer(
-          (_) async => Future.value('data:[{"id":1,"response":{"data":"1"}},'
-              '{"id":2,"response":{"data":"-1"}}]'));
-
-      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
-          atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-
-      await syncService.syncInternal(-1, SyncRequest()..result = SyncResult());
-      expect(await syncService.getLastReceivedServerCommitId(), 1);
-    });
-
     tearDown(() async {
       await TestResources.tearDownLocalStorage();
       resetMocktailState();
@@ -2886,15 +2768,21 @@ void main() {
     test(
         'A test to verify when sync conflict info when key present in uncommitted entries and in server response of sync',
         () async {
+      AtSignLogger.root_level = 'finer';
       // ------------------------------ Setup ----------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+      MockAtKeyDecryptionManager mockAtKeyDecryptionManager =
+          MockAtKeyDecryptionManager();
+      MockSharedKeyDecryption mockSharedKeyDecryption =
+          MockSharedKeyDecryption();
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
@@ -2907,23 +2795,23 @@ void main() {
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
           .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
       when(() => mockRemoteSecondary.executeVerb(
-              any(that: SyncVerbBuilderMatcher()),
-              sync: any(named: "sync")))
-          .thenAnswer((invocation) => Future.value('data:['
-              '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
-              '"value":"dummy",'
-              '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-              '"commitId":1,"operation":"*"}'
-              ','
-              '{"atKey":"public:conflict_key1@bob",'
-              '"value":"remoteValue_value",'
-              '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-              '"commitId":2,"operation":"*"}'
-              ','
-              '{"atKey":"public:test_key2.demo@bob",'
-              '"value":"remoteValue",'
-              '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-              '"commitId":3,"operation":"*"}]'));
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(
+              named: "sync"))).thenAnswer((invocation) => Future.value('data:['
+          '{"atKey":"cached:@bob:shared_key${TestResources.atsign}",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":1,"operation":"*"}'
+          ','
+          '{"atKey":"public:conflict_key1${TestResources.atsign}",'
+          '"value":"remote_value",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":2,"operation":"*"}'
+          ','
+          '{"atKey":"@alice:conflict_shared_key.demo${TestResources.atsign}",'
+          '"value":"shared_key_remote_value",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z","isEncrypted":"true"},'
+          '"commitId":3,"operation":"*"}]'));
       when(() =>
           mockRemoteSecondary.executeCommand(any(),
               auth: any(named: "auth"))).thenAnswer(
@@ -2936,16 +2824,27 @@ void main() {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
-      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+      when(() => mockAtClient.get(
+              AtKey.fromString('public:conflict_key1${TestResources.atsign}')))
           .thenAnswer(
-              (_) => StreamController<at_notification.AtNotification>().stream);
-      when(() => mockAtClient.getPreferences())
-          .thenAnswer((_) => AtClientPreference());
+              (invocation) => Future.value(AtValue()..value = 'local_value'));
+      when(() => mockAtClient.get(AtKey.fromString(
+              '@alice:conflict_shared_key.demo${TestResources.atsign}')))
+          .thenAnswer((invocation) =>
+              Future.value(AtValue()..value = 'shared_key_local_value'));
+      when(() => mockAtKeyDecryptionManager.get(
+              any(that: ConflictKeyMatcher()), TestResources.atsign))
+          .thenAnswer((_) => mockSharedKeyDecryption);
+      when(() => mockSharedKeyDecryption.decrypt(
+              any(that: ConflictKeyMatcher()), 'shared_key_remote_value'))
+          .thenAnswer((_) => Future.value('shared_key_remote_value'));
 
       // --------------------- preconditions setup -----------------------------
-      await localSecondary.putValue('public:conflict_key1@bob', 'localValue');
       await localSecondary.putValue(
-          'public:test_key2.group12test1@bob', 'whatever');
+          'public:conflict_key1${TestResources.atsign}', 'localValue');
+      await localSecondary.putValue(
+          '@alice:conflict_shared_key.demo${TestResources.atsign}',
+          'shared_key_local_value');
       CustomSyncProgressListener progressListener =
           CustomSyncProgressListener();
       syncService.addProgressListener(progressListener);
@@ -2956,16 +2855,106 @@ void main() {
       progressListener.streamController.stream
           .listen(expectAsync1((syncProgress) {
         expect(syncProgress.syncStatus, SyncStatus.success);
-        syncProgress.keyInfoList?.forEach((keyInfo) {
-          if (keyInfo.key.contains('conflict_key1') &&
+        for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
+          if (keyInfo.key == 'public:conflict_key1${TestResources.atsign}' &&
               keyInfo.syncDirection == SyncDirection.remoteToLocal) {
-            expect(keyInfo.conflictInfo?.remoteValue, 'remoteValue_value');
-            expect(keyInfo.conflictInfo?.localValue.data, 'localValue');
+            expect(keyInfo.conflictInfo?.remoteValue, 'remote_value');
+            expect(keyInfo.conflictInfo?.localValue, 'local_value');
           }
-        });
+          if (keyInfo.key == '@alice:conflict_shared_key.demo@hiro' &&
+              keyInfo.syncDirection == SyncDirection.remoteToLocal) {
+            expect(
+                keyInfo.conflictInfo?.remoteValue, 'shared_key_remote_value');
+            expect(keyInfo.conflictInfo?.localValue, 'shared_key_local_value');
+          }
+        }
       }));
       //clearing sync objects
       syncService.clearSyncEntities();
+    });
+
+    test(
+        'A test to verify conflict info sets errorOrExceptionMessage when exception occurs in setConflictInfo',
+        () async {
+      AtSignLogger.root_level = 'finer';
+      // ------------------------------ Setup ----------------------------------
+      LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+      MockAtKeyDecryptionManager mockAtKeyDecryptionManager =
+          MockAtKeyDecryptionManager();
+      MockSharedKeyDecryption mockSharedKeyDecryption =
+          MockSharedKeyDecryption();
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
+
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+      registerFallbackValue(FakeAtKey());
+
+      when(() => mockNetworkUtil.isNetworkAvailable())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: StatsVerbBuilderMatcher())))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
+
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(
+              named: "sync"))).thenAnswer((invocation) => Future.value('data:['
+          '{"atKey":"@alice:conflict_shared_key.demo${TestResources.atsign}",'
+          '"value":"shared_key_remote_value",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z","isEncrypted":"true"},'
+          '"commitId":3,"operation":"*"}]'));
+      when(() => mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth")))
+          .thenAnswer((invocation) =>
+              Future.value('data:[{"id":1,"response":{"data":"3"}}]'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.get(AtKey.fromString(
+              '@alice:conflict_shared_key.demo${TestResources.atsign}')))
+          .thenAnswer((invocation) =>
+              Future.value(AtValue()..value = 'shared_key_local_value'));
+      when(() => mockAtKeyDecryptionManager.get(
+              any(that: ConflictKeyMatcher()), TestResources.atsign))
+          .thenAnswer((_) => mockSharedKeyDecryption);
+      when(() => mockSharedKeyDecryption.decrypt(
+              any(that: ConflictKeyMatcher()), 'shared_key_remote_value'))
+          .thenAnswer((_) => throw AtPublicKeyNotFoundException(
+              'Encryption public key not found'));
+
+      await localSecondary.putValue(
+          '@alice:conflict_shared_key.demo${TestResources.atsign}',
+          'shared_key_local_value');
+      CustomSyncProgressListener progressListener =
+          CustomSyncProgressListener();
+      syncService.addProgressListener(progressListener);
+      syncService.sync();
+      await syncService.processSyncRequests(
+          respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+
+      progressListener.streamController.stream
+          .listen(expectAsync1((syncProgress) {
+        expect(syncProgress.syncStatus, SyncStatus.success);
+        for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
+          if (keyInfo.key == '@alice:conflict_shared_key.demo@hiro' &&
+              keyInfo.syncDirection == SyncDirection.remoteToLocal) {
+            expect(keyInfo.conflictInfo?.errorOrExceptionMessage,
+                'Exception occurred when setting conflict info for @alice:conflict_shared_key.demo@hiro | Exception: Encryption public key not found');
+          }
+        }
+      }));
     });
 
     tearDown(() async {
@@ -4241,6 +4230,21 @@ class LastReceivedServerCommitIdMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is AtKey && item.key!.startsWith('lastreceivedservercommitid')) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class ConflictKeyMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key!.contains('conflict')) {
       return true;
     }
     return false;
