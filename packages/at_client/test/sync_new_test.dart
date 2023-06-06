@@ -2794,6 +2794,8 @@ void main() {
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
           .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
       when(() => mockRemoteSecondary.executeVerb(
           any(that: SyncVerbBuilderMatcher()),
           sync: any(
@@ -2902,7 +2904,8 @@ void main() {
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
           .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
-
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
       when(() => mockRemoteSecondary.executeVerb(
           any(that: SyncVerbBuilderMatcher()),
           sync: any(
