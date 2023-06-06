@@ -487,8 +487,10 @@ class AtClientService {
   ///
   Future<bool> isAtClientReadyForOfflineAccess(
       String atSign, AtClientPreference atClientPreference) async {
-    var isClientOnboarded = await AtClientImpl.verifyStorageForOfflineAccess(
-        atSign, atClientPreference);
+    var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+        atSign, atClientPreference.namespace, atClientPreference);
+    var isClientOnboarded = await atClientManager.atClient
+        .canUseOffline(atSign, atClientPreference);
     if (isClientOnboarded == true) {
       return true;
     }

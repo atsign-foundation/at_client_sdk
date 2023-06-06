@@ -25,6 +25,7 @@ abstract class AtClient {
 
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
+
   @experimental
   AtTelemetryService? get telemetry;
 
@@ -39,9 +40,11 @@ abstract class AtClient {
   AtChops? get atChops;
 
   set syncService(SyncService syncService);
+
   SyncService get syncService;
 
   set notificationService(NotificationService notificationService);
+
   NotificationService get notificationService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
@@ -346,6 +349,12 @@ abstract class AtClient {
       String? sharedBy,
       String? sharedWith,
       bool showHiddenKeys = false});
+
+  /// Initializes the Hive Keystore and fetches encryption public key to ensure
+  /// the atSign is previously onboarded.
+  /// If the key is available, returns false
+  Future<bool> canUseOffline(
+      String atSign, AtClientPreference atClientPreference);
 
   /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
   ///```

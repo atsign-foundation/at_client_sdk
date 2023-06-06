@@ -885,7 +885,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   /// Initializes the Hive Keystore and fetches encryption public key to ensure
   /// the atSign is previously onboarded.
   /// If the key is available, returns false
-  static Future<bool> verifyStorageForOfflineAccess(
+  @override
+  Future<bool> canUseOffline(
       String atSign, AtClientPreference atClientPreference) async {
     SecondaryPersistenceStore secondaryPersistenceStore =
         SecondaryPersistenceStoreFactory.getInstance()
