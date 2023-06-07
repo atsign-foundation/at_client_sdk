@@ -146,8 +146,24 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           _atClient.getPreferences()!.atClientParticulars,
           'RCVD: stats notification in sync: ${notification.value}'));
       final serverCommitId = notification.value;
-      if (serverCommitId != null &&
-          int.parse(serverCommitId) > await _getLocalCommitId()) {
+      int localCommitId = -1;
+      try {
+        localCommitId = await _getLocalCommitId();
+      } on FormatException catch (e) {
+        _logger.finer('Exception occurred in statsListener ${e.message}');
+
+        _statsNotificationListener.stopAllSubscriptions();
+        var syncRequest = SyncRequest()
+          ..result = (SyncResult()
+            ..atClientException = AtClientException.message(e.message));
+        _syncError(syncRequest);
+
+        SyncProgress syncProgress = SyncProgress()
+          ..atClientException = AtClientException.message(e.message)
+          ..syncStatus = SyncStatus.failure;
+        _informSyncProgress(syncProgress);
+      }
+      if (serverCommitId != null && int.parse(serverCommitId) > localCommitId) {
         final syncRequest = SyncRequest();
         syncRequest.onDone = _onDone;
         syncRequest.onError = _onError;

@@ -30,21 +30,10 @@ class MockAtClient extends Mock implements AtClient {
   String? getCurrentAtSign() {
     return TestResources.atsign;
   }
-
-  @override
-  AtClientPreference getPreferences() {
-    return AtClientPreference();
-  }
 }
 
 class MockNotificationServiceImpl extends Mock
-    implements NotificationServiceImpl {
-  @override
-  Stream<at_notification.AtNotification> subscribe(
-      {String? regex, bool shouldDecrypt = false}) {
-    return StreamController<at_notification.AtNotification>().stream;
-  }
-}
+    implements NotificationServiceImpl {}
 
 class MockNetworkUtil extends Mock implements NetworkUtil {}
 
@@ -1199,6 +1188,11 @@ void main() {
       when(() => mockAtClient.put(
               any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
 
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
@@ -1246,17 +1240,22 @@ void main() {
   group(
       'tests related to sending uncommitted entries to server via the batch verb',
       () {
-    setUp(() async {
-      TestResources.atsign = '@alice';
-      await TestResources.setupLocalStorage(TestResources.atsign);
-    });
-
     AtClient mockAtClient = MockAtClient();
     AtClientManager mockAtClientManager = MockAtClientManager();
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+    setUp(() async {
+      TestResources.atsign = '@alice';
+      await TestResources.setupLocalStorage(TestResources.atsign);
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
+    });
 
     /// Preconditions:
     /// 1. The local commitId is 5 and hive_seq is also at 5
@@ -2052,6 +2051,11 @@ void main() {
       when(() => mockAtClient.put(
               any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2353,6 +2357,11 @@ void main() {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2415,6 +2424,12 @@ void main() {
       mockRemoteSecondary = MockRemoteSecondary();
       mockNetworkUtil = MockNetworkUtil();
       mockSyncUtil = MockSyncUtil();
+
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
     });
 
     /// The test should contain all types of keys - public key, shared key, self key
@@ -2727,17 +2742,20 @@ void main() {
   });
 
   group('A group of test to verify sync conflict resolution', () {
-    setUp(() async {
-      TestResources.atsign = '@hiro';
-      await TestResources.setupLocalStorage(TestResources.atsign);
-    });
-
     AtClient mockAtClient = MockAtClient();
     AtClientManager mockAtClientManager = MockAtClientManager();
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+    setUp(() async {
+      TestResources.atsign = '@hiro';
+      await TestResources.setupLocalStorage(TestResources.atsign);
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+    });
 
     /// Preconditions:
     /// 1. The server commit id should be greater than local commit id
@@ -2776,6 +2794,8 @@ void main() {
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
           .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
       when(() => mockRemoteSecondary.executeVerb(
           any(that: SyncVerbBuilderMatcher()),
           sync: any(
@@ -2884,7 +2904,8 @@ void main() {
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
           .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
-
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
       when(() => mockRemoteSecondary.executeVerb(
           any(that: SyncVerbBuilderMatcher()),
           sync: any(
@@ -3013,17 +3034,21 @@ void main() {
     /// 3. Server and client are already in sync
     /// 4. sync request threshold is not met
     group('A group of tests to verify sync trigger criteria', () {
-      setUp(() async {
-        TestResources.atsign = '@knox';
-        await TestResources.setupLocalStorage(TestResources.atsign);
-      });
-
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
       NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      setUp(() async {
+        TestResources.atsign = '@knox';
+        await TestResources.setupLocalStorage(TestResources.atsign);
+        when(() =>
+                mockNotificationService.subscribe(regex: 'statsNotification'))
+            .thenAnswer((_) =>
+                StreamController<at_notification.AtNotification>().stream);
+      });
 
       ///***********************************
       ///unable to assert if sync has happened
@@ -3119,6 +3144,8 @@ void main() {
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
+        when(() => mockAtClient.getPreferences())
+            .thenAnswer((_) => AtClientPreference());
 
         //----------------------------Preconditions setup ----------------------
         await localSecondary.putValue(
@@ -3253,6 +3280,8 @@ void main() {
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
+        when(() => mockAtClient.getPreferences())
+            .thenAnswer((_) => AtClientPreference());
 
         //------------------Assertions -------------------
         //onDoneCallback when triggered, flips the switch in TestResources
@@ -3280,17 +3309,17 @@ void main() {
     });
 
     group('A group of tests to verify isSyncInProgress flag', () {
-      setUp(() async {
-        TestResources.atsign = '@levi';
-        await TestResources.setupLocalStorage(TestResources.atsign);
-      });
-
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
       NetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      setUp(() async {
+        TestResources.atsign = '@levi';
+        await TestResources.setupLocalStorage(TestResources.atsign);
+      });
 
       /// Preconditions:
       /// 1. Initially the isSyncInProgress is set to false.
@@ -3349,6 +3378,12 @@ void main() {
                 .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
+        when(() =>
+                mockNotificationService.subscribe(regex: 'statsNotification'))
+            .thenAnswer((_) =>
+                StreamController<at_notification.AtNotification>().stream);
+        when(() => mockAtClient.getPreferences())
+            .thenAnswer((_) => AtClientPreference());
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3452,17 +3487,22 @@ void main() {
     group(
         'A group of tests to validate sync command - sync server changes to client',
         () {
-      setUp(() async {
-        TestResources.atsign = '@nadia';
-        await TestResources.setupLocalStorage(TestResources.atsign);
-      });
-
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
       NetworkUtil mockNetworkUtil = MockNetworkUtil();
+      setUp(() async {
+        TestResources.atsign = '@nadia';
+        await TestResources.setupLocalStorage(TestResources.atsign);
+        when(() =>
+                mockNotificationService.subscribe(regex: 'statsNotification'))
+            .thenAnswer((_) =>
+                StreamController<at_notification.AtNotification>().stream);
+        when(() => mockAtClient.getPreferences())
+            .thenAnswer((_) => AtClientPreference());
+      });
 
       /// Preconditions:
       /// 1. The localCommitId is at commitId 5
@@ -3591,17 +3631,23 @@ void main() {
     });
 
     group('A group of test on sync progress call back', () {
-      setUp(() async {
-        TestResources.atsign = '@poland';
-        await TestResources.setupLocalStorage(TestResources.atsign);
-      });
-
       AtClient mockAtClient = MockAtClient();
       AtClientManager mockAtClientManager = MockAtClientManager();
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
       MockNetworkUtil mockNetworkUtil = MockNetworkUtil();
+
+      setUp(() async {
+        TestResources.atsign = '@poland';
+        await TestResources.setupLocalStorage(TestResources.atsign);
+        when(() =>
+                mockNotificationService.subscribe(regex: 'statsNotification'))
+            .thenAnswer((_) =>
+                StreamController<at_notification.AtNotification>().stream);
+        when(() => mockAtClient.getPreferences())
+            .thenAnswer((_) => AtClientPreference());
+      });
 
       /// Preconditions:
       /// 1. Create a class that extends "SyncProgressListener" and override "onSyncProgressEvent" method
@@ -3999,6 +4045,56 @@ void main() {
             }
             expect(keyInfo.syncDirection, SyncDirection.localToRemote);
           });
+        }));
+      });
+
+      test(
+          'A test to verify exception is thrown when an invalid regex is supplied',
+          () async {
+        SyncUtil mockSyncUtil = MockSyncUtil();
+        when(() => mockAtClient.getPreferences())
+            .thenAnswer((_) => AtClientPreference()..syncRegex = '.buzz)');
+        when(() =>
+                mockNotificationService.subscribe(regex: 'statsNotification'))
+            .thenAnswer((_) {
+          var streamController =
+              StreamController<at_notification.AtNotification>();
+          // Adding a delay of 1 second to let the sync service initialize and
+          // add the progress listener to the sync service.
+          Future.delayed(Duration(seconds: 1)).then((_) {
+            streamController.add(at_notification.AtNotification(
+                '-1',
+                'statsNotification',
+                TestResources.atsign,
+                TestResources.atsign,
+                DateTime.now().millisecondsSinceEpoch,
+                MessageType.key.toString(),
+                false,
+                value: '10'));
+          });
+          return streamController.stream;
+        });
+
+        when(() =>
+            mockSyncUtil.getLastSyncedEntry(any(that: startsWith('.buzz)')),
+                atSign: TestResources.atsign)).thenAnswer(
+            (_) async => throw FormatException('.buzz) is not a valid regex'));
+
+        var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = mockSyncUtil;
+        var syncProgressListener = CustomSyncProgressListener();
+        syncServiceImpl.addProgressListener(syncProgressListener);
+
+        syncProgressListener.streamController.stream
+            .listen(expectAsync1((syncProgress) {
+          expect(syncProgress.syncStatus, SyncStatus.failure);
+          expect(syncProgress.atClientException, isA<AtClientException>());
+          expect(syncProgress.atClientException?.message,
+              '.buzz) is not a valid regex');
+          print(syncProgress.atClientException);
         }));
       });
 
