@@ -40,19 +40,19 @@ jobs:
         run: dart analyze
 
       # Run unit tests
-      - name: Run unit tests, with code coverage measurement
+      - name: Run at_client unit tests, with code coverage measurement
         working-directory: packages/at_client
         run: dart test --concurrency=1 --coverage="coverage"
 
-      - name: Convert coverage to LCOV format
+      - name: Convert at_client coverage to LCOV format
         working-directory: packages/at_client
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@894ff025c7b54547a9a2a1e9f228beae737ad3c2 # v3.1.3
+      - name: Upload at_client coverage to Codecov
+        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
         with:
           file: packages/at_client/unit_test_coverage.lcov
-          flags: unit_tests
+          flags: at_client_unit_tests
 
       # Adding flutter to path
       - name: Installing Flutter
@@ -69,6 +69,21 @@ jobs:
       - name: flutter analyze
         working-directory: packages/at_client_mobile
         run: flutter analyze --no-fatal-infos
+
+      # Run unit tests
+      - name: Run at_client_mobile unit tests, with code coverage measurement
+        working-directory: packages/at_client_mobile
+        run: flutter test --concurrency=1 --coverage
+
+      - name: Convert at_client_mobile coverage to LCOV format
+        working-directory: packages/at_client_mobile
+        run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
+
+      - name: Upload at_client_mobile coverage to Codecov
+        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
+        with:
+          file: packages/at_client_mobile/unit_test_coverage.lcov
+          flags: at_client_mobile_unit_tests
 
       # Check formatting
       - name: Check that code in packages is correctly formatted
@@ -121,7 +136,7 @@ jobs:
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@894ff025c7b54547a9a2a1e9f228beae737ad3c2 # v3.1.3
+        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
         with:
           file: tests/at_functional_test/functional_test_coverage.lcov
           flags: functional_tests
@@ -196,7 +211,7 @@ jobs:
       - name: Upload coverage to Codecov
         # Needs LCOV report to upload, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: codecov/codecov-action@894ff025c7b54547a9a2a1e9f228beae737ad3c2 # v3.1.3
+        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
         with:
           file: tests/at_end2end_test/end2end_test_coverage.lcov
           flags: end2end_tests

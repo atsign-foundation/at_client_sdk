@@ -65,7 +65,7 @@ class SyncUtil {
   //#TODO change return type to enum which says in sync, local ahead or server ahead
   static bool isInSync(List<CommitEntry?>? unCommittedEntries,
       int? serverCommitId, int? lastReceivedServerCommitId) {
-    logger.finer('localCommitId:$lastReceivedServerCommitId');
+    logger.finer('lastReceivedServerCommitId:$lastReceivedServerCommitId');
     logger.finer('serverCommitId:$serverCommitId');
     logger.finer('changed entries: ${unCommittedEntries?.length}');
     return (unCommittedEntries == null || unCommittedEntries.isEmpty) &&
@@ -137,6 +137,12 @@ class SyncUtil {
       }
     }
     return NullCommitEntry();
+  }
+
+  Future<void> removeCommitEntry(dynamic key, String atSign) async {
+    atCommitLog ??=
+        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+    await atCommitLog!.commitLogKeyStore.remove(key);
   }
 
   /// Sorts the commit entries in descending order.
