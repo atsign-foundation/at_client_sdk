@@ -1,7 +1,9 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -49,6 +51,7 @@ void main() {
 
     RSAKeypair alicesRSAKeyPair = RSAKeypair.fromRandom();
     RSAKeypair bobsRSAKeyPair = RSAKeypair.fromRandom();
+    RSAKeypair victorsRSAKeyPair = RSAKeypair.fromRandom();
 
     AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
         alicesRSAKeyPair.publicKey.toString(),
@@ -63,8 +66,25 @@ void main() {
       ..atKey = '$AT_ENCRYPTION_SHARED_KEY.bob'
       ..sharedBy = '@alice';
 
+    var victorSymKey = EncryptionUtil.generateAESKey();
+    var myEncryptedVicSymKey = EncryptionUtil.encryptKey(
+        victorSymKey, alicesRSAKeyPair.publicKey.toString());
+
+    late Map<String, dynamic> remoteLLookupMap;
+    late Map<String, dynamic> remotePLookupMap;
+    late Map<String, dynamic> remoteUpdatedMap;
+    late Set<String> remoteDeletedSet;
+    late int remoteCommitId;
+    late int remoteLLookupRequestCount;
+    late int remotePLookupRequestCount;
+    late int remoteUpdateRequestCount;
+    late int remoteDeleteRequestCount;
+    late bool remoteSecondaryAvailable;
+    late SecondaryKeyStore localStore;
+
     registerFallbackValue(llookupMySharedKeyForBob);
 
+    /// Runs once for this entire group of tests
     setUpAll(() async {
       mockRemoteSecondary = MockRemoteSecondary();
       MockSecondaryAddressFinder mockSecondaryAddressFinder =
@@ -77,6 +97,7 @@ void main() {
           AtChopsImpl(AtChopsKeys.create(atEncryptionKeyPair, null));
       atClient = await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
           remoteSecondary: mockRemoteSecondary, atChops: atChops);
+      localStore = atClient.getLocalSecondary()!.keyStore!;
       atClient.syncService = NoOpSyncService();
 
       // Create our symmetric 'self' encryption key
@@ -84,36 +105,103 @@ void main() {
           .getLocalSecondary()!
           .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
 
+      await atClient.getLocalSecondary()!.putValue(
+          'public:publickey@alice', alicesRSAKeyPair.publicKey.toString());
       // Create our symmetric encryption key for sharing with @bob
       await atClient
           .getLocalSecondary()!
           .putValue('shared_key.bob@alice', myEncryptedBobSharedKey);
+    });
 
-      when(() => mockRemoteSecondary.executeVerb(
-          any(that: isA<LLookupVerbBuilder>()))).thenAnswer((invocation) async {
-        var builder = invocation.positionalArguments[0];
-        print('LLookupVerbBuilder : ${builder.buildCommand()}');
-        return myEncryptedBobSharedKey;
-      });
+    String myCopyVicSymKeyName = 'shared_key.victor@alice';
+    String vicsCopySymKeyName = '@victor:shared_key@alice';
+
+    /// Runs for every test
+    setUp(() async {
+      await localStore.remove(myCopyVicSymKeyName);
+      await localStore.remove(vicsCopySymKeyName);
+
+      remoteSecondaryAvailable = true;
+
+      remotePLookupMap = {};
+      remotePLookupRequestCount = 0;
+      remotePLookupMap['publickey@bob'] = bobsRSAKeyPair.publicKey.toString();
+      remotePLookupMap['publickey@victor'] =
+          victorsRSAKeyPair.publicKey.toString();
       when(() => mockRemoteSecondary.executeVerb(
           any(that: isA<PLookupVerbBuilder>()))).thenAnswer((invocation) async {
-        var builder = invocation.positionalArguments[0];
+        remotePLookupRequestCount++;
+        var builder = invocation.positionalArguments[0] as PLookupVerbBuilder;
         print('PLookupVerbBuilder : ${builder.buildCommand()}');
-        return bobsRSAKeyPair.publicKey.toString();
+        if (!remoteSecondaryAvailable) {
+          print("Mock RemoteSecondary throwing SecondaryConnectException");
+          throw SecondaryConnectException(
+              'Mock remote atServer is unavailable');
+        }
+        var val = remotePLookupMap['${builder.atKey}${builder.sharedBy}'];
+        if (val != null) {
+          return val;
+        } else {
+          throw KeyNotFoundException(
+              'No value in mock remote for PLookup: ${builder.buildCommand()}');
+        }
       });
+
+      remoteLLookupMap = {};
+      remoteLLookupRequestCount = 0;
+      remoteLLookupMap['shared_key.bob@alice'] = myEncryptedBobSharedKey;
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: isA<LLookupVerbBuilder>()))).thenAnswer((invocation) async {
+        remoteLLookupRequestCount++;
+        var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+        print('LLookupVerbBuilder : ${builder.buildCommand()}');
+        if (!remoteSecondaryAvailable) {
+          print("Mock RemoteSecondary throwing SecondaryConnectException");
+          throw SecondaryConnectException(
+              'Mock remote atServer is unavailable');
+        }
+        var val = remoteLLookupMap[builder.atKeyObj.toString()];
+        if (val != null) {
+          return val;
+        } else {
+          throw KeyNotFoundException(
+              'No value in mock remote for LLookup: ${builder.buildCommand()}');
+        }
+      });
+
+      remoteUpdatedMap = {};
+      remoteCommitId = 1;
+      remoteUpdateRequestCount = 0;
       when(() => mockRemoteSecondary.executeVerb(
           any(that: isA<UpdateVerbBuilder>()),
-          sync: true)).thenAnswer((invocation) async {
-        var builder = invocation.positionalArguments[0];
+          sync: any(named: "sync"))).thenAnswer((invocation) async {
+        remoteUpdateRequestCount++;
+        var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
         print('UpdateVerbBuilder : ${builder.buildCommand()}');
-        return 'data:10';
+        if (!remoteSecondaryAvailable) {
+          print("Mock RemoteSecondary throwing SecondaryConnectException");
+          throw SecondaryConnectException(
+              'Mock remote atServer is unavailable');
+        }
+        remoteUpdatedMap[builder.atKeyObj.toString()] = builder.value;
+        return 'data:${remoteCommitId++}';
       });
+
+      remoteDeletedSet = {};
+      remoteDeleteRequestCount = 0;
       when(() => mockRemoteSecondary.executeVerb(
-          any(that: isA<UpdateVerbBuilder>()),
-          sync: false)).thenAnswer((invocation) async {
-        var builder = invocation.positionalArguments[0];
-        print('UpdateVerbBuilder : ${builder.buildCommand()}');
-        return 'data:10';
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: "sync"))).thenAnswer((invocation) async {
+        remoteDeleteRequestCount++;
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder : ${builder.buildCommand()}');
+        if (!remoteSecondaryAvailable) {
+          print("Mock RemoteSecondary throwing SecondaryConnectException");
+          throw SecondaryConnectException(
+              'Mock remote atServer is unavailable');
+        }
+        remoteDeletedSet.add(builder.atKeyObj.toString());
+        return 'data:${remoteCommitId++}';
       });
     });
 
@@ -420,6 +508,175 @@ void main() {
       });
       test('delete behaviour when useRemoteAtServer set to false', () async {
         await checkDeleteBehaviour(false);
+      });
+    });
+    group(
+        'Verify that my new shared symmetric keys are sent first to remote atServer',
+        () {
+      AtKey fooBarForVictor = AtKey.fromString('@victor:foo.bar@alice');
+
+      // 1. My copy not found in local, atServer unavailable ? => exception
+      test(
+          'exception thrown if no local my copy of shared key and atServer is unavailable',
+          () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        remoteSecondaryAvailable = false;
+        try {
+          await ske.getMyCopyOfSharedSymmetricKey(fooBarForVictor);
+        } catch (e) {
+          expect(e is SecondaryConnectException, true);
+        }
+        expect(remotePLookupRequestCount, 0);
+        expect(remoteLLookupRequestCount, 1);
+      });
+
+      // 2. My copy not found in local, not found in atServer => create new
+      //   and save to atServer, then local.
+      test(
+          'if no my copy locally or on atServer, generate new and store remote and local',
+          () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        var decryptedSymmetricKey =
+            await ske.getMyCopyOfSharedSymmetricKey(fooBarForVictor);
+        expect(decryptedSymmetricKey, '');
+        expect(remotePLookupRequestCount, 0);
+        expect(remoteLLookupRequestCount, 1); // lookup 'my' copy on atServer
+
+        // 2a. atServer unavailable when saving new key to atServer?
+        //    => Exception; should not be in remote nor in local
+        remoteSecondaryAvailable = false;
+        try {
+          await ske.createMyCopyOfSharedSymmetricKey(fooBarForVictor);
+        } catch (e, st) {
+          if (e is! SecondaryConnectException) {
+            print('Unexpected exception $e, $st');
+          }
+          expect(e is SecondaryConnectException, true);
+        }
+        expect(remoteLLookupRequestCount, 1); // still the same
+        expect(remoteDeleteRequestCount,
+            1); // a delete attempt for 'their' copy in atServer
+        expect(remoteUpdateRequestCount,
+            0); // 0 because we try the delete of 'their' copy first, and remote was 'unavailable'
+        expect(localStore.isKeyExists(myCopyVicSymKeyName), false);
+        expect(remoteUpdatedMap[myCopyVicSymKeyName], null);
+
+        // 2b. atServer available? new key should be created in remote and in local
+        remoteSecondaryAvailable = true;
+        await ske.createMyCopyOfSharedSymmetricKey(fooBarForVictor);
+        expect(remoteLLookupRequestCount, 1); // still the same
+        expect(remoteDeleteRequestCount,
+            2); // another delete attempt for 'their' copy in atServer
+        expect(remoteUpdateRequestCount, 1); // update 'our' copy to atServer
+        expect(remoteDeletedSet.contains(vicsCopySymKeyName), true);
+        expect(remoteUpdatedMap[myCopyVicSymKeyName] != null, true);
+        expect(localStore.isKeyExists(myCopyVicSymKeyName), true);
+      });
+
+      // 3. My copy not found in local, found in atServer => save to local
+      // Also, when 'my copy' is not found locally, we also delete any local copy of 'their copy'
+      test('no my copy locally, but found on atServer, so should store locally',
+          () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        expect(localStore.isKeyExists(myCopyVicSymKeyName), false);
+        await atClient
+            .getLocalSecondary()!
+            .putValue(vicsCopySymKeyName, 'dummy symmetric key');
+        expect(localStore.isKeyExists(vicsCopySymKeyName), true);
+        remoteLLookupMap[myCopyVicSymKeyName] = myEncryptedVicSymKey;
+
+        var decryptedSymmetricKey =
+            await ske.getMyCopyOfSharedSymmetricKey(fooBarForVictor);
+        expect(decryptedSymmetricKey, victorSymKey);
+        expect(localStore.isKeyExists(myCopyVicSymKeyName), true);
+        expect(localStore.isKeyExists(vicsCopySymKeyName), false);
+      });
+
+      // 4. My copy found locally, make no request to atServer
+      test('my copy found locally, no LLookup request to atServer', () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        await atClient
+            .getLocalSecondary()!
+            .putValue(myCopyVicSymKeyName, myEncryptedVicSymKey);
+        expect(localStore.isKeyExists(myCopyVicSymKeyName), true);
+
+        var decryptedSymmetricKey =
+            await ske.getMyCopyOfSharedSymmetricKey(fooBarForVictor);
+        expect(decryptedSymmetricKey, victorSymKey);
+        expect(remoteLLookupRequestCount, 0);
+        expect(remotePLookupRequestCount, 0);
+      });
+
+      // 5. Their copy not found local, atServer unavailable => exception
+      test('their copy not found locally, remote unavailable, exception',
+          () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        expect(localStore.isKeyExists(vicsCopySymKeyName), false);
+
+        remoteSecondaryAvailable = false;
+        try {
+          await ske.verifyTheirCopyOfSharedSymmetricKey(
+              fooBarForVictor, victorSymKey);
+        } catch (e) {
+          expect(e is SecondaryConnectException, true);
+        }
+        expect(remoteLLookupRequestCount, 1);
+      });
+
+      // 6. Their copy not found local, not found in atServer => save to atServer
+      //   then to local
+      test('their copy not found locally nor remotely, save remote then local',
+          () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        expect(remoteUpdatedMap.containsKey(vicsCopySymKeyName), false);
+        expect(localStore.isKeyExists(vicsCopySymKeyName), false);
+
+        var encryptedForVictor = await ske.verifyTheirCopyOfSharedSymmetricKey(
+            fooBarForVictor, victorSymKey);
+        expect(remoteUpdatedMap[vicsCopySymKeyName], encryptedForVictor);
+        expect(localStore.isKeyExists(vicsCopySymKeyName), true);
+      });
+
+      // 7. Their copy not found local, found in atServer => save to local
+      test(
+          'their copy not found locally but found remotely, save remote value to local',
+          () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        remoteLLookupMap[vicsCopySymKeyName] =
+            'encrypted symmetric key copy for victor';
+        expect(localStore.isKeyExists(vicsCopySymKeyName), false);
+
+        await ske.verifyTheirCopyOfSharedSymmetricKey(
+            fooBarForVictor, victorSymKey);
+        expect(remoteLLookupRequestCount, 1);
+        expect(remoteUpdateRequestCount, 0);
+        expect(localStore.isKeyExists(vicsCopySymKeyName), true);
+        var valueCopiedToLocalStore =
+            (await localStore.get(vicsCopySymKeyName)).data;
+        expect(
+            valueCopiedToLocalStore, 'encrypted symmetric key copy for victor');
+      });
+      // 8. Their copy found local, make no request to atServer
+      test('their copy found locally, make no request to atServer', () async {
+        SharedKeyEncryption ske = SharedKeyEncryption(atClient);
+        await atClient.getLocalSecondary()!.putValue(
+            vicsCopySymKeyName, 'encrypted symmetric key copy for victor');
+
+        remoteSecondaryAvailable = true;
+        await ske.verifyTheirCopyOfSharedSymmetricKey(
+            fooBarForVictor, victorSymKey);
+        expect(remotePLookupRequestCount, 0);
+        expect(remoteLLookupRequestCount, 0);
+        expect(remoteUpdateRequestCount, 0);
+        expect(remoteDeleteRequestCount, 0);
+
+        remoteSecondaryAvailable = false;
+        await ske.verifyTheirCopyOfSharedSymmetricKey(
+            fooBarForVictor, victorSymKey);
+
+        // And let's just double check nothing else weird has happened
+        var valueInLocalStore = (await localStore.get(vicsCopySymKeyName)).data;
+        expect(valueInLocalStore, 'encrypted symmetric key copy for victor');
       });
     });
   });

@@ -74,9 +74,16 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
     try {
       /// If not found in local storage, look in atServer
+      /// Also, delete *their* copy from our local storage
       if (encryptedSharedKey.isNull || encryptedSharedKey == 'data:null') {
         _logger.info(
-            'Encrypted shared key for ${atKey.sharedBy} not found in local storage. Fetching from atServer');
+            'Encrypted shared symmetric key for ${atKey.sharedBy} not found in local storage');
+        // Defensive code to ensure that 'their' copy is not in local storage
+        // if 'our' copy is not in local storage
+        await deleteTheirCopyOfEncryptedSharedKey(
+            atKey, _atClient.getLocalSecondary()!);
+        _logger.info(
+            'Fetching shared symmetric key for ${atKey.sharedBy} from atServer');
         encryptedSharedKey = await _getMyEncryptedCopyOfSharedSymmetricKey(
             _atClient.getRemoteSecondary()!, atKey);
         if (encryptedSharedKey != null && encryptedSharedKey != 'data:null') {
@@ -162,6 +169,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     // Encrypt the new symmetric key with our public key
     var encryptedSharedKeyMyCopy = EncryptionUtil.encryptKey(
         newSymmetricKeyBase64, currentAtSignEncryptionPublicKey!);
+
+    // Defensive code to ensure that we do not have an old 'their' copy on atServer
+    await deleteTheirCopyOfEncryptedSharedKey(
+        atKey, _atClient.getRemoteSecondary()!);
 
     // Store my copy for future use
     // First, store to atServer
@@ -370,5 +381,20 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       ..ttr = 3888000
       ..value = encryptedSharedKeyValue;
     return await secondary.executeVerb(updateSharedKeyBuilder, sync: false);
+  }
+
+  /// Called in two situations, for defensive purposes:
+  /// 1. When we don't find 'our' copy in local storage, we also remove 'their' copy from local storage
+  /// 2. When we have determined that we are creating a new shared key, we try to remove from remote atServer
+  Future<void> deleteTheirCopyOfEncryptedSharedKey(
+      AtKey atKey, Secondary secondary) async {
+    var deleteBuilder = DeleteVerbBuilder()
+      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..sharedWith = atKey.sharedWith
+      ..sharedBy = atKey.sharedBy;
+
+    _logger.info(
+        'Deleting ${deleteBuilder.buildKey()} from ${secondary.runtimeType}');
+    await secondary.executeVerb(deleteBuilder, sync: false);
   }
 }

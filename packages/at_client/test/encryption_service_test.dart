@@ -36,6 +36,8 @@ void main() {
 
   AtClientManager mockAtClientManager = MockAtClientManager();
 
+  registerFallbackValue(FakeLocalLookUpVerbBuilder());
+
   group('A group of test to validate self key encryption exceptions', () {
     test(
         'A test to verify SelfKeyNotFoundException is thrown when self key is not found',
@@ -169,10 +171,25 @@ void main() {
   group(
       'A group of tests to related to fetch and decrypt the encrypted shared key',
       () {
+    setUp(() async {
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
+    });
     test(
         'A test to verify encrypted shared key is fetched from local secondary and decrypted successfully',
         () async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
 
       var originalSharedKey = 'WwOn34SJaEQUHvmaY5haGtVAfHp1eBzLk8239uRGnhw=';
@@ -201,8 +218,6 @@ void main() {
     test(
         'A test to verify encrypted shared key is fetched from remote secondary and decrypted successfully',
         () async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
-
       when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => '@alice');
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
 
@@ -248,7 +263,6 @@ void main() {
     test(
         'A test to verify empty string is returned when shared key is not found in local and remote secondary',
         () async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
 
       when(() => mockAtClient.getLocalSecondary())
@@ -272,34 +286,6 @@ void main() {
     });
   });
 
-  group(
-      'Verify that my new shared symmetric keys are sent first to remote atServer',
-      () {
-    String storageDir = '${Directory.current.path}/test/hive';
-
-    // TODO: test scenarios
-    // 1. My copy not found in local, atServer unavailable ? => exception
-    // 2. My copy not found in local, not found in atServer => create new
-    //   and save to atServer, then local. atServer unavailable ? => exception
-    // 3. My copy not found in local, found in atServer => save to local
-    // 4. My copy found in local
-    // When we have a key after scenarios 2, 3 and 4 above
-    // 5. Their copy not found local, atServer unavailable => exception
-    // 6. Their copy not found local, not found in atServer => save to atServer
-    //   then to local. atServer unavailable? => exception
-    // 7. Their copy not found local, found in atServer => save to local
-    // 8. Their copy found local
-
-    tearDown(() async {
-      resetMocktailState();
-      await AtCommitLogManagerImpl.getInstance().close();
-      var isExists = await Directory(storageDir).exists();
-      if (isExists) {
-        Directory(storageDir).deleteSync(recursive: true);
-      }
-    });
-  });
-
   group('A group of test related shared key encryption', () {
     String storageDir = '${Directory.current.path}/test/hive';
     SharedKeyEncryption sharedKeyEncryption;
@@ -314,13 +300,27 @@ void main() {
         'JZ3fjGxobojMytMhslfcBsJ5R0f5oVFwV7Qyyko1PMB3DhWMWRhlCQFUIZlyGyX0gIBrDBkYGRHDkj00DYAoF1VVJ3jaHL1d45VPpYpPG0QxhA7A8BriU8PnX+3wbUk8LMD7GscW3sOJPJ2mduCM2UKs1TUO3D4AKR7vrEZXRi11ddgQZet6JgTcKG+/uG7ftdMxs1Y+jHvwfHCYlW+w/IfERzoyfPlAyyGAuY/ucZea/9JvSXtgp5Oxk7MKn3IMBa3N6vCb0zYpg+6SUdee0t47zeTaMcPJ9wCOJQ6p5b5ltK7kJxX2ILGHDFUeMUISKG2eMrEeR9HlVKQ3e3eLRw==';
 
     setUp(() async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => mockLocalSecondary);
       when(() => mockAtClient.getRemoteSecondary())
           .thenAnswer((_) => mockRemoteSecondary);
       when(() => mockLocalSecondary.getEncryptionPrivateKey())
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
+
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
 
       atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
           '@alice',
