@@ -275,8 +275,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
     syncProgress.localCommitId = localCommitId;
     syncProgress.serverCommitId = serverCommitId;
-    _logger.finer(
-        "Informing ${_syncProgressListeners.length} listeners of $syncProgress");
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(syncProgress);
@@ -499,7 +497,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           await _processServerCommitEntry(
               serverCommitEntry, uncommittedEntries, keyInfoList);
           _logger.finest(
-              '**lastReceivedServerCommitId $lastReceivedServerCommitId');
+              'Updating lastReceivedServerCommitId to $lastReceivedServerCommitId');
         }
       }
     } finally {
@@ -896,15 +894,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ..value = serverCommitEntry['value'];
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
-        _logger.finest(
-            'syncing to local: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
         var builder = DeleteVerbBuilder()
           ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
-        _logger.finest(
-            'syncing to local delete: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
         break;
     }
@@ -999,7 +993,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     commitEntry.operation = operation;
     _logger.finest(
-        '*** updating commitId to local ${serverCommitEntry['commitId']}');
+        'Updating ${commitEntry.atKey} commitId to ${serverCommitEntry['commitId']} in local keystore');
     await syncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
         _atClient.getCurrentAtSign()!);
   }
