@@ -5,6 +5,7 @@ import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
+import 'package:at_utils/at_logger.dart';
 
 late AtClient sharedByAtClient;
 late AtClient sharedWithAtClient;
@@ -64,6 +65,7 @@ void main() {
   test(
       'A test to verify cached key is deleted in sharedWith secondary when CCD is set to true',
       () async {
+    AtSignLogger.root_level = 'finer';
     // Create a key with TTR set
     var key = 'deletecachedkey-${Uuid().v4().hashCode}';
     var atKey =
@@ -76,7 +78,8 @@ void main() {
             namespace,
             TestPreferences.getInstance().getPreference(sharedByAtSign)))
         .atClient;
-    await sharedByAtClient.put(atKey, 'dummy_cached_value');
+    var putResult = await sharedByAtClient.put(atKey, 'dummy_cached_value');
+    assert(putResult == true);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService,
         syncOptions: SyncOptions()..key = atKey.toString());
 

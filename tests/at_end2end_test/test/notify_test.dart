@@ -49,7 +49,8 @@ void main() async {
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
             TestPreferences.getInstance().getPreference(currentAtSign));
-    final notificationResult = await currentAtClientManager.atClient.notificationService
+    final notificationResult = await currentAtClientManager
+        .atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
     expect(notificationResult, isNotNull);
     expect(notificationResult.notificationStatusEnum,
@@ -103,17 +104,20 @@ void main() async {
         expect(notificationResult.notificationStatusEnum,
             NotificationStatusEnum.delivered);
 
-        sharedWithAtClientManager = await AtClientManager.getInstance().setCurrentAtSign(sharedWithAtSign,
-            namespace, TestPreferences.getInstance().getPreference(sharedWithAtSign));
+        sharedWithAtClientManager = await AtClientManager.getInstance()
+            .setCurrentAtSign(sharedWithAtSign, namespace,
+                TestPreferences.getInstance().getPreference(sharedWithAtSign));
         var atNotification = await AtClientManager.getInstance()
             .atClient
             .notificationService
             .fetch(notificationResult.notificationID);
         atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
-        await NotificationResponseTransformer(sharedWithAtClientManager.atClient).transform(Tuple()
-          ..one = atNotification
-          ..two = (NotificationConfig()
-            ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));
+        await NotificationResponseTransformer(
+                sharedWithAtClientManager.atClient)
+            .transform(Tuple()
+              ..one = atNotification
+              ..two = (NotificationConfig()
+                ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));
         expect(atNotification.id, notificationResult.notificationID);
         expect(atNotification.key, expectedOutput);
       });
@@ -123,7 +127,9 @@ void main() async {
   group('A group of tests for notification fetch', () {
     test('A test to verify non existent notification', () async {
       await AtClientManager.getInstance().setCurrentAtSign(
-          currentAtSign, namespace, TestPreferences.getInstance().getPreference(currentAtSign));
+          currentAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(currentAtSign));
       var notificationResult = await AtClientManager.getInstance()
           .atClient
           .notificationService
@@ -136,45 +142,41 @@ void main() async {
       for (int i = 0; i < 10; i++) {
         print('Testing notification expiry - test run #$i');
         await AtClientManager.getInstance().setCurrentAtSign(
-            currentAtSign, namespace, TestPreferences.getInstance().getPreference(currentAtSign));
+            currentAtSign,
+            namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
         var atKey = (AtKey.shared('test-notification-expiry',
-            namespace: 'wavi', sharedBy: currentAtSign)
-          ..sharedWith(sharedWithAtSign))
+                namespace: 'wavi', sharedBy: currentAtSign)
+              ..sharedWith(sharedWithAtSign))
             .build();
-        NotificationResult notificationResult = await AtClientManager
-            .getInstance()
-            .atClient
-            .notificationService
-            .notify(NotificationParams.forUpdate(atKey,
-            notificationExpiry: Duration(minutes: 1)));
+        NotificationResult notificationResult =
+            await AtClientManager.getInstance()
+                .atClient
+                .notificationService
+                .notify(NotificationParams.forUpdate(atKey,
+                    notificationExpiry: Duration(minutes: 1)));
 
-        AtNotification atNotification = await AtClientManager
-            .getInstance()
+        AtNotification atNotification = await AtClientManager.getInstance()
             .atClient
             .notificationService
             .fetch(notificationResult.notificationID);
 
-        var actualExpiresAtInEpochMills = DateTime
-            .fromMillisecondsSinceEpoch(
-            atNotification.expiresAtInEpochMillis!)
+        var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
+                atNotification.expiresAtInEpochMillis!)
             .toUtc()
             .millisecondsSinceEpoch;
         var expectedExpiresAtInEpochMills =
-            DateTime
-                .fromMillisecondsSinceEpoch(atNotification.epochMillis)
+            DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
                 .toUtc()
                 .add(Duration(minutes: 1))
                 .millisecondsSinceEpoch;
-        expect((actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills).abs() < 10, true);
+        expect(
+            (actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills)
+                    .abs() <
+                10,
+            true);
       }
     });
-  });
-
-  tearDownAll(() async {
-    var isExists = await Directory('test/hive').exists();
-    if (isExists) {
-      Directory('test/hive/').deleteSync(recursive: true);
-    }
   });
 }
 
