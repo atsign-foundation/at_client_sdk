@@ -82,9 +82,10 @@ class AtRpcResp {
     return AtRpcResp(
         reqId: json['reqId'],
         respType: AtRpcRespType.values.byName(json['respType']),
-        payload: json['payload']);
+        payload: json['payload'],
+        message: json['message']);
   }
 
   Map<String, dynamic> toJson() =>
-      {'reqId': reqId, 'respType': respType.name, 'payload': payload};
+      {'reqId': reqId, 'respType': respType.name, 'payload': payload, 'message': message};
 }
