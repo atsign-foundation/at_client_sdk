@@ -19,7 +19,7 @@ dependencies:
   at_commons: ^3.0.47
   at_utils: ^3.0.13
   at_chops: ^1.0.3
-  at_lookup: ^3.0.36
+  at_lookup: ^3.0.37
   at_client: ^3.0.60
 
 dev_dependencies:
