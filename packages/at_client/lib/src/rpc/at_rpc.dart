@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/rpc/at_rpc_types.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 

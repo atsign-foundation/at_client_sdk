@@ -86,6 +86,10 @@ class AtRpcResp {
         message: json['message']);
   }
 
-  Map<String, dynamic> toJson() =>
-      {'reqId': reqId, 'respType': respType.name, 'payload': payload, 'message': message};
+  Map<String, dynamic> toJson() => {
+        'reqId': reqId,
+        'respType': respType.name,
+        'payload': payload,
+        'message': message
+      };
 }
