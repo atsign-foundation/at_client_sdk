@@ -1,6 +1,8 @@
 ## 3.0.61
 - fix: ensure key exchange functions properly when the sync service is not
   being used
+- feat: Add AtRpc - A simple rpc request-response API which uses atProtocol
+  notifications under the hood.
 ## 3.0.60
 - feat: Add `useRemoteAtServer` to PutRequestOptions. When set, the update
   request will be sent directly to the remote atServer
