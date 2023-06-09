@@ -242,6 +242,7 @@ class AtRpc {
     late AtRpcResp response;
     try {
       response = await callbacks.handleRequest(request, notification.from);
+      await sendResponse(notification, request, response);
     } catch (e, st) {
       var message =
           'Exception $e from callbacks.handleRequest for request $request';
@@ -250,8 +251,6 @@ class AtRpc {
       await sendResponse(notification, request,
           AtRpcResp.nack(request: request, message: message));
     }
-
-    await sendResponse(notification, request, response);
   }
 
   /// Not part of API, but visibleForTesting.
