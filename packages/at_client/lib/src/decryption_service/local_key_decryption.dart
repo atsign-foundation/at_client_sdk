@@ -24,15 +24,15 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     // Get the shared key.
-    var sharedKey = await getSharedKey(atKey);
+    var symmetricKey = await getMyCopyOfSharedSymmetricKey(atKey);
 
-    if (sharedKey.isEmpty) {
+    if (symmetricKey.isEmpty) {
       _logger.severe('Decryption failed. SharedKey is null');
       throw SharedKeyNotFoundException('Empty or null SharedKey is found',
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    return EncryptionUtil.decryptValue(encryptedValue, sharedKey,
+    return EncryptionUtil.decryptValue(encryptedValue, symmetricKey,
         ivBase64: atKey.metadata?.ivNonce);
   }
 }
