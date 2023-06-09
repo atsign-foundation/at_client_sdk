@@ -28,3 +28,4 @@ doc/api/
 
 #gradle
 *.gradle/
+!/full_stack_tests/
