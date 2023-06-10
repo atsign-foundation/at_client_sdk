@@ -23,3 +23,7 @@ export 'package:at_client/src/listener/sync_progress_listener.dart';
 export 'package:at_client/src/client/request_options.dart';
 @experimental
 export 'package:at_client/src/telemetry/at_client_telemetry.dart';
+@experimental
+export 'package:at_client/src/rpc/at_rpc_types.dart';
+@experimental
+export 'package:at_client/src/rpc/at_rpc.dart';
