@@ -1,5 +1,7 @@
 import 'package:at_client/src/at_collection/at_collection_model.dart';
+import 'package:meta/meta.dart';
 
+@experimental
 abstract class AtCollectionModelFactory<T extends AtCollectionModel> {
   /// Expected to return an instance of T
   T create();
