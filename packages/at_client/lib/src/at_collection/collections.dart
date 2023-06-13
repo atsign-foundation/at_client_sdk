@@ -1,9 +1,8 @@
-
-import '../at_client.dart';
+import 'package:at_client/at_client.dart';
 
 /// Contains CRUD operations that can be performed on [AtCollectionModel]
 abstract class AtCollectionModelOperations {
-  /// Saves the json representaion of [AtCollectionModel] to the secondary server of a atSign.
+  /// Saves the json representation of [AtCollectionModel] to the secondary server of a atSign.
   /// [save] calls [toJson] method to get the json representation of a [AtCollectionModel].
   ///
   /// If [autoReshare] is set to true, then the Object will not only be saved but also be shared with the atSigns with whom it was previously shared.
@@ -143,7 +142,8 @@ abstract class AtCollectionQueryOperations {
   ///
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
-  Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(String atSign);
+  Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
+      String atSign);
 
   /// Returns list of AtCollectionModels that are shared with any atSign
   /// Returns an empty list when nothing has been shared
@@ -157,14 +157,16 @@ abstract class AtCollectionQueryOperations {
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
   ///
   /// Throws [Exception] when an AtCollectionModel could not found for the given inputs
-  Future<T> getModel<T extends AtCollectionModel>(String id, String namespace, String collectionName);
+  Future<T> getModel<T extends AtCollectionModel>(
+      String id, String namespace, String collectionName);
 
   /// Returns list of AtCollectionModels that are created for the [collectionName] passed
   /// Returns an empty list when there are no matches
   ///
   /// An instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
-  Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(String collectionName);
+  Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
+      String collectionName);
 }
 
 /// [AtCollectionModel] sets the base structure of the model that is used to interact with collection methods.
@@ -177,7 +179,6 @@ abstract class AtCollectionQueryOperations {
 /// ```
 ///
 abstract class AtCollectionModelStreamOperations {
-
   /// Saves the json representaion of the object to the secondary server of the @sign.
   /// [save] calls [toJson] method to get the json representation.
   ///
@@ -290,11 +291,18 @@ class AtOperationItemStatus {
 enum Operation { save, share, unshare, delete }
 
 abstract class KeyMaker {
-  AtKey createSelfKey({required String keyId, required String collectionName, required String namespace,
-    ObjectLifeCycleOptions? objectLifeCycleOptions});
+  AtKey createSelfKey(
+      {required String keyId,
+      required String collectionName,
+      required String namespace,
+      ObjectLifeCycleOptions? objectLifeCycleOptions});
 
-  AtKey createSharedKey({required String keyId, required String collectionName, required String namespace,
-    String? sharedWith, ObjectLifeCycleOptions? objectLifeCycleOptions});
+  AtKey createSharedKey(
+      {required String keyId,
+      required String collectionName,
+      required String namespace,
+      String? sharedWith,
+      ObjectLifeCycleOptions? objectLifeCycleOptions});
 }
 
 class ObjectLifeCycleOptions {
@@ -313,15 +321,10 @@ class ObjectLifeCycleOptions {
   // Time after which the recipient has to refresh the cached value that was shared by someone
   Duration cacheRefreshIntervalOnRecipient;
 
-
-
   ObjectLifeCycleOptions(
       {this.timeToBirth,
-        this.timeToLive,
-        this.cascadeDelete = true,
-        this.cacheValueOnRecipient = true,
-        this.cacheRefreshIntervalOnRecipient = const Duration(days: 5)});
+      this.timeToLive,
+      this.cascadeDelete = true,
+      this.cacheValueOnRecipient = true,
+      this.cacheRefreshIntervalOnRecipient = const Duration(days: 5)});
 }
-
-
-

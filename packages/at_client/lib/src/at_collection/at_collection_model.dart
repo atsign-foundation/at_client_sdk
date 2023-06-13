@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/at_collection/at_collection_model_factory.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:uuid/uuid.dart';
 import 'at_json_collection_model.dart';
@@ -11,14 +11,17 @@ import 'impl/at_collection_stream_operations_impl.dart';
 
 abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   static final _logger = AtSignLogger('AtCollectionModel');
+
   /// [id] uniquely identifies this model.
   ///
   /// By default, id is set to UUID.
   String id = Uuid().v4();
+
   /// [collectionName] is used to identify collections of same type
   /// For example, if Preference is a class that extends AtCollectionModel then collectionName can be "preferences"
   /// Defaulted to the name of the dart class in lowercase
   late String collectionName;
+
   /// namespace is used to persist the collection model
   /// Typically namespace is used to identify the app that is used to persist the data.
   late String namespace;
@@ -34,7 +37,6 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   static final AtCollectionQueryOperations _atCollectionQueryOperations =
       AtCollectionQueryOperationsImpl();
 
-
   AtCollectionModel() {
     _atCollectionModelOperations = AtCollectionModelOperationsImpl(this);
     streams = AtCollectionModelStreamOperationsImpl(this);
@@ -45,7 +47,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   /// Registers list of AtCollectionModelFactory instances.
   /// These factories will be used while creating specific sub classes of [AtCollectionModel] for a given collection
   static registerFactories(List<AtCollectionModelFactory> factories) {
-    for(var atCollectionModelFactory in factories) {
+    for (var atCollectionModelFactory in factories) {
       AtCollectionModelFactoryManager.getInstance()
           .register(atCollectionModelFactory);
     }
@@ -60,11 +62,11 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
       {required String id,
       required String namespace,
       required String collectionName}) async {
-    _logger.finer('get model for id:$id namespace:$namespace collectionName:$collectionName');
+    _logger.finer(
+        'get model for id:$id namespace:$namespace collectionName:$collectionName');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
-    return _atCollectionQueryOperations.getModel(
-        id, namespace, collectionName);
+    return _atCollectionQueryOperations.getModel(id, namespace, collectionName);
   }
 
   /// Returns list of AtCollectionModels that are created for the [collectionName] passed
@@ -81,18 +83,17 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
         .getModelsByCollectionName(collectionName);
   }
 
-
   /// Returns list of AtCollectionModels that are shared with the given [atSign]
   /// Returns an empty list when nothing has been shared
   ///
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
-  static Future<List<T>>
-      getModelsSharedWith<T extends AtCollectionModel>(String atSign) async {
+  static Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
+      String atSign) async {
     _logger.finer('get models shared with atSign:$atSign');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
-    AtUtils.formatAtSign(atSign)!;
+    AtUtils.fixAtSign(atSign);
     return _atCollectionQueryOperations.getModelsSharedWith(atSign);
   }
 
@@ -107,7 +108,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     _logger.finer('get models shared by atSign:$atSign');
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
-    AtUtils.formatAtSign(atSign);
+    AtUtils.fixAtSign(atSign);
     return _atCollectionQueryOperations.getModelsSharedBy(atSign);
   }
 
@@ -116,7 +117,8 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   ///
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
-  static Future<List<T>> getModelsSharedByAnyAtSign<T extends AtCollectionModel>() async {
+  static Future<List<T>>
+      getModelsSharedByAnyAtSign<T extends AtCollectionModel>() async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
     return _atCollectionQueryOperations.getModelsSharedByAnyAtSign();
@@ -127,17 +129,18 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   ///
   /// Instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]
-  static Future<List<T>> getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
+  static Future<List<T>>
+      getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
     AtCollectionModelFactoryManager.getInstance()
         .register(_jsonCollectionModelFactory);
     return _atCollectionQueryOperations.getModelsSharedWithAnyAtSign();
   }
 
-
   @override
   Future<bool> save(
       {bool autoReshare = true, ObjectLifeCycleOptions? options}) async {
-    return _atCollectionModelOperations.save(autoReshare: autoReshare, options: options);
+    return _atCollectionModelOperations.save(
+        autoReshare: autoReshare, options: options);
   }
 
   @override
@@ -160,5 +163,4 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   Future<bool> unshare({List<String>? atSigns}) async {
     return _atCollectionModelOperations.unshare(atSigns: atSigns);
   }
-
 }

@@ -28,6 +28,6 @@ export 'package:at_client/src/rpc/at_rpc_types.dart';
 @experimental
 export 'package:at_client/src/rpc/at_rpc.dart';
 @experimental
-export 'package:at_client/at_collection/at_collection_impl.dart';
+export 'package:at_client/src/at_collection/at_collection_model.dart';
 @experimental
-export 'package:at_client/at_collection/model/data_operation_model.dart';
+export 'package:at_client/src/at_collection/at_collection_model_factory.dart';

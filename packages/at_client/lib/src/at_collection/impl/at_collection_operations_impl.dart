@@ -1,17 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/at_collection/collection_util.dart';
+import 'package:at_client/src/at_collection/collections.dart';
 import 'package:at_utils/at_logger.dart';
-import '../../at_client.dart';
-import '../collection_util.dart';
-import '../collections.dart';
-import 'default_key_maker.dart';
 import 'collection_methods_impl.dart';
 
-class AtCollectionModelOperationsImpl
-    extends AtCollectionModelOperations {
+class AtCollectionModelOperationsImpl extends AtCollectionModelOperations {
   final _logger = AtSignLogger('AtCollectionModelOperationsImpl');
-  final KeyMaker _keyMaker = DefaultKeyMaker();
   late AtCollectionModel atCollectionModel;
   late AtCollectionMethodImpl collectionMethodImpl;
 
@@ -22,7 +19,6 @@ class AtCollectionModelOperationsImpl
   @override
   Future<bool> save(
       {bool autoReshare = true, ObjectLifeCycleOptions? options}) async {
-
     var jsonObject = CollectionUtil.initAndValidateJson(
         collectionModelJson: toJson(),
         id: atCollectionModel.id,
@@ -59,8 +55,8 @@ class AtCollectionModelOperationsImpl
 
   @override
   Future<List<String>> sharedWith() async {
-    CollectionUtil.checkForNullOrEmptyValues(
-        atCollectionModel.id, atCollectionModel.collectionName, atCollectionModel.namespace);
+    CollectionUtil.checkForNullOrEmptyValues(atCollectionModel.id,
+        atCollectionModel.collectionName, atCollectionModel.namespace);
 
     List<String> sharedWithList = [];
     String formattedId = CollectionUtil.format(atCollectionModel.id);
@@ -112,8 +108,8 @@ class AtCollectionModelOperationsImpl
 
   @override
   Future<bool> delete() async {
-    CollectionUtil.checkForNullOrEmptyValues(
-        atCollectionModel.id, atCollectionModel.collectionName, atCollectionModel.namespace);
+    CollectionUtil.checkForNullOrEmptyValues(atCollectionModel.id,
+        atCollectionModel.collectionName, atCollectionModel.namespace);
 
     bool isSelfKeyDeleted = false;
     await collectionMethodImpl

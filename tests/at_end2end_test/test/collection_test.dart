@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_collection/at_json_collection_model.dart';
-import 'package:at_client/at_collection/collection_util.dart';
-import 'package:at_client/at_collection/collections.dart';
+import 'package:at_client/src/at_collection/at_json_collection_model.dart';
+import 'package:at_client/src/at_collection/collection_util.dart';
+import 'package:at_client/src/at_collection/collections.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -571,7 +571,7 @@ void main() async {
 
     /// Share at Collections models from first atSign to second atSign
     var a = A.from('a11', a: 'a11 value');
-    var shareRes = await a.share([secondAtSign]);
+    await a.share([secondAtSign]);
 
     var b = B.from('b11', b: 'b11 value');
     await b.share([secondAtSign]);
@@ -653,7 +653,7 @@ void main() async {
       ..preference = pizzaPreferences;
     await preference.save();
 
-    var shareRes = await preference.share([secondAtSign]);
+    await preference.share([secondAtSign]);
 
     var contact = Contact()
       ..id = 'jagan'
@@ -661,14 +661,14 @@ void main() async {
       ..collectionName = 'contact'
       ..atSign = '@jagan'
       ..nickname = 'jagan';
-    shareRes = await contact.share([secondAtSign]);
+    await contact.share([secondAtSign]);
 
     Phone phone = Phone()
       ..id = 'my another phone'
       ..namespace = 'buzz'
       ..collectionName = 'phone'
       ..phoneNumber = '1122';
-    shareRes = await phone.share([secondAtSign]);
+    await phone.share([secondAtSign]);
 
     /// receiver's end
     sharedWithAtClientManager =

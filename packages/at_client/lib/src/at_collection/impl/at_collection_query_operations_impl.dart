@@ -1,11 +1,10 @@
 import 'dart:convert';
 
-
-import 'package:at_client/at_collection/impl/default_key_maker.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/at_collection/collection_util.dart';
+import 'package:at_client/src/at_collection/collections.dart';
+import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
 import 'package:at_utils/at_logger.dart';
-import '../../at_client.dart';
-import '../collection_util.dart';
-import '../collections.dart';
 
 class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   final _logger = AtSignLogger('AtCollectionQueryOperationsImpl');
@@ -22,7 +21,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   @override
   Future<List<T>> getModelsByCollectionName<T extends AtCollectionModel>(
       String collectionName) async {
-    AtCollectionModelFactory<T>? collectionModelFactory  =
+    AtCollectionModelFactory<T>? collectionModelFactory =
         AtCollectionModelFactoryManager.getInstance().get(collectionName);
 
     if (collectionModelFactory == null) {
@@ -64,7 +63,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
   @override
-  Future<T> getModel <T extends AtCollectionModel>(
+  Future<T> getModel<T extends AtCollectionModel>(
       String id, String namespace, String collectionName) async {
     AtCollectionModelFactory<T>? collectionModelFactory =
         AtCollectionModelFactoryManager.getInstance().get(collectionName);
@@ -83,18 +82,19 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
 
     try {
       AtValue atValue = await getAtClient().get(atKey);
-      var atValueJson = jsonDecode(atValue.value);
       T model = collectionModelFactory.create();
       _populateModel(model, jsonDecode(atValue.value), atKey);
       return model;
     } catch (e) {
       _logger.severe('failed to get value of ${atKey.key} $e');
-      throw Exception('AtCollectionModel is not found for the given id:$id , namespace:$namespace and collectionName: $collectionName');
+      throw Exception(
+          'AtCollectionModel is not found for the given id:$id , namespace:$namespace and collectionName: $collectionName');
     }
   }
 
   @override
-  Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(String atSign) async {
+  Future<List<T>> getModelsSharedWith<T extends AtCollectionModel>(
+      String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
@@ -104,27 +104,29 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   }
 
   @override
-  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(String atSign) async {
+  Future<List<T>> getModelsSharedBy<T extends AtCollectionModel>(
+      String atSign) async {
     var regex = CollectionUtil.makeRegex();
     // Get all collection model keys
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     // Just keep the ones where shared by is the atSign passed
-    collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null && atKey.sharedBy == atSign));
-
+    collectionAtKeys.retainWhere(
+        (atKey) => (atKey.sharedBy != null && atKey.sharedBy == atSign));
 
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
   @override
-  Future<List<T>> getModelsSharedByAnyAtSign<T extends AtCollectionModel>() async {
+  Future<List<T>>
+      getModelsSharedByAnyAtSign<T extends AtCollectionModel>() async {
     var regex = CollectionUtil.makeRegex();
     // Get all collection model keys
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     // From all of the shared collection keys retain the ones where sharedBy is not null and it not the current atSign
-    collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null && atKey.sharedBy != getAtClient().getCurrentAtSign()));
+    collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null &&
+        atKey.sharedBy != getAtClient().getCurrentAtSign()));
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
-
 
   @override
   Future<List<T>>
@@ -163,9 +165,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
           continue;
         }
 
-
-        AtCollectionModelFactory<AtCollectionModel>? factory = AtCollectionModelFactoryManager.getInstance()
-            .get(atValueJson['collectionName']);
+        AtCollectionModelFactory<AtCollectionModel>? factory =
+            AtCollectionModelFactoryManager.getInstance()
+                .get(atValueJson['collectionName']);
 
         T? model = factory?.create() as T?;
         if (model == null) {
@@ -183,12 +185,11 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
     return modelList;
   }
 
-  void _populateModel(AtCollectionModel model, Map<String, dynamic> atValueJson, AtKey atKey) {
+  void _populateModel(
+      AtCollectionModel model, Map<String, dynamic> atValueJson, AtKey atKey) {
     model.id = atValueJson['id'];
     model.collectionName = atValueJson['collectionName'];
     model.namespace = CollectionUtil.getNamespaceFromKey(atKey.toString());
     model.fromJson(atValueJson);
   }
 }
-
-

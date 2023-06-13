@@ -1,6 +1,6 @@
-import 'package:at_client/at_collection/at_collection_model.dart';
-import 'package:at_client/at_collection/collection_util.dart';
-import 'package:at_client/at_collection/impl/default_key_maker.dart';
+import 'package:at_client/src/at_collection/at_collection_model.dart';
+import 'package:at_client/src/at_collection/collection_util.dart';
+import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
@@ -12,7 +12,6 @@ import '../collections.dart';
 
 class AtCollectionMethodImpl {
   final _logger = AtSignLogger('AtCollectionModelMethodsImpl');
-
 
   late KeyMaker keyMaker = DefaultKeyMaker();
   AtCollectionModel atCollectionModel;
@@ -29,7 +28,8 @@ class AtCollectionMethodImpl {
     String formattedCollectionName = CollectionUtil.format(
       atCollectionModel.collectionName,
     );
-    _logger.finest('formatted id: $formattedId --  formatted collectionName: $formattedCollectionName');
+    _logger.finest(
+        'formatted id: $formattedId --  formatted collectionName: $formattedCollectionName');
 
     AtKey atKey = keyMaker.createSelfKey(
       keyId: formattedId,
@@ -62,13 +62,13 @@ class AtCollectionMethodImpl {
 
   Stream<AtOperationItemStatus> updateSharedKeys(String formattedId,
       String formattedCollectionName, String jsonEncodedData) async* {
-    _logger.finest('Update shared keys for id:$formattedId collectionName:$formattedCollectionName');
+    _logger.finest(
+        'Update shared keys for id:$formattedId collectionName:$formattedCollectionName');
     var sharedAtKeys = await _getAtClient().getAtKeys(
         regex: CollectionUtil.makeRegex(
-      formattedId: formattedId,
-      collectionName: formattedCollectionName,
-            namespace: atCollectionModel.namespace
-    ));
+            formattedId: formattedId,
+            collectionName: formattedCollectionName,
+            namespace: atCollectionModel.namespace));
 
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
@@ -177,10 +177,9 @@ class AtCollectionMethodImpl {
 
     var sharedAtKeys = await _getAtClient().getAtKeys(
       regex: CollectionUtil.makeRegex(
-        formattedId: formattedId,
-        collectionName: formattedCollectionName,
-          namespace: atCollectionModel.namespace
-      ),
+          formattedId: formattedId,
+          collectionName: formattedCollectionName,
+          namespace: atCollectionModel.namespace),
     );
 
     if (atSigns == null) {

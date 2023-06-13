@@ -3,7 +3,6 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtCollectionUtil {
-
   static AtClient? atClient;
 
   static AtClient _getAtClient() {
@@ -11,7 +10,7 @@ class AtCollectionUtil {
 
     return atClient!;
   }
-  
+
   static AtKey formAtKey({
     required String key,
     String? sharedWith,

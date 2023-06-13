@@ -2,7 +2,6 @@
 root_server:
   # The url to connect to root server
   url: 'root.atsign.wtf'
-  # url: 'root.atsign.org'
 
 # cicd atSign details
 atSign:

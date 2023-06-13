@@ -1,11 +1,8 @@
-import 'dart:convert';
-
 import 'at_collection_model.dart';
 import 'at_collection_model_factory.dart';
 
 // Represens a generic JSON model of a atCollection model
 class AtJsonCollectionModel extends AtCollectionModel {
-
   late Map<String, dynamic> jsonModel;
 
   @override
@@ -17,8 +14,6 @@ class AtJsonCollectionModel extends AtCollectionModel {
   Map<String, dynamic> toJson() {
     return jsonModel;
   }
-
-
 }
 
 // Factory for creating instance of AtJsonCollectionModel
@@ -39,4 +34,3 @@ class AtJsonCollectionModelFactory extends AtCollectionModelFactory {
     return 1;
   }
 }
-
