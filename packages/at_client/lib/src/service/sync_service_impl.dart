@@ -572,10 +572,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     final key = serverCommitEntry['atKey'];
     // publickey.<atsign>@<currentatsign> is used to store the public key of
     // other atsign. The value is not encrypted.
-    // The keys starting with publickey. and shared_key. are the reserved keys
+    // The keys starting with publickey. and keys that contain shared_key
+    // (@someone:shared_key@me, shared_key.someone@me) are the reserved keys
     // and do not require actions. Hence skipping from checking conflict resolution.
     if (key.startsWith('publickey.') ||
-        key.startsWith('shared_key.') ||
+        key.contains('shared_key') ||
         key.startsWith('cached:')) {
       _logger.finer('$key found in conflict resolution, returning null');
       return null;
@@ -587,7 +588,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     final conflictInfo = ConflictInfo();
     try {
-      final localAtValue = await _atClient.get(atKey);
+      AtValue localAtValue;
+      // For a conflicting key, if an uncommitted entry is of CommitOp.Delete, then
+      // key will not exist in Key-Store. On KeyNotFoundException, return null.
+      try {
+        localAtValue = await _atClient.get(atKey);
+      } on KeyNotFoundException {
+        return null;
+      }
       if (atKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
         if (localAtValue.value != serverValue) {
