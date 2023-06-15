@@ -2756,6 +2756,58 @@ void main() {
               (_) => StreamController<at_notification.AtNotification>().stream);
     });
 
+    group('A group of tests to validate shared key matcher regex', () {
+      test('A test to verify shared_key with invalid key structure is ignored', () async {
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('shared_keyyy.alice@alice'),
+            false);
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('sssshared_key.alice@alice'),
+            false);
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('shared_key@alice'),
+            false);
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('@alice:ssssshared_key@alice'),
+            false);
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('@ssssssshared_key:phone.wavi@alice'),
+            false);
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('@alice:ssssssshared_key@alice'),
+            false);
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('@alice:shared_key.alice@alice'),
+            false);
+      });
+
+      test('A test to verify valid shared_key matches the regex',() async {
+        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            notificationService: mockNotificationService,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('shared_key.alice@alice'),
+            true);
+        expect(
+            syncService.encryptedSharedKeyMatcher
+                .hasMatch('@bob:shared_key@alice'),
+            true);
+      });
+    });
+
     /// Preconditions:
     /// 1. The server commit id should be greater than local commit id
     /// 2. The server response should an contains a entry - @alice:phone@bob
