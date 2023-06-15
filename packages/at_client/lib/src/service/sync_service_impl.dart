@@ -569,14 +569,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   Future<ConflictInfo?> _setConflictInfo(final serverCommitEntry) async {
-    final key = serverCommitEntry['atKey'];
+    String key = serverCommitEntry['atKey'];
     // publickey.<atsign>@<currentatsign> is used to store the public key of
     // other atsign. The value is not encrypted.
     // The keys starting with publickey. and keys that contain shared_key
     // (@someone:shared_key@me, shared_key.someone@me) are the reserved keys
     // and do not require actions. Hence skipping from checking conflict resolution.
     if (key.startsWith('publickey.') ||
-        key.contains('shared_key') ||
+        key.startsWith(RegExp('shared_key.+@.+|@.+shared_key@.+')) ||
         key.startsWith('cached:')) {
       _logger.finer('$key found in conflict resolution, returning null');
       return null;
