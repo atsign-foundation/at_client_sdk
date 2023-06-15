@@ -2757,7 +2757,8 @@ void main() {
     });
 
     group('A group of tests to validate shared key matcher regex', () {
-      test('A test to verify shared_key with invalid key structure is ignored', () async {
+      test('A test to verify shared_key with invalid key structure is ignored',
+          () async {
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
             notificationService: mockNotificationService,
@@ -2771,8 +2772,7 @@ void main() {
                 .hasMatch('sssshared_key.alice@alice'),
             false);
         expect(
-            syncService.encryptedSharedKeyMatcher
-                .hasMatch('shared_key@alice'),
+            syncService.encryptedSharedKeyMatcher.hasMatch('shared_key@alice'),
             false);
         expect(
             syncService.encryptedSharedKeyMatcher
@@ -2792,7 +2792,7 @@ void main() {
             false);
       });
 
-      test('A test to verify valid shared_key matches the regex',() async {
+      test('A test to verify valid shared_key matches the regex', () async {
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
             notificationService: mockNotificationService,
