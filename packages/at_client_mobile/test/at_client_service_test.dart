@@ -7,7 +7,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_client/src/service/sync_service.dart';
 
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
