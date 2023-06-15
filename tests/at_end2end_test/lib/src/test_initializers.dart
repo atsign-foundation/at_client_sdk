@@ -25,14 +25,14 @@ class TestSuiteInitializer {
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(atClientManager.atClient, atSign);
-      await E2ESyncService.getInstance()
-          .syncData(atClientManager.atClient.syncService);
+      await E2ESyncService.getInstance().syncData(
+          atClientManager.atClient.syncService,
+          syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
 
       // verify if the public key is in the local secondary
       var result = await atClientManager.atClient
           .getLocalSecondary()!
           .getEncryptionPublicKey(atSign);
-      print('testInitializer: $atSign: encryption public key from local key-store: $result');
       assert(result ==
           AtCredentials
               .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
@@ -41,11 +41,9 @@ class TestSuiteInitializer {
       result = await atClientManager.atClient
           .getLocalSecondary()!
           .getEncryptionPrivateKey();
-      print('testInitializer: $atSign: encryption public key from local key-store: $result');
       assert(result ==
           AtCredentials
               .credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY]);
-      print('testInitializer: $atSign: setup complete');
     } on Exception catch (e) {
       print('Exception in setting the encryption: $e');
     }

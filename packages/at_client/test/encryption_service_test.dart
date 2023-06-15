@@ -1,8 +1,6 @@
-import 'dart:collection';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
@@ -37,6 +35,8 @@ void main() {
   AtClient mockAtClient = MockAtClient();
 
   AtClientManager mockAtClientManager = MockAtClientManager();
+
+  registerFallbackValue(FakeLocalLookUpVerbBuilder());
 
   group('A group of test to validate self key encryption exceptions', () {
     test(
@@ -171,10 +171,25 @@ void main() {
   group(
       'A group of tests to related to fetch and decrypt the encrypted shared key',
       () {
+    setUp(() async {
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
+    });
     test(
         'A test to verify encrypted shared key is fetched from local secondary and decrypted successfully',
         () async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
 
       var originalSharedKey = 'WwOn34SJaEQUHvmaY5haGtVAfHp1eBzLk8239uRGnhw=';
@@ -187,7 +202,7 @@ void main() {
           .thenAnswer((_) => mockLocalSecondary);
 
       when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
       when(() => mockLocalSecondary.getEncryptionPrivateKey())
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
@@ -196,13 +211,14 @@ void main() {
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
         ..key = 'phone';
-      expect(await sharedKeyEncryption.getSharedKey(atKey), originalSharedKey);
+      expect(await sharedKeyEncryption.getMyCopyOfSharedSymmetricKey(atKey),
+          originalSharedKey);
     });
 
     test(
         'A test to verify encrypted shared key is fetched from remote secondary and decrypted successfully',
         () async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
+      when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => '@alice');
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
 
       var originalSharedKey = 'WwOn34SJaEQUHvmaY5haGtVAfHp1eBzLk8239uRGnhw=';
@@ -216,11 +232,20 @@ void main() {
       when(() => mockAtClient.getRemoteSecondary())
           .thenAnswer((_) => mockRemoteSecondary);
 
-      when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
-          .thenAnswer((_) => Future.value('data:null'));
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: LLookupEncryptedSharedKeyMatcher()))).thenAnswer((_) async {
+        print("Matched the LLookupVerbBuilder");
+        return 'data:null';
+      });
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: UpdateEncryptedSharedKeyMatcher()),
+          sync: false)).thenAnswer((_) async {
+        print("Matched the UpdateVerbBuilder");
+        return 'data:1';
+      });
+
       when(() => mockRemoteSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
       when(() => mockLocalSecondary.getEncryptionPrivateKey())
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
@@ -229,13 +254,15 @@ void main() {
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
         ..key = 'phone';
-      expect(await sharedKeyEncryption.getSharedKey(atKey), originalSharedKey);
+      var foo = await sharedKeyEncryption.getMyCopyOfSharedSymmetricKey(atKey);
+      print('Symmetric key: $foo');
+      await Future.delayed(Duration(milliseconds: 100));
+      expect(foo, originalSharedKey);
     });
 
     test(
         'A test to verify empty string is returned when shared key is not found in local and remote secondary',
         () async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
       var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
 
       when(() => mockAtClient.getLocalSecondary())
@@ -244,149 +271,18 @@ void main() {
           .thenAnswer((_) => mockRemoteSecondary);
 
       when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockRemoteSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
 
       var atKey = AtKey()
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
         ..key = 'phone';
-      expect(await sharedKeyEncryption.getSharedKey(atKey), '');
-    });
-  });
-
-  group('A group of test related to shared_key is synced to cloud secondary',
-      () {
-    String storageDir = '${Directory.current.path}/test/hive';
-    AtCommitLog? atCommitLog;
-
-    test(
-        'A test to verify isEncryptedSharedKeyInSync method returns false when commit id null',
-        () async {
-      atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
-          '@alice',
-          commitLogPath: storageDir,
-          enableCommitId: false);
-      await atCommitLog?.commit('@bob:shared_key@alice', CommitOp.UPDATE);
-
-      var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      sharedKeyEncryption.atCommitLog = atCommitLog;
-
-      var atKey = AtKey()
-        ..key = AT_ENCRYPTION_SHARED_KEY
-        ..sharedBy = '@alice'
-        ..sharedWith = '@bob';
       expect(
-          await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
-      // assert the sync status is not added to cache map when commit id is null.
-      expect(
-          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey(atKey.toString()),
-          false);
-    });
-
-    test(
-        'A test to verify isEncryptedSharedKeyInSync method returns true when commit is not null',
-        () async {
-      var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-          .getCommitLog('@alice', commitLogPath: storageDir);
-      await commitLogInstance?.commit('@bob:shared_key@alice', CommitOp.UPDATE);
-
-      var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      sharedKeyEncryption.atCommitLog = commitLogInstance;
-
-      var atKey = AtKey()
-        ..key = AT_ENCRYPTION_SHARED_KEY
-        ..sharedBy = '@alice'
-        ..sharedWith = '@bob';
-      expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
-      // assert the sync status is added to cache map
-      expect(
-          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey(atKey.toString()),
-          true);
-    });
-
-    test(
-        'A test to verify isEncryptedSharedKeyInSync method returns false when two commit entries exist with commit id null and not null',
-        () async {
-      var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-          .getCommitLog('@alice',
-              commitLogPath: storageDir, enableCommitId: false);
-      // Null commit id
-      await commitLogInstance?.commitLogKeyStore.add(CommitEntry(
-          '@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now()));
-      // Populated commit id to mock commit entry is synced from server
-      await commitLogInstance?.commitLogKeyStore.add(
-          CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
-            ..commitId = 1);
-
-      var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      sharedKeyEncryption.atCommitLog = commitLogInstance;
-
-      var atKey = AtKey()
-        ..key = AT_ENCRYPTION_SHARED_KEY
-        ..sharedBy = '@alice'
-        ..sharedWith = '@bob';
-      expect(
-          await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), false);
-      // assert the sync status is not added to cache map
-
-      expect(
-          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey(atKey.toString()),
-          false);
-    });
-
-    test(
-        'A test to verify isEncryptedSharedKeyInSync is return from the cache map',
-        () async {
-      Map<int, CommitEntry> keystoreToMap = HashMap<int, CommitEntry>();
-      keystoreToMap[1] =
-          CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now());
-      keystoreToMap[1]?.commitId = 1;
-
-      var fakeCommitLogKeystore = MockCommitLogKeystore();
-      when(() => fakeCommitLogKeystore.toMap())
-          .thenAnswer((_) => Future.value(keystoreToMap));
-
-      var commitLog = AtCommitLog(fakeCommitLogKeystore);
-
-      var atKey = AtKey()
-        ..key = AT_ENCRYPTION_SHARED_KEY
-        ..sharedBy = '@alice'
-        ..sharedWith = '@bob';
-
-      var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      sharedKeyEncryption.atCommitLog = commitLog;
-      //the line below will access the commitEntry from the commitLog and return true
-      //this will also add the key to the encryptedSharedKeySyncStatusCacheMap
-      expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
-      //assert that the key is present in the cache
-      expect(
-          AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap
-              .containsKey('@bob:shared_key@alice'),
-          true);
-      //now change the commitId of the respective commitEntry to null
-      //this will make sure that when accessed from the commitLog
-      // it would appear that the entry is not synced
-      //for isEncryptedSharedKeyInSync() to return true, the cache must contain this key
-      keystoreToMap[1]?.commitId = null;
-      //the below assertion will only return true if the key is present in the cache
-      expect(await sharedKeyEncryption.isEncryptedSharedKeyInSync(atKey), true);
-    });
-
-    tearDown(() async {
-      resetMocktailState();
-      AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap.clear();
-      await AtCommitLogManagerImpl.getInstance().close();
-      var isExists = await Directory(storageDir).exists();
-      if (isExists) {
-        Directory(storageDir).deleteSync(recursive: true);
-      }
+          await sharedKeyEncryption.getMyCopyOfSharedSymmetricKey(atKey), '');
     });
   });
 
@@ -404,13 +300,27 @@ void main() {
         'JZ3fjGxobojMytMhslfcBsJ5R0f5oVFwV7Qyyko1PMB3DhWMWRhlCQFUIZlyGyX0gIBrDBkYGRHDkj00DYAoF1VVJ3jaHL1d45VPpYpPG0QxhA7A8BriU8PnX+3wbUk8LMD7GscW3sOJPJ2mduCM2UKs1TUO3D4AKR7vrEZXRi11ddgQZet6JgTcKG+/uG7ftdMxs1Y+jHvwfHCYlW+w/IfERzoyfPlAyyGAuY/ucZea/9JvSXtgp5Oxk7MKn3IMBa3N6vCb0zYpg+6SUdee0t47zeTaMcPJ9wCOJQ6p5b5ltK7kJxX2ILGHDFUeMUISKG2eMrEeR9HlVKQ3e3eLRw==';
 
     setUp(() async {
-      registerFallbackValue(FakeLocalLookUpVerbBuilder());
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => mockLocalSecondary);
       when(() => mockAtClient.getRemoteSecondary())
           .thenAnswer((_) => mockRemoteSecondary);
       when(() => mockLocalSecondary.getEncryptionPrivateKey())
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
+
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: isA<DeleteVerbBuilder>()),
+          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+        var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
+        print('DeleteVerbBuilder: ${builder.buildCommand()}');
+        return 'data:10';
+      });
 
       atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
           '@alice',
@@ -432,13 +342,16 @@ void main() {
       var value = 'hello';
 
       when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
 
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
+      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+
       var decryptedSharedKey =
           // ignore: deprecated_member_use_from_same_package
           EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
@@ -447,8 +360,6 @@ void main() {
           encryptedValue, decryptedSharedKey,
           ivBase64: null);
       expect(decryptedValue, value);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
     });
 
     test('test to verify encryption when shared key is available', () async {
@@ -465,7 +376,7 @@ void main() {
       var value = 'hello';
 
       when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
@@ -494,17 +405,23 @@ void main() {
       sharedKeyEncryption.atCommitLog = atCommitLog;
 
       when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockRemoteSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
       when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdatedSharedKeyMatcher()),
+          any(that: UpdateEncryptedSharedKeyMatcher()),
           sync: true)).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockLocalSecondary.executeVerb(
+          any(that: UpdateEncryptedSharedKeyMatcher()),
+          sync: false)).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: UpdateEncryptedSharedKeyMatcher()),
+          sync: false)).thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
 
@@ -534,16 +451,16 @@ void main() {
       sharedKeyEncryption.atCommitLog = atCommitLog;
 
       when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockRemoteSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
       when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdatedSharedKeyMatcher()),
+          any(that: UpdateEncryptedSharedKeyMatcher()),
           sync: true)).thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
@@ -575,20 +492,21 @@ void main() {
       sharedKeyEncryption.atCommitLog = atCommitLog;
 
       when(() => mockLocalSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockRemoteSecondary
-              .executeVerb(any(that: EncryptedSharedKeyMatcher())))
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
       when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdatedSharedKeyMatcher()),
-          sync: true)).thenAnswer((_) => Future.value('data:1'));
+          any(that: UpdateEncryptedSharedKeyMatcher()),
+          sync: false)).thenAnswer((_) => Future.value('data:1'));
 
-      when(() => mockRemoteSecondary
-              .executeVerb(any(that: UpdatedSharedKeyMatcher()), sync: true))
+      when(() => mockRemoteSecondary.executeVerb(
+              any(that: UpdateEncryptedSharedKeyMatcher()),
+              sync: false))
           .thenAnswer((_) => throw SecondaryConnectException(
               'unable to connect to remote secondary'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
@@ -606,7 +524,6 @@ void main() {
     });
 
     tearDown(() async {
-      AbstractAtKeyEncryption.encryptedSharedKeySyncStatusCacheMap.clear();
       await AtCommitLogManagerImpl.getInstance().close();
       var isExists = await Directory(storageDir).exists();
       if (isExists) {
@@ -616,10 +533,10 @@ void main() {
   });
 }
 
-class EncryptedSharedKeyMatcher extends Matcher {
+class LLookupEncryptedSharedKeyMatcher extends Matcher {
   @override
-  Description describe(Description description) =>
-      description.add('A custom matcher to match the encrypted shared key');
+  Description describe(Description description) => description
+      .add('A custom matcher to match LOOKUPS of encrypted shared key');
 
   @override
   bool matches(item, Map matchState) {
@@ -644,14 +561,14 @@ class EncryptionPublicKeyMatcher extends Matcher {
   }
 }
 
-class UpdatedSharedKeyMatcher extends Matcher {
+class UpdateEncryptedSharedKeyMatcher extends Matcher {
   @override
   Description describe(Description description) => description.add(
       'A custom matcher to match the encrypted shared key for update verb builder');
 
   @override
   bool matches(item, Map matchState) {
-    if (item is UpdateVerbBuilder) {
+    if (item is UpdateVerbBuilder && item.atKey!.contains('shared_key')) {
       return true;
     }
     return false;
