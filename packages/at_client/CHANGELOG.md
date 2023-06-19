@@ -1,3 +1,5 @@
+## 3.0.62
+- fix: skip reserved keys during sync conflict checking
 ## 3.0.61
 - fix: ensure key exchange functions properly when the sync service is not
   being used
