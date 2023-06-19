@@ -154,7 +154,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final serverCommitId = notification.value;
       int localCommitId = -1;
       try {
-        localCommitId = await _getLocalCommitId();
+        localCommitId = await getLastReceivedServerCommitId();
       } on FormatException catch (e) {
         _logger.finer('Exception occurred in statsListener ${e.message}');
 
