@@ -1,6 +1,6 @@
 import 'package:at_client/at_client.dart';
 
-import 'at_demo_credentials.dart' as demo_credentials;
+import '../lib/src/at_demo_credentials.dart' as demo_credentials;
 
 class TestUtils {
   static AtClientPreference getPreference(String atsign) {

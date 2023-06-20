@@ -1,23 +1,26 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_logger.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
 
-import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() async {
-  test('notify updating of a key to sharedWith atSign - using await', () async {
-    AtSignLogger.root_level = 'info';
-    final atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
+  late AtClientManager atClientManager;
+  final atSign = '@alice🛠';
+
+  setUpAll(() async {
+    atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
+  });
+
+  test('notify updating of a key to sharedWith atSign - using await', () async {
     final progressListener = MySyncProgressListener();
     atClientManager.atClient.syncService.addProgressListener(progressListener);
     final atClient = atClientManager.atClient;
     // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClient, atSign);
     final remoteSecondary = atClient.getRemoteSecondary()!;
     final updateVerbBuilder = UpdateVerbBuilder()
       ..sharedBy = atSign
@@ -38,16 +41,12 @@ void main() async {
   /// 2. Updating the same key in the client with a non null value
   /// 3. Verifying that sync conflict is populated with no exception thrown
   test('server value is null', () async {
-    AtSignLogger.root_level = 'info';
-    final atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
     final progressListener = MySyncProgressListener2();
     atClientManager.atClient.syncService.addProgressListener(progressListener);
     final atClient = atClientManager.atClient;
     // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClient, atSign);
     final remoteSecondary = atClient.getRemoteSecondary()!;
     final updateVerbBuilder = UpdateVerbBuilder()
       ..sharedBy = atSign

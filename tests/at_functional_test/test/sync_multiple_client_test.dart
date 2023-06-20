@@ -6,14 +6,14 @@ import 'dart:math';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/util/logger_util.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:at_client/at_client.dart';
 import 'package:version/version.dart';
 import 'package:uuid/uuid.dart';
-import 'at_demo_credentials.dart' as demo_credentials;
-import 'set_encryption_keys.dart';
+import 'package:at_functional_test/src/at_demo_credentials.dart' as demo_credentials;
 
 /// The purpose of this test is to run multiple clients in Isolate and inject
 /// bulk data.
@@ -86,7 +86,7 @@ void main() async {
       ..localKeysList = atKeyEntityList
   };
 
-  test('A test to verify the commit log entries', () async {
+  test('A test to verify the commit log entries when keys are synced from multiple clients', () async {
     // Spawn isolate for client-1
     await Isolate.spawn(
         childIsolate, clientInitializationParameters['client1']!,
@@ -187,7 +187,6 @@ void mainIsolateMessageListener(data) {
 }
 
 Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
-  AtSignLogger.root_level = 'finer';
   int numberOfRepetitions = 5;
   int counter = 0;
   var random = Random();
@@ -264,7 +263,8 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
       commitLogPath: clientParameters.commitLogPath);
   atClientManager = await AtClientManager.getInstance()
       .setCurrentAtSign(currentAtSign, namespace, atClientPreferences);
-  await setEncryptionKeys(currentAtSign, atClientPreferences);
+  await AtEncryptionKeysLoader.getInstance()
+      .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   MySyncProgressListener mySyncProgressListener = MySyncProgressListener();
   atClientManager.atClient.syncService
       .addProgressListener(mySyncProgressListener);

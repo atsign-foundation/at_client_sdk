@@ -1,15 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
-import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
@@ -26,7 +25,8 @@ void main() {
     progressListener = MySyncProgressListener();
     atClientManager.atClient.syncService.addProgressListener(progressListener);
     // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClientManager.atClient, atSign);
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
@@ -225,7 +225,6 @@ void main() {
 
   tearDown(() async {
     await progressListener.streamController.close();
-    await tearDownFunc();
   });
 }
 
@@ -236,12 +235,5 @@ class MySyncProgressListener extends SyncProgressListener {
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     streamController.add(syncProgress);
-  }
-}
-
-Future<void> tearDownFunc() async {
-  var isExists = await Directory('test/hive').exists();
-  if (isExists) {
-    Directory('test/hive').deleteSync(recursive: true);
   }
 }

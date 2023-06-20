@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -40,7 +39,6 @@ class FunctionalTestSyncService {
     functionalTestSyncProgressListener.streamController.stream
         .listen((SyncProgress syncProgress) async {
       lastReceivedDateTime = DateTime.now().toUtc();
-      _logger.info('SyncService| $syncProgress');
       // Exit the sync process when either of the conditions are met,
       // 1. If syncStatus is success && localCommitId is equal to serverCommitID (or)
       //    If syncStatus is failure

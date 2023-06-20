@@ -1,29 +1,20 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
-
-import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
-late AtClientManager atClientManager;
-late String currentAtSign;
-late String sharedWithAtSign;
-
-Future<void> setUpMethod() async {
-  currentAtSign = '@alice🛠';
-  sharedWithAtSign = '@bob🛠';
-  var preference = TestUtils.getPreference(currentAtSign);
-  atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign(currentAtSign, 'me', preference);
-  atClientManager.atClient.syncService.sync();
-  // To setup encryption keys
-  await setEncryptionKeys(currentAtSign, preference);
-}
-
 void main() {
-  setUp(() async {
-    await setUpMethod();
+  late AtClientManager atClientManager;
+  String currentAtSign = '@alice🛠';
+  String sharedWithAtSign = '@bob🛠';
+
+  setUpAll(() async {
+    var preference = TestUtils.getPreference(currentAtSign);
+    atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, 'me', preference);
+    // To setup encryption keys
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   });
 
   test(
@@ -51,12 +42,4 @@ void main() {
             .isKeyExists(atKey.toString()),
         false);
   });
-  tearDown(() async => await tearDownMethod());
-}
-
-Future<void> tearDownMethod() async {
-  var isExists = await Directory('test/hive').exists();
-  if (isExists) {
-    Directory('test/hive').deleteSync(recursive: true);
-  }
 }
