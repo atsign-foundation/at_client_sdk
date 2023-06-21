@@ -23,27 +23,19 @@ class SelfKeyDecryption implements AtKeyDecryption {
     if (atKey.key == "shared_key") {
       var privateEncryptionKey =
           await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
-      var publicEncryptionKey = await _atClient
-          .getLocalSecondary()!
-          .getEncryptionPublicKey(atKey.sharedBy!);
-      var publicKey = await _atClient.getLocalSecondary()!.getPublicKey();
-      var privateKey = await _atClient.getLocalSecondary()!.getPrivateKey();
 
       if ((privateEncryptionKey == null || privateEncryptionKey.isEmpty) ||
           privateEncryptionKey == 'data:null') {
-        throw SelfKeyNotFoundException('Empty or null SelfEncryptionKey found',
+        throw AtPrivateKeyNotFoundException(
+            'Empty or null PrivateEncryptionKey found',
             intent: Intent.fetchEncryptionPrivateKey,
             exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
       }
 
-      //I know there's definetly a better way to do this but I'm way too tired.
-      // I'll try again tmw. (Maybe reading them from .atKeys file?)
+      //yea.
 
-      AtChops _chops = AtChopsImpl(AtChopsKeys.create(
-          AtEncryptionKeyPair.create(
-              publicEncryptionKey!, privateEncryptionKey),
-          AtPkamKeyPair.create(publicKey!, privateKey!)));
-      return _chops.decryptString(encryptedValue, EncryptionKeyType.rsa2048);
+      return _atClient.atChops!
+          .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048);
     }
     var selfEncryptionKey =
         await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
