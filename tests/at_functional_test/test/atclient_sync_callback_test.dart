@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/at_keys_intialializer.dart';
+import 'package:at_functional_test/src/sync_progress_listener.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
@@ -226,14 +226,4 @@ void main() {
   tearDown(() async {
     await progressListener.streamController.close();
   });
-}
-
-class MySyncProgressListener extends SyncProgressListener {
-  StreamController<SyncProgress> streamController =
-      StreamController<SyncProgress>();
-
-  @override
-  void onSyncProgressEvent(SyncProgress syncProgress) {
-    streamController.add(syncProgress);
-  }
 }

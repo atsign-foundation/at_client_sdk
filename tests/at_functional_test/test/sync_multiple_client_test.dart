@@ -13,7 +13,8 @@ import 'package:test/test.dart';
 import 'package:at_client/at_client.dart';
 import 'package:version/version.dart';
 import 'package:uuid/uuid.dart';
-import 'package:at_functional_test/src/at_demo_credentials.dart' as demo_credentials;
+import 'package:at_functional_test/src/at_demo_credentials.dart'
+    as demo_credentials;
 
 /// The purpose of this test is to run multiple clients in Isolate and inject
 /// bulk data.
@@ -86,7 +87,9 @@ void main() async {
       ..localKeysList = atKeyEntityList
   };
 
-  test('A test to verify the commit log entries when keys are synced from multiple clients', () async {
+  test(
+      'A test to verify the commit log entries when keys are synced from multiple clients',
+      () async {
     // Spawn isolate for client-1
     await Isolate.spawn(
         childIsolate, clientInitializationParameters['client1']!,
@@ -287,14 +290,14 @@ Future<void> waitForSyncToComplete({String clientId = ''}) async {
         atClientManager.atClient.getPreferences()!.atClientParticulars,
         '($clientId) SyncCompletedStatus: $isSyncCompleted'));
     atClientManager.atClient.syncService.sync();
-    await Future.delayed(Duration(seconds: 1));
+    await Future.delayed(Duration(milliseconds: 20));
   }
   _logger.info(_logger.getLogMessageWithClientParticulars(
       atClientManager.atClient.getPreferences()!.atClientParticulars,
       '($clientId) Sync Completed Successfully'));
   // Resetting back to false for future use
   isSyncCompleted = false;
-  await Future.delayed(Duration(seconds: 60));
+  await Future.delayed(Duration(milliseconds: 30));
 }
 
 Future<void> updateDeleteKey(AtKey atKey, int randomValueForOperation,
