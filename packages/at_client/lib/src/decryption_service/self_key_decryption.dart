@@ -13,40 +13,24 @@ class SelfKeyDecryption implements AtKeyDecryption {
   final AtClient _atClient;
   @override
   Future<dynamic> decrypt(AtKey atKey, dynamic encryptedValue) async {
-    if (encryptedValue == null ||
-        encryptedValue.isEmpty ||
-        encryptedValue == 'null') {
+    if (encryptedValue == null || encryptedValue.isEmpty || encryptedValue == 'null') {
       throw AtDecryptionException('Decryption failed. Encrypted value is null',
-          intent: Intent.decryptData,
-          exceptionScenario: ExceptionScenario.decryptionFailed);
+          intent: Intent.decryptData, exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     if (atKey.key == "shared_key") {
-      var privateEncryptionKey =
-          await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
-
-      if ((privateEncryptionKey == null || privateEncryptionKey.isEmpty) ||
-          privateEncryptionKey == 'data:null') {
-        throw AtPrivateKeyNotFoundException(
-            'Empty or null PrivateEncryptionKey found',
-            intent: Intent.fetchEncryptionPrivateKey,
-            exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
+      if (atKey.sharedWith != _atClient.getCurrentAtSign()) {
+        throw AtKeyException("This symmetric shared key cannot be decrypted using your private key.",
+            intent: Intent.fetchData, exceptionScenario: ExceptionScenario.decryptionFailed);
       }
-
       //yea.
-
-      return _atClient.atChops!
-          .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048);
+      return _atClient.atChops!.decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048);
     }
-    var selfEncryptionKey =
-        await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
-    if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
-        selfEncryptionKey == 'data:null') {
+    var selfEncryptionKey = await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
+    if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) || selfEncryptionKey == 'data:null') {
       throw SelfKeyNotFoundException('Empty or null SelfEncryptionKey found',
-          intent: Intent.fetchSelfEncryptionKey,
-          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
+          intent: Intent.fetchSelfEncryptionKey, exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    return EncryptionUtil.decryptValue(encryptedValue,
-        DefaultResponseParser().parse(selfEncryptionKey).response,
+    return EncryptionUtil.decryptValue(encryptedValue, DefaultResponseParser().parse(selfEncryptionKey).response,
         ivBase64: atKey.metadata?.ivNonce);
   }
 }
