@@ -30,6 +30,12 @@ class SharedKeyDecryption implements AtKeyDecryption {
           intent: Intent.decryptData,
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
+     if (atKey.key == "shared_key") {
+      if (atKey.sharedWith != atClient.getCurrentAtSign()) {
+        throw AtKeyException("This symmetric shared key cannot be decrypted using your private key.",
+            intent: Intent.fetchData, exceptionScenario: ExceptionScenario.decryptionFailed);
+      }
+    }
     String? encryptedSharedKey;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
       encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
