@@ -28,7 +28,8 @@ class SelfKeyDecryption implements AtKeyDecryption {
             exceptionScenario: ExceptionScenario.decryptionFailed);
       }
       return _atClient.atChops!
-          .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048);
+          .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048)
+          .result;
     }
     var selfEncryptionKey =
         await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
