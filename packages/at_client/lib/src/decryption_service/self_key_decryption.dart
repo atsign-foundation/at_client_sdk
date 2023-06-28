@@ -27,7 +27,6 @@ class SelfKeyDecryption implements AtKeyDecryption {
             intent: Intent.fetchData,
             exceptionScenario: ExceptionScenario.decryptionFailed);
       }
-      //yea.
       return _atClient.atChops!
           .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048);
     }

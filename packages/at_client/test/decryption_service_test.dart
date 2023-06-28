@@ -197,6 +197,22 @@ void main() {
             'Failed to fetchData caused by\nConnection timeout');
       }
     });
+
+    test(
+        'A test to verify exception is thrown when symmetric shared key is trying to be decrypted by another atsign',
+        () {
+      var atKey =
+          (AtKey.shared('shared_key', namespace: 'wavi', sharedBy: '@murali')
+                ..sharedWith('@sitaram'))
+              .build();
+      var sharedKeyDecryption = SharedKeyDecryption(mockAtClientImpl);
+      expect(
+          () => sharedKeyDecryption.decrypt(atKey, '123'),
+          throwsA(predicate((dynamic e) =>
+              e is AtKeyException &&
+              e.message ==
+                  'This symmetric shared key cannot be decrypted using your private key.')));
+    });
   });
 
   group('A group of test to validate the decryption service manager', () {
