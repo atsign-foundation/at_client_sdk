@@ -21,7 +21,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     if (atKey.key == "shared_key") {
-      if (atKey.sharedWith != _atClient.getCurrentAtSign()) {
+      if (atKey.sharedBy != _atClient.getCurrentAtSign()) {
         throw AtKeyException(
             "This symmetric shared key cannot be decrypted using your private key.",
             intent: Intent.fetchData,
