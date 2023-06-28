@@ -39,7 +39,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
       }
       return atClient.atChops!
           .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048)
-          .toString();
+          .result;
     }
     String? encryptedSharedKey;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
