@@ -38,3 +38,6 @@ coverage/
 # Functional test related
 
 hive/
+
+# Misc
+.DS_Store
