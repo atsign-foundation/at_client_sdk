@@ -79,7 +79,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         atChops: atClient.atChops);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
-    await syncService._statsServiceListener();
+    await syncService.statsServiceListener();
     syncService._scheduleSyncRun();
     return syncService;
   }
@@ -142,7 +142,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Listens on stats notification sent by the cloud secondary server
-  Future<void> _statsServiceListener() async {
+  @visibleForTesting
+  Future<void> statsServiceListener() async {
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
     _statsNotificationListener
@@ -152,9 +153,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           _atClient.getPreferences()!.atClientParticulars,
           'RCVD: stats notification in sync: ${notification.value}'));
       final serverCommitId = notification.value;
-      int localCommitId = -1;
+      int lastReceivedServerCommitId = -1;
       try {
-        localCommitId = await getLastReceivedServerCommitId();
+        lastReceivedServerCommitId = await getLastReceivedServerCommitId();
       } on FormatException catch (e) {
         _logger.finer('Exception occurred in statsListener ${e.message}');
 
@@ -169,7 +170,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ..syncStatus = SyncStatus.failure;
         _informSyncProgress(syncProgress);
       }
-      if (serverCommitId != null && int.parse(serverCommitId) > localCommitId) {
+      if (serverCommitId != null &&
+          int.parse(serverCommitId) > lastReceivedServerCommitId) {
         final syncRequest = SyncRequest();
         syncRequest.onDone = _onDone;
         syncRequest.onError = _onError;
@@ -1056,6 +1058,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return int.parse(arg1);
     }
     return arg1;
+  }
+
+  @visibleForTesting
+  int getSyncRequestQueueSize() {
+    return _syncRequests.length;
   }
 }
 
