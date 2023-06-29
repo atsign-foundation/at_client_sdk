@@ -4252,6 +4252,7 @@ void main() {
         // Adding a delay of 1 second to let the sync service initialize and
         // add the progress listener to the sync service.
         Future.delayed(Duration(seconds: 1)).then((_) {
+          syncServiceImpl.clearSyncEntities();
           streamController.add(at_notification.AtNotification(
               '-1',
               'statsNotification',
@@ -4292,6 +4293,7 @@ void main() {
         // Adding a delay of 1 second to let the sync service initialize and
         // add the progress listener to the sync service.
         Future.delayed(Duration(seconds: 1)).then((_) {
+          syncServiceImpl.clearSyncEntities();
           streamController.add(at_notification.AtNotification(
               '-1',
               'statsNotification',
