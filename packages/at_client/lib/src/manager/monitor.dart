@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/util/network_util.dart';
@@ -259,7 +260,11 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
-    await _monitorConnection!.write('from:$_atSign\n');
+    final fromCommand = (FromVerbBuilder()
+          ..atSign = _atSign
+          ..clientConfig = _getClientConfig())
+        .buildCommand();
+    await _monitorConnection!.write(fromCommand);
     var fromResponse = await getQueueResponse();
     if (fromResponse.isEmpty) {
       throw UnAuthenticatedException('From response is empty');
@@ -388,6 +393,22 @@ class Monitor {
           'Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
       _onError(e);
     }
+  }
+
+  Map<String, String> _getClientConfig() {
+    var clientConfig = <String, String>{};
+    clientConfig[VERSION] = AtClientConfig.getInstance().atClientVersion;
+    clientConfig[CLIENT_ID] = _preference.atClientParticulars.clientId;
+    if (_preference.atClientParticulars.appName.isNotNull) {
+      clientConfig[APP_NAME] = _preference.atClientParticulars.appName!;
+    }
+    if (_preference.atClientParticulars.appVersion.isNotNull) {
+      clientConfig[APP_VERSION] = _preference.atClientParticulars.appVersion!;
+    }
+    if (_preference.atClientParticulars.platform.isNotNull) {
+      clientConfig[PLATFORM] = _preference.atClientParticulars.platform!;
+    }
+    return clientConfig;
   }
 
   Future<void> _checkConnectivity() async {

@@ -100,7 +100,8 @@ void main() {
       return MockStreamSubscription<Uint8List>();
     });
 
-    when(() => mockOutboundConnection.write('from:$atSign\n'))
+    when(() => mockOutboundConnection
+            .write(any(that: startsWith('from:$atSign:clientConfig:'))))
         .thenAnswer((Invocation invocation) async {
       socketOnDataFn("@data:server challenge\n"
           .codeUnits); // actual challenge is different, of course, but not important for unit tests
