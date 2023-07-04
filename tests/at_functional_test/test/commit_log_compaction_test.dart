@@ -1,9 +1,8 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
-
-import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 late AtClientManager atClientManager;
@@ -18,7 +17,8 @@ Future<void> setUpMethod() async {
       .setCurrentAtSign(currentAtSign, namespace, preference);
   atClientManager.atClient.syncService.sync();
   // To setup encryption keys
-  await setEncryptionKeys(currentAtSign, preference);
+  await AtEncryptionKeysLoader.getInstance()
+      .setEncryptionKeys(atClientManager.atClient, currentAtSign);
 }
 
 void main() {
@@ -42,7 +42,8 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
     // Start the compaction job in async mode
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
@@ -66,7 +67,8 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
 
     await compactionFuture.then((atCompactionStats) {
       print(atCompactionStats);
@@ -96,7 +98,8 @@ void main() {
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
-    await FunctionalTestSyncService.getInstance().syncData(atClientManager.atClient.syncService);
+    await FunctionalTestSyncService.getInstance()
+        .syncData(atClientManager.atClient.syncService);
 
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
