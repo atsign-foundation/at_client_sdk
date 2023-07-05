@@ -1,14 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
-import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 late AtSignLogger logger;
@@ -18,13 +17,6 @@ void main() {
 
   logger = AtSignLogger('at_lookup_race_test.dart');
   logger.level = 'info';
-
-  setUpAll(() async {});
-  tearDownAll(() async {
-    if (await Directory('test/hive').exists()) {
-      Directory('test/hive').deleteSync(recursive: true);
-    }
-  });
 
   test('race test - repeated gets without awaits', () async {
     var atSign = '@alice🛠';
@@ -36,7 +28,8 @@ void main() {
     var atClient = atClientManager.atClient;
 
     // To setup encryption keys
-    await setEncryptionKeys(atSign, preference);
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClient, atSign);
 
     Random random = Random();
 

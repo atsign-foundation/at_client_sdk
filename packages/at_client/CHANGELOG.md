@@ -1,5 +1,6 @@
 ## 3.0.62
 - fix: skip reserved keys during sync conflict checking
+- build: updated dependency on http package to `'>=0.13.5 <2.0.0'`
 ## 3.0.61
 - fix: ensure key exchange functions properly when the sync service is not
   being used

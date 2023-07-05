@@ -134,7 +134,7 @@ class A extends AtCollectionModel {
 
   A.from(String id, {this.a}) {
     this.id = id;
-    namespace = 'buzz';
+    this.namespace = 'buzz';
   }
 
   @override
@@ -177,7 +177,7 @@ class B extends AtCollectionModel {
 
   B.from(String id, {this.b}) {
     this.id = id;
-    namespace = 'buzz';
+    this.namespace = 'buzz';
   }
 
   @override

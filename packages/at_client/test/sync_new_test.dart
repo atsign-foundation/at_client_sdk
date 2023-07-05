@@ -4221,6 +4221,103 @@ void main() {
       });
     });
   });
+
+  group('A group of tests to related to adding sync request to queue', () {
+    late SyncServiceImpl syncServiceImpl;
+
+    AtClient mockAtClient = MockAtClient();
+    AtClientManager mockAtClientManager = MockAtClientManager();
+    NotificationServiceImpl mockNotificationService =
+        MockNotificationServiceImpl();
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+
+    setUp(() async {
+      TestResources.atsign = '@poland';
+      registerFallbackValue(FakeAtKey());
+      await TestResources.setupLocalStorage(TestResources.atsign);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '5'));
+    });
+
+    test(
+        'A test to verify sync request is added to queue when server commit id is greater than local commit id',
+        () async {
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer((_) {
+        var streamController =
+            StreamController<at_notification.AtNotification>();
+        // Adding a delay of 1 second to let the sync service initialize and
+        // add the progress listener to the sync service.
+        Future.delayed(Duration(seconds: 1)).then((_) {
+          syncServiceImpl.clearSyncEntities();
+          streamController.add(at_notification.AtNotification(
+              '-1',
+              'statsNotification',
+              TestResources.atsign,
+              TestResources.atsign,
+              DateTime.now().millisecondsSinceEpoch,
+              MessageType.key.toString(),
+              false,
+              value: '10'));
+          streamController.add(at_notification.AtNotification(
+              '-1',
+              'statsNotification',
+              TestResources.atsign,
+              TestResources.atsign,
+              DateTime.now().millisecondsSinceEpoch,
+              MessageType.key.toString(),
+              false,
+              value: '10'));
+        });
+        return streamController.stream;
+      });
+      syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      await Future.delayed(Duration(seconds: 1)).then((_) {
+        expect(syncServiceImpl.getSyncRequestQueueSize(), 2);
+      });
+    });
+
+    test(
+        'A test to verify sync request is not added to queue when server commit id is equal to local commit id',
+        () async {
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer((_) {
+        var streamController =
+            StreamController<at_notification.AtNotification>();
+        // Adding a delay of 1 second to let the sync service initialize and
+        // add the progress listener to the sync service.
+        Future.delayed(Duration(seconds: 1)).then((_) {
+          syncServiceImpl.clearSyncEntities();
+          streamController.add(at_notification.AtNotification(
+              '-1',
+              'statsNotification',
+              TestResources.atsign,
+              TestResources.atsign,
+              DateTime.now().millisecondsSinceEpoch,
+              MessageType.key.toString(),
+              false,
+              value: '5'));
+        });
+        return streamController.stream;
+      });
+      syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      await Future.delayed(Duration(seconds: 1)).then((_) {
+        expect(syncServiceImpl.getSyncRequestQueueSize(), 0);
+      });
+    });
+    tearDown(() {
+      syncServiceImpl.clearSyncEntities();
+    });
+  });
 }
 
 class CustomSyncProgressListener extends SyncProgressListener {
