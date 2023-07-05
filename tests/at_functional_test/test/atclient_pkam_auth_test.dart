@@ -6,17 +6,22 @@ import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
 import 'package:at_chops/at_chops.dart';
 
-import 'at_demo_credentials.dart' as at_demos;
+import 'package:at_functional_test/src/at_demo_credentials.dart' as at_demos;
 import 'test_utils.dart';
 
 String atSign = '@alice🛠';
+
 void main() {
-  test('Verify pkam auth', () async {
+  late AtClientManager atClientManager;
+
+  setUpAll(() async {
     var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
+    atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, 'wavi', preference);
+  });
+
+  test('Verify pkam auth', () async {
     final atClient = atClientManager.atClient;
-    // await setEncryptionKeys(atSign, preference);
     var fromResponse = await atClient
         .getRemoteSecondary()!
         .executeCommand('from:$atSign\n', auth: true);
@@ -28,10 +33,8 @@ void main() {
         .executeCommand('pkam:$pkamDigest\n', auth: true);
     expect(pkamResult, 'data:success');
   });
+
   test('Verify pkam auth with atchops', () async {
-    var preference = TestUtils.getPreference(atSign);
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', preference);
     final atClient = atClientManager.atClient;
     final atChopsKeys = AtChopsKeys.create(
         null,
