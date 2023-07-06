@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'package:at_client/src/preference/at_client_particulars.dart';
@@ -56,6 +57,10 @@ var isolateResponseQueue = Queue();
 var childIsolateSendPortMap = <ClientId, SendPort>{};
 bool isClientOneCompleted = false;
 bool isClientTwoCompleted = false;
+final String clientOneHiveKeyStorePath = 'test/hive/client1';
+final String clientTwoHiveKeyStorePath = 'test/hive/client2';
+late Isolate clientOneIsolate;
+late Isolate clientTwoIsolate;
 
 void main() async {
   var mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
@@ -75,14 +80,14 @@ void main() async {
   var clientInitializationParameters = {
     'client1': ChildIsolatePreferences()
       ..clientId = ClientId.client1
-      ..hiveStoragePath = 'test/hive/client'
-      ..commitLogPath = 'test/hive/client/commit'
+      ..hiveStoragePath = clientOneHiveKeyStorePath
+      ..commitLogPath = '$clientOneHiveKeyStorePath/commit'
       ..sendPort = mainIsolateReceivePort.sendPort
       ..localKeysList = atKeyEntityList,
     'client2': ChildIsolatePreferences()
       ..clientId = ClientId.client2
-      ..hiveStoragePath = 'test/hive/client2'
-      ..commitLogPath = 'test/hive/client2/commit'
+      ..hiveStoragePath = clientTwoHiveKeyStorePath
+      ..commitLogPath = '$clientTwoHiveKeyStorePath/commit'
       ..sendPort = mainIsolateReceivePort.sendPort
       ..localKeysList = atKeyEntityList
   };
@@ -91,11 +96,11 @@ void main() async {
       'A test to verify the commit log entries when keys are synced from multiple clients',
       () async {
     // Spawn isolate for client-1
-    await Isolate.spawn(
+    clientOneIsolate = await Isolate.spawn(
         childIsolate, clientInitializationParameters['client1']!,
         debugName: clientInitializationParameters['client1']!.clientId.name);
     // Spawn isolate for client-2
-    await Isolate.spawn(
+    clientTwoIsolate = await Isolate.spawn(
         childIsolate, clientInitializationParameters['client2']!,
         debugName: clientInitializationParameters['client2']!.clientId.name);
     // Add listener for main isolate to receive messages from child isolates
@@ -149,6 +154,21 @@ void main() async {
       expect(testResult, true);
     }
   }, timeout: Timeout(Duration(minutes: 5)));
+
+  // Kill the isolates at the end of the test
+  tearDown(() {
+    clientOneIsolate.kill();
+    clientTwoIsolate.kill();
+    // Remove the hive boxes
+    var client1 = Directory(clientOneHiveKeyStorePath);
+    if (client1.existsSync()) {
+      client1.deleteSync(recursive: true);
+    }
+    var client2 = Directory(clientTwoHiveKeyStorePath);
+    if (client2.existsSync()) {
+      client2.deleteSync(recursive: true);
+    }
+  });
 }
 
 /// Reads the message from [isolateResponseQueue] and returns
