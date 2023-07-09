@@ -12,9 +12,13 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
       throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
+
+    // Call super.encrypt to take care of getting hold of the correct
+    // encryption key and setting it in super.sharedKey
     await super.encrypt(atKey, value,
         storeSharedKeyEncryptedWithData: storeSharedKeyEncryptedWithData);
-    // Encrypt value using sharedKey
+
+    // Encrypt the value
     return EncryptionUtil.encryptValue(value, sharedKey,
         ivBase64: atKey.metadata?.ivNonce);
   }

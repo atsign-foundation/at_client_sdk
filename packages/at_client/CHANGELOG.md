@@ -1,3 +1,11 @@
+## 3.0.62
+- fix: skip reserved keys during sync conflict checking
+- build: updated dependency on http package to `'>=0.13.5 <2.0.0'`
+## 3.0.61
+- fix: ensure key exchange functions properly when the sync service is not
+  being used
+- feat: Add AtRpc - A simple rpc request-response API which uses atProtocol
+  notifications under the hood.
 ## 3.0.60
 - feat: Add `useRemoteAtServer` to PutRequestOptions. When set, the update
   request will be sent directly to the remote atServer
@@ -9,7 +17,8 @@
 - fix: Sync/Monitor bug while running onboarding_cli with at_chops using pkam from secure element
 ## 3.0.59
 - fix: Sync running into infinite loop when an invalid key is present in the entries to sync into client
-- fix: Redundant logs generated for an internal key[lastReceivedNotification] while sending notifications
+- fix: Redundant logs generated for an internal key (lastReceivedNotification)
+  while sending notifications
 - chore: Reduced log_level of AtKey lower case enforcement message from INFO to FINER
 - feat: Introduce clientId, appName, appVersion and platform to distinguish requests from several clients in server logs.
 ## 3.0.58
