@@ -890,7 +890,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     LookupVerbBuilder lookupBuilder = LookupVerbBuilder()
       ..atKey = 'publickey' //AT_ENCRYPTION_PUBLIC_KEY
       ..sharedBy = getCurrentAtSign();
-    var remotePublicKey =
+    String? remotePublicKey =
         await getRemoteSecondary()?.executeVerb(lookupBuilder);
     // secondary response is in format 'data:publickey'. Removing 'data:' from response
     remotePublicKey = remotePublicKey?.replaceFirst('data:', '');
@@ -901,7 +901,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       return;
     }
 
-    //TODO should there be a check for remote enc_key being null ?
+    // TODO should there be a check for remote enc_key being null ?
 
     if (localPublicKey != remotePublicKey) {
       _logger.info('EncryptionPublicKey on LocalSecondary: $localPublicKey');
@@ -938,14 +938,16 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
 
     File commitLogFile = File('$commitLogDirectoryPath/$fileName');
+
+    // Todo: Do windows/mac have lock files ?
     File lockFile = File('$commitLogDirectoryPath/$lockFileName');
 
     if (commitLogFile.existsSync()) {
       commitLogFile.deleteSync();
       lockFile.deleteSync();
       _logger.info('Successfully deleted commitLog storage');
-      // Since recursive delete is true by default, If the directory is empty
-      // the directory will be deleted too
+      // Since recursive delete is false by default, If the directory is empty
+      // the directory will also be deleted
       Directory(commitLogDirectoryPath).deleteSync();
       return;
     }

@@ -267,9 +267,9 @@ void main() {
     test('Verify isSecondaryReset() functionality - negative case', () async {
       AtData responseObj = AtData()..data = 'incorrectLocalEncPublicKey';
       when(() => mockRemoteSecondary.executeVerb(any())).thenAnswer(
-              (invocation) => Future.value('data:incorrectRemoteEncPublicKey'));
-      when(() => mockKeystore.get(any())).thenAnswer(
-              (invocation) => Future.value(responseObj));
+          (invocation) => Future.value('data:incorrectRemoteEncPublicKey'));
+      when(() => mockKeystore.get(any()))
+          .thenAnswer((invocation) => Future.value(responseObj));
 
       client = await AtClientImpl.create('@alice47', 'resetLocalTest',
           AtClientPreference()..isLocalStoreRequired = true,
@@ -281,10 +281,10 @@ void main() {
 
     test('Verify isSecondaryReset() functionality - positive case', () async {
       AtData responseObj = AtData()..data = 'correctEncPublicKey';
-      when(() => mockRemoteSecondary.executeVerb(any())).thenAnswer(
-              (invocation) => Future.value('data:correctEncPublicKey'));
-      when(() => mockKeystore.get(any())).thenAnswer(
-              (invocation) => Future.value(responseObj));
+      when(() => mockRemoteSecondary.executeVerb(any()))
+          .thenAnswer((invocation) => Future.value('data:correctEncPublicKey'));
+      when(() => mockKeystore.get(any()))
+          .thenAnswer((invocation) => Future.value(responseObj));
 
       client = await AtClientImpl.create('@alice47', 'resetLocalTest',
           AtClientPreference()..isLocalStoreRequired = true,
