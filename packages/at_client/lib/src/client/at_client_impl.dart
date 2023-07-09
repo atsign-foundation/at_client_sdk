@@ -887,7 +887,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     var localPublicKey =
         await getLocalSecondary()?.getEncryptionPublicKey(getCurrentAtSign()!);
 
-    PLookupVerbBuilder lookupBuilder = PLookupVerbBuilder()
+    LookupVerbBuilder lookupBuilder = LookupVerbBuilder()
       ..atKey = 'publickey' //AT_ENCRYPTION_PUBLIC_KEY
       ..sharedBy = getCurrentAtSign();
     var remotePublicKey =
