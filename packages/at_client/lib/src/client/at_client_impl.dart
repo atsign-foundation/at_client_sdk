@@ -914,7 +914,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           ' call AtClientImpl.deleteLocalSecondary() with user consent');
       throw AtResetException('Remote secondary has been reset');
     }
-    _logger.finest('Secondary is not reset. Status ok');
+    _logger.finer('Secondary is not reset. Status ok');
   }
 
   void deleteLocalSecondaryStorageWithConsent(

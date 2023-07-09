@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
