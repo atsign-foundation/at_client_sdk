@@ -1,6 +1,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
+import 'commit_log_compaction_test.dart';
 import 'test_utils.dart';
 
 /// The tests verify the put and get functionality where key is created using AtKey
@@ -76,6 +77,34 @@ void main() {
       var getKey = AtKey()..key = 'mobile';
       var getResult = await atClientManager.atClient.get(getKey);
       expect(getResult.value, value);
+    });
+  });
+
+  group('A group of tests to verify get of symmetric shared keys', () {
+    test('Positive test - self keys ', () async {
+      var atKey = AtKey()
+        ..sharedBy = '@alice🛠'
+        ..key = 'shared_key';
+      var result = await atClientManager.atClient.get(atKey);
+      expect(result, returnsNormally);
+    });
+
+    test('Positive test - shared keys ', () async {
+      var atKey = AtKey()
+        ..sharedBy = '@bob🛠'
+        ..key = 'shared_key'
+        ..sharedWith = '@alice🛠';
+      var result = await atClientManager.atClient.get(atKey);
+      expect(result, returnsNormally);
+    });
+
+    test('Negative test - shared keys ', () async {
+      var atKey = AtKey()
+        ..sharedBy = '@alice🛠'
+        ..key = 'shared_key'
+        ..sharedWith = '@bob🛠';
+      var result = await atClientManager.atClient.get(atKey);
+      expect(result, isException);
     });
   });
 }
