@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
-import 'package:biometric_storage/biometric_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -34,30 +33,15 @@ class KeyChainManager {
     return _singleton;
   }
 
-  static AndroidOptions _getAndroidOptions() => AndroidOptions(
-        encryptedSharedPreferences: true,
-        sharedPreferencesName: '@atSign',
-      );
-
-  static IOSOptions _getIOSOptions() => IOSOptions(
-        groupId: '@atSign',
-      );
-
-  static LinuxOptions _getLinuxOptions() => LinuxOptions();
-
-  static WindowsOptions _getWindowsOptions() => WindowsOptions();
-
-  static MacOsOptions _getMacOsOptions() => MacOsOptions(groupId: '@atSign');
-
   @visibleForTesting
-  BiometricStorage biometricStorage = BiometricStorage();
+  FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
   Future<AtClientData?> deleteAllData({
     bool useSharedStorage = false,
   }) async {
     try {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
-      await store.delete();
+      await secureStorage.delete(key: store);
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
       print(s);
@@ -193,11 +177,10 @@ class KeyChainManager {
         Map<String, dynamic>? keysFromBiometric;
         Map<String, dynamic>? keysFromKeychain;
         try {
-          final data =
-              await (await BiometricStorage().getStorage('@atsign')).read();
+          final data = await FlutterSecureStorage().read(key: '@atsign');
           keysFromBiometric = jsonDecode(data ?? '{}');
         } catch (e, s) {
-          _logger.warning('Read keys from BiometricStorage', e, s);
+          _logger.warning('Read keys from FlutterSecureStorage', e, s);
         }
         try {
           final data = await FlutterKeychain.get(key: '@atsign');
@@ -212,27 +195,20 @@ class KeyChainManager {
             if (value == true) {
               migratedData.defaultAtsign = key;
             }
-            final String? pkamPublicKey = await (await BiometricStorage()
-                    .getStorage('$key:_pkam_public_key'))
-                .read();
-            final String? pkamPrivateKey = await (await BiometricStorage()
-                    .getStorage('$key:_pkam_private_key'))
-                .read();
-            final String? encryptionPublicKey = await (await BiometricStorage()
-                    .getStorage('$key:_encryption_public_key'))
-                .read();
-            final String? encryptionPrivateKey = await (await BiometricStorage()
-                    .getStorage('$key:_encryption_private_key'))
-                .read();
+            final String? pkamPublicKey =
+                await FlutterSecureStorage().read(key: '$key:_pkam_public_key');
+            final String? pkamPrivateKey = await FlutterSecureStorage()
+                .read(key: '$key:_pkam_private_key');
+            final String? encryptionPublicKey = await FlutterSecureStorage()
+                .read(key: '$key:_encryption_public_key');
+            final String? encryptionPrivateKey = await FlutterSecureStorage()
+                .read(key: '$key:_encryption_private_key');
             final String? selfEncryptionKey =
-                await (await BiometricStorage().getStorage('$key:_aesKey'))
-                    .read();
+                await FlutterSecureStorage().read(key: '$key:_aesKey');
             final String? hiveSecret =
-                await (await BiometricStorage().getStorage('$key:_hive_secret'))
-                    .read();
+                await FlutterSecureStorage().read(key: '$key:_hive_secret');
             final String? secret =
-                await (await BiometricStorage().getStorage('$key:_secret'))
-                    .read();
+                await FlutterSecureStorage().read(key: '$key:_secret');
             final newAtSignKey = AtsignKey(
               atSign: key,
               pkamPublicKey: pkamPublicKey,
@@ -630,13 +606,6 @@ class KeyChainManager {
     }
   }
 
-  /// This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead")
-  Future<Map<String, bool?>> checkForValuesInFlutterKeychain() async {
-    return getAtsignsWithStatus();
-  }
-
   /// Function to clear all entries from keychain
   Future<void> clearKeychainEntries() async {
     for (var element
@@ -645,31 +614,7 @@ class KeyChainManager {
     }
   }
 
-  /// This function is deprecated and will be removed in upcoming version
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version")
-  Future<BiometricStorageFile> getBiometricStorageFile(String key) async {
-    return await BiometricStorage().getStorage(key,
-        options: StorageFileInitOptions(
-          authenticationRequired: false,
-        ));
-  }
-
-  /// Function to get value for the key passed from keychain
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version")
-  Future<String?> getValue(String atsign, String key) async {
-    throw UnimplementedError();
-  }
-
-  /// Function to save value for the key passed to keychain
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version")
-  Future<String> putValue(String atsign, String key, String value) async {
-    throw UnimplementedError();
-  }
-
-  Future<BiometricStorageFile> _getAppStorage({
+  Future<String> _getAppStorage({
     bool useSharedStorage = false,
   }) async {
     String packageName = '';
@@ -680,16 +625,9 @@ class KeyChainManager {
       _logger.warning('Get PackageInfo', e, s);
     }
 
-    final data = await biometricStorage.getStorage(
-      useSharedStorage
-          ? '$_kDefaultKeystoreAccount:shared'
-          : '$_kDefaultKeystoreAccount:$packageName',
-      options: StorageFileInitOptions(
-        authenticationRequired: false,
-      ),
-    );
-
-    return data;
+    return useSharedStorage
+        ? '$_kDefaultKeystoreAccount:shared'
+        : '$_kDefaultKeystoreAccount:$packageName';
   }
 
   /// Function to save client data
@@ -698,10 +636,8 @@ class KeyChainManager {
     required bool useSharedStorage,
   }) async {
     try {
-      final store = await _getAppStorage(useSharedStorage: useSharedStorage);
       final mapList = jsonEncode(data.toJson());
       await _writeDataToStore(
-        store: store,
         data: mapList,
         useSharedStorage: useSharedStorage,
       );
@@ -723,55 +659,48 @@ class KeyChainManager {
     return result;
   }
 
-  /// The function write String data to BiometricStorageFile
-  /// If Platform is Windows, data will separated into segments before save. Because in Window, BiometricStorage limit the data length saved
+  /// The function write String data
+  /// If Platform is Windows, data will separated into segments before save. Because in Window, it limit the data length saved
   Future<void> _writeDataToStore({
-    required BiometricStorageFile store,
     required String data,
     bool useSharedStorage = false,
   }) async {
+    final store = await _getAppStorage(useSharedStorage: useSharedStorage);
     if (Platform.isWindows) {
       final dataList = _splitString(data, _kWindowSegmentDataLength);
-      await store.write(dataList.length.toString());
+      await secureStorage.write(key: store, value: dataList.length.toString());
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
       final packageName = packageInfo.packageName;
 
       for (int i = 0; i < dataList.length; i++) {
-        final dataStore = await BiometricStorage().getStorage(
-          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
-          options: StorageFileInitOptions(
-            authenticationRequired: false,
-          ),
-        );
-        await dataStore.write(dataList[i]);
+        final dataStore =
+            useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i';
+        await secureStorage.write(key: dataStore, value: dataList[i]);
       }
     } else {
-      await store.write(data);
+      await secureStorage.write(key: store, value: data);
     }
   }
 
-  /// The function read String data to BiometricStorageFile
+  /// The function read String data
   Future<String?> _readDataFromStore({
-    required BiometricStorageFile store,
+    required String store,
     bool useSharedStorage = false,
   }) async {
     if (Platform.isWindows) {
-      final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
+      final segmentCount = int.tryParse(store) ?? 0;
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
       final packageName = packageInfo.packageName;
       final results = <String>[];
       for (int i = 0; i < segmentCount; i++) {
-        final dataStore = await biometricStorage.getStorage(
-          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
-          options: StorageFileInitOptions(
-            authenticationRequired: false,
-          ),
+        final dataStore = await secureStorage.read(
+          key: useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
         );
-        results.add(await dataStore.read() ?? '');
+        results.add(dataStore ?? '');
       }
       return _combineString(results);
     }
-    return await store.read();
+    return store;
   }
 
   /// The function separated a String to a list of segment String
