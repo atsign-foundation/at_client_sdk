@@ -1,3 +1,5 @@
+## 3.2.11
+- chore: Upgraded biometric_storage dependency to 5.0.0 
 ## 3.2.10
 - fix: Fixed incorrect import statements in at_client_mobile/example which are
   causing analysis errors in dart 3
