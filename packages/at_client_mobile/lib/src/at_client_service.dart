@@ -8,11 +8,15 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
   AtClient? _atClient;
   AtClientManager atClientManager = AtClientManager.getInstance();
+  @visibleForTesting
+  InternetConnectionChecker internetConnectionChecker =
+      InternetConnectionChecker();
 
   @visibleForTesting
   AtClientAuthenticator? atClientAuthenticator;
@@ -148,14 +152,14 @@ class AtClientService {
         .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
 
     // Verify if keys are added to local storage.
-    var result = await _getKeysFromLocalSecondary(atSign);
+    var result = await _checkKeysInLocalSecondary(atSign);
     return result;
   }
 
   ///Throws [Error] of type [OnboardingStatus]
-  ///if the details for [atsign] is not found in localsecondary.
+  ///if the details for [atSign] is not found in local secondary.
   ///Returns `true` on successful fetching of all the details.
-  Future<bool> _getKeysFromLocalSecondary(String atsign) async {
+  Future<bool> _checkKeysInLocalSecondary(String atSign) async {
     String? pkamPublicKey =
         await _atClient!.getLocalSecondary()!.getPublicKey();
     if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
@@ -172,7 +176,7 @@ class AtClientService {
       throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
     String? encryptPublicKey =
-        await _atClient!.getLocalSecondary()!.getEncryptionPublicKey(atsign);
+        await _atClient!.getLocalSecondary()!.getEncryptionPublicKey(atSign);
     if (encryptPublicKey == null || encryptPublicKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
@@ -256,7 +260,6 @@ class AtClientService {
       atChops = createAtChops(await getKeysFromKeyChainManager(atsign));
     }
     await _init(atsign, atClientPreference, atChops);
-    await _sync();
     // persist keys to the local-keystore
     await persistKeys(atsign);
     return true;
@@ -358,17 +361,27 @@ class AtClientService {
     }
     atChops = createAtChops(await getKeysFromKeyChainManager(atsign));
     await _init(atsign, atClientPreference, atChops);
-    await persistKeys(atsign);
+    // Checks if the local storage has the PKAM and Encryption keys
+    bool keyStoreHasKeys = await _checkKeysInLocalSecondary(atsign);
+    // Defensive code: If the keys are available in keychain manager and not
+    // available in local storage, add keys to the local storage.
+    if (!keyStoreHasKeys) {
+      keyStoreHasKeys = await persistKeys(atsign);
+    }
+    // When network connection is not available and if the local storage
+    // all the keys, allow at_client to work offline with limited operations.
+    if (!await internetConnectionChecker.hasConnection) {
+      return keyStoreHasKeys;
+    }
     var keyRestorePolicyStatus = await getKeyRestorePolicy(atsign);
     if (keyRestorePolicyStatus == OnboardingStatus.ACTIVATE ||
         keyRestorePolicyStatus == OnboardingStatus.RESTORE) {
       throw (keyRestorePolicyStatus);
     }
-    await _sync();
     return true;
   }
 
-  ///Returns [OnboardingStatus] of the atsign by checking it with remote server.
+  ///Returns [OnboardingStatus] of the atSign by checking it with remote server.
   Future<OnboardingStatus> getKeyRestorePolicy(String atSign) async {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
     var localEncryptionPublicKey =
@@ -392,11 +405,6 @@ class AtClientService {
         return OnboardingStatus.RESTORE;
       }
     }
-  }
-
-  /// Initiates Sync Process.
-  Future<void> _sync() async {
-    atClientManager.atClient.syncService.sync();
   }
 
   ///returns public key for [atsign] if found else returns null.
