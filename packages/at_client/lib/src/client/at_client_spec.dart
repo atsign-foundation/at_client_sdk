@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/enrollment/enrollment_request.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -507,6 +508,10 @@ abstract class AtClient {
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
   ///```
   Future<String> notifyList({String? fromDate, String? toDate, String? regex});
+
+  Future<EnrollmentResponse> enroll(Enrollment enrollment);
+
+  Future<String> getOTP();
 
   /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
   /// the notification on the client.

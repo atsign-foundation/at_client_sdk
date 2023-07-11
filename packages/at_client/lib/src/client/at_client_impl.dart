@@ -7,12 +7,14 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
+import 'package:at_client/src/enrollment/enrollment_request.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
@@ -954,5 +956,82 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       throw result.atClientException!;
     }
     return result.notificationID;
+  }
+
+  @override
+  Future<EnrollmentResponse> enroll(Enrollment enrollment) async {
+    switch (enrollment.enrollmentOperation) {
+      case EnrollOperationEnum.request:
+        return await _handleRequestOperation(enrollment);
+      case EnrollOperationEnum.approve:
+        return _handleApproveOperation(enrollment);
+      case EnrollOperationEnum.deny:
+        return _handleDenyOperation(enrollment);
+      default:
+        return EnrollmentResponse()..isError = true;
+    }
+  }
+
+  Future<EnrollmentResponse> _handleRequestOperation(
+      Enrollment enrollment) async {
+    EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
+      ..appName = enrollment.appName
+      ..deviceName = enrollment.deviceName
+      ..namespaces = enrollment.namespaces
+      ..totp = enrollment.totp
+      ..apkamPublicKey = enrollment.aPKAMPublicKey;
+
+    EnrollmentResponse enrollmentResponse = EnrollmentResponse();
+    String? enrollResponse;
+
+    try {
+      // The enroll request will sent on an unauthenticated connection
+      // Hence setting auth to false.
+      enrollResponse = await _remoteSecondary
+          ?.executeCommand(enrollVerbBuilder.buildCommand(), auth: false);
+    } on AtException catch (e) {
+      enrollmentResponse.isError = true;
+      enrollmentResponse.errorDescription = e.message;
+    }
+    enrollResponse = enrollResponse?.replaceAll('data:', '');
+    var enrollJsonMap = jsonDecode(enrollResponse!);
+    enrollmentResponse.enrollmentId = enrollJsonMap['enrollmentId'];
+    enrollmentResponse.enrollStatus = enrollJsonMap['status'];
+
+    return enrollmentResponse;
+  }
+
+  Future<EnrollmentResponse> _handleApproveOperation(
+      Enrollment enrollment) async {
+    String command = 'enroll:approve:enrollmentId:${enrollment.enrollmentId}';
+    String? enrollResponse =
+        await _remoteSecondary?.executeCommand(command, auth: true);
+    enrollResponse = enrollResponse?.replaceAll('data:', '');
+    var enrollJsonMap = jsonDecode(enrollResponse!);
+    EnrollmentResponse enrollmentResponse = EnrollmentResponse();
+    enrollmentResponse.enrollmentId = '${enrollment.enrollmentId}';
+    enrollmentResponse.enrollStatus = enrollJsonMap['status'];
+    return enrollmentResponse;
+  }
+
+  Future<EnrollmentResponse> _handleDenyOperation(Enrollment enrollment) async {
+    String command = 'enroll:deny:enrollmentId:${enrollment.enrollmentId}';
+    String? enrollResponse =
+        await _remoteSecondary?.executeCommand(command, auth: true);
+    enrollResponse = enrollResponse?.replaceAll('data:', '');
+    var enrollJsonMap = jsonDecode(enrollResponse!);
+    EnrollmentResponse enrollmentResponse = EnrollmentResponse();
+    enrollmentResponse.enrollmentId = '${enrollment.enrollmentId}';
+    enrollmentResponse.enrollStatus = enrollJsonMap['status'];
+    return enrollmentResponse;
+  }
+
+  Future<String> getOTP() async {
+    String? response = await _remoteSecondary?.executeCommand('totp:get\n');
+    AtResponse atResponse = DefaultResponseParser().parse(response!);
+    if (atResponse.isError) {
+      return atResponse.errorDescription!;
+    }
+    return atResponse.response;
   }
 }
