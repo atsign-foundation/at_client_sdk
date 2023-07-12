@@ -35,7 +35,7 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
             exceptionScenario: ExceptionScenario.decryptionFailed);
       }
       if (_atClient.atChops == null) {
-        var privateKey = await _atClient.getLocalSecondary()!.getPrivateKey();
+        var privateKey = await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
         // ignore: deprecated_member_use_from_same_package
         EncryptionUtil.decryptKey(encryptedValue, privateKey!);
       } else {

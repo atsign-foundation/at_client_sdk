@@ -38,7 +38,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
             exceptionScenario: ExceptionScenario.decryptionFailed);
       }
       if (atClient.atChops == null) {
-        var privateKey = await atClient.getLocalSecondary()!.getPrivateKey();
+        var privateKey = await atClient.getLocalSecondary()!.getEncryptionPrivateKey();
         // ignore: deprecated_member_use_from_same_package
         EncryptionUtil.decryptKey(encryptedValue, privateKey!);
       } else {

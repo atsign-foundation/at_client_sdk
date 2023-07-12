@@ -113,13 +113,13 @@ void main() {
 
     test('Negative test - shared keys ', () async {
       await switchAtsigns("@alice🛠");
-      atClientManager.atClient.encryptionService!.logger
-          .info(atClientManager.atClient.getCurrentAtSign());
-      var atKey = (AtKey.shared("shared_key", namespace: "" "@bob🛠")
+      var atKey = (AtKey.shared("shared_key", namespace: "", sharedBy: "@bob🛠")
             ..sharedWith("@alice🛠"))
           .build();
-      var result = await atClientManager.atClient.get(atKey);
-      expect(result, isException);
+
+      expect(() async {
+        await atClientManager.atClient.get(atKey);
+      }, throwsException);
     });
   });
 }
