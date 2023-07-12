@@ -27,9 +27,15 @@ class SelfKeyDecryption implements AtKeyDecryption {
             intent: Intent.fetchData,
             exceptionScenario: ExceptionScenario.decryptionFailed);
       }
-      return _atClient.atChops!
-          .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048)
-          .result;
+      if (_atClient.atChops == null) {
+        var privateKey = await _atClient.getLocalSecondary()!.getPrivateKey();
+        // ignore: deprecated_member_use_from_same_package
+        EncryptionUtil.decryptKey(encryptedValue, privateKey!);
+      } else {
+        return _atClient.atChops!
+            .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048)
+            .result;
+      }
     }
     var selfEncryptionKey =
         await _atClient.getLocalSecondary()!.getEncryptionSelfKey();

@@ -37,9 +37,15 @@ class SharedKeyDecryption implements AtKeyDecryption {
             intent: Intent.fetchData,
             exceptionScenario: ExceptionScenario.decryptionFailed);
       }
-      return atClient.atChops!
-          .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048)
-          .result;
+      if (atClient.atChops == null) {
+        var privateKey = await atClient.getLocalSecondary()!.getPrivateKey();
+        // ignore: deprecated_member_use_from_same_package
+        EncryptionUtil.decryptKey(encryptedValue, privateKey!);
+      } else {
+        return atClient.atChops!
+            .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048)
+            .result;
+      }
     }
     String? encryptedSharedKey;
     if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
