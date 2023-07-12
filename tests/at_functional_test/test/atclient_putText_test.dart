@@ -22,8 +22,11 @@ void main() {
   Future<void> switchAtsigns(String atsign) async {
     var preference = TestUtils.getPreference(atsign);
     atClientManager.setCurrentAtSign(atsign, null, preference);
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, atsign);
+    var list = await atClientManager.atClient
+        .getRemoteSecondary()!
+        .atLookUp
+        .scan(regex: 'shared_key');
+    print(list);
   }
 
   group('A group of tests to verify positive scenarios of put and get', () {
