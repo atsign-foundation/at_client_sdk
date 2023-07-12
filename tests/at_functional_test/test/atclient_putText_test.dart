@@ -80,6 +80,13 @@ void main() {
     });
   });
 
+  setUp(() async {
+    var list = await atClientManager.atClient
+        .getRemoteSecondary()!
+        .atLookUp
+        .scan(regex: 'shared_key');
+    print(list);
+  });
   group('A group of tests to verify get of symmetric shared keys', () {
     test('Positive test - self keys ', () async {
       var atKey = AtKey()
