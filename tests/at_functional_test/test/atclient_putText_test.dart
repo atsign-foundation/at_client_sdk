@@ -19,6 +19,16 @@ void main() {
         .setEncryptionKeys(atClientManager.atClient, atSign);
   });
 
+  switchAtsigns(String atsign) async {
+    var preference = TestUtils.getPreference(atsign);
+    atClientManager.setCurrentAtSign(atsign, null, preference);
+    var list = await atClientManager.atClient
+        .getRemoteSecondary()!
+        .atLookUp
+        .scan(regex: 'shared_key');
+    print(list);
+  }
+
   group('A group of tests to verify positive scenarios of put and get', () {
     test('put method - create a key sharing to other atSign', () async {
       // phone.wavi@alice🛠
@@ -80,36 +90,34 @@ void main() {
     });
   });
 
-  setUp(() async {
-    var list = await atClientManager.atClient
-        .getRemoteSecondary()!
-        .atLookUp
-        .scan(regex: 'shared_key');
-    print(list);
-  });
   group('A group of tests to verify get of symmetric shared keys', () {
     test('Positive test - self keys ', () async {
-      var atKey = AtKey()
-        ..sharedBy = '@alice🛠'
-        ..key = 'shared_key';
+      var atKey =
+          AtKey.self("shared_key", namespace: "@bob🛠", sharedBy: "@alice🛠")
+              .build();
+
       var result = await atClientManager.atClient.get(atKey);
       expect(result, returnsNormally);
     });
 
     test('Positive test - shared keys ', () async {
-      var atKey = AtKey()
-        ..sharedBy = '@bob🛠'
-        ..key = 'shared_key'
-        ..sharedWith = '@alice🛠';
+      switchAtsigns("@bob🛠");
+      atClientManager.atClient.encryptionService!.logger
+          .info(atClientManager.atClient.getCurrentAtSign());
+      var atKey = (AtKey.shared("shared_key", sharedBy: "@alice🛠")
+            ..sharedWith("@bob🛠"))
+          .build();
       var result = await atClientManager.atClient.get(atKey);
       expect(result, returnsNormally);
     });
 
     test('Negative test - shared keys ', () async {
-      var atKey = AtKey()
-        ..sharedBy = '@alice🛠'
-        ..key = 'shared_key'
-        ..sharedWith = '@bob🛠';
+      switchAtsigns("@alice🛠");
+      atClientManager.atClient.encryptionService!.logger
+          .info(atClientManager.atClient.getCurrentAtSign());
+      var atKey = (AtKey.shared("shared_key", sharedBy: "@bob🛠")
+            ..sharedWith("@alice🛠"))
+          .build();
       var result = await atClientManager.atClient.get(atKey);
       expect(result, isException);
     });
