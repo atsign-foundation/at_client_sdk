@@ -6,6 +6,7 @@ import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 import 'package:at_app_flutter/at_app_flutter.dart' show AtEnv;
+import 'package:at_client/src/preference/at_client_preference.dart';
 
 Future<void> main() async {
   await AtEnv.load();
