@@ -919,9 +919,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     return false;
   }
 
-  void deleteLocalSecondaryStorageWithConsent(
-      String commitLogDirectoryPath, String hiveStorageDirectoryPath,
-      {required bool userConsentToDeleteLocalStorage}) {
+  @override
+  void deleteLocalSecondaryStorageWithConsent({required bool userConsentToDeleteLocalStorage}) {
     _logger.shout(
         'Consent to delete LocalSecondary storage received: $userConsentToDeleteLocalStorage');
     if (!userConsentToDeleteLocalStorage) {
@@ -930,68 +929,77 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     // Deleting commit log storage
     _logger
-        .info('Deleting CommitLog local storage at: $commitLogDirectoryPath');
-    String commitLogFileName =
-        'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
-    String commitLogLockFileName =
-        'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
-
-    File commitLogFile = File('$commitLogDirectoryPath/$commitLogFileName');
-
-    // Todo: Do windows/mac have lock files ?
-    File lockFile = File('$commitLogDirectoryPath/$commitLogLockFileName');
-
-    if (!commitLogFile.existsSync()) {
-      throw AtClientException.message(
-          'CommitLog storage not found at path: $commitLogFile.'
-          ' Please provide a valid CommitLog directory path');
-    }
+        .info('Deleting CommitLog local storage at: ${_preference?.commitLogPath}');
     try {
-      commitLogFile.deleteSync();
-      lockFile.deleteSync();
-      // Since recursive delete is false by default, If the directory is empty
-      // the directory will also be deleted
-      Directory(commitLogDirectoryPath).deleteSync();
-      _logger.info('Successfully deleted commitLog storage');
+      _deleteLocalStorage(_preference!.commitLogPath!, isHiveStorage: false);
     } on Exception catch (e) {
       _logger.finer('Unable to delete CommitLog storage | Cause: $e');
       throw AtIOException(e.toString());
     }
 
     // Deleting hive storage
-    _logger.info('Deleting hive local storage at: $hiveStorageDirectoryPath');
-    String hashFileName =
-        '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hash';
-    String hiveFileName =
-        '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
-    String hiveLockFileName =
-        '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
+    _logger.info('Deleting hive local storage at: ${_preference?.hiveStoragePath}');
+    try {
+      _deleteLocalStorage(_preference!.hiveStoragePath!, isHiveStorage: true);
+    } on Exception catch (e) {
+      _logger.finer('Unable to delete hive storage | Cause: $e');
+      throw AtIOException(e.toString());
+    }
+  }
 
-    File hiveFile = File('$hiveStorageDirectoryPath/$hiveFileName');
-    File hiveLockFile = File('$hiveStorageDirectoryPath/$hiveLockFileName');
-    File hashFile = File('$hiveStorageDirectoryPath/$hashFileName');
+  void _deleteLocalStorage(String storageDirectory,
+      {bool isHiveStorage = false}) {
+    if (isHiveStorage) {
+      String hashFileName =
+          '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hash';
+      String hiveFileName =
+          '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
+      String hiveLockFileName =
+          '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
 
-    if (!(hashFile.existsSync() && hiveFile.existsSync())) {
-      if (!hiveFile.existsSync()) {
+      File hiveFile = File('$storageDirectory/$hiveFileName');
+      File hiveLockFile = File('$storageDirectory/$hiveLockFileName');
+      File hashFile = File('$storageDirectory/$hashFileName');
+
+      if (!(hashFile.existsSync() && hiveFile.existsSync())) {
+        if (!hiveFile.existsSync()) {
+          throw AtClientException.message(
+              'hive file not found at path: $hiveFile.'
+              ' Please provide a valid hive storage directory path');
+        }
         throw AtClientException.message(
-            'hive file not found at path: $hiveFile.'
+            'hive hash file not found at path: $hiveFile.'
             ' Please provide a valid hive storage directory path');
       }
-      throw AtClientException.message(
-          'hive hash file not found at path: $hiveFile.'
-          ' Please provide a valid hive storage directory path');
-    }
-    try {
       hashFile.deleteSync();
       hiveFile.deleteSync();
       hiveLockFile.deleteSync();
       // Since recursive delete is true by default, only if the directory is
       // empty the directory will be deleted too
-      Directory(hiveStorageDirectoryPath).deleteSync();
+      Directory(storageDirectory).deleteSync();
       _logger.info('Successfully deleted hive storage');
-    } on Exception catch (e) {
-      _logger.finer('Unable to delete hive storage | Cause: $e');
-      throw AtIOException(e.toString());
+    } else {
+      String commitLogFileName =
+          'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
+      String commitLogLockFileName =
+          'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
+
+      File commitLogFile = File('$storageDirectory/$commitLogFileName');
+
+      // Todo: Do windows/mac have lock files ?
+      File lockFile = File('$storageDirectory/$commitLogLockFileName');
+
+      if (!commitLogFile.existsSync()) {
+        throw AtClientException.message(
+            'CommitLog storage not found at path: $commitLogFile.'
+            ' Please provide a valid CommitLog directory path');
+      }
+      commitLogFile.deleteSync();
+      lockFile.deleteSync();
+      // Since recursive delete is false by default, If the directory is empty
+      // the directory will also be deleted
+      Directory(storageDirectory).deleteSync();
+      _logger.info('Successfully deleted commitLog storage');
     }
   }
 
