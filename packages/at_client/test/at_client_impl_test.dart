@@ -275,8 +275,7 @@ void main() {
           AtClientPreference()..isLocalStoreRequired = true,
           remoteSecondary: mockRemoteSecondary,
           localSecondaryKeyStore: mockKeystore);
-      expect(client.isSecondaryReset(),
-          throwsA(predicate((dynamic e) => e is AtResetException)));
+      expect(await client.isSecondaryReset(), false);
     });
 
     test('Verify isSecondaryReset() functionality - positive case', () async {
