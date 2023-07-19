@@ -145,6 +145,7 @@ class AtRpc {
             NotificationParams.forUpdate(requestRecordID, value: requestJson),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
+        sent = true;
         logger.info('Notification ${requestRecordID.toString()} sent');
       } catch (e) {
         if (attemptNumber < maxSendAttempts) {
