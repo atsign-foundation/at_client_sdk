@@ -291,7 +291,7 @@ void main() {
           localSecondaryKeyStore: mockKeystore);
       // errorless execution test
       // if the method call below triggers any errors/exceptions this test will fail
-      await client.isSecondaryReset();
+      expect(await client.isSecondaryReset(), true);
     });
   });
 }
