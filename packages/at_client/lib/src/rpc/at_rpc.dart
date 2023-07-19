@@ -28,6 +28,7 @@ abstract class AtRpcCallbacks {
 /// - Responder:
 /// ```
 /// ```
+@experimental
 class AtRpc {
   static final AtSignLogger logger = AtSignLogger('AtRpc');
 
