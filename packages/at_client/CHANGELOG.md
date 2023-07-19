@@ -1,3 +1,5 @@
+## 3.0.63
+- fix: Fixed bug in AtRpc.sendRequest which was causing repeat sends of requests
 ## 3.0.62
 - fix: skip reserved keys during sync conflict checking
 - build: updated dependency on http package to `'>=0.13.5 <2.0.0'`
