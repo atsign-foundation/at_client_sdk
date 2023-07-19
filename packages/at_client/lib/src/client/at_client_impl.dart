@@ -884,9 +884,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<void> isSecondaryReset() async {
     _logger.finer('Performing Remote Secondary reset check');
+    // Fetch EncryptionPublicKey from LocalSecondary
     var localPublicKey =
         await getLocalSecondary()?.getEncryptionPublicKey(getCurrentAtSign()!);
-
+    // Fetch EncryptionPublicKey from RemoteSecondary
     LookupVerbBuilder lookupBuilder = LookupVerbBuilder()
       ..atKey = 'publickey' //AT_ENCRYPTION_PUBLIC_KEY
       ..sharedBy = getCurrentAtSign();
@@ -908,55 +909,56 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       _logger.info('EncryptionPublicKey on RemoteSecondary: $remotePublicKey');
       _logger.shout(
           'AtEncryptionPublicKey on local secondary and remote secondary are different.'
-          '\nThis indicates remote secondary has been reset.'
-          '\nPlease delete localStorage and restart the client');
-      _logger.info('To delete localSecondary,'
-          ' call AtClientImpl.deleteLocalSecondary() with user consent');
+          'This indicates remote secondary has been reset.'
+          'Please delete localStorage and restart the client');
+      _logger.info('To delete localSecondary, call '
+          'AtClientImpl.deleteLocalSecondaryStorageWithConsent() with user consent');
       throw AtResetException('Remote secondary has been reset');
     }
-    _logger.finer('Secondary is not reset. Status ok');
+    _logger.finer('Remote Secondary is NOT reset. Status ok');
   }
 
   void deleteLocalSecondaryStorageWithConsent(
       String commitLogDirectoryPath, String hiveStorageDirectoryPath,
-      {required bool userConsentToDeleteLocalSecondaryStorage}) {
+      {required bool userConsentToDeleteLocalStorage}) {
     _logger.shout(
-        'Consent to delete LocalSecondary storage received: $userConsentToDeleteLocalSecondaryStorage');
-    if (userConsentToDeleteLocalSecondaryStorage) {
-      _logger
-          .info('Deleting CommitLog local storage at: $commitLogDirectoryPath');
-      _deleteLocalCommitLog(commitLogDirectoryPath);
-      _logger.info('Deleting hive local storage at: $hiveStorageDirectoryPath');
-      _deleteLocalHiveStorage(hiveStorageDirectoryPath);
+        'Consent to delete LocalSecondary storage received: $userConsentToDeleteLocalStorage');
+    if (!userConsentToDeleteLocalStorage) {
+      throw AtClientException.message(
+          'User consent not provided. Unable to delete local storage without consent');
     }
-  }
-
-  void _deleteLocalCommitLog(String commitLogDirectoryPath) {
-    String fileName =
+    // Deleting commit log storage
+    _logger
+        .info('Deleting CommitLog local storage at: $commitLogDirectoryPath');
+    String commitLogFileName =
         'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
-    String lockFileName =
+    String commitLogLockFileName =
         'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
 
-    File commitLogFile = File('$commitLogDirectoryPath/$fileName');
+    File commitLogFile = File('$commitLogDirectoryPath/$commitLogFileName');
 
     // Todo: Do windows/mac have lock files ?
-    File lockFile = File('$commitLogDirectoryPath/$lockFileName');
+    File lockFile = File('$commitLogDirectoryPath/$commitLogLockFileName');
 
-    if (commitLogFile.existsSync()) {
+    if (!commitLogFile.existsSync()) {
+      throw AtClientException.message(
+          'CommitLog storage not found at path: $commitLogFile.'
+          ' Please provide a valid CommitLog directory path');
+    }
+    try {
       commitLogFile.deleteSync();
       lockFile.deleteSync();
-      _logger.info('Successfully deleted commitLog storage');
       // Since recursive delete is false by default, If the directory is empty
       // the directory will also be deleted
       Directory(commitLogDirectoryPath).deleteSync();
-      return;
+      _logger.info('Successfully deleted commitLog storage');
+    } on Exception catch (e) {
+      _logger.finer('Unable to delete CommitLog storage | Cause: $e');
+      throw AtIOException(e.toString());
     }
-    throw AtClientException.message(
-        'CommitLog storage not found at path: $commitLogFile.'
-        ' Please provide a valid CommitLog directory path');
-  }
 
-  void _deleteLocalHiveStorage(String hiveStorageDirectoryPath) {
+    // Deleting hive storage
+    _logger.info('Deleting hive local storage at: $hiveStorageDirectoryPath');
     String hashFileName =
         '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hash';
     String hiveFileName =
@@ -968,15 +970,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     File hiveLockFile = File('$hiveStorageDirectoryPath/$hiveLockFileName');
     File hashFile = File('$hiveStorageDirectoryPath/$hashFileName');
 
-    if (hashFile.existsSync() && hiveFile.existsSync()) {
-      hashFile.deleteSync();
-      hiveFile.deleteSync();
-      hiveLockFile.deleteSync();
-      _logger.info('Successfully deleted hive storage');
-      // Since recursive delete is true by default, If the directory is empty
-      // the directory will be deleted too
-      Directory(hiveStorageDirectoryPath).deleteSync();
-    } else {
+    if (!(hashFile.existsSync() && hiveFile.existsSync())) {
       if (!hiveFile.existsSync()) {
         throw AtClientException.message(
             'hive file not found at path: $hiveFile.'
@@ -986,10 +980,21 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           'hive hash file not found at path: $hiveFile.'
           ' Please provide a valid hive storage directory path');
     }
+    try {
+      hashFile.deleteSync();
+      hiveFile.deleteSync();
+      hiveLockFile.deleteSync();
+      // Since recursive delete is true by default, only if the directory is
+      // empty the directory will be deleted too
+      Directory(hiveStorageDirectoryPath).deleteSync();
+      _logger.info('Successfully deleted hive storage');
+    } on Exception catch (e) {
+      _logger.finer('Unable to delete hive storage | Cause: $e');
+      throw AtIOException(e.toString());
+    }
   }
 
   // TODO v4 - remove the follow methods in version 4 of at_client package
-
   @override
   @Deprecated("Use AtClient.syncService")
   SyncManager? getSyncManager() {
