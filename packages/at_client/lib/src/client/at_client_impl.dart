@@ -882,7 +882,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<void> isSecondaryReset() async {
+  Future<bool> isSecondaryReset() async {
     _logger.finer('Performing Remote Secondary reset check');
     // Fetch EncryptionPublicKey from LocalSecondary
     var localPublicKey =
@@ -899,7 +899,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (localPublicKey.isNull) {
       _logger.info('Could not fetch EncryptionPublicKey from LocalSecondary.'
           ' Unable to complete reset check');
-      return;
+      return false;
     }
 
     // TODO should there be a check for remote enc_key being null ?
@@ -913,9 +913,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           'Please delete localStorage and restart the client');
       _logger.info('To delete localSecondary, call '
           'AtClientImpl.deleteLocalSecondaryStorageWithConsent() with user consent');
-      throw AtResetException('Remote secondary has been reset');
+      return true;
     }
     _logger.finer('Remote Secondary is NOT reset. Status ok');
+    return false;
   }
 
   void deleteLocalSecondaryStorageWithConsent(
