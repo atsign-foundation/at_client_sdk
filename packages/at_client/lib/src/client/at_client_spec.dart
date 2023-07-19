@@ -530,8 +530,18 @@ abstract class AtClient {
       Function streamReceiveCallBack);
 
   /// Performs a check to see if RemoteSecondary has been reset
-  /// throws [AtResetException] if the RemoteSecondary has been reset
-  Future<void> isSecondaryReset();
+  /// returns true if the RemoteSecondary has been reset, false otherwise
+  Future<bool> isSecondaryReset();
+
+  /// Deletes a client's local secondary storage
+  ///
+  /// [To be used when remote secondary has been reset]
+  ///
+  /// Requires user consent passed as a method parameter.
+  ///
+  /// Performs deletion only if consent is true
+  void deleteLocalSecondaryStorageWithConsent(
+      {required bool userConsentToDeleteLocalStorage});
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
