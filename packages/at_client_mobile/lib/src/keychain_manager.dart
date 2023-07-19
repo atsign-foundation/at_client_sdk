@@ -27,10 +27,6 @@ class KeyChainManager {
   KeyChainManager._internal();
 
   factory KeyChainManager.getInstance() {
-    if (Platform.isWindows) {
-      // ignore: undefined_method
-      Win32BiometricStoragePlugin.registerWith();
-    }
     return _singleton;
   }
 
