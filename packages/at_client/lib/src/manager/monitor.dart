@@ -176,12 +176,18 @@ class Monitor {
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
-      _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
-        _logger.info(
-            'socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
-        _callCloseStopAndRetry();
-      }, onError: (error) {
-        _logger.warning('socket.listen onError called with: $error');
+      runZonedGuarded(() {
+        _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
+          _logger.info(
+              'socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
+          _callCloseStopAndRetry();
+        }, onError: (error) {
+          _logger.warning('socket.listen onError called with: $error');
+          _handleError(error);
+        });
+      }, (Object error, StackTrace stackTrace) {
+        _logger.warning(
+            'runZonedGuarded received socket error $error - calling _handleError');
         _handleError(error);
       });
       await _authenticateConnection();
