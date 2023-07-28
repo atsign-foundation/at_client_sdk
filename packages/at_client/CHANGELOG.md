@@ -1,3 +1,5 @@
+## 3.0.64
+- fix: wrap Monitor's call to `socket.listen()` in a runZonedGuarded block
 ## 3.0.63
 - fix: Fixed bug in AtRpc.sendRequest which was causing repeat sends of requests
 ## 3.0.62
