@@ -186,7 +186,7 @@ class RemoteSecondary implements Secondary {
     return secondaryAddress.toString();
   }
 
-  @Deprecated('This method will be removed in next major release')
+  @Deprecated('This method is unused and will be removed in next major release')
   Future<bool> isAvailable() async {
     try {
       String? secondaryUrl = await findSecondaryUrl();
