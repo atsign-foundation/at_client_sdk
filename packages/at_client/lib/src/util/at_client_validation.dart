@@ -86,12 +86,6 @@ class AtClientValidation {
     }
     // validates the metadata
     validateMetadata(atKey.metadata);
-    // verifies if the sharedWith atSign exists.
-    if (atKey.sharedWith != null && await NetworkUtil().isNetworkAvailable()) {
-      await isAtSignExists(
-          AtClientManager.getInstance().secondaryAddressFinder!,
-          atKey.sharedWith!);
-    }
   }
 
   /// Performs the validations on the PutRequest
