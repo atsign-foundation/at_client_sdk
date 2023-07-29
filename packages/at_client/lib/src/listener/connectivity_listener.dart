@@ -5,7 +5,7 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 /// Listener class that returns a Stream<True> if internet connection is on in the running device, Stream<False> if internet gets disconnected.
 /// Sample usage
 /// ```
-/// ConnectivityListener().subscribe().listen((isConnected) {
+/// ConnectivityListener({hostname:'google.com', port:80}).subscribe().listen((isConnected) {
 ///   if (isConnected) {
 ///     print('connection available');
 ///    } else {
@@ -14,24 +14,46 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 /// });
 /// ```
 class ConnectivityListener {
-  late StreamSubscription _listener;
+  late final String? hostname;
+  late final int? port;
+  late final Duration checkInterval;
+  late final StreamSubscription _listener;
+
+  ConnectivityListener(
+      {this.hostname,
+      this.port,
+      this.checkInterval = const Duration(seconds: 10)}) {
+    if (hostname != null && port == null) {
+      throw ArgumentError('port may not be null if hostname is provided');
+    }
+    if (hostname == null && port != null) {
+      throw ArgumentError('hostname may not be null if port is provided');
+    }
+  }
 
   /// Listen to [InternetConnectionChecker.onStatusChange] and returns Stream<True> whenever
   /// internet connection is online. Returns Stream<False> if internet connection is lost.
   Stream<bool> subscribe() {
-    // ignore: no_leading_underscores_for_local_identifiers
-    final _controller = StreamController<bool>();
-    _listener = InternetConnectionChecker().onStatusChange.listen((status) {
+    late final InternetConnectionChecker icc;
+    if (hostname != null && port != null) {
+      icc = InternetConnectionChecker.createInstance(
+          checkInterval: checkInterval,
+          addresses: [AddressCheckOptions(hostname: hostname!, port: port!)]);
+    } else {
+      icc = InternetConnectionChecker.createInstance(checkInterval: checkInterval);
+    }
+    final sc = StreamController<bool>();
+    _listener = icc.onStatusChange.listen((status) {
       switch (status) {
         case InternetConnectionStatus.connected:
-          _controller.add(true);
+          sc.add(true);
           break;
         case InternetConnectionStatus.disconnected:
-          _controller.add(false);
+          sc.add(false);
           break;
       }
     });
-    return _controller.stream;
+    return sc.stream;
   }
 
   /// Cancels the active subscription to [InternetConnectionChecker]
