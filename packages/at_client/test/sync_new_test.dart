@@ -9,7 +9,6 @@ import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -33,8 +32,6 @@ class MockAtClient extends Mock implements AtClient {
 
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {}
-
-class MockNetworkUtil extends Mock implements NetworkUtil {}
 
 class MockSyncUtil extends Mock implements SyncUtil {}
 
@@ -1008,7 +1005,6 @@ void main() {
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-    NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
     /// Preconditions:
     /// 1. The hive key store has 5 distinct keys with different key types - public key, shared key and self key
@@ -1170,8 +1166,6 @@ void main() {
       registerFallbackValue(FakeUpdateVerbBuilder());
       registerFallbackValue(FakeAtKey());
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((invocation) async => Future.value('data:ok'));
@@ -1244,7 +1238,6 @@ void main() {
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-    NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
     setUp(() async {
       TestResources.atsign = '@alice';
@@ -1281,8 +1274,6 @@ void main() {
       registerFallbackValue(FakeUpdateVerbBuilder());
       registerFallbackValue(FakeAtKey());
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:${jsonEncode([
@@ -1326,7 +1317,6 @@ void main() {
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       //capture hive seq_num before operation
@@ -1433,15 +1423,12 @@ void main() {
       LocalSecondary? localSecondary =
           LocalSecondary(mockAtClient, keyStore: keystore);
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
 
       //------------------------------preconditions setup-----------------------
       await localSecondary.putValue(
@@ -1491,15 +1478,12 @@ void main() {
       LocalSecondary? localSecondary =
           LocalSecondary(mockAtClient, keyStore: keystore);
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
 
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -1567,8 +1551,6 @@ void main() {
       registerFallbackValue(FakeUpdateVerbBuilder());
       registerFallbackValue(FakeAtKey());
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeCommand(any(),
               auth: any(named: "auth")))
@@ -1587,7 +1569,6 @@ void main() {
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       //------------------preconditions setup-----------------------------------
       await localSecondary.putValue(
@@ -1663,15 +1644,12 @@ void main() {
       LocalSecondary? localSecondary =
           LocalSecondary(mockAtClient, keyStore: keystore);
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
 
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -1834,7 +1812,6 @@ void main() {
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-    NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
     ///Preconditions:
     /// 1. The local keystore contains following keys
@@ -2032,8 +2009,6 @@ void main() {
       registerFallbackValue(FakeAtKey());
 
       mockAtClient.setPreferences(preference);
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() =>
           mockRemoteSecondary.executeCommand(any(),
@@ -2137,7 +2112,6 @@ void main() {
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
 
       var syncResult =
           await syncService.syncInternal(serverCommitId, syncRequest);
@@ -2312,7 +2286,6 @@ void main() {
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-      NetworkUtil mockNetworkUtil = MockNetworkUtil();
       SyncUtil syncUtil = SyncUtil();
 
       registerFallbackValue(FakeAtKey());
@@ -2320,8 +2293,6 @@ void main() {
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(
               any(that: StatsVerbBuilderMatcher()),
@@ -2410,7 +2381,6 @@ void main() {
     late AtClientManager mockAtClientManager;
     late NotificationServiceImpl mockNotificationService;
     late RemoteSecondary mockRemoteSecondary;
-    late NetworkUtil mockNetworkUtil;
     late SyncUtil mockSyncUtil;
 
     setUp(() async {
@@ -2420,7 +2390,6 @@ void main() {
       mockAtClientManager = MockAtClientManager();
       mockNotificationService = MockNotificationServiceImpl();
       mockRemoteSecondary = MockRemoteSecondary();
-      mockNetworkUtil = MockNetworkUtil();
       mockSyncUtil = MockSyncUtil();
 
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
@@ -2448,8 +2417,6 @@ void main() {
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
       // ------------------preconditions setup ---------------------------------
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(
               any(that: StatsVerbBuilderMatcher()),
@@ -2495,7 +2462,6 @@ void main() {
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       //--------------------------Preconditions setup---------------------------
@@ -2659,7 +2625,6 @@ void main() {
           atClientManager: mockAtClientManager,
           notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.networkUtil = mockNetworkUtil;
       syncService.syncUtil = mockSyncUtil;
 
       HiveKeystore? keystore =
@@ -2745,7 +2710,6 @@ void main() {
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-    NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
     setUp(() async {
       TestResources.atsign = '@hiro';
@@ -2837,8 +2801,6 @@ void main() {
       registerFallbackValue(FakeUpdateVerbBuilder());
       registerFallbackValue(FakeAtKey());
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
@@ -2944,8 +2906,6 @@ void main() {
       registerFallbackValue(FakeUpdateVerbBuilder());
       registerFallbackValue(FakeAtKey());
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
@@ -3022,8 +2982,6 @@ void main() {
       registerFallbackValue(FakeUpdateVerbBuilder());
       registerFallbackValue(FakeAtKey());
 
-      when(() => mockNetworkUtil.isNetworkAvailable())
-          .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary
               .executeVerb(any(that: StatsVerbBuilderMatcher())))
@@ -3442,7 +3400,6 @@ void main() {
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-      NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
       setUp(() async {
         TestResources.atsign = '@levi';
@@ -3469,8 +3426,6 @@ void main() {
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeAtKey());
 
-        when(() => mockNetworkUtil.isNetworkAvailable())
-            .thenAnswer((_) => Future.value(true));
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary.executeVerb(any(),
                 sync: any(named: "sync")))
@@ -3517,7 +3472,6 @@ void main() {
             atClientManager: mockAtClientManager,
             notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-        syncService.networkUtil = mockNetworkUtil;
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         //----------------- Assertions-----------------
         await syncService.syncInternal(4, SyncRequest()..result = SyncResult());
@@ -3620,7 +3574,6 @@ void main() {
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-      NetworkUtil mockNetworkUtil = MockNetworkUtil();
       setUp(() async {
         TestResources.atsign = '@nadia';
         await TestResources.setupLocalStorage(TestResources.atsign);
@@ -3658,14 +3611,11 @@ void main() {
             notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
-        syncService.networkUtil = mockNetworkUtil;
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeAtKey());
 
-        when(() => mockNetworkUtil.isNetworkAvailable())
-            .thenAnswer((_) => Future.value(true));
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary
                 .executeVerb(any(that: StatsVerbBuilderMatcher())))
@@ -3764,7 +3714,6 @@ void main() {
       NotificationServiceImpl mockNotificationService =
           MockNotificationServiceImpl();
       RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-      MockNetworkUtil mockNetworkUtil = MockNetworkUtil();
 
       setUp(() async {
         TestResources.atsign = '@poland';
@@ -3809,14 +3758,11 @@ void main() {
             notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
-        syncService.networkUtil = mockNetworkUtil;
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeAtKey());
 
-        when(() => mockNetworkUtil.isNetworkAvailable())
-            .thenAnswer((_) => Future.value(true));
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary
                 .executeVerb(any(that: StatsVerbBuilderMatcher())))
@@ -3915,14 +3861,11 @@ void main() {
             notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
-        syncService.networkUtil = mockNetworkUtil;
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeAtKey());
 
-        when(() => mockNetworkUtil.isNetworkAvailable())
-            .thenAnswer((_) => Future.value(true));
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary
                 .executeVerb(any(that: StatsVerbBuilderMatcher())))

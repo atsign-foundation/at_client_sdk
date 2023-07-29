@@ -101,7 +101,6 @@ void main() async {
   AtCommitLog mockAtCommitLog = MockAtCommitLog();
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
-  NetworkUtil mockNetworkUtil = MockNetworkUtil();
 
   var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
       atClientManager: mockAtClientManager,
@@ -207,8 +206,6 @@ void main() async {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
-
-      syncServiceImpl.networkUtil = mockNetworkUtil;
 
       // ignore: prefer_typing_uninitialized_variables
       var actualSyncException;
