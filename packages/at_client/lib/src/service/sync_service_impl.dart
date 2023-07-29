@@ -206,13 +206,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _informSyncProgress(syncProgress);
       return;
     }
-    if (!await networkUtil.isNetworkAvailable()) {
-      _logger.finer('skipping sync due to network unavailability');
-      syncProgress.syncStatus = SyncStatus.failure;
-      syncProgress.message = 'network unavailable';
-      _informSyncProgress(syncProgress);
-      return;
-    }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
       if (_syncRequests.isEmpty ||
           (_syncRequests.length < syncRequestThreshold &&
