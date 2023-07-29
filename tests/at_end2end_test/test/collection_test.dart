@@ -254,7 +254,7 @@ void main() async {
       ..phoneNumber = '12345';
     var shareRes = await phone.save();
     expect(shareRes, true);
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Model operations - save() with reshare() as true test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -311,7 +311,7 @@ void main() async {
     expect('12345-9999', jsonDecode(atValue.value)['phoneNumber'],
         reason:
             'Since the value is reshared the phone number should be the new modified one');
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Model operations - share() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -355,7 +355,7 @@ void main() async {
     var getResult =
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
     expect(getResult.length, 1);
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Model operations - unshare() and delete() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -391,7 +391,7 @@ void main() async {
           id: 'fourth phone', namespace: 'buzz', collectionName: 'phone'),
       throwsA(isA<Exception>()),
     );
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Query method - AtCollectionModel.getModel() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -437,7 +437,7 @@ void main() async {
     expect(officePhoneLoaded.id, 'Office Phone');
     AtCollectionModelFactoryManager.getInstance()
         .unregister(PhoneFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Query method - AtCollectionModel.getModelsByCollectionName() test',
       () async {
@@ -478,7 +478,7 @@ void main() async {
         reason: 'Expect phones to be empty for an invalid collection name');
     AtCollectionModelFactoryManager.getInstance()
         .unregister(PhoneFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Query method - AtCollectionModel.getModelsSharedWith() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -513,7 +513,7 @@ void main() async {
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test('Query method - AtCollectionModel.getModelsSharedBy() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -557,7 +557,7 @@ void main() async {
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test('Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test',
       () async {
@@ -628,7 +628,7 @@ void main() async {
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test(
       'Query methods - Test retreival of shared models with and without factories',
@@ -732,7 +732,7 @@ void main() async {
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test('Query methods - Test retrieval of sharedWithAnyAtSign', () async {
     // Setting firstAtSign atClient instance to context.
@@ -782,75 +782,71 @@ void main() async {
     }
   });
 
-  test(
-    'Model operations - save and incremental share with stream',
-    () async {
-      // Setting firstAtSign atClient instance to context.
-      currentAtClientManager =
-          await AtClientManager.getInstance().setCurrentAtSign(
-        firstAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(firstAtSign),
-      );
+  test('Model operations - save and incremental share with stream', () async {
+    // Setting firstAtSign atClient instance to context.
+    currentAtClientManager =
+        await AtClientManager.getInstance().setCurrentAtSign(
+      firstAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(firstAtSign),
+    );
 
-      AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
+    AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
 
-      Phone fifthPhone = Phone()
-        ..id = 'fifth phone'
-        ..namespace = 'buzz'
-        ..collectionName = 'phone'
-        ..phoneNumber = '55555';
+    Phone fifthPhone = Phone()
+      ..id = 'fifth phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '55555';
 
-      await fifthPhone.streams.save(share: false).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-          expect(element.atSign, firstAtSign);
-          expect(element.operation, Operation.save);
-        },
-      );
+    await fifthPhone.streams.save(share: false).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.atSign, firstAtSign);
+        expect(element.operation, Operation.save);
+      },
+    );
 
-      await fifthPhone.streams.share([secondAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.share([secondAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      await fifthPhone.streams.share([thirdAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.share([thirdAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      await fifthPhone.streams.share([fourthAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.share([fourthAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      // Unshare now
-      await fifthPhone.streams
-          .unshare(atSigns: [thirdAtSign, fourthAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    // Unshare now
+    await fifthPhone.streams
+        .unshare(atSigns: [thirdAtSign, fourthAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      await fifthPhone.streams.delete().forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.delete().forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      expect(await fifthPhone.sharedWith(), []);
-      AtCollectionModelFactoryManager.getInstance()
-          .unregister(PhoneFactory.getInstance());
-    },
-    timeout: Timeout(Duration(minutes: 5)),
-  );
+    expect(await fifthPhone.sharedWith(), []);
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PhoneFactory.getInstance());
+  });
 }
