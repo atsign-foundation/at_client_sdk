@@ -6,7 +6,6 @@ import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -75,13 +74,6 @@ class MockAtCommitLog extends Mock implements AtCommitLog {
   Future<void> update(CommitEntry commitEntry, int commitId) async {
     mockCommitLogStore.putIfAbsent(
         commitId, () => commitEntry..commitId = commitId);
-  }
-}
-
-class MockNetworkUtil extends Mock implements NetworkUtil {
-  @override
-  Future<bool> isNetworkAvailable() {
-    return Future.value(true);
   }
 }
 
