@@ -40,7 +40,8 @@ class ConnectivityListener {
           checkInterval: checkInterval,
           addresses: [AddressCheckOptions(hostname: hostname!, port: port!)]);
     } else {
-      icc = InternetConnectionChecker.createInstance(checkInterval: checkInterval);
+      icc = InternetConnectionChecker.createInstance(
+          checkInterval: checkInterval);
     }
     final sc = StreamController<bool>();
     _listener = icc.onStatusChange.listen((status) {

@@ -242,9 +242,8 @@ void main() {
           fakeSecondaryUrl,
           decryptPackets: true,
           tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation))
-          .thenAnswer((_) async {
-            throw AtConnectException('Mock - connection failed');
+          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
+        throw AtConnectException('Mock - connection failed');
       });
 
       Monitor monitor = Monitor(
@@ -482,8 +481,7 @@ void main() {
           fakeSecondaryUrl,
           decryptPackets: true,
           tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation))
-          .thenAnswer((_) async {
+          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
         throw AtConnectException('Mock - connection failed');
       });
 
@@ -499,10 +497,10 @@ void main() {
       sendHeartbeatResponse = true;
       // and let's make creating new connections succeed again
       when(() => mockMonitorOutboundConnectionFactory.createConnection(
-          fakeSecondaryUrl,
-          decryptPackets: true,
-          tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation))
+              fakeSecondaryUrl,
+              decryptPackets: true,
+              tlsKeysSavePath: fakeTlsKeysSavePath,
+              pathToCerts: fakeCertsLocation))
           .thenAnswer((_) async => mockOutboundConnection);
 
       // The retryCallback will call Monitor.start() after a delay, so let's wait for that delay
