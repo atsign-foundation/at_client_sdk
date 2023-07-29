@@ -1,3 +1,6 @@
+## 3.0.64
+- Made ConnectivityListener configurable, and removed some unnecessary network 
+  availability checks
 ## 3.0.63
 - fix: Fixed bug in AtRpc.sendRequest which was causing repeat sends of requests
 ## 3.0.62
