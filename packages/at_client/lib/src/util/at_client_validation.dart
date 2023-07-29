@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 
