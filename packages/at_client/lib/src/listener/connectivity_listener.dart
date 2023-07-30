@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 
+/// @Deprecated Will be removed in a future release. Please use a connectivity checker of your own choice in your application code
+///
 /// Listener class that returns a Stream<True> if internet connection is on in the running device, Stream<False> if internet gets disconnected.
 /// Sample usage
 /// ```
@@ -13,6 +15,9 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 ///   }
 /// });
 /// ```
+@Deprecated('Will be removed in a future release.'
+    ' Please use a connectivity checker of your own choice'
+    ' in your application code')
 class ConnectivityListener {
   late final String? hostname;
   late final int? port;
