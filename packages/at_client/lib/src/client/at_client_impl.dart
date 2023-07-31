@@ -52,6 +52,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
+  StorageManager? _storageManager;
   static final upperCaseRegex = RegExp(r'[A-Z]');
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
@@ -181,8 +182,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<void> _init() async {
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
-        var storageManager = StorageManager(preference);
-        await storageManager.init(_atSign, preference!.keyStoreSecret);
+        _storageManager = StorageManager(preference);
+        await _storageManager?.init(_atSign, preference!.keyStoreSecret);
       }
 
       _localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
@@ -526,7 +527,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     // will not be null.
     if (verbBuilder.value.length > _preference!.maxDataSize) {
       throw BufferOverFlowException(
-          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
+          'The length of value exceeds the maximum allowed length.'
+          ' Maximum buffer size is ${_preference!.maxDataSize} bytes.'
+          ' Found ${value.toString().length} bytes');
     }
 
     Secondary secondary = SecondaryManager.getSecondary(this, verbBuilder);
@@ -901,8 +904,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           ' Unable to complete reset check');
       return false;
     }
-
-    // TODO should there be a check for remote enc_key being null ?
+    if (remotePublicKey.isNull) {
+      _logger.info('Could not fetch EncryptionPublicKey from RemoteSecondary.'
+          ' Unable to complete reset check');
+      return false;
+    }
 
     if (localPublicKey != remotePublicKey) {
       _logger.info('EncryptionPublicKey on LocalSecondary: $localPublicKey');
@@ -920,16 +926,18 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  void deleteLocalSecondaryStorageWithConsent({required bool userConsentToDeleteLocalStorage}) {
+  Future<void> deleteLocalSecondaryStorageWithConsent(
+      {required bool userConsentToDeleteLocalStorage}) async {
     _logger.shout(
         'Consent to delete LocalSecondary storage received: $userConsentToDeleteLocalStorage');
     if (!userConsentToDeleteLocalStorage) {
       throw AtClientException.message(
           'User consent not provided. Unable to delete local storage without consent');
     }
+    await _storageManager?.stopInstances(_atSign);
     // Deleting commit log storage
-    _logger
-        .info('Deleting CommitLog local storage at: ${_preference?.commitLogPath}');
+    _logger.info(
+        'Deleting CommitLog local storage at: ${_preference?.commitLogPath}');
     try {
       _deleteLocalStorage(_preference!.commitLogPath!, isHiveStorage: false);
     } on Exception catch (e) {
@@ -938,7 +946,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
 
     // Deleting hive storage
-    _logger.info('Deleting hive local storage at: ${_preference?.hiveStoragePath}');
+    _logger.info(
+        'Deleting hive local storage at: ${_preference?.hiveStoragePath}');
     try {
       _deleteLocalStorage(_preference!.hiveStoragePath!, isHiveStorage: true);
     } on Exception catch (e) {
@@ -950,55 +959,24 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   void _deleteLocalStorage(String storageDirectory,
       {bool isHiveStorage = false}) {
     if (isHiveStorage) {
-      String hashFileName =
-          '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hash';
-      String hiveFileName =
-          '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
-      String hiveLockFileName =
-          '${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
+      Directory hiveDir = Directory(storageDirectory);
 
-      File hiveFile = File('$storageDirectory/$hiveFileName');
-      File hiveLockFile = File('$storageDirectory/$hiveLockFileName');
-      File hashFile = File('$storageDirectory/$hashFileName');
-
-      if (!(hashFile.existsSync() && hiveFile.existsSync())) {
-        if (!hiveFile.existsSync()) {
-          throw AtClientException.message(
-              'hive file not found at path: $hiveFile.'
-              ' Please provide a valid hive storage directory path');
-        }
+      if (!(hiveDir.existsSync())) {
         throw AtClientException.message(
-            'hive hash file not found at path: $hiveFile.'
+            'hive directory not found at path: $storageDirectory.'
             ' Please provide a valid hive storage directory path');
       }
-      hashFile.deleteSync();
-      hiveFile.deleteSync();
-      hiveLockFile.deleteSync();
-      // Since recursive delete is true by default, only if the directory is
-      // empty the directory will be deleted too
-      Directory(storageDirectory).deleteSync();
+      hiveDir.deleteSync();
       _logger.info('Successfully deleted hive storage');
     } else {
-      String commitLogFileName =
-          'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.hive';
-      String commitLogLockFileName =
-          'commit_log_${AtUtils.getShaForAtSign(getCurrentAtSign()!)}.lock';
+     Directory commitLogDir = Directory(storageDirectory);
 
-      File commitLogFile = File('$storageDirectory/$commitLogFileName');
-
-      // Todo: Do windows/mac have lock files ?
-      File lockFile = File('$storageDirectory/$commitLogLockFileName');
-
-      if (!commitLogFile.existsSync()) {
+      if (!commitLogDir.existsSync()) {
         throw AtClientException.message(
-            'CommitLog storage not found at path: $commitLogFile.'
+            'CommitLog storage not found at path: $storageDirectory.'
             ' Please provide a valid CommitLog directory path');
       }
-      commitLogFile.deleteSync();
-      lockFile.deleteSync();
-      // Since recursive delete is false by default, If the directory is empty
-      // the directory will also be deleted
-      Directory(storageDirectory).deleteSync();
+      commitLogDir.deleteSync();
       _logger.info('Successfully deleted commitLog storage');
     }
   }

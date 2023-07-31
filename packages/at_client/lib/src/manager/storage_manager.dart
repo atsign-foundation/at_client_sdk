@@ -43,4 +43,24 @@ class StorageManager {
     keyStoreManager.keyStore = hiveKeyStore;
     isStorageInitialized = true;
   }
+
+  Future<void> stopInstances(String currentAtSign) async {
+    AtCommitLog? atCommitLog = await AtCommitLogManagerImpl.getInstance()
+        .getCommitLog(currentAtSign,
+            commitLogPath: preferences?.commitLogPath, enableCommitId: false);
+
+    HivePersistenceManager hiveManager =
+        SecondaryPersistenceStoreFactory.getInstance()
+            .getSecondaryPersistenceStore(currentAtSign)!
+            .getHivePersistenceManager()!;
+
+    SecondaryKeyStore hiveKeyStore =
+        SecondaryPersistenceStoreFactory.getInstance()
+            .getSecondaryPersistenceStore(currentAtSign)!
+            .getSecondaryKeyStore()!;
+
+    await (hiveKeyStore.commitLog as AtCommitLog).close();
+    await hiveManager.close();
+    await atCommitLog?.close();
+  }
 }
