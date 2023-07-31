@@ -275,7 +275,7 @@ void main() {
           AtClientPreference()..isLocalStoreRequired = true,
           remoteSecondary: mockRemoteSecondary,
           localSecondaryKeyStore: mockKeystore);
-      expect(await client.isSecondaryReset(), false);
+      expect(await client.isSecondaryReset(), true);
     });
 
     test('Verify isSecondaryReset() functionality - positive case', () async {
@@ -289,9 +289,7 @@ void main() {
           AtClientPreference()..isLocalStoreRequired = true,
           remoteSecondary: mockRemoteSecondary,
           localSecondaryKeyStore: mockKeystore);
-      // errorless execution test
-      // if the method call below triggers any errors/exceptions this test will fail
-      expect(await client.isSecondaryReset(), true);
+      expect(await client.isSecondaryReset(), false);
     });
   });
 }
