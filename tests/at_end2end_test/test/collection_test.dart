@@ -133,7 +133,7 @@ class A extends AtCollectionModel {
 
   A.from(String id, {this.a}) {
     this.id = id;
-    namespace = 'buzz';
+    this.namespace = 'buzz';
   }
 
   @override
@@ -176,7 +176,7 @@ class B extends AtCollectionModel {
 
   B.from(String id, {this.b}) {
     this.id = id;
-    namespace = 'buzz';
+    this.namespace = 'buzz';
   }
 
   @override
@@ -670,12 +670,12 @@ void main() async {
     for (var model in res) {
       switch (model.collectionName) {
         case 'phone':
-          expect(model is Phone,true,
+          expect(model is Phone, true,
               reason:
                   'For collection name phone, model should be of type Phone');
           break;
         case 'contact':
-          expect(model is Contact,true,
+          expect(model is Contact, true,
               reason:
                   'For collection name contact, model should be of type Contact');
           break;
