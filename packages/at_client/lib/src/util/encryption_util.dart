@@ -12,7 +12,8 @@ class EncryptionUtil {
 
   static IV getIV(String? ivBase64) {
     if (ivBase64 == null) {
-      return IV.fromLength(16);
+      // From the bad old days when we weren't setting IVs
+      return IV(Uint8List(16));
     } else {
       return IV.fromBase64(ivBase64);
     }

@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 
@@ -86,12 +85,6 @@ class AtClientValidation {
     }
     // validates the metadata
     validateMetadata(atKey.metadata);
-    // verifies if the sharedWith atSign exists.
-    if (atKey.sharedWith != null && await NetworkUtil().isNetworkAvailable()) {
-      await isAtSignExists(
-          AtClientManager.getInstance().secondaryAddressFinder!,
-          atKey.sharedWith!);
-    }
   }
 
   /// Performs the validations on the PutRequest
