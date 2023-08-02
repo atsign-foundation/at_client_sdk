@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -10,15 +9,10 @@ class MockSecondaryAddressFinder extends Mock
 
 class MockAtLookUp extends Mock implements AtLookupImpl {}
 
-class MockInternetConnectionChecker extends Mock
-    implements InternetConnectionChecker {}
-
 void main() {
   AtLookupImpl mockAtLookUp = MockAtLookUp();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
-  InternetConnectionChecker mockInternetConnectionChecker =
-      MockInternetConnectionChecker();
   SecondaryAddress fakeSecondaryAddress =
       SecondaryAddress('fake.secondary.address', 8010);
   String fakePrivateKey =
@@ -31,7 +25,6 @@ void main() {
     setUp(() {
       reset(mockSecondaryAddressFinder);
       reset(mockAtLookUp);
-      reset(mockInternetConnectionChecker);
       when(() => mockSecondaryAddressFinder.findSecondary(atsign.toLowerCase()))
           .thenAnswer((_) async => fakeSecondaryAddress);
       AtClientManager.getInstance().secondaryAddressFinder =

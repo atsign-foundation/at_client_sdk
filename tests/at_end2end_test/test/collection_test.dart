@@ -47,7 +47,6 @@ class Preference extends AtCollectionModel {
         data[key] = preference[key];
       }
     }
-
     return data;
   }
 }
@@ -219,7 +218,6 @@ void main() async {
   late String firstAtSign;
   late String secondAtSign, thirdAtSign, fourthAtSign;
   final namespace = 'wavi';
-  // AtSignLogger.root_level = 'FINER';
 
   setUpAll(() async {
     firstAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -231,10 +229,10 @@ void main() async {
         .testInitializer(firstAtSign, namespace);
     await TestSuiteInitializer.getInstance()
         .testInitializer(secondAtSign, namespace);
-    // await TestSuiteInitializer.getInstance()
-    //     .testInitializer(thirdAtSign, namespace);
-    // await TestSuiteInitializer.getInstance()
-    //     .testInitializer(fourthAtSign, namespace);
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(thirdAtSign, namespace);
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(fourthAtSign, namespace);
   });
 
   test('Model operations - save() test', () async {
@@ -254,7 +252,7 @@ void main() async {
       ..phoneNumber = '12345';
     var shareRes = await phone.save();
     expect(shareRes, true);
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Model operations - save() with reshare() as true test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -272,29 +270,29 @@ void main() async {
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     var shareRes = await phone.share([secondAtSign]);
-
     expect(shareRes, true);
 
     // Have the phone number changed
     phone.phoneNumber = '12345-9999';
     // Now call a save with reshare as true
-    await phone.save(autoReshare: true);
+    var saveStatus = await phone.save(autoReshare: true);
+    expect(saveStatus, true);
 
-    await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.atClient.syncService);
+    await E2ESyncService.getInstance().syncData(
+        currentAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()
+          ..key =
+              '$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
 
-    /// receiver's end - Varify that the phone has been shared
+    // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
       secondAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(secondAtSign),
     );
-
-    await E2ESyncService.getInstance().syncData(
-      sharedWithAtClientManager.atClient.syncService,
-    );
-
+    await E2ESyncService.getInstance()
+        .syncData(sharedWithAtClientManager.atClient.syncService);
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone',
         collectionName: 'phone',
@@ -302,16 +300,16 @@ void main() async {
 
     List<String> keys =
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
-    expect(1, keys.length,
+    expect(keys.length, 1,
         reason:
             'On the recipient side expecting a single keys with the regex supplied');
 
     AtValue atValue =
         await sharedWithAtClientManager.atClient.get(AtKey.fromString(keys[0]));
-    expect('12345-9999', jsonDecode(atValue.value)['phoneNumber'],
+    expect(jsonDecode(atValue.value)['phoneNumber'], '12345-9999',
         reason:
-            'Since the value is reshared the phone number should be the new modified one');
-  }, timeout: Timeout(Duration(minutes: 5)));
+            'Since the value is re-shared the phone number should be the new modified one');
+  });
 
   test('Model operations - share() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -321,7 +319,6 @@ void main() async {
       namespace,
       TestPreferences.getInstance().getPreference(firstAtSign),
     );
-
     // Share a phone
     var phone = Phone()
       ..id = 'personal phone'
@@ -329,33 +326,31 @@ void main() async {
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     var shareRes = await phone.share([secondAtSign]);
-
     expect(shareRes, true);
+    await E2ESyncService.getInstance().syncData(
+        currentAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()
+          ..key =
+              '$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
 
-    await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.atClient.syncService);
-
-    /// receiver's end - Varify that the phone has been shared
+    // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
       secondAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(secondAtSign),
     );
-
     await E2ESyncService.getInstance().syncData(
       sharedWithAtClientManager.atClient.syncService,
     );
-
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone',
         collectionName: 'phone',
         namespace: 'buzz');
-
     var getResult =
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
     expect(getResult.length, 1);
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Model operations - unshare() and delete() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -382,7 +377,6 @@ void main() async {
     // Unshare now
     await fourthPhone.unshare(atSigns: [thirdAtSign, fourthAtSign]);
     expect(await fourthPhone.sharedWith(), ['@ce2e2']);
-
     await fourthPhone.unshare(atSigns: [secondAtSign]);
     await fourthPhone.delete();
     expect(await fourthPhone.sharedWith(), []);
@@ -391,7 +385,7 @@ void main() async {
           id: 'fourth phone', namespace: 'buzz', collectionName: 'phone'),
       throwsA(isA<Exception>()),
     );
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Query method - AtCollectionModel.getModel() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -416,7 +410,6 @@ void main() async {
     await officePhone.save();
 
     AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
-
     var personalPhoneLoaded = await AtCollectionModel.getModel(
         id: 'new personal Phone',
         namespace: 'buzz',
@@ -437,7 +430,7 @@ void main() async {
     expect(officePhoneLoaded.id, 'Office Phone');
     AtCollectionModelFactoryManager.getInstance()
         .unregister(PhoneFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Query method - AtCollectionModel.getModelsByCollectionName() test',
       () async {
@@ -463,22 +456,18 @@ void main() async {
     await officePhone.save();
 
     AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
-
     // Get models with existing collectionName
     var phones = await AtCollectionModel.getModelsByCollectionName('phone');
-
-    print('phones.length : ${phones.length}');
-    expect(true, phones.length >= 2,
+    expect(phones.length >= 2, true,
         reason: 'Expect phones to be non-empty for an valid collection name');
-
-    // Get models with non-existingalid/inv collectionName
+    // Get models with non-existing id/inv collectionName
     phones =
         await AtCollectionModel.getModelsByCollectionName('phone-dont-exist');
-    expect(true, phones.isEmpty,
+    expect(phones.isEmpty, true,
         reason: 'Expect phones to be empty for an invalid collection name');
     AtCollectionModelFactoryManager.getInstance()
         .unregister(PhoneFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 5)));
+  });
 
   test('Query method - AtCollectionModel.getModelsSharedWith() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -491,7 +480,7 @@ void main() async {
 
     var a = A.from('a1', a: 'a1 value');
     var shareRes = await a.share([secondAtSign]);
-
+    expect(shareRes, true);
     var b = B.from('b1', b: 'b1 value');
     await b.share([secondAtSign]);
 
@@ -500,20 +489,19 @@ void main() async {
     AtCollectionModelFactoryManager.getInstance()
         .register(BFactory.getInstance());
 
-    expect(shareRes, true);
-
-    await E2ESyncService.getInstance()
-        .syncData(currentAtClientManager.atClient.syncService);
+    await E2ESyncService.getInstance().syncData(
+        currentAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()
+          ..key = '$secondAtSign:b1.b.atcollectionmodel.buzz.wavi$firstAtSign');
 
     var res = await AtCollectionModel.getModelsSharedWith(secondAtSign);
-
-    expect(false, res.isEmpty,
+    expect(res.isEmpty, false,
         reason: 'Expect the models shared to be non-empty');
     AtCollectionModelFactoryManager.getInstance()
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test('Query method - AtCollectionModel.getModelsSharedBy() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -526,13 +514,12 @@ void main() async {
 
     var a = A.from('a1', a: 'a1 value');
     var shareRes = await a.share([secondAtSign]);
-
+    expect(shareRes, true);
     var b = B.from('b1', b: 'b1 value');
-    await b.share([secondAtSign]);
-
+    shareRes = await b.share([secondAtSign]);
     expect(shareRes, true);
 
-    /// receiver's end
+    // Receiver's end
     sharedWithAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
       secondAtSign,
@@ -543,21 +530,18 @@ void main() async {
     await E2ESyncService.getInstance().syncData(
       sharedWithAtClientManager.atClient.syncService,
     );
-
     AtCollectionModel.registerFactories(
         [AFactory.getInstance(), BFactory.getInstance()]);
-
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
-
     var res = await AtCollectionModel.getModelsSharedBy(firstAtSign);
-    expect(false, res.isEmpty,
+    expect(res.isEmpty, false,
         reason: 'Expect the models shared by to be non-empty');
     AtCollectionModelFactoryManager.getInstance()
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test('Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test',
       () async {
@@ -568,67 +552,47 @@ void main() async {
       namespace,
       TestPreferences.getInstance().getPreference(firstAtSign),
     );
-
-    /// Share at Collections models from first atSign to second atSign
+    // Share at Collections models from first atSign to second atSign
     var a = A.from('a11', a: 'a11 value');
     await a.share([secondAtSign]);
-
     var b = B.from('b11', b: 'b11 value');
     await b.share([secondAtSign]);
-
-    /// Share at Collections models from third atSign to second atSign
+    // Share at Collections models from third atSign to second atSign
     sharedWithAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
       thirdAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(thirdAtSign),
     );
-
     await E2ESyncService.getInstance().syncData(
       sharedWithAtClientManager.atClient.syncService,
     );
-
     a = A.from('a22', a: 'a22 value');
     await a.share([secondAtSign]);
-
     b = B.from('b22', b: 'b22 value');
     await b.share([secondAtSign]);
-
-    /// SSwitch to second atSign and get AtCollectionModels shared by any atSign
+    // Switch to second atSign and get AtCollectionModels shared by any atSign
     sharedWithAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
       secondAtSign,
       namespace,
       TestPreferences.getInstance().getPreference(secondAtSign),
     );
-
     await E2ESyncService.getInstance().syncData(
       sharedWithAtClientManager.atClient.syncService,
     );
-
     AtCollectionModel.registerFactories(
         [AFactory.getInstance(), BFactory.getInstance()]);
-
     var res = await AtCollectionModel.getModelsSharedByAnyAtSign();
-    expect(false, res.isEmpty,
+    expect(res.isEmpty, false,
         reason: 'Expect the models shared by to be non-empty');
-    expect(true, res.length >= 4,
+    expect(res.length >= 4, true,
         reason: 'Expect a minimum of 4 shared models');
-    for (AtCollectionModel model in res) {
-      print(model.collectionName);
-      print(model.sharedByAtSign);
-      if (model is A) {
-        print(model.a);
-      }
-      if (model is B) {
-        print(model.b);
-      }
-    }
     AtCollectionModelFactoryManager.getInstance()
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test(
       'Query methods - Test retreival of shared models with and without factories',
@@ -689,7 +653,7 @@ void main() async {
     var res = await AtCollectionModel.getModelsSharedBy(firstAtSign);
 
     for (var model in res) {
-      expect(true, model is AtJsonCollectionModel,
+      expect(model is AtJsonCollectionModel, true,
           reason:
               'Without factories AtCollectionsModels should be of type AtJsonCollectionModel');
     }
@@ -706,17 +670,17 @@ void main() async {
     for (var model in res) {
       switch (model.collectionName) {
         case 'phone':
-          expect(true, model is Phone,
+          expect(model is Phone, true,
               reason:
                   'For collection name phone, model should be of type Phone');
           break;
         case 'contact':
-          expect(true, model is Contact,
+          expect(model is Contact, true,
               reason:
                   'For collection name contact, model should be of type Contact');
           break;
         case 'preference':
-          expect(true, model is Preference,
+          expect(model is Preference, true,
               reason:
                   'For collection name preference, model should be of type Preference');
           break;
@@ -732,7 +696,7 @@ void main() async {
         .unregister(AFactory.getInstance());
     AtCollectionModelFactoryManager.getInstance()
         .unregister(BFactory.getInstance());
-  }, timeout: Timeout(Duration(minutes: 10)));
+  });
 
   test('Query methods - Test retrieval of sharedWithAnyAtSign', () async {
     // Setting firstAtSign atClient instance to context.
@@ -750,7 +714,6 @@ void main() async {
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     await p1.save();
-
     var p2 = Phone()
       ..id = 'p2'
       ..namespace = 'buzz'
@@ -782,75 +745,71 @@ void main() async {
     }
   });
 
-  test(
-    'Model operations - save and incremental share with stream',
-    () async {
-      // Setting firstAtSign atClient instance to context.
-      currentAtClientManager =
-          await AtClientManager.getInstance().setCurrentAtSign(
-        firstAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(firstAtSign),
-      );
+  test('Model operations - save and incremental share with stream', () async {
+    // Setting firstAtSign atClient instance to context.
+    currentAtClientManager =
+        await AtClientManager.getInstance().setCurrentAtSign(
+      firstAtSign,
+      namespace,
+      TestPreferences.getInstance().getPreference(firstAtSign),
+    );
 
-      AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
+    AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
 
-      Phone fifthPhone = Phone()
-        ..id = 'fifth phone'
-        ..namespace = 'buzz'
-        ..collectionName = 'phone'
-        ..phoneNumber = '55555';
+    Phone fifthPhone = Phone()
+      ..id = 'fifth phone'
+      ..namespace = 'buzz'
+      ..collectionName = 'phone'
+      ..phoneNumber = '55555';
 
-      await fifthPhone.streams.save(share: false).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-          expect(element.atSign, firstAtSign);
-          expect(element.operation, Operation.save);
-        },
-      );
+    await fifthPhone.streams.save(share: false).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.atSign, firstAtSign);
+        expect(element.operation, Operation.save);
+      },
+    );
 
-      await fifthPhone.streams.share([secondAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.share([secondAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      await fifthPhone.streams.share([thirdAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.share([thirdAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      await fifthPhone.streams.share([fourthAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.share([fourthAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      // Unshare now
-      await fifthPhone.streams
-          .unshare(atSigns: [thirdAtSign, fourthAtSign]).forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    // Unshare now
+    await fifthPhone.streams
+        .unshare(atSigns: [thirdAtSign, fourthAtSign]).forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      await fifthPhone.streams.delete().forEach(
-        (AtOperationItemStatus element) {
-          expect(element.complete, true);
-          expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
-        },
-      );
+    await fifthPhone.streams.delete().forEach(
+      (AtOperationItemStatus element) {
+        expect(element.complete, true);
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+      },
+    );
 
-      expect(await fifthPhone.sharedWith(), []);
-      AtCollectionModelFactoryManager.getInstance()
-          .unregister(PhoneFactory.getInstance());
-    },
-    timeout: Timeout(Duration(minutes: 5)),
-  );
+    expect(await fifthPhone.sharedWith(), []);
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PhoneFactory.getInstance());
+  });
 }
