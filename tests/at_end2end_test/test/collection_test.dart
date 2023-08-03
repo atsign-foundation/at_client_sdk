@@ -291,8 +291,11 @@ void main() async {
       namespace,
       TestPreferences.getInstance().getPreference(secondAtSign),
     );
-    await E2ESyncService.getInstance()
-        .syncData(sharedWithAtClientManager.atClient.syncService);
+    await E2ESyncService.getInstance().syncData(
+        sharedWithAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()
+          ..key =
+              'cached:$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone',
         collectionName: 'phone',
@@ -300,6 +303,7 @@ void main() async {
 
     List<String> keys =
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
+    print('Keys sync to $secondAtSign: $keys');
     expect(keys.length, 1,
         reason:
             'On the recipient side expecting a single keys with the regex supplied');
