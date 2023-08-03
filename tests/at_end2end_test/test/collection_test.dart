@@ -9,7 +9,6 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
-import 'package:at_utils/at_logger.dart';
 
 class PreferenceFactory extends AtCollectionModelFactory<Preference> {
   static final PreferenceFactory _singleton = PreferenceFactory._internal();
@@ -256,7 +255,6 @@ void main() async {
   });
 
   test('Model operations - save() with reshare() as true test', () async {
-    AtSignLogger.root_level = 'finest';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
