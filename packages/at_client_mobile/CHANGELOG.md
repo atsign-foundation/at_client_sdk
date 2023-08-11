@@ -1,5 +1,5 @@
 ## 3.2.12
-- fix: Fixed the issue biometric_storage dependency not working on Windows when using Dart 3α
+- fix: Fixed the issue biometric_storage dependency not working on Windows when using Dart 3
 ## 3.2.11
 - chore: Upgraded biometric_storage dependency to 5.0.0 
 - chore: Upgraded package_info_plus dependency to 4.0.2 
