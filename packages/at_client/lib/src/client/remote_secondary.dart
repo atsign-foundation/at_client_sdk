@@ -186,11 +186,9 @@ class RemoteSecondary implements Secondary {
     return secondaryAddress.toString();
   }
 
+  @Deprecated('This method is unused and will be removed in next major release')
   Future<bool> isAvailable() async {
     try {
-      // How often is this method called? Should we consider caching the secondary URL?
-      // If we do cache it then we should clear the cache if the secondary ever becomes unavailable
-      // ... in case the secondary URL changes from foo.example.com:1234 to bar.example.com:4567
       String? secondaryUrl = await findSecondaryUrl();
 
       var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
