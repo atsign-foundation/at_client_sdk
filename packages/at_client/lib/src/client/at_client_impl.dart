@@ -886,42 +886,65 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @override
   Future<bool> isSecondaryReset() async {
+    String? localPublicKey, remotePublicKey;
     _logger.finer('Performing Remote Secondary reset check');
     // Fetch EncryptionPublicKey from LocalSecondary
-    var localPublicKey =
-        await getLocalSecondary()?.getEncryptionPublicKey(getCurrentAtSign()!);
-    // Fetch EncryptionPublicKey from RemoteSecondary
-    LookupVerbBuilder lookupBuilder = LookupVerbBuilder()
-      ..atKey = 'publickey' //AT_ENCRYPTION_PUBLIC_KEY
-      ..sharedBy = getCurrentAtSign();
-    String? remotePublicKey =
-        await getRemoteSecondary()?.executeVerb(lookupBuilder);
-    // secondary response is in format 'data:publickey'. Removing 'data:' from response
-    remotePublicKey = remotePublicKey?.replaceFirst('data:', '');
-
-    if (localPublicKey.isNull) {
-      _logger.info('Could not fetch EncryptionPublicKey from LocalSecondary.'
-          ' Unable to complete reset check');
+    try {
+      localPublicKey = await getLocalSecondary()
+          ?.getEncryptionPublicKey(getCurrentAtSign()!);
+    } on Exception catch (e) {
+      _logger.severe(
+          'Exception caused fetch EncryptionPublicKey from LocalSecondary.'
+          ' Unable to complete reset check | Cause $e');
       return false;
     }
-    if (remotePublicKey.isNull) {
-      _logger.info('Could not fetch EncryptionPublicKey from RemoteSecondary.'
+    // Fetch EncryptionPublicKey from RemoteSecondary
+    try {
+      PLookupVerbBuilder plookup = PLookupVerbBuilder()
+        ..atKey = 'publickey'
+        ..sharedBy = getCurrentAtSign();
+      remotePublicKey = await getRemoteSecondary()?.executeVerb(plookup);
+    } on Exception catch (e) {
+      _logger.info('Caught exception during public key lookup | $e');
+      _logger.info('Retrying fetch public key');
+      // try fetching the ENCRYPTION_PUB_KEY using lookup verb
+      // this fallback is for when reset status check is performed on an
+      //unauthenticated connection
+      LookupVerbBuilder lookup = LookupVerbBuilder()
+        ..atKey = 'publickey' //AT_ENCRYPTION_PUBLIC_KEY
+        ..sharedBy = getCurrentAtSign();
+      remotePublicKey = await getRemoteSecondary()?.executeVerb(lookup);
+    }
+
+    // secondary response is in format 'data:publickey'. Removing 'data:' from response
+    if (remotePublicKey!.contains('data:')) {
+      remotePublicKey = remotePublicKey.replaceFirst('data:', '');
+    } else {
+      remotePublicKey = null;
+    }
+
+    if (localPublicKey.isNull) {
+      _logger.severe('Could not fetch EncryptionPublicKey from LocalSecondary.'
+          ' Unable to complete reset check');
+      return false;
+    } else if (remotePublicKey.isNull) {
+      _logger.severe('Could not fetch EncryptionPublicKey from RemoteSecondary.'
           ' Unable to complete reset check');
       return false;
     }
 
     if (localPublicKey != remotePublicKey) {
-      _logger.info('EncryptionPublicKey on LocalSecondary: $localPublicKey');
-      _logger.info('EncryptionPublicKey on RemoteSecondary: $remotePublicKey');
       _logger.shout(
           'AtEncryptionPublicKey on local secondary and remote secondary are different.'
           'This indicates remote secondary has been reset.'
           'Please delete localStorage and restart the client');
       _logger.info('To delete localSecondary, call '
           'AtClientImpl.deleteLocalSecondaryStorageWithConsent() with user consent');
+      _logger.finer('EncryptionPublicKey on LocalSecondary: $localPublicKey');
+      _logger.finer('EncryptionPublicKey on RemoteSecondary: $remotePublicKey');
       return true;
     }
-    _logger.finer('Remote Secondary is NOT reset. Status ok');
+    _logger.info('Remote Secondary is NOT reset. Status ok');
     return false;
   }
 
@@ -934,20 +957,14 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       throw AtClientException.message(
           'User consent not provided. Unable to delete local storage without consent');
     }
-    await _storageManager?.stopInstances(_atSign);
-    // Deleting commit log storage
-    _logger.info(
-        'Deleting CommitLog local storage at: ${_preference?.commitLogPath}');
+    await StorageManager(_preference).close(_atSign);
     try {
       _deleteLocalStorage(_preference!.commitLogPath!, isHiveStorage: false);
     } on Exception catch (e) {
       _logger.finer('Unable to delete CommitLog storage | Cause: $e');
       throw AtIOException(e.toString());
     }
-
-    // Deleting hive storage
-    _logger.info(
-        'Deleting hive local storage at: ${_preference?.hiveStoragePath}');
+    // Delete hive storage
     try {
       _deleteLocalStorage(_preference!.hiveStoragePath!, isHiveStorage: true);
     } on Exception catch (e) {
@@ -957,31 +974,22 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   void _deleteLocalStorage(String storageDirectory,
-      {bool isHiveStorage = false}) {
-    if (isHiveStorage) {
-      Directory hiveDir = Directory(storageDirectory);
+      {required bool isHiveStorage}) {
+    String storageType = isHiveStorage ? 'hive' : 'commitLog';
+    _logger.info('Deleting $storageType storage at path: $storageDirectory');
 
-      if (!(hiveDir.existsSync())) {
-        throw AtClientException.message(
-            'hive directory not found at path: $storageDirectory.'
-            ' Please provide a valid hive storage directory path');
-      }
-      hiveDir.deleteSync();
-      _logger.info('Successfully deleted hive storage');
-    } else {
-     Directory commitLogDir = Directory(storageDirectory);
-
-      if (!commitLogDir.existsSync()) {
-        throw AtClientException.message(
-            'CommitLog storage not found at path: $storageDirectory.'
-            ' Please provide a valid CommitLog directory path');
-      }
-      commitLogDir.deleteSync();
-      _logger.info('Successfully deleted commitLog storage');
+    Directory storageDir = Directory(storageDirectory);
+    if (!storageDir.existsSync()) {
+      throw AtClientException.message(
+          '$storageType storage not found at path: $storageDirectory.'
+          ' Please provide a valid $storageType storage directory path');
     }
+    Directory(storageDirectory).deleteSync(recursive: true);
+    _logger.info('Successfully deleted $storageType storage');
   }
 
   // TODO v4 - remove the follow methods in version 4 of at_client package
+
   @override
   @Deprecated("Use AtClient.syncService")
   SyncManager? getSyncManager() {
