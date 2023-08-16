@@ -11,13 +11,6 @@ dependencies:
   at_client:
     path: ../../packages/at_client
 
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries
-      path: packages/at_commons
-      ref: at_reset_exception
-
 dev_dependencies:
   test: ^1.24.3
   lints: ^2.0.0
