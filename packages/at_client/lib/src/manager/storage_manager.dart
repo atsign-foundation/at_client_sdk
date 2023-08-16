@@ -63,4 +63,21 @@ class StorageManager {
     await hiveManager.close();
     await atCommitLog?.close();
   }
+
+  Future<void> close(String currentAtSign) async {
+    var storagePath = preferences!.hiveStoragePath;
+    var commitLogPath = preferences!.commitLogPath;
+
+    var atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
+        currentAtSign,
+        commitLogPath: commitLogPath,
+        enableCommitId: false);
+
+    await atCommitLog?.close;
+
+    var manager = SecondaryPersistenceStoreFactory.getInstance()
+        .getSecondaryPersistenceStore(currentAtSign)!
+        .getHivePersistenceManager()!;
+    await manager.close();
+  }
 }
