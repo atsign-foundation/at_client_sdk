@@ -271,8 +271,12 @@ class Monitor {
         ..hashingAlgoType = _preference.hashingAlgoType
         ..signingMode = AtSigningMode.pkam;
       var signingResult = atChops!.sign(atSigningInput);
-      var pkamCommand =
-          'pkam:signingAlgo:${_preference.signingAlgoType.name}:hashingAlgo:${_preference.hashingAlgoType.name}:${signingResult.result}\n';
+      var pkamBuilder = PkamVerbBuilder()
+        ..signingAlgo = _preference.signingAlgoType.name
+        ..hashingAlgo = _preference.hashingAlgoType.name
+        ..enrollmentlId = _preference.enrollmentId
+        ..signature = signingResult.result;
+      var pkamCommand = pkamBuilder.buildCommand();
       _logger.finer('Sending command $pkamCommand');
       await _monitorConnection!.write(pkamCommand);
     } else {
@@ -339,7 +343,8 @@ class Monitor {
   }
 
   String _buildMonitorCommand() {
-    var monitorVerbBuilder = MonitorVerbBuilder();
+    var monitorVerbBuilder = MonitorVerbBuilder()
+      ..selfNotificationsEnabled = true;
     if (_regex != null && _regex!.isNotEmpty) {
       monitorVerbBuilder.regex = _regex;
     }

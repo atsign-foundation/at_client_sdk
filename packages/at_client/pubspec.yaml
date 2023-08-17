@@ -31,14 +31,27 @@ dependencies:
   async: ^2.9.0
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.45
-  at_utils: ^3.0.12
+  at_commons: ^3.0.53
+  at_utils: ^3.0.15
   at_chops: ^1.0.3
   at_lookup: ^3.0.36
   at_persistence_spec: ^2.0.12
   at_persistence_secondary_server: ^3.0.52
   meta: ^1.8.0
   version: ^3.0.2
+
+
+dependency_overrides:
+  at_chops:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries
+      path: packages/at_chops
+      ref: atchops_apkam_changes
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries
+      path: packages/at_lookup
+      ref: atlookup_apkam_changes
 
 dev_dependencies:
   lints: ^2.1.1
