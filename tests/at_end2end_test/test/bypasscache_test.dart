@@ -6,7 +6,7 @@ import 'package:at_end2end_test/src/test_preferences.dart';
 
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
-import 'package:at_utils/at_logger.dart';
+
 
 void main() async {
   late String sharedByAtSign;
@@ -15,7 +15,6 @@ void main() async {
   var uuid = Uuid();
 
   setUpAll(() async {
-    AtSignLogger.root_level = 'finer';
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 

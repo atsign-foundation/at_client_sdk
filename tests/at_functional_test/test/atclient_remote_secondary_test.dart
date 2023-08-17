@@ -1,60 +1,73 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/src/verb/llookup_verb_builder.dart';
 import 'package:at_commons/src/verb/update_verb_builder.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
 
-import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
-  test('sequence of put and get results', () async {
-    var atsign = '@alice🛠';
-    var preference = TestUtils.getPreference(atsign);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
-    var atClient = atClientManager.atClient;
-    atClient.syncService.sync();
+  late AtClientManager atClientManager;
+  String atSign = '@alice🛠';
+
+  setUpAll(() async {
+    var preference = TestUtils.getPreference(atSign);
+    atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atSign, 'wavi', preference);
     // To setup encryption keys
-    await setEncryptionKeys(atsign, preference);
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClientManager.atClient, atSign);
+  });
+
+  test('sequence of put and get results', () async {
     var value = '+1 1111';
     final phoneUpdateBuilder = UpdateVerbBuilder()
       ..isPublic = true
       ..atKey = 'phone'
-      ..sharedBy = atsign
+      ..sharedBy = atSign
       ..value = value;
-    await atClient.getRemoteSecondary()!.executeVerb(phoneUpdateBuilder);
+    await atClientManager.atClient
+        .getRemoteSecondary()!
+        .executeVerb(phoneUpdateBuilder);
     final phoneLookupVerbBuilder = LLookupVerbBuilder()
       ..isPublic = true
       ..atKey = 'phone'
-      ..sharedBy = atsign;
+      ..sharedBy = atSign;
 
     final emailUpdateBuilder = UpdateVerbBuilder()
       ..isPublic = true
       ..atKey = 'email'
-      ..sharedBy = atsign
+      ..sharedBy = atSign
       ..value = 'alice@gmail.com';
-    await atClient.getRemoteSecondary()!.executeVerb(emailUpdateBuilder);
+    await atClientManager.atClient
+        .getRemoteSecondary()!
+        .executeVerb(emailUpdateBuilder);
     final emailLookupVerbBuilder = LLookupVerbBuilder()
       ..isPublic = true
       ..atKey = 'email'
-      ..sharedBy = atsign;
+      ..sharedBy = atSign;
 
     final locationUpdateBuilder = UpdateVerbBuilder()
       ..isPublic = true
       ..atKey = 'location'
-      ..sharedBy = atsign
+      ..sharedBy = atSign
       ..value = 'newyork';
-    await atClient.getRemoteSecondary()!.executeVerb(locationUpdateBuilder);
+    await atClientManager.atClient
+        .getRemoteSecondary()!
+        .executeVerb(locationUpdateBuilder);
     final locationLookupVerbBuilder = LLookupVerbBuilder()
       ..isPublic = true
       ..atKey = 'location'
-      ..sharedBy = atsign;
-    final phoneFuture =
-        atClient.getRemoteSecondary()!.executeVerb(phoneLookupVerbBuilder);
-    final emailFuture =
-        atClient.getRemoteSecondary()!.executeVerb(emailLookupVerbBuilder);
-    final locationFuture =
-        atClient.getRemoteSecondary()!.executeVerb(locationLookupVerbBuilder);
+      ..sharedBy = atSign;
+    final phoneFuture = atClientManager.atClient
+        .getRemoteSecondary()!
+        .executeVerb(phoneLookupVerbBuilder);
+    final emailFuture = atClientManager.atClient
+        .getRemoteSecondary()!
+        .executeVerb(emailLookupVerbBuilder);
+    final locationFuture = atClientManager.atClient
+        .getRemoteSecondary()!
+        .executeVerb(locationLookupVerbBuilder);
     phoneFuture.then((value) => expect(value, 'data:+1 1111'));
     emailFuture.then((value) => expect(value, 'data:alice@gmail.com'));
     locationFuture.then((value) => expect(value, 'data:newyork'));

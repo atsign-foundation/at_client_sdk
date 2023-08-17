@@ -1,10 +1,8 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
-
-import 'set_encryption_keys.dart';
 import 'test_utils.dart';
 
 void main() {
@@ -12,13 +10,15 @@ void main() {
   final String sharedWithAtSign = '@bob🛠';
   late AtClientManager atClientManager;
   String namespace = 'wavi';
+
   setUpAll(() async {
     var preference = TestUtils.getPreference(currentAtSign);
     atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, 'wavi', preference);
     atClientManager.atClient.syncService.sync();
     // To setup encryption keys
-    await setEncryptionKeys(currentAtSign, preference);
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   });
   // Invoking 'setCurrentAtSign' in setUp method to set currentAtSign before each test.
   setUp(() async {
@@ -149,25 +149,7 @@ void main() {
         await atClient.notify(phoneKey, value, OperationEnum.update);
     expect(notifyResult, true);
   });
-  // test('notifyall - test deprecated method using notificationservice',
-  //     () async {
-  //   final bobAtSign = '@bob🛠';
-  //   final colinAtSign = '@colin🛠';
-  //   // phone.me@alice🛠
-  //   var shareWithList = []
-  //     ..add(bobAtSign)
-  //     ..add(colinAtSign);
-  //   var phoneKey = AtKey()
-  //     ..key = 'phone'
-  //     ..sharedWith = jsonEncode(shareWithList)
-  //   ..namespace = '.wavi';
-  //   var value = '+1 100 200 300';
-  //   final atClient = atClientManager.atClient;
-  //   final notifyResult =
-  //       await atClient.notifyAll(phoneKey, value, OperationEnum.update);
-  //   expect(jsonDecode(notifyResult)['@bobAtSign'], true);
-  //   expect(jsonDecode(notifyResult)['@colinAtSign'], true);
-  // });
+
   test('notify check value decryption on receiver', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()
@@ -237,7 +219,6 @@ void main() {
           true);
     }
   });
-  tearDownAll(() async => await tearDownFunc());
 }
 
 void onSuccessCallback(notificationResult) {
@@ -245,11 +226,4 @@ void onSuccessCallback(notificationResult) {
       'NotificationStatusEnum.delivered');
   expect(notificationResult.atKey.key, 'phone');
   expect(notificationResult.atKey.sharedWith, '@bob🛠');
-}
-
-Future<void> tearDownFunc() async {
-  var isExists = await Directory('test/hive').exists();
-  if (isExists) {
-    Directory('test/hive').deleteSync(recursive: true);
-  }
 }

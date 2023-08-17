@@ -11,7 +11,6 @@ import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/util/logger_util.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -55,8 +54,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   late AtClientManager _atClientManager;
 
+  // "^shared_key\..+@.+" matches the key that starts-with shared_key.<someone>@<me>
+  // "@.+:shared_key@.+" matches the key that starts-with @<someone>:shared_key@<me>
   @visibleForTesting
-  NetworkUtil networkUtil = NetworkUtil();
+  RegExp encryptedSharedKeyMatcher =
+      RegExp(r'^shared_key\..+@.+|@.+:shared_key@.+');
 
   /// Returns the currentAtSign associated with the SyncService
   String get currentAtSign => _atClient.getCurrentAtSign()!;
@@ -73,7 +75,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         atChops: atClient.atChops);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
-    await syncService._statsServiceListener();
+    await syncService.statsServiceListener();
     syncService._scheduleSyncRun();
     return syncService;
   }
@@ -136,7 +138,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Listens on stats notification sent by the cloud secondary server
-  Future<void> _statsServiceListener() async {
+  @visibleForTesting
+  Future<void> statsServiceListener() async {
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
     _statsNotificationListener
@@ -146,8 +149,25 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           _atClient.getPreferences()!.atClientParticulars,
           'RCVD: stats notification in sync: ${notification.value}'));
       final serverCommitId = notification.value;
+      int lastReceivedServerCommitId = -1;
+      try {
+        lastReceivedServerCommitId = await getLastReceivedServerCommitId();
+      } on FormatException catch (e) {
+        _logger.finer('Exception occurred in statsListener ${e.message}');
+
+        _statsNotificationListener.stopAllSubscriptions();
+        var syncRequest = SyncRequest()
+          ..result = (SyncResult()
+            ..atClientException = AtClientException.message(e.message));
+        _syncError(syncRequest);
+
+        SyncProgress syncProgress = SyncProgress()
+          ..atClientException = AtClientException.message(e.message)
+          ..syncStatus = SyncStatus.failure;
+        _informSyncProgress(syncProgress);
+      }
       if (serverCommitId != null &&
-          int.parse(serverCommitId) > await _getLocalCommitId()) {
+          int.parse(serverCommitId) > lastReceivedServerCommitId) {
         final syncRequest = SyncRequest();
         syncRequest.onDone = _onDone;
         syncRequest.onError = _onError;
@@ -179,13 +199,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (_syncInProgress) {
       _logger.finer('**** another sync in progress');
       syncProgress.message = 'another sync in progress';
-      _informSyncProgress(syncProgress);
-      return;
-    }
-    if (!await networkUtil.isNetworkAvailable()) {
-      _logger.finer('skipping sync due to network unavailability');
-      syncProgress.syncStatus = SyncStatus.failure;
-      syncProgress.message = 'network unavailable';
       _informSyncProgress(syncProgress);
       return;
     }
@@ -259,8 +272,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
     syncProgress.localCommitId = localCommitId;
     syncProgress.serverCommitId = serverCommitId;
-    _logger.finer(
-        "Informing ${_syncProgressListeners.length} listeners of $syncProgress");
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(syncProgress);
@@ -483,7 +494,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           await _processServerCommitEntry(
               serverCommitEntry, uncommittedEntries, keyInfoList);
           _logger.finest(
-              '**lastReceivedServerCommitId $lastReceivedServerCommitId');
+              'Updating lastReceivedServerCommitId to $lastReceivedServerCommitId');
         }
       }
     } finally {
@@ -555,13 +566,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   Future<ConflictInfo?> _setConflictInfo(final serverCommitEntry) async {
-    final key = serverCommitEntry['atKey'];
+    String key = serverCommitEntry['atKey'];
     // publickey.<atsign>@<currentatsign> is used to store the public key of
     // other atsign. The value is not encrypted.
-    // The keys starting with publickey. and shared_key. are the reserved keys
+    // The keys starting with publickey. and keys that contain shared_key
+    // (@someone:shared_key@me, shared_key.someone@me) are the reserved keys
     // and do not require actions. Hence skipping from checking conflict resolution.
     if (key.startsWith('publickey.') ||
-        key.startsWith('shared_key.') ||
+        key.startsWith(encryptedSharedKeyMatcher) ||
         key.startsWith('cached:')) {
       _logger.finer('$key found in conflict resolution, returning null');
       return null;
@@ -573,7 +585,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     final conflictInfo = ConflictInfo();
     try {
-      final localAtValue = await _atClient.get(atKey);
+      AtValue localAtValue;
+      // For a conflicting key, if an uncommitted entry is of CommitOp.Delete, then
+      // key will not exist in Key-Store. On KeyNotFoundException, return null.
+      try {
+        localAtValue = await _atClient.get(atKey);
+      } on KeyNotFoundException {
+        return null;
+      }
       if (atKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
         if (localAtValue.value != serverValue) {
@@ -880,15 +899,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ..value = serverCommitEntry['value'];
         builder.operation = UPDATE_ALL;
         _setMetaData(builder, serverCommitEntry);
-        _logger.finest(
-            'syncing to local: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
         var builder = DeleteVerbBuilder()
           ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
-        _logger.finest(
-            'syncing to local delete: ${serverCommitEntry['atKey']}  commitId:${serverCommitEntry['commitId']}');
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
         break;
     }
@@ -983,7 +998,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     commitEntry.operation = operation;
     _logger.finest(
-        '*** updating commitId to local ${serverCommitEntry['commitId']}');
+        'Updating ${commitEntry.atKey} commitId to ${serverCommitEntry['commitId']} in local keystore');
     await syncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
         _atClient.getCurrentAtSign()!);
   }
@@ -1032,6 +1047,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return int.parse(arg1);
     }
     return arg1;
+  }
+
+  @visibleForTesting
+  int getSyncRequestQueueSize() {
+    return _syncRequests.length;
   }
 }
 
