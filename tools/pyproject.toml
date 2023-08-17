@@ -9,7 +9,7 @@ packages = [{include = "at_client_sdk_tools"}]
 [tool.poetry.dependencies]
 python = "^3.8"
 requests = "2.31.0"
-dnspython = "2.4.0"
+dnspython = "2.4.2"
 
 
 [build-system]

@@ -4,7 +4,7 @@ description: The at_client library is the non-platform specific Client SDK which
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 3.0.62
+version: 3.0.64
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -12,20 +12,21 @@ repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://docs.atsign.com/
 
 environment:
-  sdk: '>=2.15.0 <4.0.0'
+  sdk: ">=2.15.0 <4.0.0"
 
 dependencies:
   path: ^1.8.2
   hive: ^2.2.3
-  crypton: ^2.1.0
-  encrypt: ^5.0.1
+  asn1lib: ">=1.4.1 <1.5.0"
+  crypton: ">=2.1.0 <2.1.1"
+  encrypt: ">=5.0.1 <5.0.2"
   cron: ^0.5.1
   convert: ^3.0.2
   uuid: ^3.0.7
   crypto: ^3.0.1
   collection: ^1.16.0
   archive: ^3.3.5
-  http: '>=0.13.5 <2.0.0'
+  http: ">=0.13.5 <2.0.0"
   internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
   at_utf7: ^1.0.0
@@ -48,7 +49,7 @@ dependency_overrides:
 
 
 dev_dependencies:
-  lints: ^2.0.0
+  lints: ^2.1.1
   test: ^1.21.4
   at_demo_data: ^1.0.0
   coverage: ^1.5.0
