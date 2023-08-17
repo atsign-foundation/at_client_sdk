@@ -920,6 +920,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (remotePublicKey!.contains('data:')) {
       remotePublicKey = remotePublicKey.replaceFirst('data:', '');
     } else {
+      _logger.info(
+          'Fetched potential invalid remote Public encryption key: $remotePublicKey');
       remotePublicKey = null;
     }
 
