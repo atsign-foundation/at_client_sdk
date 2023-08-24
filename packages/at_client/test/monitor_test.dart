@@ -233,7 +233,8 @@ void main() {
           verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
       // We've created a monitor with a real lastNotificationTime
-      expect(writesToSocket.last, 'monitor:selfNotifications:$lastNotificationTime\n');
+      expect(writesToSocket.last,
+          'monitor:selfNotifications:$lastNotificationTime\n');
       expect(monitor.status, MonitorStatus.started);
     });
 
