@@ -203,7 +203,7 @@ void main() {
           verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
       // We've created a monitor with a null lastNotificationTime - expect the command sent to the server to be simply 'monitor\n'
-      expect(writesToSocket.last, 'monitor\n');
+      expect(writesToSocket.last, 'monitor:selfNotifications\n');
       expect(monitor.status, MonitorStatus.started);
     });
 
@@ -233,7 +233,7 @@ void main() {
           verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
       // We've created a monitor with a real lastNotificationTime
-      expect(writesToSocket.last, 'monitor:$lastNotificationTime\n');
+      expect(writesToSocket.last, 'monitor:selfNotifications:$lastNotificationTime\n');
       expect(monitor.status, MonitorStatus.started);
     });
 
