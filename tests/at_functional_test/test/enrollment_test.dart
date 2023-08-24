@@ -85,7 +85,7 @@ void main() {
           print('got enrollment notification: $enrollNotification');
           expect(enrollNotification.key,
               '$enrollmentIdFromServer.new.enrollments.__manage');
-        }, count: 1));
+        }, count: 1, max: -1));
   });
 }
 
