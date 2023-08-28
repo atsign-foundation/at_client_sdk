@@ -81,6 +81,8 @@ class Monitor {
 
   final AtChops? atChops;
 
+  String? _enrollmentId;
+
   final int newLineCodeUnit = 10;
   final int atCharCodeUnit = 64;
 
@@ -118,17 +120,17 @@ class Monitor {
   /// When [retry] is true
   ////
   Monitor(
-    Function onResponse,
-    Function onError,
-    String atSign,
-    AtClientPreference preference,
-    MonitorPreference monitorPreference,
-    Function retryCallBack, {
-    RemoteSecondary? remoteSecondary,
-    MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-    Duration? monitorHeartbeatInterval,
-    this.atChops,
-  }) {
+      Function onResponse,
+      Function onError,
+      String atSign,
+      AtClientPreference preference,
+      MonitorPreference monitorPreference,
+      Function retryCallBack,
+      {RemoteSecondary? remoteSecondary,
+      MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
+      Duration? monitorHeartbeatInterval,
+      this.atChops,
+      String? enrollmentId}) {
     _logger = AtSignLogger('Monitor ($atSign)');
     _onResponse = onResponse;
     _onError = onError;
@@ -137,8 +139,10 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
+    _enrollmentId = enrollmentId;
     _remoteSecondary = remoteSecondary ??
-        RemoteSecondary(atSign, preference, atChops: atChops);
+        RemoteSecondary(atSign, preference,
+            atChops: atChops, enrollmentId: enrollmentId);
     _retryCallBack = retryCallBack;
     _monitorOutboundConnectionFactory =
         monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
@@ -274,7 +278,7 @@ class Monitor {
       var pkamBuilder = PkamVerbBuilder()
         ..signingAlgo = _preference.signingAlgoType.name
         ..hashingAlgo = _preference.hashingAlgoType.name
-        ..enrollmentlId = _preference.enrollmentId
+        ..enrollmentlId = _enrollmentId
         ..signature = signingResult.result;
       var pkamCommand = pkamBuilder.buildCommand();
       _logger.finer('Sending command $pkamCommand');
