@@ -59,7 +59,9 @@ class AtClientManager {
   /// can use it
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference,
-      {AtServiceFactory? serviceFactory, AtChops? atChops}) async {
+      {AtServiceFactory? serviceFactory,
+      AtChops? atChops,
+      String? enrollmentId}) async {
     serviceFactory ??= DefaultAtServiceFactory();
 
     _logger.info("setCurrentAtSign called with atSign $atSign");
@@ -142,7 +144,7 @@ class AtClientManager {
 abstract class AtServiceFactory {
   Future<AtClient> atClient(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops});
+      {AtChops? atChops, String? enrollmentId});
 
   Future<NotificationService> notificationService(
       AtClient atClient, AtClientManager atClientManager);
@@ -155,9 +157,11 @@ class DefaultAtServiceFactory implements AtServiceFactory {
   @override
   Future<AtClient> atClient(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops}) async {
+      {AtChops? atChops, String? enrollmentId}) async {
     return await AtClientImpl.create(atSign, namespace, preference,
-        atClientManager: atClientManager, atChops: atChops);
+        atClientManager: atClientManager,
+        atChops: atChops,
+        enrollmentId: enrollmentId);
   }
 
   @override
