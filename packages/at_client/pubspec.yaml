@@ -40,6 +40,13 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: feat/gkc-add-root-lookup-retry
+
 dev_dependencies:
   lints: ^2.1.1
   test: ^1.21.4
