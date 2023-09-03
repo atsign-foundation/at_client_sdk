@@ -58,16 +58,16 @@ void main() {
     expect(enrollResponseJson['enrollmentId'], isNotEmpty);
     expect(enrollResponseJson['status'], 'approved');
     // Fetch OTP
-    var totpResponse =
-        await atClient.getRemoteSecondary()!.executeCommand('totp:get\n');
-    expect(totpResponse, isNotEmpty);
-    String totp = totpResponse!.replaceFirst('data:', '');
+    var otpResponse =
+        await atClient.getRemoteSecondary()!.executeCommand('otp:get\n');
+    expect(otpResponse, isNotEmpty);
+    String otp = otpResponse!.replaceFirst('data:', '');
 
     var remoteSecondary_2 = RemoteSecondary(atSign, getClient2Preferences());
     var secondApkamPublicKey = at_demos.pkamPublicKeyMap[
         '@bob🛠']; //choose any pkam public key part from @alice🛠
     var newEnrollRequest =
-        'enroll:request:{"appName":"buzz","deviceName":"pixel","namespaces":{"buzz":"rw"},"totp":"$totp","apkamPublicKey":"$secondApkamPublicKey"}\n';
+        'enroll:request:{"appName":"buzz","deviceName":"pixel","namespaces":{"buzz":"rw"},"otp":"$otp","apkamPublicKey":"$secondApkamPublicKey"}\n';
     var newEnrollResponse =
         await remoteSecondary_2.executeCommand(newEnrollRequest);
     print('EnrollmentResponse: $newEnrollResponse');
@@ -85,7 +85,7 @@ void main() {
           expect(enrollNotification.key,
               '$enrollmentIdFromServer.new.enrollments.__manage');
         }, count: 1, max: -1));
-  }, skip: true); // TODO Needs to be un-skipped once problem has been resolved
+  });
 }
 
 Future<void> setLastReceivedNotificationDateTime() async {
