@@ -31,7 +31,7 @@ dependencies:
   async: ^2.9.0
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^3.0.53
+  at_commons: ^3.0.54
   at_utils: ^3.0.15
   at_chops: ^1.0.3
   at_lookup: ^3.0.39
