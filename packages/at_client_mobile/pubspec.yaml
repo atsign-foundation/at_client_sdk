@@ -5,7 +5,7 @@ repository: https://github.com/atsign-foundation/at_client_sdk/packages
 homepage: https://docs.atsign.com/
 
 environment:
-  sdk: '>=2.15.0 <4.0.0'
+  sdk: ">=2.15.0 <4.0.0"
 
 dependencies:
   path: ^1.8.2
@@ -15,12 +15,20 @@ dependencies:
   flutter_keychain: ^2.2.1
   biometric_storage: ^5.0.0
   hive: ^2.0.4
-  crypton: '>=2.1.0 <=2.2.1'
+  crypton: ^2.2.1
   at_commons: ^4.0.1
   at_utils: ^3.0.16
   at_chops: ^2.0.0
   at_lookup: ^3.0.46
   at_client: ^3.0.75
+  at_auth: ^1.0.0
+  at_file_saver: 0.1.2
+
+dependency_overrides:
+  at_client:
+    path: ../at_client
+  at_auth:
+    path: ../../../at_libraries/packages/at_auth
 
 dev_dependencies:
   lints: ^2.0.0

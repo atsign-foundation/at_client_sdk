@@ -15,6 +15,7 @@ import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -103,6 +104,16 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
   }
+
+  late EnrollmentService _enrollmentService;
+
+  @override
+  set enrollmentService(EnrollmentService enrollmentService) {
+    _enrollmentService = enrollmentService;
+  }
+
+  @override
+  EnrollmentService get enrollmentService => _enrollmentService;
 
   @override
   NotificationService get notificationService => _notificationService;
@@ -661,36 +672,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     return AtChopsImpl(atChopsKeys);
-  }
-
-  @override
-  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
-      EnrollListRequestParam enrollmentListRequestParams) async {
-    // enrollmentListRequestParams for now is not  used
-    // A server side enhancement request is created. https://github.com/atsign-foundation/at_server/issues/1748
-    // On implementation of this enhancement/feature, the enrollListRequestParam object can be made use of
-    EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
-      ..operation = EnrollOperationEnum.list
-      ..appName = enrollmentListRequestParams.appName
-      ..deviceName = enrollmentListRequestParams.deviceName;
-
-    var response = await getRemoteSecondary()
-        ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
-
-    return _formatEnrollListResponse(response);
-  }
-
-  List<EnrollmentRequest> _formatEnrollListResponse(response) {
-    response = response?.replaceFirst('data:', '');
-    Map<String, dynamic> enrollRequests = jsonDecode(response!);
-    List<EnrollmentRequest> enrollRequestsFormatted = [];
-    EnrollmentRequest? enrollment;
-    for (var request in enrollRequests.entries) {
-      enrollment = EnrollmentRequest.fromJson(request.value);
-      enrollment.enrollmentKey = request.key;
-      enrollRequestsFormatted.add(enrollment);
-    }
-    return enrollRequestsFormatted;
   }
 
   @override

@@ -2,11 +2,14 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
+import 'package:at_auth/at_auth.dart';
 
 /// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
 ///
@@ -94,6 +97,10 @@ class AtClientManager {
         _currentAtClient!, this, notificationService);
     _currentAtClient!.syncService = syncService;
 
+    EnrollmentService enrollmentService =
+        serviceFactory.enrollmentService(_currentAtClient!);
+    _currentAtClient!.enrollmentService = enrollmentService;
+
     _logger.info("setCurrentAtSign complete");
 
     return this;
@@ -151,6 +158,8 @@ abstract class AtServiceFactory {
 
   Future<SyncService> syncService(AtClient atClient,
       AtClientManager atClientManager, NotificationService notificationService);
+
+  EnrollmentService enrollmentService(AtClient atClient);
 }
 
 class DefaultAtServiceFactory implements AtServiceFactory {
@@ -179,5 +188,12 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     return await SyncServiceImpl.create(atClient,
         atClientManager: atClientManager,
         notificationService: notificationService);
+  }
+
+  @override
+  EnrollmentService enrollmentService(AtClient atClient) {
+    AtEnrollmentBase atEnrollmentBase =
+        AtAuthBase.atEnrollment(atClient.getCurrentAtSign()!);
+    return EnrollmentServiceImpl(atClient, atEnrollmentBase);
   }
 }

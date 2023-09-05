@@ -59,16 +59,20 @@ void main() {
         () async => await selfKeyDecryption.decrypt(selfKey, 'a@#!!c'),
         throwsA(predicate((e) =>
             e is SelfKeyNotFoundException &&
-            e.message == 'Empty or null SelfEncryptionKey found')));
+            e.message == 'Failed to decrypt the key: ${selfKey.toString()} caused by self encryption key not found')));
   });
 
   test('test to check self encryption key decrypt method without IV', () async {
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
-    var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
+    SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+
+    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
+    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
+
+    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
+    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+
     var location = 'san francisco';
     var encryptedLocation =
         EncryptionUtil.encryptValue(location, selfEncryptionKey.key);
@@ -85,12 +89,17 @@ void main() {
   });
 
   test('test to check self encryption key decrypt method with IV', () async {
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
-    var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
+    SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+
+    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
+    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
+
+    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
+
+    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';
 
