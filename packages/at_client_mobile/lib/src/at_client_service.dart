@@ -34,7 +34,6 @@ class AtClientService {
   Future<bool> _init(
       String atSign, AtClientPreference preference, AtChops atChops) async {
     atClientAuthenticator ??= AtClientAuthenticator();
-    preference.useAtChops = true;
     await atClientManager.setCurrentAtSign(
         atSign, preference.namespace, preference,
         atChops: atChops);
@@ -122,15 +121,15 @@ class AtClientService {
     //Store keys into local secondary.
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
+        .putValue(AtConstants.atPkamPublicKey, pkamPublicKey);
 
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
+        .putValue(AtConstants.atPkamPrivateKey, pkamPrivateKey);
 
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
+        .putValue(AtConstants.atEncryptionPrivateKey, encryptPrivateKey);
 
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = 'publickey'
@@ -145,7 +144,7 @@ class AtClientService {
 
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
+        .putValue(AtConstants.atEncryptionSelfKey, selfEncryptionKey);
 
     // Verify if keys are added to local storage.
     var result = await _getKeysFromLocalSecondary(atSign);
@@ -186,6 +185,7 @@ class AtClientService {
 
   ///Returns `true` on successfully authenticating [atsign] with [cramSecret]/[privateKey].
   /// if pkam is successful, encryption keys will be set for the user.
+  @Deprecated('Use AtAuthService.authenticate method')
   Future<bool> authenticate(
       String atsign, AtClientPreference atClientPreference,
       {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
@@ -344,6 +344,7 @@ class AtClientService {
   ///Returns `true` on successfully completing onboarding.
   /// Throws [OnboardingStatus.atSignNotFound] exception if atsign not found.
   /// Throws [OnboardingStatus.privateKeyNotFound] exception if privatekey not found.
+  @Deprecated('Use AtAuthService.onboard method')
   Future<bool> onboard(
       {required AtClientPreference atClientPreference, String? atsign}) async {
     AtChops? atChops;
@@ -462,6 +463,8 @@ class BackupKeyConstants {
   static const String ENCRYPTION_PUBLIC_KEY_FROM_FILE = 'aesEncryptPublicKey';
   static const String ENCRYPTION_PRIVATE_KEY_FROM_FILE = 'aesEncryptPrivateKey';
   static const String SELF_ENCRYPTION_KEY_FROM_FILE = 'selfEncryptionKey';
+  static const String APKAM_SYMMETRIC_KEY_FROM_FILE = 'apkamSymmetricKey';
+  static const String APKAM_ENROLLMENT_ID_FROM_FILE = 'enrollmentId';
 }
 
 class KeychainUtil {

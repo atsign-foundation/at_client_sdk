@@ -18,9 +18,22 @@ dependencies:
   crypton: '>=2.1.0 <=2.2.0'
   at_commons: ^3.0.53
   at_utils: ^3.0.15
-  at_chops: ^1.0.3
-  at_lookup: ^3.0.38
+  at_chops: ^1.0.4
+  at_lookup: ^3.0.39
   at_client: ^3.0.64
+  at_auth: ^1.0.0
+  file_saver: 0.2.8
+  flutter_secure_storage: ^9.0.0
+
+dependency_overrides:
+  at_client:
+    path: ../at_client
+  at_auth:
+    path: ../../../at_libraries/packages/at_auth
+
+dependency_overrides:
+  at_client:
+    path: ../at_client
 
 dev_dependencies:
   lints: ^2.0.0
