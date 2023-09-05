@@ -34,8 +34,6 @@ class AtClientService {
   Future<bool> _init(
       String atSign, AtClientPreference preference, AtChops atChops) async {
     atClientAuthenticator ??= AtClientAuthenticator();
-    // ignore: deprecated_member_use
-    preference.useAtChops = true;
     await atClientManager.setCurrentAtSign(
         atSign, preference.namespace, preference,
         atChops: atChops);
@@ -189,6 +187,7 @@ class AtClientService {
 
   ///Returns `true` on successfully authenticating [atsign] with [cramSecret]/[privateKey].
   /// if pkam is successful, encryption keys will be set for the user.
+  @Deprecated('Use AtAuthService.authenticate method')
   Future<bool> authenticate(
       String atsign, AtClientPreference atClientPreference,
       {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
@@ -347,6 +346,7 @@ class AtClientService {
   ///Returns `true` on successfully completing onboarding.
   /// Throws [OnboardingStatus.atSignNotFound] exception if atsign not found.
   /// Throws [OnboardingStatus.privateKeyNotFound] exception if privatekey not found.
+  @Deprecated('Use AtAuthService.onboard method')
   Future<bool> onboard(
       {required AtClientPreference atClientPreference, String? atsign}) async {
     AtChops? atChops;

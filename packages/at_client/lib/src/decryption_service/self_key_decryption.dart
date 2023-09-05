@@ -11,11 +11,9 @@ import 'package:at_client/src/response/default_response_parser.dart';
 /// llookup:@bob:phone@bob
 class SelfKeyDecryption implements AtKeyDecryption {
   final AtClient _atClient;
-  late final AtSignLogger _logger;
-  SelfKeyDecryption(this._atClient) {
-    _logger =
-        AtSignLogger('SelfKeyDecryption (${_atClient.getCurrentAtSign()})');
-  }
+
+  SelfKeyDecryption(this._atClient);
+
   @override
   Future<dynamic> decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null ||
@@ -25,34 +23,10 @@ class SelfKeyDecryption implements AtKeyDecryption {
           intent: Intent.decryptData,
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
-
     var selfEncryptionKey =
-        await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
-    if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
-        selfEncryptionKey == 'data:null') {
-      throw SelfKeyNotFoundException('Empty or null SelfEncryptionKey found',
-          intent: Intent.fetchSelfEncryptionKey,
-          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
-    }
-
-    InitialisationVector iV;
-    if (atKey.metadata.ivNonce != null) {
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
-    } else {
-      iV = AtChopsUtil.generateIVLegacy();
-    }
-    AtEncryptionResult decryptionResultFromAtChops;
-    try {
-      var encryptionAlgo = AESEncryptionAlgo(
-          AESKey(DefaultResponseParser().parse(selfEncryptionKey).response));
-      decryptionResultFromAtChops = _atClient.atChops!.decryptString(
-          encryptedValue, EncryptionKeyType.aes256,
-          encryptionAlgorithm: encryptionAlgo, iv: iV);
-    } on AtDecryptionException catch (e) {
-      _logger.severe(
-          'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
-      rethrow;
-    }
-    return decryptionResultFromAtChops.result;
+        _atClient.atChops!.atChopsKeys.selfEncryptionKey!.key;
+    return EncryptionUtil.decryptValue(encryptedValue,
+        DefaultResponseParser().parse(selfEncryptionKey).response,
+        ivBase64: atKey.metadata?.ivNonce);
   }
 }
