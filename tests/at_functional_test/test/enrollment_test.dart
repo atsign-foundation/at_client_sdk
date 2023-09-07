@@ -28,6 +28,11 @@ void main() {
     setLastReceivedNotificationDateTime();
   });
 
+  void _stopSubscriptions() {
+    atClientManager.atClient.notificationService.stopAllSubscriptions();
+    print('subscriptions stopped');
+  }
+
   test('A test to verify enrollment request returns notification', () async {
     final atClient = atClientManager.atClient;
     var fromResponse =
@@ -79,12 +84,13 @@ void main() {
     expect(enrollmentIdFromServer, isNotEmpty);
     expect(enrollJson['status'], 'pending');
     atClientManager.atClient.notificationService
-        .subscribe()
+        .subscribe(regex: '.new.enrollments.__manage')
         .listen(expectAsync1((enrollNotification) {
           print('got enrollment notification: $enrollNotification');
           expect(enrollNotification.key,
               '$enrollmentIdFromServer.new.enrollments.__manage');
-        }, count: 1, max: -1));
+          _stopSubscriptions();
+        }, count: 1, max: 1));
   });
 }
 
