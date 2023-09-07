@@ -7,6 +7,7 @@ class AtsignKey {
   final String? encryptionPublicKey;
   final String? encryptionPrivateKey;
   final String? selfEncryptionKey;
+  final String? apkamSymmetricKey;
   final String? hiveSecret;
   final String? secret;
 
@@ -17,6 +18,7 @@ class AtsignKey {
     this.encryptionPublicKey,
     this.encryptionPrivateKey,
     this.selfEncryptionKey,
+    this.apkamSymmetricKey,
     this.hiveSecret,
     this.secret,
   });
@@ -36,6 +38,9 @@ class AtsignKey {
         selfEncryptionKey: json["selfEncryptionKey"] is String
             ? json["selfEncryptionKey"]
             : null,
+        apkamSymmetricKey: json["apkamSymmetricKey"] is String
+            ? json["apkamSymmetricKey"]
+            : null,
         hiveSecret: json["hiveSecret"] is String ? json["hiveSecret"] : null,
         secret: json["secret"] is String ? json["secret"] : null,
       );
@@ -47,6 +52,7 @@ class AtsignKey {
         "encryptionPublicKey": encryptionPublicKey,
         "encryptionPrivateKey": encryptionPrivateKey,
         "selfEncryptionKey": selfEncryptionKey,
+        "apkamSymmetricKey": apkamSymmetricKey,
         "hiveSecret": hiveSecret,
         "secret": secret,
       };
@@ -58,6 +64,7 @@ class AtsignKey {
     String? encryptionPublicKey,
     String? encryptionPrivateKey,
     String? selfEncryptionKey,
+    String? apkamSymmetricKey,
     String? hiveSecret,
     String? secret,
   }) {
@@ -68,6 +75,7 @@ class AtsignKey {
       encryptionPublicKey: encryptionPublicKey ?? this.encryptionPublicKey,
       encryptionPrivateKey: encryptionPrivateKey ?? this.encryptionPrivateKey,
       selfEncryptionKey: selfEncryptionKey ?? this.selfEncryptionKey,
+      apkamSymmetricKey: apkamSymmetricKey ?? this.apkamSymmetricKey,
       hiveSecret: hiveSecret ?? this.hiveSecret,
       secret: secret ?? this.secret,
     );

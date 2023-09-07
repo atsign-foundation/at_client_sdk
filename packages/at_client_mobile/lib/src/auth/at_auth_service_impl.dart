@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_client_mobile/src/auth/at_security_keys.dart';
 import 'package:at_client_mobile/src/auth/cram_authenticator.dart';
 import 'package:at_commons/at_builders.dart';
@@ -15,10 +19,16 @@ class AtAuthServiceImpl implements AtAuthService {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
   PkamAuthenticator? pkamAuthenticator;
   CramAuthenticator? cramAuthenticator;
-  AtLookUp? _atLookup;
+  AtClient? _atClient;
+  AtLookUp? _atLookUp;
   final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
   @override
   AtChops? atChops;
+  AtServiceFactory? atServiceFactory;
+  String _atSign;
+  AtClientPreference _atClientPreference;
+
+  AtAuthServiceImpl(this._atSign, this._atClientPreference);
 
   @override
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) {
@@ -42,25 +52,28 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<AtOnboardingResponse> onboard(
       AtOnboardingRequest atOnboardingRequest) async {
     var atSign = atOnboardingRequest.atSign;
-    var onboardingResponse = AtOnboardingResponse(atSign);
+    var atOnboardingResponse = AtOnboardingResponse(atSign);
 
     try {
-      _atLookup ??= AtLookupImpl(
+      _atLookUp ??= AtLookupImpl(
           atSign,
           atOnboardingRequest.preference.rootDomain,
           atOnboardingRequest.preference.rootPort);
       cramAuthenticator ??= CramAuthenticator(
           atOnboardingRequest.preference.cramSecret!,
           atOnboardingRequest.preference)
-        ..atLookup = _atLookup;
+        ..atLookup = _atLookUp;
       final cramAuthResult =
           await cramAuthenticator!.authenticate(atOnboardingRequest.atSign);
       _logger.finer('cram auth result for $atSign : $cramAuthResult');
       if (cramAuthResult.isSuccessful) {
-        await _activateNewAtSign(atOnboardingRequest);
+        await _activateNewAtSign(atOnboardingRequest, atOnboardingResponse);
+      } else {
+        atOnboardingResponse.isSuccessful = false;
+        throw AtClientException(
+            error_codes['UnAuthenticatedException'], 'cram auth failed');
       }
-      throw AtClientException(
-          error_codes['UnAuthenticatedException'], 'cram auth failed');
+      return atOnboardingResponse;
     } on AtClientException catch (e) {
       _logger
           .severe('exception in onboard -_activateNewAtSign : ${e.toString()}');
@@ -68,7 +81,8 @@ class AtAuthServiceImpl implements AtAuthService {
     }
   }
 
-  Future<void> _activateNewAtSign(AtOnboardingRequest onboardingRequest) async {
+  Future<void> _activateNewAtSign(AtOnboardingRequest onboardingRequest,
+      AtOnboardingResponse atOnboardingResponse) async {
     try {
       // 1. generate pkam keypair/read public key from secure element using atChops
       var atSecurityKeys = AtSecurityKeys();
@@ -87,12 +101,6 @@ class AtAuthServiceImpl implements AtAuthService {
         var pkamKeypair = _keyChainManager.generateKeyPair();
         atSecurityKeys.apkamPublicKey = pkamKeypair.publicKey.toString();
         atSecurityKeys.apkamPrivateKey = pkamKeypair.privateKey.toString();
-        atChops ??= _createAtChops(
-            null,
-            AtPkamKeyPair.create(
-                atSecurityKeys.apkamPublicKey!,
-                atSecurityKeys
-                    .apkamPrivateKey!)); // set encryption key pair after generation
       }
       //1.1 generate encryption key pair, self encryption key and AES key
       var encryptionKeyPair = _keyChainManager.generateKeyPair();
@@ -100,8 +108,8 @@ class AtAuthServiceImpl implements AtAuthService {
           encryptionKeyPair.publicKey.toString();
       atSecurityKeys.defaultEncryptionPrivateKey =
           encryptionKeyPair.privateKey.toString();
-      // var selfEncryptionKey = _keyChainManager.getSelfEncryptionAESKey(atSign);
-      // var apkamSymmetricKey = generateAESKey();
+      atSecurityKeys.defaultSelfEncryptionKey = EncryptionUtil.generateAESKey();
+      atSecurityKeys.apkamSymmetricKey = EncryptionUtil.generateAESKey();
       //2.Send enroll request
       var enrollBuilder = EnrollVerbBuilder()
         ..appName = onboardingRequest.preference.appName
@@ -115,15 +123,131 @@ class AtAuthServiceImpl implements AtAuthService {
           EncryptionUtil.encryptValue(atSecurityKeys.defaultSelfEncryptionKey!,
               atSecurityKeys.apkamSymmetricKey!);
       enrollBuilder.apkamPublicKey = atSecurityKeys.apkamPublicKey;
+      var enrollResult = await _atLookUp!
+          .executeCommand(enrollBuilder.buildCommand(), auth: false);
+      //#TODO change the error codes
+      if (enrollResult == null || enrollResult.isEmpty) {
+        throw AtClientException(
+            'AT0401', 'Enrollment response is null or empty');
+      } else if (enrollResult.startsWith('error:')) {
+        throw AtClientException('AT0401', 'Enrollment error:$enrollResult');
+      }
+      enrollResult = enrollResult.replaceFirst('data:', '');
+      _logger.finer('enrollResult: $enrollResult');
+      var enrollResultJson = jsonDecode(enrollResult);
+      var enrollmentIdFromServer = enrollResultJson[enrollmentId];
+      var enrollmentStatus = enrollResultJson['status'];
+      if (enrollmentStatus != 'approved') {
+        throw AtClientException('AT0401',
+            'initial enrollment is not approved. Status from server: $enrollmentStatus');
+      }
+      atSecurityKeys.enrollmentId = enrollmentIdFromServer;
+      //3. Close connection to server
+      try {
+        await (_atLookUp! as AtLookupImpl).close();
+      } on Exception catch (e) {
+        _logger.severe('error while closing connection to server: $e');
+      }
+      //4. try pkam auth to server
+      var isPkamAuthenticated;
+      try {
+        isPkamAuthenticated = await _atLookUp!
+            .pkamAuthenticate(enrollmentId: enrollmentIdFromServer);
+      } on UnAuthenticatedException {
+        throw AtClientException('AT0401',
+            'Pkam auth with enrollmentId-$enrollmentIdFromServer failed');
+      }
+      //5.1 init atClient and atChops.
+      //5.2 Store keys to keychain manager
+      //5.3 Delete cram secret
+      if (isPkamAuthenticated) {
+        await _init(atSecurityKeys, enrollmentId: enrollmentIdFromServer);
+        var atSignItem = await _keyChainManager.readAtsign(name: _atSign) ??
+            AtsignKey(atSign: _atSign);
+        atSignItem = atSignItem.copyWith(
+            encryptionPrivateKey: atSecurityKeys.defaultEncryptionPrivateKey,
+            encryptionPublicKey: atSecurityKeys.defaultEncryptionPublicKey,
+            selfEncryptionKey: atSecurityKeys.defaultSelfEncryptionKey,
+            apkamSymmetricKey: atSecurityKeys.apkamSymmetricKey);
+        await _keyChainManager.storeAtSign(atSign: atSignItem);
+        var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
+        var deleteResponse = await _atLookUp!.executeVerb(deleteBuilder);
+        _logger.finer('cram secret delete response : $deleteResponse');
+        await _persistKeysLocalSecondary(atSecurityKeys);
+        atOnboardingResponse.isSuccessful = true;
+        atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
+      }
     } on AtClientException {
       rethrow;
     }
   }
 
-  AtChops _createAtChops(
-      AtEncryptionKeyPair? atEncryptionKeyPair, AtPkamKeyPair atPkamKeyPair) {
+  Future<void> _persistKeysLocalSecondary(AtSecurityKeys atSecurityKeys) async {
+    await _atClient!
+        .getLocalSecondary()!
+        .putValue(AT_PKAM_PUBLIC_KEY, atSecurityKeys.apkamPublicKey!);
+
+    // pkam private will not be available in case of secure element
+    if (atSecurityKeys.apkamPrivateKey != null) {
+      await _atClient!
+          .getLocalSecondary()!
+          .putValue(AT_PKAM_PRIVATE_KEY, atSecurityKeys.apkamPrivateKey!);
+    }
+
+    await _atClient!.getLocalSecondary()!.putValue(
+        AT_ENCRYPTION_PRIVATE_KEY, atSecurityKeys.defaultEncryptionPrivateKey!);
+
+    var updateBuilder = UpdateVerbBuilder()
+      ..atKey = 'publickey'
+      ..isPublic = true
+      ..sharedBy = _atSign
+      ..value = atSecurityKeys.defaultEncryptionPublicKey
+      ..metadata.ttr = -1;
+
+    await _atClient!
+        .getLocalSecondary()!
+        .executeVerb(updateBuilder, sync: true);
+
+    await _atClient!.getLocalSecondary()!.putValue(
+        AT_ENCRYPTION_SELF_KEY, atSecurityKeys.defaultSelfEncryptionKey!);
+  }
+
+  Future<void> _init(AtSecurityKeys atSecurityKeys,
+      {String? enrollmentId}) async {
+    atChops ??= _createAtChops(atSecurityKeys);
+    await _initAtClient(atChops!, enrollmentId: enrollmentId);
+    _atLookUp!.atChops = atChops;
+    _atClient!.atChops = atChops;
+    _atClient!.getPreferences()!.useAtChops = true;
+  }
+
+  Future<void> _initAtClient(AtChops atChops, {String? enrollmentId}) async {
+    AtClientManager atClientManager = AtClientManager.getInstance();
+    await atClientManager.setCurrentAtSign(
+        _atSign, _atClientPreference.namespace, _atClientPreference,
+        atChops: atChops,
+        serviceFactory: atServiceFactory,
+        enrollmentId: enrollmentId);
+    // ??= to support mocking
+    _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
+    _atLookUp?.enrollmentId = enrollmentId;
+    _atLookUp?.signingAlgoType = _atClientPreference.signingAlgoType;
+    _atLookUp?.hashingAlgoType = _atClientPreference.hashingAlgoType;
+    _atClient ??= atClientManager.atClient;
+  }
+
+  AtChops _createAtChops(AtSecurityKeys atKeysFile) {
+    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
+        atKeysFile.defaultEncryptionPublicKey!,
+        atKeysFile.defaultEncryptionPrivateKey!);
+    final atPkamKeyPair = AtPkamKeyPair.create(
+        atKeysFile.apkamPublicKey!, atKeysFile.apkamPrivateKey!);
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    final atChops = AtChopsImpl(atChopsKeys);
-    return atChops;
+    if (atKeysFile.apkamSymmetricKey != null) {
+      atChopsKeys.apkamSymmetricKey = AESKey(atKeysFile.apkamSymmetricKey!);
+    }
+    atChopsKeys.selfEncryptionKey =
+        AESKey(atKeysFile.defaultSelfEncryptionKey!);
+    return AtChopsImpl(atChopsKeys);
   }
 }

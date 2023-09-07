@@ -51,6 +51,7 @@ class AtOnboardingRequest {
 
 class AtOnboardingResponse {
   String atSign;
+  String? enrollmentId;
   AtOnboardingResponse(this.atSign);
   bool? isSuccessful;
   AtKeysFileData? atKeysData;
