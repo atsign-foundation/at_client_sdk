@@ -9,6 +9,7 @@ class AtAuthRequest {
   String atSign;
   AtAuthRequest(this.atSign, this.preference);
   AtClientPreference preference;
+  String? enrollmentId;
   AtKeysFileData? atKeysData;
   PkamAuthMode authMode = PkamAuthMode.keysFile;
 
