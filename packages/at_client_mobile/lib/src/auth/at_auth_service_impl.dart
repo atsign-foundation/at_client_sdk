@@ -166,6 +166,8 @@ class AtAuthServiceImpl implements AtAuthService {
       //4. try pkam auth to server
       var isPkamAuthenticated;
       try {
+        atChops ??= _createAtChops(atSecurityKeys);
+        _atLookUp!.atChops = atChops;
         isPkamAuthenticated = await _atLookUp!
             .pkamAuthenticate(enrollmentId: enrollmentIdFromServer);
       } on UnAuthenticatedException {
@@ -232,7 +234,6 @@ class AtAuthServiceImpl implements AtAuthService {
 
   Future<void> _init(AtSecurityKeys atSecurityKeys,
       {String? enrollmentId}) async {
-    atChops ??= _createAtChops(atSecurityKeys);
     await _initAtClient(atChops!, enrollmentId: enrollmentId);
     _atLookUp!.atChops = atChops;
     _atClient!.atChops = atChops;
