@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
+import 'package:at_client_mobile/src/auth/at_keys_file.dart';
 import 'package:at_client_mobile/src/auth/at_security_keys.dart';
 import 'package:at_client_mobile/src/auth/cram_authenticator.dart';
 import 'package:at_commons/at_builders.dart';
@@ -31,9 +32,24 @@ class AtAuthServiceImpl implements AtAuthService {
   AtAuthServiceImpl(this._atSign, this._atClientPreference);
 
   @override
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) {
-    // TODO: implement authenticate
-    throw UnimplementedError();
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
+    var atAuthResponse = AtAuthResponse(atAuthRequest.atSign);
+    switch (atAuthRequest.authMode) {
+      case PkamAuthMode.keysFile:
+        var decryptKey = atAuthRequest.atKeysData!.decryptionKey;
+        var decryptedKeys = _decodeAndDecryptKeys(
+            atAuthRequest.atKeysData!.jsonData, decryptKey);
+
+        break;
+      case PkamAuthMode.sim:
+        // TODO: Handle this case.
+        break;
+      case PkamAuthMode.apkam:
+        // TODO: Handle this case.
+        break;
+    }
+
+    return atAuthResponse;
   }
 
   @override
@@ -49,20 +65,19 @@ class AtAuthServiceImpl implements AtAuthService {
   }
 
   @override
-  Future<AtOnboardingResponse> onboard(
-      AtOnboardingRequest atOnboardingRequest) async {
+  Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest,
+      {String? cramSecret}) async {
     var atSign = atOnboardingRequest.atSign;
     var atOnboardingResponse = AtOnboardingResponse(atSign);
-
+    cramSecret ??= atOnboardingRequest.preference.cramSecret!;
     try {
       _atLookUp ??= AtLookupImpl(
           atSign,
           atOnboardingRequest.preference.rootDomain,
           atOnboardingRequest.preference.rootPort);
-      cramAuthenticator ??= CramAuthenticator(
-          atOnboardingRequest.preference.cramSecret!,
-          atOnboardingRequest.preference)
-        ..atLookup = _atLookUp;
+      cramAuthenticator ??=
+          CramAuthenticator(cramSecret, atOnboardingRequest.preference)
+            ..atLookup = _atLookUp;
       final cramAuthResult =
           await cramAuthenticator!.authenticate(atOnboardingRequest.atSign);
       _logger.finer('cram auth result for $atSign : $cramAuthResult');
@@ -175,6 +190,9 @@ class AtAuthServiceImpl implements AtAuthService {
         _logger.finer('cram secret delete response : $deleteResponse');
         await _persistKeysLocalSecondary(atSecurityKeys);
         atOnboardingResponse.isSuccessful = true;
+        atOnboardingResponse.atKeysData = AtKeysFileData(
+            jsonEncode(atSecurityKeys.toMap()),
+            atSecurityKeys.defaultSelfEncryptionKey!);
         atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
       }
     } on AtClientException {
@@ -249,5 +267,47 @@ class AtAuthServiceImpl implements AtAuthService {
     atChopsKeys.selfEncryptionKey =
         AESKey(atKeysFile.defaultSelfEncryptionKey!);
     return AtChopsImpl(atChopsKeys);
+  }
+
+  Map<String, String> _decodeAndDecryptKeys(
+      String jsonData, String decryptKey) {
+    var extractedJsonData = jsonDecode(jsonData);
+
+    var pkamPublicKey = EncryptionUtil.decryptValue(
+        extractedJsonData[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
+        decryptKey);
+
+    var pkamPrivateKeyFromFile =
+        extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE];
+    var pkamPrivateKey;
+    if (pkamPrivateKeyFromFile != null) {
+      pkamPrivateKey = EncryptionUtil.decryptValue(
+          extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
+          decryptKey);
+    }
+
+    var encryptionPublicKey = EncryptionUtil.decryptValue(
+        extractedJsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
+        decryptKey);
+
+    var encryptionPrivateKey = EncryptionUtil.decryptValue(
+        extractedJsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
+        decryptKey);
+
+    var atKeysMap = {
+      BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE: pkamPublicKey,
+      BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE: encryptionPrivateKey,
+      BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE: encryptionPublicKey,
+      BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE: decryptKey
+    };
+    if (pkamPrivateKey != null) {
+      atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
+          pkamPrivateKey;
+    }
+    atKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
+        extractedJsonData[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE];
+    atKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
+        extractedJsonData[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE];
+    return atKeysMap;
   }
 }

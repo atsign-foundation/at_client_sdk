@@ -34,7 +34,8 @@ abstract class AtAuthService {
   /// Step 7. delete cram secret from secondary server
   /// Set [atOnboardingRequest.publicKeyId] if pkam auth mode is [PkamAuthMode.sim]
   /// Set the AtClient preferences in [atOnboardingRequest.preference]
-  Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest);
+  Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest,
+      {String? cramSecret});
 
   Future<AtEnrollmentResponse> enroll(AtEnrollmentRequest atEnrollmentRequest);
 }
