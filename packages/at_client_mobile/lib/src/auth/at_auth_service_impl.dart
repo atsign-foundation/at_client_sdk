@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_client_mobile/src/auth/at_keys_file.dart';
 import 'package:at_client_mobile/src/auth/at_security_keys.dart';
@@ -16,6 +15,8 @@ import 'package:at_client_mobile/src/auth/pkam_authenticator.dart';
 import 'at_auth_service.dart';
 import 'package:at_utils/at_logger.dart';
 
+import 'enroll/at_enrollment_service.dart';
+
 class AtAuthServiceImpl implements AtAuthService {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
   PkamAuthenticator? pkamAuthenticator;
@@ -28,40 +29,69 @@ class AtAuthServiceImpl implements AtAuthService {
   AtServiceFactory? atServiceFactory;
   String _atSign;
   AtClientPreference _atClientPreference;
+  KeyChainManager keyChainManager = KeyChainManager.getInstance();
+  AtClientManager atClientManager = AtClientManager.getInstance();
+  AtEnrollmentService? atEnrollmentService;
 
   AtAuthServiceImpl(this._atSign, this._atClientPreference);
 
   @override
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
     var atAuthResponse = AtAuthResponse(atAuthRequest.atSign);
-    switch (atAuthRequest.authMode) {
-      case PkamAuthMode.keysFile:
-        var decryptKey = atAuthRequest.atKeysData!.decryptionKey;
-        var decryptedKeys = _decodeAndDecryptKeys(
-            atAuthRequest.atKeysData!.jsonData, decryptKey);
+    var decryptKey = atAuthRequest.atKeysData!.decryptionKey;
 
-        break;
-      case PkamAuthMode.sim:
-        // TODO: Handle this case.
-        break;
-      case PkamAuthMode.apkam:
-        // TODO: Handle this case.
-        break;
+    AtSecurityKeys atSecurityKeys;
+    // 1. check if atsign is already onboarded
+    if (await isOnboarded(atSign: atAuthRequest.atSign)) {
+      // read keys from keychain/local secondary
+      atSecurityKeys = await _readKeys(atAuthRequest.authMode);
+      var enrollmentId = atAuthRequest.enrollmentId;
+      if (enrollmentId == null || enrollmentId.isEmpty) {
+        enrollmentId = atSecurityKeys.enrollmentId;
+      }
+      await _init(atSecurityKeys, enrollmentId: enrollmentId);
+      return _pkamAuth(atAuthRequest.atSign);
+    } else {
+      // read keys file data
+      atSecurityKeys =
+          _decodeAndDecryptKeys(atAuthRequest.atKeysData!.jsonData, decryptKey);
+      if (atSecurityKeys.apkamPrivateKey == null ||
+          atSecurityKeys.apkamPrivateKey!.isEmpty) {
+        throw AtPrivateKeyNotFoundException(
+            'Unable to read PkamPrivateKey from provided atKeys file. Please provide a valid atKeys file',
+            exceptionScenario: ExceptionScenario.invalidValueProvided);
+      }
     }
 
+    // 2. Create atChops instance if not injected
+    atChops ??= _createAtChops(atSecurityKeys);
+    // 3. init at client
+    await _initAtClient(atChops!);
+
+    // 4. pkam auth using the created atClient instance
+    try {
+      atAuthResponse.isSuccessful = await atClientManager.atClient
+          .getRemoteSecondary()!
+          .atLookUp
+          .pkamAuthenticate(enrollmentId: atSecurityKeys.enrollmentId);
+    } on UnAuthenticatedException {
+      atAuthResponse.isSuccessful = false;
+    }
+
+    if (!atAuthResponse.isSuccessful) {
+      _logger.severe('Authentication failed. ${atAuthRequest.atSign}.');
+      atAuthResponse.isSuccessful = false;
+      return atAuthResponse;
+    }
+    // 5. if auth is successful,persist keys to keychain and local secondary
+    await _storeToKeyChainManager(atAuthRequest.atSign, atSecurityKeys);
+    await _persistKeysLocalSecondary(atSecurityKeys);
     return atAuthResponse;
   }
 
   @override
-  Future<AtEnrollmentResponse> enroll(AtEnrollmentRequest atEnrollmentRequest) {
-    // TODO: implement enroll
-    throw UnimplementedError();
-  }
-
-  @override
   Future<bool> isOnboarded({String? atSign}) {
-    // TODO: implement isOnboarded
-    throw UnimplementedError();
+    return _atClient!.isOnboarded();
   }
 
   @override
@@ -94,6 +124,80 @@ class AtAuthServiceImpl implements AtAuthService {
           .severe('exception in onboard -_activateNewAtSign : ${e.toString()}');
       rethrow;
     }
+  }
+
+  Future<AtSecurityKeys> _readKeys(PkamAuthMode authMode) async {
+    var atSecurityKeys = AtSecurityKeys();
+    if (authMode != PkamAuthMode.sim) {
+      var pkamPrivateKey = await keyChainManager.getPkamPrivateKey(_atSign);
+      if (pkamPrivateKey == null || pkamPrivateKey.isEmpty) {
+        pkamPrivateKey = await _atClient!.getLocalSecondary()!.getPrivateKey();
+      }
+      if (pkamPrivateKey == null || pkamPrivateKey.isEmpty) {
+        throw AtPrivateKeyNotFoundException(
+            'Pkam private key not found in keychain/local secondary');
+      }
+      atSecurityKeys.apkamPrivateKey = pkamPrivateKey;
+    }
+    var pkamPublicKey = await keyChainManager.getPkamPublicKey(_atSign);
+    if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
+      pkamPublicKey = await _atClient!.getLocalSecondary()!.getPrivateKey();
+    }
+    if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
+      throw AtPublicKeyNotFoundException(
+          'Pkam public key not found in keychain/local secondary');
+    }
+    atSecurityKeys.apkamPublicKey = pkamPublicKey;
+
+    var encryptionPublicKey =
+        await keyChainManager.getEncryptionPublicKey(_atSign);
+    if (encryptionPublicKey == null || encryptionPublicKey.isEmpty) {
+      encryptionPublicKey =
+          await _atClient!.getLocalSecondary()!.getEncryptionPublicKey(_atSign);
+    }
+    if (encryptionPublicKey == null || encryptionPublicKey.isEmpty) {
+      throw AtPublicKeyNotFoundException(
+          'Encryption public key not found in keychain/local secondary');
+    }
+    atSecurityKeys.defaultEncryptionPublicKey = encryptionPublicKey;
+
+    var encryptionPrivateKey =
+        await keyChainManager.getEncryptionPrivateKey(_atSign);
+    if (encryptionPrivateKey == null || encryptionPrivateKey.isEmpty) {
+      encryptionPrivateKey =
+          await _atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
+    }
+    if (encryptionPrivateKey == null || encryptionPrivateKey.isEmpty) {
+      throw AtPrivateKeyNotFoundException(
+          'Encryption private key not found in keychain/local secondary');
+    }
+    atSecurityKeys.defaultEncryptionPrivateKey = encryptionPrivateKey;
+
+    var selfEncryptionKey =
+        await keyChainManager.getSelfEncryptionAESKey(_atSign);
+    if (selfEncryptionKey == null || selfEncryptionKey.isEmpty) {
+      selfEncryptionKey =
+          await _atClient!.getLocalSecondary()!.getEncryptionSelfKey();
+    }
+    if (selfEncryptionKey == null || selfEncryptionKey.isEmpty) {
+      throw AtKeyNotFoundException(
+          'Self encryption key not found in keychain/local secondary');
+    }
+
+    atSecurityKeys.defaultSelfEncryptionKey = selfEncryptionKey;
+    return atSecurityKeys;
+  }
+
+  Future<AtAuthResponse> _pkamAuth(String atSign) async {
+    final atAuthResponse = AtAuthResponse(atSign);
+    try {
+      final pkamAuthResult = await pkamAuthenticator!.authenticate(atSign);
+      atAuthResponse.isSuccessful = pkamAuthResult.isSuccessful;
+    } on AtClientException catch (e) {
+      _logger.severe('pkam auth failed for atSign: $e');
+      atAuthResponse.isSuccessful = false;
+    }
+    return atAuthResponse;
   }
 
   Future<void> _activateNewAtSign(AtOnboardingRequest onboardingRequest,
@@ -202,6 +306,30 @@ class AtAuthServiceImpl implements AtAuthService {
     }
   }
 
+  /// Stores the atKeys to Key-Chain Manager.
+  Future<void> _storeToKeyChainManager(
+      String atsign, AtSecurityKeys atSecurityKeys) async {
+    await keyChainManager.storePkamKeysToKeychain(atsign,
+        privateKey: atSecurityKeys.apkamPrivateKey,
+        publicKey: atSecurityKeys.apkamPublicKey);
+
+    var atSignItem = await keyChainManager.readAtsign(name: atsign) ??
+        AtsignKey(atSign: atsign);
+    atSignItem = atSignItem.copyWith(
+        encryptionPrivateKey: atSecurityKeys.defaultEncryptionPrivateKey,
+        encryptionPublicKey: atSecurityKeys.defaultEncryptionPublicKey,
+        selfEncryptionKey: atSecurityKeys.defaultSelfEncryptionKey,
+        apkamSymmetricKey: atSecurityKeys.apkamSymmetricKey,
+        enrollmentId: atSecurityKeys.enrollmentId);
+
+    await keyChainManager.storeAtSign(atSign: atSignItem);
+
+    // Add atSign to the keychain.
+    await keyChainManager.storeCredentialToKeychain(atsign,
+        privateKey: atSecurityKeys.apkamPrivateKey,
+        publicKey: atSecurityKeys.apkamPublicKey);
+  }
+
   Future<void> _persistKeysLocalSecondary(AtSecurityKeys atSecurityKeys) async {
     await _atClient!
         .getLocalSecondary()!
@@ -270,45 +398,39 @@ class AtAuthServiceImpl implements AtAuthService {
     return AtChopsImpl(atChopsKeys);
   }
 
-  Map<String, String> _decodeAndDecryptKeys(
-      String jsonData, String decryptKey) {
+  AtSecurityKeys _decodeAndDecryptKeys(String jsonData, String decryptKey) {
     var extractedJsonData = jsonDecode(jsonData);
-
+    var atSecurityKeys = AtSecurityKeys();
     var pkamPublicKey = EncryptionUtil.decryptValue(
         extractedJsonData[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
         decryptKey);
-
+    atSecurityKeys.apkamPublicKey = pkamPublicKey;
     var pkamPrivateKeyFromFile =
         extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE];
-    var pkamPrivateKey;
     if (pkamPrivateKeyFromFile != null) {
-      pkamPrivateKey = EncryptionUtil.decryptValue(
+      atSecurityKeys.apkamPrivateKey = EncryptionUtil.decryptValue(
           extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
           decryptKey);
     }
 
-    var encryptionPublicKey = EncryptionUtil.decryptValue(
+    atSecurityKeys.defaultEncryptionPublicKey = EncryptionUtil.decryptValue(
         extractedJsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
         decryptKey);
 
-    var encryptionPrivateKey = EncryptionUtil.decryptValue(
+    atSecurityKeys.defaultEncryptionPrivateKey = EncryptionUtil.decryptValue(
         extractedJsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
         decryptKey);
 
-    var atKeysMap = {
-      BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE: pkamPublicKey,
-      BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE: encryptionPrivateKey,
-      BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE: encryptionPublicKey,
-      BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE: decryptKey
-    };
-    if (pkamPrivateKey != null) {
-      atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
-          pkamPrivateKey;
-    }
-    atKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
+    atSecurityKeys.apkamSymmetricKey =
         extractedJsonData[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE];
-    atKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
+    atSecurityKeys.enrollmentId =
         extractedJsonData[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE];
-    return atKeysMap;
+    return atSecurityKeys;
+  }
+
+  @override
+  Future<EnrollResponse> enroll(EnrollRequest atEnrollmentRequest) async {
+    var enrollResponse = await atEnrollmentService!.enroll(atEnrollmentRequest);
+    return enrollResponse;
   }
 }

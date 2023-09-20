@@ -37,7 +37,7 @@ abstract class AtAuthService {
   Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest,
       {String? cramSecret});
 
-  Future<AtEnrollmentResponse> enroll(AtEnrollmentRequest atEnrollmentRequest);
+  Future<EnrollResponse> enroll(EnrollRequest atEnrollmentRequest);
 }
 
 class AtOnboardingRequest {
@@ -58,6 +58,11 @@ class AtOnboardingResponse {
   AtKeysFileData? atKeysData;
 }
 
-class AtEnrollmentRequest {}
-
-class AtEnrollmentResponse {}
+class EnrollRequest {
+  String appName;
+  String deviceName;
+  int pkamRetryIntervalMins = 30;
+  String otp;
+  Map<String, String> namespaces;
+  EnrollRequest(this.appName, this.deviceName, this.otp, this.namespaces);
+}

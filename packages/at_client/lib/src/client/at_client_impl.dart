@@ -962,4 +962,21 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     return result.notificationID;
   }
+
+  @override
+  Future<bool> isOnboarded() async {
+    try {
+      // not checking pkam private key since it can be in secure element
+      await _localSecondary!.getPublicKey();
+      await _localSecondary!.getEncryptionPrivateKey();
+      await _localSecondary!.getEncryptionPublicKey(_atSign);
+      await _localSecondary!.getEncryptionSelfKey();
+    } on KeyNotFoundException {
+      rethrow;
+    } on Exception catch (e) {
+      _logger.severe('Exception in isOnboarded: $e');
+      rethrow;
+    }
+    return true;
+  }
 }

@@ -567,4 +567,6 @@ abstract class AtClient {
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;
+
+  Future<bool> isOnboarded();
 }
