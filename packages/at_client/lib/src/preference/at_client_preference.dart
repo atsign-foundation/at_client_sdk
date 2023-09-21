@@ -112,9 +112,14 @@ class AtClientPreference {
   //hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
+  // application/client name for apkam
   String? appName;
 
+  // device name for apkam
   String? deviceName;
+
+  // if set to true, the onboarded app will get privilege to approve enrollment requests
+  bool enableEnrollmentDuringOnboard = false;
 }
 
 @Deprecated("Use SyncService")

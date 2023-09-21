@@ -42,8 +42,7 @@ abstract class AtAuthService {
 
 class AtOnboardingRequest {
   String atSign;
-  AtOnboardingRequest(this.atSign, this.preference);
-  AtClientPreference preference;
+  AtOnboardingRequest(this.atSign);
   PkamAuthMode authMode = PkamAuthMode.keysFile;
 
   /// public key id if [authMode] is [PkamAuthMode.sim]

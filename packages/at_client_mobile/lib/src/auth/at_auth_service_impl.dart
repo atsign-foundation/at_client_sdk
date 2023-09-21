@@ -97,17 +97,20 @@ class AtAuthServiceImpl implements AtAuthService {
   @override
   Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest,
       {String? cramSecret}) async {
+    if (_atClientPreference.enableEnrollmentDuringOnboard &&
+        (_atClientPreference.appName == null ||
+            _atClientPreference.deviceName == null)) {
+      throw AtClientException.message(
+          'appName and deviceName are mandatory for onboarding. Please set the params in AtClientPreference');
+    }
     var atSign = atOnboardingRequest.atSign;
     var atOnboardingResponse = AtOnboardingResponse(atSign);
-    cramSecret ??= atOnboardingRequest.preference.cramSecret!;
+    cramSecret ??= _atClientPreference.cramSecret!;
     try {
       _atLookUp ??= AtLookupImpl(
-          atSign,
-          atOnboardingRequest.preference.rootDomain,
-          atOnboardingRequest.preference.rootPort);
-      cramAuthenticator ??=
-          CramAuthenticator(cramSecret, atOnboardingRequest.preference)
-            ..atLookup = _atLookUp;
+          atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
+      cramAuthenticator ??= CramAuthenticator(cramSecret, _atClientPreference)
+        ..atLookup = _atLookUp;
       final cramAuthResult =
           await cramAuthenticator!.authenticate(atOnboardingRequest.atSign);
       _logger.finer('cram auth result for $atSign : $cramAuthResult');
@@ -229,38 +232,22 @@ class AtAuthServiceImpl implements AtAuthService {
           encryptionKeyPair.privateKey.toString();
       atSecurityKeys.defaultSelfEncryptionKey = EncryptionUtil.generateAESKey();
       atSecurityKeys.apkamSymmetricKey = EncryptionUtil.generateAESKey();
-      //2.Send enroll request
-      var enrollBuilder = EnrollVerbBuilder()
-        ..appName = onboardingRequest.preference.appName
-        ..deviceName = onboardingRequest.preference.deviceName;
 
-      enrollBuilder.encryptedDefaultEncryptedPrivateKey =
-          EncryptionUtil.encryptValue(
-              atSecurityKeys.defaultEncryptionPrivateKey!,
-              atSecurityKeys.apkamSymmetricKey!);
-      enrollBuilder.encryptedDefaultSelfEncryptionKey =
-          EncryptionUtil.encryptValue(atSecurityKeys.defaultSelfEncryptionKey!,
-              atSecurityKeys.apkamSymmetricKey!);
-      enrollBuilder.apkamPublicKey = atSecurityKeys.apkamPublicKey;
-      var enrollResult = await _atLookUp!
-          .executeCommand(enrollBuilder.buildCommand(), auth: false);
-      //#TODO change the error codes
-      if (enrollResult == null || enrollResult.isEmpty) {
-        throw AtClientException(
-            'AT0401', 'Enrollment response is null or empty');
-      } else if (enrollResult.startsWith('error:')) {
-        throw AtClientException('AT0401', 'Enrollment error:$enrollResult');
+      //2.Send enroll request
+      String? enrollmentIdFromServer;
+      if (_atClientPreference.enableEnrollmentDuringOnboard) {
+        enrollmentIdFromServer =
+            await _sendOnboardingEnrollment(atSecurityKeys);
+        atSecurityKeys.enrollmentId = enrollmentIdFromServer;
+      } else {
+        // update pkam public key to server if enrollment is not set in preference
+        _logger.finer('Updating PkamPublicKey to remote secondary');
+        final pkamPublicKey = atSecurityKeys.apkamPublicKey;
+        String updateCommand = 'update:$AT_PKAM_PUBLIC_KEY $pkamPublicKey\n';
+        String? pkamUpdateResult =
+            await _atLookUp!.executeCommand(updateCommand, auth: false);
+        _logger.info('PkamPublicKey update result: $pkamUpdateResult');
       }
-      enrollResult = enrollResult.replaceFirst('data:', '');
-      _logger.finer('enrollResult: $enrollResult');
-      var enrollResultJson = jsonDecode(enrollResult);
-      var enrollmentIdFromServer = enrollResultJson[enrollmentId];
-      var enrollmentStatus = enrollResultJson['status'];
-      if (enrollmentStatus != 'approved') {
-        throw AtClientException('AT0401',
-            'initial enrollment is not approved. Status from server: $enrollmentStatus');
-      }
-      atSecurityKeys.enrollmentId = enrollmentIdFromServer;
       //3. Close connection to server
       try {
         await (_atLookUp! as AtLookupImpl).close();
@@ -304,6 +291,39 @@ class AtAuthServiceImpl implements AtAuthService {
     } on AtClientException {
       rethrow;
     }
+  }
+
+  Future<String> _sendOnboardingEnrollment(
+      AtSecurityKeys atSecurityKeys) async {
+    var enrollBuilder = EnrollVerbBuilder()
+      ..appName = _atClientPreference.appName
+      ..deviceName = _atClientPreference.deviceName;
+
+    enrollBuilder.encryptedDefaultEncryptedPrivateKey =
+        EncryptionUtil.encryptValue(atSecurityKeys.defaultEncryptionPrivateKey!,
+            atSecurityKeys.apkamSymmetricKey!);
+    enrollBuilder.encryptedDefaultSelfEncryptionKey =
+        EncryptionUtil.encryptValue(atSecurityKeys.defaultSelfEncryptionKey!,
+            atSecurityKeys.apkamSymmetricKey!);
+    enrollBuilder.apkamPublicKey = atSecurityKeys.apkamPublicKey;
+    var enrollResult = await _atLookUp!
+        .executeCommand(enrollBuilder.buildCommand(), auth: false);
+    //#TODO change the error codes
+    if (enrollResult == null || enrollResult.isEmpty) {
+      throw AtClientException('AT0401', 'Enrollment response is null or empty');
+    } else if (enrollResult.startsWith('error:')) {
+      throw AtClientException('AT0401', 'Enrollment error:$enrollResult');
+    }
+    enrollResult = enrollResult.replaceFirst('data:', '');
+    _logger.finer('enrollResult: $enrollResult');
+    var enrollResultJson = jsonDecode(enrollResult);
+    var enrollmentIdFromServer = enrollResultJson[enrollmentId];
+    var enrollmentStatus = enrollResultJson['status'];
+    if (enrollmentStatus != 'approved') {
+      throw AtClientException('AT0401',
+          'initial enrollment is not approved. Status from server: $enrollmentStatus');
+    }
+    return enrollmentIdFromServer;
   }
 
   /// Stores the atKeys to Key-Chain Manager.
