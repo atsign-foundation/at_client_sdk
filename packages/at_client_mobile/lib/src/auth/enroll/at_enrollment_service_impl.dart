@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/auth/at_auth_service.dart';
+import 'package:at_client_mobile/src/auth/at_security_keys.dart';
 import 'package:at_client_mobile/src/auth/enroll/at_enrollment_service.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_file_saver/at_file_saver.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
@@ -18,9 +21,11 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   AtClientPreference _atClientPreference;
   final StreamController<String> _pkamSuccessController =
       StreamController<String>();
+
   Stream<dynamic> get _onPkamSuccess => _pkamSuccessController.stream;
 
   AtEnrollmentServiceImpl(this._atSign, this._atClientPreference);
+
   @override
   Future<EnrollResponse> enroll(EnrollRequest atEnrollmentRequest) async {
     final Duration retryInterval =
@@ -102,15 +107,15 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
               enrollmentIdFromServer, atLookUpImpl),
           apkamSymmetricKey);
 
-      // var atSecurityKeys = AtSecurityKeys()
-      //   ..defaultEncryptionPrivateKey = decryptedEncryptionPrivateKey
-      //   ..defaultEncryptionPublicKey = defaultEncryptionPublicKey
-      //   ..apkamSymmetricKey = apkamSymmetricKey
-      //   ..defaultSelfEncryptionKey = decryptedSelfEncryptionKey
-      //   ..apkamPublicKey = apkamKeyPair.publicKey.toString()
-      //   ..apkamPrivateKey = apkamKeyPair.privateKey.toString();
-      // _logger.finer('Generating keys file for $enrollmentIdFromServer');
-      // await _generateAtKeysFile(enrollmentIdFromServer, atSecurityKeys);
+      var atSecurityKeys = AtSecurityKeys()
+        ..defaultEncryptionPrivateKey = decryptedEncryptionPrivateKey
+        ..defaultEncryptionPublicKey = defaultEncryptionPublicKey
+        ..apkamSymmetricKey = apkamSymmetricKey
+        ..defaultSelfEncryptionKey = decryptedSelfEncryptionKey
+        ..apkamPublicKey = apkamKeyPair.publicKey.toString()
+        ..apkamPrivateKey = apkamKeyPair.privateKey.toString();
+      _logger.finer('Generating keys file for $enrollmentIdFromServer');
+      await _generateAtKeysFile(enrollmentIdFromServer, atSecurityKeys);
     });
   }
 
@@ -232,5 +237,14 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
           'Exception while getting encrypted private key/self key from server: $e');
     }
     return selfEncryptionKeyFromServer;
+  }
+
+  Future<String> _generateAtKeysFile(
+      enrollmentIdFromServer, AtSecurityKeys atSecurityKeys) async {
+    String atKeysEncodedString = jsonEncode(atSecurityKeys.toMap());
+    String fileName = '${_atSign}_key';
+    String extension = '.atKeys';
+    return await FileSaver.instance.saveFile(
+        fileName, Uint8List.fromList(atKeysEncodedString.codeUnits), extension);
   }
 }
