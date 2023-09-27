@@ -533,8 +533,13 @@ class KeychainUtil {
 
   static Future<Map<String, String>> getEncryptedKeys(String atsign) async {
     var aesEncryptedKeys = {};
+    AtsignKey? atSignKey = await _keyChainManager.readAtsign(name: atsign);
+    if (atSignKey == null) {
+      throw AtException(
+          'Keys not found in keychain manager for atSign: $atsign');
+    }
     // encrypt pkamPublicKey with AES key
-    var pkamPublicKey = await getPkamPublicKey(atsign);
+    var pkamPublicKey = atSignKey.pkamPublicKey;
     var aesEncryptionKey = await getAESKey(atsign);
     var encryptedPkamPublicKey =
         EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
@@ -542,30 +547,32 @@ class KeychainUtil {
         encryptedPkamPublicKey;
 
     // encrypt pkamPrivateKey with AES key
-    var pkamPrivateKey = await getPkamPrivateKey(atsign);
+    var pkamPrivateKey = atSignKey.pkamPrivateKey;
     var encryptedPkamPrivateKey =
         EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
     // encrypt encryption public key with AES key
-    var encryptionPublicKey = await getEncryptionPublicKey(atsign);
+    var encryptionPublicKey = atSignKey.encryptionPublicKey;
     var encryptedEncryptionPublicKey =
         EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
     // encrypt encryption private key with AES key
-    var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
+    var encryptionPrivateKey = atSignKey.encryptionPrivateKey;
     var encryptedEncryptionPrivateKey =
         EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
     aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
     // store  self encryption key as it is.This will be same as AES key in key zip file
-    var selfEncryptionKey = await getSelfEncryptionKey(atsign);
+    var selfEncryptionKey = atSignKey.selfEncryptionKey;
     aesEncryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
         selfEncryptionKey;
+    aesEncryptedKeys[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] = atSignKey.enrollmentId;
+
     return Map<String, String>.from(aesEncryptedKeys);
   }
 }

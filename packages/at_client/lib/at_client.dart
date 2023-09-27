@@ -31,3 +31,4 @@ export 'package:at_client/src/rpc/at_rpc.dart';
 export 'package:at_client/src/at_collection/at_collection_model.dart';
 @experimental
 export 'package:at_client/src/at_collection/at_collection_model_factory.dart';
+export 'package:at_client/src/enrollment/enrollment_request.dart';
