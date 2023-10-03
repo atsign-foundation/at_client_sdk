@@ -81,6 +81,7 @@ class AtClientManager {
     var previousAtClient = _currentAtClient;
     _currentAtClient = await serviceFactory
         .atClient(_atSign, namespace, preference, this, atChops: atChops);
+    (_currentAtClient as AtClientImpl).enrollmentId = enrollmentId;
 
     final switchAtSignEvent =
         SwitchAtSignEvent(previousAtClient, _currentAtClient!);

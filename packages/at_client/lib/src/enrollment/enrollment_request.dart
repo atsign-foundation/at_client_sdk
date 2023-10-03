@@ -8,6 +8,8 @@ class Enrollment {
   final Map<String, String> _namespaces;
   final String? _otp;
   final String? _aPKAMPublicKey;
+  String? encryptedDefaultEncryptedPrivateKey;
+  String? encryptedDefaultSelfEncryptionKey;
   final EnrollOperationEnum _enrollOperationEnum;
 
   String? get enrollmentId => _enrollmentId;

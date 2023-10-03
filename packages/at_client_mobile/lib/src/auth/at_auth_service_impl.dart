@@ -41,6 +41,9 @@ class AtAuthServiceImpl implements AtAuthService {
     var atAuthResponse = AtAuthResponse(atAuthRequest.atSign);
     String decryptKey;
     if (atAuthRequest.atKeysData == null) {
+      /* TODO: When keychain manager does not have the self encryption AES key
+           data for an atSign, this results into null pointer exception.
+           Throw exception*/
       decryptKey = (await keyChainManager
           .getSelfEncryptionAESKey(atAuthRequest.atSign))!;
     } else {

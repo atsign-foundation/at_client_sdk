@@ -116,6 +116,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   late final AtSignLogger _logger;
 
+  String? enrollmentId;
+
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
@@ -1005,7 +1007,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<EnrollmentResponse> _handleApproveOperation(
       Enrollment enrollment) async {
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
-      ..enrollmentId = enrollment.enrollmentId;
+      ..enrollmentId = enrollment.enrollmentId
+      ..operation = EnrollOperationEnum.approve;
     String? enrollResponse = await _remoteSecondary
         ?.executeCommand(enrollVerbBuilder.buildCommand(), auth: true);
     enrollResponse = enrollResponse?.replaceAll('data:', '');
@@ -1018,7 +1021,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   Future<EnrollmentResponse> _handleDenyOperation(Enrollment enrollment) async {
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
-      ..enrollmentId = enrollment.enrollmentId;
+      ..enrollmentId = enrollment.enrollmentId
+      ..operation = EnrollOperationEnum.deny;
     String? enrollResponse = await _remoteSecondary
         ?.executeCommand(enrollVerbBuilder.buildCommand(), auth: true);
     enrollResponse = enrollResponse?.replaceAll('data:', '');

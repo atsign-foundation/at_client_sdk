@@ -29,7 +29,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   @override
   Future<EnrollResponse> enroll(EnrollRequest atEnrollmentRequest) async {
     final Duration retryInterval =
-        Duration(minutes: atEnrollmentRequest.pkamRetryIntervalMins);
+        Duration(seconds: atEnrollmentRequest.pkamRetryIntervalMins);
     _logger.info('Generating apkam encryption keypair and apkam symmetric key');
     //1. Generate new apkam key pair and apkam symmetric key
     var apkamKeyPair = keyChainManager.generateKeyPair();
