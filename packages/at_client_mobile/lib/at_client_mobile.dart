@@ -8,3 +8,4 @@ export 'src/onboarding_status.dart';
 export 'src/auth/at_auth_service.dart';
 export 'src/auth/at_auth_service_impl.dart';
 export 'src/auth/at_authenticator.dart';
+export 'src/auth/at_keys_file.dart';

@@ -425,10 +425,10 @@ class AtAuthServiceImpl implements AtAuthService {
   AtSecurityKeys _decodeAndDecryptKeys(String jsonData, String decryptKey) {
     var extractedJsonData = jsonDecode(jsonData);
     var atSecurityKeys = AtSecurityKeys();
-    var pkamPublicKey = EncryptionUtil.decryptValue(
+    atSecurityKeys.apkamPublicKey = EncryptionUtil.decryptValue(
         extractedJsonData[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
         decryptKey);
-    atSecurityKeys.apkamPublicKey = pkamPublicKey;
+
     var pkamPrivateKeyFromFile =
         extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE];
     if (pkamPrivateKeyFromFile != null) {
@@ -449,6 +449,8 @@ class AtAuthServiceImpl implements AtAuthService {
         extractedJsonData[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE];
     atSecurityKeys.enrollmentId =
         extractedJsonData[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE];
+    atSecurityKeys.defaultSelfEncryptionKey =
+        extractedJsonData[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE];
     return atSecurityKeys;
   }
 
