@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -241,10 +242,45 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
 
   Future<String> _generateAtKeysFile(
       enrollmentIdFromServer, AtSecurityKeys atSecurityKeys) async {
-    String atKeysEncodedString = jsonEncode(atSecurityKeys.toMap());
-    String fileName = '${_atSign}_key';
-    String extension = '.atKeys';
-    return await FileSaver.instance.saveFile(
-        fileName, Uint8List.fromList(atKeysEncodedString.codeUnits), extension);
+    Map<String, String> encryptedKeys = {};
+
+    encryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] = EncryptionUtil.encryptValue(atSecurityKeys.apkamPrivateKey!, atSecurityKeys.defaultSelfEncryptionKey!);
+    encryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] = EncryptionUtil.encryptValue(atSecurityKeys.apkamPublicKey!, atSecurityKeys.defaultSelfEncryptionKey!);
+    encryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] = EncryptionUtil.encryptValue(atSecurityKeys.defaultEncryptionPrivateKey!, atSecurityKeys.defaultSelfEncryptionKey!);
+    encryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] = EncryptionUtil.encryptValue(atSecurityKeys.defaultEncryptionPublicKey!,atSecurityKeys.defaultSelfEncryptionKey!);
+    encryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] = atSecurityKeys.defaultSelfEncryptionKey!;
+    encryptedKeys[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] = atSecurityKeys.apkamSymmetricKey!;
+    encryptedKeys[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] = enrollmentIdFromServer;
+    encryptedKeys[_atSign] = atSecurityKeys.defaultSelfEncryptionKey!;
+
+    String atKeysEncodedString = jsonEncode(encryptedKeys);
+    String fileName = '${_atSign}_apkam_key';
+    String extension = 'atKeys';
+    String desktopPath = await FileSaver.instance.saveFile(
+        fileName, Uint8List.fromList(atKeysEncodedString.codeUnits), extension,
+        mimeType: MimeType.OTHER);
+    _logger.info('atKeys file save to $desktopPath');
+    return desktopPath;
+  }
+
+  Future<EnrollmentResponse> approve(
+      Enrollment enrollment, String encryptedAPKAMSymmetricKey) async {
+    String? defaultEncryptionPrivateKey =
+        await keyChainManager.getEncryptionPrivateKey(_atSign);
+    String decryptedAPKAMSymmetricKey = EncryptionUtil.decryptKey(
+        encryptedAPKAMSymmetricKey, defaultEncryptionPrivateKey!);
+
+    enrollment.encryptedDefaultEncryptedPrivateKey =
+        EncryptionUtil.encryptValue(
+            defaultEncryptionPrivateKey, decryptedAPKAMSymmetricKey);
+
+    String? defaultSelfEncryptionKey =
+        await keyChainManager.getSelfEncryptionAESKey(_atSign);
+    enrollment.encryptedDefaultSelfEncryptionKey = EncryptionUtil.encryptValue(
+        defaultSelfEncryptionKey!, decryptedAPKAMSymmetricKey);
+
+    var enrollmentResponse =
+        await AtClientManager.getInstance().atClient.enroll(enrollment);
+    return enrollmentResponse;
   }
 }

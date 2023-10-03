@@ -1008,7 +1008,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       Enrollment enrollment) async {
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..enrollmentId = enrollment.enrollmentId
-      ..operation = EnrollOperationEnum.approve;
+      ..operation = EnrollOperationEnum.approve
+      ..encryptedDefaultEncryptedPrivateKey =
+          enrollment.encryptedDefaultEncryptedPrivateKey
+      ..encryptedDefaultSelfEncryptionKey =
+          enrollment.encryptedDefaultSelfEncryptionKey;
+
     String? enrollResponse = await _remoteSecondary
         ?.executeCommand(enrollVerbBuilder.buildCommand(), auth: true);
     enrollResponse = enrollResponse?.replaceAll('data:', '');
