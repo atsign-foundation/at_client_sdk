@@ -104,7 +104,7 @@ class AtClientValidation {
     // If namespace is not set on key and in preferences, throw exception
     if ((atKey.namespace == null || atKey.namespace!.isEmpty) &&
         (atClientPreference.namespace == null ||
-            atClientPreference.namespace!.isEmpty)) {
+            atClientPreference.namespace!.isEmpty) && !atKey.isLocal) {
       throw AtKeyException('namespace is mandatory');
     }
     // validate metadata
