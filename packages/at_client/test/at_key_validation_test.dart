@@ -37,4 +37,47 @@ void main() {
             .setCurrentAtSign(atSign, namespace, preference),
         throwsA(predicate((dynamic e) => e is InvalidAtSignException)));
   });
+
+  test('Verify namespace is mandatory for public key', () {
+    AtKey atKey = AtKey.public('key_no_namespace', sharedBy: '@noname').build();
+    AtClientPreference preference = AtClientPreference()..namespace = null;
+
+    expect(
+        () => AtClientValidation.validatePutRequest(
+            atKey, 'dummyvalue', preference),
+        throwsA(predicate((dynamic e) =>
+            e is AtKeyException && e.message == 'namespace is mandatory')));
+  });
+
+  test('Verify namespace is mandatory for private key', () {
+    AtKey atKey = AtKey.private('key_no_namespace1').build()
+      ..sharedBy = '@noname1';
+    AtClientPreference preference = AtClientPreference()..namespace = null;
+
+    expect(
+        () => AtClientValidation.validatePutRequest(
+            atKey, 'dummyvalue', preference),
+        throwsA(predicate((dynamic e) =>
+            e is AtKeyException && e.message == 'namespace is mandatory')));
+  });
+
+  test('Verify namespace is mandatory for shared key', () {
+    AtKey atKey = (AtKey.shared('key_no_namespace2', namespace: 'namespace', sharedBy: '@sharer')
+          ..sharedWith('@sharee')).build();
+    AtClientPreference preference = AtClientPreference()..namespace = null;
+
+    expect(
+        () => AtClientValidation.validatePutRequest(
+            atKey, 'dummyvalue', preference),
+        throwsA(predicate((dynamic e) =>
+            e is AtKeyException && e.message == 'namespace is mandatory')));
+  });
+
+  test('Verify namespace is NOT mandatory for local key', () {
+    AtKey atKey = AtKey.local('key_no_namespace3', '@sharer').build();
+    AtClientPreference preference = AtClientPreference()..namespace = null;
+    // validatePutRequest() has a return type of void
+    // error-less execution of this method should be considered as test passing
+    AtClientValidation.validatePutRequest(atKey, 'dummyvalue', preference);
+  });
 }
