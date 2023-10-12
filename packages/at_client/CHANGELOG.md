@@ -1,3 +1,6 @@
+## 3.0.65
+- feat: apkam changes for at_onboarding_cli
+- build: updated at_commons to `'3.0.55'`, at_chops to `'1.0.4`, at_lookup to `'3.0.40'` 
 ## 3.0.64
 - Made ConnectivityListener configurable, and removed some unnecessary network 
   availability checks

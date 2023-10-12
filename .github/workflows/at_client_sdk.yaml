@@ -20,12 +20,12 @@ jobs:
   unit_tests_and_code_analysis:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4.0.0
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
 
       # Note: This workflow uses the latest stable version of the Dart SDK.
       # You can specify other versions if desired, see documentation here:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
-      - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
+      - uses: dart-lang/setup-dart@8a4b97ea2017cc079571daec46542f76189836b1 # v1.5.1
         with:
           sdk: stable
 
@@ -93,12 +93,12 @@ jobs:
   functional_tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4.0.0
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
 
       # Note: This workflow uses the latest stable version of the Dart SDK.
       # You can specify other versions if desired, see documentation here:
       # https://github.com/dart-lang/setup-dart/blob/main/README.md
-      - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
+      - uses: dart-lang/setup-dart@8a4b97ea2017cc079571daec46542f76189836b1 # v1.5.1
         with:
           sdk: stable
 
@@ -171,8 +171,8 @@ jobs:
     needs: [ end2end_tests_prep ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4.0.0
-      - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - uses: dart-lang/setup-dart@8a4b97ea2017cc079571daec46542f76189836b1 # v1.5.1
         with:
           sdk: stable
 
@@ -222,8 +222,8 @@ jobs:
     if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4.0.0
-      - uses: dart-lang/setup-dart@d6a63dab3335f427404425de0fbfed4686d93c4f # v1.5.0
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - uses: dart-lang/setup-dart@8a4b97ea2017cc079571daec46542f76189836b1 # v1.5.1
         with:
           sdk: stable
 
