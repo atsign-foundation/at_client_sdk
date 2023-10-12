@@ -62,7 +62,7 @@ void main() {
   });
 
   test('Verify namespace is mandatory for shared key', () {
-    AtKey atKey = (AtKey.shared('key_no_namespace2', namespace: 'namespace', sharedBy: '@sharer')
+    AtKey atKey = (AtKey.shared('key_no_namespace2', namespace: null, sharedBy: '@sharer')
           ..sharedWith('@sharee')).build();
     AtClientPreference preference = AtClientPreference()..namespace = null;
 
