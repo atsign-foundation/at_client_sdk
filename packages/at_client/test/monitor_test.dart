@@ -53,6 +53,7 @@ void main() {
   atClientPreference.decryptPackets = true;
   atClientPreference.tlsKeysSavePath = fakeTlsKeysSavePath;
   atClientPreference.pathToCerts = fakeCertsLocation;
+  late AtSigningResult mockSigningResult;
 
   setUp(() {
     reset(mockRemoteSecondary);
@@ -60,7 +61,6 @@ void main() {
     reset(mockOutboundConnection);
     reset(mockMonitorOutboundConnectionFactory);
     reset(mockAtChops);
-    atClientPreference.useAtChops = false;
     when(() => mockRemoteSecondary.findSecondaryUrl())
         .thenAnswer((_) async => fakeSecondaryUrl);
     when(() => mockOutboundConnection.getSocket())
@@ -93,6 +93,9 @@ void main() {
     });
     when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
         .thenAnswer((Invocation invocation) async {});
+    mockSigningResult = AtSigningResult()..result = 'mock_signing_result';
+    registerFallbackValue(FakeAtSigningInput());
+    when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
   });
 
   group('Monitor socket response handling', () {
@@ -114,7 +117,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       Future<void> monitorStartFuture =
           monitor.start(lastNotificationTime: null);
@@ -146,7 +150,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       expect(monitor.heartbeatInterval,
           atClientPreference.monitorHeartbeatInterval);
@@ -171,7 +176,8 @@ void main() {
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
-          monitorHeartbeatInterval: customHeartbeatInterval);
+          monitorHeartbeatInterval: customHeartbeatInterval,
+          atChops: mockAtChops);
 
       expect(monitor.heartbeatInterval, customHeartbeatInterval);
       expect(
@@ -193,7 +199,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       Future<void> monitorStartFuture =
           monitor.start(lastNotificationTime: null);
@@ -221,7 +228,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       int lastNotificationTime =
           DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
@@ -256,7 +264,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       Future<void> monitorStartFuture = monitor.start();
       await monitorStartFuture;
@@ -273,7 +282,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       Future<void> monitorStartFuture =
           monitor.start(lastNotificationTime: null);
@@ -295,7 +305,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       Future<void> monitorStartFuture =
           monitor.start(lastNotificationTime: null);
@@ -320,7 +331,8 @@ void main() {
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
           monitorHeartbeatInterval:
-              Duration(milliseconds: heartbeatIntervalMillis));
+              Duration(milliseconds: heartbeatIntervalMillis),
+          atChops: mockAtChops);
 
       int numHeartbeatsSent = 0;
       when(() => mockOutboundConnection.write("noop:0\n"))
@@ -393,7 +405,8 @@ void main() {
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
-          monitorHeartbeatInterval: heartbeatInterval);
+          monitorHeartbeatInterval: heartbeatInterval,
+          atChops: mockAtChops);
 
       await monitor.start(lastNotificationTime: null);
 
@@ -431,7 +444,8 @@ void main() {
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
           monitorHeartbeatInterval:
-              Duration(milliseconds: heartbeatIntervalMillis));
+              Duration(milliseconds: heartbeatIntervalMillis),
+          atChops: mockAtChops);
 
       int numHeartbeatsSent = 0;
       bool sendHeartbeatResponse = true;
@@ -550,7 +564,8 @@ void main() {
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
           monitorHeartbeatInterval:
-              Duration(milliseconds: heartbeatIntervalMillis));
+              Duration(milliseconds: heartbeatIntervalMillis),
+          atChops: mockAtChops);
 
       // Setup the heartbeat request-response mocking
       int numHeartbeatRequests = 0;
@@ -626,7 +641,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
 
       expect(
           () async => await monitor.getQueueResponse(maxWaitTimeInMillis: 10),
@@ -644,7 +660,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
       monitor.addMonitorResponseToQueue('data:success');
 
       var response = await monitor.getQueueResponse();
@@ -662,7 +679,8 @@ void main() {
           () => print('onRetry called'),
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
-              mockMonitorOutboundConnectionFactory);
+              mockMonitorOutboundConnectionFactory,
+          atChops: mockAtChops);
       monitor.addMonitorResponseToQueue(
           'error: AT0003 - Invalid syntax exception');
 
@@ -674,7 +692,6 @@ void main() {
       test('test monitor start when useAtChops is true', () async {
         AtSigningResult mockSigningResult = AtSigningResult()
           ..result = 'mock_signing_result';
-        atClientPreference.useAtChops = true;
         registerFallbackValue(FakeAtSigningInput());
         when(() => mockAtChops.sign(any()))
             .thenAnswer((_) => mockSigningResult);

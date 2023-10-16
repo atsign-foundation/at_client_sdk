@@ -64,17 +64,9 @@ class PutRequestTransformer
       if (encryptionPrivateKey.isNull) {
         throw AtPrivateKeyNotFoundException('Failed to sign the public data');
       }
-      //# TODO remove else block once atChops once testing is good
-      if (_atClient.getPreferences()!.useAtChops) {
-        final signingResult = _atClient.atChops!
-            // ignore: deprecated_member_use
-            .signString(updateVerbBuilder.value, SigningKeyType.signingSha256);
-        updateVerbBuilder.dataSignature = signingResult.result;
-      } else {
-        // ignore: deprecated_member_use_from_same_package
-        updateVerbBuilder.dataSignature = await SignInPublicData.signInData(
-            updateVerbBuilder.value, encryptionPrivateKey!);
-      }
+      final atSigningInput = AtSigningInput(updateVerbBuilder.value);
+      final signingResult = _atClient.atChops!.sign(atSigningInput);
+      updateVerbBuilder.dataSignature = signingResult.result;
       // Encode the public data if it contains new line characters
       if (updateVerbBuilder.value.contains('\n')) {
         updateVerbBuilder.value =

@@ -268,29 +268,20 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    if (_preference.useAtChops) {
-      _logger.finer('Using AtChops to do the PKAM signing');
-      final atSigningInput = AtSigningInput(fromResponse)
-        ..signingAlgoType = _preference.signingAlgoType
-        ..hashingAlgoType = _preference.hashingAlgoType
-        ..signingMode = AtSigningMode.pkam;
-      var signingResult = atChops!.sign(atSigningInput);
-      var pkamBuilder = PkamVerbBuilder()
-        ..signingAlgo = _preference.signingAlgoType.name
-        ..hashingAlgo = _preference.hashingAlgoType.name
-        ..enrollmentlId = _enrollmentId
-        ..signature = signingResult.result;
-      var pkamCommand = pkamBuilder.buildCommand();
-      _logger.finer('Sending command $pkamCommand');
-      await _monitorConnection!.write(pkamCommand);
-    } else {
-      var key = RSAPrivateKey.fromString(_preference.privateKey!);
-      var sha256signature =
-          key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
-      var signature = base64Encode(sha256signature);
-      _logger.finer('Authenticating the monitor connection: pkam:$signature');
-      await _monitorConnection!.write('pkam:$signature\n');
-    }
+    _logger.finer('Using AtChops to do the PKAM signing');
+    final atSigningInput = AtSigningInput(fromResponse)
+      ..signingAlgoType = _preference.signingAlgoType
+      ..hashingAlgoType = _preference.hashingAlgoType
+      ..signingMode = AtSigningMode.pkam;
+    var signingResult = atChops!.sign(atSigningInput);
+    var pkamBuilder = PkamVerbBuilder()
+      ..signingAlgo = _preference.signingAlgoType.name
+      ..hashingAlgo = _preference.hashingAlgoType.name
+      ..enrollmentlId = _enrollmentId
+      ..signature = signingResult.result;
+    var pkamCommand = pkamBuilder.buildCommand();
+    _logger.finer('Sending command $pkamCommand');
+    await _monitorConnection!.write(pkamCommand);
 
     var pkamResponse = await getQueueResponse();
     if (!pkamResponse.contains('success')) {
