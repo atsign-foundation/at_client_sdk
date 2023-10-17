@@ -14,5 +14,5 @@ dependencies:
 dev_dependencies:
   test: ^1.24.3
   lints: ^2.0.0
-  at_demo_data: ^1.0.0
+  at_demo_data: ^1.0.1
   coverage: ^1.5.0

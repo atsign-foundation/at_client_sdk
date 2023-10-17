@@ -1,3 +1,12 @@
+## 3.0.65
+- feat: apkam changes for at_onboarding_cli
+- build: updated at_commons to `'3.0.55'`, at_chops to `'1.0.4`, at_lookup to `'3.0.40'` 
+## 3.0.64
+- Made ConnectivityListener configurable, and removed some unnecessary network 
+  availability checks
+- fix: wrap Monitor's call to `socket.listen()` in a runZonedGuarded block
+## 3.0.63
+- fix: Fixed bug in AtRpc.sendRequest which was causing repeat sends of requests
 ## 3.0.62
 - fix: skip reserved keys during sync conflict checking
 - build: updated dependency on http package to `'>=0.13.5 <2.0.0'`

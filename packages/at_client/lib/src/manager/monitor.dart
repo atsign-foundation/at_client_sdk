@@ -8,7 +8,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
@@ -54,8 +53,6 @@ class Monitor {
 
   final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
 
-  late MonitorConnectivityChecker _monitorConnectivityChecker;
-
   late MonitorOutboundConnectionFactory _monitorOutboundConnectionFactory;
 
   bool _closeOpInProgress = false;
@@ -83,6 +80,8 @@ class Monitor {
   get heartbeatInterval => _heartbeatInterval;
 
   final AtChops? atChops;
+
+  String? _enrollmentId;
 
   final int newLineCodeUnit = 10;
   final int atCharCodeUnit = 64;
@@ -121,18 +120,17 @@ class Monitor {
   /// When [retry] is true
   ////
   Monitor(
-    Function onResponse,
-    Function onError,
-    String atSign,
-    AtClientPreference preference,
-    MonitorPreference monitorPreference,
-    Function retryCallBack, {
-    RemoteSecondary? remoteSecondary,
-    MonitorConnectivityChecker? monitorConnectivityChecker,
-    MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-    Duration? monitorHeartbeatInterval,
-    this.atChops,
-  }) {
+      Function onResponse,
+      Function onError,
+      String atSign,
+      AtClientPreference preference,
+      MonitorPreference monitorPreference,
+      Function retryCallBack,
+      {RemoteSecondary? remoteSecondary,
+      MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
+      Duration? monitorHeartbeatInterval,
+      this.atChops,
+      String? enrollmentId}) {
     _logger = AtSignLogger('Monitor ($atSign)');
     _onResponse = onResponse;
     _onError = onError;
@@ -141,11 +139,11 @@ class Monitor {
     _regex = monitorPreference.regex;
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
+    _enrollmentId = enrollmentId;
     _remoteSecondary = remoteSecondary ??
-        RemoteSecondary(atSign, preference, atChops: atChops);
+        RemoteSecondary(atSign, preference,
+            atChops: atChops, enrollmentId: enrollmentId);
     _retryCallBack = retryCallBack;
-    _monitorConnectivityChecker =
-        monitorConnectivityChecker ?? MonitorConnectivityChecker();
     _monitorOutboundConnectionFactory =
         monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
     _heartbeatInterval =
@@ -171,17 +169,21 @@ class Monitor {
       _lastNotificationTime = lastNotificationTime;
     }
     try {
-      await _checkConnectivity();
-
       //1. Get a new outbound connection dedicated to monitor verb.
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
-      _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
-        _logger.info(
-            'socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
-        _callCloseStopAndRetry();
-      }, onError: (error) {
-        _logger.warning('socket.listen onError called with: $error');
+      runZonedGuarded(() {
+        _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
+          _logger.info(
+              'socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
+          _callCloseStopAndRetry();
+        }, onError: (error) {
+          _logger.warning('socket.listen onError called with: $error');
+          _handleError(error);
+        });
+      }, (Object error, StackTrace stackTrace) {
+        _logger.warning(
+            'runZonedGuarded received socket error $error - calling _handleError');
         _handleError(error);
       });
       await _authenticateConnection();
@@ -273,8 +275,12 @@ class Monitor {
         ..hashingAlgoType = _preference.hashingAlgoType
         ..signingMode = AtSigningMode.pkam;
       var signingResult = atChops!.sign(atSigningInput);
-      var pkamCommand =
-          'pkam:signingAlgo:${_preference.signingAlgoType.name}:hashingAlgo:${_preference.hashingAlgoType.name}:${signingResult.result}\n';
+      var pkamBuilder = PkamVerbBuilder()
+        ..signingAlgo = _preference.signingAlgoType.name
+        ..hashingAlgo = _preference.hashingAlgoType.name
+        ..enrollmentlId = _enrollmentId
+        ..signature = signingResult.result;
+      var pkamCommand = pkamBuilder.buildCommand();
       _logger.finer('Sending command $pkamCommand');
       await _monitorConnection!.write(pkamCommand);
     } else {
@@ -341,7 +347,8 @@ class Monitor {
   }
 
   String _buildMonitorCommand() {
-    var monitorVerbBuilder = MonitorVerbBuilder();
+    var monitorVerbBuilder = MonitorVerbBuilder()
+      ..selfNotificationsEnabled = true;
     if (_regex != null && _regex!.isNotEmpty) {
       monitorVerbBuilder.regex = _regex;
     }
@@ -388,10 +395,6 @@ class Monitor {
           'Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
       _onError(e);
     }
-  }
-
-  Future<void> _checkConnectivity() async {
-    await _monitorConnectivityChecker.checkConnectivity(_remoteSecondary);
   }
 
   /// Handles messages on the inbound client's connection.
@@ -452,16 +455,6 @@ class Monitor {
 }
 
 enum MonitorStatus { notStarted, started, stopped, errored }
-
-class MonitorConnectivityChecker {
-  Future<void> checkConnectivity(RemoteSecondary remoteSecondary) async {
-    if (!(await NetworkUtil().isNetworkAvailable())) {
-      throw AtConnectException(
-          'Monitor connectivity checker: Internet connection unavailable');
-    }
-    return;
-  }
-}
 
 class MonitorOutboundConnectionFactory {
   Future<OutboundConnection> createConnection(String secondaryUrl,

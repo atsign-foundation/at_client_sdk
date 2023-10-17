@@ -1,3 +1,8 @@
+## 3.2.12
+- fix: Fixed the issue biometric_storage dependency not working on Windows when using Dart 3
+## 3.2.11
+- chore: Upgraded biometric_storage dependency to 5.0.0 
+- chore: Upgraded package_info_plus dependency to 4.0.2 
 ## 3.2.10
 - fix: Fixed incorrect import statements in at_client_mobile/example which are
   causing analysis errors in dart 3

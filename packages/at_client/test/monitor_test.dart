@@ -12,19 +12,6 @@ import 'package:test/test.dart';
 
 import 'package:mocktail/mocktail.dart';
 
-class MockMonitorConnectivityChecker extends Mock
-    implements MonitorConnectivityChecker {
-  bool shouldFail = false;
-  @override
-  Future<void> checkConnectivity(RemoteSecondary remoteSecondary) async {
-    if (shouldFail) {
-      throw Exception('mock check connectivity - No No No!');
-    } else {
-      print('mock check connectivity - OK');
-    }
-  }
-}
-
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockSecureSocket extends Mock implements SecureSocket {}
@@ -47,8 +34,6 @@ void main() {
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   MonitorOutboundConnectionFactory mockMonitorOutboundConnectionFactory =
       MockMonitorOutboundConnectionFactory();
-  MockMonitorConnectivityChecker mockMonitorConnectivityChecker =
-      MockMonitorConnectivityChecker();
   OutboundConnection mockOutboundConnection = MockOutboundConnection();
   SecureSocket mockSocket = MockSecureSocket();
   MonitorPreference monitorPreference = MonitorPreference()..keepAlive = true;
@@ -70,15 +55,12 @@ void main() {
   atClientPreference.pathToCerts = fakeCertsLocation;
 
   setUp(() {
-    reset(mockMonitorConnectivityChecker);
     reset(mockRemoteSecondary);
     reset(mockSocket);
     reset(mockOutboundConnection);
     reset(mockMonitorOutboundConnectionFactory);
     reset(mockAtChops);
-    mockMonitorConnectivityChecker.shouldFail = false;
     atClientPreference.useAtChops = false;
-    when(() => mockRemoteSecondary.isAvailable()).thenAnswer((_) async => true);
     when(() => mockRemoteSecondary.findSecondaryUrl())
         .thenAnswer((_) async => fakeSecondaryUrl);
     when(() => mockOutboundConnection.getSocket())
@@ -130,7 +112,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -163,7 +144,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -188,7 +168,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
@@ -212,7 +191,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -225,7 +203,7 @@ void main() {
           verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
       // We've created a monitor with a null lastNotificationTime - expect the command sent to the server to be simply 'monitor\n'
-      expect(writesToSocket.last, 'monitor\n');
+      expect(writesToSocket.last, 'monitor:selfNotifications\n');
       expect(monitor.status, MonitorStatus.started);
     });
 
@@ -241,7 +219,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -256,12 +233,20 @@ void main() {
           verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
       // We've created a monitor with a real lastNotificationTime
-      expect(writesToSocket.last, 'monitor:$lastNotificationTime\n');
+      expect(writesToSocket.last,
+          'monitor:selfNotifications:$lastNotificationTime\n');
       expect(monitor.status, MonitorStatus.started);
     });
 
     test('Monitor start, secondary not available', () async {
-      mockMonitorConnectivityChecker.shouldFail = true;
+      when(() => mockMonitorOutboundConnectionFactory.createConnection(
+          fakeSecondaryUrl,
+          decryptPackets: true,
+          tlsKeysSavePath: fakeTlsKeysSavePath,
+          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
+        throw AtConnectException('Mock - connection failed');
+      });
+
       Monitor monitor = Monitor(
           (String json) => print('onResponse: $json'),
           (e) => print('onError: $e'),
@@ -269,7 +254,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -287,7 +271,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -310,7 +293,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -334,7 +316,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
@@ -409,7 +390,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
@@ -447,7 +427,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => retryCallback(),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
@@ -498,8 +477,15 @@ void main() {
       expect(retryCallbackCalledCount, 1);
 
       // OK - now let's make the retry fail
-      // First of all let's make sure that "start" will fail
-      mockMonitorConnectivityChecker.shouldFail = true;
+      // First of all let's make sure that "start" will fail because it can't creat a connection
+      when(() => mockMonitorOutboundConnectionFactory.createConnection(
+          fakeSecondaryUrl,
+          decryptPackets: true,
+          tlsKeysSavePath: fakeTlsKeysSavePath,
+          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
+        throw AtConnectException('Mock - connection failed');
+      });
+
       // The retryCallback will call Monitor.start() after a delay, so let's wait for that delay
       await Future.delayed(delayBeforeRestart);
 
@@ -510,8 +496,13 @@ void main() {
 
       // let's start sending responses to heartbeats again
       sendHeartbeatResponse = true;
-      // and let's make the connectivity checks succeed again
-      mockMonitorConnectivityChecker.shouldFail = false;
+      // and let's make creating new connections succeed again
+      when(() => mockMonitorOutboundConnectionFactory.createConnection(
+              fakeSecondaryUrl,
+              decryptPackets: true,
+              tlsKeysSavePath: fakeTlsKeysSavePath,
+              pathToCerts: fakeCertsLocation))
+          .thenAnswer((_) async => mockOutboundConnection);
 
       // The retryCallback will call Monitor.start() after a delay, so let's wait for that delay
       await Future.delayed(delayBeforeRestart);
@@ -555,7 +546,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => retryCallback(),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory,
@@ -634,7 +624,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -653,7 +642,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -672,7 +660,6 @@ void main() {
           atClientPreference,
           monitorPreference,
           () => print('onRetry called'),
-          monitorConnectivityChecker: mockMonitorConnectivityChecker,
           remoteSecondary: mockRemoteSecondary,
           monitorOutboundConnectionFactory:
               mockMonitorOutboundConnectionFactory);
@@ -698,7 +685,6 @@ void main() {
             atClientPreference,
             monitorPreference,
             () => print('onRetry called'),
-            monitorConnectivityChecker: mockMonitorConnectivityChecker,
             remoteSecondary: mockRemoteSecondary,
             monitorOutboundConnectionFactory:
                 mockMonitorOutboundConnectionFactory,

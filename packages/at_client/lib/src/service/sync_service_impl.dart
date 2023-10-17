@@ -11,7 +11,6 @@ import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/util/logger_util.dart';
-import 'package:at_client/src/util/network_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -54,9 +53,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final AtSignLogger _logger;
 
   late AtClientManager _atClientManager;
-
-  @visibleForTesting
-  NetworkUtil networkUtil = NetworkUtil();
 
   // "^shared_key\..+@.+" matches the key that starts-with shared_key.<someone>@<me>
   // "@.+:shared_key@.+" matches the key that starts-with @<someone>:shared_key@<me>
@@ -203,13 +199,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (_syncInProgress) {
       _logger.finer('**** another sync in progress');
       syncProgress.message = 'another sync in progress';
-      _informSyncProgress(syncProgress);
-      return;
-    }
-    if (!await networkUtil.isNetworkAvailable()) {
-      _logger.finer('skipping sync due to network unavailability');
-      syncProgress.syncStatus = SyncStatus.failure;
-      syncProgress.message = 'network unavailable';
       _informSyncProgress(syncProgress);
       return;
     }

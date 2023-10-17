@@ -28,7 +28,7 @@ class RemoteSecondary implements Secondary {
   final AtChops? atChops;
 
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey, this.atChops}) {
+      {String? privateKey, this.atChops, String? enrollmentId}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -44,6 +44,7 @@ class RemoteSecondary implements Secondary {
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
         clientConfig: _getClientConfig());
+    atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
     atLookUp.signingAlgoType = preference.signingAlgoType;
@@ -186,11 +187,9 @@ class RemoteSecondary implements Secondary {
     return secondaryAddress.toString();
   }
 
+  @Deprecated('This method is unused and will be removed in next major release')
   Future<bool> isAvailable() async {
     try {
-      // How often is this method called? Should we consider caching the secondary URL?
-      // If we do cache it then we should clear the cache if the secondary ever becomes unavailable
-      // ... in case the secondary URL changes from foo.example.com:1234 to bar.example.com:4567
       String? secondaryUrl = await findSecondaryUrl();
 
       var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
