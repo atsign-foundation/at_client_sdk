@@ -22,12 +22,8 @@ void main() {
   Future<void> switchAtsigns(String atsign) async {
     var preference = TestUtils.getPreference(atsign);
     atClientManager.setCurrentAtSign(atsign, null, preference);
-    var list =
-        await atClientManager.atClient.getRemoteSecondary()!.atLookUp.scan();
-    print(list);
-  }
-
-  Future<void> scan() async {
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClientManager.atClient, atSign);
     var list =
         await atClientManager.atClient.getRemoteSecondary()!.atLookUp.scan();
     atClientManager.atClient.encryptionService!.logger.info(list);
@@ -94,7 +90,7 @@ void main() {
     });
   });
 
-  ///
+  ////////////
   group('A group of tests to verify get of symmetric shared keys', () {
     test('Positive test - self keys ', () async {
       var atKey =
@@ -107,7 +103,6 @@ void main() {
 
     test('Positive test - shared keys ', () async {
       await switchAtsigns("@bob🛠");
-      await scan();
       atClientManager.atClient.encryptionService!.logger
           .info(atClientManager.atClient.getCurrentAtSign());
       var atKey = AtKey.fromString("@bob🛠:shared_key@alice🛠");
