@@ -97,9 +97,8 @@ void main() {
 ///
   group('A group of tests to verify get of symmetric shared keys', () {
     test('Positive test - self keys ', () async {
-      await scan();
       var atKey =
-          AtKey.self("shared_key", namespace: "", sharedBy: "@alice🛠").build();
+          AtKey.self("shared_key", namespace: "bob", sharedBy: "@alice🛠").build();
 
       var result = await atClientManager.atClient.get(atKey);
       expect(result, returnsNormally);
@@ -110,7 +109,7 @@ void main() {
       await scan();
       atClientManager.atClient.encryptionService!.logger
           .info(atClientManager.atClient.getCurrentAtSign());
-      var atKey = (AtKey.shared("shared_key", sharedBy: "@alice🛠")
+      var atKey = (AtKey.shared("shared_key", sharedBy: "@alice🛠", namespace: null)
             ..sharedWith("@bob🛠")
             ..cache(1000, true))
           .build();
