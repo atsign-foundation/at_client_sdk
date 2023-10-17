@@ -101,7 +101,6 @@ void main() {
     });
 
     test('Positive test - shared keys ', () async {
-      await switchAtsigns("@bob🛠");
       atClientManager.atClient.encryptionService!.logger
           .info(atClientManager.atClient.getCurrentAtSign());
       var atKey = (AtKey.shared("shared_key", sharedBy: "@bob🛠")
@@ -112,7 +111,6 @@ void main() {
     });
 
     test('Negative test - shared keys ', () async {
-      await switchAtsigns("@alice🛠");
       var atKey = (AtKey.shared("shared_key", namespace: "", sharedBy: "@alice🛠")
             ..sharedWith("@bob🛠"))
           .build();
