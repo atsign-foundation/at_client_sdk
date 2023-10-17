@@ -25,7 +25,7 @@ void main() {
     var list = await atClientManager.atClient
         .getRemoteSecondary()!
         .atLookUp
-        .scan(regex: 'shared_key');
+        .scan();
     atClientManager.atClient.encryptionService!.logger.info(list);
   }
 
