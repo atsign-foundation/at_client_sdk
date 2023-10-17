@@ -94,7 +94,7 @@ void main() {
     });
   });
 
-//
+///
   group('A group of tests to verify get of symmetric shared keys', () {
     test('Positive test - self keys ', () async {
       await scan();
