@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -11,7 +10,6 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 import 'package:meta/meta.dart';
 
 ///
@@ -261,6 +259,10 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
+    if (atChops == null) {
+      throw AtClientException.message(
+          'cannot authenticate monitor connection without at_chops set');
+    }
     await _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await getQueueResponse();
     if (fromResponse.isEmpty) {

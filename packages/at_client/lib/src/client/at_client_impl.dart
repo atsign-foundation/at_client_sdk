@@ -191,6 +191,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       }
 
       _localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
+      _atChops ??= await _createAtChops(_atSign);
     }
 
     // Now using ??= because we may be injecting a RemoteSecondary
@@ -639,6 +640,37 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       result = result.replaceFirst('data:', '');
     }
     return result ??= '';
+  }
+
+  Future<AtChops> _createAtChops(String atSign) async {
+    AtEncryptionKeyPair? atEncryptionKeyPair;
+    AtPkamKeyPair? atPkamKeyPair;
+    try {
+      var encryptionPublicKey =
+          await _localSecondary!.getEncryptionPublicKey(atSign);
+      var encryptionPrivateKey =
+          await _localSecondary!.getEncryptionPrivateKey();
+      if (encryptionPublicKey != null && encryptionPrivateKey != null) {
+        atEncryptionKeyPair = AtEncryptionKeyPair.create(
+            encryptionPublicKey, encryptionPrivateKey);
+      }
+    } on KeyNotFoundException catch (e) {
+      _logger.warning(
+          '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}');
+    }
+    try {
+      var pkamPublicKey = await _localSecondary!.getPublicKey();
+      var pkamPrivateKey = await _localSecondary!.getPrivateKey();
+
+      if (pkamPublicKey != null && pkamPrivateKey != null) {
+        atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
+      }
+    } on KeyNotFoundException catch (e) {
+      _logger.warning(
+          '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}');
+    }
+    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    return AtChopsImpl(atChopsKeys);
   }
 
   @override

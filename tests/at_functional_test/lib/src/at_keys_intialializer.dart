@@ -38,7 +38,7 @@ class AtEncryptionKeysLoader {
     bool result;
     // Set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(
-        AT_ENCRYPTION_PRIVATE_KEY,
+        AtConstants.atEncryptionPrivateKey,
         demo_credentials.encryptionPrivateKeyMap[atSign]!);
     if (result) {
       _logger.info('encryption private key was set successfully');
@@ -46,7 +46,8 @@ class AtEncryptionKeysLoader {
       _logger.severe('failed to set encryption private key');
     }
     // set encryption public key. this key should be synced to the remote secondary
-    var encryptionPublicKeyAtKey = '$AT_ENCRYPTION_PUBLIC_KEY$atSign';
+    var encryptionPublicKeyAtKey =
+        '${AtConstants.atEncryptionPublicKey}$atSign';
     result = await atClient.getLocalSecondary()!.putValue(
         encryptionPublicKeyAtKey,
         demo_credentials.encryptionPublicKeyMap[atSign]!);
@@ -57,13 +58,30 @@ class AtEncryptionKeysLoader {
     }
 
     // set self encryption key
-    result = await atClient
-        .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_SELF_KEY, demo_credentials.aesKeyMap[atSign]!);
+    result = await atClient.getLocalSecondary()!.putValue(
+        AtConstants.atEncryptionSelfKey, demo_credentials.aesKeyMap[atSign]!);
     if (result) {
       _logger.info('self encryption key was set successfully');
     } else {
       _logger.severe('failed to set self encryption key');
+    }
+    // set pkam keys
+    result = await atClient.getLocalSecondary()!.putValue(
+        AtConstants.atPkamPublicKey,
+        demo_credentials.pkamPublicKeyMap[atSign]!);
+    if (result) {
+      _logger.info('pkam public key was set successfully');
+    } else {
+      _logger.severe('failed to pkam public key');
+    }
+
+    result = await atClient.getLocalSecondary()!.putValue(
+        AtConstants.atPkamPrivateKey,
+        demo_credentials.pkamPrivateKeyMap[atSign]!);
+    if (result) {
+      _logger.info('pkam private key was set successfully');
+    } else {
+      _logger.severe('failed to pkam private key');
     }
   }
 }

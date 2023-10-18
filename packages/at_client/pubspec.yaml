@@ -33,7 +33,7 @@ dependencies:
   at_base2e15: ^1.0.0
   at_commons: ^3.0.55
   at_utils: ^3.0.15
-  at_chops: ^1.0.4
+  at_chops: ^1.0.5
   at_lookup: ^3.0.40
   at_persistence_spec: ^2.0.14
   at_persistence_secondary_server: ^3.0.57

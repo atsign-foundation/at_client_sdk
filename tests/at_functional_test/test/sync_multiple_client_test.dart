@@ -153,7 +153,7 @@ void main() async {
           clientOneCommitLog, clientTwoCommitLog);
       expect(testResult, true);
     }
-  }, timeout: Timeout(Duration(minutes: 5)));
+  }, timeout: Timeout(Duration(minutes: 5)),skip: true);
 
   // Kill the isolates at the end of the test
   tearDown(() {

@@ -4,7 +4,6 @@ import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/encryption_service/sign_in_public_data.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -64,7 +63,8 @@ class PutRequestTransformer
       if (encryptionPrivateKey.isNull) {
         throw AtPrivateKeyNotFoundException('Failed to sign the public data');
       }
-      final atSigningInput = AtSigningInput(updateVerbBuilder.value);
+      final atSigningInput = AtSigningInput(updateVerbBuilder.value)
+        ..signingMode = AtSigningMode.data;
       final signingResult = _atClient.atChops!.sign(atSigningInput);
       updateVerbBuilder.dataSignature = signingResult.result;
       // Encode the public data if it contains new line characters
