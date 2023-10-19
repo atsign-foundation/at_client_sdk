@@ -7,7 +7,6 @@ import 'dart:math';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/util/logger_util.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -16,6 +15,8 @@ import 'package:version/version.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_functional_test/src/at_demo_credentials.dart'
     as demo_credentials;
+
+import 'test_utils.dart';
 
 /// The purpose of this test is to run multiple clients in Isolate and inject
 /// bulk data.
@@ -153,7 +154,7 @@ void main() async {
           clientOneCommitLog, clientTwoCommitLog);
       expect(testResult, true);
     }
-  }, timeout: Timeout(Duration(minutes: 5)),skip: true);
+  }, timeout: Timeout(Duration(minutes: 5)));
 
   // Kill the isolates at the end of the test
   tearDown(() {
@@ -284,10 +285,8 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
   var atClientPreferences = _getAtClientPreference(currentAtSign,
       hiveStoragePath: clientParameters.hiveStoragePath,
       commitLogPath: clientParameters.commitLogPath);
-  atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign(currentAtSign, namespace, atClientPreferences);
-  await AtEncryptionKeysLoader.getInstance()
-      .setEncryptionKeys(atClientManager.atClient, currentAtSign);
+  atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
+      preference: atClientPreferences);
   MySyncProgressListener mySyncProgressListener = MySyncProgressListener();
   atClientManager.atClient.syncService
       .addProgressListener(mySyncProgressListener);
@@ -341,7 +340,6 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
       currentAtSign,
       namespace,
       AtClientPreference()
-        ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
         ..isLocalStoreRequired = false
         ..rootDomain = 'vip.ve.atsign.zone');
   var infoResponse = await atClientManager.atClient
@@ -439,7 +437,6 @@ AtClientPreference _getAtClientPreference(String currentAtSign,
   preference.hiveStoragePath = hiveStoragePath;
   preference.commitLogPath = commitLogPath;
   preference.isLocalStoreRequired = true;
-  preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   preference.atClientParticulars = AtClientParticulars()
     ..appName = 'wavi'

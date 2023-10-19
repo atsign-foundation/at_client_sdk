@@ -43,7 +43,7 @@ dependencies:
 dev_dependencies:
   lints: ^2.1.1
   test: ^1.21.4
-  at_demo_data: ^1.0.0
+  at_demo_data: ^1.0.1
   coverage: ^1.5.0
   mocktail: ^0.3.0
   dart_code_metrics: ^4.17.0

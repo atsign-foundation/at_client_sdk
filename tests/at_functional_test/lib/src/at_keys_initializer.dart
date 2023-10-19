@@ -1,6 +1,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
 import 'at_demo_credentials.dart' as demo_credentials;
+import 'package:at_chops/at_chops.dart';
 
 /// The class is responsible for loading all the encryption of the atSign to the
 /// local secondary keystore.
@@ -83,5 +84,16 @@ class AtEncryptionKeysLoader {
     } else {
       _logger.severe('failed to pkam private key');
     }
+  }
+
+  AtChops createAtChopsFromDemoKeys(String atSign) {
+    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
+        demo_credentials.encryptionPublicKeyMap[atSign]!,
+        demo_credentials.encryptionPrivateKeyMap[atSign]!);
+    var atPkamKeyPair = AtPkamKeyPair.create(
+        demo_credentials.pkamPublicKeyMap[atSign]!,
+        demo_credentials.pkamPrivateKeyMap[atSign]!);
+    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    return AtChopsImpl(atChopsKeys);
   }
 }

@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
@@ -8,14 +7,9 @@ import 'test_utils.dart';
 void main() {
   late AtClientManager atClientManager;
   String atSign = '@alice🛠';
-
+  String namespace = 'wavi';
   setUpAll(() async {
-    var preference = TestUtils.getPreference(atSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', preference);
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, atSign);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
   group('A group of tests to verify positive scenarios of put and get', () {
