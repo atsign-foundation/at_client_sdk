@@ -340,6 +340,7 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
       currentAtSign,
       namespace,
       AtClientPreference()
+        ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
         ..isLocalStoreRequired = false
         ..rootDomain = 'vip.ve.atsign.zone');
   var infoResponse = await atClientManager.atClient
@@ -437,6 +438,7 @@ AtClientPreference _getAtClientPreference(String currentAtSign,
   preference.hiveStoragePath = hiveStoragePath;
   preference.commitLogPath = commitLogPath;
   preference.isLocalStoreRequired = true;
+  preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   preference.atClientParticulars = AtClientParticulars()
     ..appName = 'wavi'
