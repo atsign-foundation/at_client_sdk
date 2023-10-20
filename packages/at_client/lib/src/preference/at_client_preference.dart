@@ -91,9 +91,8 @@ class AtClientPreference {
   /// Set to false to ignore the notifications received when device is offline.
   bool fetchOfflineNotifications = true;
 
-  /// Temporary feature flag. Remove once tests are successful.
-  @experimental
-  bool useAtChops = false;
+  @Deprecated('No longer needed. at_chops will be used by default')
+  bool useAtChops = true;
 
   /// Which version of the atProtocol this client will use.
   /// Note that this is different from the version of the

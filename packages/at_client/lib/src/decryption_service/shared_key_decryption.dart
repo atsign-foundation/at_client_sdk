@@ -65,29 +65,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
     }
     String decryptedValue = '';
     try {
-      //# TODO remove else block once atChops once testing is good
-      if (atClient.getPreferences()!.useAtChops) {
-        final decryptionResult = atClient.atChops!
-            .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-        decryptedValue = EncryptionUtil.decryptValue(
-            encryptedValue, decryptionResult.result,
-            ivBase64: atKey.metadata?.ivNonce);
-      } else {
-        var currentAtSignPrivateKey =
-            await (atClient.getLocalSecondary()!.getEncryptionPrivateKey());
-        if (currentAtSignPrivateKey == null ||
-            currentAtSignPrivateKey.isEmpty) {
-          throw AtPrivateKeyNotFoundException('Encryption private not found',
-              intent: Intent.fetchEncryptionPrivateKey,
-              exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
-        }
-        decryptedValue = EncryptionUtil.decryptValue(
-            encryptedValue,
-            // ignore: deprecated_member_use_from_same_package
-            EncryptionUtil.decryptKey(
-                encryptedSharedKey, currentAtSignPrivateKey),
-            ivBase64: atKey.metadata?.ivNonce);
-      }
+      final decryptionResult = atClient.atChops!
+          .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
+      decryptedValue = EncryptionUtil.decryptValue(
+          encryptedValue, decryptionResult.result,
+          ivBase64: atKey.metadata?.ivNonce);
     } on AtKeyException catch (e) {
       e.stack(AtChainedException(
           Intent.decryptData,

@@ -24,8 +24,6 @@ class TestPreferences {
     atClientPreference.hiveStoragePath = 'test/hive/client';
     atClientPreference.commitLogPath = 'test/hive/client/commit';
     atClientPreference.isLocalStoreRequired = true;
-    atClientPreference.privateKey =
-        AtCredentials.credentialsMap[atSign]![TestConstants.PKAM_PRIVATE_KEY];
     atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
     atClientPreferencesMap.putIfAbsent(atSign, () => atClientPreference);
     return atClientPreference;

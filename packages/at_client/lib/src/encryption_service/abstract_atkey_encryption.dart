@@ -107,38 +107,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     /// - If found existing in either local or atServer, decrypt it and return
     encryptedSharedKey =
         defaultResponseParser.parse(encryptedSharedKey!).response;
-    if (_atClient.getPreferences()!.useAtChops) {
-      final decryptionResult = _atClient.atChops!
-          .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-      return decryptionResult.result;
-    } else {
-      String? encryptionPrivateKey;
-      try {
-        encryptionPrivateKey =
-            await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
-      } on KeyNotFoundException catch (e) {
-        e.stack(AtChainedException(
-            Intent.fetchEncryptionPrivateKey,
-            ExceptionScenario.encryptionFailed,
-            'Failed to decrypt the encrypted shared key'));
-        rethrow;
-      }
-      try {
-        _logger.finer(
-            "Decrypting encryptedSharedKey $encryptedSharedKey using EncryptionUtil");
-        // ignore: deprecated_member_use_from_same_package
-        return EncryptionUtil.decryptKey(
-            encryptedSharedKey, encryptionPrivateKey!);
-      } on KeyNotFoundException catch (e) {
-        _logger.severe(
-            "Failed to decrypt my copy of shared symmetric key for ${atKey.sharedWith}");
-        e.stack(AtChainedException(
-            Intent.fetchEncryptionPrivateKey,
-            ExceptionScenario.encryptionFailed,
-            'Failed to decrypt the encrypted shared key'));
-        rethrow;
-      }
-    }
+    final decryptionResult = _atClient.atChops!
+        .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
+    return decryptionResult.result;
   }
 
   /// Create a new symmetric shared key and share it.
