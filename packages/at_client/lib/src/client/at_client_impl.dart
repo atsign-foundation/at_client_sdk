@@ -261,20 +261,22 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<bool> persistPrivateKey(String privateKey) async {
     var atData = AtData();
     atData.data = privateKey.toString();
-    await _localSecondary!.keyStore!.put(AT_PKAM_PRIVATE_KEY, atData);
+    await _localSecondary!.keyStore!.put(AtConstants.atPkamPrivateKey, atData);
     return true;
   }
 
   Future<bool> persistPublicKey(String publicKey) async {
     var atData = AtData();
     atData.data = publicKey.toString();
-    await getLocalSecondary()!.keyStore!.put(AT_PKAM_PUBLIC_KEY, atData);
+    await getLocalSecondary()!
+        .keyStore!
+        .put(AtConstants.atPkamPublicKey, atData);
     return true;
   }
 
   Future<String?> getPrivateKey(String atSign) async {
     var privateKeyData =
-        await getLocalSecondary()!.keyStore!.get(AT_PKAM_PRIVATE_KEY);
+        await getLocalSecondary()!.keyStore!.get(AtConstants.atPkamPrivateKey);
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
@@ -596,7 +598,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       ..isBinary = metadata.isBinary
       ..isEncrypted = metadata.isEncrypted
       ..dataSignature = metadata.dataSignature
-      ..operation = UPDATE_META;
+      ..operation = AtConstants.updateMeta;
 
     var updateMetaResult = await getSecondary()
         .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
@@ -613,7 +615,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   String? getOperation(dynamic value, Metadata? data) {
     if (value != null && data == null) {
-      return VALUE;
+      return AtConstants.value;
     }
     // Verifies if any of the args are not null
     var isMetadataNotNull = AtClientUtil.isAnyNotNull(
@@ -625,11 +627,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         a6: data.isEncrypted);
     //If value is not null and metadata is not null, return UPDATE_ALL
     if (value != null && isMetadataNotNull) {
-      return UPDATE_ALL;
+      return AtConstants.updateAll;
     }
     //If value is null and metadata is not null,
     if (value == null && isMetadataNotNull) {
-      return UPDATE_META;
+      return AtConstants.updateMeta;
     }
     return null;
   }

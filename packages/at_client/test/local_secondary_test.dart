@@ -74,7 +74,8 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
-      await localSecondary.putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
+      await localSecondary.putValue(
+          AtConstants.atPkamPrivateKey, pkamPrivateKey);
       expect(await localSecondary.getPrivateKey(), pkamPrivateKey);
     });
 
@@ -87,7 +88,7 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
-      await localSecondary.putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
+      await localSecondary.putValue(AtConstants.atPkamPublicKey, pkamPublicKey);
       expect(await localSecondary.getPublicKey(), pkamPublicKey);
     });
 
@@ -102,7 +103,7 @@ void main() {
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
       await localSecondary.putValue(
-          AT_ENCRYPTION_PRIVATE_KEY, encryptionPrivateKey);
+          AtConstants.atEncryptionPrivateKey, encryptionPrivateKey);
       expect(
           await localSecondary.getEncryptionPrivateKey(), encryptionPrivateKey);
     });
@@ -117,7 +118,7 @@ void main() {
       final localSecondary = LocalSecondary(atClient);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       await localSecondary.putValue(
-          '$AT_ENCRYPTION_PUBLIC_KEY$atSign', encryptionPublicKey);
+          '${AtConstants.atEncryptionPublicKey}$atSign', encryptionPublicKey);
       expect(await localSecondary.getEncryptionPublicKey(atSign),
           encryptionPublicKey);
     });
@@ -131,7 +132,8 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
-      await localSecondary.putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
+      await localSecondary.putValue(
+          AtConstants.atEncryptionSelfKey, selfEncryptionKey);
       expect(await localSecondary.getEncryptionSelfKey(), selfEncryptionKey);
     });
   });

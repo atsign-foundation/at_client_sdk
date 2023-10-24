@@ -83,7 +83,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
     String? encryptedSharedKey = '';
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..atKey = AtConstants.atEncryptionSharedKey
       ..sharedWith = atClient.getCurrentAtSign()
       ..sharedBy = atKey.sharedBy
       ..isCached = true;
@@ -99,7 +99,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
         encryptedSharedKey.isEmpty ||
         encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = AT_ENCRYPTION_SHARED_KEY
+        ..atKey = AtConstants.atEncryptionSharedKey
         ..sharedBy = atKey.sharedBy
         ..auth = true;
       encryptedSharedKey = await atClient
