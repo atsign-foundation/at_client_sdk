@@ -69,34 +69,35 @@ class AtClientUtil {
             metadataMap['availableAt'] != 'null')
         ? DateTime.parse(metadataMap['availableAt'])
         : null;
-    metadata.refreshAt =
-        (metadataMap[REFRESH_AT] != null && metadataMap[REFRESH_AT] != 'null')
-            ? DateTime.parse(metadataMap[REFRESH_AT])
-            : null;
-    metadata.createdAt =
-        (metadataMap[CREATED_AT] != null && metadataMap[CREATED_AT] != 'null')
-            ? DateTime.parse(metadataMap[CREATED_AT])
-            : null;
-    metadata.updatedAt =
-        (metadataMap[UPDATED_AT] != null && metadataMap[UPDATED_AT] != 'null')
-            ? DateTime.parse(metadataMap[UPDATED_AT])
-            : null;
-    metadata.ttr = metadataMap[AT_TTR];
-    metadata.ttl = metadataMap[AT_TTL];
-    metadata.ttb = metadataMap[AT_TTB];
-    metadata.ccd = metadataMap[CCD];
-    metadata.isBinary = metadataMap[IS_BINARY];
-    metadata.isEncrypted = metadataMap[IS_ENCRYPTED];
-    metadata.dataSignature = metadataMap[PUBLIC_DATA_SIGNATURE];
-    metadata.sharedKeyEnc = metadataMap[SHARED_KEY_ENCRYPTED];
-    metadata.pubKeyCS = metadataMap[SHARED_WITH_PUBLIC_KEY_CHECK_SUM];
-    metadata.encoding = metadataMap[ENCODING];
-    metadata.encKeyName = metadataMap[ENCRYPTING_KEY_NAME];
-    metadata.encAlgo = metadataMap[ENCRYPTING_ALGO];
-    metadata.ivNonce = metadataMap[IV_OR_NONCE];
+    metadata.refreshAt = (metadataMap[AtConstants.refreshAt] != null &&
+            metadataMap[AtConstants.refreshAt] != 'null')
+        ? DateTime.parse(metadataMap[AtConstants.refreshAt])
+        : null;
+    metadata.createdAt = (metadataMap[AtConstants.createdAt] != null &&
+            metadataMap[AtConstants.createdAt] != 'null')
+        ? DateTime.parse(metadataMap[AtConstants.createdAt])
+        : null;
+    metadata.updatedAt = (metadataMap[AtConstants.updatedAt] != null &&
+            metadataMap[AtConstants.updatedAt] != 'null')
+        ? DateTime.parse(metadataMap[AtConstants.updatedAt])
+        : null;
+    metadata.ttr = metadataMap[AtConstants.ttr];
+    metadata.ttl = metadataMap[AtConstants.ttl];
+    metadata.ttb = metadataMap[AtConstants.ttb];
+    metadata.ccd = metadataMap[AtConstants.ccd];
+    metadata.isBinary = metadataMap[AtConstants.isBinary];
+    metadata.isEncrypted = metadataMap[AtConstants.isEncrypted];
+    metadata.dataSignature = metadataMap[AtConstants.publicDataSignature];
+    metadata.sharedKeyEnc = metadataMap[AtConstants.sharedKeyEncrypted];
+    metadata.pubKeyCS = metadataMap[AtConstants.sharedWithPublicKeyCheckSum];
+    metadata.encoding = metadataMap[AtConstants.encoding];
+    metadata.encKeyName = metadataMap[AtConstants.encryptingKeyName];
+    metadata.encAlgo = metadataMap[AtConstants.encryptingAlgo];
+    metadata.ivNonce = metadataMap[AtConstants.ivOrNonce];
     metadata.skeEncKeyName =
-        metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
-    metadata.skeEncAlgo = metadataMap[SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
+        metadataMap[AtConstants.sharedKeyEncryptedEncryptingKeyName];
+    metadata.skeEncAlgo =
+        metadataMap[AtConstants.sharedKeyEncryptedEncryptingAlgo];
     metadata.isPublic = isPublic;
     metadata.isCached = isCached;
 

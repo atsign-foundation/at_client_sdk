@@ -7,22 +7,22 @@ void main() {
   group('A group of sync util tests', () {
     // The PKAM Private keys should not be sync'ed to server
     test('sync util check pkam private key sync skip', () {
-      var shouldSync = SyncUtil.shouldSync(AT_PKAM_PRIVATE_KEY);
+      var shouldSync = SyncUtil.shouldSync(AtConstants.atPkamPrivateKey);
       expect(shouldSync, false);
     });
     // The PKAM Public keys should not be sync'ed to server
     test('sync util check pkam public key sync skip', () {
-      var shouldSync = SyncUtil.shouldSync(AT_PKAM_PUBLIC_KEY);
+      var shouldSync = SyncUtil.shouldSync(AtConstants.atPkamPublicKey);
       expect(shouldSync, false);
     });
     // The encryption private keys should not be sync'ed to server
     test('sync util check encryption private key sync skip', () {
-      var shouldSync = SyncUtil.shouldSync(AT_ENCRYPTION_PRIVATE_KEY);
+      var shouldSync = SyncUtil.shouldSync(AtConstants.atEncryptionPrivateKey);
       expect(shouldSync, false);
     });
     // The encryption public key should be sync'ed to server
     test('sync util check encryption public key sync skip', () {
-      var shouldSync = SyncUtil.shouldSync(AT_ENCRYPTION_PUBLIC_KEY);
+      var shouldSync = SyncUtil.shouldSync(AtConstants.atEncryptionPublicKey);
       expect(shouldSync, true);
     });
 
