@@ -79,19 +79,22 @@ class AtClientManager {
         'Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
     var previousAtClient = _currentAtClient;
-    _currentAtClient = await serviceFactory
-        .atClient(_atSign, namespace, preference, this, atChops: atChops);
+    _currentAtClient = await serviceFactory.atClient(
+        _atSign, namespace, preference, this,
+        atChops: atChops, enrollmentId: enrollmentId);
 
     final switchAtSignEvent =
         SwitchAtSignEvent(previousAtClient, _currentAtClient!);
     _notifyListeners(switchAtSignEvent);
 
-    var notificationService =
-        await serviceFactory.notificationService(_currentAtClient!, this);
+    var notificationService = await serviceFactory.notificationService(
+        _currentAtClient!, this,
+        enrollmentId: enrollmentId);
     _currentAtClient!.notificationService = notificationService;
 
     var syncService = await serviceFactory.syncService(
-        _currentAtClient!, this, notificationService);
+        _currentAtClient!, this, notificationService,
+        enrollmentId: enrollmentId);
     _currentAtClient!.syncService = syncService;
 
     _logger.info("setCurrentAtSign complete");
@@ -147,10 +150,12 @@ abstract class AtServiceFactory {
       {AtChops? atChops, String? enrollmentId});
 
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager);
+      AtClient atClient, AtClientManager atClientManager,
+      {String? enrollmentId});
 
   Future<SyncService> syncService(AtClient atClient,
-      AtClientManager atClientManager, NotificationService notificationService);
+      AtClientManager atClientManager, NotificationService notificationService,
+      {String? enrollmentId});
 }
 
 class DefaultAtServiceFactory implements AtServiceFactory {
@@ -166,18 +171,19 @@ class DefaultAtServiceFactory implements AtServiceFactory {
 
   @override
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager) async {
+      AtClient atClient, AtClientManager atClientManager,
+      {String? enrollmentId}) async {
     return await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
+        atClientManager: atClientManager, enrollmentId: enrollmentId);
   }
 
   @override
-  Future<SyncService> syncService(
-      AtClient atClient,
-      AtClientManager atClientManager,
-      NotificationService notificationService) async {
+  Future<SyncService> syncService(AtClient atClient,
+      AtClientManager atClientManager, NotificationService notificationService,
+      {String? enrollmentId}) async {
     return await SyncServiceImpl.create(atClient,
         atClientManager: atClientManager,
-        notificationService: notificationService);
+        notificationService: notificationService,
+        enrollmentId: enrollmentId);
   }
 }

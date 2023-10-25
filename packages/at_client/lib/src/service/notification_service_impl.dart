@@ -76,20 +76,25 @@ class NotificationServiceImpl
   String get currentAtSign => _atClient.getCurrentAtSign()!;
 
   static Future<NotificationService> create(AtClient atClient,
-      {required AtClientManager atClientManager, Monitor? monitor}) async {
-    final notificationService =
-        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
+      {required AtClientManager atClientManager,
+      Monitor? monitor,
+      String? enrollmentId}) async {
+    final notificationService = NotificationServiceImpl._(
+        atClientManager, atClient,
+        monitor: monitor, enrollmentId: enrollmentId);
     // We used to call _init() at this point which would start the monitor, but now we
     // call _init() from the [subscribe] method
     return notificationService;
   }
 
   NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
-      {Monitor? monitor}) {
+      {Monitor? monitor, String? enrollmentId}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
     _logger = AtSignLogger(
         'NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
+
+    _logger.info('enrollmentId: $enrollmentId');
     _monitor = monitor ??
         Monitor(
             _internalNotificationCallback,
@@ -98,7 +103,8 @@ class NotificationServiceImpl
             _atClient.getPreferences()!,
             MonitorPreference()..keepAlive = true,
             monitorRetry,
-            atChops: atClient.atChops);
+            atChops: atClient.atChops,
+            enrollmentId: enrollmentId);
     _atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, _atClient.getCurrentAtSign()!,

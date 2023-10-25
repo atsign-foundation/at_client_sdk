@@ -138,6 +138,7 @@ class Monitor {
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
     _enrollmentId = enrollmentId;
+    _logger.finer('enrollmentId: $_enrollmentId');
     _remoteSecondary = remoteSecondary ??
         RemoteSecondary(atSign, preference,
             atChops: atChops, enrollmentId: enrollmentId);

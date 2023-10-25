@@ -69,10 +69,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static Future<SyncService> create(AtClient atClient,
       {required AtClientManager atClientManager,
       required NotificationService notificationService,
-      RemoteSecondary? remoteSecondary}) async {
+      RemoteSecondary? remoteSecondary,
+      String? enrollmentId}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-        atChops: atClient.atChops);
+        atChops: atClient.atChops, enrollmentId: enrollmentId);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
     await syncService.statsServiceListener();
