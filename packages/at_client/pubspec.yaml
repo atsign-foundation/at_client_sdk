@@ -17,9 +17,9 @@ environment:
 dependencies:
   path: ^1.8.2
   hive: ^2.2.3
-  asn1lib: "<=1.5.0"
-  crypton: "<=2.2.1"
-  encrypt: "<=5.0.3"
+  asn1lib: ">=1.4.1 <=1.5.0"
+  crypton: ">=2.1.0 <=2.2.1"
+  encrypt: ">=5.0.1 <=5.0.3"
   cron: ^0.5.1
   convert: ^3.0.2
   uuid: ^3.0.7
