@@ -114,7 +114,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   late final AtSignLogger _logger;
 
-  String? _enrollmentId;
+  @override
+  String? enrollmentId;
 
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
@@ -126,7 +127,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
-      String? enrollmentId,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) async {
     atClientManager ??= AtClientManager.getInstance();
@@ -162,7 +162,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
-      String? enrollmentId,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) {
     _atSign = AtUtils.fixAtSign(theAtSign);
@@ -179,7 +178,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
     _atChops = atChops;
-    _enrollmentId = enrollmentId;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
   }
 
@@ -198,7 +196,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops,
         privateKey: _preference!.privateKey,
-        enrollmentId: _enrollmentId);
+        enrollmentId: enrollmentId);
 
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);

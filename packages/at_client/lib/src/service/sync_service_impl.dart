@@ -72,7 +72,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-        atChops: atClient.atChops);
+        atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(
         atClientManager, atClient, notificationService, remoteSecondary);
     await syncService.statsServiceListener();
