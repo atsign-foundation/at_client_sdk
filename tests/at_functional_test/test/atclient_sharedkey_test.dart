@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
@@ -14,13 +13,8 @@ void main() {
   var namespace = 'wavi';
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(currentAtSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, namespace, preference);
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
     atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   });
 
   test('shared key - check sharedKey and checksum in metadata', () async {

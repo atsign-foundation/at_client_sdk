@@ -1,6 +1,5 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -14,11 +13,7 @@ void main() async {
   String namespace = 'wavi';
 
   setUpAll(() async {
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtils.getPreference(atSign));
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, atSign);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
   // The SyncProgressListener is removed and stream is closed at the end of each test.

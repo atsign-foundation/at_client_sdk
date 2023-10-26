@@ -1,6 +1,5 @@
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 
 import 'package:test/test.dart';
 import 'package:at_commons/at_commons.dart';
@@ -14,13 +13,8 @@ void main() {
   var namespace = 'wavi';
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(currentAtSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, namespace, preference);
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
     atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   });
 
   test('Verify KeyNotFoundException for local secondary', () async {

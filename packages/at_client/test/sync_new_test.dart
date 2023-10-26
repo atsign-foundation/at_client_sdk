@@ -787,7 +787,7 @@ void main() {
       var atData = AtData();
       atData.data = encryptionPrivateKey;
       //------------Operation---------------------------------
-      String atKey = (AtKey.self(AT_ENCRYPTION_PRIVATE_KEY,
+      String atKey = (AtKey.self(AtConstants.atEncryptionPrivateKey,
               sharedBy: TestResources.atsign))
           .build()
           .toString();
@@ -829,10 +829,10 @@ void main() {
       var atData = AtData();
       atData.data = pkamPrivateKey;
       //------------Operation---------------------------------
-      String atKey =
-          (AtKey.self(AT_PKAM_PRIVATE_KEY, sharedBy: TestResources.atsign))
-              .build()
-              .toString();
+      String atKey = (AtKey.self(AtConstants.atPkamPrivateKey,
+              sharedBy: TestResources.atsign))
+          .build()
+          .toString();
       int putCommitId = await keystore!.put(atKey, atData);
       // -----------Assertions---------------------------------
       // verifying the key in the key store

@@ -21,7 +21,9 @@ class TestSuiteInitializer {
       // Create the atClientManager for the atSign
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace,
-              TestPreferences.getInstance().getPreference(atSign));
+              TestPreferences.getInstance().getPreference(atSign),
+              atChops: AtEncryptionKeysLoader.getInstance()
+                  .createAtChopsFromDemoKeys(atSign));
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(atClientManager.atClient, atSign);

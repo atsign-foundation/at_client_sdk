@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
@@ -12,13 +11,8 @@ void main() {
   String namespace = 'wavi';
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(currentAtSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, 'wavi', preference);
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
     atClientManager.atClient.syncService.sync();
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   });
   // Invoking 'setCurrentAtSign' in setUp method to set currentAtSign before each test.
   setUp(() async {

@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
@@ -9,12 +8,7 @@ void main() {
   String sharedWithAtSign = '@bob🛠';
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(currentAtSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, 'me', preference);
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
+    atClientManager = await TestUtils.initAtClient(currentAtSign, 'wavi');
   });
 
   test(

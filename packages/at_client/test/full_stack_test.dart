@@ -39,7 +39,6 @@ void main() {
   group('Test with full client stack except mockRemoteSecondary', () {
     final fullStackPrefs = AtClientPreference()
       ..namespace = namespace
-      ..useAtChops = true
       ..isLocalStoreRequired = true
       ..hiveStoragePath = '$namespace/put/hive'
       ..commitLogPath = '$namespace/put/commitLog';
@@ -63,7 +62,7 @@ void main() {
     var myEncryptedBobSharedKey = EncryptionUtil.encryptKey(
         bobSharedKey, alicesRSAKeyPair.publicKey.toString());
     var llookupMySharedKeyForBob = LLookupVerbBuilder()
-      ..atKey = '$AT_ENCRYPTION_SHARED_KEY.bob'
+      ..atKey = '${AtConstants.atEncryptionSharedKey}.bob'
       ..sharedBy = '@alice';
 
     var victorSymKey = EncryptionUtil.generateAESKey();
@@ -103,7 +102,7 @@ void main() {
       // Create our symmetric 'self' encryption key
       await atClient
           .getLocalSecondary()!
-          .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
+          .putValue(AtConstants.atEncryptionSelfKey, selfEncryptionKey);
 
       await atClient.getLocalSecondary()!.putValue(
           'public:publickey@alice', alicesRSAKeyPair.publicKey.toString());
