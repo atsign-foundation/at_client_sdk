@@ -114,6 +114,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   late final AtSignLogger _logger;
 
+  @override
+  String? enrollmentId;
+
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
@@ -991,7 +994,4 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     return result.notificationID;
   }
-
-  @override
-  String? enrollmentId;
 }
