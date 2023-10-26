@@ -90,6 +90,8 @@ class NotificationServiceImpl
     _atClient = atClient;
     _logger = AtSignLogger(
         'NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
+
+    _logger.finer('enrollmentId: ${atClient.enrollmentId}');
     _monitor = monitor ??
         Monitor(
             _internalNotificationCallback,
@@ -98,7 +100,8 @@ class NotificationServiceImpl
             _atClient.getPreferences()!,
             MonitorPreference()..keepAlive = true,
             monitorRetry,
-            atChops: atClient.atChops);
+            atChops: atClient.atChops,
+            enrollmentId: atClient.enrollmentId);
     _atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, _atClient.getCurrentAtSign()!,

@@ -38,6 +38,11 @@ abstract class AtClient {
 
   AtChops? get atChops;
 
+  /// Enrollment id for apkam enrolled clients
+  set enrollmentId(String? enrollmentId);
+
+  String? get enrollmentId;
+
   set syncService(SyncService syncService);
   SyncService get syncService;
 

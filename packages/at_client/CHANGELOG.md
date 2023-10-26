@@ -2,6 +2,7 @@
 - build[deps]: Upgraded dependencies for the following packages:
   - asn1lib: `>=1.4.1 <=1.5.0`, crypton: `>=2.1.0 <=2.2.1`, encrypt: `>=5.0.1 <=5.0.3`, crypto: `^3.0.3`
 ## 3.0.66
+- feat: make namespace NOT mandatory for local keys
 - feat: deprecate useAtChops experimental flag and remove fallback code using private key from preferences/EncryptionUtil methods
 - updated at_commons to `'3.0.57'`, at_chops to `'1.0.5`, at_persistence_secondary_server to `'3.0.59'` 
 ## 3.0.65
