@@ -1,3 +1,5 @@
+## 3.0.67
+- feat: Make enrollment available to SyncService/NotificationService for authentication
 ## 3.0.66
 - feat: make namespace NOT mandatory for local keys
 - feat: deprecate useAtChops experimental flag and remove fallback code using private key from preferences/EncryptionUtil methods
