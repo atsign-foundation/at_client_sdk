@@ -158,7 +158,7 @@ class RemoteSecondary implements Secondary {
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to
   /// secondary server
   Future<bool> authenticateCram(var secret) async {
-    if(secret == null){
+    if (secret == null) {
       throw UnAuthenticatedException('Cram secret cannot be null');
     }
     var authResult = await atLookUp.cramAuthenticate(secret);
