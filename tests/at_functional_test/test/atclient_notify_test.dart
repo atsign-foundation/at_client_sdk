@@ -1,16 +1,19 @@
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
-  final String currentAtSign = '@alice🛠';
-  final String sharedWithAtSign = '@bob🛠';
   late AtClientManager atClientManager;
-  String namespace = 'wavi';
+  late String currentAtSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
+    currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
     atClientManager.atClient.syncService.sync();
   });
@@ -212,6 +215,61 @@ void main() {
               10,
           true);
     }
+  });
+
+   group('A group of tests for notification fetch', () {
+    test('A test to verify non existent notification', () async {
+      await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign,
+          namespace,
+          TestUtils.getPreference(currentAtSign));
+      var notificationResult = await AtClientManager.getInstance()
+          .atClient
+          .notificationService
+          .fetch('abc-123');
+      expect(notificationResult.id, 'abc-123');
+      expect(notificationResult.status, 'NotificationStatus.expired');
+    });
+
+    test('A test to verify the notification expiry', () async {
+      for (int i = 0; i < 10; i++) {
+        print('Testing notification expiry - test run #$i');
+        await AtClientManager.getInstance().setCurrentAtSign(
+            currentAtSign,
+            namespace,
+            TestUtils.getPreference(currentAtSign));
+        var atKey = (AtKey.shared('test-notification-expiry',
+                namespace: 'wavi', sharedBy: currentAtSign)
+              ..sharedWith(sharedWithAtSign))
+            .build();
+        NotificationResult notificationResult =
+            await AtClientManager.getInstance()
+                .atClient
+                .notificationService
+                .notify(NotificationParams.forUpdate(atKey,
+                    notificationExpiry: Duration(minutes: 1)));
+
+        AtNotification atNotification = await AtClientManager.getInstance()
+            .atClient
+            .notificationService
+            .fetch(notificationResult.notificationID);
+
+        var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
+                atNotification.expiresAtInEpochMillis!)
+            .toUtc()
+            .millisecondsSinceEpoch;
+        var expectedExpiresAtInEpochMills =
+            DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
+                .toUtc()
+                .add(Duration(minutes: 1))
+                .millisecondsSinceEpoch;
+        expect(
+            (actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills)
+                    .abs() <
+                10,
+            true);
+      }
+    });
   });
 }
 

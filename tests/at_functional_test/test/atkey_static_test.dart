@@ -1,17 +1,20 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
 /// The tests verify the put and get functionality where key is created using AtKey
 /// static factory methods
 void main() {
-  String atSign = '@alice🛠';
-  String sharedWithAtSign = '@bob🛠';
+  late String atSign;
+  late String sharedWithAtSign;
   String namespace = 'wavi';
   late AtClientManager atClientManager;
 
   setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
