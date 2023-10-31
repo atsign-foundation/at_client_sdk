@@ -3,7 +3,6 @@ import 'dart:math';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
@@ -20,16 +19,10 @@ void main() {
 
   test('race test - repeated gets without awaits', () async {
     var atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
     var namespace = 'at_lookup_race_test';
 
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, namespace, preference);
+    final atClientManager = await TestUtils.initAtClient(atSign, namespace);
     var atClient = atClientManager.atClient;
-
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClient, atSign);
 
     Random random = Random();
 

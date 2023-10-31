@@ -10,14 +10,13 @@ import 'package:at_functional_test/src/at_demo_credentials.dart' as at_demos;
 import 'test_utils.dart';
 
 String atSign = '@alice🛠';
+String namespace = 'wavi';
 
 void main() {
   late AtClientManager atClientManager;
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(atSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', preference);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
   test('Verify pkam auth', () async {

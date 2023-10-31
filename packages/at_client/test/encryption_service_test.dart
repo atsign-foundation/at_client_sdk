@@ -9,12 +9,15 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'package:at_chops/at_chops.dart';
 
 class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {}
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+
+class MockAtChops extends Mock implements AtChops {}
 
 class MockAtClient extends Mock implements AtClient {
   @override
@@ -24,6 +27,8 @@ class MockAtClient extends Mock implements AtClient {
 }
 
 class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
+
+class FakeAtSigningInput extends Fake implements AtSigningInput {}
 
 class MockCommitLogKeystore extends Mock implements CommitLogKeyStore {}
 
@@ -37,6 +42,17 @@ void main() {
   AtClientManager mockAtClientManager = MockAtClientManager();
 
   registerFallbackValue(FakeLocalLookUpVerbBuilder());
+  AtChops mockAtChops = MockAtChops();
+  late AtSigningResult mockSigningResult;
+
+  setUp(() {
+    when(() => mockAtClient.atChops).thenAnswer((_) => mockAtChops);
+    when(() => mockAtClient.getLocalSecondary())
+        .thenAnswer((_) => mockLocalSecondary);
+    mockSigningResult = AtSigningResult()..result = 'mock_signing_result';
+    registerFallbackValue(FakeAtSigningInput());
+    when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
+  });
 
   group('A group of test to validate self key encryption exceptions', () {
     test(
@@ -200,7 +216,10 @@ void main() {
 
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => mockLocalSecondary);
-
+      when(() => mockAtChops.decryptString(
+              encryptedSharedKey, EncryptionKeyType.rsa2048))
+          .thenAnswer(
+              (_) => (AtEncryptionResult()..result = originalSharedKey));
       when(() => mockLocalSecondary
               .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
@@ -231,6 +250,10 @@ void main() {
           .thenAnswer((_) => mockLocalSecondary);
       when(() => mockAtClient.getRemoteSecondary())
           .thenAnswer((_) => mockRemoteSecondary);
+      when(() => mockAtChops.decryptString(
+              encryptedSharedKey, EncryptionKeyType.rsa2048))
+          .thenAnswer(
+              (_) => (AtEncryptionResult()..result = originalSharedKey));
 
       when(() => mockLocalSecondary.executeVerb(
           any(that: LLookupEncryptedSharedKeyMatcher()))).thenAnswer((_) async {
@@ -347,6 +370,9 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
+      when(() => mockAtChops.decryptString(
+              encryptedSharedKey, EncryptionKeyType.rsa2048))
+          .thenAnswer((_) => (AtEncryptionResult()..result = sharedKey));
 
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
@@ -381,6 +407,9 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
+      when(() => mockAtChops.decryptString(
+              encryptedSharedKey, EncryptionKeyType.rsa2048))
+          .thenAnswer((_) => (AtEncryptionResult()..result = sharedKey));
 
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       var decryptedSharedKey =

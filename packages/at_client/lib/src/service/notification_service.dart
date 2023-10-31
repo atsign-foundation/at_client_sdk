@@ -155,7 +155,7 @@ class NotificationParams {
   PriorityEnum _priority = PriorityEnum.low;
   StrategyEnum _strategy = StrategyEnum.all;
   int _latestN = 1;
-  String _notifier = SYSTEM;
+  String _notifier = AtConstants.system;
   Duration _notificationExpiry = Duration(hours: 24);
 
   String get id => _id;
@@ -197,7 +197,7 @@ class NotificationParams {
       PriorityEnum priority = PriorityEnum.low,
       StrategyEnum strategy = StrategyEnum.all,
       int latestN = 1,
-      String notifier = SYSTEM,
+      String notifier = AtConstants.system,
       Duration? notificationExpiry}) {
     return NotificationParams()
       .._id = Uuid().v4()

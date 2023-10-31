@@ -115,9 +115,9 @@ class SyncUtil {
   ///
   /// The PKAM keys and Encryption Private key should not be sync'ed to remote secondary
   static bool shouldSync(String key) {
-    if (key.startsWith(AT_PKAM_PRIVATE_KEY) ||
-        key.startsWith(AT_PKAM_PUBLIC_KEY) ||
-        key.startsWith(AT_ENCRYPTION_PRIVATE_KEY) ||
+    if (key.startsWith(AtConstants.atPkamPrivateKey) ||
+        key.startsWith(AtConstants.atPkamPublicKey) ||
+        key.startsWith(AtConstants.atEncryptionPrivateKey) ||
         key.startsWith(NotificationServiceImpl.notificationIdKey) ||
         key.startsWith(NotificationServiceImpl.lastReceivedNotificationKey)) {
       return false;

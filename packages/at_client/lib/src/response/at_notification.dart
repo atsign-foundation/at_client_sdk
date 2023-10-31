@@ -26,17 +26,17 @@ class AtNotification {
 
     if (json['metadata'] != null) {
       metadata = Metadata();
-      metadata.encKeyName = json['metadata'][ENCRYPTING_KEY_NAME];
-      metadata.encAlgo = json['metadata'][ENCRYPTING_ALGO];
-      metadata.ivNonce = json['metadata'][IV_OR_NONCE];
+      metadata.encKeyName = json['metadata'][AtConstants.encryptingKeyName];
+      metadata.encAlgo = json['metadata'][AtConstants.encryptingAlgo];
+      metadata.ivNonce = json['metadata'][AtConstants.ivOrNonce];
       metadata.skeEncKeyName =
-          json['metadata'][SHARED_KEY_ENCRYPTED_ENCRYPTING_KEY_NAME];
+          json['metadata'][AtConstants.sharedKeyEncryptedEncryptingKeyName];
       metadata.skeEncAlgo =
-          json['metadata'][SHARED_KEY_ENCRYPTED_ENCRYPTING_ALGO];
+          json['metadata'][AtConstants.sharedKeyEncryptedEncryptingAlgo];
     }
 
     return AtNotification(json['id'], json['key'], json['from'], json['to'],
-        json['epochMillis'], json['messageType'], json[IS_ENCRYPTED],
+        json['epochMillis'], json['messageType'], json[AtConstants.isEncrypted],
         value: json['value'],
         operation: json['operation'],
         expiresAtInEpochMillis: json['expiresAt'],
@@ -53,7 +53,7 @@ class AtNotification {
       'value': value,
       'operation': operation,
       'messageType': messageType,
-      IS_ENCRYPTED: isEncrypted,
+      AtConstants.isEncrypted: isEncrypted,
       'notificationStatus': status,
       'expiresAt': expiresAtInEpochMillis,
       'metadata': metadata

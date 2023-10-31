@@ -291,5 +291,16 @@ void main() {
           localSecondaryKeyStore: mockKeystore);
       expect(await client.isSecondaryReset(), false);
     });
+
+  group('A group of tests related to setting enrollmentId', () {
+    test(
+        'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
+        () async {
+      final testEnrollmentId = 'abc123';
+      var atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign('@alice', 'wavi', AtClientPreference(),
+              enrollmentId: testEnrollmentId);
+      expect(atClientManager.atClient.enrollmentId, testEnrollmentId);
+    });
   });
 }
