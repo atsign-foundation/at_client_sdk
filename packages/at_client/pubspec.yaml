@@ -40,13 +40,6 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries
-      path: packages/at_commons
-      ref: at_reset_exception
-
 
 dev_dependencies:
   lints: ^2.1.1
