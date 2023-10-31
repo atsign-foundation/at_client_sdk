@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -16,17 +15,15 @@ void main() {
   late AtClientManager atClientManager;
   late MySyncProgressListener progressListener;
   var uniqueId = Uuid().v4();
+  String namespace = 'wavi';
 
   setUp(() async {
     var preference = TestUtils.getPreference(atSign);
     preference.syncBatchSize = 15;
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', preference);
+    atClientManager =
+        await TestUtils.initAtClient(atSign, namespace, preference: preference);
     progressListener = MySyncProgressListener();
     atClientManager.atClient.syncService.addProgressListener(progressListener);
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, atSign);
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {

@@ -7,7 +7,6 @@ import 'dart:math';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/util/logger_util.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -16,6 +15,8 @@ import 'package:version/version.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_functional_test/src/at_demo_credentials.dart'
     as demo_credentials;
+
+import 'test_utils.dart';
 
 /// The purpose of this test is to run multiple clients in Isolate and inject
 /// bulk data.
@@ -284,10 +285,8 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
   var atClientPreferences = _getAtClientPreference(currentAtSign,
       hiveStoragePath: clientParameters.hiveStoragePath,
       commitLogPath: clientParameters.commitLogPath);
-  atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign(currentAtSign, namespace, atClientPreferences);
-  await AtEncryptionKeysLoader.getInstance()
-      .setEncryptionKeys(atClientManager.atClient, currentAtSign);
+  atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
+      preference: atClientPreferences);
   MySyncProgressListener mySyncProgressListener = MySyncProgressListener();
   atClientManager.atClient.syncService
       .addProgressListener(mySyncProgressListener);
