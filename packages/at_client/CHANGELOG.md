@@ -1,3 +1,5 @@
+## 3.0.68
+- feat: have AtRpc use ephemeral notifications
 ## 3.0.67
 - feat: Make enrollment available to SyncService/NotificationService for authentication
 ## 3.0.66
