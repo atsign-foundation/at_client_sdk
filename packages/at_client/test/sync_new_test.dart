@@ -787,8 +787,7 @@ void main() {
       var atData = AtData();
       atData.data = encryptionPrivateKey;
       //------------Operation---------------------------------
-      String atKey = (AtKey.self(AtConstants.atEncryptionPrivateKey,
-              sharedBy: TestResources.atsign))
+      String atKey = (AtKey.self(AtConstants.atEncryptionPrivateKey))
           .build()
           .toString();
       int putCommitId = await keystore!.put(atKey, atData);
@@ -829,8 +828,7 @@ void main() {
       var atData = AtData();
       atData.data = pkamPrivateKey;
       //------------Operation---------------------------------
-      String atKey = (AtKey.self(AtConstants.atPkamPrivateKey,
-              sharedBy: TestResources.atsign))
+      String atKey = (AtKey.self(AtConstants.atPkamPrivateKey))
           .build()
           .toString();
       int putCommitId = await keystore!.put(atKey, atData);
