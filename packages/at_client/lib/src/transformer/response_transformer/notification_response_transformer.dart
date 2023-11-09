@@ -65,7 +65,7 @@ class NotificationResponseTransformer
         // The shared_key (which is a reserved key) has different decryption process
         // and is not a user created key.
         // Hence do not decrypt if key's are reserved keys
-        AtKey.getKeyType(atKey.key!) != KeyType.reservedKey) {
+        AtKey.getKeyType(atKey.toString()) != KeyType.reservedKey) {
       // decrypt the value
       atNotification.value =
           await _getDecryptedValue(atKey, atNotification.value!);
