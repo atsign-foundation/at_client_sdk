@@ -1,18 +1,27 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
 const notificationIdKey = '_latestNotificationIdv2';
 
 void main() {
-  test('put method - create a key sharing to other atSign', () async {
-    var atSign = '@alice🛠';
-    var atSign2 = '@bob🛠';
-    String namespace = 'wavi';
-    var atClientManager = await TestUtils.initAtClient(atSign, namespace);
+  late String atSign;
+  late String atSign2;
+  late AtClientManager atClientManager;
+   String namespace = 'wavi';
+
+  setUp(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    atSign2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
     atClientManager.atClient.syncService.sync();
+  });
+
+  test('put method - create a key sharing to other atSign', () async {
     // phone.me@alice🛠
     var notificationKey = AtKey()..key = notificationIdKey;
     var atNotification = AtNotification('123', notificationIdKey, atSign,

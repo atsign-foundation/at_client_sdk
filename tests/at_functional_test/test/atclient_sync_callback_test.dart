@@ -1,8 +1,11 @@
+// ignore_for_file: depend_on_referenced_packages
+
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -11,13 +14,14 @@ import 'package:uuid/uuid.dart';
 import 'test_utils.dart';
 
 void main() {
-  final atSign = '@alice🛠';
   late AtClientManager atClientManager;
+  late String atSign;
   late MySyncProgressListener progressListener;
   var uniqueId = Uuid().v4();
   String namespace = 'wavi';
 
   setUp(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     var preference = TestUtils.getPreference(atSign);
     preference.syncBatchSize = 15;
     atClientManager =
