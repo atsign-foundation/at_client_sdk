@@ -76,7 +76,7 @@ class AtRpcClient implements AtRpcCallbacks {
         break;
       case AtRpcRespType.success:
         logger.info(
-            'Got auth check response : $response');
+            'Got success response : $response');
         completer.complete(response.payload);
         completerMap.remove(response.reqId);
         break;
