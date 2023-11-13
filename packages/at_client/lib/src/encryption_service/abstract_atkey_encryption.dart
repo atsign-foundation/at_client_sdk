@@ -107,38 +107,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     /// - If found existing in either local or atServer, decrypt it and return
     encryptedSharedKey =
         defaultResponseParser.parse(encryptedSharedKey!).response;
-    if (_atClient.getPreferences()!.useAtChops) {
-      final decryptionResult = _atClient.atChops!
-          .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-      return decryptionResult.result;
-    } else {
-      String? encryptionPrivateKey;
-      try {
-        encryptionPrivateKey =
-            await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
-      } on KeyNotFoundException catch (e) {
-        e.stack(AtChainedException(
-            Intent.fetchEncryptionPrivateKey,
-            ExceptionScenario.encryptionFailed,
-            'Failed to decrypt the encrypted shared key'));
-        rethrow;
-      }
-      try {
-        _logger.finer(
-            "Decrypting encryptedSharedKey $encryptedSharedKey using EncryptionUtil");
-        // ignore: deprecated_member_use_from_same_package
-        return EncryptionUtil.decryptKey(
-            encryptedSharedKey, encryptionPrivateKey!);
-      } on KeyNotFoundException catch (e) {
-        _logger.severe(
-            "Failed to decrypt my copy of shared symmetric key for ${atKey.sharedWith}");
-        e.stack(AtChainedException(
-            Intent.fetchEncryptionPrivateKey,
-            ExceptionScenario.encryptionFailed,
-            'Failed to decrypt the encrypted shared key'));
-        rethrow;
-      }
-    }
+    final decryptionResult = _atClient.atChops!
+        .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
+    return decryptionResult.result;
   }
 
   /// Create a new symmetric shared key and share it.
@@ -316,7 +287,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       AtKey atKey, String encryptedSharedKey, Secondary secondary) async {
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
       ..atKey =
-          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
+          '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
       ..sharedBy = atKey.sharedBy
       ..value = encryptedSharedKey;
     await secondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder,
@@ -330,7 +301,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       Secondary secondary, AtKey atKey) async {
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey =
-          '$AT_ENCRYPTION_SHARED_KEY.${atKey.sharedWith?.replaceAll('@', '')}'
+          '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
       ..sharedBy = atKey.sharedBy;
     String? myCopy;
 
@@ -353,7 +324,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<String?> _getTheirEncryptedCopyOfSharedSymmetricKey(
       Secondary secondary, AtKey atKey) async {
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..atKey = AtConstants.atEncryptionSharedKey
       ..sharedBy = atKey.sharedBy
       ..sharedWith = atKey.sharedWith;
     String? theirCopy;
@@ -375,7 +346,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       {Secondary? secondary}) async {
     secondary ??= _atClient.getLocalSecondary()!;
     var updateSharedKeyBuilder = UpdateVerbBuilder()
-      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..atKey = AtConstants.atEncryptionSharedKey
       ..sharedWith = atKey.sharedWith
       ..sharedBy = atKey.sharedBy
       ..ttr = 3888000
@@ -389,7 +360,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<void> deleteTheirCopyOfEncryptedSharedKey(
       AtKey atKey, Secondary secondary) async {
     var deleteBuilder = DeleteVerbBuilder()
-      ..atKey = AT_ENCRYPTION_SHARED_KEY
+      ..atKey = AtConstants.atEncryptionSharedKey
       ..sharedWith = atKey.sharedWith
       ..sharedBy = atKey.sharedBy;
 

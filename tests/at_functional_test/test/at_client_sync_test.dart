@@ -4,25 +4,22 @@ import 'package:at_client/src/util/sync_util.dart';
 
 // ignore: depend_on_referenced_packages
 import 'package:at_commons/at_builders.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
+import 'package:at_functional_test/src/config_util.dart';
 
 void main() {
-  String atSign = '@alice🛠';
-  String sharedWithAtSign = '@bob🛠';
+  late String atSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
   late AtClientManager atClientManager;
-  String namespace = 'wavi';
 
-  setUp(() async {
-    var preference = TestUtils.getPreference(atSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, namespace, preference);
+  setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
     atClientManager.atClient.syncService.sync();
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, atSign);
   });
 
   test('Verify local changes are synced to server - local ahead', () async {

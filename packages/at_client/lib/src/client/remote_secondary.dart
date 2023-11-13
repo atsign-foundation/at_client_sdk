@@ -54,16 +54,21 @@ class RemoteSecondary implements Secondary {
 
   Map<String, String> _getClientConfig() {
     var clientConfig = <String, String>{};
-    clientConfig[VERSION] = AtClientConfig.getInstance().atClientVersion;
-    clientConfig[CLIENT_ID] = _preference.atClientParticulars.clientId;
+    clientConfig[AtConstants.version] =
+        AtClientConfig.getInstance().atClientVersion;
+    clientConfig[AtConstants.clientId] =
+        _preference.atClientParticulars.clientId;
     if (_preference.atClientParticulars.appName.isNotNull) {
-      clientConfig[APP_NAME] = _preference.atClientParticulars.appName!;
+      clientConfig[AtConstants.appName] =
+          _preference.atClientParticulars.appName!;
     }
     if (_preference.atClientParticulars.appVersion.isNotNull) {
-      clientConfig[APP_VERSION] = _preference.atClientParticulars.appVersion!;
+      clientConfig[AtConstants.appVersion] =
+          _preference.atClientParticulars.appVersion!;
     }
     if (_preference.atClientParticulars.platform.isNotNull) {
-      clientConfig[PLATFORM] = _preference.atClientParticulars.platform!;
+      clientConfig[AtConstants.platform] =
+          _preference.atClientParticulars.platform!;
     }
     return clientConfig;
   }
@@ -153,7 +158,10 @@ class RemoteSecondary implements Secondary {
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to
   /// secondary server
   Future<bool> authenticateCram(var secret) async {
-    var authResult = await atLookUp.authenticate_cram(secret);
+    if (secret == null) {
+      throw UnAuthenticatedException('Cram secret cannot be null');
+    }
+    var authResult = await atLookUp.cramAuthenticate(secret);
     return authResult;
   }
 

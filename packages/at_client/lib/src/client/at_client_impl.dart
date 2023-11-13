@@ -114,7 +114,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   late final AtSignLogger _logger;
 
-  String? _enrollmentId;
+  @override
+  String? enrollmentId;
 
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
@@ -126,7 +127,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
-      String? enrollmentId,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) async {
     atClientManager ??= AtClientManager.getInstance();
@@ -162,7 +162,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
-      String? enrollmentId,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig}) {
     _atSign = AtUtils.fixAtSign(theAtSign);
@@ -179,7 +178,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
     _atChops = atChops;
-    _enrollmentId = enrollmentId;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
   }
 
@@ -191,13 +189,14 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       }
 
       _localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
+      _atChops ??= await _createAtChops(_atSign);
     }
 
     // Now using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops,
         privateKey: _preference!.privateKey,
-        enrollmentId: _enrollmentId);
+        enrollmentId: enrollmentId);
 
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
@@ -260,20 +259,22 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<bool> persistPrivateKey(String privateKey) async {
     var atData = AtData();
     atData.data = privateKey.toString();
-    await _localSecondary!.keyStore!.put(AT_PKAM_PRIVATE_KEY, atData);
+    await _localSecondary!.keyStore!.put(AtConstants.atPkamPrivateKey, atData);
     return true;
   }
 
   Future<bool> persistPublicKey(String publicKey) async {
     var atData = AtData();
     atData.data = publicKey.toString();
-    await getLocalSecondary()!.keyStore!.put(AT_PKAM_PUBLIC_KEY, atData);
+    await getLocalSecondary()!
+        .keyStore!
+        .put(AtConstants.atPkamPublicKey, atData);
     return true;
   }
 
   Future<String?> getPrivateKey(String atSign) async {
     var privateKeyData =
-        await getLocalSecondary()!.keyStore!.get(AT_PKAM_PRIVATE_KEY);
+        await getLocalSecondary()!.keyStore!.get(AtConstants.atPkamPrivateKey);
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
@@ -595,7 +596,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       ..isBinary = metadata.isBinary
       ..isEncrypted = metadata.isEncrypted
       ..dataSignature = metadata.dataSignature
-      ..operation = UPDATE_META;
+      ..operation = AtConstants.updateMeta;
 
     var updateMetaResult = await getSecondary()
         .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
@@ -612,7 +613,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   String? getOperation(dynamic value, Metadata? data) {
     if (value != null && data == null) {
-      return VALUE;
+      return AtConstants.value;
     }
     // Verifies if any of the args are not null
     var isMetadataNotNull = AtClientUtil.isAnyNotNull(
@@ -624,11 +625,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         a6: data.isEncrypted);
     //If value is not null and metadata is not null, return UPDATE_ALL
     if (value != null && isMetadataNotNull) {
-      return UPDATE_ALL;
+      return AtConstants.updateAll;
     }
     //If value is null and metadata is not null,
     if (value == null && isMetadataNotNull) {
-      return UPDATE_META;
+      return AtConstants.updateMeta;
     }
     return null;
   }
@@ -639,6 +640,37 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       result = result.replaceFirst('data:', '');
     }
     return result ??= '';
+  }
+
+  Future<AtChops> _createAtChops(String atSign) async {
+    AtEncryptionKeyPair? atEncryptionKeyPair;
+    AtPkamKeyPair? atPkamKeyPair;
+    try {
+      var encryptionPublicKey =
+          await _localSecondary!.getEncryptionPublicKey(atSign);
+      var encryptionPrivateKey =
+          await _localSecondary!.getEncryptionPrivateKey();
+      if (encryptionPublicKey != null && encryptionPrivateKey != null) {
+        atEncryptionKeyPair = AtEncryptionKeyPair.create(
+            encryptionPublicKey, encryptionPrivateKey);
+      }
+    } on KeyNotFoundException catch (e) {
+      _logger.warning(
+          '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}');
+    }
+    try {
+      var pkamPublicKey = await _localSecondary!.getPublicKey();
+      var pkamPrivateKey = await _localSecondary!.getPrivateKey();
+
+      if (pkamPublicKey != null && pkamPrivateKey != null) {
+        atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
+      }
+    } on KeyNotFoundException catch (e) {
+      _logger.warning(
+          '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}');
+    }
+    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    return AtChopsImpl(atChopsKeys);
   }
 
   @override

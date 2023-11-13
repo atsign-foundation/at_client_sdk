@@ -1,9 +1,10 @@
+// ignore_for_file: depend_on_referenced_packages
+
 import 'dart:async';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
@@ -14,23 +15,22 @@ late AtSignLogger logger;
 
 void main() {
   AtSignLogger.root_level = 'warning';
-
   logger = AtSignLogger('at_lookup_race_test.dart');
   logger.level = 'info';
+  late String atSign;
+  late AtClientManager atClientManager;
+  late AtClient atClient;
+  final namespace = 'at_lookup_race_test';
+
+  setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager.atClient.syncService.sync();
+    atClient = atClientManager.atClient;
+  });
 
   test('race test - repeated gets without awaits', () async {
-    var atSign = '@alice🛠';
-    var preference = TestUtils.getPreference(atSign);
-    var namespace = 'at_lookup_race_test';
-
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, namespace, preference);
-    var atClient = atClientManager.atClient;
-
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClient, atSign);
-
     Random random = Random();
 
     // Wait for initial sync to complete

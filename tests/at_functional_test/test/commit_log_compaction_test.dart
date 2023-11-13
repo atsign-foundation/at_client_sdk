@@ -1,5 +1,5 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
@@ -8,17 +8,13 @@ import 'test_utils.dart';
 late AtClientManager atClientManager;
 late String sharedWithAtSign;
 AtCommitLog? atCommitLog;
-String currentAtSign = '@alice🛠';
+late String currentAtSign;
 var preference = TestUtils.getPreference(currentAtSign);
 String namespace = 'wavi';
 
 Future<void> setUpMethod() async {
-  atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign(currentAtSign, namespace, preference);
-  atClientManager.atClient.syncService.sync();
-  // To setup encryption keys
-  await AtEncryptionKeysLoader.getInstance()
-      .setEncryptionKeys(atClientManager.atClient, currentAtSign);
+  currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+  atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
 }
 
 void main() {

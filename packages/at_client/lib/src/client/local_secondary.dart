@@ -68,7 +68,7 @@ class LocalSecondary implements Secondary {
       dynamic updateResult;
       var updateKey = builder.buildKey();
       switch (builder.operation) {
-        case UPDATE_META:
+        case AtConstants.updateMeta:
           var metadata = Metadata();
           metadata
             ..ttl = builder.ttl
@@ -237,29 +237,30 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String?> getPrivateKey() async {
-    var privateKeyData = await keyStore!.get(AT_PKAM_PRIVATE_KEY);
+    var privateKeyData = await keyStore!.get(AtConstants.atPkamPrivateKey);
     return privateKeyData?.data;
   }
 
-  Future<String>? getEncryptionPrivateKey() async {
-    var privateKeyData = await keyStore!.get(AT_ENCRYPTION_PRIVATE_KEY);
+  Future<String?> getEncryptionPrivateKey() async {
+    var privateKeyData =
+        await keyStore!.get(AtConstants.atEncryptionPrivateKey);
     return privateKeyData?.data;
   }
 
   Future<String?> getPublicKey() async {
-    var publicKeyData = await keyStore!.get(AT_PKAM_PUBLIC_KEY);
+    var publicKeyData = await keyStore!.get(AtConstants.atPkamPublicKey);
     return publicKeyData?.data;
   }
 
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
     var privateKeyData =
-        await keyStore!.get('$AT_ENCRYPTION_PUBLIC_KEY$atSign');
+        await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign');
     return privateKeyData?.data;
   }
 
   Future<String?> getEncryptionSelfKey() async {
-    var selfKeyData = await keyStore!.get(AT_ENCRYPTION_SELF_KEY);
+    var selfKeyData = await keyStore!.get(AtConstants.atEncryptionSelfKey);
     return selfKeyData?.data;
   }
 

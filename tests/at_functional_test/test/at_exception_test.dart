@@ -1,26 +1,25 @@
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
-
-import 'package:test/test.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+// ignore: depend_on_referenced_packages
 import 'package:at_commons/at_commons.dart';
+import 'package:at_functional_test/src/config_util.dart';
+import 'package:test/test.dart';
+
 import 'test_utils.dart';
 
 void main() {
   late AtClientManager atClientManager;
   late AtClient atClient;
-  var sharedWithAtSign = '@bob🛠';
-  var currentAtSign = '@alice🛠';
-  var namespace = 'wavi';
+  late String atSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(currentAtSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, namespace, preference);
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager.atClient.syncService.sync();
     atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   });
 
   test('Verify KeyNotFoundException for local secondary', () async {

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -11,7 +10,6 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 import 'package:meta/meta.dart';
 
 ///
@@ -140,6 +138,7 @@ class Monitor {
     _keepAlive = monitorPreference.keepAlive;
     _lastNotificationTime = monitorPreference.lastNotificationTime;
     _enrollmentId = enrollmentId;
+    _logger.finer('enrollmentId: $_enrollmentId');
     _remoteSecondary = remoteSecondary ??
         RemoteSecondary(atSign, preference,
             atChops: atChops, enrollmentId: enrollmentId);
@@ -261,6 +260,10 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
+    if (atChops == null) {
+      throw AtClientException.message(
+          'cannot authenticate monitor connection without at_chops set');
+    }
     await _monitorConnection!.write('from:$_atSign\n');
     var fromResponse = await getQueueResponse();
     if (fromResponse.isEmpty) {
@@ -268,29 +271,20 @@ class Monitor {
     }
     _logger.finer(
         'Authenticating the monitor connection: from result:$fromResponse');
-    if (_preference.useAtChops) {
-      _logger.finer('Using AtChops to do the PKAM signing');
-      final atSigningInput = AtSigningInput(fromResponse)
-        ..signingAlgoType = _preference.signingAlgoType
-        ..hashingAlgoType = _preference.hashingAlgoType
-        ..signingMode = AtSigningMode.pkam;
-      var signingResult = atChops!.sign(atSigningInput);
-      var pkamBuilder = PkamVerbBuilder()
-        ..signingAlgo = _preference.signingAlgoType.name
-        ..hashingAlgo = _preference.hashingAlgoType.name
-        ..enrollmentlId = _enrollmentId
-        ..signature = signingResult.result;
-      var pkamCommand = pkamBuilder.buildCommand();
-      _logger.finer('Sending command $pkamCommand');
-      await _monitorConnection!.write(pkamCommand);
-    } else {
-      var key = RSAPrivateKey.fromString(_preference.privateKey!);
-      var sha256signature =
-          key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
-      var signature = base64Encode(sha256signature);
-      _logger.finer('Authenticating the monitor connection: pkam:$signature');
-      await _monitorConnection!.write('pkam:$signature\n');
-    }
+    _logger.finer('Using AtChops to do the PKAM signing');
+    final atSigningInput = AtSigningInput(fromResponse)
+      ..signingAlgoType = _preference.signingAlgoType
+      ..hashingAlgoType = _preference.hashingAlgoType
+      ..signingMode = AtSigningMode.pkam;
+    var signingResult = atChops!.sign(atSigningInput);
+    var pkamBuilder = PkamVerbBuilder()
+      ..signingAlgo = _preference.signingAlgoType.name
+      ..hashingAlgo = _preference.hashingAlgoType.name
+      ..enrollmentlId = _enrollmentId
+      ..signature = signingResult.result;
+    var pkamCommand = pkamBuilder.buildCommand();
+    _logger.finer('Sending command $pkamCommand');
+    await _monitorConnection!.write(pkamCommand);
 
     var pkamResponse = await getQueueResponse();
     if (!pkamResponse.contains('success')) {

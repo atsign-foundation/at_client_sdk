@@ -1,31 +1,29 @@
 import 'dart:convert';
 
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'test_utils.dart';
 
 void main() {
   late AtClientManager atClientManager;
-  String atSign = '@alice🛠';
+  late String atSign;
+  String namespace = 'wavi';
   late String aliceApkamSymmetricKey;
   late String aliceDefaultEncryptionPrivateKey;
   late String aliceSelfEncryptionKey;
   late String alicePkamPublicKey;
 
   setUp(() async {
-    var preference = TestUtils.getPreference(atSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', preference);
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
     aliceApkamSymmetricKey = at_demos.apkamSymmetricKeyMap[atSign]!;
     aliceDefaultEncryptionPrivateKey =
         at_demos.encryptionPrivateKeyMap[atSign]!;
     aliceSelfEncryptionKey = at_demos.aesKeyMap[atSign]!;
     alicePkamPublicKey = at_demos.pkamPublicKeyMap[atSign]!;
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, atSign);
-    setLastReceivedNotificationDateTime();
+    await setLastReceivedNotificationDateTime();
   });
 
   void _stopSubscriptions() {

@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
@@ -10,15 +10,13 @@ import 'test_utils.dart';
 /// class
 void main() {
   late AtClientManager atClientManager;
-  String atSign = '@alice🛠';
+  late String atSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(atSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', preference);
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, atSign);
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager.atClient.syncService.sync();
   });
 
   test('put method - create a key sharing to other atSign', () async {

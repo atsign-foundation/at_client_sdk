@@ -52,8 +52,7 @@ class SyncManager {
     _atSign = atSign;
     _preference = preference;
     this._localSecondary = _localSecondary;
-    this._remoteSecondary = RemoteSecondary(atSign, _preference!,
-        privateKey: _preference!.privateKey);
+    this._remoteSecondary = RemoteSecondary(atSign, _preference!);
     if (preference.syncStrategy == SyncStrategy.scheduled && !_isScheduled) {
       _scheduleSyncTask();
     }

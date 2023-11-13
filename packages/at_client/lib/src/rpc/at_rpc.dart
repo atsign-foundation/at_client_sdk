@@ -32,6 +32,8 @@ abstract class AtRpcCallbacks {
 class AtRpc {
   static final AtSignLogger logger = AtSignLogger('AtRpc');
 
+  static Duration defaultNotificationExpiry = Duration(seconds: 30);
+
   /// The [AtClient] used by this AtRpc
   final AtClient atClient;
 
@@ -143,7 +145,9 @@ class AtRpc {
         logger.info(
             'Sending notification ${requestRecordID.toString()} with payload $requestJson');
         await atClient.notificationService.notify(
-            NotificationParams.forUpdate(requestRecordID, value: requestJson),
+            NotificationParams.forUpdate(requestRecordID,
+                value: requestJson,
+                notificationExpiry: defaultNotificationExpiry),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;
@@ -171,9 +175,7 @@ class AtRpc {
   final Metadata _defaultMetaData = Metadata()
     ..isPublic = false
     ..isEncrypted = true
-    ..namespaceAware = true
-    ..ttr = -1
-    ..ttl = 60 * 60 * 1000; // 1 hour
+    ..namespaceAware = true;
 
   /// Not part of API, but visibleForTesting.
   /// Receives 'request' notifications, and
@@ -343,7 +345,8 @@ class AtRpc {
             "Sending notification $responseAtKey with payload ${response.toJson()}");
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
-                value: jsonEncode(response.toJson())),
+                value: jsonEncode(response.toJson()),
+                notificationExpiry: defaultNotificationExpiry),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;

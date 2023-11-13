@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_functional_test/src/at_keys_intialializer.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
@@ -9,18 +8,15 @@ import 'test_utils.dart';
 void main() {
   late AtClientManager atClientManager;
   late AtClient atClient;
-  var sharedWithAtSign = '@bob🛠';
-  var currentAtSign = '@alice🛠';
-  var namespace = 'wavi';
+  late String currentAtSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
-    var preference = TestUtils.getPreference(currentAtSign);
-    atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, namespace, preference);
+    currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
     atClient = atClientManager.atClient;
-    // To setup encryption keys
-    await AtEncryptionKeysLoader.getInstance()
-        .setEncryptionKeys(atClientManager.atClient, currentAtSign);
   });
 
   test('shared key - check sharedKey and checksum in metadata', () async {

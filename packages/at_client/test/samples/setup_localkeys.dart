@@ -14,17 +14,18 @@ void main() async {
     metadata.namespaceAware = false;
     bool result;
     // set pkam private key
-    result = await atClient.getLocalSecondary()!.putValue(AT_PKAM_PRIVATE_KEY,
+    result = await atClient.getLocalSecondary()!.putValue(
+        AtConstants.atPkamPrivateKey,
         at_demos.pkamPrivateKeyMap[atSign]!); // set pkam public key
-    result = await atClient
-        .getLocalSecondary()!
-        .putValue(AT_PKAM_PUBLIC_KEY, at_demos.pkamPublicKeyMap[atSign]!);
+    result = await atClient.getLocalSecondary()!.putValue(
+        AtConstants.atPkamPublicKey, at_demos.pkamPublicKeyMap[atSign]!);
     // set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(
-        AT_ENCRYPTION_PRIVATE_KEY, at_demos.encryptionPrivateKeyMap[atSign]!);
+        AtConstants.atEncryptionPrivateKey,
+        at_demos.encryptionPrivateKeyMap[atSign]!);
     result = await atClient
         .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_SELF_KEY, at_demos.aesKeyMap[atSign]!);
+        .putValue(AtConstants.atEncryptionSelfKey, at_demos.aesKeyMap[atSign]!);
     // set encryption public key. should be synced
     metadata.isPublic = true;
     var atKey = AtKey()

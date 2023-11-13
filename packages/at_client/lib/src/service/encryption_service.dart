@@ -135,7 +135,7 @@ class EncryptionService {
   Future<String?> _getSharedKeyFromLocalForEncryption(String sharedWith) async {
     final sharedWithUser = sharedWith.replaceFirst('@', '');
     final llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
+      ..atKey = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
       ..sharedBy = atSign;
     String? sharedKey;
     try {
@@ -151,7 +151,7 @@ class EncryptionService {
       String sharedWith) async {
     final sharedWithUser = sharedWith.replaceFirst('@', '');
     final llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
+      ..atKey = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
       ..sharedBy = atSign;
     String? sharedKey;
     try {
@@ -168,13 +168,13 @@ class EncryptionService {
     var lookupEncryptionSharedKey = LLookupVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = atSign
-      ..atKey = AT_ENCRYPTION_SHARED_KEY;
+      ..atKey = AtConstants.atEncryptionSharedKey;
     String? result;
     try {
       result = await localSecondary!.executeVerb(lookupEncryptionSharedKey);
     } on KeyNotFoundException {
       logger.finer(
-          '$sharedWith:$AT_ENCRYPTION_SHARED_KEY@$atSign not found in local secondary. Fetching from cloud secondary');
+          '$sharedWith:${AtConstants.atEncryptionSharedKey}@$atSign not found in local secondary. Fetching from cloud secondary');
     }
 
     // Create the encryptedSharedKey if
@@ -197,7 +197,7 @@ class EncryptionService {
       var updateSharedKeyBuilder = UpdateVerbBuilder()
         ..sharedWith = sharedWith
         ..sharedBy = atSign
-        ..atKey = AT_ENCRYPTION_SHARED_KEY
+        ..atKey = AtConstants.atEncryptionSharedKey
         ..value = encryptedSharedKey
         ..ttr = 3888000;
       await localSecondary!.executeVerb(updateSharedKeyBuilder, sync: true);
@@ -216,7 +216,7 @@ class EncryptionService {
 
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
       ..sharedBy = atSign
-      ..atKey = '$AT_ENCRYPTION_SHARED_KEY.$sharedWithUser'
+      ..atKey = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
       ..value = encryptedSharedKeyForCurrentAtSign;
     await localSecondary!
         .executeVerb(updateSharedKeyForCurrentAtSignBuilder, sync: true);
@@ -228,7 +228,7 @@ class EncryptionService {
       ..isCached = true
       ..sharedBy = sharedBy
       ..sharedWith = atSign
-      ..atKey = AT_ENCRYPTION_SHARED_KEY;
+      ..atKey = AtConstants.atEncryptionSharedKey;
     try {
       encryptedSharedKey =
           await localSecondary!.executeVerb(localLookupSharedKeyBuilder);
@@ -238,7 +238,7 @@ class EncryptionService {
     }
     if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = AT_ENCRYPTION_SHARED_KEY
+        ..atKey = AtConstants.atEncryptionSharedKey
         ..sharedBy = sharedBy
         ..auth = true;
       encryptedSharedKey =
