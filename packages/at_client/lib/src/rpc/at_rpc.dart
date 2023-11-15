@@ -16,7 +16,8 @@ abstract class AtRpcCallbacks {
 
 @experimental
 class AtRpcClient implements AtRpcCallbacks {
-  static final AtSignLogger logger = AtSignLogger(' AtRpcClient ', loggingHandler: AtSignLogger.stdErrLoggingHandler);
+  static final AtSignLogger logger = AtSignLogger(' AtRpcClient ',
+      loggingHandler: AtSignLogger.stdErrLoggingHandler);
 
   late final String serverAtsign;
   late final AtRpc rpc;
@@ -42,7 +43,7 @@ class AtRpcClient implements AtRpcCallbacks {
     rpc.start();
   }
 
-  Future<Map<String, dynamic>> call (Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> call(Map<String, dynamic> payload) async {
     AtRpcReq request = AtRpcReq.create(payload);
     completerMap[request.reqId] = Completer();
     logger.info('Sending request to $serverAtsign : $request');
@@ -63,27 +64,23 @@ class AtRpcClient implements AtRpcCallbacks {
     final Completer? completer = completerMap[response.reqId];
 
     if (completer == null || completer.isCompleted) {
-      logger.warning(
-          'Ignoring response, no completer found : $response');
+      logger.warning('Ignoring response, no completer found : $response');
       return;
     }
 
     switch (response.respType) {
       case AtRpcRespType.ack:
-      // We don't complete the future when we get an ack
-        logger.info(
-            'Got ack : $response');
+        // We don't complete the future when we get an ack
+        logger.info('Got ack : $response');
         break;
       case AtRpcRespType.success:
-        logger.info(
-            'Got success response : $response');
+        logger.info('Got success response : $response');
         completer.complete(response.payload);
         completerMap.remove(response.reqId);
         break;
       default:
-        logger.warning(
-            'Got non-success response '
-                ' : $response');
+        logger.warning('Got non-success response '
+            ' : $response');
         completer.completeError('Got non-success response : $response');
         completerMap.remove(response.reqId);
         break;
