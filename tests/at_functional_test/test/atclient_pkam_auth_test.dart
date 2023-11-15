@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
 import 'package:at_chops/at_chops.dart';
@@ -9,13 +10,14 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_functional_test/src/at_demo_credentials.dart' as at_demos;
 import 'test_utils.dart';
 
-String atSign = '@alice🛠';
-String namespace = 'wavi';
+late String atSign;
 
 void main() {
+  String namespace = 'wavi';
   late AtClientManager atClientManager;
 
   setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 

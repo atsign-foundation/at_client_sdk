@@ -7,15 +7,18 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
+import 'package:at_functional_test/src/config_util.dart';
 
 void main() {
-  String atSign = '@alice🛠';
-  String sharedWithAtSign = '@bob🛠';
+  late String atSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
   late AtClientManager atClientManager;
-  String namespace = 'wavi';
 
-  setUp(() async {
-    atClientManager = await TestUtils.initAtClient(atSign, 'wavi');
+  setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
     atClientManager.atClient.syncService.sync();
   });
 

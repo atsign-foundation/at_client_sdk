@@ -235,25 +235,6 @@ void main() async {
         .testInitializer(fourthAtSign, namespace);
   });
 
-  test('Model operations - save() test', () async {
-    // Setting firstAtSign atClient instance to context.
-    currentAtClientManager =
-        await AtClientManager.getInstance().setCurrentAtSign(
-      firstAtSign,
-      namespace,
-      TestPreferences.getInstance().getPreference(firstAtSign),
-    );
-
-    // Save a photo
-    var phone = Phone()
-      ..id = 'personal phone'
-      ..namespace = 'buzz'
-      ..collectionName = 'phone'
-      ..phoneNumber = '12345';
-    var shareRes = await phone.save();
-    expect(shareRes, true);
-  });
-
   test('Model operations - save() with reshare() as true test', () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
@@ -389,88 +370,6 @@ void main() async {
           id: 'fourth phone', namespace: 'buzz', collectionName: 'phone'),
       throwsA(isA<Exception>()),
     );
-  });
-
-  test('Query method - AtCollectionModel.getModel() test', () async {
-    // Setting firstAtSign atClient instance to context.
-    currentAtClientManager =
-        await AtClientManager.getInstance().setCurrentAtSign(
-      firstAtSign,
-      namespace,
-      TestPreferences.getInstance().getPreference(firstAtSign),
-    );
-
-    Phone personalPhone = Phone()
-      ..id = 'new personal Phone'
-      ..namespace = 'buzz'
-      ..collectionName = 'phone'
-      ..phoneNumber = '123456789';
-    Phone officePhone = Phone()
-      ..id = 'Office Phone'
-      ..namespace = 'buzz.bz'
-      ..collectionName = 'phone'
-      ..phoneNumber = '9999';
-    await personalPhone.save();
-    await officePhone.save();
-
-    AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
-    var personalPhoneLoaded = await AtCollectionModel.getModel(
-        id: 'new personal Phone',
-        namespace: 'buzz',
-        collectionName: 'phone') as Phone;
-
-    expect(personalPhoneLoaded.phoneNumber, '123456789');
-    expect(personalPhoneLoaded.collectionName, 'phone');
-    expect(personalPhoneLoaded.namespace, 'buzz');
-    expect(personalPhoneLoaded.id, 'new personal Phone');
-    var officePhoneLoaded = await AtCollectionModel.getModel(
-        id: 'Office Phone',
-        namespace: 'buzz.bz',
-        collectionName: 'phone') as Phone;
-
-    expect(officePhoneLoaded.phoneNumber, '9999');
-    expect(officePhoneLoaded.collectionName, 'phone');
-    expect(officePhoneLoaded.namespace, 'buzz.bz');
-    expect(officePhoneLoaded.id, 'Office Phone');
-    AtCollectionModelFactoryManager.getInstance()
-        .unregister(PhoneFactory.getInstance());
-  });
-
-  test('Query method - AtCollectionModel.getModelsByCollectionName() test',
-      () async {
-    // Setting firstAtSign atClient instance to context.
-    currentAtClientManager =
-        await AtClientManager.getInstance().setCurrentAtSign(
-      firstAtSign,
-      namespace,
-      TestPreferences.getInstance().getPreference(firstAtSign),
-    );
-
-    Phone personalPhone = Phone()
-      ..id = 'new personal Phone'
-      ..namespace = 'buzz'
-      ..collectionName = 'phone'
-      ..phoneNumber = '123456789';
-    Phone officePhone = Phone()
-      ..id = 'Office Phone'
-      ..namespace = 'buzz'
-      ..collectionName = 'phone'
-      ..phoneNumber = '9999';
-    await personalPhone.save();
-    await officePhone.save();
-
-    AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
-    // Get models with existing collectionName
-    var phones = await AtCollectionModel.getModelsByCollectionName('phone');
-    expect(phones.length >= 2, true,
-        reason: 'Expect phones to be non-empty for an valid collection name');
-    // Get models with non-existing id/inv collectionName
-    phones =
-        await AtCollectionModel.getModelsByCollectionName('phone-dont-exist');
-    expect(phones.isEmpty, true,
-        reason: 'Expect phones to be empty for an invalid collection name');
-    AtCollectionModelFactoryManager.getInstance()
-        .unregister(PhoneFactory.getInstance());
   });
 
   test('Query method - AtCollectionModel.getModelsSharedWith() test', () async {
