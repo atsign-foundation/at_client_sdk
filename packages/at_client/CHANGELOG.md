@@ -1,3 +1,5 @@
+## 3.0.60
+feat: Modify code to fetch "selfEncryptionKey" from atChops instead of local secondary 
 ## 3.0.68
 - feat: have AtRpc use ephemeral notifications
 ## 3.0.67
