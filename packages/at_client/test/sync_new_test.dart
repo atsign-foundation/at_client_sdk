@@ -868,6 +868,7 @@ void main() {
       // ------------Setup---------------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
+      SyncUtil syncUtil = SyncUtil();
       var atData = AtData();
       atData.data = 'alice@gmail.com';
       var newData = AtData();
@@ -877,9 +878,17 @@ void main() {
               namespace: 'wavi', sharedBy: TestResources.atsign))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
+      int commitId = await keystore!.put(atKey, atData);
+      CommitEntry? commitEntry =
+          await syncUtil.getCommitEntry(commitId, TestResources.atsign);
+      await syncUtil.updateCommitEntry(
+          commitEntry, commitId, TestResources.atsign);
       // updating the same key in the keystore with a different value
-      int putCommitId = await keystore.put(atKey, newData);
+      commitId = await keystore.put(atKey, newData);
+      commitEntry =
+          await syncUtil.getCommitEntry(commitId, TestResources.atsign);
+      await syncUtil.updateCommitEntry(
+          commitEntry, commitId, TestResources.atsign);
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice@yahoo.com');
@@ -889,7 +898,7 @@ void main() {
       // verify the latest entry in the commit log is for DELETE
       var commitEntryResult =
           await SyncUtil(atCommitLog: TestResources.commitLog)
-              .getChangesSinceLastCommit(putCommitId, 'wavi',
+              .getChangesSinceLastCommit(commitId, 'wavi',
                   atSign: TestResources.atsign);
       expect(commitEntryResult[0].operation, CommitOp.DELETE);
     });
@@ -912,6 +921,7 @@ void main() {
       // ------------Setup---------------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
+      SyncUtil syncUtil = SyncUtil();
       var atData = AtData();
       atData.data = 'alice123';
       var newData = AtData();
@@ -922,9 +932,17 @@ void main() {
             ..sharedWith('@alice'))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
+      int commitId = await keystore!.put(atKey, atData);
+      CommitEntry? commitEntry =
+          await syncUtil.getCommitEntry(commitId, TestResources.atsign);
+      await syncUtil.updateCommitEntry(
+          commitEntry, commitId, TestResources.atsign);
       // updating the same key in the keystore with a different value
-      int putCommitId = await keystore.put(atKey, newData);
+      commitId = await keystore.put(atKey, newData);
+      commitEntry =
+          await syncUtil.getCommitEntry(commitId, TestResources.atsign);
+      await syncUtil.updateCommitEntry(
+          commitEntry, commitId, TestResources.atsign);
       // --------Assertions---------------------------------
       // verifying the key in the key store
       var keyStoreGetResult = await keystore.get(atKey);
@@ -936,7 +954,7 @@ void main() {
       await keystore.remove(atKey);
       var commitEntryResult =
           await SyncUtil(atCommitLog: TestResources.commitLog)
-              .getChangesSinceLastCommit(putCommitId, 'wavi',
+              .getChangesSinceLastCommit(commitId, 'wavi',
                   atSign: TestResources.atsign);
       expect(commitEntryResult[0].operation, CommitOp.DELETE);
     });
@@ -959,6 +977,7 @@ void main() {
       // ------------Setup---------------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
+      SyncUtil syncUtil = SyncUtil();
       var atData = AtData();
       atData.data = '1134';
       var newData = AtData();
@@ -968,19 +987,27 @@ void main() {
               namespace: 'wavi', sharedBy: TestResources.atsign))
           .build()
           .toString();
-      await keystore!.put(atKey, atData);
+      int commitId = await keystore?.put(atKey, newData);
+      CommitEntry? commitEntry =
+          await syncUtil.getCommitEntry(commitId, TestResources.atsign);
+      await syncUtil.updateCommitEntry(
+          commitEntry, commitId, TestResources.atsign);
       // updating the same key in the keystore with a different value
-      int putCommitId = await keystore.put(atKey, newData);
+      commitId = await keystore?.put(atKey, newData);
+      commitEntry =
+          await syncUtil.getCommitEntry(commitId, TestResources.atsign);
+      await syncUtil.updateCommitEntry(
+          commitEntry, commitId, TestResources.atsign);
       // --------Assertions---------------------------------
       // verifying the key in the key store
-      var keyStoreGetResult = await keystore.get(atKey);
+      var keyStoreGetResult = await keystore?.get(atKey);
       expect(keyStoreGetResult!.data, '5424');
       //  deleting the key
-      await keystore.remove(atKey);
+      await keystore?.remove(atKey);
       // verifying the latest entry in the commit log is for DELETE
       var commitEntryResult =
           await SyncUtil(atCommitLog: TestResources.commitLog)
-              .getChangesSinceLastCommit(putCommitId, 'wavi',
+              .getChangesSinceLastCommit(commitId, 'wavi',
                   atSign: TestResources.atsign);
       expect(commitEntryResult[0].operation, CommitOp.DELETE);
     });
@@ -1021,7 +1048,8 @@ void main() {
       //----------------------------setup---------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
-      int? preOpSeqNum = TestResources.commitLog?.lastCommittedSequenceNumber();
+      int? preOpSeqNum =
+          await TestResources.commitLog?.lastCommittedSequenceNumber();
       List<String> keys = [];
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -1320,7 +1348,8 @@ void main() {
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       //capture hive seq_num before operation
-      int? preOpSeqNum = TestResources.commitLog?.lastCommittedSequenceNumber();
+      int? preOpSeqNum =
+          await TestResources.commitLog?.lastCommittedSequenceNumber();
       int count = 0;
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -1346,7 +1375,7 @@ void main() {
 
       //capture hive_seq_num before creating uncommitted entries again
       preOpSeqNum =
-          syncService.syncUtil.atCommitLog?.lastCommittedSequenceNumber();
+          await syncService.syncUtil.atCommitLog?.lastCommittedSequenceNumber();
       //create new uncommitted entries
       await localSecondary.putValue(
           'public:test_key0.group3test1@bob', 'dummydata');
@@ -1983,8 +2012,10 @@ void main() {
           await syncUtil.getLastSyncedEntry('regex',
               atSign: TestResources.atsign),
           null);
-      expect(commitLog?.lastCommittedSequenceNumber(), -1);
-      expect(await commitLog?.getEntry(commitLog.lastCommittedSequenceNumber()),
+      expect(await commitLog?.lastCommittedSequenceNumber(), -1);
+      expect(
+          await commitLog
+              ?.getEntry(await commitLog.lastCommittedSequenceNumber()),
           null);
     });
 
