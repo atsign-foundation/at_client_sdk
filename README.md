@@ -3,6 +3,7 @@
 [![Build Status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml)
 [![GitHub License](https://img.shields.io/badge/license-BSD3-blue.svg)](./LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/atsign-foundation/at_client_sdk/badge)](https://api.securityscorecards.dev/projects/github.com/atsign-foundation/at_client_sdk)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8098/badge)](https://www.bestpractices.dev/projects/8098)
 
 # at_client_sdk
 This repo contains two versions of the at_client_sdk that you can choose from 
