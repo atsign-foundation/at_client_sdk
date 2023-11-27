@@ -30,7 +30,7 @@ class SyncIsolateManager {
         var preference = message['preference'];
         var privateKey = message['privateKey'];
         var remoteSecondary =
-            RemoteSecondary(atSign, preference, privateKey: privateKey);
+            RemoteSecondary(atSign, preference);
         var verbResult = await remoteSecondary.executeVerb(builder);
         logger.info('syncIsolate result:$verbResult');
         var serverCommitId = verbResult.split(':')[1];
@@ -49,9 +49,8 @@ class SyncIsolateManager {
         var operation = message['operation'];
         var atSign = message['atsign'];
         var preference = message['preference'];
-        var privateKey = message['private_key'];
         var remoteSecondary =
-            RemoteSecondary(atSign, preference, privateKey: privateKey);
+            RemoteSecondary(atSign, preference);
 
         switch (operation) {
           case 'get_commit_id':

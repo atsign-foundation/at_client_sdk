@@ -28,17 +28,15 @@ class RemoteSecondary implements Secondary {
   final AtChops? atChops;
 
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey, this.atChops, String? enrollmentId}) {
+      { this.atChops, String? enrollmentId}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
-    privateKey ??= preference.privateKey;
     SecureSocketConfig secureSocketConfig = SecureSocketConfig();
     secureSocketConfig.decryptPackets = preference.decryptPackets;
     secureSocketConfig.pathToCerts = preference.pathToCerts;
     secureSocketConfig.tlsKeysSavePath = preference.tlsKeysSavePath;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
-        privateKey: privateKey,
         cramSecret: preference.cramSecret,
         secondaryAddressFinder:
             AtClientManager.getInstance().secondaryAddressFinder,
@@ -151,7 +149,7 @@ class RemoteSecondary implements Secondary {
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
   /// secondary server. This method is executed for all verbs that requires authentication.
   Future<bool> authenticate(var privateKey) async {
-    var authResult = await atLookUp.authenticate(privateKey);
+    var authResult = await atLookUp.pkamAuthenticate();
     return authResult;
   }
 
