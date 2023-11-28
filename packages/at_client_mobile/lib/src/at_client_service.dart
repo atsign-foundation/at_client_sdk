@@ -533,40 +533,42 @@ class KeychainUtil {
   }
 
   static Future<Map<String, String>> getEncryptedKeys(String atsign) async {
-    var aesEncryptedKeys = {};
-    // encrypt pkamPublicKey with AES key
-    var pkamPublicKey = await getPkamPublicKey(atsign);
-    var aesEncryptionKey = await getAESKey(atsign);
-    var encryptedPkamPublicKey =
-        EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
-    aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
+    AtsignKey? atsignKeyData = await _keyChainManager.readAtsign(name: atsign);
+
+    if (atsignKeyData == null) {
+      throw AtClientException.message(
+          "Failed to fetch the keys for the atsign: $atsign");
+    }
+
+    Map<String, String> encryptedAtKeysMap = <String, String>{};
+
+    String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
-    // encrypt pkamPrivateKey with AES key
-    var pkamPrivateKey = await getPkamPrivateKey(atsign);
-    var encryptedPkamPrivateKey =
-        EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
+    String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
-    // encrypt encryption public key with AES key
-    var encryptionPublicKey = await getEncryptionPublicKey(atsign);
-    var encryptedEncryptionPublicKey =
-        EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
+    String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
-    // encrypt encryption private key with AES key
-    var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
-    var encryptedEncryptionPrivateKey =
-        EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
+    String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
-    // store  self encryption key as it is.This will be same as AES key in key zip file
-    var selfEncryptionKey = await getSelfEncryptionKey(atsign);
-    aesEncryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
-        selfEncryptionKey;
-    return Map<String, String>.from(aesEncryptedKeys);
+    encryptedAtKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
+        atsignKeyData.selfEncryptionKey!;
+    encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
+        atsignKeyData.apkamSymmetricKey!;
+    encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
+        atsignKeyData.enrollmentId!;
+
+    return encryptedAtKeysMap;
   }
 }
