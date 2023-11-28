@@ -18,7 +18,7 @@ abstract class AtAuthService {
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest);
 
   //# TODO documentation
-  Future<bool> isOnboarded({String? atSign});
+  Future<bool> isOnboarded(String atSign);
 
   /// Onboard method is called when an atsign is activated for the first time in an app.
   /// Step 1. perform cram auth

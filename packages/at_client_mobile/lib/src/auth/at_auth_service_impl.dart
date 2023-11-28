@@ -77,9 +77,16 @@ class AtAuthServiceImpl implements AtAuthService {
   }
 
   @override
-  Future<bool> isOnboarded({String? atSign}) async {
-    // TODO Fetch keys from keychain manager.
-    return false;
+  Future<bool> isOnboarded(String atSign) async {
+    AtsignKey? atsignKey = await _keyChainManager.readAtsign(name: atSign);
+    if (atsignKey == null) {
+      return false;
+    }
+    if (atsignKey.encryptionPublicKey == null ||
+        atsignKey.encryptionPublicKey!.isEmpty) {
+      return false;
+    }
+    return true;
   }
 
   @override
