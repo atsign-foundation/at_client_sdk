@@ -148,7 +148,7 @@ void main() {
       AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
       await E2ESyncService.getInstance().syncData(atClient_2.syncService);
 
-      var getResult = await atClient_2.get(atKey);
+      var getResult = await atClient_2.get(atKey, getRequestOptions: GetRequestOptions()..bypassCache = true);
       expect(getResult.value, clearText);
     }, timeout: Timeout(Duration(minutes: 5)));
 
