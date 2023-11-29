@@ -31,10 +31,6 @@ dependency_overrides:
   at_auth:
     path: ../../../at_libraries/packages/at_auth
 
-dependency_overrides:
-  at_client:
-    path: ../at_client
-
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.6.0
