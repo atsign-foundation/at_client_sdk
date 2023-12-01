@@ -28,6 +28,10 @@ jobs:
       - uses: dart-lang/setup-dart@b64355ae6ca0b5d484f0106a033dd1388965d06d # v1.6.0
         with:
           sdk: stable
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: tools/osv-scanner/go.sum
 
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
@@ -89,6 +93,16 @@ jobs:
       - name: Check that code in packages is correctly formatted
         working-directory: packages
         run: dart format . -o none --set-exit-if-changed
+
+      # Runs osv-scanner to find any vulnerable Dart dependencies
+      # It needs to look at pubspec.lock files, which is why it's
+      # placed here, as the `dart pub get` above will create them
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client/pubspec.lock
+          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
 
   functional_tests:
     runs-on: ubuntu-latest
