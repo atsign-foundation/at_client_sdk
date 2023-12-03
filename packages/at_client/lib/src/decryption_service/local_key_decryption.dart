@@ -33,6 +33,6 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
     return EncryptionUtil.decryptValue(encryptedValue, symmetricKey,
-        ivBase64: atKey.metadata?.ivNonce);
+        ivBase64: atKey.metadata.ivNonce);
   }
 }

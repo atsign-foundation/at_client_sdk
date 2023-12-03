@@ -19,43 +19,44 @@ void main() {
   test('sequence of put and get results', () async {
     var value = '+1 1111';
     final phoneUpdateBuilder = UpdateVerbBuilder()
-      ..isPublic = true
-      ..atKey = 'phone'
+      ..atKey = (AtKey()..key = 'phone'
       ..sharedBy = atSign
+      ..metadata = (Metadata()..isPublic = true))
       ..value = value;
     await atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(phoneUpdateBuilder);
     final phoneLookupVerbBuilder = LLookupVerbBuilder()
-      ..isPublic = true
-      ..atKey = 'phone'
-      ..sharedBy = atSign;
+      ..atKey = (AtKey()..key = 'phone'
+      ..sharedBy = atSign
+      ..metadata = (Metadata()..isPublic = true));
 
     final emailUpdateBuilder = UpdateVerbBuilder()
-      ..isPublic = true
-      ..atKey = 'email'
+      ..atKey = (AtKey()..key = 'email'
       ..sharedBy = atSign
+      ..metadata = (Metadata()..isPublic = true))
       ..value = 'alice@gmail.com';
     await atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(emailUpdateBuilder);
     final emailLookupVerbBuilder = LLookupVerbBuilder()
-      ..isPublic = true
-      ..atKey = 'email'
-      ..sharedBy = atSign;
+
+      ..atKey = (AtKey()..key = 'email'
+      ..sharedBy = atSign
+      ..metadata = (Metadata()..isPublic = true));
 
     final locationUpdateBuilder = UpdateVerbBuilder()
-      ..isPublic = true
-      ..atKey = 'location'
+      ..atKey = (AtKey()..key = 'location'
       ..sharedBy = atSign
+      ..metadata = (Metadata()..isPublic = true))
       ..value = 'newyork';
     await atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(locationUpdateBuilder);
     final locationLookupVerbBuilder = LLookupVerbBuilder()
-      ..isPublic = true
-      ..atKey = 'location'
-      ..sharedBy = atSign;
+      ..atKey = (AtKey()..key = 'location'
+      ..sharedBy = atSign
+      ..metadata = (Metadata()..isPublic = true));
     final phoneFuture = atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(phoneLookupVerbBuilder);

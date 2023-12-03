@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
@@ -34,8 +33,7 @@ class AtClientUtil {
   static String signChallenge(String challenge, String privateKey) {
     var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
-    var signature =
-        key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
+    var signature = key.createSHA256Signature(utf8.encode(challenge));
     return base64Encode(signature);
   }
 
@@ -85,8 +83,12 @@ class AtClientUtil {
     metadata.ttl = metadataMap[AtConstants.ttl];
     metadata.ttb = metadataMap[AtConstants.ttb];
     metadata.ccd = metadataMap[AtConstants.ccd];
-    metadata.isBinary = metadataMap[AtConstants.isBinary];
-    metadata.isEncrypted = metadataMap[AtConstants.isEncrypted];
+    metadata.isBinary = (metadataMap[AtConstants.isBinary] == null)
+        ? false
+        : metadataMap[AtConstants.isBinary];
+    metadata.isEncrypted = (metadataMap[AtConstants.isEncrypted] == null)
+        ? false
+        : metadataMap[AtConstants.isEncrypted];
     metadata.dataSignature = metadataMap[AtConstants.publicDataSignature];
     metadata.sharedKeyEnc = metadataMap[AtConstants.sharedKeyEncrypted];
     metadata.pubKeyCS = metadataMap[AtConstants.sharedWithPublicKeyCheckSum];
@@ -109,16 +111,14 @@ class AtClientUtil {
   /// else namespace is not appended
   static String getKeyWithNameSpace(
       AtKey atKey, AtClientPreference atClientPreference) {
-    // If metadata is null, initialize with new Metadata.
-    atKey.metadata ??= Metadata();
     // Do not append namespace for encryption keys.
-    if (!(atKey.metadata!.namespaceAware)) {
-      return atKey.key!;
+    if (!(atKey.metadata.namespaceAware)) {
+      return atKey.key;
     }
     //Do not append namespace if already appended
-    if (atKey.key?.substring(atKey.key!.lastIndexOf('.') + 1) ==
+    if (atKey.key.substring(atKey.key.lastIndexOf('.') + 1) ==
         atClientPreference.namespace) {
-      return atKey.key!;
+      return atKey.key;
     }
     // If key does not have any namespace, append the namespace to the key.
     if (atKey.namespace.isNotNull) {
@@ -127,7 +127,7 @@ class AtClientUtil {
     if (atClientPreference.namespace.isNotNull) {
       return '${atKey.key}.${atClientPreference.namespace}';
     }
-    return atKey.key!;
+    return atKey.key;
   }
 
   // TODO Remove this once AtUtils.fixAtSign accepts and returns String?

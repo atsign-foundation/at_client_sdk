@@ -68,7 +68,8 @@ class AtClientAuthenticator implements AtClientAuth {
         }
         // send public key to remote Secondary server
         logger.finer('updating pkam public key to server');
-        var updateCommand = 'update:$AT_PKAM_PUBLIC_KEY $publicKey\n';
+        var updateCommand =
+            'update:${AtConstants.atPkamPublicKey} $publicKey\n';
         // auth is false since already cram authenticated
         var pkamUpdateResult = await atLookupInitialAuth
             .executeCommand(updateCommand, auth: false);
@@ -103,7 +104,8 @@ class AtClientAuthenticator implements AtClientAuth {
           );
           await _keyChainManager.storeAtSign(atSign: atSignItem);
         }
-        var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
+        var deleteBuilder = DeleteVerbBuilder()
+          ..atKey = (AtKey()..key = AtConstants.atCramSecret);
         var deleteResponse =
             await atLookupInitialAuth.executeVerb(deleteBuilder);
         logger.finer('cram secret delete response : $deleteResponse');

@@ -53,7 +53,7 @@ class KeyStreamIterableBase<T, I extends Iterable<T>> extends KeyStreamMixin<I>
     FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
         onError,
     AtClientManager? atClientManager,
-  })  : _generateRef = generateRef ?? ((key, value) => key.key ?? ''),
+  })  : _generateRef = generateRef ?? ((key, value) => key.key),
         _castTo = castTo ?? ((Iterable<T> values) => values as I),
         super(
           convert: convert,

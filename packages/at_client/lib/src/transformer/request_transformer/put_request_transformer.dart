@@ -39,7 +39,7 @@ class PutRequestTransformer
     updateVerbBuilder.value = tuple.two;
 
     //Encrypt the data for non public keys
-    if (!atKey.metadata!.isPublic!) {
+    if (!atKey.metadata.isPublic) {
       var encryptionService = AtKeyEncryptionManager(_atClient)
           .get(atKey, _atClient.getCurrentAtSign()!);
       try {
@@ -52,13 +52,15 @@ class PutRequestTransformer
             ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
         rethrow;
       }
-      updateVerbBuilder.sharedKeyEncrypted = atKey.metadata!.sharedKeyEnc;
-      updateVerbBuilder.pubKeyChecksum = atKey.metadata!.pubKeyCS;
-      updateVerbBuilder.encKeyName = atKey.metadata!.encKeyName;
-      updateVerbBuilder.encAlgo = atKey.metadata!.encAlgo;
-      updateVerbBuilder.ivNonce = atKey.metadata!.ivNonce;
-      updateVerbBuilder.skeEncKeyName = atKey.metadata!.skeEncKeyName;
-      updateVerbBuilder.skeEncAlgo = atKey.metadata!.skeEncAlgo;
+      updateVerbBuilder.atKey.metadata.sharedKeyEnc =
+          atKey.metadata.sharedKeyEnc;
+      updateVerbBuilder.atKey.metadata.pubKeyCS = atKey.metadata.pubKeyCS;
+      updateVerbBuilder.atKey.metadata.encKeyName = atKey.metadata.encKeyName;
+      updateVerbBuilder.atKey.metadata.encAlgo = atKey.metadata.encAlgo;
+      updateVerbBuilder.atKey.metadata.ivNonce = atKey.metadata.ivNonce;
+      updateVerbBuilder.atKey.metadata.skeEncKeyName =
+          atKey.metadata.skeEncKeyName;
+      updateVerbBuilder.atKey.metadata.skeEncAlgo = atKey.metadata.skeEncAlgo;
     } else {
       if (encryptionPrivateKey.isNull) {
         throw AtPrivateKeyNotFoundException('Failed to sign the public data');
@@ -66,12 +68,13 @@ class PutRequestTransformer
       final atSigningInput = AtSigningInput(updateVerbBuilder.value)
         ..signingMode = AtSigningMode.data;
       final signingResult = _atClient.atChops!.sign(atSigningInput);
-      updateVerbBuilder.dataSignature = signingResult.result;
+      updateVerbBuilder.atKey.metadata.dataSignature = signingResult.result;
       // Encode the public data if it contains new line characters
       if (updateVerbBuilder.value.contains('\n')) {
         updateVerbBuilder.value =
             AtEncoderImpl().encodeData(updateVerbBuilder.value, encodingType);
-        updateVerbBuilder.encoding = encodingType.toShortString();
+        updateVerbBuilder.atKey.metadata.encoding =
+            encodingType.toShortString();
       }
     }
 
@@ -82,31 +85,30 @@ class PutRequestTransformer
   UpdateVerbBuilder _populateUpdateVerbBuilder(
       AtKey atKey, AtClientPreference atClientPreference) {
     UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-      ..sharedWith = AtClientUtil.fixAtSign(atKey.sharedWith)
-      ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
-      ..isPublic =
-          (atKey.metadata?.isPublic != null) ? atKey.metadata!.isPublic! : false
-      ..isEncrypted = (atKey.metadata?.isEncrypted != null)
-          ? atKey.metadata?.isEncrypted!
-          : false
-      ..isBinary =
-          (atKey.metadata?.isBinary != null) ? atKey.metadata?.isBinary! : false
-      ..isLocal = atKey.isLocal;
+      ..atKey = (AtKey()
+        ..key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
+        ..sharedWith = AtClientUtil.fixAtSign(atKey.sharedWith)
+        ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
+        ..isLocal = atKey.isLocal
+        ..metadata = (Metadata()
+          ..isPublic = atKey.metadata.isPublic
+          ..isEncrypted = atKey.metadata.isEncrypted
+          ..isBinary = atKey.metadata.isBinary));
 
-    if (atKey.metadata!.ttl != null) {
-      updateVerbBuilder.ttl = atKey.metadata!.ttl;
+    if (atKey.metadata.ttl != null) {
+      updateVerbBuilder.atKey.metadata.ttl = atKey.metadata.ttl;
     }
-    if (atKey.metadata!.ttb != null) {
-      updateVerbBuilder.ttb = atKey.metadata!.ttb;
+    if (atKey.metadata.ttb != null) {
+      updateVerbBuilder.atKey.metadata.ttb = atKey.metadata.ttb;
     }
-    if (atKey.metadata!.ttr != null) {
-      updateVerbBuilder.ttr = atKey.metadata!.ttr;
+    if (atKey.metadata.ttr != null) {
+      updateVerbBuilder.atKey.metadata.ttr = atKey.metadata.ttr;
     }
-    if (atKey.metadata!.ccd != null) {
-      updateVerbBuilder.ccd = atKey.metadata!.ccd;
+    if (atKey.metadata.ccd != null) {
+      updateVerbBuilder.atKey.metadata.ccd = atKey.metadata.ccd;
     }
-    updateVerbBuilder.dataSignature = atKey.metadata!.dataSignature;
+    updateVerbBuilder.atKey.metadata.dataSignature =
+        atKey.metadata.dataSignature;
     return updateVerbBuilder;
   }
 }

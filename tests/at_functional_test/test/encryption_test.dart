@@ -1,19 +1,19 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_utils/at_utils.dart';
-import 'test_utils.dart';
 import 'package:test/test.dart';
 import 'package:version/version.dart';
+
+import 'test_utils.dart';
 
 void main() {
   late String atSign_1;
   final namespace = 'e2e_encryption_test';
 
-
   var clearText = 'Some clear text';
 
   var logLevelToRestore = AtSignLogger.root_level;
-  
+
   setUpAll(() async {
     AtSignLogger.root_level = 'SHOUT';
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -25,9 +25,7 @@ void main() {
 
   Future<AtClient> getAtClient(String atSign, Version version) async {
     AtClient atClient = (await AtClientManager.getInstance().setCurrentAtSign(
-            atSign,
-            namespace,
-          TestUtils.getPreference(atSign_1)))
+            atSign, namespace, TestUtils.getPreference(atSign_1)))
         .atClient;
 
     atClient.getPreferences()!.atProtocolEmitted = version;
@@ -42,7 +40,7 @@ void main() {
 
       var atKey = (AtKey.self('test_put.15_15')..timeToLive(ttl)).build();
       await atClient.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNull);
+      expect(atKey.metadata.ivNonce, isNull);
 
       atClient.getPreferences()!.atProtocolEmitted = Version(1, 5, 0);
 
@@ -63,7 +61,7 @@ void main() {
 
       var atKey = (AtKey.self('test_put.15_20')..timeToLive(ttl)).build();
       await atClient.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNull);
+      expect(atKey.metadata.ivNonce, isNull);
 
       atClient.getPreferences()!.atProtocolEmitted = Version(2, 0, 0);
       String selfEncryptionKey =
@@ -83,7 +81,7 @@ void main() {
 
       var atKey = (AtKey.self('test_put.20_20')..timeToLive(ttl)).build();
       await atClient.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNotNull);
+      expect(atKey.metadata.ivNonce, isNotNull);
 
       atClient.getPreferences()!.atProtocolEmitted = Version(2, 0, 0);
       String selfEncryptionKey =
@@ -93,7 +91,7 @@ void main() {
       var cipherText = atData.data;
       expect(
           EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
-              ivBase64: atKey.metadata?.ivNonce),
+              ivBase64: atKey.metadata.ivNonce),
           clearText);
 
       var getResult = await atClient.get(atKey);
@@ -105,7 +103,7 @@ void main() {
 
       var atKey = (AtKey.self('test_put.20_15')..timeToLive(ttl)).build();
       await atClient.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNotNull);
+      expect(atKey.metadata.ivNonce, isNotNull);
 
       atClient.getPreferences()!.atProtocolEmitted = Version(1, 5, 0);
       String selfEncryptionKey =
@@ -115,7 +113,7 @@ void main() {
       var cipherText = atData.data;
       expect(
           EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
-              ivBase64: atKey.metadata?.ivNonce),
+              ivBase64: atKey.metadata.ivNonce),
           clearText);
 
       var getResult = await atClient.get(atKey);

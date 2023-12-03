@@ -22,6 +22,29 @@ dependencies:
   at_lookup: ^3.0.38
   at_client: ^3.0.64
 
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_commons
+      ref: trunk
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_secondary_server
+      ref: uptake_commons_4.0.0
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: uptake_commons_changes_into_lookup
+  at_client:
+    git:
+      url: https://github.com/atsign-foundation/at_client_sdk.git
+      path: packages/at_client
+      ref: uptake_commons_4.0.0
+
+
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.6.0

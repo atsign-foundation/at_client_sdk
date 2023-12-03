@@ -327,9 +327,7 @@ class NotificationServiceImpl
       ..atKey = notificationParams.atKey;
 
     if (_atClient.getPreferences()!.atProtocolEmitted >= Version(2, 0, 0)) {
-      notificationParams.atKey.metadata ??= Metadata();
-      notificationParams.atKey.metadata!.ivNonce ??=
-          EncryptionUtil.generateIV();
+      notificationParams.atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     }
 
     try {
@@ -410,7 +408,8 @@ class NotificationServiceImpl
       case MessageTypeEnum.text:
         // When messageType is text, the "text" to notify is added to the key. Hence validating
         // the key length
-        if (builder.atKey!.length > _atClient.getPreferences()!.maxDataSize) {
+        if (builder.atKey.key.length >
+            _atClient.getPreferences()!.maxDataSize) {
           throw BufferOverFlowException(
               'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
         }
