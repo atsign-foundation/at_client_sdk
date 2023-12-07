@@ -1,3 +1,5 @@
+## 3.0.69
+- feat: Add AtRpcClient for a much cleaner developer experience for sending AtRpc requests
 ## 3.0.68
 - feat: have AtRpc use ephemeral notifications
 ## 3.0.67
