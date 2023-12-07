@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/util/logger_util.dart';
@@ -336,13 +337,22 @@ Future<void> updateDeleteKey(AtKey atKey, int randomValueForOperation,
 }
 
 Future<dynamic> _getServerCommitEntries(String regex) async {
+  AtChopsKeys atChopsKeys = AtChopsKeys.create(
+      AtEncryptionKeyPair.create(
+          demo_credentials.encryptionPublicKeyMap[currentAtSign]!,
+          demo_credentials.encryptionPrivateKeyMap[currentAtSign]!),
+      AtPkamKeyPair.create(demo_credentials.pkamPublicKeyMap[currentAtSign]!,
+          demo_credentials.pkamPrivateKeyMap[currentAtSign]!));
+
+  AtChops atChops = AtChopsImpl(atChopsKeys);
   atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
       currentAtSign,
       namespace,
       AtClientPreference()
         ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
         ..isLocalStoreRequired = false
-        ..rootDomain = 'vip.ve.atsign.zone');
+        ..rootDomain = 'vip.ve.atsign.zone',
+      atChops: atChops);
   var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
       ?.executeCommand('info:brief\n');
