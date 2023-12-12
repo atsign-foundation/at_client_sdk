@@ -14,6 +14,80 @@ abstract class AtRpcCallbacks {
   Future<void> handleResponse(AtRpcResp response);
 }
 
+@experimental
+class AtRpcClient implements AtRpcCallbacks {
+  static final AtSignLogger logger = AtSignLogger(' AtRpcClient ',
+      loggingHandler: AtSignLogger.stdErrLoggingHandler);
+
+  late final String serverAtsign;
+  late final AtRpc rpc;
+
+  Map<int, Completer<Map<String, dynamic>>> completerMap = {};
+
+  AtRpcClient({
+    required String serverAtsign,
+    required AtClient atClient,
+    required String baseNameSpace, // e.g. my_app
+    String rpcsNameSpace = '__rpcs',
+    required String domainNameSpace, // e.g. math_evaluator
+  }) {
+    this.serverAtsign = AtUtils.fixAtSign(serverAtsign);
+    rpc = AtRpc(
+      atClient: atClient,
+      baseNameSpace: baseNameSpace,
+      rpcsNameSpace: rpcsNameSpace,
+      domainNameSpace: domainNameSpace,
+      callbacks: this,
+      allowList: {},
+    );
+    rpc.start();
+  }
+
+  Future<Map<String, dynamic>> call(Map<String, dynamic> payload) async {
+    AtRpcReq request = AtRpcReq.create(payload);
+    completerMap[request.reqId] = Completer();
+    logger.info('Sending request to $serverAtsign : $request');
+    await rpc.sendRequest(toAtSign: serverAtsign, request: request);
+    return completerMap[request.reqId]!.future;
+  }
+
+  @override
+  Future<AtRpcResp> handleRequest(AtRpcReq request, String fromAtSign) {
+    // We're just a client, we don't handle requests
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> handleResponse(AtRpcResp response) async {
+    logger.info('Got response ${response.payload}');
+
+    final Completer? completer = completerMap[response.reqId];
+
+    if (completer == null || completer.isCompleted) {
+      logger.warning('Ignoring response, no completer found : $response');
+      return;
+    }
+
+    switch (response.respType) {
+      case AtRpcRespType.ack:
+        // We don't complete the future when we get an ack
+        logger.info('Got ack : $response');
+        break;
+      case AtRpcRespType.success:
+        logger.info('Got success response : $response');
+        completer.complete(response.payload);
+        completerMap.remove(response.reqId);
+        break;
+      default:
+        logger.warning('Got non-success response '
+            ' : $response');
+        completer.completeError('Got non-success response : $response');
+        completerMap.remove(response.reqId);
+        break;
+    }
+  }
+}
+
 /// A simple rpc request-response abstraction which uses atProtocol
 /// notifications under the hood.
 /// - 'requests' are sent as notifications with a 'key' like:
@@ -31,6 +105,8 @@ abstract class AtRpcCallbacks {
 @experimental
 class AtRpc {
   static final AtSignLogger logger = AtSignLogger('AtRpc');
+
+  static Duration defaultNotificationExpiry = Duration(seconds: 30);
 
   /// The [AtClient] used by this AtRpc
   final AtClient atClient;
@@ -143,7 +219,9 @@ class AtRpc {
         logger.info(
             'Sending notification ${requestRecordID.toString()} with payload $requestJson');
         await atClient.notificationService.notify(
-            NotificationParams.forUpdate(requestRecordID, value: requestJson),
+            NotificationParams.forUpdate(requestRecordID,
+                value: requestJson,
+                notificationExpiry: defaultNotificationExpiry),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;
@@ -171,9 +249,7 @@ class AtRpc {
   final Metadata _defaultMetaData = Metadata()
     ..isPublic = false
     ..isEncrypted = true
-    ..namespaceAware = true
-    ..ttr = -1
-    ..ttl = 60 * 60 * 1000; // 1 hour
+    ..namespaceAware = true;
 
   /// Not part of API, but visibleForTesting.
   /// Receives 'request' notifications, and
@@ -343,7 +419,8 @@ class AtRpc {
             "Sending notification $responseAtKey with payload ${response.toJson()}");
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
-                value: jsonEncode(response.toJson())),
+                value: jsonEncode(response.toJson()),
+                notificationExpiry: defaultNotificationExpiry),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;

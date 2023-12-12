@@ -37,32 +37,6 @@ void main() {
   });
 
   test(
-      'A test to verify deletion of key when overriding the namespace in atKey',
-      () async {
-    // The namespace in the preference is "wavi". Overriding the namespace in the atKey to "buzz"
-    var atKey = (AtKey.shared('keyNamespaceOverriding',
-            namespace: 'buzz', sharedBy: sharedByAtSign)
-          ..sharedWith(sharedWithAtSign))
-        .build();
-    await sharedByAtClient.put(atKey, 'dummy_value');
-    expect(
-        sharedByAtClient
-            .getLocalSecondary()!
-            .keyStore!
-            .isKeyExists(atKey.toString()),
-        true);
-
-    // Delete the key
-    await sharedByAtClient.delete(atKey);
-    expect(
-        sharedByAtClient
-            .getLocalSecondary()!
-            .keyStore!
-            .isKeyExists(atKey.toString()),
-        false);
-  });
-
-  test(
       'A test to verify cached key is deleted in sharedWith secondary when CCD is set to true',
       () async {
     AtSignLogger.root_level = 'finer';

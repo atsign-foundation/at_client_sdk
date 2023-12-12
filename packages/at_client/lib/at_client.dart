@@ -15,6 +15,8 @@ export 'package:at_client/src/util/encryption_util.dart';
 export 'package:at_client/src/service/notification_service.dart';
 export 'package:at_client/src/service/sync_service.dart';
 export 'package:at_client/src/service/sync/sync_result.dart';
+export 'package:at_client/src/service/sync_service_impl.dart'
+    show KeyInfo, SyncDirection;
 export 'package:at_client/src/service/sync/sync_status.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_client/src/service/sync/sync_conflict.dart';

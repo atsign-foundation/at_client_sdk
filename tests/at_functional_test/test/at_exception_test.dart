@@ -1,19 +1,24 @@
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
-
-import 'package:test/test.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+// ignore: depend_on_referenced_packages
 import 'package:at_commons/at_commons.dart';
+import 'package:at_functional_test/src/config_util.dart';
+import 'package:test/test.dart';
+
 import 'test_utils.dart';
 
 void main() {
   late AtClientManager atClientManager;
   late AtClient atClient;
-  var sharedWithAtSign = '@bob🛠';
-  var currentAtSign = '@alice🛠';
-  var namespace = 'wavi';
+  late String atSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
-    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager.atClient.syncService.sync();
     atClient = atClientManager.atClient;
   });
 

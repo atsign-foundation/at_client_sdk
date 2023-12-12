@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -9,10 +10,11 @@ import 'test_utils.dart';
 void main() async {
   late AtClientManager atClientManager;
   late MySyncProgressListener mySyncProgressListener;
-  final atSign = '@alice🛠';
+  late String atSign;
   String namespace = 'wavi';
 
   setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
