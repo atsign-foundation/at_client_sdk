@@ -13,6 +13,12 @@ dependencies:
   at_client:
     path: ../../packages/at_client
 
+dependency_overrides:
+  at_chops:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_chops
+      ref: at_chops_dep_upgrade
 dev_dependencies:
   test: ^1.24.3
   lints: ^2.0.0
