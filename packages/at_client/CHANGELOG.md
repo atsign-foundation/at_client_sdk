@@ -1,3 +1,6 @@
+## 3.0.70
+- build[deps]: Upgraded dependencies for the following packages:
+  - asn1lib: `>=1.4.1 <=1.5.0`, crypton: `>=2.1.0 <=2.2.1`, encrypt: `>=5.0.1 <=5.0.3`, crypto: `^3.0.3`
 ## 3.0.69
 - feat: Add AtRpcClient for a much cleaner developer experience for sending AtRpc requests
 ## 3.0.68
