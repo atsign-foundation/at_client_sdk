@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
@@ -32,7 +33,18 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    return EncryptionUtil.decryptValue(encryptedValue, symmetricKey,
-        ivBase64: atKey.metadata?.ivNonce);
+    var iV;
+    if (atKey.metadata?.ivNonce != null) {
+      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata!.ivNonce!);
+    } else {
+      iV = AtChopsUtil.generateIVLegacy();
+    }
+    var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
+    final decryptionResultFromAtChops = super.atClient.atChops!.decryptString(
+        encryptedValue, EncryptionKeyType.aes256,
+        encryptionAlgorithm: encryptionAlgo, iv: iV);
+    _logger.finer(
+        'decryptionResultFromAtChops: ${decryptionResultFromAtChops.result}');
+    return decryptionResultFromAtChops.result;
   }
 }
