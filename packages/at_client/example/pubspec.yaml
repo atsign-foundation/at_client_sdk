@@ -19,11 +19,11 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: packages/at_lookup
       ref: uptake_commons_changes_into_lookup
-  at_chops:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_chops
-      ref: at_chops_dep_upgrade
+  # at_chops:
+  #   git:
+  #     url: https://github.com/atsign-foundation/at_libraries.git
+  #     path: packages/at_chops
+  #     ref: at_chops_dep_upgrade
 
 dependencies:
   at_client: ^3.0.37

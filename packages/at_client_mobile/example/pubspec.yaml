@@ -42,6 +42,17 @@ dependency_overrides:
   async: ^2.10.0
   at_client:
     path: ../../at_client
+  at_commons: ^4.0.0
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_secondary_server
+      ref: uptake_commons_4.0.0
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: uptake_commons_changes_into_lookup
 
 dev_dependencies:
   flutter_test:

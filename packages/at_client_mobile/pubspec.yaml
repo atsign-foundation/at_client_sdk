@@ -23,11 +23,7 @@ dependencies:
   at_client: ^3.0.64
 
 dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_commons
-      ref: trunk
+  at_commons: ^4.0.0
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
