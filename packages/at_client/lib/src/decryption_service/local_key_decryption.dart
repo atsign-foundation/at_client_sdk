@@ -33,7 +33,7 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    var iV;
+    InitialisationVector iV;
     if (atKey.metadata?.ivNonce != null) {
       iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata!.ivNonce!);
     } else {
