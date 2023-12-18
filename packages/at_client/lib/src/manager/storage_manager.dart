@@ -41,6 +41,7 @@ class StorageManager {
         .getSecondaryKeyStoreManager()!;
     await hiveKeyStore.initialize();
     keyStoreManager.keyStore = hiveKeyStore;
+    manager.scheduleKeyExpireTask(preferences!.expiryCheckTimeIntervalMins);
     isStorageInitialized = true;
   }
 }
