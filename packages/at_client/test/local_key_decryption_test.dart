@@ -39,7 +39,6 @@ void main() {
           sharedSymmetricKey, rsaKeyPair.atPublicKey.publicKey);
       AtChopsKeys atChopsKeys = AtChopsKeys.create(rsaKeyPair, null);
       var atChopsImpl = AtChopsImpl(atChopsKeys);
-      mockAtClient.atChops = atChopsImpl;
       when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
       print('encryptedSharedSymmetricKey:$encryptedSharedSymmetricKey');
       when(() => mockAtClient.getLocalSecondary())

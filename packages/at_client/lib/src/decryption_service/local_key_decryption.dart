@@ -39,12 +39,19 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
     } else {
       iV = AtChopsUtil.generateIVLegacy();
     }
-    var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
-    final decryptionResultFromAtChops = super.atClient.atChops!.decryptString(
-        encryptedValue, EncryptionKeyType.aes256,
-        encryptionAlgorithm: encryptionAlgo, iv: iV);
-    _logger.finer(
-        'decryptionResultFromAtChops: ${decryptionResultFromAtChops.result}');
+    AtEncryptionResult decryptionResultFromAtChops;
+    try {
+      var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
+      decryptionResultFromAtChops = super.atClient.atChops!.decryptString(
+          encryptedValue, EncryptionKeyType.aes256,
+          encryptionAlgorithm: encryptionAlgo, iv: iV);
+      _logger.finer(
+          'decryptionResultFromAtChops: ${decryptionResultFromAtChops.result}');
+    } on AtDecryptionException catch (e) {
+      _logger.severe(
+          'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
+      rethrow;
+    }
     return decryptionResultFromAtChops.result;
   }
 }
