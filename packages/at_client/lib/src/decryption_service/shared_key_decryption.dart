@@ -51,6 +51,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
     }
     if (currentAtSignPublicKey != null &&
+        atKey.metadata != null &&
         atKey.metadata!.pubKeyCS != null &&
         atKey.metadata!.pubKeyCS !=
             EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
