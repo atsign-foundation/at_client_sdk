@@ -51,11 +51,12 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: packages/at_lookup
       ref: uptake_commons_changes_into_lookup
-  at_commons:
+  at_commons: ^4.0.0
+  at_chops:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_commons
-      ref: trunk
+      path: packages/at_chops
+      ref: uptake_commons_into_atchops
 
 dev_dependencies:
   lints: ^2.1.1
