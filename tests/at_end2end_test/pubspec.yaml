@@ -25,11 +25,7 @@ dependency_overrides:
       path: packages/at_lookup
       ref: uptake_commons_changes_into_lookup
   at_commons: ^4.0.0
-  at_chops:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_chops
-      ref: uptake_commons_into_atchops
+  at_chops: ^1.0.7
   watcher: ^1.1.0
 
 dev_dependencies:

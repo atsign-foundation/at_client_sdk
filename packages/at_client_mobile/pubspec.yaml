@@ -24,6 +24,7 @@ dependencies:
 
 dependency_overrides:
   at_commons: ^4.0.0
+  at_chops: ^1.0.7
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
@@ -39,13 +40,7 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_client_sdk.git
       path: packages/at_client
       ref: uptake_commons_4.0.0
-  at_chops:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_chops
-      ref: uptake_commons_into_atchops
-
-
+ 
 dev_dependencies:
   lints: ^2.0.0
   test: ^1.6.0
