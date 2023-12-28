@@ -1,3 +1,5 @@
+## 3.2.13
+- fix: Introduce the "isOnboarded" function to confirm the successful onboarding of the atSign.
 ## 3.2.12
 - fix: Fixed the issue biometric_storage dependency not working on Windows when using Dart 3
 ## 3.2.11
