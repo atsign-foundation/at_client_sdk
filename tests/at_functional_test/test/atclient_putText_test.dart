@@ -2,6 +2,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
+import 'commit_log_compaction_test.dart';
 import 'test_utils.dart';
 
 /// The tests verify the put and get functionality where key is created using AtKey
@@ -15,6 +16,16 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
+
+  Future<void> switchAtsigns(String atsign) async {
+    var preference = TestUtils.getPreference(atsign);
+    atClientManager.setCurrentAtSign(atsign, null, preference);
+    await AtEncryptionKeysLoader.getInstance()
+        .setEncryptionKeys(atClientManager.atClient, atSign);
+    var list =
+        await atClientManager.atClient.getRemoteSecondary()!.atLookUp.scan();
+    atClientManager.atClient.encryptionService!.logger.info(list);
+  }
 
   group('A group of tests to verify positive scenarios of put and get', () {
     test('put method - create a key sharing to other atSign', () async {
@@ -74,6 +85,38 @@ void main() {
       var getKey = AtKey()..key = 'mobile';
       var getResult = await atClientManager.atClient.get(getKey);
       expect(getResult.value, value);
+    });
+  });
+
+  ////////////
+  group('A group of tests to verify get of symmetric shared keys', () {
+    test('Positive test - self keys ', () async {
+      var atKey =
+          AtKey.self("shared_key", namespace: "bob🛠", sharedBy: "@alice🛠")
+              .build();
+
+      var result = await atClientManager.atClient.get(atKey);
+      expect(result, returnsNormally);
+    });
+
+    test('Positive test - shared keys ', () async {
+      await switchAtsigns("@bob🛠");
+      atClientManager.atClient.encryptionService!.logger
+          .info(atClientManager.atClient.getCurrentAtSign());
+      var atKey = AtKey.fromString("@bob🛠:shared_key@alice🛠");
+      var result = await atClientManager.atClient.get(atKey);
+      expect(result, returnsNormally);
+    });
+
+    test('Negative test - shared keys ', () async {
+      await switchAtsigns("@alice🛠");
+      var atKey = (AtKey.shared("shared_key", sharedBy: "@alice🛠")
+            ..sharedWith("@bob🛠"))
+          .build();
+
+      expect(() async {
+        await atClientManager.atClient.get(atKey);
+      }, throwsException);
     });
   });
 }

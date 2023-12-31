@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -8,8 +9,8 @@ import 'package:at_client/src/response/default_response_parser.dart';
 /// llookup:phone.wavi@bob
 /// llookup:@bob:phone@bob
 class SelfKeyDecryption implements AtKeyDecryption {
-  final AtClient _atClient;
   SelfKeyDecryption(this._atClient);
+  final AtClient _atClient;
   @override
   Future<dynamic> decrypt(AtKey atKey, dynamic encryptedValue) async {
     if (encryptedValue == null ||
@@ -19,7 +20,26 @@ class SelfKeyDecryption implements AtKeyDecryption {
           intent: Intent.decryptData,
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
-
+    if (atKey.key == "shared_key") {
+      if (atKey.sharedBy != _atClient.getCurrentAtSign()) {
+        throw AtKeyException(
+            "This symmetric shared key cannot be decrypted using your private key.",
+            intent: Intent.fetchData,
+            exceptionScenario: ExceptionScenario.decryptionFailed);
+      }
+      if (_atClient.atChops == null) {
+        var privateKey =
+            await _atClient.getLocalSecondary()!.getEncryptionPrivateKey();
+        _atClient.encryptionService!.logger
+            .info(encryptedValue + " " + privateKey);
+        // ignore: deprecated_member_use_from_same_package
+        EncryptionUtil.decryptKey(encryptedValue, privateKey!);
+      } else {
+        return _atClient.atChops!
+            .decryptString(encryptedValue.toString(), EncryptionKeyType.rsa2048)
+            .result;
+      }
+    }
     var selfEncryptionKey =
         await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
     if ((selfEncryptionKey == null || selfEncryptionKey.isEmpty) ||
@@ -28,7 +48,6 @@ class SelfKeyDecryption implements AtKeyDecryption {
           intent: Intent.fetchSelfEncryptionKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-
     return EncryptionUtil.decryptValue(encryptedValue,
         DefaultResponseParser().parse(selfEncryptionKey).response,
         ivBase64: atKey.metadata?.ivNonce);
