@@ -8,6 +8,11 @@ environment:
 dependency_overrides:
   at_client:
     path: ../../at_client
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_secondary_server
+      ref: uptake_commons_4.0.0
 
 dependencies:
   at_client: ^3.0.37

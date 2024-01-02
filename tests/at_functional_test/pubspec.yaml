@@ -10,7 +10,6 @@ dependencies:
   uuid: 3.0.7
   at_client:
     path: ../../packages/at_client
-  at_chops: ^1.0.6
 
 dependency_overrides:
   at_persistence_secondary_server:
@@ -18,13 +17,6 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_server.git
       path: packages/at_persistence_secondary_server
       ref: uptake_commons_4.0.0
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_lookup
-      ref: uptake_commons_changes_into_lookup
-  at_commons: ^4.0.0
-  at_chops: ^1.0.7
 
 dev_dependencies:
   test: ^1.24.3

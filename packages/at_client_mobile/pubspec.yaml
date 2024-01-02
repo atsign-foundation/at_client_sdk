@@ -16,30 +16,21 @@ dependencies:
   biometric_storage: ^5.0.0
   hive: ^2.0.4
   crypton: '>=2.1.0 <=2.2.1'
-  at_commons: ^3.0.53
-  at_utils: ^3.0.15
-  at_chops: ^1.0.3
-  at_lookup: ^3.0.38
+  at_commons: ^4.0.0
+  at_utils: ^3.0.16
+  at_chops: ^1.0.7
+  at_lookup: ^3.0.44
   at_client: ^3.0.64
 
 dependency_overrides:
-  at_commons: ^4.0.0
-  at_chops: ^1.0.7
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
       path: packages/at_persistence_secondary_server
       ref: uptake_commons_4.0.0
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_lookup
-      ref: uptake_commons_changes_into_lookup
   at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: packages/at_client
-      ref: uptake_commons_4.0.0
+      path: ../at_client
+      
  
 dev_dependencies:
   lints: ^2.0.0
