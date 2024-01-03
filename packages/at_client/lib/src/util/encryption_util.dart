@@ -7,6 +7,8 @@ import 'package:encrypt/encrypt.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_utils/at_logger.dart';
 
+//#TODO Replace calls to methods in this class with at_chops methods and
+// move this class to test folder in next major release
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
 
