@@ -169,7 +169,7 @@ jobs:
       - name: update image on cicd VMs
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: appleboy/ssh-action@8f949198563a347a01c65ffc60399aef2b59d4ab # v1.0.1
+        uses: appleboy/ssh-action@2451745138b602d3e100a6def50c8e4e39591d4c # v1.0.2
         with:
           host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
           username: ubuntu
