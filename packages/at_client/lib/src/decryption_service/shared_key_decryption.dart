@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -50,13 +52,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
           intent: Intent.fetchEncryptionPublicKey,
           exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
     }
-    if (currentAtSignPublicKey != null &&
-        atKey.metadata != null &&
-        atKey.metadata!.pubKeyCS != null &&
-        atKey.metadata!.pubKeyCS !=
-            EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
+    if (!_verifyPublicKeyCheckSum(atKey, currentAtSignPublicKey)) {
       throw AtPublicKeyChangeException(
-          'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
+          'The sender encrypted this key with a public key which does not match the current public key. Cannot decrypt shared key ${atKey.toString()}',
           intent: Intent.fetchEncryptionPublicKey,
           exceptionScenario: ExceptionScenario.encryptionFailed);
     }
@@ -93,10 +91,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
     String? encryptedSharedKey = '';
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..atKey = AtConstants.atEncryptionSharedKey
-      ..sharedWith = _atClient.getCurrentAtSign()
-      ..sharedBy = atKey.sharedBy
-      ..isCached = true;
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = _atClient.getCurrentAtSign()
+        ..sharedBy = atKey.sharedBy
+        ..metadata = (Metadata()..isCached = true));
     try {
       encryptedSharedKey = await _atClient
           .getLocalSecondary()!
@@ -109,8 +108,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
         encryptedSharedKey.isEmpty ||
         encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = AtConstants.atEncryptionSharedKey
-        ..sharedBy = atKey.sharedBy
+        ..atKey = (AtKey()
+          ..key = AtConstants.atEncryptionSharedKey
+          ..sharedBy = atKey.sharedBy)
         ..auth = true;
       encryptedSharedKey = await _atClient
           .getRemoteSecondary()!
@@ -122,5 +122,18 @@ class SharedKeyDecryption implements AtKeyDecryption {
       return DefaultResponseParser().parse(encryptedSharedKey).response;
     }
     return encryptedSharedKey;
+  }
+
+  bool _verifyPublicKeyCheckSum(AtKey atKey, String? publicKey) {
+    if (publicKey != null && atKey.metadata != null) {
+      if (atKey.metadata.publicKeyHash != null) {
+        return _atClient.atChops!
+                .hash(Uint8List.fromList(publicKey.codeUnits), DefaultHash()) ==
+            atKey.metadata.publicKeyHash!.hash;
+      } else if (atKey.metadata.pubKeyCS != null) {
+        return atKey.metadata.pubKeyCS == EncryptionUtil.md5CheckSum(publicKey);
+      }
+    }
+    return true;
   }
 }

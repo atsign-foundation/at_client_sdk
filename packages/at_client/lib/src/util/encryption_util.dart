@@ -81,6 +81,7 @@ class EncryptionUtil {
         iv: getIV(ivBase64));
   }
 
+  @Deprecated('use at_chops hash method')
   static String md5CheckSum(String data) {
     return md5.convert(utf8.encode(data)).toString();
   }
