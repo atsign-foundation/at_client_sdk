@@ -17,6 +17,7 @@ void main() {
   setUpAll(() async {
     AtSignLogger.root_level = 'SHOUT';
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    await TestUtils.initAtClient(atSign_1, namespace);
   });
 
   tearDownAll(() {
