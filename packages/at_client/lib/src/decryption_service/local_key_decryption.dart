@@ -11,10 +11,11 @@ import 'package:at_utils/at_logger.dart';
 class LocalKeyDecryption extends AbstractAtKeyEncryption
     implements AtKeyDecryption {
   late final AtSignLogger _logger;
+  final AtClient _atClient;
 
-  LocalKeyDecryption(AtClient atClient) : super(atClient) {
+  LocalKeyDecryption(this._atClient) : super(_atClient) {
     _logger =
-        AtSignLogger('LocalKeyDecryption (${atClient.getCurrentAtSign()})');
+        AtSignLogger('LocalKeyDecryption (${_atClient.getCurrentAtSign()})');
   }
 
   @override
@@ -42,7 +43,7 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
     AtEncryptionResult decryptionResultFromAtChops;
     try {
       var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
-      decryptionResultFromAtChops = super.atClient.atChops!.decryptString(
+      decryptionResultFromAtChops = _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
       _logger.finer(

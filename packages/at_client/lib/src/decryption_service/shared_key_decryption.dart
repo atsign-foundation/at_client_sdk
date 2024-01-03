@@ -58,7 +58,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
       throw AtPublicKeyChangeException(
           'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
           intent: Intent.fetchEncryptionPublicKey,
-          exceptionScenario: ExceptionScenario.encryptionFailed);
+          exceptionScenario: ExceptionScenario.decryptionFailed);
     }
 
     AtEncryptionResult decryptionResultFromAtChops;
