@@ -43,7 +43,7 @@ class KeyStreamMapBase<K, V, I extends Map<K, V>> extends KeyStreamMixin<I>
     FutureOr<void> Function(Object exception, [StackTrace? stackTrace])?
         onError,
     AtClientManager? atClientManager,
-  })  : _generateRef = generateRef ?? ((key, value) => key.key ?? ''),
+  })  : _generateRef = generateRef ?? ((key, value) => key.key),
         _castTo = castTo ?? ((Iterable<MapEntry<K, V>> values) => values as I),
         super(
           convert: convert,

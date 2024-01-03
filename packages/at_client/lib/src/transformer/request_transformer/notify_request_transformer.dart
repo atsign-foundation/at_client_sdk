@@ -21,8 +21,6 @@ class NotificationRequestTransformer
   @override
   Future<NotifyVerbBuilder> transform(
       NotificationParams notificationParams) async {
-    // If metadata is not set, initialize Metadata instance.
-    notificationParams.atKey.metadata ??= Metadata();
     // prepares notification builder
     NotifyVerbBuilder builder = await _prepareNotificationBuilder(
         notificationParams, atClientPreference);
@@ -43,8 +41,8 @@ class NotificationRequestTransformer
       AtClientPreference atClientPreference) async {
     var builder = NotifyVerbBuilder()
       ..id = notificationParams.id
-      ..sharedBy = notificationParams.atKey.sharedBy
-      ..sharedWith = notificationParams.atKey.sharedWith
+      ..atKey.sharedBy = notificationParams.atKey.sharedBy
+      ..atKey.sharedWith = notificationParams.atKey.sharedWith
       ..operation = notificationParams.operation
       ..messageType = notificationParams.messageType
       ..priority = notificationParams.priority
@@ -55,15 +53,15 @@ class NotificationRequestTransformer
     // Append namespace only to message type key. For message type text do not
     // append namespaces.
     if (notificationParams.messageType == MessageTypeEnum.key) {
-      builder.atKey = AtClientUtil.getKeyWithNameSpace(
+      builder.atKey.key = AtClientUtil.getKeyWithNameSpace(
           notificationParams.atKey, atClientPreference);
     }
     if (notificationParams.messageType == MessageTypeEnum.text) {
-      if (notificationParams.atKey.metadata!.isEncrypted!) {
-        builder.atKey = await _encryptNotificationValue(
-            notificationParams.atKey, notificationParams.atKey.key!);
+      if (notificationParams.atKey.metadata.isEncrypted) {
+        builder.atKey.key = await _encryptNotificationValue(
+            notificationParams.atKey, notificationParams.atKey.key);
       } else {
-        builder.atKey = notificationParams.atKey.key;
+        builder.atKey.key = notificationParams.atKey.key;
       }
     }
     return builder;
@@ -71,23 +69,26 @@ class NotificationRequestTransformer
 
   void _addMetadataToBuilder(
       NotifyVerbBuilder builder, NotificationParams notificationParams) {
-    builder.ttl = notificationParams.atKey.metadata?.ttl;
-    builder.ttb = notificationParams.atKey.metadata?.ttb;
-    builder.ttr = notificationParams.atKey.metadata?.ttr;
-    builder.ccd = notificationParams.atKey.metadata?.ccd;
-    builder.isPublic = notificationParams.atKey.metadata!.isPublic!;
-    if (notificationParams.atKey.metadata!.isEncrypted != null) {
-      builder.isTextMessageEncrypted =
-          notificationParams.atKey.metadata!.isEncrypted!;
-    }
-    builder.sharedKeyEncrypted =
-        notificationParams.atKey.metadata?.sharedKeyEnc;
-    builder.pubKeyChecksum = notificationParams.atKey.metadata?.pubKeyCS;
-    builder.encKeyName = notificationParams.atKey.metadata?.encKeyName;
-    builder.encAlgo = notificationParams.atKey.metadata?.encAlgo;
-    builder.ivNonce = notificationParams.atKey.metadata?.ivNonce;
-    builder.skeEncKeyName = notificationParams.atKey.metadata?.skeEncKeyName;
-    builder.skeEncAlgo = notificationParams.atKey.metadata?.skeEncAlgo;
+    builder.atKey.metadata.ttl = notificationParams.atKey.metadata.ttl;
+    builder.atKey.metadata.ttb = notificationParams.atKey.metadata.ttb;
+    builder.atKey.metadata.ttr = notificationParams.atKey.metadata.ttr;
+    builder.atKey.metadata.ccd = notificationParams.atKey.metadata.ccd;
+    builder.atKey.metadata.isPublic =
+        notificationParams.atKey.metadata.isPublic;
+    builder.atKey.metadata.isEncrypted =
+        notificationParams.atKey.metadata.isEncrypted;
+    builder.atKey.metadata.sharedKeyEnc =
+        notificationParams.atKey.metadata.sharedKeyEnc;
+    builder.atKey.metadata.pubKeyCS =
+        notificationParams.atKey.metadata.pubKeyCS;
+    builder.atKey.metadata.encKeyName =
+        notificationParams.atKey.metadata.encKeyName;
+    builder.atKey.metadata.encAlgo = notificationParams.atKey.metadata.encAlgo;
+    builder.atKey.metadata.ivNonce = notificationParams.atKey.metadata.ivNonce;
+    builder.atKey.metadata.skeEncKeyName =
+        notificationParams.atKey.metadata.skeEncKeyName;
+    builder.atKey.metadata.skeEncAlgo =
+        notificationParams.atKey.metadata.skeEncAlgo;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {

@@ -31,8 +31,8 @@ class SharedKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     String? encryptedSharedKey;
-    if (atKey.metadata != null && atKey.metadata!.pubKeyCS != null) {
-      encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
+    if (atKey.metadata.pubKeyCS != null) {
+      encryptedSharedKey = atKey.metadata.sharedKeyEnc;
       String? currentAtSignPublicKey;
       try {
         currentAtSignPublicKey = (await atClient
@@ -46,7 +46,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
             exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
       }
       if (currentAtSignPublicKey != null &&
-          atKey.metadata!.pubKeyCS !=
+          atKey.metadata.pubKeyCS !=
               EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
         throw AtPublicKeyChangeException(
             'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
@@ -69,7 +69,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
           .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
       decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptionResult.result,
-          ivBase64: atKey.metadata?.ivNonce);
+          ivBase64: atKey.metadata.ivNonce);
     } on AtKeyException catch (e) {
       e.stack(AtChainedException(
           Intent.decryptData,
@@ -83,10 +83,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
     String? encryptedSharedKey = '';
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..atKey = AtConstants.atEncryptionSharedKey
-      ..sharedWith = atClient.getCurrentAtSign()
-      ..sharedBy = atKey.sharedBy
-      ..isCached = true;
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = atClient.getCurrentAtSign()
+        ..sharedBy = atKey.sharedBy
+        ..metadata = (Metadata()..isCached = true));
     try {
       encryptedSharedKey = await atClient
           .getLocalSecondary()!
@@ -99,8 +100,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
         encryptedSharedKey.isEmpty ||
         encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = AtConstants.atEncryptionSharedKey
-        ..sharedBy = atKey.sharedBy
+        ..atKey = (AtKey()
+          ..key = AtConstants.atEncryptionSharedKey
+          ..sharedBy = atKey.sharedBy)
         ..auth = true;
       encryptedSharedKey = await atClient
           .getRemoteSecondary()!

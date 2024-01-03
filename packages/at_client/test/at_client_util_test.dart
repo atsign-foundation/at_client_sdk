@@ -1,30 +1,33 @@
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('A group of update builder tests', () {
     test('test non public key', () {
       var builder = UpdateVerbBuilder()
-        ..atKey = 'privatekey:at_pkam_privatekey';
+        ..atKey.key = 'privatekey:at_pkam_privatekey';
       var updateKey = builder.buildKey();
       expect(updateKey, 'privatekey:at_pkam_privatekey');
     });
 
     test('test public key', () {
       var builder = UpdateVerbBuilder()
-        ..isPublic = true
-        ..atKey = 'phone'
-        ..sharedBy = 'alice';
+        ..atKey = (AtKey()
+          ..key = 'phone'
+          ..sharedBy = 'alice'
+          ..metadata = (Metadata()..isPublic = true));
       var updateKey = builder.buildKey();
       expect(updateKey, 'public:phone@alice');
     });
 
     test('test key sharedwith another atsign', () {
       var builder = UpdateVerbBuilder()
-        ..sharedWith = 'bob'
-        ..atKey = 'phone'
-        ..sharedBy = 'alice';
+        ..atKey = (AtKey()
+          ..key = 'phone'
+          ..sharedWith = 'bob'
+          ..sharedBy = 'alice');
       var updateKey = builder.buildKey();
       expect(updateKey, '@bob:phone@alice');
     });

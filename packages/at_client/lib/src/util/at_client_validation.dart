@@ -97,8 +97,8 @@ class AtClientValidation {
     }
     // If key starts with 'cached:' (or) if the metadata of key has isCached set to true; it represent
     // a cached key. Prevent client updating the cached key. Hence throw exception.
-    if (atKey.key!.startsWith('${AtConstants.cached}:') ||
-        (atKey.metadata != null && atKey.metadata!.isCached)) {
+    if (atKey.key.startsWith('${AtConstants.cached}:') ||
+        (atKey.metadata.isCached)) {
       throw AtKeyException('Cannot create/update a cached key');
     }
     // If namespace is not set on key and in preferences, throw exception
