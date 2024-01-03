@@ -23,11 +23,6 @@ dependencies:
   at_client: ^3.0.64
 
 dependency_overrides:
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      path: packages/at_persistence_secondary_server
-      ref: uptake_commons_4.0.0
   at_client:
       path: ../at_client
       
