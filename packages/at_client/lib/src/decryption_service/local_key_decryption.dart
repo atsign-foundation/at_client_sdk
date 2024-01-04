@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
@@ -10,10 +11,11 @@ import 'package:at_utils/at_logger.dart';
 class LocalKeyDecryption extends AbstractAtKeyEncryption
     implements AtKeyDecryption {
   late final AtSignLogger _logger;
+  final AtClient _atClient;
 
-  LocalKeyDecryption(AtClient atClient) : super(atClient) {
+  LocalKeyDecryption(this._atClient) : super(_atClient) {
     _logger =
-        AtSignLogger('LocalKeyDecryption (${atClient.getCurrentAtSign()})');
+        AtSignLogger('LocalKeyDecryption (${_atClient.getCurrentAtSign()})');
   }
 
   @override
@@ -32,7 +34,25 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    return EncryptionUtil.decryptValue(encryptedValue, symmetricKey,
-        ivBase64: atKey.metadata.ivNonce);
+    InitialisationVector iV;
+    if (atKey.metadata.ivNonce != null) {
+      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+    } else {
+      iV = AtChopsUtil.generateIVLegacy();
+    }
+    AtEncryptionResult decryptionResultFromAtChops;
+    try {
+      var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
+      decryptionResultFromAtChops = _atClient.atChops!.decryptString(
+          encryptedValue, EncryptionKeyType.aes256,
+          encryptionAlgorithm: encryptionAlgo, iv: iV);
+      _logger.finer(
+          'decryptionResultFromAtChops: ${decryptionResultFromAtChops.result}');
+    } on AtDecryptionException catch (e) {
+      _logger.severe(
+          'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
+      rethrow;
+    }
+    return decryptionResultFromAtChops.result;
   }
 }
