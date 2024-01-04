@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
 
 ///Enum to represent the sync status
 enum SyncStatus { started, notStarted, success, failure }
