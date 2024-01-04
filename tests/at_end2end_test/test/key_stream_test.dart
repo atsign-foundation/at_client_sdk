@@ -225,7 +225,7 @@ void main() async {
           TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = MapKeyStream<String, String>(
         regex: '$namespace@',
-        convert: (key, value) => MapEntry(key.key!, value.value),
+        convert: (key, value) => MapEntry(key.key, value.value),
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
