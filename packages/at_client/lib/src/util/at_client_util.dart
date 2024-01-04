@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
@@ -34,8 +33,7 @@ class AtClientUtil {
   static String signChallenge(String challenge, String privateKey) {
     var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
-    var signature =
-        key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
+    var signature = key.createSHA256Signature(utf8.encode(challenge));
     return base64Encode(signature);
   }
 
