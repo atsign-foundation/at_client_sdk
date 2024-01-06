@@ -51,8 +51,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
     }
     if (currentAtSignPublicKey != null &&
-        atKey.metadata.pubKeyCS !=
-            EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
+        (atKey.metadata.pubKeyCS != null &&
+            atKey.metadata.pubKeyCS !=
+                EncryptionUtil.md5CheckSum(currentAtSignPublicKey))) {
       throw AtPublicKeyChangeException(
           'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
           intent: Intent.fetchEncryptionPublicKey,
@@ -91,11 +92,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
     String? encryptedSharedKey = '';
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..atKey = ( AtKey() 
-      ..key = AtConstants.atEncryptionSharedKey
-      ..sharedWith = _atClient.getCurrentAtSign()
-      ..sharedBy = atKey.sharedBy
-      ..metadata = (Metadata()..isCached = true));
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = _atClient.getCurrentAtSign()
+        ..sharedBy = atKey.sharedBy
+        ..metadata = (Metadata()..isCached = true));
     try {
       encryptedSharedKey = await _atClient
           .getLocalSecondary()!
