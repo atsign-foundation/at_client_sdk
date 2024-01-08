@@ -14,6 +14,11 @@ dependencies:
     path: ../../packages/at_client
 
 dependency_overrides:
+  at_client:
+    git:
+        url: https://github.com/atsign-foundation/at_client_sdk.git
+        path: packages/at_client
+        ref: update_atclient_dependencies
   watcher: ^1.1.0
 
 dev_dependencies:

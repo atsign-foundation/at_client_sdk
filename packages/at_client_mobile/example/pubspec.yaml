@@ -41,7 +41,10 @@ dependency_overrides:
   path: ^1.8.3
   async: ^2.10.0
   at_client:
-    path: ../../at_client
+    git:
+        url: https://github.com/atsign-foundation/at_client_sdk.git
+        path: packages/at_client
+        ref: update_atclient_dependencies
   at_utils: ^3.0.16
   at_commons: ^4.0.0
 

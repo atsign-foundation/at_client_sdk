@@ -5,7 +5,6 @@ import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:meta/meta.dart';
 import 'package:at_chops/at_chops.dart';
 
 /// Class responsible for decrypting the value of shared key's that are not owned
@@ -14,13 +13,12 @@ import 'package:at_chops/at_chops.dart';
 /// CurrentAtSign: @bob
 /// lookup:phone@alice
 class SharedKeyDecryption implements AtKeyDecryption {
-  @visibleForTesting
-  final AtClient atClient;
+  final AtClient _atClient;
   late final AtSignLogger _logger;
 
-  SharedKeyDecryption(this.atClient) {
+  SharedKeyDecryption(this._atClient) {
     _logger =
-        AtSignLogger('SharedKeyDecryption (${atClient.getCurrentAtSign()})');
+        AtSignLogger('SharedKeyDecryption (${_atClient.getCurrentAtSign()})');
   }
 
   @override
@@ -33,51 +31,62 @@ class SharedKeyDecryption implements AtKeyDecryption {
     String? encryptedSharedKey;
     if (atKey.metadata.pubKeyCS != null) {
       encryptedSharedKey = atKey.metadata.sharedKeyEnc;
-      String? currentAtSignPublicKey;
-      try {
-        currentAtSignPublicKey = (await atClient
-                .getLocalSecondary()!
-                .getEncryptionPublicKey(atClient.getCurrentAtSign()!))
-            ?.trim();
-      } on KeyNotFoundException {
-        throw AtPublicKeyNotFoundException(
-            'Failed to fetch the current atSign public key - public:publickey${atClient.getCurrentAtSign()!}',
-            intent: Intent.fetchEncryptionPublicKey,
-            exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
-      }
-      if (currentAtSignPublicKey != null &&
-          atKey.metadata.pubKeyCS !=
-              EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
-        throw AtPublicKeyChangeException(
-            'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
-            intent: Intent.fetchEncryptionPublicKey,
-            exceptionScenario: ExceptionScenario.encryptionFailed);
-      }
-    } else {
-      encryptedSharedKey = await _getEncryptedSharedKey(atKey);
     }
-    if (encryptedSharedKey == null ||
-        encryptedSharedKey.isEmpty ||
-        encryptedSharedKey == 'null') {
+    encryptedSharedKey ??= await _getEncryptedSharedKey(atKey);
+    if (encryptedSharedKey.isEmpty || encryptedSharedKey == 'null') {
       throw SharedKeyNotFoundException('shared encryption key not found',
           intent: Intent.fetchEncryptionSharedKey,
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
-    String decryptedValue = '';
+    String? currentAtSignPublicKey;
     try {
-      final decryptionResult = atClient.atChops!
+      currentAtSignPublicKey = (await _atClient
+              .getLocalSecondary()!
+              .getEncryptionPublicKey(_atClient.getCurrentAtSign()!))
+          ?.trim();
+    } on KeyNotFoundException {
+      throw AtPublicKeyNotFoundException(
+          'Failed to fetch the current atSign public key - public:publickey${_atClient.getCurrentAtSign()!}',
+          intent: Intent.fetchEncryptionPublicKey,
+          exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
+    }
+    if (currentAtSignPublicKey != null &&
+        (atKey.metadata.pubKeyCS != null &&
+            atKey.metadata.pubKeyCS !=
+                EncryptionUtil.md5CheckSum(currentAtSignPublicKey))) {
+      throw AtPublicKeyChangeException(
+          'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
+          intent: Intent.fetchEncryptionPublicKey,
+          exceptionScenario: ExceptionScenario.decryptionFailed);
+    }
+
+    AtEncryptionResult decryptionResultFromAtChops;
+    try {
+      InitialisationVector iV;
+      if (atKey.metadata.ivNonce != null) {
+        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      } else {
+        iV = AtChopsUtil.generateIVLegacy();
+      }
+      final decryptionResult = _atClient.atChops!
           .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-      decryptedValue = EncryptionUtil.decryptValue(
-          encryptedValue, decryptionResult.result,
-          ivBase64: atKey.metadata.ivNonce);
+      var encryptionAlgo = AESEncryptionAlgo(AESKey(
+          DefaultResponseParser().parse(decryptionResult.result).response));
+      decryptionResultFromAtChops = _atClient.atChops!.decryptString(
+          encryptedValue, EncryptionKeyType.aes256,
+          encryptionAlgorithm: encryptionAlgo, iv: iV);
     } on AtKeyException catch (e) {
       e.stack(AtChainedException(
           Intent.decryptData,
           ExceptionScenario.decryptionFailed,
           'Failed to decrypt ${atKey.toString()}'));
       rethrow;
+    } on AtDecryptionException catch (e) {
+      _logger.severe(
+          'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
+      rethrow;
     }
-    return decryptedValue;
+    return decryptionResultFromAtChops.result;
   }
 
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
@@ -85,11 +94,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = AtConstants.atEncryptionSharedKey
-        ..sharedWith = atClient.getCurrentAtSign()
+        ..sharedWith = _atClient.getCurrentAtSign()
         ..sharedBy = atKey.sharedBy
         ..metadata = (Metadata()..isCached = true));
     try {
-      encryptedSharedKey = await atClient
+      encryptedSharedKey = await _atClient
           .getLocalSecondary()!
           .executeVerb(localLookupSharedKeyBuilder);
     } on KeyNotFoundException {
@@ -104,7 +113,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
           ..key = AtConstants.atEncryptionSharedKey
           ..sharedBy = atKey.sharedBy)
         ..auth = true;
-      encryptedSharedKey = await atClient
+      encryptedSharedKey = await _atClient
           .getRemoteSecondary()!
           .executeVerb(sharedKeyLookUpBuilder);
       encryptedSharedKey =

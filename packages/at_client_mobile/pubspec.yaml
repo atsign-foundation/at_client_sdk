@@ -24,7 +24,10 @@ dependencies:
 
 dependency_overrides:
   at_client:
-      path: ../at_client
+      git:
+        url: https://github.com/atsign-foundation/at_client_sdk.git
+        path: packages/at_client
+        ref: update_atclient_dependencies
       
  
 dev_dependencies:

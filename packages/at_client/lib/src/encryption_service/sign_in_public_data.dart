@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:crypton/crypton.dart';
 
 /// Class responsible for signing the public key value using the
