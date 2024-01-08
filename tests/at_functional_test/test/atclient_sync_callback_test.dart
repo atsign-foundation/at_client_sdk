@@ -156,7 +156,7 @@ void main() {
         syncProgress.keyInfoList?.forEach((keyInfo) {
           if (keyInfo.key.contains('fb_username-$uniqueId')) {
             expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
-            expect(keyInfo.commitOp, CommitOp.UPDATE);
+            expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
           }
         });
       }
