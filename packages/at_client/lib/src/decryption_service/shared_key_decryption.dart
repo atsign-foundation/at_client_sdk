@@ -29,7 +29,7 @@ class SharedKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     String? encryptedSharedKey;
-    if (atKey.metadata.pubKeyCS != null) {
+    if (atKey.metadata.sharedKeyEnc != null) {
       encryptedSharedKey = atKey.metadata.sharedKeyEnc;
     }
     encryptedSharedKey ??= await _getEncryptedSharedKey(atKey);
