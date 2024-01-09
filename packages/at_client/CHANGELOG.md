@@ -1,3 +1,5 @@
+## 3.0.71
+- feat: Replace decryption methods from EncryptionUtil with AtChops methods
 ## 3.0.70
 - build[deps]: Upgraded dependencies for the following packages:
   - asn1lib: `>=1.4.1 <=1.5.0`, crypton: `>=2.1.0 <=2.2.1`, encrypt: `>=5.0.1 <=5.0.3`, crypto: `^3.0.3`

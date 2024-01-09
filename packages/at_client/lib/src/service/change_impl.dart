@@ -36,7 +36,7 @@
 //
 //  @override
 //  Future<bool> isInSync() async {
-////    return await _atClient.getSyncService()!.isInSync();
+//    return await _atClient.getSyncService()!.isInSync();
 //  return true;
 //  }
 //
@@ -49,11 +49,11 @@
 //  Future<void> sync(
 //      {Function? onDone, Function? onError, String? regex}) async {
 //    if (onDone != null && onError != null) {
-////      unawaited(_atClient
-////          .getSyncService()!
-////          .sync(onDone: onDone, onError: onError, regex: regex));
+//      unawaited(_atClient
+//          .getSyncService()!
+//          .sync(onDone: onDone, onError: onError, regex: regex));
 //    } else {
-////      await _atClient.getSyncService()!.sync(regex: regex);
+//      await _atClient.getSyncService()!.sync(regex: regex);
 //    }
 //  }
 //
@@ -64,7 +64,7 @@
 //    var changeImpl = ChangeImpl(atClient)
 //      ..atKey = atKey
 //      ..operationEnum = OperationEnum.update;
-//    // If value is not null, set value.
+//    //If value is not null, set value.
 //    if (value != null) {
 //      changeImpl.atValue = AtValue();
 //      changeImpl.atValue!.value = value;
