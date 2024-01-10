@@ -75,6 +75,12 @@ class SharedKeyDecryption implements AtKeyDecryption {
       decryptionResultFromAtChops = _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
+    } on AtKeyException catch (e) {
+      e.stack(AtChainedException(
+          Intent.decryptData,
+          ExceptionScenario.decryptionFailed,
+          'Failed to decrypt ${atKey.toString()}'));
+      rethrow;
     } on AtDecryptionException catch (e) {
       _logger.severe(
           'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
