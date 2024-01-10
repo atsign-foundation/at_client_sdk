@@ -674,6 +674,20 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  Future<Map<String, dynamic>> fetchEnrollmentRequests(
+      {String? appName, String? deviceName}) async {
+    EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
+      ..operation = EnrollOperationEnum.list
+      ..appName = appName
+      ..deviceName = deviceName;
+
+    var response = await getRemoteSecondary()?.executeCommand(enrollBuilder.buildCommand(), auth: true);
+    response = response?.replaceFirst('data:', '');
+    Map<String, dynamic> enrollRequests = jsonDecode(response!);
+    return enrollRequests;
+  }
+
+  @override
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
     var streamResponse = AtStreamResponse();

@@ -572,4 +572,7 @@ abstract class AtClient {
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;
+
+  /// Fetches all enrollment requests from the corresponding atServer
+  Future<Map<String, dynamic>> fetchEnrollmentRequests({String? appName, String? deviceName});
 }
