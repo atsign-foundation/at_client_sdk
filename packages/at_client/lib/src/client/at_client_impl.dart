@@ -295,6 +295,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<bool> _delete(AtKey atKey,
       {DeleteRequestOptions? deleteRequestOptions}) async {
     atKey.sharedBy ??= _atSign;
+    // When namespace is not set in AtKey.namespace, default it to namespace from
+    // AtClientPreferences
+    if (atKey.metadata.namespaceAware) {
+      atKey.namespace ??= preference?.namespace;
+    }
     var builder = DeleteVerbBuilder()..atKey = atKey;
     var secondary = getSecondary();
     if (deleteRequestOptions != null &&
