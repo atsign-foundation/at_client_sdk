@@ -2,7 +2,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:encrypt/encrypt.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
