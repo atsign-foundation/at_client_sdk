@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -19,6 +21,8 @@ class MockAtCompactionJob extends Mock implements AtCompactionJob {
     isCronScheduled = false;
   }
 }
+
+class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 void main() {
   group('A group of at client impl create tests', () {
@@ -251,7 +255,7 @@ void main() {
     });
   });
 
-  group('A group of tests related to setting enrollmentId', () {
+  group('A group of tests related to apkam/enrollments', () {
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
         () async {
@@ -260,6 +264,40 @@ void main() {
           .setCurrentAtSign('@alice', 'wavi', AtClientPreference(),
               enrollmentId: testEnrollmentId);
       expect(atClientManager.atClient.enrollmentId, testEnrollmentId);
+    });
+
+    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+
+    test('verify behaviour of fetchEnrollmentRequests()', () async {
+      String currentAtsign = '@apkam';
+      String enrollKey1 =
+          '0acdeb4d-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
+      String enrollValue1 =
+          '{"appName":"buzz","deviceName":"pixel","namespace":{"buzz":"rw"}}';
+      String enrollKey2 =
+          '9beefa26-3384-4f10-81a6-0deaa4332669.new.enrollments.__manage$currentAtsign';
+      String enrollValue2 =
+          '{"appName":"buzz","deviceName":"pixel","namespace":{"buzz":"rw"}}';
+      String enrollKey3 =
+          'a6bbef17-c7bf-46f4-a172-1ed7b3b443bc.new.enrollments.__manage$currentAtsign';
+      String enrollValue3 =
+          '{"appName":"buzz","deviceName":"pixel","namespace":{"buzz":"rw"}}';
+      when(() =>
+              mockRemoteSecondary.executeCommand('enroll:list\n', auth: true))
+          .thenAnswer((_) => Future.value('data:{"$enrollKey1":'
+              '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
+
+      AtClient? client = await AtClientImpl.create(
+          currentAtsign, 'buzz', AtClientPreference(),
+          remoteSecondary: mockRemoteSecondary);
+      AtClientImpl? clientImpl = client as AtClientImpl;
+
+      Map<String, dynamic>? requests =
+          await clientImpl.fetchEnrollmentRequests();
+      expect(requests.length, 3);
+      expect(requests[enrollKey1], jsonDecode(enrollValue1));
+      expect(requests[enrollKey2], jsonDecode(enrollValue2));
+      expect(requests[enrollKey3], jsonDecode(enrollValue3));
     });
   });
 }
