@@ -2,6 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:encrypt/encrypt.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
@@ -32,10 +33,16 @@ void main() {
     registerFallbackValue(FakeLocalLookUpVerbBuilder());
   });
 
-  test('test to check self key encryption', () async {
+  test('test to check encryption/decryption of self keys', () async {
+    // This test encrypts a self key value and then checks whether decrypted value is same as original value
+    // If @alice wants to maintain a location without sharing to anyone then the key-value format will be @alice:location@alice New Jersey
+    // @alice uses self encryption AES key generated during onboarding process to encrypt the value. Same key is used for decryption
     var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    var aliceSelfEncryptionKey = 'vR+w/lx9qitj/W2+SfFxbjeRM8VdaYGsxG6lxYCVQ0w=';
+    // generate new AES key for the test
+    var aliceSelfEncryptionKey =
+        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    // set atChops
     AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
     atChopsKeys.selfEncryptionKey = AESKey(aliceSelfEncryptionKey);
     var atChopsImpl = AtChopsImpl(atChopsKeys);
