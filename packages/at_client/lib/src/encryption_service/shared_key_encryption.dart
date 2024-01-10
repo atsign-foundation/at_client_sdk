@@ -1,9 +1,16 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
 
 ///Class responsible for encrypting the value of the SharedKey's
 class SharedKeyEncryption extends AbstractAtKeyEncryption {
-  SharedKeyEncryption(AtClient atClient) : super(atClient);
+  final AtClient _atClient;
+  late final AtSignLogger _logger;
+  SharedKeyEncryption(this._atClient) : super(_atClient) {
+    _logger =
+        AtSignLogger('SelfKeyEncryption (${_atClient.getCurrentAtSign()})');
+  }
 
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value,
@@ -17,9 +24,23 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
     // encryption key and setting it in super.sharedKey
     await super.encrypt(atKey, value,
         storeSharedKeyEncryptedWithData: storeSharedKeyEncryptedWithData);
-
-    // Encrypt the value
-    return EncryptionUtil.encryptValue(value, sharedKey,
-        ivBase64: atKey.metadata.ivNonce);
+    AtEncryptionResult encryptionResultFromAtChops;
+    try {
+      InitialisationVector iV;
+      if (atKey.metadata.ivNonce != null) {
+        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      } else {
+        iV = AtChopsUtil.generateIVLegacy();
+      }
+      var encryptionAlgo = AESEncryptionAlgo(AESKey(sharedKey));
+      encryptionResultFromAtChops = _atClient.atChops!.encryptString(
+          value, EncryptionKeyType.aes256,
+          encryptionAlgorithm: encryptionAlgo, iv: iV);
+    } on AtEncryptionException catch (e) {
+      _logger.severe(
+          'encryption exception during shared key encryption of key: ${atKey.key}. Reason: ${e.toString()}');
+      rethrow;
+    }
+    return encryptionResultFromAtChops.result;
   }
 }
