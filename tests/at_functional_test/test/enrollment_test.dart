@@ -14,11 +14,9 @@ void main() {
   late String aliceDefaultEncryptionPrivateKey;
   late String aliceSelfEncryptionKey;
   late String alicePkamPublicKey;
-  late String secondAtsign;
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    secondAtsign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
     aliceApkamSymmetricKey = at_demos.apkamSymmetricKeyMap[atSign]!;
     aliceDefaultEncryptionPrivateKey =
@@ -96,7 +94,7 @@ void main() {
   test(
       'validate client functionality to fetch pending enrollments on legacy pkam authenticated client',
       () async {
-    atClientManager = await TestUtils.initAtClient(secondAtsign, 'buzz');
+    atClientManager = await TestUtils.initAtClient(atSign, 'new_app');
     AtClient? client = atClientManager.atClient;
     // fetch first otp
     String? otp =
@@ -104,11 +102,11 @@ void main() {
     expect(otp, isNotNull);
     // create first enrollment request
     RemoteSecondary? secondRemoteSecondary =
-        RemoteSecondary(secondAtsign, getClient2Preferences());
+        RemoteSecondary(atSign, getClient2Preferences());
     var apkamPublicKey =
         at_demos.pkamPublicKeyMap['@eve🛠']; // can be any random public key
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"buzz","deviceName":"pixel","namespaces":{"buzz":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -122,7 +120,7 @@ void main() {
     expect(otp, isNotNull);
     // create second enrollment request
     newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"wavi","deviceName":"pixel7","namespaces":{"buzz":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel7","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
     enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -137,17 +135,17 @@ void main() {
     expect(enrollmentRequests.length, 2);
 
     String firstEnrollmentKey = getEnrollmentKey(
-        enrollResponse1JsonDecoded['enrollmentId'], secondAtsign);
+        enrollResponse1JsonDecoded['enrollmentId'], atSign);
     String secondEnrollmentKey = getEnrollmentKey(
-        enrollResponse2JsonDecoded['enrollmentId'], secondAtsign);
+        enrollResponse2JsonDecoded['enrollmentId'], atSign);
 
     expect(
         (enrollmentRequests[firstEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['buzz'],
+            as Map<String, dynamic>)['new_app'],
         'rw');
     expect(
         (enrollmentRequests[secondEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['buzz'],
+            as Map<String, dynamic>)['new_app'],
         'rw');
     expect(
         (enrollmentRequests[secondEnrollmentKey]['namespace']
