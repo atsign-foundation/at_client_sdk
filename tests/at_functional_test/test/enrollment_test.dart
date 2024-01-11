@@ -14,9 +14,11 @@ void main() {
   late String aliceDefaultEncryptionPrivateKey;
   late String aliceSelfEncryptionKey;
   late String alicePkamPublicKey;
+  late String secondAtsign;
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    secondAtsign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
     aliceApkamSymmetricKey = at_demos.apkamSymmetricKeyMap[atSign]!;
     aliceDefaultEncryptionPrivateKey =
@@ -94,6 +96,64 @@ void main() {
   test(
       'validate client functionality to fetch pending enrollments on legacy pkam authenticated client',
       () async {
+    atClientManager = await TestUtils.initAtClient(secondAtsign, 'buzz');
+    AtClient? client = atClientManager.atClient;
+    // fetch first otp
+    String? otp =
+        await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
+    expect(otp, isNotNull);
+    // create first enrollment request
+    RemoteSecondary? secondRemoteSecondary =
+        RemoteSecondary(secondAtsign, getClient2Preferences());
+    var apkamPublicKey =
+        at_demos.pkamPublicKeyMap['@eve🛠']; // can be any random public key
+    var newEnrollRequest = TestUtils.formatCommand(
+        'enroll:request:{"appName":"buzz","deviceName":"pixel","namespaces":{"buzz":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+    var enrollResponse = await TestUtils.executeCommandAndParse(
+        null, newEnrollRequest,
+        remoteSecondary: secondRemoteSecondary);
+    Map<String, dynamic> enrollResponse1JsonDecoded =
+        jsonDecode(enrollResponse!);
+    expect(enrollResponse1JsonDecoded['enrollmentId'], isNotNull);
+    expect(enrollResponse1JsonDecoded['status'], 'pending');
+
+    // fetch second otp
+    otp = await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
+    expect(otp, isNotNull);
+    // create second enrollment request
+    newEnrollRequest = TestUtils.formatCommand(
+        'enroll:request:{"appName":"wavi","deviceName":"pixel7","namespaces":{"buzz":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+    enrollResponse = await TestUtils.executeCommandAndParse(
+        null, newEnrollRequest,
+        remoteSecondary: secondRemoteSecondary);
+    var enrollResponse2JsonDecoded = jsonDecode(enrollResponse!);
+    expect(enrollResponse2JsonDecoded['enrollmentId'], isNotNull);
+    expect(enrollResponse2JsonDecoded['status'], 'pending');
+
+    // fetch enrollment requests through client
+    Map<String, dynamic> enrollmentRequests =
+        await client.fetchEnrollmentRequests();
+    print(enrollmentRequests.entries);
+    expect(enrollmentRequests.length, 2);
+
+    String firstEnrollmentKey = enrollmentRequests.keys.toList()[0];
+    String secondEnrollmentKey = enrollmentRequests.keys.toList()[1];
+
+    expect(
+        (enrollmentRequests[firstEnrollmentKey]['namespace']
+            as Map<String, dynamic>)['buzz'],
+        'rw');
+    expect(
+        (enrollmentRequests[secondEnrollmentKey]['namespace']
+            as Map<String, dynamic>)['buzz'],
+        'rw');
+    expect(
+        (enrollmentRequests[secondEnrollmentKey]['namespace']
+            as Map<String, dynamic>)['wavi'],
+        'r');
+  });
+
+  test('validate client functionality to fetch pending enrollments', () async {
     AtClient? client = atClientManager.atClient;
     // fetch first otp
     String? otp =
@@ -113,6 +173,9 @@ void main() {
         jsonDecode(enrollResponse!);
     expect(enrollResponse1JsonDecoded['enrollmentId'], isNotNull);
     expect(enrollResponse1JsonDecoded['status'], 'pending');
+    // approve first enrollment request
+    enrollResponse = await TestUtils.executeCommandAndParse(client,
+        'enroll:approve:{"enrollmentId":"${enrollResponse1JsonDecoded['enrollmentId']}"}');
 
     // fetch second otp
     otp = await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
@@ -136,9 +199,18 @@ void main() {
     String firstEnrollmentKey = enrollmentRequests.keys.toList()[0];
     String secondEnrollmentKey = enrollmentRequests.keys.toList()[1];
 
-    expect((enrollmentRequests[firstEnrollmentKey]['namespace'] as Map<String, dynamic>)['buzz'], 'rw');
-    expect((enrollmentRequests[secondEnrollmentKey]['namespace'] as Map<String, dynamic>)['buzz'], 'rw');
-    expect((enrollmentRequests[secondEnrollmentKey]['namespace'] as Map<String, dynamic>)['wavi'], 'r');
+    expect(
+        (enrollmentRequests[firstEnrollmentKey]['namespace']
+            as Map<String, dynamic>)['buzz'],
+        'rw');
+    expect(
+        (enrollmentRequests[secondEnrollmentKey]['namespace']
+            as Map<String, dynamic>)['buzz'],
+        'rw');
+    expect(
+        (enrollmentRequests[secondEnrollmentKey]['namespace']
+            as Map<String, dynamic>)['wavi'],
+        'r');
   });
 }
 
