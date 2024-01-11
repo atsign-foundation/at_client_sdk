@@ -40,7 +40,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<dynamic> encrypt(AtKey atKey, dynamic value,
       {bool storeSharedKeyEncryptedWithData = true}) async {
     _sharedKey = await getMyCopyOfSharedSymmetricKey(atKey);
-
     if (_sharedKey.isEmpty) {
       _sharedKey = await createMyCopyOfSharedSymmetricKey(atKey);
     }
@@ -121,26 +120,15 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<String> createMyCopyOfSharedSymmetricKey(AtKey atKey) async {
     _logger.info(
         "Creating new shared symmetric key as ${atKey.sharedBy} for ${atKey.sharedWith}");
-    // Fetch our encryption public key
-    String? currentAtSignEncryptionPublicKey;
-    try {
-      currentAtSignEncryptionPublicKey = await _atClient
-          .getLocalSecondary()!
-          .getEncryptionPublicKey(atKey.sharedBy!);
-    } on KeyNotFoundException catch (e) {
-      e.stack(AtChainedException(
-          Intent.fetchEncryptionPublicKey,
-          ExceptionScenario.fetchEncryptionKeys,
-          'Failed to fetch encryption public key of current atSign'));
-      rethrow;
-    }
     // Generate new symmetric key
-    var newSymmetricKeyBase64 = EncryptionUtil.generateAESKey();
-
+    var newSymmetricKeyBase64 =
+        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
     // Encrypt the new symmetric key with our public key
-    var encryptedSharedKeyMyCopy = EncryptionUtil.encryptKey(
-        newSymmetricKeyBase64, currentAtSignEncryptionPublicKey!);
-
+    var atChopsEncryptionResult = _atClient.atChops!
+        .encryptString(newSymmetricKeyBase64, EncryptionKeyType.rsa2048);
+    var encryptedSharedKeyMyCopy = atChopsEncryptionResult.result;
+    _logger.info(
+        'encryptedSharedKeyMyCopy from atChops: $encryptedSharedKeyMyCopy');
     // Defensive code to ensure that we do not have an old 'their' copy on atServer
     await deleteTheirCopyOfEncryptedSharedKey(
         atKey, _atClient.getRemoteSecondary()!);

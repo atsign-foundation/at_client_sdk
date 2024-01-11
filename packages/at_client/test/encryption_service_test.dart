@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
@@ -521,7 +522,8 @@ void main() {
               'unable to connect to remote secondary'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-
+      when(() => mockAtChops.encryptString(any(), EncryptionKeyType.rsa2048))
+          .thenAnswer((_) => AtEncryptionResult()..result = 'random');
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
