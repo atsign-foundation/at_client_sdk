@@ -26,7 +26,7 @@ void main() {
     await setLastReceivedNotificationDateTime();
   });
 
-  void _stopSubscriptions() {
+  void stopSubscriptions() {
     atClientManager.atClient.notificationService.stopAllSubscriptions();
     print('subscriptions stopped');
   }
@@ -87,8 +87,58 @@ void main() {
           print('got enrollment notification: $enrollNotification');
           expect(enrollNotification.key,
               '$enrollmentIdFromServer.new.enrollments.__manage');
-          _stopSubscriptions();
+          stopSubscriptions();
         }, count: 1, max: 1));
+  });
+
+  test(
+      'validate client functionality to fetch pending enrollments on legacy pkam authenticated client',
+      () async {
+    AtClient? client = atClientManager.atClient;
+    // fetch first otp
+    String? otp =
+        await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
+    expect(otp, isNotNull);
+    // create first enrollment request
+    RemoteSecondary? secondRemoteSecondary =
+        RemoteSecondary(atSign, getClient2Preferences());
+    var publicKey =
+        at_demos.pkamPublicKeyMap['@bob🛠']; // can be any random public key
+    var newEnrollRequest = TestUtils.formatCommand(
+        'enroll:request:{"appName":"buzz","deviceName":"pixel","namespaces":{"buzz":"rw"},"otp":"$otp","apkamPublicKey":"$publicKey"}');
+    var enrollResponse = await TestUtils.executeCommandAndParse(
+        null, newEnrollRequest,
+        remoteSecondary: secondRemoteSecondary);
+    Map<String, dynamic> enrollResponse1JsonDecoded =
+        jsonDecode(enrollResponse!);
+    expect(enrollResponse1JsonDecoded['enrollmentId'], isNotNull);
+    expect(enrollResponse1JsonDecoded['status'], 'pending');
+
+    // fetch second otp
+    otp = await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
+    expect(otp, isNotNull);
+    // create second enrollment request
+    newEnrollRequest = TestUtils.formatCommand(
+        'enroll:request:{"appName":"wavi","deviceName":"pixel7","namespaces":{"buzz":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$publicKey"}');
+    enrollResponse = await TestUtils.executeCommandAndParse(
+        null, newEnrollRequest,
+        remoteSecondary: secondRemoteSecondary);
+    var enrollResponse2JsonDecoded = jsonDecode(enrollResponse!);
+    expect(enrollResponse2JsonDecoded['enrollmentId'], isNotNull);
+    expect(enrollResponse2JsonDecoded['status'], 'pending');
+
+    // fetch enrollment requests through client
+    Map<String, dynamic> enrollmentRequests =
+        await client.fetchEnrollmentRequests();
+    print(enrollmentRequests.entries);
+    expect(enrollmentRequests.length, 2);
+
+    String firstEnrollmentKey = enrollmentRequests.keys.toList()[0];
+    String secondEnrollmentKey = enrollmentRequests.keys.toList()[1];
+
+    expect((enrollmentRequests[firstEnrollmentKey]['namespace'] as Map<String, dynamic>)['buzz'], 'rw');
+    expect((enrollmentRequests[secondEnrollmentKey]['namespace'] as Map<String, dynamic>)['buzz'], 'rw');
+    expect((enrollmentRequests[secondEnrollmentKey]['namespace'] as Map<String, dynamic>)['wavi'], 'r');
   });
 }
 
