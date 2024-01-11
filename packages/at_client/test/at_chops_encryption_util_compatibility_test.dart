@@ -33,7 +33,9 @@ void main() {
     var atChops = AtChopsImpl(atChopsKeys);
     var encryptedAesKey =
         atChops.encryptString(aesKey, EncryptionKeyType.rsa2048).result;
+
     var decryptedAesKey =
+        //ignore: deprecated_member_use_from_same_package
         EncryptionUtil.decryptKey(encryptedAesKey, encryptionPrivateKey);
     expect(decryptedAesKey, aesKey);
   });

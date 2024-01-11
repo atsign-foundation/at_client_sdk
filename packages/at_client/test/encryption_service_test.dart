@@ -10,7 +10,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_chops/at_chops.dart';
 
 class MockAtClientManager extends Mock implements AtClientManager {}
 
