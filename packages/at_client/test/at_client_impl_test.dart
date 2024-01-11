@@ -283,9 +283,9 @@ void main() {
       String enrollValue3 =
           '{"appName":"buzz","deviceName":"pixel","namespace":{"buzz":"rw"}}';
       when(() =>
-              mockRemoteSecondary.executeCommand('enroll:list\n', auth: true))
-          .thenAnswer((_) => Future.value('data:{"$enrollKey1":'
-              '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
+          mockRemoteSecondary.executeCommand('enroll:list\n',
+              auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
+          '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'buzz', AtClientPreference(),

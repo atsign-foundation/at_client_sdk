@@ -681,7 +681,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       ..appName = appName
       ..deviceName = deviceName;
 
-    var response = await getRemoteSecondary()?.executeCommand(enrollBuilder.buildCommand(), auth: true);
+    var response = await getRemoteSecondary()
+        ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
     response = response?.replaceFirst('data:', '');
     Map<String, dynamic> enrollRequests = jsonDecode(response!);
     return enrollRequests;
