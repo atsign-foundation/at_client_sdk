@@ -132,13 +132,14 @@ void main() {
     Map<String, dynamic> enrollmentRequests =
         await client.fetchEnrollmentRequests();
     print(enrollmentRequests.entries);
-    expect(enrollmentRequests.length, 4); // 4 entries - 2 entries from this test
+    expect(
+        enrollmentRequests.length, 4); // 4 entries - 2 entries from this test
     // + 2 entries from the other test in this file.
 
-    String firstEnrollmentKey = getEnrollmentKey(
-        enrollResponse1JsonDecoded['enrollmentId'], atSign);
-    String secondEnrollmentKey = getEnrollmentKey(
-        enrollResponse2JsonDecoded['enrollmentId'], atSign);
+    String firstEnrollmentKey =
+        getEnrollmentKey(enrollResponse1JsonDecoded['enrollmentId'], atSign);
+    String secondEnrollmentKey =
+        getEnrollmentKey(enrollResponse2JsonDecoded['enrollmentId'], atSign);
 
     expect(
         (enrollmentRequests[firstEnrollmentKey]['namespace']
