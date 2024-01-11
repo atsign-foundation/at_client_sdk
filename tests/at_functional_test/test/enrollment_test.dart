@@ -136,68 +136,10 @@ void main() {
     print(enrollmentRequests.entries);
     expect(enrollmentRequests.length, 2);
 
-    String firstEnrollmentKey = enrollmentRequests.keys.toList()[0];
-    String secondEnrollmentKey = enrollmentRequests.keys.toList()[1];
-
-    expect(
-        (enrollmentRequests[firstEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['buzz'],
-        'rw');
-    expect(
-        (enrollmentRequests[secondEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['buzz'],
-        'rw');
-    expect(
-        (enrollmentRequests[secondEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['wavi'],
-        'r');
-  });
-
-  test('validate client functionality to fetch pending enrollments', () async {
-    AtClient? client = atClientManager.atClient;
-    // fetch first otp
-    String? otp =
-        await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
-    expect(otp, isNotNull);
-    // create first enrollment request
-    RemoteSecondary? secondRemoteSecondary =
-        RemoteSecondary(atSign, getClient2Preferences());
-    var publicKey =
-        at_demos.pkamPublicKeyMap['@bob🛠']; // can be any random public key
-    var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"buzz","deviceName":"pixel","namespaces":{"buzz":"rw"},"otp":"$otp","apkamPublicKey":"$publicKey"}');
-    var enrollResponse = await TestUtils.executeCommandAndParse(
-        null, newEnrollRequest,
-        remoteSecondary: secondRemoteSecondary);
-    Map<String, dynamic> enrollResponse1JsonDecoded =
-        jsonDecode(enrollResponse!);
-    expect(enrollResponse1JsonDecoded['enrollmentId'], isNotNull);
-    expect(enrollResponse1JsonDecoded['status'], 'pending');
-    // approve first enrollment request
-    enrollResponse = await TestUtils.executeCommandAndParse(client,
-        'enroll:approve:{"enrollmentId":"${enrollResponse1JsonDecoded['enrollmentId']}"}');
-
-    // fetch second otp
-    otp = await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
-    expect(otp, isNotNull);
-    // create second enrollment request
-    newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"wavi","deviceName":"pixel7","namespaces":{"buzz":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$publicKey"}');
-    enrollResponse = await TestUtils.executeCommandAndParse(
-        null, newEnrollRequest,
-        remoteSecondary: secondRemoteSecondary);
-    var enrollResponse2JsonDecoded = jsonDecode(enrollResponse!);
-    expect(enrollResponse2JsonDecoded['enrollmentId'], isNotNull);
-    expect(enrollResponse2JsonDecoded['status'], 'pending');
-
-    // fetch enrollment requests through client
-    Map<String, dynamic> enrollmentRequests =
-        await client.fetchEnrollmentRequests();
-    print(enrollmentRequests.entries);
-    expect(enrollmentRequests.length, 2);
-
-    String firstEnrollmentKey = enrollmentRequests.keys.toList()[0];
-    String secondEnrollmentKey = enrollmentRequests.keys.toList()[1];
+    String firstEnrollmentKey = getEnrollmentKey(
+        enrollResponse1JsonDecoded['enrollmentId'], secondAtsign);
+    String secondEnrollmentKey = getEnrollmentKey(
+        enrollResponse2JsonDecoded['enrollmentId'], secondAtsign);
 
     expect(
         (enrollmentRequests[firstEnrollmentKey]['namespace']
@@ -235,6 +177,10 @@ Future<void> setLastReceivedNotificationDateTime() async {
   await AtClientManager.getInstance()
       .atClient
       .put(lastReceivedNotificationAtKey, jsonEncode(atNotification.toJson()));
+}
+
+String getEnrollmentKey(String enrollmentId, String atsign) {
+  return '$enrollmentId.new.enrollments.__manage$atsign';
 }
 
 AtClientPreference getClient2Preferences() {
