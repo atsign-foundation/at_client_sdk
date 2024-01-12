@@ -9,6 +9,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/src/enrollment/at_enrollment_service.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -39,10 +40,12 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   late AtEnrollmentImpl _atEnrollmentImpl;
   AtLookUp? _atLookUp;
 
-  final String _atSign;
+  String _atSign;
   final AtClientPreference _atClientPreference;
 
   AtEnrollmentServiceImpl(this._atSign, this._atClientPreference) {
+    // Prefix "@" to the atSign is missed.
+    _atSign = AtUtils.fixAtSign(_atSign);
     _atEnrollmentImpl = AtEnrollmentImpl(_atSign);
   }
 
