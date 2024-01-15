@@ -34,8 +34,8 @@ class AtClientUtil {
   static String signChallenge(String challenge, String privateKey) {
     var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
-    // ignore: unnecessary_cast
     var signature =
+    // ignore: unnecessary_cast
         key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
     return base64Encode(signature);
   }
