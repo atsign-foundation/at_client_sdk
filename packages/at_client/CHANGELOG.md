@@ -1,3 +1,10 @@
+## 3.0.72
+- chore: Minor change to allow us to support dart 
+  versions both before and after 3.2.0 specifically for this
+  [Dart breaking change](https://github.com/dart-lang/sdk/issues/52801) 
+  which was
+  [introduced](https://github.com/dart-lang/sdk/blob/main/CHANGELOG.md)
+  in dart 3.2.0
 ## 3.0.71
 - feat: Replace decryption methods from EncryptionUtil with AtChops methods
 ## 3.0.70
