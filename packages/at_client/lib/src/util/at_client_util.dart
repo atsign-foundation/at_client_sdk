@@ -35,7 +35,7 @@ class AtClientUtil {
     var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
     var signature =
-    // ignore: unnecessary_cast
+        // ignore: unnecessary_cast
         key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
     return base64Encode(signature);
   }
