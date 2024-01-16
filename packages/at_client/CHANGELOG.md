@@ -1,10 +1,17 @@
-# 3.0.72
+# 3.0.73
 - build[deps]: Upgraded dependencies for the following packages:
     - at_commons to v4.0.0
     - at_utils to v3.0.16
     - at_lookup to v3.0.44
     - at_chops to v1.0.7
     - at_persistence_secondary_server to v3.0.60
+## 3.0.72
+- chore: Minor change to allow us to support dart 
+  versions both before and after 3.2.0 specifically for this
+  [Dart breaking change](https://github.com/dart-lang/sdk/issues/52801) 
+  which was
+  [introduced](https://github.com/dart-lang/sdk/blob/main/CHANGELOG.md)
+  in dart 3.2.0
 ## 3.0.71
 - feat: Replace decryption methods from EncryptionUtil with AtChops methods
 ## 3.0.70
