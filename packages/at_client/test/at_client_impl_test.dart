@@ -292,12 +292,18 @@ void main() {
           remoteSecondary: mockRemoteSecondary);
       AtClientImpl? clientImpl = client as AtClientImpl;
 
-      Map<String, dynamic>? requests =
+      List<EnrollmentRequest> requests =
           await clientImpl.fetchEnrollmentRequests();
       expect(requests.length, 3);
-      expect(requests[enrollKey1], jsonDecode(enrollValue1));
-      expect(requests[enrollKey2], jsonDecode(enrollValue2));
-      expect(requests[enrollKey3], jsonDecode(enrollValue3));
+      expect(requests[0].appName, jsonDecode(enrollValue1)['appName']);
+      expect(requests[0].deviceName, jsonDecode(enrollValue1)['deviceName']);
+      expect(requests[0].namespace, jsonDecode(enrollValue1)['namespace']);
+      expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
+      expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
+      expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
+      expect(requests[2].appName, jsonDecode(enrollValue3)['appName']);
+      expect(requests[2].deviceName, jsonDecode(enrollValue3)['deviceName']);
+      expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
     });
   });
 }

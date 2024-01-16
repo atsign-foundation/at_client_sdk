@@ -129,9 +129,11 @@ void main() {
     expect(enrollResponse2JsonDecoded['status'], 'pending');
 
     // fetch enrollment requests through client
-    Map<String, dynamic> enrollmentRequests =
+    List<EnrollmentRequest> enrollmentRequests =
         await client.fetchEnrollmentRequests();
-    print(enrollmentRequests.entries);
+    for(var request in enrollmentRequests){
+      print(request);
+    }
     expect(
         enrollmentRequests.length, 4); // 4 entries - 2 entries from this test
     // + 2 entries from the other test in this file.
@@ -140,19 +142,21 @@ void main() {
         getEnrollmentKey(enrollResponse1JsonDecoded['enrollmentId'], atSign);
     String secondEnrollmentKey =
         getEnrollmentKey(enrollResponse2JsonDecoded['enrollmentId'], atSign);
-
-    expect(
-        (enrollmentRequests[firstEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['new_app'],
-        'rw');
-    expect(
-        (enrollmentRequests[secondEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['new_app'],
-        'rw');
-    expect(
-        (enrollmentRequests[secondEnrollmentKey]['namespace']
-            as Map<String, dynamic>)['wavi'],
-        'r');
+    int matchCount = 0;
+    for (var request in enrollmentRequests){
+      if(request.enrollmentKey == firstEnrollmentKey){
+        expect(request.namespace['new_app'], 'rw');
+        expect(request.deviceName, 'pixel');
+        matchCount ++;
+      } else if (request.enrollmentKey == secondEnrollmentKey){
+        expect(request.namespace['new_app'], 'rw');
+        expect(request.namespace['wavi'], 'r');
+        expect(request.deviceName, 'pixel7');
+        matchCount++;
+      }
+    }
+    // this counter is to assert that the list of requests has exactly two request matches
+    expect(matchCount, 2);
   });
 }
 
