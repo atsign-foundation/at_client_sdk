@@ -2,6 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
+// Tests to verify whether encryption with EncryptionUtil, decryption with AtChops works and vice versa.
 void main() {
   test(
       'A test to verify encrypting AES key with encryption util and decryption with at_chops',
