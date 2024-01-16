@@ -150,7 +150,7 @@ void main() async {
     var result = await currentAtClientManager.atClient
         .getRemoteSecondary()!
         .executeCommand(
-            'update:ttl:300000:${locationKey.toString()} $encryptedValue\n',
+            'update:ttl:300000:sharedKeyEnc:${locationKey.metadata.sharedKeyEnc}:pubKeyCS:${locationKey.metadata.pubKeyCS}:${locationKey.toString()} $encryptedValue\n',
             auth: true);
     expect(result != null, true);
     await E2ESyncService.getInstance()

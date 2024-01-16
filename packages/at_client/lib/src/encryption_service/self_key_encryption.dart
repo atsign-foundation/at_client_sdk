@@ -34,7 +34,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
         DefaultResponseParser().parse(selfEncryptionKey).response;
     // Encrypt value using sharedKey
     return EncryptionUtil.encryptValue(value, selfEncryptionKey,
-        ivBase64: atKey.metadata?.ivNonce);
+        ivBase64: atKey.metadata.ivNonce);
   }
 
   Future<String> _getSelfEncryptionKey(LocalSecondary localSecondary) async {

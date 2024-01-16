@@ -49,8 +49,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         await verifyTheirCopyOfSharedSymmetricKey(atKey, _sharedKey);
 
     if (storeSharedKeyEncryptedWithData) {
-      atKey.metadata!.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
-      atKey.metadata!.pubKeyCS =
+      atKey.metadata.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
+      atKey.metadata.pubKeyCS =
           EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
     }
   }
@@ -248,10 +248,12 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     try {
       // 1. Get the cached public key
       var cachedEncryptionPublicKeyBuilder = LLookupVerbBuilder()
-        ..atKey = 'publickey'
-        ..sharedBy = atKey.sharedWith
-        ..isPublic = true
-        ..isCached = true;
+        ..atKey = (AtKey()
+          ..key = 'publickey'
+          ..sharedBy = atKey.sharedWith
+          ..metadata = (Metadata()
+            ..isPublic = true
+            ..isCached = true));
 
       sharedWithPublicKey = await _atClient
           .getLocalSecondary()!
@@ -262,8 +264,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     try {
       if (sharedWithPublicKey.isNull || sharedWithPublicKey == 'data:null') {
         var encryptionPublicKeyBuilder = PLookupVerbBuilder()
-          ..atKey = 'publickey'
-          ..sharedBy = atKey.sharedWith;
+          ..atKey = (AtKey()
+            ..key = 'publickey'
+            ..sharedBy = atKey.sharedWith);
         sharedWithPublicKey = await _atClient
             .getRemoteSecondary()!
             .executeVerb(encryptionPublicKeyBuilder);
@@ -286,9 +289,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<void> _storeMyEncryptedCopyOfSharedSymmetricKey(
       AtKey atKey, String encryptedSharedKey, Secondary secondary) async {
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
-      ..atKey =
-          '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
-      ..sharedBy = atKey.sharedBy
+      ..atKey = (AtKey()
+        ..key =
+            '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
+        ..sharedBy = atKey.sharedBy)
       ..value = encryptedSharedKey;
     await secondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder,
         sync: false);
@@ -300,9 +304,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<String?> _getMyEncryptedCopyOfSharedSymmetricKey(
       Secondary secondary, AtKey atKey) async {
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey =
-          '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
-      ..sharedBy = atKey.sharedBy;
+      ..atKey = (AtKey()
+        ..key =
+            '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
+        ..sharedBy = atKey.sharedBy);
     String? myCopy;
 
     try {
@@ -324,9 +329,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<String?> _getTheirEncryptedCopyOfSharedSymmetricKey(
       Secondary secondary, AtKey atKey) async {
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = AtConstants.atEncryptionSharedKey
-      ..sharedBy = atKey.sharedBy
-      ..sharedWith = atKey.sharedWith;
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedBy = atKey.sharedBy
+        ..sharedWith = atKey.sharedWith);
     String? theirCopy;
     try {
       theirCopy = await secondary.executeVerb(llookupVerbBuilder);
@@ -346,10 +352,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       {Secondary? secondary}) async {
     secondary ??= _atClient.getLocalSecondary()!;
     var updateSharedKeyBuilder = UpdateVerbBuilder()
-      ..atKey = AtConstants.atEncryptionSharedKey
-      ..sharedWith = atKey.sharedWith
-      ..sharedBy = atKey.sharedBy
-      ..ttr = 3888000
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = atKey.sharedWith
+        ..sharedBy = atKey.sharedBy
+        ..metadata = (Metadata()..ttr = 3888000))
       ..value = encryptedSharedKeyValue;
     return await secondary.executeVerb(updateSharedKeyBuilder, sync: false);
   }
@@ -360,9 +367,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   Future<void> deleteTheirCopyOfEncryptedSharedKey(
       AtKey atKey, Secondary secondary) async {
     var deleteBuilder = DeleteVerbBuilder()
-      ..atKey = AtConstants.atEncryptionSharedKey
-      ..sharedWith = atKey.sharedWith
-      ..sharedBy = atKey.sharedBy;
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = atKey.sharedWith
+        ..sharedBy = atKey.sharedBy);
 
     _logger.info(
         'Deleting ${deleteBuilder.buildKey()} from ${secondary.runtimeType}');

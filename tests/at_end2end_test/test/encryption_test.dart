@@ -55,7 +55,7 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNull);
+      expect(atKey.metadata.ivNonce, isNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 
@@ -74,7 +74,7 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNull);
+      expect(atKey.metadata.ivNonce, isNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 
@@ -93,7 +93,7 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNotNull);
+      expect(atKey.metadata.ivNonce, isNotNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 
@@ -112,7 +112,7 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText);
-      expect(atKey.metadata?.ivNonce, isNotNull);
+      expect(atKey.metadata.ivNonce, isNotNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 
@@ -139,9 +139,9 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: options);
-      expect(atKey.metadata?.ivNonce, isNull);
-      expect(atKey.metadata?.sharedKeyEnc, isNull);
-      expect(atKey.metadata?.pubKeyCS, isNull);
+      expect(atKey.metadata.ivNonce, isNull);
+      expect(atKey.metadata.sharedKeyEnc, isNull);
+      expect(atKey.metadata.pubKeyCS, isNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 
@@ -161,9 +161,9 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: options);
-      expect(atKey.metadata?.ivNonce, isNull);
-      expect(atKey.metadata?.sharedKeyEnc, isNull);
-      expect(atKey.metadata?.pubKeyCS, isNull);
+      expect(atKey.metadata.ivNonce, isNull);
+      expect(atKey.metadata.sharedKeyEnc, isNull);
+      expect(atKey.metadata.pubKeyCS, isNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 
@@ -183,9 +183,9 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: options);
-      expect(atKey.metadata?.ivNonce, isNotNull);
-      expect(atKey.metadata?.sharedKeyEnc, isNull);
-      expect(atKey.metadata?.pubKeyCS, isNull);
+      expect(atKey.metadata.ivNonce, isNotNull);
+      expect(atKey.metadata.sharedKeyEnc, isNull);
+      expect(atKey.metadata.pubKeyCS, isNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 
@@ -205,9 +205,9 @@ void main() {
             ..timeToLive(ttl))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: options);
-      expect(atKey.metadata?.ivNonce, isNotNull);
-      expect(atKey.metadata?.sharedKeyEnc, isNull);
-      expect(atKey.metadata?.pubKeyCS, isNull);
+      expect(atKey.metadata.ivNonce, isNotNull);
+      expect(atKey.metadata.sharedKeyEnc, isNull);
+      expect(atKey.metadata.pubKeyCS, isNull);
 
       await E2ESyncService.getInstance().syncData(atClient_1.syncService);
 

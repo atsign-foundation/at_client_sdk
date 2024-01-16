@@ -20,6 +20,6 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
 
     // Encrypt the value
     return EncryptionUtil.encryptValue(value, sharedKey,
-        ivBase64: atKey.metadata?.ivNonce);
+        ivBase64: atKey.metadata.ivNonce);
   }
 }
