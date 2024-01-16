@@ -353,12 +353,15 @@ class SyncManager {
   void _setMetaData(UpdateVerbBuilder builder, serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
-      if (metaData[AtConstants.ttl] != null)
+      if (metaData[AtConstants.ttl] != null) {
         builder.atKey.metadata.ttl = int.parse(metaData[AtConstants.ttl]);
-      if (metaData[AtConstants.ttb] != null)
+      }
+      if (metaData[AtConstants.ttb] != null) {
         builder.atKey.metadata.ttb = int.parse(metaData[AtConstants.ttb]);
-      if (metaData[AtConstants.ttr] != null)
+      }
+      if (metaData[AtConstants.ttr] != null) {
         builder.atKey.metadata.ttr = int.parse(metaData[AtConstants.ttr]);
+      }
       if (metaData[AtConstants.ccd] != null) {
         (metaData[AtConstants.ccd].toLowerCase() == 'true')
             ? builder.atKey.metadata.ccd = true
