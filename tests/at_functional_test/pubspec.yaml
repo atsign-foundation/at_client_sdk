@@ -16,7 +16,7 @@ dependency_overrides:
     git:
         url: https://github.com/atsign-foundation/at_client_sdk.git
         path: packages/at_client
-        ref: replace_encryption_methods_with_atchops
+        ref: update_atclient_dependencies
 dev_dependencies:
   test: ^1.24.3
   lints: ^2.0.0
