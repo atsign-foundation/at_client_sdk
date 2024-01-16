@@ -674,18 +674,32 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<Map<String, dynamic>> fetchEnrollmentRequests(
-      {String? appName, String? deviceName}) async {
+  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
+      {EnrollListRequestParam? enrollmentListRequest}) async {
     EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
       ..operation = EnrollOperationEnum.list
-      ..appName = appName
-      ..deviceName = deviceName;
+      ..appName = enrollmentListRequest?.appName
+      ..deviceName = enrollmentListRequest?.deviceName;
 
     var response = await getRemoteSecondary()
         ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
     response = response?.replaceFirst('data:', '');
     Map<String, dynamic> enrollRequests = jsonDecode(response!);
-    return enrollRequests;
+    stdout.writeln('enrollment lis req response: $response');
+    return _formatEnrollListResponse(enrollRequests);
+  }
+
+  List<EnrollmentRequest> _formatEnrollListResponse(
+      Map<String, dynamic> enrollRequests) {
+    List<EnrollmentRequest> enrollRequestsFormatted = [];
+    for (var request in enrollRequests.entries) {
+      enrollRequestsFormatted.add(EnrollmentRequest()
+        ..enrollmentKey = request.key
+        ..appName = request.value['appName']
+        ..deviceName = request.value['deviceName']
+        ..namespace = request.value['namespace']);
+    }
+    return enrollRequestsFormatted;
   }
 
   @override

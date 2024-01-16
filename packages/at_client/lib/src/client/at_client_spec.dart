@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
@@ -573,7 +574,11 @@ abstract class AtClient {
 
   EncryptionService? get encryptionService;
 
-  /// Fetches all enrollment requests from the corresponding atServer
-  Future<Map<String, dynamic>> fetchEnrollmentRequests(
-      {String? appName, String? deviceName});
+  /// Fetches all enrollment requests from the corresponding atServer; Formats the requests into a
+  /// List<[EnrollmentResponse]>
+  ///
+  /// The optional param [EnrollListRequestParam] is present to avoid future compatibility issues over backwards compatibility
+  /// [enrollListRequest] for now does not have any functionality
+  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
+      {EnrollListRequestParam? enrollmentListRequest});
 }
