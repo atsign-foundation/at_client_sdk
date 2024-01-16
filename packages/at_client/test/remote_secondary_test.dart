@@ -64,8 +64,9 @@ void main() {
     test('executeAndParse using llookup', () async {
       String fakeLookupData = 'data:lookup data stub';
       LookupVerbBuilder lookupVerbBuilder = LookupVerbBuilder()
-        ..atKey = 'dummy_key'
-        ..sharedBy = '@alice';
+        ..atKey = (AtKey()
+          ..key = 'dummy_key'
+          ..sharedBy = '@alice');
       when(() => mockAtLookUp.executeVerb(lookupVerbBuilder))
           .thenAnswer((_) async => fakeLookupData);
       RemoteSecondary remoteSecondary =

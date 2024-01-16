@@ -34,8 +34,9 @@ void main() {
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   var atClientPreferenceWithAtChops = AtClientPreference();
   var lookupVerbBuilder = LookupVerbBuilder()
-    ..atKey = 'phone.wavi'
-    ..sharedBy = '@alice';
+    ..atKey = (AtKey()
+      ..key = 'phone.wavi'
+      ..sharedBy = '@alice');
 
   setUp(() {
     reset(mockAtLookup);

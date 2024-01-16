@@ -129,9 +129,10 @@ void main() {
     // username.me@alice🛠
     var value = 'alice_1231';
     var updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey = 'fb_username-$uniqueId'
-      ..sharedBy = atSign
-      ..isPublic = true
+      ..atKey = (AtKey()
+        ..key = 'fb_username-$uniqueId'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isPublic = true))
       ..value = value;
     var updateResponse = await atClientManager.atClient
         .getRemoteSecondary()!

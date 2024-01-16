@@ -204,7 +204,8 @@ class SyncManager {
         .getLastSyncedEntry(_preference!.syncRegex, atSign: _atSign!);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     var commitIdReceivePort = ReceivePort();
-    var privateKey = await _localSecondary!.keyStore!.get(AT_PKAM_PRIVATE_KEY);
+    var privateKey =
+        await _localSecondary!.keyStore!.get(AtConstants.atPkamPrivateKey);
     var isolate = await Isolate.spawn(
         SyncIsolateManager.executeRemoteCommandIsolate,
         commitIdReceivePort.sendPort);
@@ -338,7 +339,7 @@ class SyncManager {
         var builder = UpdateVerbBuilder()
           ..atKey = serverCommitEntry['atKey']
           ..value = serverCommitEntry['value'];
-        builder.operation = UPDATE_ALL;
+        builder.operation = AtConstants.updateAll;
         _setMetaData(builder, serverCommitEntry);
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
@@ -349,29 +350,33 @@ class SyncManager {
     }
   }
 
-  void _setMetaData(builder, serverCommitEntry) {
+  void _setMetaData(UpdateVerbBuilder builder, serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
-      if (metaData[AT_TTL] != null) builder.ttl = int.parse(metaData[AT_TTL]);
-      if (metaData[AT_TTB] != null) builder.ttb = int.parse(metaData[AT_TTB]);
-      if (metaData[AT_TTR] != null) builder.ttr = int.parse(metaData[AT_TTR]);
-      if (metaData[CCD] != null) {
-        (metaData[CCD].toLowerCase() == 'true')
-            ? builder.ccd = true
-            : builder.ccd = false;
+      if (metaData[AtConstants.ttl] != null)
+        builder.atKey.metadata.ttl = int.parse(metaData[AtConstants.ttl]);
+      if (metaData[AtConstants.ttb] != null)
+        builder.atKey.metadata.ttb = int.parse(metaData[AtConstants.ttb]);
+      if (metaData[AtConstants.ttr] != null)
+        builder.atKey.metadata.ttr = int.parse(metaData[AtConstants.ttr]);
+      if (metaData[AtConstants.ccd] != null) {
+        (metaData[AtConstants.ccd].toLowerCase() == 'true')
+            ? builder.atKey.metadata.ccd = true
+            : builder.atKey.metadata.ccd = false;
       }
-      if (metaData[PUBLIC_DATA_SIGNATURE] != null) {
-        builder.dataSignature = metaData[PUBLIC_DATA_SIGNATURE];
+      if (metaData[AtConstants.publicDataSignature] != null) {
+        builder.atKey.metadata.dataSignature =
+            metaData[AtConstants.publicDataSignature];
       }
-      if (metaData[IS_BINARY] != null) {
-        (metaData[IS_BINARY].toLowerCase() == 'true')
-            ? builder.isBinary = true
-            : builder.isBinary = false;
+      if (metaData[AtConstants.isBinary] != null) {
+        (metaData[AtConstants.isBinary].toLowerCase() == 'true')
+            ? builder.atKey.metadata.isBinary = true
+            : builder.atKey.metadata.isBinary = false;
       }
-      if (metaData[IS_ENCRYPTED] != null) {
-        (metaData[IS_ENCRYPTED].toLowerCase() == 'true')
-            ? builder.isEncrypted = true
-            : builder.isEncrypted = false;
+      if (metaData[AtConstants.isEncrypted] != null) {
+        (metaData[AtConstants.isEncrypted].toLowerCase() == 'true')
+            ? builder.atKey.metadata.isEncrypted = true
+            : builder.atKey.metadata.isEncrypted = false;
       }
     }
   }
