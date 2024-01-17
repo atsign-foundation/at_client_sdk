@@ -1,7 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
 
-
 class EnrollmentRequest {
   late String enrollmentKey;
   late String appName;
