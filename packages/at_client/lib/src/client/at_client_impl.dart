@@ -675,29 +675,30 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @override
   Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
-      {EnrollListRequestParam? enrollmentListRequest}) async {
+      EnrollListRequestParam enrollmentListRequestParams) async {
+    // enrollmentListRequestParams for now is not  used
+    // A server side enhancement request is created. https://github.com/atsign-foundation/at_server/issues/1748
+    // On implementation of this enhancement/feature, the enrollListRequestParam object can be made use of
     EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
       ..operation = EnrollOperationEnum.list
-      ..appName = enrollmentListRequest?.appName
-      ..deviceName = enrollmentListRequest?.deviceName;
+      ..appName = enrollmentListRequestParams.appName
+      ..deviceName = enrollmentListRequestParams.deviceName;
 
     var response = await getRemoteSecondary()
         ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
-    response = response?.replaceFirst('data:', '');
-    Map<String, dynamic> enrollRequests = jsonDecode(response!);
-    stdout.writeln('enrollment lis req response: $response');
-    return _formatEnrollListResponse(enrollRequests);
+
+    return _formatEnrollListResponse(response);
   }
 
   List<EnrollmentRequest> _formatEnrollListResponse(
-      Map<String, dynamic> enrollRequests) {
+      response) {
+    response = response?.replaceFirst('data:', '');
+    Map<String, dynamic> enrollRequests = jsonDecode(response!);
     List<EnrollmentRequest> enrollRequestsFormatted = [];
+
     for (var request in enrollRequests.entries) {
-      enrollRequestsFormatted.add(EnrollmentRequest()
-        ..enrollmentKey = request.key
-        ..appName = request.value['appName']
-        ..deviceName = request.value['deviceName']
-        ..namespace = request.value['namespace']);
+      enrollRequestsFormatted.add(EnrollmentRequest.fromJson(request.value,
+          jsonIncludesKey: false, enrollmentKey: request.key));
     }
     return enrollRequestsFormatted;
   }

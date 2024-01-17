@@ -293,17 +293,28 @@ void main() {
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<EnrollmentRequest> requests =
-          await clientImpl.fetchEnrollmentRequests();
+          await clientImpl.fetchEnrollmentRequests(EnrollListRequestParam());
       expect(requests.length, 3);
       expect(requests[0].appName, jsonDecode(enrollValue1)['appName']);
       expect(requests[0].deviceName, jsonDecode(enrollValue1)['deviceName']);
       expect(requests[0].namespace, jsonDecode(enrollValue1)['namespace']);
+
       expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
       expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
       expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
+
       expect(requests[2].appName, jsonDecode(enrollValue3)['appName']);
       expect(requests[2].deviceName, jsonDecode(enrollValue3)['deviceName']);
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
+    });
+
+    test('validate EnrollRequest.extractEnrollmentId()', () {
+      String enrollmentKey =
+          '0acdeb4d-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage@random';
+      String enrollmentId = '0acdeb4d-1a2e-43e4-93bd-378f1d366ea7';
+
+      expect(
+          EnrollmentRequest.extractEnrollmentId(enrollmentKey), enrollmentId);
     });
   });
 }

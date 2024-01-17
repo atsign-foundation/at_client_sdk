@@ -130,12 +130,10 @@ void main() {
 
     // fetch enrollment requests through client
     List<EnrollmentRequest> enrollmentRequests =
-        await client.fetchEnrollmentRequests();
-    for(var request in enrollmentRequests){
-      print(request);
-    }
-    expect(
-        enrollmentRequests.length, 4); // 4 entries - 2 entries from this test
+        await client.fetchEnrollmentRequests(EnrollListRequestParam());
+
+    expect(enrollmentRequests.length, 4);
+    // 4 entries - 2 entries from this test
     // + 2 entries from the other test in this file.
 
     String firstEnrollmentKey =
@@ -143,12 +141,12 @@ void main() {
     String secondEnrollmentKey =
         getEnrollmentKey(enrollResponse2JsonDecoded['enrollmentId'], atSign);
     int matchCount = 0;
-    for (var request in enrollmentRequests){
-      if(request.enrollmentKey == firstEnrollmentKey){
+    for (var request in enrollmentRequests) {
+      if (request.enrollmentKey == firstEnrollmentKey) {
         expect(request.namespace['new_app'], 'rw');
         expect(request.deviceName, 'pixel');
-        matchCount ++;
-      } else if (request.enrollmentKey == secondEnrollmentKey){
+        matchCount++;
+      } else if (request.enrollmentKey == secondEnrollmentKey) {
         expect(request.namespace['new_app'], 'rw');
         expect(request.namespace['wavi'], 'r');
         expect(request.deviceName, 'pixel7');
