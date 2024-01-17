@@ -585,5 +585,6 @@ abstract class AtClient {
   /// EnrollmentRequest objects
   /// ```
   @experimental
-  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(EnrollListRequestParam enrollmentListRequest);
+  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
+      EnrollListRequestParam enrollmentListRequest);
 }

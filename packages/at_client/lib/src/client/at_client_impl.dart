@@ -666,8 +666,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     return _formatEnrollListResponse(response);
   }
 
-  List<EnrollmentRequest> _formatEnrollListResponse(
-      response) {
+  List<EnrollmentRequest> _formatEnrollListResponse(response) {
     response = response?.replaceFirst('data:', '');
     Map<String, dynamic> enrollRequests = jsonDecode(response!);
     List<EnrollmentRequest> enrollRequestsFormatted = [];
