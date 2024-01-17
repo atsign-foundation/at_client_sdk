@@ -50,8 +50,10 @@ class NotificationResponseTransformer
     AtKey atKey = AtKey()
       ..key = key
       ..sharedWith = atNotification.to
-      ..sharedBy = atNotification.from
-      ..metadata = atNotification.metadata;
+      ..sharedBy = atNotification.from;
+    if (atNotification.metadata != null) {
+      atKey.metadata = atNotification.metadata!;
+    }
 
     if (atNotification.messageType.isNotNull &&
         atNotification.messageType!.toLowerCase().contains('text') &&
@@ -65,7 +67,7 @@ class NotificationResponseTransformer
         // The shared_key (which is a reserved key) has different decryption process
         // and is not a user created key.
         // Hence do not decrypt if key's are reserved keys
-        AtKey.getKeyType(atKey.key!) != KeyType.reservedKey) {
+        AtKey.getKeyType(atKey.toString()) != KeyType.reservedKey) {
       // decrypt the value
       atNotification.value =
           await _getDecryptedValue(atKey, atNotification.value!);

@@ -896,7 +896,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       case '#':
       case '*':
         var builder = UpdateVerbBuilder()
-          ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey'])
+          ..atKey = AtKey.fromString(serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
         builder.operation = AtConstants.updateAll;
         _setMetaData(builder, serverCommitEntry);
@@ -904,7 +904,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         break;
       case '-':
         var builder = DeleteVerbBuilder()
-          ..atKeyObj = AtKey.fromString(serverCommitEntry['atKey']);
+          ..atKey = AtKey.fromString(serverCommitEntry['atKey']);
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
         break;
     }
@@ -936,57 +936,60 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
       if (metaData[AtConstants.ttl] != null) {
-        builder.ttl = int.parse(metaData[AtConstants.ttl]);
+        builder.atKey.metadata.ttl = int.parse(metaData[AtConstants.ttl]);
       }
       if (metaData[AtConstants.ttb] != null) {
-        builder.ttb = int.parse(metaData[AtConstants.ttb]);
+        builder.atKey.metadata.ttb = int.parse(metaData[AtConstants.ttb]);
       }
       if (metaData[AtConstants.ttr] != null) {
-        builder.ttr = int.parse(metaData[AtConstants.ttr]);
+        builder.atKey.metadata.ttr = int.parse(metaData[AtConstants.ttr]);
       }
       if (metaData[AtConstants.ccd] != null) {
         (metaData[AtConstants.ccd].toLowerCase() == 'true')
-            ? builder.ccd = true
-            : builder.ccd = false;
+            ? builder.atKey.metadata.ccd = true
+            : builder.atKey.metadata.ccd = false;
       }
       if (metaData[AtConstants.publicDataSignature] != null) {
-        builder.dataSignature = metaData[AtConstants.publicDataSignature];
+        builder.atKey.metadata.dataSignature =
+            metaData[AtConstants.publicDataSignature];
       }
       if (metaData[AtConstants.isBinary] != null) {
         (metaData[AtConstants.isBinary].toLowerCase() == 'true')
-            ? builder.isBinary = true
-            : builder.isBinary = false;
+            ? builder.atKey.metadata.isBinary = true
+            : builder.atKey.metadata.isBinary = false;
       }
       if (metaData[AtConstants.isEncrypted] != null) {
         (metaData[AtConstants.isEncrypted].toLowerCase() == 'true')
-            ? builder.isEncrypted = true
-            : builder.isEncrypted = false;
+            ? builder.atKey.metadata.isEncrypted = true
+            : builder.atKey.metadata.isEncrypted = false;
       }
       if (metaData[AtConstants.sharedKeyEncrypted] != null) {
-        builder.sharedKeyEncrypted = metaData[AtConstants.sharedKeyEncrypted];
+        builder.atKey.metadata.sharedKeyEnc =
+            metaData[AtConstants.sharedKeyEncrypted];
       }
       if (metaData[AtConstants.sharedWithPublicKeyCheckSum] != null) {
-        builder.pubKeyChecksum =
+        builder.atKey.metadata.pubKeyCS =
             metaData[AtConstants.sharedWithPublicKeyCheckSum];
       }
       if (metaData[AtConstants.encoding] != null) {
-        builder.encoding = metaData[AtConstants.encoding];
+        builder.atKey.metadata.encoding = metaData[AtConstants.encoding];
       }
       if (metaData[AtConstants.encryptingKeyName] != null) {
-        builder.encKeyName = metaData[AtConstants.encryptingKeyName];
+        builder.atKey.metadata.encKeyName =
+            metaData[AtConstants.encryptingKeyName];
       }
       if (metaData[AtConstants.encryptingAlgo] != null) {
-        builder.encAlgo = metaData[AtConstants.encryptingAlgo];
+        builder.atKey.metadata.encAlgo = metaData[AtConstants.encryptingAlgo];
       }
       if (metaData[AtConstants.ivOrNonce] != null) {
-        builder.ivNonce = metaData[AtConstants.ivOrNonce];
+        builder.atKey.metadata.ivNonce = metaData[AtConstants.ivOrNonce];
       }
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingKeyName] != null) {
-        builder.skeEncKeyName =
+        builder.atKey.metadata.skeEncKeyName =
             metaData[AtConstants.sharedKeyEncryptedEncryptingKeyName];
       }
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo] != null) {
-        builder.skeEncAlgo =
+        builder.atKey.metadata.skeEncAlgo =
             metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo];
       }
     }

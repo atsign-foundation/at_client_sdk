@@ -21,7 +21,7 @@ class AtKeyDecryptionManager {
     // Eg: currentAtSign is @bob and _phone.wavi@bob (or) phone@bob (or) @bob:phone@bob
     if (((atKey.sharedWith == null || atKey.sharedWith == currentAtSign) &&
             atKey.sharedBy == currentAtSign) ||
-        atKey.key!.startsWith('_')) {
+        atKey.key.startsWith('_')) {
       return SelfKeyDecryption(_atClient);
     }
     // Returns LocalKeyDecryption to for the keys present in local storage

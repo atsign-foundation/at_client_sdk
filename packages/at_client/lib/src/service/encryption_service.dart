@@ -95,8 +95,9 @@ class EncryptionService {
     //a local lookup the cached public key of sharedWith atsign.
     String? sharedWithPublicKey;
     var cachedPublicKeyBuilder = LLookupVerbBuilder()
-      ..atKey = 'publickey.$sharedWithUser'
-      ..sharedBy = atSign;
+      ..atKey = (AtKey()
+        ..key = 'publickey.$sharedWithUser'
+        ..sharedBy = atSign);
     try {
       sharedWithPublicKey =
           await localSecondary!.executeVerb(cachedPublicKeyBuilder);
@@ -112,8 +113,9 @@ class EncryptionService {
 
     //b Lookup public key of sharedWith atsign
     var plookupBuilder = PLookupVerbBuilder()
-      ..atKey = 'publickey'
-      ..sharedBy = sharedWithUser;
+      ..atKey = (AtKey()
+        ..key = 'publickey'
+        ..sharedBy = sharedWithUser);
     sharedWithPublicKey = await remoteSecondary!.executeVerb(plookupBuilder);
     sharedWithPublicKey =
         DefaultResponseParser().parse(sharedWithPublicKey).response;
@@ -125,8 +127,9 @@ class EncryptionService {
     }
     //Cache the sharedWithPublicKey
     var sharedWithPublicKeyBuilder = UpdateVerbBuilder()
-      ..atKey = 'publickey.$sharedWithUser'
-      ..sharedBy = atSign
+      ..atKey = (AtKey()
+        ..key = 'publickey.$sharedWithUser'
+        ..sharedBy = atSign)
       ..value = sharedWithPublicKey;
     await localSecondary!.executeVerb(sharedWithPublicKeyBuilder, sync: true);
     return sharedWithPublicKey;
@@ -135,8 +138,9 @@ class EncryptionService {
   Future<String?> _getSharedKeyFromLocalForEncryption(String sharedWith) async {
     final sharedWithUser = sharedWith.replaceFirst('@', '');
     final llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
-      ..sharedBy = atSign;
+      ..atKey = (AtKey()
+        ..key = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
+        ..sharedBy = atSign);
     String? sharedKey;
     try {
       sharedKey = await localSecondary!.executeVerb(llookupVerbBuilder);
@@ -151,8 +155,9 @@ class EncryptionService {
       String sharedWith) async {
     final sharedWithUser = sharedWith.replaceFirst('@', '');
     final llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
-      ..sharedBy = atSign;
+      ..atKey = (AtKey()
+        ..key = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
+        ..sharedBy = atSign);
     String? sharedKey;
     try {
       sharedKey = await remoteSecondary!.executeVerb(llookupVerbBuilder);
@@ -166,9 +171,10 @@ class EncryptionService {
     var sharedWithUser = sharedWith.replaceFirst('@', '');
     //Verify if encryptedSharedKey for sharedWith atSign is available.
     var lookupEncryptionSharedKey = LLookupVerbBuilder()
-      ..sharedWith = sharedWith
-      ..sharedBy = atSign
-      ..atKey = AtConstants.atEncryptionSharedKey;
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = sharedWith
+        ..sharedBy = atSign);
     String? result;
     try {
       result = await localSecondary!.executeVerb(lookupEncryptionSharedKey);
@@ -195,11 +201,12 @@ class EncryptionService {
           EncryptionUtil.encryptKey(sharedKey, sharedWithPublicKey);
       // Store the encryptedSharedWith Key. Set ttr to enable sharedWith atsign to cache the encryptedSharedKey.
       var updateSharedKeyBuilder = UpdateVerbBuilder()
-        ..sharedWith = sharedWith
-        ..sharedBy = atSign
-        ..atKey = AtConstants.atEncryptionSharedKey
-        ..value = encryptedSharedKey
-        ..ttr = 3888000;
+        ..atKey = (AtKey()
+          ..key = AtConstants.atEncryptionSharedKey
+          ..sharedWith = sharedWith
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..ttr = 3888000))
+        ..value = encryptedSharedKey;
       await localSecondary!.executeVerb(updateSharedKeyBuilder, sync: true);
     }
   }
@@ -215,8 +222,9 @@ class EncryptionService {
         EncryptionUtil.encryptKey(sharedKey, currentAtSignPublicKey!);
 
     var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
-      ..sharedBy = atSign
-      ..atKey = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
+      ..atKey = (AtKey()
+        ..key = '${AtConstants.atEncryptionSharedKey}.$sharedWithUser'
+        ..sharedBy = atSign)
       ..value = encryptedSharedKeyForCurrentAtSign;
     await localSecondary!
         .executeVerb(updateSharedKeyForCurrentAtSignBuilder, sync: true);
@@ -225,10 +233,11 @@ class EncryptionService {
   Future<String?> _getSharedKeyForDecryption(String sharedBy) async {
     String? encryptedSharedKey;
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..isCached = true
-      ..sharedBy = sharedBy
-      ..sharedWith = atSign
-      ..atKey = AtConstants.atEncryptionSharedKey;
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedBy = sharedBy
+        ..sharedWith = atSign
+        ..metadata = (Metadata()..isCached = true));
     try {
       encryptedSharedKey =
           await localSecondary!.executeVerb(localLookupSharedKeyBuilder);
@@ -238,8 +247,9 @@ class EncryptionService {
     }
     if (encryptedSharedKey == null || encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = AtConstants.atEncryptionSharedKey
-        ..sharedBy = sharedBy
+        ..atKey = (AtKey()
+          ..key = AtConstants.atEncryptionSharedKey
+          ..sharedBy = sharedBy)
         ..auth = true;
       encryptedSharedKey =
           await remoteSecondary!.executeVerb(sharedKeyLookUpBuilder);

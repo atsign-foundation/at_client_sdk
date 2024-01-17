@@ -10,12 +10,11 @@ class LookUpBuilderManager {
       {GetRequestOptions? getRequestOptions}) {
     // If isPublic is true in metadata, the key is a public key, return PLookupVerbHandler.
     if (atKey.sharedBy != currentAtSign &&
-        (atKey.metadata != null &&
-            atKey.metadata!.isPublic! &&
-            !atKey.metadata!.isCached)) {
+        (atKey.metadata.isPublic && !atKey.metadata.isCached)) {
       final plookUpVerbBuilder = PLookupVerbBuilder()
-        ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-        ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
+        ..atKey = (AtKey()
+          ..key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
+          ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy))
         ..operation = 'all';
       if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
         plookUpVerbBuilder.bypassCache = true;
@@ -24,12 +23,11 @@ class LookUpBuilderManager {
     }
     // If sharedBy is not equal to currentAtSign and isCached is false, return LookupVerbHandler
     if (atKey.sharedBy != currentAtSign &&
-        (atKey.metadata != null &&
-            !atKey.metadata!.isCached &&
-            !atKey.metadata!.isPublic!)) {
+        (!atKey.metadata.isCached && !atKey.metadata.isPublic)) {
       final lookupVerbBuilder = LookupVerbBuilder()
-        ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-        ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
+        ..atKey = (AtKey()
+          ..key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
+          ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy))
         ..auth = true
         ..operation = 'all';
       if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
@@ -38,16 +36,14 @@ class LookUpBuilderManager {
       return lookupVerbBuilder;
     }
     return LLookupVerbBuilder()
-      ..atKey = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
-      ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
-      ..sharedWith = AtClientUtil.fixAtSign(atKey.sharedWith)
-      ..isPublic = (atKey.metadata != null && atKey.metadata?.isPublic != null)
-          ? atKey.metadata!.isPublic!
-          : false
-      ..isCached = (atKey.metadata != null && atKey.metadata?.isCached != null)
-          ? atKey.metadata!.isCached
-          : false
-      ..isLocal = atKey.isLocal
+      ..atKey = (AtKey()
+        ..key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
+        ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy)
+        ..sharedWith = AtClientUtil.fixAtSign(atKey.sharedWith)
+        ..metadata = (Metadata()
+          ..isPublic = atKey.metadata.isPublic
+          ..isCached = atKey.metadata.isCached)
+        ..isLocal = atKey.isLocal)
       ..operation = 'all';
   }
 }

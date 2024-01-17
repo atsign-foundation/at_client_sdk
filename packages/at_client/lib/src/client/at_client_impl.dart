@@ -294,23 +294,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   Future<bool> _delete(AtKey atKey,
       {DeleteRequestOptions? deleteRequestOptions}) async {
-    // If metadata is null, initialize metadata
-    atKey.metadata ??= Metadata();
-    String keyWithNamespace;
-    if (atKey.metadata!.namespaceAware) {
-      keyWithNamespace = AtClientUtil.getKeyWithNameSpace(atKey, _preference!);
-    } else {
-      keyWithNamespace = atKey.key!;
-    }
     atKey.sharedBy ??= _atSign;
-    var builder = DeleteVerbBuilder()
-      ..isLocal = atKey.isLocal
-      ..isCached = atKey.metadata!.isCached
-      ..isPublic =
-          (atKey.metadata!.isPublic == null) ? false : atKey.metadata!.isPublic!
-      ..sharedWith = atKey.sharedWith
-      ..atKey = keyWithNamespace
-      ..sharedBy = atKey.sharedBy;
+    // When namespace is not set in AtKey.namespace, default it to namespace from
+    // AtClientPreferences
+    if (atKey.metadata.namespaceAware) {
+      atKey.namespace ??= preference?.namespace;
+    }
+    var builder = DeleteVerbBuilder()..atKey = atKey;
     var secondary = getSecondary();
     if (deleteRequestOptions != null &&
         deleteRequestOptions.useRemoteAtServer) {
@@ -441,10 +431,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<AtResponse> putText(AtKey atKey, String value,
       {PutRequestOptions? putRequestOptions}) async {
     try {
-      // Set the default metadata if not already set.
-      atKey.metadata ??= Metadata();
       // Setting metadata.isBinary to false for putText
-      atKey.metadata!.isBinary = false;
+      atKey.metadata.isBinary = false;
       return await _putInternal(atKey, value, putRequestOptions);
     } on AtException catch (e) {
       throw AtExceptionManager.createException(e);
@@ -456,10 +444,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<AtResponse> putBinary(AtKey atKey, List<int> value,
       {PutRequestOptions? putRequestOptions}) async {
     try {
-      // Set the default metadata if not already set.
-      atKey.metadata ??= Metadata();
       // Setting metadata.isBinary to true for putBinary
-      atKey.metadata!.isBinary = true;
+      atKey.metadata.isBinary = true;
       // Base2e15.encode method converts the List<int> type to String.
       return await _putInternal(
           atKey, Base2e15.encode(value), putRequestOptions);
@@ -470,7 +456,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @visibleForTesting
   ensureLowerCase(AtKey atKey) {
-    if ((atKey.key != null && upperCaseRegex.hasMatch(atKey.key!)) ||
+    if (upperCaseRegex.hasMatch(atKey.key) ||
         (atKey.namespace != null &&
             upperCaseRegex.hasMatch(atKey.namespace!))) {
       _logger.finer('AtKey: ${atKey.toString()} previously contained upper case'
@@ -487,12 +473,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (atKey.sharedBy.isNull) {
       atKey.sharedBy = _atSign;
     }
-    if (atKey.metadata!.namespaceAware) {
+    if (atKey.metadata.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
     }
 
     if (preference!.atProtocolEmitted >= Version(2, 0, 0)) {
-      atKey.metadata!.ivNonce ??= EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     }
     ensureLowerCase(atKey);
 
@@ -521,7 +507,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
     //Get encryptionPrivateKey for public key to signData
     String? encryptionPrivateKey;
-    if (atKey.metadata!.isPublic != null && atKey.metadata!.isPublic! == true) {
+    if (atKey.metadata.isPublic == true) {
       encryptionPrivateKey = await _localSecondary?.getEncryptionPrivateKey();
     }
     // Transform put request
@@ -543,7 +529,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     // Execute the verb builder
     var putResponse = await secondary.executeVerb(verbBuilder,
-        sync: SyncUtil.shouldSync(atKey.key!));
+        sync: SyncUtil.shouldSync(atKey.key));
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
       return AtResponse()..isError = true;
@@ -579,27 +565,17 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> putMeta(AtKey atKey) async {
     var updateKey = atKey.key;
-    var metadata = atKey.metadata!;
+    var metadata = atKey.metadata;
     if (metadata.namespaceAware) {
-      updateKey = _getKeyWithNamespace(atKey.key!);
+      updateKey = _getKeyWithNamespace(atKey.key);
     }
-    var sharedWith = atKey.sharedWith;
     var builder = UpdateVerbBuilder();
     builder
-      ..atKey = updateKey
-      ..sharedBy = _atSign
-      ..sharedWith = sharedWith
-      ..ttl = metadata.ttl
-      ..ttb = metadata.ttb
-      ..ttr = metadata.ttr
-      ..ccd = metadata.ccd
-      ..isBinary = metadata.isBinary
-      ..isEncrypted = metadata.isEncrypted
-      ..dataSignature = metadata.dataSignature
+      ..atKey = atKey
       ..operation = AtConstants.updateMeta;
 
     var updateMetaResult = await getSecondary()
-        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
+        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey));
     return updateMetaResult != null;
   }
 
@@ -798,9 +774,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           ..key = key
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
-          ..metadata!.ttr = -1
+          ..metadata.ttr = -1
           // file transfer key will be deleted after 30 days
-          ..metadata!.ttl = 2592000000
+          ..metadata.ttl = 2592000000
           ..sharedBy = _atSign;
 
         var notificationResult = await notificationService.notify(
@@ -979,7 +955,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       PriorityEnum? priority,
       StrategyEnum? strategy,
       int? latestN,
-      String? notifier = SYSTEM,
+      String? notifier = AtConstants.system,
       bool isDedicated = false}) async {
     AtKeyValidators.get().validate(
         atKey.toString(),

@@ -102,12 +102,12 @@ void main() {
       var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
 
       var atKey = AtKey.self('phone', namespace: 'wavi').build();
-      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce = EncryptionUtil.generateIV();
 
       var encryptedData = await selfKeyEncryption.encrypt(atKey, value);
       var response = EncryptionUtil.decryptValue(
           encryptedData, selfEncryptionKey,
-          ivBase64: atKey.metadata!.ivNonce);
+          ivBase64: atKey.metadata.ivNonce);
       expect(response, value);
     });
   });
@@ -127,7 +127,7 @@ void main() {
             ..one = atKey
             ..two = value,
           encryptionPrivateKey: encryptionPrivateKey);
-      assert(updateVerbBuilder.dataSignature != null);
+      assert(updateVerbBuilder.atKey.metadata.dataSignature != null);
     });
   });
 
@@ -375,8 +375,8 @@ void main() {
           .thenAnswer((_) => (AtEncryptionResult()..result = sharedKey));
 
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
 
       var decryptedSharedKey =
           // ignore: deprecated_member_use_from_same_package
@@ -398,7 +398,7 @@ void main() {
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
-      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce = EncryptionUtil.generateIV();
       var value = 'hello';
 
       when(() => mockLocalSecondary
@@ -418,10 +418,10 @@ void main() {
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptedSharedKey,
-          ivBase64: atKey.metadata!.ivNonce);
+          ivBase64: atKey.metadata.ivNonce);
       expect(decryptedValue, value);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
     test('test to verify legacy encryption when a new shared key is generated',
@@ -466,8 +466,8 @@ void main() {
               encryptedValue, sharedKeyEncryption.sharedKey,
               ivBase64: null),
           originalValue);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
     test('test to verify encryption when a new shared key is generated',
@@ -497,7 +497,7 @@ void main() {
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
-      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce = EncryptionUtil.generateIV();
       var originalValue = 'hello';
 
       var encryptedValue =
@@ -505,10 +505,10 @@ void main() {
       expect(
           EncryptionUtil.decryptValue(
               encryptedValue, sharedKeyEncryption.sharedKey,
-              ivBase64: atKey.metadata!.ivNonce),
+              ivBase64: atKey.metadata.ivNonce),
           originalValue);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
     test(
@@ -569,7 +569,7 @@ class LLookupEncryptedSharedKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is LLookupVerbBuilder && item.atKey!.contains('shared_key')) {
+    if (item is LLookupVerbBuilder && item.atKey.key.contains('shared_key')) {
       return true;
     }
     return false;
@@ -583,7 +583,7 @@ class EncryptionPublicKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is LLookupVerbBuilder && item.atKey!.contains('publickey')) {
+    if (item is LLookupVerbBuilder && item.atKey.key.contains('publickey')) {
       return true;
     }
     return false;
@@ -597,7 +597,7 @@ class UpdateEncryptedSharedKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is UpdateVerbBuilder && item.atKey!.contains('shared_key')) {
+    if (item is UpdateVerbBuilder && item.atKey.key.contains('shared_key')) {
       return true;
     }
     return false;

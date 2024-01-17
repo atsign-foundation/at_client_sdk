@@ -787,10 +787,8 @@ void main() {
       var atData = AtData();
       atData.data = encryptionPrivateKey;
       //------------Operation---------------------------------
-      String atKey = (AtKey.self(AtConstants.atEncryptionPrivateKey,
-              sharedBy: TestResources.atsign))
-          .build()
-          .toString();
+      String atKey =
+          (AtKey.self(AtConstants.atEncryptionPrivateKey)).build().toString();
       int putCommitId = await keystore!.put(atKey, atData);
       // -----------Assertions---------------------------------
       // verifying the key in the key store
@@ -829,10 +827,8 @@ void main() {
       var atData = AtData();
       atData.data = pkamPrivateKey;
       //------------Operation---------------------------------
-      String atKey = (AtKey.self(AtConstants.atPkamPrivateKey,
-              sharedBy: TestResources.atsign))
-          .build()
-          .toString();
+      String atKey =
+          (AtKey.self(AtConstants.atPkamPrivateKey)).build().toString();
       int putCommitId = await keystore!.put(atKey, atData);
       // -----------Assertions---------------------------------
       // verifying the key in the key store
@@ -2076,22 +2072,25 @@ void main() {
 
       // Create uncommitted entries in local storage
       await localSecondary.executeVerb(UpdateVerbBuilder()
-        ..atKey = 'firstKey'
-        ..sharedBy = TestResources.atsign
-        ..sharedWith = '@bob'
+        ..atKey = (AtKey()
+          ..key = 'firstKey'
+          ..sharedBy = TestResources.atsign
+          ..sharedWith = '@bob')
         ..value = 'value1');
 
       UpdateVerbBuilder updateBuilderForSecondKey = UpdateVerbBuilder()
-        ..atKey = 'secondKey'
-        ..sharedBy = TestResources.atsign
-        ..sharedWith = '@bob'
+        ..atKey = (AtKey()
+          ..key = 'secondKey'
+          ..sharedBy = TestResources.atsign
+          ..sharedWith = '@bob')
         ..value = 'value1';
       await localSecondary.executeVerb(updateBuilderForSecondKey);
 
       DeleteVerbBuilder deleteBuilderForThirdKey = DeleteVerbBuilder()
-        ..atKey = 'firstKey'
-        ..sharedBy = TestResources.atsign
-        ..sharedWith = '@bob';
+        ..atKey = (AtKey()
+          ..key = 'firstKey'
+          ..sharedBy = TestResources.atsign
+          ..sharedWith = '@bob');
       await localSecondary.executeVerb(deleteBuilderForThirdKey);
 
       // Mock Responses
@@ -3012,9 +3011,10 @@ void main() {
               throw KeyNotFoundException('key is not found in keystore'));
 
       await localSecondary.executeVerb(DeleteVerbBuilder()
-        ..sharedWith = '@alice'
-        ..atKey = 'conflict-key'
-        ..sharedBy = TestResources.atsign);
+        ..atKey = (AtKey()
+          ..key = 'conflict-key'
+          ..sharedWith = '@alice'
+          ..sharedBy = TestResources.atsign));
       CustomSyncProgressListener progressListener =
           CustomSyncProgressListener();
       syncService.addProgressListener(progressListener);
@@ -4400,7 +4400,7 @@ class LastReceivedServerCommitIdMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.startsWith('lastreceivedservercommitid')) {
+    if (item is AtKey && item.key.startsWith('lastreceivedservercommitid')) {
       return true;
     }
     return false;
@@ -4415,7 +4415,7 @@ class ConflictKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.contains('conflict')) {
+    if (item is AtKey && item.key.contains('conflict')) {
       return true;
     }
     return false;

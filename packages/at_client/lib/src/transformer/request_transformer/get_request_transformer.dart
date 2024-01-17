@@ -12,8 +12,6 @@ class GetRequestTransformer implements RequestTransformer<AtKey, VerbBuilder> {
 
   @override
   VerbBuilder transform(AtKey atKey, {RequestOptions? requestOptions}) {
-    // Set the default metadata if not already set.
-    atKey.metadata ??= Metadata();
     // Set sharedBy to currentAtSign if not set.
     atKey.sharedBy ??= _atClient.getCurrentAtSign();
     atKey.sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy);
