@@ -1,3 +1,10 @@
+# 3.2.14
+  build[deps]: Upgraded dependencies for the following packages:
+    - at_commons to v4.0.0
+    - at_utils to v3.0.16
+    - at_lookup to v3.0.44
+    - at_chops to v1.0.7
+    - at_client to v3.0.73
 ## 3.2.13
 - fix: Introduce the "isOnboarded" function to confirm the successful onboarding of the atSign.
 ## 3.2.12

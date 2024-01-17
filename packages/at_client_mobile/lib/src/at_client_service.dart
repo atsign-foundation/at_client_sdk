@@ -122,22 +122,24 @@ class AtClientService {
     //Store keys into local secondary.
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_PKAM_PUBLIC_KEY, pkamPublicKey);
+        .putValue(AtConstants.atPkamPublicKey, pkamPublicKey);
 
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_PKAM_PRIVATE_KEY, pkamPrivateKey);
+        .putValue(AtConstants.atPkamPrivateKey, pkamPrivateKey);
 
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_PRIVATE_KEY, encryptPrivateKey);
+        .putValue(AtConstants.atEncryptionPrivateKey, encryptPrivateKey);
 
     var updateBuilder = UpdateVerbBuilder()
-      ..atKey = 'publickey'
-      ..isPublic = true
-      ..sharedBy = atSign
-      ..value = encryptPublicKey
-      ..metadata.ttr = -1;
+      ..atKey = (AtKey()
+        ..key = 'publickey'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()
+          ..ttr = -1
+          ..isPublic = true))
+      ..value = encryptPublicKey;
 
     await _atClient!
         .getLocalSecondary()!
@@ -145,7 +147,7 @@ class AtClientService {
 
     await _atClient!
         .getLocalSecondary()!
-        .putValue(AT_ENCRYPTION_SELF_KEY, selfEncryptionKey);
+        .putValue(AtConstants.atEncryptionSelfKey, selfEncryptionKey);
 
     // Verify if keys are added to local storage.
     var result = await _getKeysFromLocalSecondary(atSign);
