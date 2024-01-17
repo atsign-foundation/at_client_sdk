@@ -43,6 +43,8 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   String _atSign;
   final AtClientPreference _atClientPreference;
 
+  Function? enrollmentStatusCallback;
+
   AtEnrollmentServiceImpl(this._atSign, this._atClientPreference) {
     // Prefix "@" to the atSign is missed.
     _atSign = AtUtils.fixAtSign(_atSign);
@@ -112,11 +114,15 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
         // If enrollment retry has reached the limit, do no retry. Remove
         // the enrollment info from the keychain manager.
         await _enrollmentKeychainStore.delete(key: enrollmentInfoKey);
+        if (enrollmentStatusCallback != null) {
+          enrollmentStatusCallback!(EnrollmentStatusResponse(
+              enrollmentInfo.enrollmentId, EnrollStatus.expired));
+        }
+        return;
       }
 
       _atLookUp ??= AtLookupImpl(_atSign, _atClientPreference.rootDomain,
           _atClientPreference.rootPort);
-
       // Create the AtChops instance with the new APKAM keys to verify if enrollment
       // is approved.
       // If enrollment is approved, then pkam authentication will be successful.
@@ -133,12 +139,26 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
       try {
         isAuthenticated = await _atLookUp?.pkamAuthenticate(
             enrollmentId: enrollmentInfo.enrollmentId);
-      } on UnAuthenticatedException {
+      } on UnAuthenticatedException catch (e) {
+        // The enrollment is denied. So do not retry and remove the
+        // enrollment info from the keychain manager.
+        if (e.message.contains('error:AT0025')) {
+          _logger.info("The enrollment : ${enrollmentInfoKey} is denied. Stopping the auth scheduler");
+          await _enrollmentKeychainStore.delete(key: enrollmentInfoKey);
+          if (enrollmentStatusCallback != null) {
+            enrollmentStatusCallback!(EnrollmentStatusResponse(
+                enrollmentInfo.enrollmentId, EnrollStatus.denied));
+          }
+        }
         _logger.finest(
             'Failed to authenticate with enrollmentId - ${enrollmentInfo.enrollmentId}');
       }
       if (isAuthenticated == true) {
         await _handleAuthenticatedEnrollment(enrollmentInfo);
+        if (enrollmentStatusCallback != null) {
+          enrollmentStatusCallback!(EnrollmentStatusResponse(
+              enrollmentInfo.enrollmentId, EnrollStatus.approved));
+        }
         // Authentication is completed successfully and APKAM keys file
         // is generated. Stop the scheduler.
         return;
@@ -330,4 +350,11 @@ class _EnrollmentInfo {
       : enrollmentId = json['enrollmentId'],
         atAuthKeys = AtAuthKeys.fromJson(json['atAuthKeys']),
         enrollmentSubmissionTimeEpoch = json['enrollmentSubmissionTimeEpoch'];
+}
+
+class EnrollmentStatusResponse {
+  String enrollmentKey;
+  EnrollStatus enrollStatus;
+
+  EnrollmentStatusResponse(this.enrollmentKey, this.enrollStatus);
 }
