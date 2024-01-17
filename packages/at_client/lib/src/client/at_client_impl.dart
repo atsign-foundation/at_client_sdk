@@ -670,10 +670,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     response = response?.replaceFirst('data:', '');
     Map<String, dynamic> enrollRequests = jsonDecode(response!);
     List<EnrollmentRequest> enrollRequestsFormatted = [];
-
+    EnrollmentRequest? enrollment;
     for (var request in enrollRequests.entries) {
-      enrollRequestsFormatted.add(EnrollmentRequest.fromJson(request.value,
-          jsonIncludesKey: false, enrollmentKey: request.key));
+      enrollment = EnrollmentRequest.fromJson(request.value);
+      enrollment.enrollmentKey = request.key;
+      enrollRequestsFormatted.add(enrollment);
     }
     return enrollRequestsFormatted;
   }

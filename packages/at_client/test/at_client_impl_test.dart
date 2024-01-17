@@ -295,17 +295,24 @@ void main() {
       List<EnrollmentRequest> requests =
           await clientImpl.fetchEnrollmentRequests(EnrollListRequestParam());
       expect(requests.length, 3);
+      expect(requests[0].enrollmentKey, enrollKey1);
       expect(requests[0].appName, jsonDecode(enrollValue1)['appName']);
       expect(requests[0].deviceName, jsonDecode(enrollValue1)['deviceName']);
       expect(requests[0].namespace, jsonDecode(enrollValue1)['namespace']);
+      // the following statement asserts that the enrollment.enrollmentId getter fetches the correct enrollment id
+      expect(requests[0].enrollmentKey.contains(enrollKey1), true);
 
+      expect(requests[1].enrollmentKey, enrollKey2);
       expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
       expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
       expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
+      expect(requests[1].enrollmentKey.contains(enrollKey2), true);
 
+      expect(requests[2].enrollmentKey, enrollKey3);
       expect(requests[2].appName, jsonDecode(enrollValue3)['appName']);
       expect(requests[2].deviceName, jsonDecode(enrollValue3)['deviceName']);
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
+      expect(requests[2].enrollmentKey.contains(enrollKey3), true);
     });
 
     test('validate EnrollRequest.extractEnrollmentId()', () {

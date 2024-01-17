@@ -1,7 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
 
 class EnrollmentRequest {
   late String enrollmentKey;
@@ -18,26 +17,18 @@ class EnrollmentRequest {
     return 'Enrollment Request: enrollmentKey: $enrollmentKey | appName: $appName | deviceName: $deviceName | namespace: ${namespace.toString()}';
   }
 
-  String toJson() {
-    Map jsonMap = HashMap();
+  Map<String, dynamic> toJson() {
+    Map<String, dynamic> jsonMap = HashMap();
     jsonMap['enrollmentKey'] = enrollmentKey;
     jsonMap['appName'] = appName;
     jsonMap['deviceName'] = deviceName;
     jsonMap['namespace'] = jsonEncode(namespace);
 
-    return jsonEncode(jsonMap);
+    return jsonMap;
   }
 
-  static EnrollmentRequest fromJson(Map<String, dynamic> json,
-      {bool jsonIncludesKey = true, String? enrollmentKey}) {
+  static EnrollmentRequest fromJson(Map<String, dynamic> json) {
     EnrollmentRequest enrollmentRequest = EnrollmentRequest();
-    if (jsonIncludesKey) {
-      enrollmentRequest.enrollmentKey = json['enrollmentKey'];
-    } else if (!jsonIncludesKey && enrollmentKey != null) {
-      enrollmentRequest.enrollmentKey = enrollmentKey;
-    } else {
-      throw IllegalArgumentException('enrollment key not set');
-    }
     return enrollmentRequest
       ..appName = json['appName']
       ..deviceName = json['deviceName']
