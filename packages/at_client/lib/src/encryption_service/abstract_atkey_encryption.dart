@@ -209,14 +209,21 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
 
     ///         (ii) Encrypt the symmetric key with their public key
-    theirEncryptedCopy =
-        EncryptionUtil.encryptKey(symmetricKeyBase64, sharedWithPublicKey);
+    // theirEncryptedCopy =
+    //     EncryptionUtil.encryptKey(symmetricKeyBase64, sharedWithPublicKey);
+    var rsaEncryptionAlgo = DefaultEncryptionAlgo();
+    rsaEncryptionAlgo.atPublicKey = AtPublicKey.fromString(sharedWithPublicKey);
+    var encryptionResult = _atClient.atChops!.encryptString(
+        symmetricKeyBase64, EncryptionKeyType.rsa2048,
+        encryptionAlgorithm: rsaEncryptionAlgo);
+    // _logger.info('encrypt key result from AtChops: ${encryptionResult.result}');
+    theirEncryptedCopy = encryptionResult.result;
 
     ///   - (b) save encrypted copy to atServer
     _logger.info(
         "Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to atServer");
     await storeTheirCopyOfEncryptedSharedKeyToSecondary(
-        atKey, theirEncryptedCopy,
+        atKey, theirEncryptedCopy!,
         secondary: _atClient.getRemoteSecondary()!);
 
     ///   - (c) save encrypted copy to local storage and return
