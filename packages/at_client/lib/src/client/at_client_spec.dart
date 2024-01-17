@@ -577,8 +577,13 @@ abstract class AtClient {
   /// Fetches all enrollment requests from the corresponding atServer; Formats the requests into a
   /// List<[EnrollmentResponse]>
   ///
-  /// The optional param [EnrollListRequestParam] is present to avoid future compatibility issues over backwards compatibility
-  /// [enrollListRequest] for now does not have any functionality
-  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
-      {EnrollListRequestParam? enrollmentListRequest});
+  /// Responses can be filtered using params provided through [EnrollListRequestParam]
+  /// ```
+  /// e.g.
+  /// List<EnrollmentRequest> enrollmentRequests = fetchEnrollmentRequests(EnrollRequestParams());
+  /// enrollmentRequests now contains all the enrollment requests fetched from the server in the for of
+  /// EnrollmentRequest objects
+  /// ```
+  @experimental
+  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(EnrollListRequestParam enrollmentListRequest);
 }
