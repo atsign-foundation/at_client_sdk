@@ -107,7 +107,7 @@ class AtClientAuthenticator implements AtClientAuth {
           await _keyChainManager.storeAtSign(atSign: atSignItem);
         }
         var deleteBuilder = DeleteVerbBuilder()
-           ..atKey = (AtKey()..key = AtConstants.atCramSecret);
+          ..atKey = (AtKey()..key = AtConstants.atCramSecret);
         var deleteResponse =
             await atLookupInitialAuth.executeVerb(deleteBuilder);
         logger.finer('cram secret delete response : $deleteResponse');
