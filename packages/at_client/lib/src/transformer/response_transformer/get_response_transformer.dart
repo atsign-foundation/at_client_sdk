@@ -33,7 +33,7 @@ class GetResponseTransformer
           decodedResponse['metaData'], _isKeyPublic(decodedResponse['key']),
           isCached: decodedResponse['key'].startsWith('cached:'));
       atValue.metadata = metadata;
-      tuple.one.metadata = metadata;
+      tuple.one.metadata = metadata!;
     }
 
     // For public and cached public keys, data is not encrypted.
@@ -62,9 +62,7 @@ class GetResponseTransformer
     // After decrypting the data, if data is binary, decode the data
     // For cached keys, isBinary is not on server-side. Hence getting
     // isBinary from AtKey.
-    if (tuple.one.metadata != null &&
-        tuple.one.metadata!.isBinary != null &&
-        tuple.one.metadata!.isBinary!) {
+    if (tuple.one.metadata.isBinary) {
       atValue.value = Base2e15.decode(atValue.value);
     }
     return atValue;

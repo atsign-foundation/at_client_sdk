@@ -62,10 +62,12 @@ void main() {
             .transform(tuple, encryptionPrivateKey: encryptionPrivateKey);
         expect(updateVerbBuilder.value.contains('\n'),
             expectedResults['isNewLineCharPresentInOutput']);
-        expect(updateVerbBuilder.encoding, expectedResults['encoding']);
-        expect(updateVerbBuilder.dataSignature.isNotNull,
+        expect(updateVerbBuilder.atKey.metadata.encoding,
+            expectedResults['encoding']);
+        expect(updateVerbBuilder.atKey.metadata.dataSignature.isNotNull,
             expectedResults['isDataSignaturePresent']);
-        final dataSignatureWithoutAtChops = updateVerbBuilder.dataSignature;
+        final dataSignatureWithoutAtChops =
+            updateVerbBuilder.atKey.metadata.dataSignature;
         when(() => mockAtClient.getPreferences())
             .thenAnswer((_) => atClientPreferenceWithAtChops);
 
@@ -75,10 +77,12 @@ void main() {
             encryptionPrivateKey: encryptionPrivateKey);
         expect(updateVerbBuilder.value.contains('\n'),
             expectedResults['isNewLineCharPresentInOutput']);
-        expect(updateVerbBuilder.encoding, expectedResults['encoding']);
-        expect(updateVerbBuilder.dataSignature.isNotNull,
+        expect(updateVerbBuilder.atKey.metadata.encoding,
+            expectedResults['encoding']);
+        expect(updateVerbBuilder.atKey.metadata.dataSignature.isNotNull,
             expectedResults['isDataSignaturePresent']);
-        expect(updateVerbBuilder.dataSignature, dataSignatureWithoutAtChops);
+        expect(updateVerbBuilder.atKey.metadata.dataSignature,
+            dataSignatureWithoutAtChops);
       });
     });
   });

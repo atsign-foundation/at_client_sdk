@@ -29,8 +29,8 @@ class SharedKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
     String? encryptedSharedKey;
-    if (atKey.metadata != null) {
-      encryptedSharedKey = atKey.metadata!.sharedKeyEnc;
+    if (atKey.metadata.sharedKeyEnc != null) {
+      encryptedSharedKey = atKey.metadata.sharedKeyEnc;
     }
     encryptedSharedKey ??= await _getEncryptedSharedKey(atKey);
     if (encryptedSharedKey.isEmpty || encryptedSharedKey == 'null') {
@@ -51,10 +51,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
     }
     if (currentAtSignPublicKey != null &&
-        atKey.metadata != null &&
-        atKey.metadata!.pubKeyCS != null &&
-        atKey.metadata!.pubKeyCS !=
-            EncryptionUtil.md5CheckSum(currentAtSignPublicKey)) {
+        (atKey.metadata.pubKeyCS != null &&
+            atKey.metadata.pubKeyCS !=
+                EncryptionUtil.md5CheckSum(currentAtSignPublicKey))) {
       throw AtPublicKeyChangeException(
           'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
           intent: Intent.fetchEncryptionPublicKey,
@@ -64,8 +63,8 @@ class SharedKeyDecryption implements AtKeyDecryption {
     AtEncryptionResult decryptionResultFromAtChops;
     try {
       InitialisationVector iV;
-      if (atKey.metadata?.ivNonce != null) {
-        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata!.ivNonce!);
+      if (atKey.metadata.ivNonce != null) {
+        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
       } else {
         iV = AtChopsUtil.generateIVLegacy();
       }
@@ -76,12 +75,6 @@ class SharedKeyDecryption implements AtKeyDecryption {
       decryptionResultFromAtChops = _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
-    } on AtKeyException catch (e) {
-      e.stack(AtChainedException(
-          Intent.decryptData,
-          ExceptionScenario.decryptionFailed,
-          'Failed to decrypt ${atKey.toString()}'));
-      rethrow;
     } on AtDecryptionException catch (e) {
       _logger.severe(
           'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
@@ -93,10 +86,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {
     String? encryptedSharedKey = '';
     var localLookupSharedKeyBuilder = LLookupVerbBuilder()
-      ..atKey = AtConstants.atEncryptionSharedKey
-      ..sharedWith = _atClient.getCurrentAtSign()
-      ..sharedBy = atKey.sharedBy
-      ..isCached = true;
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = _atClient.getCurrentAtSign()
+        ..sharedBy = atKey.sharedBy
+        ..metadata = (Metadata()..isCached = true));
     try {
       encryptedSharedKey = await _atClient
           .getLocalSecondary()!
@@ -109,8 +103,9 @@ class SharedKeyDecryption implements AtKeyDecryption {
         encryptedSharedKey.isEmpty ||
         encryptedSharedKey == 'data:null') {
       var sharedKeyLookUpBuilder = LookupVerbBuilder()
-        ..atKey = AtConstants.atEncryptionSharedKey
-        ..sharedBy = atKey.sharedBy
+        ..atKey = (AtKey()
+          ..key = AtConstants.atEncryptionSharedKey
+          ..sharedBy = atKey.sharedBy)
         ..auth = true;
       encryptedSharedKey = await _atClient
           .getRemoteSecondary()!

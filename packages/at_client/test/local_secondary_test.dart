@@ -35,6 +35,7 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
     waviOtherNonHiddenKey,
     otherWaviOtherNonHiddenKey
   ];
+
   @override
   List<String> getKeys({String? regex}) {
     if (regex != null) {
@@ -151,10 +152,11 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
-        ..isPublic = true
-        ..value = 'alice@gmail.com'
-        ..atKey = 'email'
-        ..sharedBy = atSign;
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true))
+        ..value = 'alice@gmail.com';
       final executeResult =
           await localSecondary.executeVerb(verbBuilder, sync: false);
       expect(executeResult, isNotNull);
@@ -170,15 +172,17 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
-        ..isPublic = true
-        ..value = 'alice@gmail.com'
-        ..atKey = 'email'
-        ..sharedBy = atSign;
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true))
+        ..value = 'alice@gmail.com';
       await localSecondary.executeVerb(verbBuilder, sync: false);
       final llookupVerbBuilder = LLookupVerbBuilder()
-        ..atKey = 'email'
-        ..sharedBy = atSign
-        ..isPublic = true;
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true));
       final llookupResult =
           await localSecondary.executeVerb(llookupVerbBuilder, sync: false);
       expect(llookupResult, 'data:alice@gmail.com');
@@ -193,20 +197,23 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
-        ..isPublic = true
-        ..value = 'alice@gmail.com'
-        ..atKey = 'email'
-        ..sharedBy = atSign;
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true))
+        ..value = 'alice@gmail.com';
       await localSecondary.executeVerb(verbBuilder, sync: false);
       final deleteVerbBuilder = DeleteVerbBuilder()
-        ..atKey = 'email'
-        ..sharedBy = atSign
-        ..isPublic = true;
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true));
       await localSecondary.executeVerb(deleteVerbBuilder, sync: false);
       final llookupVerbBuilder = LLookupVerbBuilder()
-        ..atKey = 'email'
-        ..sharedBy = atSign
-        ..isPublic = true;
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true));
       expect(localSecondary.executeVerb(llookupVerbBuilder, sync: false),
           throwsA(isA<KeyNotFoundException>()));
     });
@@ -220,15 +227,17 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder_1 = UpdateVerbBuilder()
-        ..isPublic = true
-        ..value = 'alice@gmail.com'
-        ..atKey = 'email'
-        ..sharedBy = atSign;
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true))
+        ..value = 'alice@gmail.com';
       await localSecondary.executeVerb(verbBuilder_1, sync: false);
       final verbBuilder_2 = UpdateVerbBuilder()
-        ..value = '+101-202-303'
-        ..atKey = 'phone'
-        ..sharedBy = atSign;
+        ..atKey = (AtKey()
+          ..key = 'phone'
+          ..sharedBy = atSign)
+        ..value = '+101-202-303';
       await localSecondary.executeVerb(verbBuilder_2, sync: false);
       final scanVerbBuilder = ScanVerbBuilder();
       final scanResult =

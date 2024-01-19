@@ -35,8 +35,8 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
           exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
     }
     InitialisationVector iV;
-    if (atKey.metadata?.ivNonce != null) {
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata!.ivNonce!);
+    if (atKey.metadata.ivNonce != null) {
+      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
     } else {
       iV = AtChopsUtil.generateIVLegacy();
     }

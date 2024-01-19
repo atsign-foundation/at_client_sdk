@@ -20,7 +20,7 @@ dependencies:
   at_utils: ^3.0.15
   at_chops: ^1.0.3
   at_lookup: ^3.0.38
-  at_client: ^3.0.64
+  at_client: ^3.0.71
 
 dev_dependencies:
   lints: ^2.0.0
