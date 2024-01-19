@@ -17,6 +17,9 @@ void main() {
     when(() => commitLog.commit(any(), CommitOp.UPDATE_ALL))
         .thenAnswer((_) => Future.value(1));
 
+    when(() => commitLog.commit(any(), CommitOp.DELETE))
+        .thenAnswer((_) => Future.value(2));
+
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atsign);
       await setUpStorage(atsign, storagePath, commitLog);
@@ -24,7 +27,7 @@ void main() {
 
     test('verify that delete expired keys task removes expired keys', () async {
       String key1 = 'public:expired_key_1.test$atsign';
-      AtMetaData metadata = AtMetaData()..ttl = 1000;
+      AtMetaData metadata = AtMetaData()..ttl = 1;
       AtData data = AtData()
         ..data = 'data_key_1'
         ..metaData = metadata;
@@ -37,28 +40,36 @@ void main() {
       await getKeyStore(atsign)?.put(key2, data);
 
       String key3 = 'public:unexpired_key_3.test$atsign';
-      metadata.ttl = -1;
+      metadata.ttl = 1000000;
       data = AtData()
         ..data = 'data_key_3'
         ..metaData = metadata;
       await getKeyStore(atsign)?.put(key3, data);
 
-      SecondaryPersistenceStoreFactory.getInstance()
+      await SecondaryPersistenceStoreFactory.getInstance()
           .getSecondaryPersistenceStore(atsign)
-          ?.getHivePersistenceManager()
-          ?.scheduleKeyExpireTask(1);
+          ?.getSecondaryKeyStore()
+          ?.deleteExpiredKeys();
 
-      stdout.writeln('Sleeping for 1min 10s');
-      await Future.delayed(Duration(minutes: 1, seconds: 10));
+      int exceptionCatchCount = 0;
+      try {
+        await getKeyStore(atsign)?.get(key1);
+      } on Exception catch (e) {
+        expect(e.toString().contains('$key1 does not exist in keystore'), true);
+        exceptionCatchCount++;
+      }
 
-      expect(await getKeyStore(atsign)?.get(key1),
-          throwsA(predicate((e) => e is KeyNotFoundException)));
-
-      expect(await getKeyStore(atsign)?.get(key2),
-          throwsA(predicate((e) => e is KeyNotFoundException)));
+      try {
+        await getKeyStore(atsign)?.get(key2);
+      } on Exception catch (e) {
+        expect(e.toString().contains('$key2 does not exist in keystore'), true);
+        exceptionCatchCount++;
+      }
 
       expect((await getKeyStore(atsign)?.get(key3))?.data, 'data_key_3');
-    }, timeout: Timeout(Duration(minutes: 2)));
+      expect(exceptionCatchCount,
+          2); // this counter maintains the count of how many exceptions have been caught
+    });
 
     tearDown(() async {
       await tearDownLocalStorage(storagePath);
@@ -72,7 +83,8 @@ HiveKeystore? getKeyStore(String atsign) {
       ?.getSecondaryKeyStore();
 }
 
-Future<void> setUpStorage(String atsign, String storagePath, ClientAtCommitLog commitLog) async {
+Future<void> setUpStorage(
+    String atsign, String storagePath, ClientAtCommitLog commitLog) async {
   var manager = SecondaryPersistenceStoreFactory.getInstance()
       .getSecondaryPersistenceStore(atsign);
   await manager?.getHivePersistenceManager()?.init(storagePath);
