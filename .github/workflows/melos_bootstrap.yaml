@@ -15,4 +15,4 @@ jobs:
       - name: flutter pub get
         run: flutter pub get
       - name: Do melos bootstrap
-        run: dart run melos bootstrap --no-example
+        run: dart run melos bootstrap
