@@ -20,14 +20,7 @@ dependencies:
   at_utils: ^3.0.16
   at_chops: ^1.0.7
   at_lookup: ^3.0.44
-  at_client: ^3.0.71
-
-dependency_overrides: 
-  at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      path: packages/at_client
-      ref: trunk
+  at_client: ^3.0.73
 
 dev_dependencies:
   lints: ^2.0.0
