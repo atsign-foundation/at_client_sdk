@@ -38,6 +38,13 @@ dependencies:
   at_client: ^3.0.73
 
 dependency_overrides:
+  at_commons: ^4.0.0
+  at_utils: ^3.0.16
+  at_server_status:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_server_status
+      ref: trunk
   path: ^1.8.3
   async: ^2.10.0
 
