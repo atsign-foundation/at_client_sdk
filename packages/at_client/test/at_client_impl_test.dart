@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -19,6 +20,8 @@ class MockAtCompactionJob extends Mock implements AtCompactionJob {
     isCronScheduled = false;
   }
 }
+
+class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 void main() {
   group('A group of at client impl create tests', () {
@@ -260,6 +263,47 @@ void main() {
           .setCurrentAtSign('@alice', 'wavi', AtClientPreference(),
               enrollmentId: testEnrollmentId);
       expect(atClientManager.atClient.enrollmentId, testEnrollmentId);
+    });
+  });
+
+  group('A group of tests related to set SPP', () {
+    test(
+        'A test to verify exception is thrown when SPP contains special characters',
+        () async {
+      String invalidSPP = 'abc#12';
+      var atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign('@alice', 'wavi', AtClientPreference());
+      expect(
+          () async => await atClientManager.atClient.setSPP(invalidSPP),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message == '$invalidSPP is not a valid SPP')));
+    });
+
+    test(
+        'A test to verify exception is thrown when SPP exceeds the character length',
+        () async {
+      String invalidSPP = 'abc1234';
+      var atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign('@alice', 'wavi', AtClientPreference());
+      expect(
+          () async => await atClientManager.atClient.setSPP(invalidSPP),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message == '$invalidSPP should be 6 characters')));
+    });
+
+    test('A test to verify SPP is created successfully', () async {
+      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+      AtClient atClient = await AtClientImpl.create(
+          '@alice', 'wavi', AtClientPreference(),
+          remoteSecondary: mockRemoteSecondary);
+
+      when(() => mockRemoteSecondary.executeCommand('otp:put:ABC123\n',
+          auth: true)).thenAnswer((_) async => await Future.value('data:ok'));
+
+      AtResponse atResponse = await atClient.setSPP('ABC123');
+      expect(atResponse.response, 'ok');
     });
   });
 }

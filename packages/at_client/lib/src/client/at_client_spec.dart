@@ -25,6 +25,7 @@ abstract class AtClient {
 
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
+
   @experimental
   AtTelemetryService? get telemetry;
 
@@ -44,9 +45,11 @@ abstract class AtClient {
   String? get enrollmentId;
 
   set syncService(SyncService syncService);
+
   SyncService get syncService;
 
   set notificationService(NotificationService notificationService);
+
   NotificationService get notificationService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
@@ -533,6 +536,28 @@ abstract class AtClient {
       String senderAtSign,
       Function streamCompletionCallBack,
       Function streamReceiveCallBack);
+
+  /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
+  /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
+  /// an enrollment request. Only the connections which have access to manage
+  /// namespace are allowed to set SPP
+  ///
+  /// Throws [InvalidPinException] when an invalid SPP is provided.
+  ///
+  /// ```dart
+  /// AtResponse sppResponse = await atClient.setSPP(ABC123);
+  /// ```
+  Future<AtResponse> setSPP(String otp);
+
+  /// Returns an OTP (One-Time Password) from the secondary server.
+  ///
+  ///
+  /// Example usage:
+  /// ```dart
+  /// AtResponse otpResponse = await atClient.getOTP();
+  /// ```
+  ///
+  Future<AtResponse> getOTP();
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
