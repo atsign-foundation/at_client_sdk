@@ -2,5 +2,8 @@ name: at_client_sdk
 
 packages:
   - packages/at_client_mobile
-  - packages/*/example
   - tests/*
+
+command:
+  bootstrap:
+    runPubGetInParallel: false
