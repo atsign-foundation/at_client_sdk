@@ -26,7 +26,7 @@ void main() {
     await setLastReceivedNotificationDateTime();
   });
 
-  void _stopSubscriptions() {
+  void stopSubscriptions() {
     atClientManager.atClient.notificationService.stopAllSubscriptions();
     print('subscriptions stopped');
   }
@@ -87,8 +87,74 @@ void main() {
           print('got enrollment notification: $enrollNotification');
           expect(enrollNotification.key,
               '$enrollmentIdFromServer.new.enrollments.__manage');
-          _stopSubscriptions();
+          stopSubscriptions();
         }, count: 1, max: 1));
+  });
+
+  test(
+      'validate client functionality to fetch pending enrollments on legacy pkam authenticated client',
+      () async {
+    atClientManager = await TestUtils.initAtClient(atSign, 'new_app');
+    AtClient? client = atClientManager.atClient;
+    // fetch first otp
+    String? otp =
+        await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
+    expect(otp, isNotNull);
+    // create first enrollment request
+    RemoteSecondary? secondRemoteSecondary =
+        RemoteSecondary(atSign, getClient2Preferences());
+    var apkamPublicKey =
+        at_demos.pkamPublicKeyMap['@eve🛠']; // can be any random public key
+    var newEnrollRequest = TestUtils.formatCommand(
+        'enroll:request:{"appName":"new_app","deviceName":"pixel","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+    var enrollResponse = await TestUtils.executeCommandAndParse(
+        null, newEnrollRequest,
+        remoteSecondary: secondRemoteSecondary);
+    Map<String, dynamic> enrollResponse1JsonDecoded =
+        jsonDecode(enrollResponse!);
+    expect(enrollResponse1JsonDecoded['enrollmentId'], isNotNull);
+    expect(enrollResponse1JsonDecoded['status'], 'pending');
+
+    // fetch second otp
+    otp = await TestUtils.executeCommandAndParse(client, 'otp:get', auth: true);
+    expect(otp, isNotNull);
+    // create second enrollment request
+    newEnrollRequest = TestUtils.formatCommand(
+        'enroll:request:{"appName":"new_app","deviceName":"pixel7","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+    enrollResponse = await TestUtils.executeCommandAndParse(
+        null, newEnrollRequest,
+        remoteSecondary: secondRemoteSecondary);
+    var enrollResponse2JsonDecoded = jsonDecode(enrollResponse!);
+    expect(enrollResponse2JsonDecoded['enrollmentId'], isNotNull);
+    expect(enrollResponse2JsonDecoded['status'], 'pending');
+
+    // fetch enrollment requests through client
+    List<EnrollmentRequest> enrollmentRequests =
+        await client.fetchEnrollmentRequests(EnrollListRequestParam());
+
+    expect(enrollmentRequests.length, 4);
+    // 4 entries - 2 entries from this test
+    // + 2 entries from the other test in this file.
+
+    String firstEnrollmentKey =
+        getEnrollmentKey(enrollResponse1JsonDecoded['enrollmentId'], atSign);
+    String secondEnrollmentKey =
+        getEnrollmentKey(enrollResponse2JsonDecoded['enrollmentId'], atSign);
+    int matchCount = 0;
+    for (var request in enrollmentRequests) {
+      if (request.enrollmentKey == firstEnrollmentKey) {
+        expect(request.namespace['new_app'], 'rw');
+        expect(request.deviceName, 'pixel');
+        matchCount++;
+      } else if (request.enrollmentKey == secondEnrollmentKey) {
+        expect(request.namespace['new_app'], 'rw');
+        expect(request.namespace['wavi'], 'r');
+        expect(request.deviceName, 'pixel7');
+        matchCount++;
+      }
+    }
+    // this counter is to assert that the list of requests has exactly two request matches
+    expect(matchCount, 2);
   });
 }
 
@@ -113,6 +179,10 @@ Future<void> setLastReceivedNotificationDateTime() async {
   await AtClientManager.getInstance()
       .atClient
       .put(lastReceivedNotificationAtKey, jsonEncode(atNotification.toJson()));
+}
+
+String getEnrollmentKey(String enrollmentId, String atsign) {
+  return '$enrollmentId.new.enrollments.__manage$atsign';
 }
 
 AtClientPreference getClient2Preferences() {
