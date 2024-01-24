@@ -1,4 +1,8 @@
-# 3.0.73
+## 3.0.74
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_chops to v2.0.0
+  - at_lookup to v3.0.45
+## 3.0.73
 - build[deps]: Upgraded dependencies for the following packages:
     - at_commons to v4.0.0
     - at_utils to v3.0.16
