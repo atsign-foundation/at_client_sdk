@@ -33,10 +33,10 @@ class RemoteSecondary implements Secondary {
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     privateKey ??= preference.privateKey;
-    SecureSocketConfig secureSocketConfig = SecureSocketConfig();
-    secureSocketConfig.decryptPackets = preference.decryptPackets;
-    secureSocketConfig.pathToCerts = preference.pathToCerts;
-    secureSocketConfig.tlsKeysSavePath = preference.tlsKeysSavePath;
+    SecureSocketConfig secureSocketConfig = SecureSocketConfig()
+      ..decryptPackets = preference.decryptPackets
+      ..pathToCerts = preference.pathToCerts
+      ..tlsKeysSavePath = preference.tlsKeysSavePath;
     atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
         privateKey: privateKey,
         cramSecret: preference.cramSecret,
@@ -107,14 +107,8 @@ class RemoteSecondary implements Secondary {
     // ignore: prefer_typing_uninitialized_variables
     var verbResult;
     try {
-      logger.finer(logger.getLogMessageWithClientParticulars(
-          _preference.atClientParticulars,
-          'Command sent to server: ${builder.buildCommand()}'));
       verbResult = await executeVerb(builder);
       verbResult = verbResult.replaceFirst('data:', '');
-      logger.finer(logger.getLogMessageWithClientParticulars(
-          _preference.atClientParticulars,
-          'Response from server: $verbResult'));
     } on AtException catch (e) {
       throw e
         ..stack(AtChainedException(Intent.fetchData,
