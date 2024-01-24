@@ -1,3 +1,5 @@
+## 3.0.75
+- feat: Replace encryption methods from EncryptionUtils with AtChops method
 ## 3.0.74
 - build[deps]: Upgraded dependencies for the following packages:
   - at_chops to v2.0.0
@@ -9,7 +11,7 @@
     - at_lookup to v3.0.44
     - at_chops to v1.0.7
     - at_persistence_secondary_server to v3.0.60
-- feat: Replace encryption methods from EncryptionUtils with AtChops method
+- feat: Introduce feature to fetch all enrollment requests from the server
 ## 3.0.72
 - chore: Minor change to allow us to support dart 
   versions both before and after 3.2.0 specifically for this
