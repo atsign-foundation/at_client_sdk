@@ -35,9 +35,11 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.4
   at_app_flutter: ^5.2.0
-  at_client: ^3.0.71
+  at_client: ^3.0.73
 
 dependency_overrides:
+  at_commons: ^4.0.0
+  at_utils: ^3.0.16
   path: ^1.8.3
   async: ^2.10.0
 
