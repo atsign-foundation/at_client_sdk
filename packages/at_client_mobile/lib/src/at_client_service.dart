@@ -34,6 +34,7 @@ class AtClientService {
   Future<bool> _init(
       String atSign, AtClientPreference preference, AtChops atChops) async {
     atClientAuthenticator ??= AtClientAuthenticator();
+    // ignore: deprecated_member_use
     preference.useAtChops = true;
     await atClientManager.setCurrentAtSign(
         atSign, preference.namespace, preference,
