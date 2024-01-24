@@ -303,8 +303,8 @@ void main() {
           sync: true)).thenAnswer((invocation) async {
         var verbBuilder = invocation.positionalArguments[0];
         if (verbBuilder is UpdateVerbBuilder &&
-            verbBuilder.atKeyObj.toString() == 'public:publickey$atSign') {
-          ttrOfPublicKeyFromUpdateVerbBuilder = verbBuilder.metadata.ttr;
+            verbBuilder.atKey.toString() == 'public:publickey$atSign') {
+          ttrOfPublicKeyFromUpdateVerbBuilder = verbBuilder.atKey.metadata.ttr;
         }
         return 'data:1';
       });
