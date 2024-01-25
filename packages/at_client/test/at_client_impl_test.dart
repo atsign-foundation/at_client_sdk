@@ -267,12 +267,14 @@ void main() {
   });
 
   group('A group of tests related to set SPP', () {
+    String atSign = '@alice';
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     test(
         'A test to verify exception is thrown when SPP contains special characters',
         () async {
       String invalidSPP = 'abc#12';
       var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', AtClientPreference());
+          .setCurrentAtSign(atSign, 'wavi', AtClientPreference());
       expect(
           () async => await atClientManager.atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
@@ -285,7 +287,7 @@ void main() {
         () async {
       String invalidSPP = 'abc1234';
       var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', AtClientPreference());
+          .setCurrentAtSign(atSign, 'wavi', AtClientPreference());
       expect(
           () async => await atClientManager.atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
@@ -294,9 +296,8 @@ void main() {
     });
 
     test('A test to verify SPP is created successfully', () async {
-      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
       AtClient atClient = await AtClientImpl.create(
-          '@alice', 'wavi', AtClientPreference(),
+          atSign, 'wavi', AtClientPreference(),
           remoteSecondary: mockRemoteSecondary);
 
       when(() => mockRemoteSecondary.executeCommand('otp:put:ABC123\n',
@@ -304,6 +305,9 @@ void main() {
 
       AtResponse atResponse = await atClient.setSPP('ABC123');
       expect(atResponse.response, 'ok');
+    });
+    tearDown(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
     });
   });
 }

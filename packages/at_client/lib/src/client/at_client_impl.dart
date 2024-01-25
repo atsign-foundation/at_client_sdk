@@ -193,6 +193,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       _atChops ??= await _createAtChops(_atSign);
     }
 
+    // Set enrollment id
+    this.enrollmentId ??= enrollmentId;
     // Now using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops,
