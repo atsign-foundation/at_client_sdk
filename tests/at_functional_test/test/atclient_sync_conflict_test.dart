@@ -37,10 +37,12 @@ void main() async {
     // Update the key directly to remote secondary for having
     // the conflict key during sync
     final updateVerbBuilder = UpdateVerbBuilder()
-      ..sharedBy = atSign
-      ..atKey = 'phone_0.wavi'
-      ..value = 'sMBnYFctMOg+lqX67ah9UA==' //encrypted value of 4
-      ..isEncrypted = true;
+      ..atKey = (AtKey()
+        ..key = 'phone_0.wavi'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isEncrypted = true))
+      ..value = 'sMBnYFctMOg+lqX67ah9UA=='; //encrypted value of 4
+
     await atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(updateVerbBuilder);
@@ -80,10 +82,12 @@ void main() async {
     // conflicting key during sync
     final remoteSecondary = atClientManager.atClient.getRemoteSecondary()!;
     final updateVerbBuilder = UpdateVerbBuilder()
-      ..sharedBy = atSign
-      ..atKey = 'test.$namespace'
-      ..ttl = 2
-      ..isPublic = true
+      ..atKey = (AtKey()
+        ..key = 'test.$namespace'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()
+          ..ttl = 2
+          ..isPublic = true))
       ..value = 'randomvalue';
     await remoteSecondary.executeVerb(updateVerbBuilder);
     // Wait for 12 milliseconds to the key to expire

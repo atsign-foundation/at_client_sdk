@@ -20,10 +20,10 @@ class AtCollectionUtil {
     return AtKey()
       ..key = key
       ..metadata = Metadata()
-      ..metadata!.ttr = -1
+      ..metadata.ttr = -1
       ..sharedWith = sharedWith
-      ..metadata!.ttl = ttl
-      ..metadata!.ttb = ttb
+      ..metadata.ttl = ttl
+      ..metadata.ttb = ttb
       ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 }

@@ -87,7 +87,7 @@ void main() async {
           shouldEncrypt: false): '$whomToNotify:$notifyText'
     };
     inputToExpectedOutput.forEach((input, expectedOutput) {
-      test('Setting shouldEncrypt to ${input.atKey.metadata?.isEncrypted}',
+      test('Setting shouldEncrypt to ${input.atKey.metadata.isEncrypted}',
           () async {
         // Setting the AtClientManager instance to current atsign
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -110,13 +110,13 @@ void main() async {
             .atClient
             .notificationService
             .fetch(notificationResult.notificationID);
-        atNotification.isEncrypted = input.atKey.metadata!.isEncrypted;
+        atNotification.isEncrypted = input.atKey.metadata.isEncrypted;
         await NotificationResponseTransformer(
                 sharedWithAtClientManager.atClient)
             .transform(Tuple()
               ..one = atNotification
               ..two = (NotificationConfig()
-                ..shouldDecrypt = input.atKey.metadata!.isEncrypted!));
+                ..shouldDecrypt = input.atKey.metadata.isEncrypted));
         expect(atNotification.id, notificationResult.notificationID);
         expect(atNotification.key, expectedOutput);
       });

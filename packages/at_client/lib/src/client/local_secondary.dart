@@ -69,46 +69,15 @@ class LocalSecondary implements Secondary {
       var updateKey = builder.buildKey();
       switch (builder.operation) {
         case AtConstants.updateMeta:
-          var metadata = Metadata();
-          metadata
-            ..ttl = builder.ttl
-            ..ttb = builder.ttb
-            ..ttr = builder.ttr
-            ..ccd = builder.ccd
-            ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted
-            ..sharedKeyEnc = builder.sharedKeyEncrypted
-            ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding
-            ..encKeyName = builder.encKeyName
-            ..encAlgo = builder.encAlgo
-            ..ivNonce = builder.ivNonce
-            ..skeEncKeyName = builder.skeEncKeyName
-            ..skeEncAlgo = builder.skeEncAlgo;
-          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
+          var atMetadata =
+              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          var metadata = Metadata();
-          metadata
-            ..ttl = builder.ttl
-            ..ttb = builder.ttb
-            ..ttr = builder.ttr
-            ..ccd = builder.ccd
-            ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted
-            ..dataSignature = builder.dataSignature
-            ..sharedKeyEnc = builder.sharedKeyEncrypted
-            ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding
-            ..encKeyName = builder.encKeyName
-            ..encAlgo = builder.encAlgo
-            ..ivNonce = builder.ivNonce
-            ..skeEncKeyName = builder.skeEncKeyName
-            ..skeEncAlgo = builder.skeEncAlgo;
-          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
+          var atMetadata =
+              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }

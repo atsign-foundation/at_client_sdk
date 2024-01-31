@@ -321,7 +321,7 @@ class LastReceivedServerCommitIdMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.startsWith('lastreceivedservercommitid')) {
+    if (item is AtKey && item.key.startsWith('lastreceivedservercommitid')) {
       return true;
     }
     return false;

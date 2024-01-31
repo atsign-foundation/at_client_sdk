@@ -20,6 +20,9 @@ class AtRpcReq {
   static AtRpcReq fromJson(Map<String, dynamic> json) {
     return AtRpcReq(reqId: json['reqId'], payload: json['payload']);
   }
+
+  @override
+  String toString() => toJson().toString();
 }
 
 /// The types of responses which the responder can send back to the requester
@@ -92,4 +95,7 @@ class AtRpcResp {
         'payload': payload,
         'message': message
       };
+
+  @override
+  String toString() => toJson().toString();
 }

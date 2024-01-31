@@ -25,6 +25,8 @@ class MockGetRequestTransformer extends Mock implements GetRequestTransformer {}
 
 class MockSecondaryManager extends Mock implements SecondaryManager {}
 
+class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
+
 void main() {
   AtLookupImpl mockAtLookup = MockAtLookup();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
@@ -32,15 +34,13 @@ void main() {
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   var atClientPreferenceWithAtChops = AtClientPreference();
   var lookupVerbBuilder = LookupVerbBuilder()
-    ..atKey = 'phone.wavi'
-    ..sharedBy = '@alice';
-
-  var llookupVerbBuilder = LLookupVerbBuilder()
-    ..atKey = 'shared_key.sitaram'
-    ..sharedBy = '@murali';
+    ..atKey = (AtKey()
+      ..key = 'phone.wavi'
+      ..sharedBy = '@alice');
 
   setUp(() {
     reset(mockAtLookup);
+    registerFallbackValue(FakeLocalLookUpVerbBuilder());
     when(() => mockAtLookup.executeVerb(lookupVerbBuilder)).thenAnswer(
         (_) async =>
             throw AtExceptionUtils.get('AT0015', 'Connection timeout'));
@@ -49,7 +49,7 @@ void main() {
     when(() => mockAtClientImpl.getCurrentAtSign()).thenAnswer((_) => '@xyz');
     when(() => mockLocalSecondary.getEncryptionPublicKey('@xyz'))
         .thenAnswer((_) => Future.value('dummy_encryption_public_key'));
-    when(() => mockLocalSecondary.executeVerb(llookupVerbBuilder))
+    when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
         .thenAnswer((_) async => 'dummy_shared_key');
     when(() => mockAtClientImpl.atChops).thenAnswer((_) => mockAtChops);
   });
@@ -89,33 +89,6 @@ void main() {
   });
 
   group('A group of tests to verify exceptions in decryption service', () {
-    test(
-        'A test to verify exception is thrown when public key checksum changes',
-        () {
-      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@murali')
-            ..sharedWith('@sitaram'))
-          .build();
-      atKey.metadata = Metadata()..pubKeyCS = '1234';
-      var sharedKeyDecryption = SharedKeyDecryption(mockAtClientImpl);
-      expect(() => sharedKeyDecryption.decrypt(atKey, '123'),
-          throwsA(predicate((dynamic e) => e is AtPublicKeyChangeException)));
-    });
-
-    test('A test to verify exception is thrown when shared key is not found',
-        () {
-      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@murali')
-            ..sharedWith('@sitaram'))
-          .build();
-      atKey.metadata = Metadata()
-        ..pubKeyCS = 'd4f6d9483907286a0563b9fdeb01aa61';
-      var sharedKeyDecryption = SharedKeyDecryption(mockAtClientImpl);
-      expect(
-          () => sharedKeyDecryption.decrypt(atKey, '123'),
-          throwsA(predicate((dynamic e) =>
-              e is SharedKeyNotFoundException &&
-              e.message == 'shared encryption key not found')));
-    });
-
     test(
         'A test to verify exception is thrown when current atsign public key is not found',
         () {

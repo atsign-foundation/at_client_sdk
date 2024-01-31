@@ -65,8 +65,8 @@ class MockSharedKeyEncryptionImpl extends Mock implements SharedKeyEncryption {
     //Set encryptionMetadata to atKey metadata
     atKey.metadata = Metadata();
     if (storeSharedKeyEncryptedWithData) {
-      atKey.metadata!.sharedKeyEnc = 'sharedKeyEnc';
-      atKey.metadata!.pubKeyCS = 'publicKeyCS';
+      atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
+      atKey.metadata.pubKeyCS = 'publicKeyCS';
     }
     return 'encryptedValue';
   }
@@ -119,8 +119,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               SharedKeyEncryption(mockAtClientImpl))
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey, 'phone.wavi');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -145,14 +145,14 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey, 'phone.wavi');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.high);
       expect(notifyVerbBuilder.strategy, StrategyEnum.latest);
       expect(notifyVerbBuilder.value, 'encryptedValue');
-      expect(notifyVerbBuilder.sharedKeyEncrypted, 'sharedKeyEnc');
-      expect(notifyVerbBuilder.pubKeyChecksum, 'publicKeyCS');
+      expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
+      expect(notifyVerbBuilder.atKey.metadata.pubKeyCS, 'publicKeyCS');
       expect(notifyVerbBuilder.notifier, 'test-notifier');
       expect(notifyVerbBuilder.latestN, 2);
       expect(notifyVerbBuilder.ttln, Duration(minutes: 1).inMilliseconds);
@@ -169,8 +169,8 @@ void main() {
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
       //upper case should be preserved in forText notifications
-      expect(notifyVerbBuilder.atKey, 'Hi How are you');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'Hi How are you');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -187,8 +187,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey, 'encryptedValue');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'encryptedValue');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -486,7 +486,7 @@ void main() {
       NotificationParams notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
       NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
-        ..atKey = atKey.toString()
+        ..atKey = atKey
         ..messageType = MessageTypeEnum.key
         ..value = 'demo-value';
 
@@ -509,7 +509,7 @@ void main() {
       NotificationParams notificationParams =
           NotificationParams.forText('Hello bob', '@bob');
       NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
-        ..atKey = '@bob:Hello bob';
+        ..atKey.key = '@bob:Hello bob';
 
       expect(
           () => notificationServiceImpl.notificationValueValidation(
@@ -1117,7 +1117,7 @@ class StatsAtKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.contains('_latestNotificationIdv2')) {
+    if (item is AtKey && item.key.contains('_latestNotificationIdv2')) {
       return true;
     }
     return false;

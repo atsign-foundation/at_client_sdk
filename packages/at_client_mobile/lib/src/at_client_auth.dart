@@ -50,7 +50,7 @@ class AtClientAuthenticator implements AtClientAuth {
     if (atClientPreference.cramSecret != null) {
       logger.finer('private key is empty. Performing cram');
       var isCramSuccessful = await atLookupInitialAuth
-          .cramAuthenticate(atClientPreference.cramSecret!);
+          .authenticate_cram(atClientPreference.cramSecret);
       // If cram auth is not successful, return false.
       if (!isCramSuccessful) {
         return false;
