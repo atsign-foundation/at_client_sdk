@@ -1,5 +1,4 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollmentService {
@@ -9,7 +8,7 @@ abstract class AtEnrollmentService {
   ///
   /// Returns a [Future] containing an [EnrollResponse] representing the
   /// result of the enrollment.
-  Future<EnrollResponse> submitEnrollmentRequest(
+  Future<AtEnrollmentResponse> submitEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest);
 
   /// Manages the approval/denial of an enrollment request.

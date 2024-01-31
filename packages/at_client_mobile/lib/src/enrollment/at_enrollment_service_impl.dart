@@ -50,7 +50,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   @override
-  Future<EnrollResponse> submitEnrollmentRequest(
+  Future<AtEnrollmentResponse> submitEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest) async {
     _atLookUp ??= AtLookupImpl(
         _atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
@@ -68,8 +68,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
     // periodically checks if enrollment is approved.
     initEnrollmentAuthScheduler();
 
-    return EnrollResponse(
-        atEnrollmentResponse.enrollmentId, atEnrollmentResponse.enrollStatus);
+    return atEnrollmentResponse;
   }
 
   @override

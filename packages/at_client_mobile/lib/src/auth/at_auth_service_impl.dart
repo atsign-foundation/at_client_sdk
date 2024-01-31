@@ -159,11 +159,10 @@ class AtAuthServiceImpl implements AtAuthService {
         atAuthKeys.defaultEncryptionPrivateKey!);
 
     var updateBuilder = UpdateVerbBuilder()
-      ..atKey = 'publickey'
-      ..isPublic = true
-      ..sharedBy = _atSign
-      ..value = atAuthKeys.defaultEncryptionPublicKey
-      ..metadata.ttr = -1;
+      ..atKey = AtKey.public('publickey', sharedBy: _atSign).build();
+    updateBuilder.atKey.metadata.ttr = -1;
+    updateBuilder.value = atAuthKeys.defaultEncryptionPublicKey;
+
     await _atClient!
         .getLocalSecondary()!
         .executeVerb(updateBuilder, sync: true);

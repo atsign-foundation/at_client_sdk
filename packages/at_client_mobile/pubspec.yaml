@@ -15,10 +15,10 @@ dependencies:
   flutter_keychain: ^2.2.1
   biometric_storage: ^5.0.0
   hive: ^2.0.4
-  crypton: '>=2.1.0 <=2.2.0'
+  crypton: ^2.2.1
   at_commons: ^4.0.0
   at_utils: ^3.0.16
-  at_chops: ^1.0.7
+  at_chops: ^2.0.0
   at_lookup: ^3.0.44
   at_client: ^3.0.73
   at_auth: ^1.0.0

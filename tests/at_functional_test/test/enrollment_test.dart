@@ -129,7 +129,7 @@ void main() {
       var newEnrollmentResponse = await atEnrollment.submitEnrollment(
           newEnrollmentRequest, newAtLookup);
       expect(newEnrollmentResponse.enrollmentId, isNotEmpty);
-      expect(newEnrollmentResponse.enrollStatus, EnrollStatus.pending);
+      expect(newEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
       print('completed new enrollment request');
       var completer = Completer<void>(); // Create a Completer
 
@@ -171,7 +171,7 @@ Future<void> _notificationCallback(
   var approvalResponse = await atEnrollment.manageEnrollmentApproval(
       enrollmentNotificationRequest, atClient.getRemoteSecondary()!.atLookUp);
   print('approvalResponse: $approvalResponse');
-  expect(approvalResponse.enrollStatus, EnrollStatus.approved);
+  expect(approvalResponse.enrollStatus, EnrollmentStatus.approved);
 }
 
 Future<void> setLastReceivedNotificationDateTime(

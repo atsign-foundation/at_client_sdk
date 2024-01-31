@@ -132,11 +132,9 @@ class AtClientService {
         .putValue(AtConstants.atEncryptionPrivateKey, encryptPrivateKey);
 
     var updateBuilder = UpdateVerbBuilder()
-      ..atKey = 'publickey'
-      ..isPublic = true
-      ..sharedBy = atSign
-      ..value = encryptPublicKey
-      ..metadata.ttr = -1;
+      ..atKey = AtKey.public('publickey', sharedBy: atSign).build();
+    updateBuilder.atKey.metadata.ttr = -1;
+    updateBuilder.value = encryptPublicKey;
 
     await _atClient!
         .getLocalSecondary()!
