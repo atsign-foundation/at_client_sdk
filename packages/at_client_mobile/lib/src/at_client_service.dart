@@ -465,6 +465,8 @@ class BackupKeyConstants {
   static const String ENCRYPTION_PUBLIC_KEY_FROM_FILE = 'aesEncryptPublicKey';
   static const String ENCRYPTION_PRIVATE_KEY_FROM_FILE = 'aesEncryptPrivateKey';
   static const String SELF_ENCRYPTION_KEY_FROM_FILE = 'selfEncryptionKey';
+  static const String APKAM_SYMMETRIC_KEY_FROM_FILE = 'apkamSymmetricKey';
+  static const String APKAM_ENROLLMENT_ID_FROM_FILE = 'enrollmentId';
 }
 
 class KeychainUtil {
