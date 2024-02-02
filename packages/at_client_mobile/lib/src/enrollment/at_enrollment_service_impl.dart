@@ -43,6 +43,8 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   String _atSign;
   final AtClientPreference _atClientPreference;
 
+  final Map<String, Completer<EnrollmentStatus>> _outcomes = {};
+
   AtEnrollmentServiceImpl(this._atSign, this._atClientPreference) {
     // Prefix "@" to the atSign is missed.
     _atSign = AtUtils.fixAtSign(_atSign);
@@ -50,8 +52,18 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   @override
-  Future<AtEnrollmentResponse> submitEnrollmentRequest(
+  Future<String> submitEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest) async {
+    // Only one enrollment request can be submitted at a time.
+    // Subsequent requests cannot be submitted until the pending one is fulfilled.
+    String? enrollmentInfoJsonString =
+        await _enrollmentKeychainStore.read(key: enrollmentInfoKey);
+    // if enrollmentInfoJsonString is not null, it indicates that there is a pending
+    // enrollment request. So, do not allow another enrollment request.
+    if (enrollmentInfoJsonString != null) {
+      throw InvalidRequestException(
+          'Cannot submit new enrollment request until the pending enrollment request is fulfilled');
+    }
     _atLookUp ??= AtLookupImpl(
         _atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
     AtEnrollmentResponse atEnrollmentResponse = await _atEnrollmentImpl
@@ -64,78 +76,70 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
     // Store the enrollment keys into keychain
     await _enrollmentKeychainStore.write(
         key: enrollmentInfoKey, value: jsonEncode(enrollmentInfo));
-    // After submitting an enrollment, start the "Authentication Scheduler" which
-    // periodically checks if enrollment is approved.
-    initEnrollmentAuthScheduler();
 
-    return atEnrollmentResponse;
+    return atEnrollmentResponse.enrollmentId;
   }
 
   @override
-  void initEnrollmentAuthScheduler() {
+  Future<EnrollmentStatus> getFinalEnrollmentStatus() async {
+    String? enrollmentInfoJsonString =
+        await _enrollmentKeychainStore.read(key: enrollmentInfoKey);
+    // If there is no enrollment data in keychain, then the enrollment
+    // is expired and hence deleted from the keychain.
+    if (enrollmentInfoJsonString == null) {
+      _logger.finest(
+          'No pending enrollment found. Returning ${EnrollmentStatus.expired}');
+      return Future.value(EnrollmentStatus.expired);
+    }
+    _EnrollmentInfo enrollmentInfo =
+        _EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
+    // "putIfAbsent" to avoid creating a new Completer for the same enrollmentId
+    // when getFinalEnrollmentStatus is called more than once.
+    _outcomes.putIfAbsent(enrollmentInfo.enrollmentId, () => Completer());
+    // Init scheduler which poll authentication at regular intervals
+    _initEnrollmentAuthScheduler(enrollmentInfo);
+
+    return _outcomes[enrollmentInfo.enrollmentId]!.future;
+  }
+
+  /// Runs a scheduler which check if an enrollment is approved.
+  ///
+  /// Retrieves the [_EnrollmentInfo] from the key-chain manager. If
+  /// If an enrollment is approved, then atKeys file is generated and removes the [_EnrollmentInfo] from
+  /// the key-chain.
+  ///
+  /// Handles the scheduled enrollment authentication.
+  ///
+  /// - This method is invoked by a timer, attempting to authenticate an enrollment
+  /// based on the [_EnrollmentInfo] stored in the key-chain manager
+  ///
+  /// - If there is no pending enrollment to retry authentication, the scheduler stops.
+  /// - If the maximum retry count for enrollment authentication is reached,
+  ///   the enrollment info is removed from the flutter key-chain, and the scheduler stops.
+  /// - If authentication succeeds, then generated the atKeys file for authentication
+  ///   and removes the enrollment info from the key-chain manager and stops the scheduler.
+  /// - If authentication fails, the method retries with an incremented retry count.
+  void _initEnrollmentAuthScheduler(_EnrollmentInfo _enrollmentInfo) {
     Timer(Duration(seconds: _secondsUntilNextRun), () async {
       if (_enrollmentAuthSchedulerStarted) {
         _logger.finest(
             'Enrollment Auth Scheduler is currently in-progress. Skipping this run');
         return;
       }
-      await _enrollmentAuthenticationScheduler();
+      await _enrollmentAuthenticationScheduler(_enrollmentInfo);
     });
   }
 
-  Future<void> _enrollmentAuthenticationScheduler() async {
+  Future<void> _enrollmentAuthenticationScheduler(
+      _EnrollmentInfo enrollmentInfo) async {
     try {
-      _enrollmentAuthSchedulerStarted = true;
-      String? enrollmentInfoJsonString =
-          await _enrollmentKeychainStore.read(key: enrollmentInfoKey);
-      // If there is no enrollment data in keychain, then there is no
-      // pending enrollment to retry authentication. So, stop the scheduler.
-      if (enrollmentInfoJsonString == null) {
-        _logger
-            .finest('No pending enrollments to retry. Stopping the scheduler');
+      // If "_canProceedWithAuthentication" returns false,
+      // stop the enrollment authentication scheduler.
+      if (!(await _canProceedWithAuthentication(enrollmentInfo))) {
         return;
       }
-      _EnrollmentInfo enrollmentInfo =
-          _EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
-      // If "_maxEnrollmentAuthenticationRetryInHours" exceeds 48 hours then
-      // stop retrying for enrollment approval and remove enrollmentInfo from
-      // key-chain.
-      if (DateTime.now()
-              .toUtc()
-              .difference(DateTime.fromMillisecondsSinceEpoch(
-                  enrollmentInfo.enrollmentSubmissionTimeEpoch))
-              .inHours >=
-          _maxEnrollmentAuthenticationRetryInHours) {
-        _logger.finest(
-            'EnrollmentId: ${enrollmentInfo.enrollmentId} has reached the maximum number of retries. Retry attempts have been stopped.');
-        // If enrollment retry has reached the limit, do no retry. Remove
-        // the enrollment info from the keychain manager.
-        await _enrollmentKeychainStore.delete(key: enrollmentInfoKey);
-      }
 
-      _atLookUp ??= AtLookupImpl(_atSign, _atClientPreference.rootDomain,
-          _atClientPreference.rootPort);
-
-      // Create the AtChops instance with the new APKAM keys to verify if enrollment
-      // is approved.
-      // If enrollment is approved, then pkam authentication will be successful.
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(
-          null,
-          AtPkamKeyPair.create(enrollmentInfo.atAuthKeys.apkamPublicKey!,
-              enrollmentInfo.atAuthKeys.apkamPrivateKey!));
-      atChopsKeys.apkamSymmetricKey =
-          AESKey(enrollmentInfo.atAuthKeys.apkamSymmetricKey!);
-      _atLookUp?.atChops = AtChopsImpl(atChopsKeys);
-
-      bool? isAuthenticated = false;
-
-      try {
-        isAuthenticated = await _atLookUp?.pkamAuthenticate(
-            enrollmentId: enrollmentInfo.enrollmentId);
-      } on UnAuthenticatedException {
-        _logger.finest(
-            'Failed to authenticate with enrollmentId - ${enrollmentInfo.enrollmentId}');
-      }
+      bool? isAuthenticated = await _performAPKAMAuthentication(enrollmentInfo);
       if (isAuthenticated == true) {
         await _handleAuthenticatedEnrollment(enrollmentInfo);
         // Authentication is completed successfully and APKAM keys file
@@ -144,13 +148,62 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
       }
       _logger.info(
           'Enrollment: ${enrollmentInfo.enrollmentId} failed to authenticate. Retrying again');
+      // If in case the app is reset, the enrollmentInfo state should be preserved. Hence
+      // store the updated enrollment info into keychain.
       await _enrollmentKeychainStore.write(
           key: enrollmentInfoKey, value: jsonEncode(enrollmentInfo));
       _secondsUntilNextRun = _secondsUntilNextRun * 2;
-      initEnrollmentAuthScheduler();
+      _initEnrollmentAuthScheduler(enrollmentInfo);
     } finally {
       _enrollmentAuthSchedulerStarted = false;
     }
+  }
+
+  Future<bool> _canProceedWithAuthentication(
+      _EnrollmentInfo enrollmentInfo) async {
+    // If "_maxEnrollmentAuthenticationRetryInHours" exceeds 48 hours then
+    // stop retrying for enrollment approval and remove enrollmentInfo from
+    // keychain.
+    if (DateTime.now()
+            .toUtc()
+            .difference(DateTime.fromMillisecondsSinceEpoch(
+                enrollmentInfo.enrollmentSubmissionTimeEpoch))
+            .inHours >=
+        _maxEnrollmentAuthenticationRetryInHours) {
+      _logger.finest(
+          'EnrollmentId: ${enrollmentInfo.enrollmentId} has reached the maximum number of retries. Retry attempts have been stopped.');
+      // If enrollment retry has reached the limit, do no retry. Remove
+      // the enrollment info from the keychain manager.
+      await _enrollmentKeychainStore.delete(key: enrollmentInfoKey);
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool?> _performAPKAMAuthentication(
+      _EnrollmentInfo enrollmentInfo) async {
+    _atLookUp ??= AtLookupImpl(
+        _atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
+    // Create the AtChops instance with the new APKAM keys to verify if enrollment
+    // is approved.
+    // If enrollment is approved, then apkam authentication will be successful.
+    AtChopsKeys atChopsKeys = AtChopsKeys.create(
+        null,
+        AtPkamKeyPair.create(enrollmentInfo.atAuthKeys.apkamPublicKey!,
+            enrollmentInfo.atAuthKeys.apkamPrivateKey!));
+    atChopsKeys.apkamSymmetricKey =
+        AESKey(enrollmentInfo.atAuthKeys.apkamSymmetricKey!);
+    _atLookUp?.atChops = AtChopsImpl(atChopsKeys);
+
+    bool? isAuthenticated = false;
+    try {
+      isAuthenticated = await _atLookUp?.pkamAuthenticate(
+          enrollmentId: enrollmentInfo.enrollmentId);
+    } on UnAuthenticatedException {
+      _logger.finest(
+          'Failed to authenticate with enrollmentId - ${enrollmentInfo.enrollmentId}');
+    }
+    return isAuthenticated;
   }
 
   Future<void> _handleAuthenticatedEnrollment(
@@ -164,10 +217,10 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
     enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey =
         await _getDefaultSelfEncryptionKey(
             enrollmentInfo.enrollmentId, _atLookUp!.atChops!);
-
     await _generateAtKeys(enrollmentInfo.atAuthKeys, _atLookUp!.atChops!);
     // Remove the keys from key-chain manager
     await _enrollmentKeychainStore.delete(key: enrollmentInfoKey);
+    _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.approved);
     _atLookUp?.close();
   }
 
@@ -287,8 +340,16 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
     return atEncryptionResult.result;
   }
 
-  @override
-  Future<AtEnrollmentResponse> manageEnrollmentApproval(
+  Future<AtEnrollmentResponse> approve(
+      AtEnrollmentRequest atEnrollmentRequest) {
+    return _manageEnrollmentApproval(atEnrollmentRequest);
+  }
+
+  Future<AtEnrollmentResponse> deny(AtEnrollmentRequest atEnrollmentRequest) {
+    return _manageEnrollmentApproval(atEnrollmentRequest);
+  }
+
+  Future<AtEnrollmentResponse> _manageEnrollmentApproval(
       AtEnrollmentRequest atEnrollmentRequest) {
     if (_atLookUp == null) {
       _initAtLookup();

@@ -1,41 +1,31 @@
 import 'package:at_auth/at_auth.dart';
+import 'package:at_client/at_client.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollmentService {
-  /// Submits an enrollment request.
+  /// Submits an enrollment request. Only one enrollment request can be submitted at a time.
+  /// Subsequent requests cannot be submitted until the pending enrollment request is fulfilled.
   ///
   /// The [atEnrollmentRequest] parameter represents the enrollment request details.
   ///
-  /// Returns a [Future] containing an [EnrollResponse] representing the
-  /// result of the enrollment.
-  Future<AtEnrollmentResponse> submitEnrollmentRequest(
+  /// Returns a [Future] representing EnrollmentId.
+  ///
+  /// Throws an [InvalidRequestException] if a new enrollment is submitted while there is already a pending enrollment.
+  Future<String> submitEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest);
 
-  /// Manages the approval/denial of an enrollment request.
-  ///
-  /// The [atEnrollmentRequest] parameter represents the enrollment request details.
-  ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the
-  /// result of the approval/denial of an enrollment.
-  Future<AtEnrollmentResponse> manageEnrollmentApproval(
-      AtEnrollmentRequest atEnrollmentRequest);
+  /// Approves an enrollment request.
+  Future<AtEnrollmentResponse> approve(AtEnrollmentRequest atEnrollmentRequest);
 
-  /// Runs a scheduler which check if an enrollment is approved.
+  /// Denies an enrollment request
+  Future<AtEnrollmentResponse> deny(AtEnrollmentRequest atEnrollmentRequest);
+
+  /// Provides the final enrollment status.
   ///
-  /// Retrieves the [_EnrollmentInfo] from the key-chain manager. If
-  /// If an enrollment is approved, then atKeys file is generated and removes the [_EnrollmentInfo] from
-  /// the key-chain.
+  /// [EnrollmentStatus.approved] signifies successful approval of the enrollment,
+  /// allowing the user to utilize the enrollment ID for APKAM authentication.
   ///
-  /// Handles the scheduled enrollment authentication.
-  ///
-  /// - This method is invoked by a timer, attempting to authenticate an enrollment
-  /// based on the [_EnrollmentInfo] stored in the key-chain manager
-  ///
-  /// - If there is no pending enrollment to retry authentication, the scheduler stops.
-  /// - If the maximum retry count for enrollment authentication is reached,
-  ///   the enrollment info is removed from the flutter key-chain, and the scheduler stops.
-  /// - If authentication succeeds, then generated the atKeys file for authentication
-  ///   and removes the enrollment info from the key-chain manager and stops the scheduler.
-  /// - If authentication fails, the method retries with an incremented retry count.
-  void initEnrollmentAuthScheduler();
+  /// [EnrollmentStatus.denied] indicates that the enrollment ID is not eligible for
+  /// APKAM authentication.
+  Future<EnrollmentStatus> getFinalEnrollmentStatus();
 }
