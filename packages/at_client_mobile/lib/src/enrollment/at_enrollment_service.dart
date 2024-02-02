@@ -1,4 +1,5 @@
 import 'package:at_auth/at_auth.dart';
+import 'package:at_client/at_client.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollmentService {
@@ -37,5 +38,7 @@ abstract class AtEnrollmentService {
   /// - If authentication succeeds, then generated the atKeys file for authentication
   ///   and removes the enrollment info from the key-chain manager and stops the scheduler.
   /// - If authentication fails, the method retries with an incremented retry count.
-  void initEnrollmentAuthScheduler();
+
+
+  Future<EnrollmentStatus> getFinalEnrollmentStatus();
 }
