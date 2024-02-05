@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
@@ -604,4 +605,18 @@ abstract class AtClient {
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;
+
+  /// Fetches all enrollment requests from the corresponding atServer; Formats the requests into a
+  /// List<[EnrollmentResponse]>
+  ///
+  /// Responses can be filtered using params provided through [EnrollListRequestParam]
+  /// ```
+  /// e.g.
+  /// List<EnrollmentRequest> enrollmentRequests = fetchEnrollmentRequests(EnrollRequestParams());
+  /// enrollmentRequests now contains all the enrollment requests fetched from the server in the for of
+  /// EnrollmentRequest objects
+  /// ```
+  @experimental
+  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
+      EnrollListRequestParam enrollmentListRequest);
 }

@@ -653,6 +653,36 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
+      EnrollListRequestParam enrollmentListRequestParams) async {
+    // enrollmentListRequestParams for now is not  used
+    // A server side enhancement request is created. https://github.com/atsign-foundation/at_server/issues/1748
+    // On implementation of this enhancement/feature, the enrollListRequestParam object can be made use of
+    EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
+      ..operation = EnrollOperationEnum.list
+      ..appName = enrollmentListRequestParams.appName
+      ..deviceName = enrollmentListRequestParams.deviceName;
+
+    var response = await getRemoteSecondary()
+        ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
+
+    return _formatEnrollListResponse(response);
+  }
+
+  List<EnrollmentRequest> _formatEnrollListResponse(response) {
+    response = response?.replaceFirst('data:', '');
+    Map<String, dynamic> enrollRequests = jsonDecode(response!);
+    List<EnrollmentRequest> enrollRequestsFormatted = [];
+    EnrollmentRequest? enrollment;
+    for (var request in enrollRequests.entries) {
+      enrollment = EnrollmentRequest.fromJson(request.value);
+      enrollment.enrollmentKey = request.key;
+      enrollRequestsFormatted.add(enrollment);
+    }
+    return enrollRequestsFormatted;
+  }
+
+  @override
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
     var streamResponse = AtStreamResponse();
