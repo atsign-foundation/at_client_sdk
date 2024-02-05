@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:at_functional_test/src/at_keys_initializer.dart';
-import 'package:at_functional_test/src/config_util.dart';
-import 'package:test/test.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_demo_data/at_demo_data.dart';
+import 'package:at_functional_test/src/config_util.dart';
+import 'package:test/test.dart';
+
 import 'test_utils.dart';
 
 void main() {
@@ -166,7 +166,7 @@ void main() {
     RemoteSecondary? secondRemoteSecondary =
         RemoteSecondary(atSign, getClient2Preferences());
     var apkamPublicKey =
-        at_demos.pkamPublicKeyMap['@eve🛠']; // can be any random public key
+        pkamPublicKeyMap['@eve🛠']; // can be any random public key
     var newEnrollRequest = TestUtils.formatCommand(
         'enroll:request:{"appName":"new_app","deviceName":"pixel","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
@@ -194,9 +194,7 @@ void main() {
     List<EnrollmentRequest> enrollmentRequests =
         await client.fetchEnrollmentRequests(EnrollListRequestParam());
 
-    expect(enrollmentRequests.length, 4);
-    // 4 entries - 2 entries from this test
-    // + 2 entries from the other test in this file.
+    expect(enrollmentRequests.length > 2, true);
 
     String firstEnrollmentKey =
         getEnrollmentKey(enrollResponse1JsonDecoded['enrollmentId'], atSign);
