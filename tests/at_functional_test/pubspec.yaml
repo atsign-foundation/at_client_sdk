@@ -8,11 +8,7 @@ environment:
 
 dependencies:
   uuid: 3.0.7
-  at_demo_data:
-    git:
-      url: https://github.com/atsign-foundation/at_demos.git
-      path: at_demo_data
-      ref: trunk
+  at_demo_data: ^1.0.3
 
   at_client:
     path: ../../packages/at_client

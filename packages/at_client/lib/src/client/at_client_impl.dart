@@ -901,7 +901,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     } on AtLookUpException catch (e) {
       throw InvalidPinException(e.errorCode, e.errorMessage);
     } on AtException catch (e) {
-      throw InvalidPinException.message(e.message);
+      throw AtClientException.message(e.message);
     }
     otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
     return AtResponse()..response = otpVerbResponse!;

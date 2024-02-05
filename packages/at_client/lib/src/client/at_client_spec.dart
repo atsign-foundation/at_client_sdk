@@ -542,7 +542,14 @@ abstract class AtClient {
   /// an enrollment request. Only the connections which have access to manage
   /// namespace are allowed to set SPP
   ///
+  /// Returns "ok" when SPP is set successfully.
+  ///
   /// Throws [InvalidPinException] when an invalid SPP is provided.
+  ///
+  /// Throws [AtClientException] when an enrollmentId does not exist.
+  ///
+  /// Throws [AtClientException] when an enrollmentId does not have access to "__manage"
+  /// namespace.
   ///
   /// ```dart
   /// AtResponse sppResponse = await atClient.setSPP(ABC123);
