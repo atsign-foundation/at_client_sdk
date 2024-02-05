@@ -145,9 +145,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           localSecondaryKeyStore: localSecondaryKeyStore,
           atChops: atChops,
           atClientCommitLogCompaction: atClientCommitLogCompaction,
-          atClientConfig: atClientConfig);
+          atClientConfig: atClientConfig,
+          enrollmentId: enrollmentId);
 
-      await atClientImpl._init(enrollmentId: enrollmentId);
+      await atClientImpl._init();
     }
 
     await atClientImpl!._startCompactionJob();
@@ -164,7 +165,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
-      AtClientConfig? atClientConfig}) {
+      AtClientConfig? atClientConfig,
+      this.enrollmentId}) {
     _atSign = AtUtils.fixAtSign(theAtSign);
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -182,7 +184,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
   }
 
-  Future<void> _init({String? enrollmentId}) async {
+  Future<void> _init() async {
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
         var storageManager = StorageManager(preference);
@@ -193,8 +195,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       _atChops ??= await _createAtChops(_atSign);
     }
 
-    // Set enrollment id
-    this.enrollmentId ??= enrollmentId;
     // Now using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops,
@@ -929,7 +929,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       otpVerbResponse =
           await _remoteSecondary?.executeCommand('otp:put:$spp\n', auth: true);
     } on AtLookUpException catch (e) {
-      throw InvalidPinException(e.errorCode, e.errorMessage);
+      throw AtClientException(e.errorCode, e.errorMessage);
     } on AtException catch (e) {
       throw AtClientException.message(e.message);
     }
