@@ -5,8 +5,7 @@ import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_client/at_client.dart';
 
-import 'package:at_functional_test/src/at_demo_credentials.dart'
-    as demo_credentials;
+import 'package:at_demo_data/at_demo_data.dart';
 
 
 class TestUtils {
@@ -23,7 +22,7 @@ class TestUtils {
   }
 
   static String generatePKAMDigest(String atSign, String challenge) {
-    var privateKey = demo_credentials.pkamPrivateKeyMap[atSign]!;
+    var privateKey = pkamPrivateKeyMap[atSign]!;
     privateKey = privateKey.trim();
     var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
@@ -33,7 +32,7 @@ class TestUtils {
   }
 
   static String generateCramDigest(String atSign, String challenge) {
-    var cramSecret = demo_credentials.cramKeyMap[atSign];
+    var cramSecret = cramKeyMap[atSign];
     var combo = '$cramSecret$challenge';
     var bytes = utf8.encode(combo);
     var digest = sha512.convert(bytes);

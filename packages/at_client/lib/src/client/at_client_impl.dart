@@ -128,7 +128,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
-      AtClientConfig? atClientConfig}) async {
+      AtClientConfig? atClientConfig,
+      String? enrollmentId}) async {
     atClientManager ??= AtClientManager.getInstance();
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -144,7 +145,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           localSecondaryKeyStore: localSecondaryKeyStore,
           atChops: atChops,
           atClientCommitLogCompaction: atClientCommitLogCompaction,
-          atClientConfig: atClientConfig);
+          atClientConfig: atClientConfig,
+          enrollmentId: enrollmentId);
 
       await atClientImpl._init();
     }
@@ -163,7 +165,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
-      AtClientConfig? atClientConfig}) {
+      AtClientConfig? atClientConfig,
+      this.enrollmentId}) {
     _atSign = AtUtils.fixAtSign(theAtSign);
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -905,6 +908,48 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       print('error in downloadFile: $e');
       return [];
     }
+  }
+
+  @override
+  Future<AtResponse> setSPP(String spp) async {
+    // SPP should be 6 characters PIN. Throw exception if its less
+    // or more than 6 characters
+    if (spp.length != 6) {
+      throw InvalidPinException.message("$spp should be 6 characters");
+    }
+    // Validate the SPP. The SPP should contain only alpha-numeric characters.
+    // Any special characters or any characters other than aplha-numeric characters
+    // are not allowed. Throw an exception
+    bool hasMatch = RegExp(r'[\W-]+').hasMatch(spp);
+    if (hasMatch) {
+      throw InvalidPinException.message("$spp is not a valid SPP");
+    }
+    String? otpVerbResponse;
+    try {
+      otpVerbResponse =
+          await _remoteSecondary?.executeCommand('otp:put:$spp\n', auth: true);
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    } on AtException catch (e) {
+      throw AtClientException.message(e.message);
+    }
+    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    return AtResponse()..response = otpVerbResponse!;
+  }
+
+  @override
+  Future<AtResponse> getOTP() async {
+    String? otpVerbResponse;
+    try {
+      otpVerbResponse =
+          await _remoteSecondary?.executeCommand('otp:get\n', auth: true);
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    } on AtException catch (e) {
+      throw AtClientException.message(e.message);
+    }
+    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    return AtResponse()..response = otpVerbResponse!;
   }
 
   @override
