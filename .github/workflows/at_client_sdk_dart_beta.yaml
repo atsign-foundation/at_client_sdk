@@ -3,7 +3,7 @@
 # separate terms of service, privacy policy, and support
 # documentation.
 
-name: at_client_sdk
+name: at_client_sdk_dart_beta
 
 on:
   pull_request:
