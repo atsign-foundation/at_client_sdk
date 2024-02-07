@@ -1,0 +1,158 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: at_client_sdk
+
+on:
+  pull_request:
+    branches:
+      - trunk
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  unit_tests_and_code_analysis_dart_beta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      # Note: This workflow uses the latest beta version of the Dart SDK.
+      # You can specify other versions if desired, see documentation here:
+      # https://github.com/dart-lang/setup-dart/blob/main/README.md
+      - uses: dart-lang/setup-dart@fedb1266e91cf51be2fdb382869461a434b920a3 # v1.6.2
+        with:
+          sdk: beta
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: tools/osv-scanner/go.sum
+
+      # Install dependencies in at_client library
+      - name: Install dependencies in at_client
+        working-directory: packages/at_client
+        run: dart pub get
+
+      # Run analyzer in at_client library
+      - name: Analyze project source in at_client
+        working-directory: packages/at_client
+        run: dart analyze
+
+      # Run unit tests
+      - name: Run at_client unit tests, with code coverage measurement
+        working-directory: packages/at_client
+        run: dart test --concurrency=1 --coverage="coverage"
+
+      - name: Convert at_client coverage to LCOV format
+        working-directory: packages/at_client
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
+
+      - name: Upload at_client coverage to Codecov
+        uses: codecov/codecov-action@e0b68c6749509c5f83f984dd99a76a1c1a231044 # v4.0.1
+        with:
+          file: packages/at_client/unit_test_coverage.lcov
+          flags: at_client_unit_tests
+
+      # Adding flutter to path
+      - name: Installing Flutter
+        uses: britannio/action-install-flutter@a486b7e3148e54a76390d849100b9dee819ff810 # v1.1
+        with:
+          version: stable
+
+      # Install dependencies of at_client_mobile
+      - name: Installing dependencies
+        working-directory: packages/at_client_mobile
+        run: flutter pub get
+
+      # Analyze at_client_mobile package
+      - name: flutter analyze
+        working-directory: packages/at_client_mobile
+        run: flutter analyze --no-fatal-infos
+
+      # Run unit tests
+      - name: Run at_client_mobile unit tests, with code coverage measurement
+        working-directory: packages/at_client_mobile
+        run: flutter test --concurrency=1 --coverage
+
+      - name: Convert at_client_mobile coverage to LCOV format
+        working-directory: packages/at_client_mobile
+        run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
+
+      - name: Upload at_client_mobile coverage to Codecov
+        uses: codecov/codecov-action@e0b68c6749509c5f83f984dd99a76a1c1a231044 # v4.0.1
+        with:
+          file: packages/at_client_mobile/unit_test_coverage.lcov
+          flags: at_client_mobile_unit_tests
+
+      # Check formatting
+      - name: Check that code in packages is correctly formatted
+        working-directory: packages
+        run: dart format . -o none --set-exit-if-changed
+
+      # Runs osv-scanner to find any vulnerable Dart dependencies
+      # It needs to look at pubspec.lock files, which is why it's
+      # placed here, as the `dart pub get` above will create them
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client/pubspec.lock
+          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
+
+  functional_tests_dart_beta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      # Note: This workflow uses the latest beta version of the Dart SDK.
+      # You can specify other versions if desired, see documentation here:
+      # https://github.com/dart-lang/setup-dart/blob/main/README.md
+      - uses: dart-lang/setup-dart@fedb1266e91cf51be2fdb382869461a434b920a3 # v1.6.2
+        with:
+          sdk: beta
+
+      # Install dependencies in at_functional_test
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      # Start docker container to run functional tests
+      - name: Start docker instance
+        working-directory: tests/at_functional_test/test
+        run: docker-compose pull && docker-compose up -d
+
+      - name: Check for docker container readiness
+        working-directory: tests/at_functional_test
+        run: dart run test/check_docker_readiness.dart
+
+      - name: Run PKAM
+        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+
+      - name: Check test environment readiness
+        working-directory: tests/at_functional_test
+        run: dart run test/check_test_env.dart
+
+      # Run functional tests
+      - name: Run functional tests
+        working-directory: tests/at_functional_test
+        run: dart test --concurrency=1 --coverage="coverage"
+
+      - name: Convert coverage to LCOV format
+        working-directory: tests/at_functional_test
+        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@e0b68c6749509c5f83f984dd99a76a1c1a231044 # v4.0.1
+        with:
+          file: tests/at_functional_test/functional_test_coverage.lcov
+          flags: functional_tests
+
+      # stop docker containers
+      - name: stop docker containers
+        working-directory: tests/at_functional_test/test
+        run: docker-compose down
