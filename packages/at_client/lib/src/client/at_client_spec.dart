@@ -567,6 +567,21 @@ abstract class AtClient {
   ///
   Future<AtResponse> getOTP();
 
+  /// Initiates a compaction job for the commit log.
+  ///
+  /// The [commitLogCompactionTimeIntervalInMins] parameter specifies the time interval,
+  /// in minutes, after which the commit log should be compacted. By default, it is set
+  /// to 11 minutes.
+  ///
+  /// The compaction job removes duplicate entries of a key from the commit log that are already synced
+  /// to the remote secondary. Only the latest commit entry of the key is retained.
+  /// Uncommitted entries that are duplicates will not be removed/compacted.
+  Future<void> startCompactionJob(
+      {int commitLogCompactionTimeIntervalInMins = 11});
+
+  /// Stops the commit log compaction job
+  Future<void> stopCompactionJob();
+
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
   @Deprecated(

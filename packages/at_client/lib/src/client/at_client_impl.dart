@@ -151,7 +151,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       await atClientImpl._init();
     }
 
-    await atClientImpl!._startCompactionJob();
+    await atClientImpl!.startCompactionJob();
     atClientManager.listenToAtSignChange(atClientImpl);
 
     atClientInstanceMap[currentAtSign] = atClientImpl;
@@ -211,7 +211,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _cascadeSetTelemetryService();
   }
 
-  Future<void> _startCompactionJob() async {
+  @override
+  Future<void> startCompactionJob(
+      {int commitLogCompactionTimeIntervalInMins = 11}) async {
     AtCompactionJob atCompactionJob = AtCompactionJob(
         (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
         SecondaryPersistenceStoreFactory.getInstance()
@@ -223,9 +225,15 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _atClientConfig ??= AtClientConfig.getInstance();
 
     if (!_atClientCommitLogCompaction!.isCompactionJobRunning()) {
-      _atClientCommitLogCompaction!.scheduleCompaction(
-          _atClientConfig!.commitLogCompactionTimeIntervalInMins);
+      _atClientCommitLogCompaction!
+          .scheduleCompaction(commitLogCompactionTimeIntervalInMins);
     }
+  }
+
+  @override
+  Future<void> stopCompactionJob() async {
+    _logger.info('Stopping the commit log compaction job');
+    await _atClientCommitLogCompaction?.stopCompactionJob();
   }
 
   /// Does nothing unless a telemetry service has been injected
