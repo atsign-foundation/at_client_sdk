@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
@@ -25,6 +26,7 @@ abstract class AtClient {
 
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
+
   @experimental
   AtTelemetryService? get telemetry;
 
@@ -44,9 +46,11 @@ abstract class AtClient {
   String? get enrollmentId;
 
   set syncService(SyncService syncService);
+
   SyncService get syncService;
 
   set notificationService(NotificationService notificationService);
+
   NotificationService get notificationService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
@@ -534,6 +538,35 @@ abstract class AtClient {
       Function streamCompletionCallBack,
       Function streamReceiveCallBack);
 
+  /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
+  /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
+  /// an enrollment request. Only the connections which have access to manage
+  /// namespace are allowed to set SPP
+  ///
+  /// Returns "ok" when SPP is set successfully.
+  ///
+  /// Throws [InvalidPinException] when an invalid SPP is provided.
+  ///
+  /// Throws [AtClientException] when an enrollmentId does not exist.
+  ///
+  /// Throws [AtClientException] when an enrollmentId does not have access to "__manage"
+  /// namespace.
+  ///
+  /// ```dart
+  /// AtResponse sppResponse = await atClient.setSPP(ABC123);
+  /// ```
+  Future<AtResponse> setSPP(String otp);
+
+  /// Returns an OTP (One-Time Password) from the secondary server.
+  ///
+  ///
+  /// Example usage:
+  /// ```dart
+  /// AtResponse otpResponse = await atClient.getOTP();
+  /// ```
+  ///
+  Future<AtResponse> getOTP();
+
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
   @Deprecated(
@@ -572,4 +605,18 @@ abstract class AtClient {
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;
+
+  /// Fetches all enrollment requests from the corresponding atServer; Formats the requests into a
+  /// List<[EnrollmentResponse]>
+  ///
+  /// Responses can be filtered using params provided through [EnrollListRequestParam]
+  /// ```
+  /// e.g.
+  /// List<EnrollmentRequest> enrollmentRequests = fetchEnrollmentRequests(EnrollRequestParams());
+  /// enrollmentRequests now contains all the enrollment requests fetched from the server in the for of
+  /// EnrollmentRequest objects
+  /// ```
+  @experimental
+  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
+      EnrollListRequestParam enrollmentListRequest);
 }
