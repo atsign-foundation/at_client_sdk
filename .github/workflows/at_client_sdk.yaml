@@ -19,15 +19,16 @@ permissions:  # added using https://github.com/step-security/secure-workflows
 jobs:
   unit_tests_and_code_analysis:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dart-channel: [stable,beta]
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
-      # Note: This workflow uses the latest stable version of the Dart SDK.
-      # You can specify other versions if desired, see documentation here:
-      # https://github.com/dart-lang/setup-dart/blob/main/README.md
       - uses: dart-lang/setup-dart@fedb1266e91cf51be2fdb382869461a434b920a3 # v1.6.2
         with:
-          sdk: stable
+          sdk: ${{ matrix.dart-channel}}
+
       - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
         with:
           go-version: 'stable'
@@ -106,15 +107,15 @@ jobs:
 
   functional_tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dart-channel: [stable,beta]
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
-      # Note: This workflow uses the latest stable version of the Dart SDK.
-      # You can specify other versions if desired, see documentation here:
-      # https://github.com/dart-lang/setup-dart/blob/main/README.md
       - uses: dart-lang/setup-dart@fedb1266e91cf51be2fdb382869461a434b920a3 # v1.6.2
         with:
-          sdk: stable
+          sdk: ${{ matrix.dart-channel}}
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
