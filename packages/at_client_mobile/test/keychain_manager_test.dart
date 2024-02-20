@@ -31,7 +31,7 @@ void main() {
       when(
         () => mockBiometricStorageFile.read(),
       ).thenAnswer(
-        (_) async => Future.value(''' 
+        (_) async => Future.value('''
             {
             "config" : {
                   "schemaVersion":1,
@@ -78,7 +78,7 @@ void main() {
       when(
         () => mockBiometricShared.read(),
       ).thenAnswer(
-        (_) async => Future.value(''' 
+        (_) async => Future.value('''
             {
               "config":null,
                "keys":[
