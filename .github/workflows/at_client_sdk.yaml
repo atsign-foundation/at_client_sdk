@@ -20,6 +20,7 @@ jobs:
   unit_tests_and_code_analysis:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         dart-channel: [stable,beta]
     steps:
