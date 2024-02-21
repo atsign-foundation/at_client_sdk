@@ -576,8 +576,7 @@ abstract class AtClient {
   /// The compaction job removes duplicate entries of a key from the commit log that are already synced
   /// to the remote secondary. Only the latest commit entry of the key is retained.
   /// Uncommitted entries that are duplicates will not be removed/compacted.
-  Future<void> startCompactionJob(
-      {int commitLogCompactionTimeIntervalInMins = 11});
+  Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
 
   /// Stops the commit log compaction job
   Future<void> stopCompactionJob();

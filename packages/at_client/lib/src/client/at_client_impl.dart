@@ -213,7 +213,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @override
   Future<void> startCompactionJob(
-      {int commitLogCompactionTimeIntervalInMins = 11}) async {
+      {Duration? commitLogCompactionDuration}) async {
+    commitLogCompactionDuration ??= Duration(
+        minutes:
+            AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins);
     AtCompactionJob atCompactionJob = AtCompactionJob(
         (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
         SecondaryPersistenceStoreFactory.getInstance()
@@ -226,7 +229,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
     if (!_atClientCommitLogCompaction!.isCompactionJobRunning()) {
       _atClientCommitLogCompaction!
-          .scheduleCompaction(commitLogCompactionTimeIntervalInMins);
+          .scheduleCompaction(commitLogCompactionDuration!.inMinutes);
     }
   }
 
