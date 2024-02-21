@@ -1,18 +1,11 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/client/request_options.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 
@@ -566,6 +559,20 @@ abstract class AtClient {
   /// ```
   ///
   Future<AtResponse> getOTP();
+
+  /// Initiates a compaction job for the commit log.
+  ///
+  /// The [commitLogCompactionTimeIntervalInMins] parameter specifies the time interval,
+  /// in minutes, after which the commit log should be compacted. By default, it is set
+  /// to 11 minutes.
+  ///
+  /// The compaction job removes duplicate entries of a key from the commit log that are already synced
+  /// to the remote secondary. Only the latest commit entry of the key is retained.
+  /// Uncommitted entries that are duplicates will not be removed/compacted.
+  Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
+
+  /// Stops the commit log compaction job
+  Future<void> stopCompactionJob();
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
