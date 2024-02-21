@@ -229,7 +229,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
     if (!_atClientCommitLogCompaction!.isCompactionJobRunning()) {
       _atClientCommitLogCompaction!
-          .scheduleCompaction(commitLogCompactionDuration!.inMinutes);
+          .scheduleCompaction(commitLogCompactionDuration.inMinutes);
     }
   }
 
