@@ -15,6 +15,8 @@ String namespace = 'wavi';
 Future<void> setUpMethod() async {
   currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
+  // Stopping the compaction job to prevent the compaction running in background.
+  await atClientManager.atClient.stopCompactionJob();
 }
 
 void main() {
