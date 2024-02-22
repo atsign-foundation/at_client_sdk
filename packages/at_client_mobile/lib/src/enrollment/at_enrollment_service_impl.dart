@@ -375,7 +375,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
 
   Future<BiometricStorageFile> _getEnrollmentStorage() async {
     final data = await _enrollmentKeychainStore.getStorage(
-      enrollmentInfoKey,
+      '${_atSign}_$enrollmentInfoKey',
       options: StorageFileInitOptions(
         authenticationRequired: false,
       ),
