@@ -67,7 +67,7 @@ class AtClientPreference {
   Duration monitorHeartbeatInterval = Duration(seconds: 10);
 
   /// Time interval for the scheduled task that removes expired keys from local keyStore
-  int expiryCheckTimeIntervalMins = 10;
+  Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
   ///[OptionalParameter] when set to true logs TLS Keys to file.
   bool decryptPackets = false;
