@@ -1,5 +1,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client_mobile/at_client_mobile.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollmentService {
@@ -28,4 +29,9 @@ abstract class AtEnrollmentService {
   /// [EnrollmentStatus.denied] indicates that the enrollment ID is not eligible for
   /// APKAM authentication.
   Future<EnrollmentStatus> getFinalEnrollmentStatus();
+
+  /// returns enrollment request data
+  ///
+  /// returns null if no enrollment request found
+  Future<EnrollmentInfo?> getSentEnrollmentRequest();
 }

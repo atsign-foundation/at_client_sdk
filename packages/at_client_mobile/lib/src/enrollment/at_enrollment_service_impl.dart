@@ -69,10 +69,12 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
     AtEnrollmentResponse atEnrollmentResponse = await _atEnrollmentImpl
         .submitEnrollment(atEnrollmentRequest, _atLookUp!);
 
-    _EnrollmentInfo enrollmentInfo = _EnrollmentInfo(
-        atEnrollmentResponse.enrollmentId,
-        atEnrollmentResponse.atAuthKeys!,
-        DateTime.now().toUtc().millisecondsSinceEpoch);
+    EnrollmentInfo enrollmentInfo = EnrollmentInfo(
+      atEnrollmentResponse.enrollmentId,
+      atEnrollmentResponse.atAuthKeys!,
+      DateTime.now().toUtc().millisecondsSinceEpoch,
+      atEnrollmentRequest.namespaces,
+    );
     // Store the enrollment keys into keychain
     await enrollmentStore.write(jsonEncode(enrollmentInfo));
 
@@ -91,8 +93,8 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
           'No pending enrollment found. Returning ${EnrollmentStatus.expired}');
       return Future.value(EnrollmentStatus.expired);
     }
-    _EnrollmentInfo enrollmentInfo =
-        _EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
+    EnrollmentInfo enrollmentInfo =
+        EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
     // "putIfAbsent" to avoid creating a new Completer for the same enrollmentId
     // when getFinalEnrollmentStatus is called more than once.
     _outcomes.putIfAbsent(enrollmentInfo.enrollmentId, () => Completer());
@@ -104,14 +106,14 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
 
   /// Runs a scheduler which check if an enrollment is approved.
   ///
-  /// Retrieves the [_EnrollmentInfo] from the key-chain manager. If
-  /// If an enrollment is approved, then atKeys file is generated and removes the [_EnrollmentInfo] from
+  /// Retrieves the [EnrollmentInfo] from the key-chain manager. If
+  /// If an enrollment is approved, then atKeys file is generated and removes the [EnrollmentInfo] from
   /// the key-chain.
   ///
   /// Handles the scheduled enrollment authentication.
   ///
   /// - This method is invoked by a timer, attempting to authenticate an enrollment
-  /// based on the [_EnrollmentInfo] stored in the key-chain manager
+  /// based on the [EnrollmentInfo] stored in the key-chain manager
   ///
   /// - If there is no pending enrollment to retry authentication, the scheduler stops.
   /// - If the maximum retry count for enrollment authentication is reached,
@@ -119,7 +121,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   /// - If authentication succeeds, then generated the atKeys file for authentication
   ///   and removes the enrollment info from the key-chain manager and stops the scheduler.
   /// - If authentication fails, the method retries with an incremented retry count.
-  void _initEnrollmentAuthScheduler(_EnrollmentInfo _enrollmentInfo) {
+  void _initEnrollmentAuthScheduler(EnrollmentInfo _enrollmentInfo) {
     Timer(Duration(seconds: _secondsUntilNextRun), () async {
       if (_enrollmentAuthSchedulerStarted) {
         _logger.finest(
@@ -131,7 +133,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   Future<void> _enrollmentAuthenticationScheduler(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
     var enrollmentStore = await _getEnrollmentStorage();
 
     try {
@@ -161,7 +163,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   Future<bool> _canProceedWithAuthentication(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
     var enrollmentStore = await _getEnrollmentStorage();
     // If "_maxEnrollmentAuthenticationRetryInHours" exceeds 48 hours then
     // stop retrying for enrollment approval and remove enrollmentInfo from
@@ -183,7 +185,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   Future<bool?> _performAPKAMAuthentication(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
     _atLookUp ??= AtLookupImpl(
         _atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
     // Create the AtChops instance with the new APKAM keys to verify if enrollment
@@ -209,7 +211,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   Future<void> _handleAuthenticatedEnrollment(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
     _logger.info('Enrollment: ${enrollmentInfo.enrollmentId} is authenticated');
 
     var enrollmentStore = await _getEnrollmentStorage();
@@ -383,27 +385,45 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
 
     return data;
   }
+
+  @override
+  Future<EnrollmentInfo?> getSentEnrollmentRequest() async {
+    var enrollmentStore = await _getEnrollmentStorage();
+    String? enrollmentInfoJsonString = await enrollmentStore.read();
+    if (enrollmentInfoJsonString != null) {
+      EnrollmentInfo enrollmentInfo =
+          EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
+      return enrollmentInfo;
+    }
+  }
 }
 
 /// Class representing the enrollment details to store in the keychain.
-class _EnrollmentInfo {
+class EnrollmentInfo {
   String enrollmentId;
   AtAuthKeys atAuthKeys;
   int enrollmentSubmissionTimeEpoch;
+  Map<String, dynamic>? namespace;
 
-  _EnrollmentInfo(
-      this.enrollmentId, this.atAuthKeys, this.enrollmentSubmissionTimeEpoch);
+  EnrollmentInfo(
+    this.enrollmentId,
+    this.atAuthKeys,
+    this.enrollmentSubmissionTimeEpoch,
+    this.namespace,
+  );
 
   Map<String, dynamic> toJson() {
     return {
       'enrollmentId': enrollmentId,
       'atAuthKeys': atAuthKeys.toJson(),
-      'enrollmentSubmissionTimeEpoch': enrollmentSubmissionTimeEpoch
+      'enrollmentSubmissionTimeEpoch': enrollmentSubmissionTimeEpoch,
+      'namespace': namespace
     };
   }
 
-  _EnrollmentInfo.fromJson(Map<String, dynamic> json)
+  EnrollmentInfo.fromJson(Map<String, dynamic> json)
       : enrollmentId = json['enrollmentId'],
         atAuthKeys = AtAuthKeys.fromJson(json['atAuthKeys']),
-        enrollmentSubmissionTimeEpoch = json['enrollmentSubmissionTimeEpoch'];
+        enrollmentSubmissionTimeEpoch = json['enrollmentSubmissionTimeEpoch'],
+        namespace = json['namespace'];
 }
