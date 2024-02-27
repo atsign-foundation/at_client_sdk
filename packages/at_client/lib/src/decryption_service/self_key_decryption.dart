@@ -1,6 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_chops/at_chops.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 
