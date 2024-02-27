@@ -7,11 +7,11 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/src/enrollment/at_enrollment_service.dart';
+import 'package:at_file_saver/at_file_saver.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:file_saver/file_saver.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:biometric_storage/biometric_storage.dart';
 
 class AtEnrollmentServiceImpl implements AtEnrollmentService {
   final AtSignLogger _logger = AtSignLogger('AtEnrollmentServiceImpl');
@@ -23,7 +23,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   /// the enrollment keys may be lost. To facilitate APKAM authentication retries,
   /// the keys are stored in the key-chain.
   /// Removal of the keys occurs upon successful approval or denial of the enrollment.
-  final _enrollmentKeychainStore = FlutterSecureStorage();
+  final _enrollmentKeychainStore = BiometricStorage();
 
   /// The maximum number of retries for verify approval/denial of an enrollment request
   final int _maxEnrollmentAuthenticationRetryInHours = 48;
@@ -56,8 +56,8 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
       AtEnrollmentRequest atEnrollmentRequest) async {
     // Only one enrollment request can be submitted at a time.
     // Subsequent requests cannot be submitted until the pending one is fulfilled.
-    String? enrollmentInfoJsonString =
-        await _enrollmentKeychainStore.read(key: enrollmentInfoKey);
+    var enrollmentStore = await _getEnrollmentStorage();
+    String? enrollmentInfoJsonString = await enrollmentStore.read();
     // if enrollmentInfoJsonString is not null, it indicates that there is a pending
     // enrollment request. So, do not allow another enrollment request.
     if (enrollmentInfoJsonString != null) {
@@ -69,21 +69,23 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
     AtEnrollmentResponse atEnrollmentResponse = await _atEnrollmentImpl
         .submitEnrollment(atEnrollmentRequest, _atLookUp!);
 
-    _EnrollmentInfo enrollmentInfo = _EnrollmentInfo(
-        atEnrollmentResponse.enrollmentId,
-        atEnrollmentResponse.atAuthKeys!,
-        DateTime.now().toUtc().millisecondsSinceEpoch);
+    EnrollmentInfo enrollmentInfo = EnrollmentInfo(
+      atEnrollmentResponse.enrollmentId,
+      atEnrollmentResponse.atAuthKeys!,
+      DateTime.now().toUtc().millisecondsSinceEpoch,
+      atEnrollmentRequest.namespaces,
+    );
     // Store the enrollment keys into keychain
-    await _enrollmentKeychainStore.write(
-        key: enrollmentInfoKey, value: jsonEncode(enrollmentInfo));
+    await enrollmentStore.write(jsonEncode(enrollmentInfo));
 
     return atEnrollmentResponse.enrollmentId;
   }
 
   @override
   Future<EnrollmentStatus> getFinalEnrollmentStatus() async {
-    String? enrollmentInfoJsonString =
-        await _enrollmentKeychainStore.read(key: enrollmentInfoKey);
+    var enrollmentStore = await _getEnrollmentStorage();
+
+    String? enrollmentInfoJsonString = await enrollmentStore.read();
     // If there is no enrollment data in keychain, then the enrollment
     // is expired and hence deleted from the keychain.
     if (enrollmentInfoJsonString == null) {
@@ -91,8 +93,8 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
           'No pending enrollment found. Returning ${EnrollmentStatus.expired}');
       return Future.value(EnrollmentStatus.expired);
     }
-    _EnrollmentInfo enrollmentInfo =
-        _EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
+    EnrollmentInfo enrollmentInfo =
+        EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
     // "putIfAbsent" to avoid creating a new Completer for the same enrollmentId
     // when getFinalEnrollmentStatus is called more than once.
     _outcomes.putIfAbsent(enrollmentInfo.enrollmentId, () => Completer());
@@ -104,14 +106,14 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
 
   /// Runs a scheduler which check if an enrollment is approved.
   ///
-  /// Retrieves the [_EnrollmentInfo] from the key-chain manager. If
-  /// If an enrollment is approved, then atKeys file is generated and removes the [_EnrollmentInfo] from
+  /// Retrieves the [EnrollmentInfo] from the key-chain manager. If
+  /// If an enrollment is approved, then atKeys file is generated and removes the [EnrollmentInfo] from
   /// the key-chain.
   ///
   /// Handles the scheduled enrollment authentication.
   ///
   /// - This method is invoked by a timer, attempting to authenticate an enrollment
-  /// based on the [_EnrollmentInfo] stored in the key-chain manager
+  /// based on the [EnrollmentInfo] stored in the key-chain manager
   ///
   /// - If there is no pending enrollment to retry authentication, the scheduler stops.
   /// - If the maximum retry count for enrollment authentication is reached,
@@ -119,7 +121,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   /// - If authentication succeeds, then generated the atKeys file for authentication
   ///   and removes the enrollment info from the key-chain manager and stops the scheduler.
   /// - If authentication fails, the method retries with an incremented retry count.
-  void _initEnrollmentAuthScheduler(_EnrollmentInfo _enrollmentInfo) {
+  void _initEnrollmentAuthScheduler(EnrollmentInfo _enrollmentInfo) {
     Timer(Duration(seconds: _secondsUntilNextRun), () async {
       if (_enrollmentAuthSchedulerStarted) {
         _logger.finest(
@@ -131,7 +133,9 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   Future<void> _enrollmentAuthenticationScheduler(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
+    var enrollmentStore = await _getEnrollmentStorage();
+
     try {
       // If "_canProceedWithAuthentication" returns false,
       // stop the enrollment authentication scheduler.
@@ -150,8 +154,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
           'Enrollment: ${enrollmentInfo.enrollmentId} failed to authenticate. Retrying again');
       // If in case the app is reset, the enrollmentInfo state should be preserved. Hence
       // store the updated enrollment info into keychain.
-      await _enrollmentKeychainStore.write(
-          key: enrollmentInfoKey, value: jsonEncode(enrollmentInfo));
+      await enrollmentStore.write(jsonEncode(enrollmentInfo));
       _secondsUntilNextRun = _secondsUntilNextRun * 2;
       _initEnrollmentAuthScheduler(enrollmentInfo);
     } finally {
@@ -160,7 +163,8 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   Future<bool> _canProceedWithAuthentication(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
+    var enrollmentStore = await _getEnrollmentStorage();
     // If "_maxEnrollmentAuthenticationRetryInHours" exceeds 48 hours then
     // stop retrying for enrollment approval and remove enrollmentInfo from
     // keychain.
@@ -174,14 +178,14 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
           'EnrollmentId: ${enrollmentInfo.enrollmentId} has reached the maximum number of retries. Retry attempts have been stopped.');
       // If enrollment retry has reached the limit, do no retry. Remove
       // the enrollment info from the keychain manager.
-      await _enrollmentKeychainStore.delete(key: enrollmentInfoKey);
+      await enrollmentStore.delete();
       return false;
     }
     return true;
   }
 
   Future<bool?> _performAPKAMAuthentication(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
     _atLookUp ??= AtLookupImpl(
         _atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
     // Create the AtChops instance with the new APKAM keys to verify if enrollment
@@ -207,8 +211,10 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
   }
 
   Future<void> _handleAuthenticatedEnrollment(
-      _EnrollmentInfo enrollmentInfo) async {
+      EnrollmentInfo enrollmentInfo) async {
     _logger.info('Enrollment: ${enrollmentInfo.enrollmentId} is authenticated');
+
+    var enrollmentStore = await _getEnrollmentStorage();
     // Get the decrypted (plain text) "Encryption Private Key" and "AES Symmetric Key"
     // from the secondary server.
     enrollmentInfo.atAuthKeys.defaultEncryptionPrivateKey =
@@ -219,7 +225,7 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
             enrollmentInfo.enrollmentId, _atLookUp!.atChops!);
     await _generateAtKeys(enrollmentInfo.atAuthKeys, _atLookUp!.atChops!);
     // Remove the keys from key-chain manager
-    await _enrollmentKeychainStore.delete(key: enrollmentInfoKey);
+    await enrollmentStore.delete();
     _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.approved);
     _atLookUp?.close();
   }
@@ -275,10 +281,11 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
     String fileName = '${_atSign}_apkam_key';
     String extension = '.atKeys';
     String atKeysFilePath = await FileSaver.instance.saveFile(
-        name: fileName,
-        bytes: Uint8List.fromList(atKeysEncodedString.codeUnits),
-        ext: extension,
-        mimeType: MimeType.other);
+      fileName,
+      Uint8List.fromList(atKeysEncodedString.codeUnits),
+      extension,
+      mimeType: MimeType.OTHER,
+    );
     _logger.info(
         'atKeys file for enrollment id - ${atAuthKeys.enrollmentId} is saved in $atKeysFilePath');
   }
@@ -367,27 +374,56 @@ class AtEnrollmentServiceImpl implements AtEnrollmentService {
 
     _atLookUp!.atChops = atClient.atChops;
   }
+
+  Future<BiometricStorageFile> _getEnrollmentStorage() async {
+    final data = await _enrollmentKeychainStore.getStorage(
+      '${_atSign}_$enrollmentInfoKey',
+      options: StorageFileInitOptions(
+        authenticationRequired: false,
+      ),
+    );
+
+    return data;
+  }
+
+  @override
+  Future<EnrollmentInfo?> getSentEnrollmentRequest() async {
+    var enrollmentStore = await _getEnrollmentStorage();
+    String? enrollmentInfoJsonString = await enrollmentStore.read();
+    if (enrollmentInfoJsonString != null) {
+      EnrollmentInfo enrollmentInfo =
+          EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
+      return enrollmentInfo;
+    }
+  }
 }
 
 /// Class representing the enrollment details to store in the keychain.
-class _EnrollmentInfo {
+class EnrollmentInfo {
   String enrollmentId;
   AtAuthKeys atAuthKeys;
   int enrollmentSubmissionTimeEpoch;
+  Map<String, dynamic>? namespace;
 
-  _EnrollmentInfo(
-      this.enrollmentId, this.atAuthKeys, this.enrollmentSubmissionTimeEpoch);
+  EnrollmentInfo(
+    this.enrollmentId,
+    this.atAuthKeys,
+    this.enrollmentSubmissionTimeEpoch,
+    this.namespace,
+  );
 
   Map<String, dynamic> toJson() {
     return {
       'enrollmentId': enrollmentId,
       'atAuthKeys': atAuthKeys.toJson(),
-      'enrollmentSubmissionTimeEpoch': enrollmentSubmissionTimeEpoch
+      'enrollmentSubmissionTimeEpoch': enrollmentSubmissionTimeEpoch,
+      'namespace': namespace
     };
   }
 
-  _EnrollmentInfo.fromJson(Map<String, dynamic> json)
+  EnrollmentInfo.fromJson(Map<String, dynamic> json)
       : enrollmentId = json['enrollmentId'],
         atAuthKeys = AtAuthKeys.fromJson(json['atAuthKeys']),
-        enrollmentSubmissionTimeEpoch = json['enrollmentSubmissionTimeEpoch'];
+        enrollmentSubmissionTimeEpoch = json['enrollmentSubmissionTimeEpoch'],
+        namespace = json['namespace'];
 }
