@@ -39,7 +39,8 @@ class AtAuthServiceImpl implements AtAuthService {
         atAuthRequest.atAuthKeys == null &&
         atAuthRequest.encryptedKeysMap == null) {
       _logger.info(
-          'Fetching the keys from Keychain Manager of atSign: ${atAuthRequest.atSign}');
+          'Fetching the keys from Keychain Manager of atSign: ${atAuthRequest
+              .atSign}');
       atAuthRequest.atAuthKeys = await _fetchKeysFromKeychainManager();
     }
     // Invoke authenticate method in AtAuth package.
@@ -99,7 +100,7 @@ class AtAuthServiceImpl implements AtAuthService {
           'CRAM Secret cannot be null or empty for atSign: $_atSign');
     }
     AtOnboardingResponse atOnboardingResponse =
-        await atAuth.onboard(atOnboardingRequest, cramSecret);
+    await atAuth.onboard(atOnboardingRequest, cramSecret);
     // If onboarding is not successful, return the onboarding response
     // with the isSuccessful set to false.
     if (!atOnboardingResponse.isSuccessful) {
@@ -118,8 +119,8 @@ class AtAuthServiceImpl implements AtAuthService {
   }
 
   /// Stores the atKeys to Key-Chain Manager.
-  Future<void> _storeToKeyChainManager(
-      String atSign, AtAuthKeys? atAuthKeys) async {
+  Future<void> _storeToKeyChainManager(String atSign,
+      AtAuthKeys? atAuthKeys) async {
     if (atAuthKeys == null) {
       throw AtException(
           'Failed to store keys in Keychain manager for atSign: $_atSign. AtAuthKeys instance is null');
@@ -187,9 +188,12 @@ class AtAuthServiceImpl implements AtAuthService {
         serviceFactory: atServiceFactory,
         enrollmentId: enrollmentId);
     // ??= to support mocking
-    _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
+    _atLookUp ??= atClientManager.atClient
+        .getRemoteSecondary()
+        ?.atLookUp;
     _atLookUp?.enrollmentId = enrollmentId;
     _atLookUp?.signingAlgoType = _atClientPreference.signingAlgoType;
     _atLookUp?.hashingAlgoType = _atClientPreference.hashingAlgoType;
     _atClient ??= atClientManager.atClient;
+  }
 }
