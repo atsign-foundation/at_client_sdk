@@ -80,3 +80,4 @@ Feature: Atclient enrollment test
                   | firstEnrollmentKey  | new_app: rw          | pixel       | pending |
                   | secondEnrollmentKey | new_app: rw, wavi: r | pixel7      | pending |
             And the list should contain exactly two matches for enrollment requests
+            
