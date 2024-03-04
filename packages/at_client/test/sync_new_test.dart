@@ -242,7 +242,7 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, newValue);
       // verifying the createdAt time is less than DateTime.now()
-      expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
+      expect(keyStoreGetResult.metaData!.createdAt!.isBefore(DateTime.now()),
           true);
       List<CommitEntry> commitEntries =
           await SyncUtil(atCommitLog: TestResources.commitLog)
@@ -417,7 +417,7 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice@yahoo.com');
       // verifying the createdAt time is less than DateTime.now()
-      expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
+      expect(keyStoreGetResult.metaData!.createdAt!.isBefore(DateTime.now()),
           true);
       // verify the entries in the commit log
       var commitEntriesResult = await SyncUtil().getChangesSinceLastCommit(
@@ -595,7 +595,7 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'alice@yahoo.com');
       // verifying the createdAt time is less than DateTime.now()
-      expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
+      expect(keyStoreGetResult.metaData!.createdAt!.isBefore(DateTime.now()),
           true);
       // verify the entries in the commit log
       var commitEntriesResult = await SyncUtil().getChangesSinceLastCommit(
@@ -635,7 +635,7 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'sample');
       // verifying the createdAt time is less than DateTime.now()
-      expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
+      expect(keyStoreGetResult.metaData!.createdAt!.isBefore(DateTime.now()),
           true);
       // verifying the version of the key is 0
       expect(keyStoreGetResult.metaData!.version, 0);
@@ -759,7 +759,7 @@ void main() {
       var keyStoreGetResult = await keystore.get(atKey);
       expect(keyStoreGetResult!.data, 'Texas');
       // verifying the createdAt time is less than DateTime.now()
-      expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
+      expect(keyStoreGetResult.metaData!.createdAt!.isBefore(DateTime.now()),
           true);
       var commitEntryResult =
           await SyncUtil(atCommitLog: TestResources.commitLog)
@@ -1773,7 +1773,7 @@ void main() {
       var atData = AtData();
       atData.data = '11122';
       //----------------------------------operation---------------------------------
-      int putCommitId = await keystore!.put(atKey, atData, time_to_born: 10000);
+      int putCommitId = await keystore!.put(atKey, atData, metadata: Metadata()..ttb = 10000);
       // key should not be available before 10 seconds
       // Assertion is not possible as the key will be available in the keystore level
       // expect(() async => await keystore.get(atKey),
@@ -2118,7 +2118,7 @@ void main() {
       // Assertions
       expect(syncResult.keyInfoList.first.key,
           updateBuilderForSecondKey.buildKey());
-      expect(syncResult.keyInfoList.first.commitOp, CommitOp.UPDATE_ALL);
+      expect(syncResult.keyInfoList.first.commitOp, CommitOp.UPDATE);
       expect(syncResult.keyInfoList.first.syncDirection,
           SyncDirection.localToRemote);
 
@@ -2588,6 +2588,7 @@ void main() {
       metaData.ttb = 10;
       metaData.ttr = 20;
       metaData.isCascade = true;
+      metaData.createdAt = DateTime.now();
       int? putMetaId = await keystore!.putMeta(atKey, metaData);
       //------------------Assertions-------------
       var keyStoreGetResult = await keystore.getMeta(atKey);
