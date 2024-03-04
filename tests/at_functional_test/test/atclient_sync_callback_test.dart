@@ -47,7 +47,7 @@ void main() {
       expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
       syncProgress.keyInfoList?.forEach((keyInfo) {
         if (keyInfo.key.startsWith('phone-$uniqueId')) {
-          expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+          expect(keyInfo.commitOp, CommitOp.UPDATE);
           expect(keyInfo.syncDirection, SyncDirection.localToRemote);
         }
       });
