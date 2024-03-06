@@ -1,7 +1,7 @@
 # The @Protocol root server configuration
 root_server:
   # The url to connect to root server
-  url: 'root.atsign.wtf'
+  url: 'vip.ve.atsign.zone'
 
 # cicd atSign details
 atSign:
@@ -9,7 +9,7 @@ atSign:
   # @ce2e4 is running the latest canary release
   # See https://github.com/atsign-foundation/at_client_sdk/issues/447#issuecomment-1075290415 for
   # full details.
-  firstAtSign: '@ce2e1'
-  secondAtSign: '@ce2e2'
+  firstAtSign: '@alice🛠'
+  secondAtSign: '@bob🛠'
   thirdAtSign: '@ce2e3'
   fourthAtSign: '@ce2e4'
