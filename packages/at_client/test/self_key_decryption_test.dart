@@ -59,7 +59,8 @@ void main() {
         () async => await selfKeyDecryption.decrypt(selfKey, 'a@#!!c'),
         throwsA(predicate((e) =>
             e is SelfKeyNotFoundException &&
-            e.message == 'Failed to decrypt the key: ${selfKey.toString()} caused by self encryption key not found')));
+            e.message ==
+                'Failed to decrypt the key: ${selfKey.toString()} caused by self encryption key not found')));
   });
 
   test('test to check self encryption key decrypt method without IV', () async {
