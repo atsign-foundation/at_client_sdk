@@ -28,7 +28,10 @@ dependency_overrides:
   at_client:
     path: ../at_client
   at_auth:
-    path: ../../../at_libraries/packages/at_auth
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_auth
+      ref: refactor_enrollment_methods
 
 dev_dependencies:
   lints: ^2.0.0
