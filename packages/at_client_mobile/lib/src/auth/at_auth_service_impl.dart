@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
@@ -284,6 +283,7 @@ class AtAuthServiceImpl implements AtAuthService {
           EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
       return enrollmentInfo;
     }
+    return null;
   }
 
   Future<BiometricStorageFile> _getEnrollmentStorage() async {
@@ -296,14 +296,14 @@ class AtAuthServiceImpl implements AtAuthService {
     return data;
   }
 
-  void _initEnrollmentAuthScheduler(EnrollmentInfo _enrollmentInfo) {
+  void _initEnrollmentAuthScheduler(EnrollmentInfo enrollmentInfo) {
     Timer(Duration(seconds: _secondsUntilNextRun), () async {
       if (_enrollmentAuthSchedulerStarted) {
         _logger.finest(
             'Enrollment Auth Scheduler is currently in-progress. Skipping this run');
         return;
       }
-      await _enrollmentAuthenticationScheduler(_enrollmentInfo);
+      await _enrollmentAuthenticationScheduler(enrollmentInfo);
     });
   }
 
@@ -423,24 +423,24 @@ class AtAuthServiceImpl implements AtAuthService {
     apkamBackupKeys[_atSign] = atChops.atChopsKeys.selfEncryptionKey!.key;
 
     try {
-      apkamBackupKeys[auth_constants.defaultEncryptionPublicKey] = atChops
+      apkamBackupKeys[defaultEncryptionPublicKey] = atChops
           .encryptString(
               atAuthKeys.defaultEncryptionPublicKey!, EncryptionKeyType.aes256,
               keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
           .result;
 
-      apkamBackupKeys[auth_constants.defaultEncryptionPrivateKey] = atChops
+      apkamBackupKeys[defaultEncryptionPrivateKey] = atChops
           .encryptString(
               atAuthKeys.defaultEncryptionPrivateKey!, EncryptionKeyType.aes256,
               keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
           .result;
 
-      apkamBackupKeys[auth_constants.apkamPublicKey] = atChops
+      apkamBackupKeys[apkamPublicKey] = atChops
           .encryptString(atAuthKeys.apkamPublicKey!, EncryptionKeyType.aes256,
               keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
           .result;
 
-      apkamBackupKeys[auth_constants.apkamPrivateKey] = atChops
+      apkamBackupKeys[apkamPrivateKey] = atChops
           .encryptString(atAuthKeys.apkamPrivateKey!, EncryptionKeyType.aes256,
               keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
           .result;

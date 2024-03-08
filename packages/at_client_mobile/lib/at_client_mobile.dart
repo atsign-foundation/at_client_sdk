@@ -1,7 +1,5 @@
 library at_client_mobile;
 
-import 'package:at_client_mobile/src/at_client_mobile_base.dart';
-
 export 'package:at_client/at_client.dart';
 
 @Deprecated('Use AtClientMobile.authService')
@@ -16,5 +14,4 @@ export 'src/auth/at_auth_service.dart';
 export 'src/enrollment/enrollment_info.dart';
 export 'src/keychain_manager.dart';
 export 'src/onboarding_status.dart';
-
-final AtClientMobileBase AtClientMobile = AtClientMobileBase();
+export 'src/at_client_mobile_base.dart';
