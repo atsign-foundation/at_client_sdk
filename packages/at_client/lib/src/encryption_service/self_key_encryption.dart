@@ -27,13 +27,14 @@ class SelfKeyEncryption implements AtKeyEncryption {
 
     if (atClient.atChops == null ||
         atClient.atChops!.atChopsKeys.selfEncryptionKey == null) {
-      throw SelfKeyNotFoundException('Failed to encrypt the data caused by Self encryption key not found');
+      throw SelfKeyNotFoundException(
+          'Failed to encrypt the data caused by Self encryption key not found');
     }
     // Get AES key for current atSign
     var selfEncryptionKey =
         atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
     // Encrypt value using sharedKey
     return EncryptionUtil.encryptValue(value, selfEncryptionKey!,
-        ivBase64: atKey.metadata?.ivNonce);
+        ivBase64: atKey.metadata.ivNonce);
   }
 }

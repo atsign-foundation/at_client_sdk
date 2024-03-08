@@ -2,8 +2,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/src/enrollment/enrollment_info.dart';
 
-import 'at_auth_service_impl.dart';
-
 /// The [AtAuthService] class handles the onboarding, authentication, and enrollment submission for an atSign.
 /// For a new atSign, use the [onboard] method to activate it.
 ///

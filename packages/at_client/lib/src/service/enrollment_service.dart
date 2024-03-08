@@ -2,8 +2,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/src/response/pending_enrollment_request.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
 
-import 'enrollment_service_impl.dart';
-
 /// [EnrollmentService] contains methods to fetch the enrollment details and methods to perform operations on the enrollments.
 abstract class EnrollmentService {
   /// Fetches all enrollment requests from the server. Optionally accepts [EnrollListRequestParamr] to filter the enrollment

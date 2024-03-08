@@ -6,7 +6,6 @@ import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
-import 'package:at_client_mobile/src/enrollment/enrollment_info.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
@@ -456,8 +455,8 @@ class AtAuthServiceImpl implements AtAuthService {
     }
 
     String atKeysEncodedString = jsonEncode(apkamBackupKeys);
-    String fileName = '${_atSign}_apkam_key';
-    String extension = '.atKeys';
+    // String fileName = '${_atSign}_apkam_key';
+    // String extension = '.atKeys';
     print('atkey file content: $atKeysEncodedString');
     // if (filePath != null && filePath.isNotEmpty) {
     //   atKeysFilePath = await FileSaver.instance.saveFile(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/response/response.dart';
@@ -9,7 +10,6 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_auth/at_auth.dart';
 
 class MockAtCompactionJob extends Mock implements AtCompactionJob {
   bool isCronScheduled = false;
@@ -317,15 +317,6 @@ void main() {
       expect(requests[2].appName, jsonDecode(enrollValue3)['appName']);
       expect(requests[2].deviceName, jsonDecode(enrollValue3)['deviceName']);
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
-    });
-
-    test('validate EnrollRequest.extractEnrollmentId()', () {
-      String enrollmentKey =
-          '0acdeb4d-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage@random';
-      String enrollmentId = '0acdeb4d-1a2e-43e4-93bd-378f1d366ea7';
-
-      // expect(
-      //     EnrollmentRequest.extractEnrollmentId(enrollmentKey), enrollmentId);
     });
   });
 
