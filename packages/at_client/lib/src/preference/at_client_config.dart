@@ -10,7 +10,7 @@ class AtClientConfig {
 
   /// Represents the at_client version.
   /// Must always be the same as the actual version in pubspec.yaml
-  final String atClientVersion = '3.0.75';
+  final String atClientVersion = '3.0.76';
 
   /// Represents the client commit log compaction time interval
   ///

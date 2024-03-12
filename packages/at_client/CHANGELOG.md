@@ -1,3 +1,5 @@
+## 3.0.76
+- feat: Introduce mechanism to identify and delete expired keys
 ## 3.0.75
 - feat: Introduce feature to fetch enrollment requests from the server
 ## 3.0.74

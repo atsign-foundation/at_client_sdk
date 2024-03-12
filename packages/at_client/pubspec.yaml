@@ -4,7 +4,7 @@ description: The at_client library is the non-platform specific Client SDK which
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 3.0.75
+version: 3.0.76
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -36,7 +36,7 @@ dependencies:
   at_chops: ^2.0.0
   at_lookup: ^3.0.46
   at_persistence_spec: ^2.0.14
-  at_persistence_secondary_server: ^3.0.60
+  at_persistence_secondary_server: ^3.0.61
   meta: ^1.8.0
   version: ^3.0.2
 
