@@ -55,7 +55,7 @@ class AtAuthServiceImpl implements AtAuthService {
   AtAuthServiceImpl(this._atSign, this._atClientPreference) {
     // If the '@' symbol is omitted, it leads to an incorrect format for the AtKey when retrieving the
     // encrypted defaultEncryptionPrivateKey and encrypted defaultSelfEncryptionKey.
-    if(!_atSign.startsWith('@')){
+    if (!_atSign.startsWith('@')) {
       _atSign = '@$_atSign';
     }
     atAuth = AtAuthBase.atAuth();
