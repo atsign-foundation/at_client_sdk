@@ -22,7 +22,8 @@ class EnrollmentInfo {
       'enrollmentId': enrollmentId,
       'atAuthKeys': atAuthKeys.toJson(),
       'enrollmentSubmissionTimeEpoch': enrollmentSubmissionTimeEpoch,
-      'namespace': namespace
+      'namespace': namespace,
+      'keysFilePath': keysFilePath
     };
   }
 
@@ -30,5 +31,6 @@ class EnrollmentInfo {
       : enrollmentId = json['enrollmentId'],
         atAuthKeys = AtAuthKeys.fromJson(json['atAuthKeys']),
         enrollmentSubmissionTimeEpoch = json['enrollmentSubmissionTimeEpoch'],
-        namespace = json['namespace'];
+        namespace = json['namespace'],
+        keysFilePath = json['keysFilePath'];
 }

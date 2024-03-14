@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -479,22 +480,22 @@ class AtAuthServiceImpl implements AtAuthService {
     }
 
     String atKeysEncodedString = jsonEncode(apkamBackupKeys);
-    // String fileName = '${_atSign}_apkam_key';
-    // String extension = '.atKeys';
+    String fileName = '${_atSign}_apkam_key';
+    String extension = '.atKeys';
     print('atkey file content: $atKeysEncodedString');
-    // if (filePath != null && filePath.isNotEmpty) {
-    //   atKeysFilePath = await FileSaver.instance.saveFile(
-    //       name: fileName,
-    //       bytes: Uint8List.fromList(atKeysEncodedString.codeUnits),
-    //       ext: extension,
-    //       mimeType: MimeType.other);
-    // } else {
-    //   atKeysFilePath = await FileSaver.instance.saveFile(
-    //       name: fileName,
-    //       bytes: Uint8List.fromList(atKeysEncodedString.codeUnits),
-    //       ext: extension,
-    //       mimeType: MimeType.other);
-    // }
+    if (filePath != null && filePath.isNotEmpty) {
+      try {
+        var atKeyFileDirectory =
+            await Directory(filePath + Platform.pathSeparator).create();
+        final file = File(atKeyFileDirectory.path + fileName);
+
+        // Write the file
+        var res = await file.writeAsString(atKeysEncodedString);
+      } catch (e) {
+        _logger.severe(
+            'Failed to save atKey for- ${atAuthKeys.enrollmentId} caused by ${e.toString()}');
+      }
+    }
     _logger.info(
         'atKeys file for enrollment id - ${atAuthKeys.enrollmentId} is saved in');
   }
