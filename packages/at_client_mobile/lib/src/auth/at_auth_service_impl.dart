@@ -21,7 +21,7 @@ class AtAuthServiceImpl implements AtAuthService {
   @visibleForTesting
   AtLookUp? atLookUp;
 
-  final String _atSign;
+  String _atSign;
   final AtClientPreference _atClientPreference;
 
   final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
@@ -54,6 +54,11 @@ class AtAuthServiceImpl implements AtAuthService {
   final Map<String, Completer<EnrollmentStatus>> _outcomes = {};
 
   AtAuthServiceImpl(this._atSign, this._atClientPreference) {
+    // If the '@' symbol is omitted, it leads to an incorrect format for the AtKey when retrieving the
+    // encrypted defaultEncryptionPrivateKey and encrypted defaultSelfEncryptionKey.
+    if (!_atSign.startsWith('@')) {
+      _atSign = '@$_atSign';
+    }
     atAuth = AtAuthBase.atAuth();
     atEnrollmentBase = AtAuthBase.atEnrollment(_atSign);
   }
