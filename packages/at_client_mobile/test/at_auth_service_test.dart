@@ -360,7 +360,6 @@ void tearDownMethod(MockBiometricStorageFile mockBiometricStorageFile,
   reset(mockAtLookUp);
   reset(mockBiometricStorage);
   mockBiometricStorageFile.dummyStorageFile.clear();
-  print('The length: ${mockBiometricStorageFile.dummyStorageFile.length}');
 }
 
 class LookupVerbBuilderMatcher extends Matcher {

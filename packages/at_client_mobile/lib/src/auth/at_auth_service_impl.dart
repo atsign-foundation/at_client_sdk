@@ -486,16 +486,14 @@ class AtAuthServiceImpl implements AtAuthService {
 
     String atKeysEncodedString = jsonEncode(apkamBackupKeys);
     String fileName = '${_atSign}_apkam_key';
-    String extension = '.atKeys';
     print('atkey file content: $atKeysEncodedString');
     if (filePath != null && filePath.isNotEmpty) {
       try {
         var atKeyFileDirectory =
             await Directory(filePath + Platform.pathSeparator).create();
         final file = File(atKeyFileDirectory.path + fileName);
-
         // Write the file
-        var res = await file.writeAsString(atKeysEncodedString);
+        await file.writeAsString(atKeysEncodedString);
       } catch (e) {
         _logger.severe(
             'Failed to save atKey for- ${atAuthKeys.enrollmentId} caused by ${e.toString()}');
