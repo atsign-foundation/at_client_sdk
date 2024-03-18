@@ -300,7 +300,8 @@ void main() {
       expect(requests[0].appName, jsonDecode(enrollValue1)['appName']);
       expect(requests[0].deviceName, jsonDecode(enrollValue1)['deviceName']);
       expect(requests[0].namespace, jsonDecode(enrollValue1)['namespace']);
-      // the following statement asserts that the enrollment.enrollmentId getter fetches the correct enrollment id
+      // the following statement asserts that the enrollment.enrollmentId
+      // getter fetches the correct enrollment id
       expect(requests[0].enrollmentKey.contains(enrollKey1), true);
 
       expect(requests[1].enrollmentKey, enrollKey2);
@@ -314,6 +315,50 @@ void main() {
       expect(requests[2].deviceName, jsonDecode(enrollValue3)['deviceName']);
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
       expect(requests[2].enrollmentKey.contains(enrollKey3), true);
+    });
+
+    test(
+        'verify behaviour of fetchEnrollmentRequests() with enrollmentStatusFilter',
+        () async {
+      String currentAtsign = '@apkam1234';
+      String enrollKey1 =
+          '0acdeb4d-1a2e-43e4-93bd-random123.new.enrollments.__manage$currentAtsign';
+      String enrollValue1 =
+          '{"appName":"unit_test","deviceName":"testDevice","namespace":{"random_namespace":"rw"}}';
+      String enrollKey2 =
+          '9beefa26-3384-4f10-81a6-random234.new.enrollments.__manage$currentAtsign';
+      String enrollValue2 =
+          '{"appName":"unit_test","deviceName":"testDevice","namespace":{"random_namespace":"rw"}}';
+      when(() =>
+          mockRemoteSecondary.executeCommand(
+              'enroll:list:{"enrollmentStatusFilter":["pending","approved"]}\n',
+              auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
+          '$enrollValue1,"$enrollKey2":$enrollValue2}'));
+
+      AtClient? client = await AtClientImpl.create(
+          currentAtsign, 'random_namespace', AtClientPreference(),
+          remoteSecondary: mockRemoteSecondary);
+      AtClientImpl? clientImpl = client as AtClientImpl;
+      EnrollListRequestParam listRequestParam = EnrollListRequestParam()
+        ..enrollmentListFilter = [
+          EnrollmentStatus.pending,
+          EnrollmentStatus.approved
+        ];
+
+      List<EnrollmentRequest> requests =
+          await clientImpl.fetchEnrollmentRequests(listRequestParam);
+      expect(requests.length, 2);
+      expect(requests[0].enrollmentKey, enrollKey1);
+      expect(requests[0].appName, jsonDecode(enrollValue1)['appName']);
+      expect(requests[0].deviceName, jsonDecode(enrollValue1)['deviceName']);
+      expect(requests[0].namespace, jsonDecode(enrollValue1)['namespace']);
+      expect(requests[0].enrollmentKey.contains(enrollKey1), true);
+
+      expect(requests[1].enrollmentKey, enrollKey2);
+      expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
+      expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
+      expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
+      expect(requests[1].enrollmentKey.contains(enrollKey2), true);
     });
 
     test('validate EnrollRequest.extractEnrollmentId()', () {
