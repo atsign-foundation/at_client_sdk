@@ -665,15 +665,15 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @override
   Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
-      EnrollListRequestParam enrollmentListRequestParams) async {
-    // enrollmentListRequestParams for now is not  used
-    // A server side enhancement request is created. https://github.com/atsign-foundation/at_server/issues/1748
-    // On implementation of this enhancement/feature, the enrollListRequestParam object can be made use of
+      EnrollListRequestParam enrollListRequestParams) async {
     EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
       ..operation = EnrollOperationEnum.list
-      ..appName = enrollmentListRequestParams.appName
-      ..deviceName = enrollmentListRequestParams.deviceName;
-
+      ..appName = enrollListRequestParams.appName
+      ..deviceName = enrollListRequestParams.deviceName;
+    if (enrollListRequestParams.enrollmentListFilter != null) {
+      enrollBuilder.enrollmentStatusFilter =
+          enrollListRequestParams.enrollmentListFilter!;
+    }
     var response = await getRemoteSecondary()
         ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
 
