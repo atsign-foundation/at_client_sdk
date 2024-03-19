@@ -1,3 +1,4 @@
+
 name: at_functional_test
 publish_to: none
 description: Functional tests for the at_client_sdk packages
@@ -9,9 +10,15 @@ environment:
 dependencies:
   uuid: 3.0.7
   at_demo_data: ^1.0.3
-
   at_client:
     path: ../../packages/at_client
+
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries
+      path: packages/at_commons
+      ref: enroll_list_filter
 
 dev_dependencies:
   test: ^1.24.3
