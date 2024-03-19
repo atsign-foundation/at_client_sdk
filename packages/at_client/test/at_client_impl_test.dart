@@ -5,6 +5,7 @@ import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -283,8 +284,11 @@ void main() {
           'a6bbef17-c7bf-46f4-a172-1ed7b3b443bc.new.enrollments.__manage$currentAtsign';
       String enrollValue3 =
           '{"appName":"buzz","deviceName":"pixel","namespace":{"buzz":"rw"}}';
+      String enrollListCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
       when(() =>
-          mockRemoteSecondary.executeCommand('enroll:list\n',
+          mockRemoteSecondary.executeCommand(enrollListCommand,
               auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
