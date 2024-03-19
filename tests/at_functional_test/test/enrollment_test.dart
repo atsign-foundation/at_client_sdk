@@ -331,7 +331,7 @@ void main() {
     expect(enrollResponse2JsonDecoded['status'], 'pending');
 
     // fetch enrollment requests through client
-    List<PendingEnrollmentRequest> enrollmentRequests =
+    List<Enrollment> enrollmentRequests =
         await client.enrollmentService.fetchEnrollmentRequests();
 
     expect(enrollmentRequests.length > 2, true);
