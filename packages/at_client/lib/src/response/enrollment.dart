@@ -1,13 +1,13 @@
 /// Class represents the enrollment details
-class PendingEnrollmentRequest {
+class Enrollment {
   String? enrollmentId;
   String? appName;
   String? deviceName;
   Map<String, dynamic>? namespace;
   String? encryptedAPKAMSymmetricKey;
 
-  static PendingEnrollmentRequest fromJSON(Map<String, dynamic> json) {
-    return PendingEnrollmentRequest()
+  static Enrollment fromJSON(Map<String, dynamic> json) {
+    return Enrollment()
       ..appName = json['appName']
       ..deviceName = json['deviceName']
       ..namespace = json['namespace']
