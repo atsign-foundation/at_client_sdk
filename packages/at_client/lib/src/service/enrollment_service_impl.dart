@@ -16,11 +16,8 @@ class EnrollmentServiceImpl implements EnrollmentService {
     EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
       ..operation = EnrollOperationEnum.list
       ..appName = enrollmentListParams?.appName
-      ..deviceName = enrollmentListParams?.deviceName;
-    if (enrollmentListParams?.enrollmentListFilter != null) {
-      enrollBuilder.enrollmentStatusFilter =
-      enrollmentListParams!.enrollmentListFilter!;
-    }
+      ..deviceName = enrollmentListParams?.deviceName
+      ..enrollmentStatusFilter = enrollmentListParams!.enrollmentListFilter;
 
     var response = await _atClient
         .getRemoteSecondary()

@@ -76,7 +76,7 @@ void main() {
     });
 
     test(
-        'verify behaviour of fetchEnrollmentRequests() with enrollmentStatusFilter',
+        'verify behaviour of fetchEnrollmentRequests() with enrollmentStatusFilter: [pending, approved]',
         () async {
       String currentAtsign = '@apkam1234';
       String enrollKey1 =
@@ -100,6 +100,49 @@ void main() {
         ];
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace', AtClientPreference(),
+          remoteSecondary: mockRemoteSecondary);
+      client.enrollmentService =
+          EnrollmentServiceImpl(client, AtAuthBase.atEnrollment(currentAtsign));
+      AtClientImpl? clientImpl = client as AtClientImpl;
+
+      List<Enrollment> requests = await clientImpl.enrollmentService
+          .fetchEnrollmentRequests(enrollmentListParams: listRequestParam);
+      expect(requests.length, 2);
+      expect(requests[0].enrollmentId,
+          enrollKey1.substring(0, enrollKey1.indexOf('.')));
+      expect(requests[0].appName, jsonDecode(enrollValue1)['appName']);
+      expect(requests[0].deviceName, jsonDecode(enrollValue1)['deviceName']);
+      expect(requests[0].namespace, jsonDecode(enrollValue1)['namespace']);
+
+      expect(requests[1].enrollmentId,
+          enrollKey2.substring(0, enrollKey2.indexOf('.')));
+      expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
+      expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
+      expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
+    });
+
+    test(
+        'verify behaviour of fetchEnrollmentRequests() with enrollmentStatusFilter: [approved]',
+        () async {
+      String currentAtsign = '@apkam1234';
+      String enrollKey1 =
+          '0acdeb4d-1a2e-43e4-93bd-randomabc.new.enrollments.__manage$currentAtsign';
+      String enrollValue1 =
+          '{"appName":"unit_test","deviceName":"testDevice","namespace":{"random_namespace":"rw"}}';
+      String enrollKey2 =
+          '9beefa26-3384-4f10-81a6-randomcde.new.enrollments.__manage$currentAtsign';
+      String enrollValue2 =
+          '{"appName":"unit_test","deviceName":"testDevice","namespace":{"random_namespace":"rw"}}';
+      when(() =>
+          mockRemoteSecondary.executeCommand(
+              'enroll:list:{"enrollmentStatusFilter":["approved"]}\n',
+              auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
+          '$enrollValue1,"$enrollKey2":$enrollValue2}'));
+
+      EnrollmentListRequestParam listRequestParam = EnrollmentListRequestParam()
+        ..enrollmentListFilter = [EnrollmentStatus.approved];
+      AtClient? client = await AtClientImpl.create(
+          currentAtsign, 'random_namespace_1', AtClientPreference(),
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtAuthBase.atEnrollment(currentAtsign));

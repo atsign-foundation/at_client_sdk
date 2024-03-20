@@ -5,5 +5,8 @@ class EnrollmentListRequestParam {
   String? appName;
   String? deviceName;
   String? namespace;
-  List<EnrollmentStatus>? enrollmentListFilter;
+  /// Allows filtering of enroll requests while listing them
+  ///
+  /// Accepts a [List<EnrollmentStatus>] defaults to all [EnrollmentStatus] values
+  List<EnrollmentStatus> enrollmentListFilter = EnrollmentStatus.values;
 }
