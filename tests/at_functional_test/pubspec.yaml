@@ -15,7 +15,11 @@ dependencies:
 
 
 dependency_overrides:
-  at_commons: ^4.0.0
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries
+      path: packages/at_commons
+      ref: enroll_list_filter
   at_auth:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git

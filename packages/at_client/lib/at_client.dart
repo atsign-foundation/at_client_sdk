@@ -17,7 +17,7 @@ export 'package:at_client/src/listener/sync_progress_listener.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/response/at_notification.dart';
-export 'package:at_client/src/response/pending_enrollment_request.dart';
+export 'package:at_client/src/response/enrollment.dart';
 @experimental
 export 'package:at_client/src/rpc/at_rpc.dart';
 @experimental

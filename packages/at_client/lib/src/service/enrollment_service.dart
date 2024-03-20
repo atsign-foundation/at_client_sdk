@@ -1,5 +1,5 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/src/response/pending_enrollment_request.dart';
+import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
 
 /// [EnrollmentService] contains methods to fetch the enrollment details and methods to perform operations on the enrollments.
@@ -17,8 +17,8 @@ abstract class EnrollmentService {
   ///   List<EnrollmentRequest> enrollmentRequests = atClientManager.atClient.encryptionService
   ///                                                     .fetchEnrollmentRequests();
   /// ```
-  Future<List<PendingEnrollmentRequest>> fetchEnrollmentRequests(
-      {EnrollListRequestParam? enrollmentListRequest});
+  Future<List<Enrollment>> fetchEnrollmentRequests(
+      {EnrollmentListRequestParam? enrollmentListParams});
 
   /// Approves the enrollment request.
   ///
