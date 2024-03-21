@@ -59,8 +59,8 @@ class AtAuthServiceImpl implements AtAuthService {
     if (!_atSign.startsWith('@')) {
       _atSign = '@$_atSign';
     }
-    atAuth = AtAuthBase.atAuth();
-    atEnrollmentBase = AtAuthBase.atEnrollment(_atSign);
+    atAuth = atAuthBase.atAuth();
+    atEnrollmentBase = atAuthBase.atEnrollment(_atSign);
   }
 
   @override
