@@ -40,6 +40,18 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server/
+      path: packages/at_persistence_secondary_server
+      ref: persistence_impl_refactoring
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server/
+      path: packages/at_persistence_spec
+      ref: persistence_spec_refactoring
+
 dev_dependencies:
   lints: ^2.1.1
   test: ^1.21.4
