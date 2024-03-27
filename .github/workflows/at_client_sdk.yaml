@@ -55,7 +55,7 @@ jobs:
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       - name: Upload at_client coverage to Codecov
-        uses: codecov/codecov-action@54bcd8715eee62d40e33596ef5e8f0f48dbbccab # v4.1.0
+        uses: codecov/codecov-action@c16abc29c95fcf9174b58eb7e1abf4c866893bc8 # v4.1.1
         with:
           file: packages/at_client/unit_test_coverage.lcov
           flags: at_client_unit_tests
@@ -86,7 +86,7 @@ jobs:
         run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       - name: Upload at_client_mobile coverage to Codecov
-        uses: codecov/codecov-action@54bcd8715eee62d40e33596ef5e8f0f48dbbccab # v4.1.0
+        uses: codecov/codecov-action@c16abc29c95fcf9174b58eb7e1abf4c866893bc8 # v4.1.1
         with:
           file: packages/at_client_mobile/unit_test_coverage.lcov
           flags: at_client_mobile_unit_tests
@@ -153,7 +153,7 @@ jobs:
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@54bcd8715eee62d40e33596ef5e8f0f48dbbccab # v4.1.0
+        uses: codecov/codecov-action@c16abc29c95fcf9174b58eb7e1abf4c866893bc8 # v4.1.1
         with:
           file: tests/at_functional_test/functional_test_coverage.lcov
           flags: functional_tests
@@ -228,7 +228,7 @@ jobs:
       - name: Upload coverage to Codecov
         # Needs LCOV report to upload, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: codecov/codecov-action@54bcd8715eee62d40e33596ef5e8f0f48dbbccab # v4.1.0
+        uses: codecov/codecov-action@c16abc29c95fcf9174b58eb7e1abf4c866893bc8 # v4.1.1
         with:
           file: tests/at_end2end_test/end2end_test_coverage.lcov
           flags: end2end_tests
