@@ -14,6 +14,8 @@ import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 const String _kDefaultKeystoreAccount = '@atsigns';
+const String enrollmentInfoKey = 'enrollmentInfo';
+
 const int _kDataSchemeVersion = 1;
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
@@ -682,6 +684,17 @@ class KeyChainManager {
     return data;
   }
 
+  Future<BiometricStorageFile> getEnrollmentStorage(String atSign) async {
+    final data = await biometricStorage.getStorage(
+      '${atSign}_$enrollmentInfoKey',
+      options: StorageFileInitOptions(
+        authenticationRequired: false,
+      ),
+    );
+
+    return data;
+  }
+
   /// Function to save client data
   Future<bool> _saveAtClientData({
     required AtClientData data,
@@ -711,6 +724,21 @@ class KeyChainManager {
       result[element.atSign] = element.atSign == atClientData?.defaultAtsign;
     }
     return result;
+  }
+
+  Future<void> writeToEnrollmentStore(String atSign, String data) async {
+    final store = await getEnrollmentStorage(atSign);
+    await _writeDataToStore(store: store, data: data);
+  }
+
+  Future<String?> readFromEnrollmentStore(String atSign) async {
+    final store = await getEnrollmentStorage(atSign);
+    return await _readDataFromStore(store: store);
+  }
+
+  deleteEnrollmentStore(String atSign) async {
+    final store = await getEnrollmentStorage(atSign);
+    await store.delete();
   }
 
   /// The function write String data to BiometricStorageFile
