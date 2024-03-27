@@ -9,6 +9,7 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
+import 'package:at_utils/at_logger.dart';
 
 class PreferenceFactory extends AtCollectionModelFactory<Preference> {
   static final PreferenceFactory _singleton = PreferenceFactory._internal();
@@ -236,6 +237,7 @@ void main() async {
   });
 
   test('Model operations - save() with reshare() as true test', () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -297,6 +299,7 @@ void main() async {
   });
 
   test('Model operations - share() test', () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -338,6 +341,7 @@ void main() async {
   });
 
   test('Model operations - unshare() and delete() test', () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -373,6 +377,7 @@ void main() async {
   });
 
   test('Query method - AtCollectionModel.getModelsSharedWith() test', () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -407,6 +412,7 @@ void main() async {
   });
 
   test('Query method - AtCollectionModel.getModelsSharedBy() test', () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -448,6 +454,7 @@ void main() async {
 
   test('Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test',
       () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -500,6 +507,7 @@ void main() async {
   test(
       'Query methods - Test retreival of shared models with and without factories',
       () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -602,6 +610,7 @@ void main() async {
   });
 
   test('Query methods - Test retrieval of sharedWithAnyAtSign', () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -649,6 +658,7 @@ void main() async {
   });
 
   test('Model operations - save and incremental share with stream', () async {
+    AtSignLogger.root_level = 'finer';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(

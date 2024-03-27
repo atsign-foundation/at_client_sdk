@@ -67,6 +67,8 @@ class LocalSecondary implements Secondary {
     try {
       dynamic updateResult;
       var updateKey = builder.buildKey();
+      print(
+          'TTR value in metadata: ${builder.atKey.metadata.ttr} for key: $updateKey');
       switch (builder.operation) {
         case AtConstants.updateMeta:
           var atMetadata =
