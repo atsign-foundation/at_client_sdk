@@ -1,3 +1,4 @@
+@Skip('Skipping this test until https://github.com/atsign-foundation/at_client_sdk/issues/1267 is fixed')
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
