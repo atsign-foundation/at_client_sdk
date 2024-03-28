@@ -104,15 +104,15 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _notificationService = notificationService;
   }
 
-  late EnrollmentService _enrollmentService;
+  EnrollmentService? _enrollmentService;
 
   @override
-  set enrollmentService(EnrollmentService enrollmentService) {
+  set enrollmentService(EnrollmentService? enrollmentService) {
     _enrollmentService = enrollmentService;
   }
 
   @override
-  EnrollmentService get enrollmentService => _enrollmentService;
+  EnrollmentService? get enrollmentService => _enrollmentService;
 
   @override
   NotificationService get notificationService => _notificationService;

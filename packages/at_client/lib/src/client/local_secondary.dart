@@ -37,6 +37,12 @@ class LocalSecondary implements Secondary {
     String? verbResult;
 
     try {
+      if (_atClient.enrollmentService != null &&
+          !await _atClient.enrollmentService!
+              .isAuthorized(builder.buildCommand(), builder)) {
+        throw UnAuthorizedException(
+            'Cannot execute ${builder.buildCommand()} on local secondary due to insufficient namespace access');
+      }
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         //1. if local and server are out of sync, first sync before updating current key-value
         //2 . update/delete to local store
