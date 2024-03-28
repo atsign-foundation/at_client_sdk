@@ -92,6 +92,7 @@ class AtEncryptionKeysLoader {
     var atPkamKeyPair = AtPkamKeyPair.create(
         pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!);
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
     return AtChopsImpl(atChopsKeys);
   }
 }

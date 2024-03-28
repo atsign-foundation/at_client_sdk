@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_export_use
+// ignore_for_file: deprecated_member_use_from_same_package
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';

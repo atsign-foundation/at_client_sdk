@@ -60,6 +60,8 @@ void main() {
     test(
         'A test to verify SelfKeyNotFoundException is thrown when self key is not found',
         () {
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
+      when(() => mockAtChops.atChopsKeys).thenReturn(atChopsKeys);
       when(() => mockLocalSecondary.getEncryptionSelfKey())
           .thenAnswer((_) => Future.value(''));
 
@@ -74,7 +76,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is SelfKeyNotFoundException &&
               e.message ==
-                  'Self encryption key is not set for current atSign')));
+                  'Failed to encrypt the data caused by Self encryption key not found')));
     });
   });
 

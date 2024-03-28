@@ -7,4 +7,7 @@ root_server:
 atSign:
   firstAtSign: "@alice🛠"
   secondAtSign: "@bob🛠"
-  
+  apkamFirstAtSign: '@srie'
+  apkamSecondAtSign: '@sachin'
+
+
