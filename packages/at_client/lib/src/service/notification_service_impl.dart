@@ -322,12 +322,6 @@ class NotificationServiceImpl
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
-    if (_atClient.enrollmentService != null &&
-        !await _atClient.enrollmentService!.isAuthorized(
-            notificationParams.atKey.toString(), NotifyVerbBuilder())) {
-      throw UnAuthorizedException(
-          'Cannot notify key ${notificationParams.atKey.toString()} due to insufficient access to namespace ${notificationParams.atKey.namespace}}');
-    }
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;

@@ -1,7 +1,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/src/response/pending_enrollment_request.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
-import 'package:at_commons/at_builders.dart';
 
 /// [EnrollmentService] contains methods to fetch the enrollment details and methods to perform operations on the enrollments.
 abstract class EnrollmentService {
@@ -54,6 +53,4 @@ abstract class EnrollmentService {
   ///                                                      .encryptionService.deny(enrollmentRequestDecision);
   Future<AtEnrollmentResponse> deny(
       EnrollmentRequestDecision enrollmentRequestDecision);
-
-  Future<bool> isAuthorized(String key, VerbBuilder verbBuilder);
 }

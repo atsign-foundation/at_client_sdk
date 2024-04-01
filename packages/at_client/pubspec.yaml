@@ -40,12 +40,13 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
+#TODO replace with published version
 dependency_overrides:
   at_auth:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: packages/at_auth
-      ref: refactor_enrollment_methods
+      ref: trunk
 
 dev_dependencies:
   lints: ^2.1.1
