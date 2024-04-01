@@ -1,7 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
