@@ -1,6 +1,8 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_utils/at_logger.dart';
 
 /// Class responsible for decrypting the value of self key's
 /// Example:
@@ -8,9 +10,14 @@ import 'package:at_client/src/response/default_response_parser.dart';
 /// llookup:phone.wavi@bob
 /// llookup:@bob:phone@bob
 class SelfKeyDecryption implements AtKeyDecryption {
+  late final AtSignLogger _logger;
+
   final AtClient _atClient;
 
-  SelfKeyDecryption(this._atClient);
+  SelfKeyDecryption(this._atClient) {
+    _logger =
+        AtSignLogger('SelfKeyDecryption (${_atClient.getCurrentAtSign()})');
+  }
 
   @override
   Future<dynamic> decrypt(AtKey atKey, dynamic encryptedValue) async {
@@ -30,8 +37,25 @@ class SelfKeyDecryption implements AtKeyDecryption {
 
     var selfEncryptionKey =
         _atClient.atChops!.atChopsKeys.selfEncryptionKey!.key;
-    return EncryptionUtil.decryptValue(encryptedValue,
-        DefaultResponseParser().parse(selfEncryptionKey).response,
-        ivBase64: atKey.metadata.ivNonce);
+
+    InitialisationVector iV;
+    if (atKey.metadata.ivNonce != null) {
+      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+    } else {
+      iV = AtChopsUtil.generateIVLegacy();
+    }
+    AtEncryptionResult decryptionResultFromAtChops;
+    try {
+      var encryptionAlgo = AESEncryptionAlgo(
+          AESKey(DefaultResponseParser().parse(selfEncryptionKey).response));
+      decryptionResultFromAtChops = _atClient.atChops!.decryptString(
+          encryptedValue, EncryptionKeyType.aes256,
+          encryptionAlgorithm: encryptionAlgo, iv: iV);
+    } on AtDecryptionException catch (e) {
+      _logger.severe(
+          'decryption exception during decryption of key: ${atKey.key}. Reason: ${e.toString()}');
+      rethrow;
+    }
+    return decryptionResultFromAtChops.result;
   }
 }

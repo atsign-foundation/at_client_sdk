@@ -9,20 +9,10 @@ environment:
 dependencies:
   uuid: 3.0.7
   at_demo_data: ^1.0.3
-
   at_client:
     path: ../../packages/at_client
-  at_auth: ^1.0.5
+  at_auth: ^1.0.6
   at_lookup: ^3.0.46
-
-
-dependency_overrides:
-  at_commons: ^4.0.0
-  at_auth:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_auth
-      ref: refactor_enrollment_methods
 
 dev_dependencies:
   test: ^1.24.3
