@@ -325,6 +325,7 @@ class NotificationServiceImpl
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
+
     if (_atClient.getPreferences()!.atProtocolEmitted >= Version(2, 0, 0)) {
       notificationParams.atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     }

@@ -71,7 +71,7 @@ class LocalSecondary implements Secondary {
     try {
       dynamic updateResult;
       var updateKey = builder.buildKey();
-      if (!await isAuthorized(updateKey, builder)) {
+      if (!await _isAuthorized(updateKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform update on $updateKey due to insufficient privilege');
       }
@@ -100,7 +100,7 @@ class LocalSecondary implements Secondary {
     var llookupKey = '';
     try {
       llookupKey = builder.buildKey();
-      if (!await isAuthorized(llookupKey, builder)) {
+      if (!await _isAuthorized(llookupKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform llookup on $llookupKey due to insufficient privilege');
       }
@@ -124,7 +124,7 @@ class LocalSecondary implements Secondary {
 
   Future<String> _delete(DeleteVerbBuilder builder) async {
     var deleteKey = builder.buildKey();
-    if (!await isAuthorized(deleteKey, builder)) {
+    if (!await _isAuthorized(deleteKey, builder)) {
       throw UnAuthorizedException(
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
@@ -157,7 +157,7 @@ class LocalSecondary implements Secondary {
       keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
       final keysToRemove = <String>[];
       await Future.forEach(keys, (key) async {
-        if (!(await isAuthorized(key.toString(), builder))) {
+        if (!(await _isAuthorized(key.toString(), builder))) {
           keysToRemove.add(key.toString());
         }
       });
@@ -265,10 +265,10 @@ class LocalSecondary implements Secondary {
     return isStored != null ? true : false;
   }
 
-  Future<bool> isAuthorized(String key, VerbBuilder verbBuilder) async {
+  Future<bool> _isAuthorized(String key, VerbBuilder verbBuilder) async {
     // if there is no enrollment, return true
     var enrollmentId = _atClient.enrollmentId;
-    _enrollmentDetails ??= await getEnrollmentDetails();
+    _enrollmentDetails ??= await _getEnrollmentDetails();
     if (enrollmentId == null ||
         _enrollmentDetails == null ||
         _isReservedKey(key)) {
@@ -306,8 +306,7 @@ class LocalSecondary implements Secondary {
         _isWriteAllowed(verbBuilder, access);
   }
 
-  @visibleForTesting
-  Future<EnrollmentDetails?> getEnrollmentDetails() async {
+  Future<EnrollmentDetails?> _getEnrollmentDetails() async {
     var enrollmentId = _atClient.enrollmentId;
     if (enrollmentId == null) {
       return null;
