@@ -241,7 +241,7 @@ class AtAuthServiceImpl implements AtAuthService {
     // if enrollmentInfoJsonString is not null, it indicates that there is a pending
     // enrollment request. So, do not allow another enrollment request.
     if (enrollmentInfoJsonString != null) {
-      throw InvalidRequestException(
+      throw AtEnrollmentException(
           'Cannot submit new enrollment request until the pending enrollment request is fulfilled');
     }
     atLookUp ??= AtLookupImpl(

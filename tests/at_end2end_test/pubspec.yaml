@@ -18,7 +18,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: packages/at_auth
-      ref: refactor_enrollment_methods
+      ref: trunk
 
 
 dev_dependencies:
