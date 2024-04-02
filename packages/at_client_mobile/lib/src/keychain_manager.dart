@@ -26,6 +26,7 @@ class KeyChainManager {
   static final KeyChainManager _singleton = KeyChainManager._internal();
 
   static final _logger = AtSignLogger('KeyChainUtil');
+  late PackageInfo packageInfo;
 
   KeyChainManager._internal();
 
@@ -666,7 +667,7 @@ class KeyChainManager {
   }) async {
     String packageName = '';
     try {
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      packageInfo = await PackageInfo.fromPlatform();
       packageName = packageInfo.packageName;
     } catch (e, s) {
       _logger.warning('Get PackageInfo', e, s);
@@ -726,7 +727,7 @@ class KeyChainManager {
     return result;
   }
 
-  Future<void> writeToEnrollmentStore(String atSign, String data) async {
+  writeToEnrollmentStore(String atSign, String data) async {
     final store = await getEnrollmentStorage(atSign);
     await _writeDataToStore(store: store, data: data);
   }
@@ -751,7 +752,7 @@ class KeyChainManager {
     if (Platform.isWindows) {
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       await store.write(dataList.length.toString());
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      packageInfo = await PackageInfo.fromPlatform();
       final packageName = packageInfo.packageName;
 
       for (int i = 0; i < dataList.length; i++) {
@@ -775,7 +776,7 @@ class KeyChainManager {
   }) async {
     if (Platform.isWindows) {
       final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      packageInfo = await PackageInfo.fromPlatform();
       final packageName = packageInfo.packageName;
       final results = <String>[];
       for (int i = 0; i < segmentCount; i++) {
