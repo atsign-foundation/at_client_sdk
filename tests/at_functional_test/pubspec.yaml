@@ -11,7 +11,7 @@ dependencies:
   at_demo_data: ^1.0.3
   at_client:
     path: ../../packages/at_client
-  at_auth: ^1.0.6
+  at_auth: ^2.0.0
   at_lookup: ^3.0.46
 
 dev_dependencies:
