@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -9,7 +8,6 @@ import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:biometric_storage/biometric_storage.dart';
 import 'package:flutter/cupertino.dart';
 
 class AtAuthServiceImpl implements AtAuthService {
@@ -28,16 +26,6 @@ class AtAuthServiceImpl implements AtAuthService {
   AtClientManager atClientManager = AtClientManager.getInstance();
   late AtAuth atAuth;
   late AtEnrollmentBase atEnrollmentBase;
-
-  /// A flutter key-chain to store the enrollment keys (APKAM key-pair and APKAM
-  /// Symmetric key) on submission of enrollment request.
-  ///
-  /// In the event of app closure following the submission of an enrollment request,
-  /// the enrollment keys may be lost. To facilitate APKAM authentication retries,
-  /// the keys are stored in the key-chain.
-  /// Removal of the keys occurs upon successful approval or denial of the enrollment.
-  @visibleForTesting
-  BiometricStorage enrollmentKeychainStore = BiometricStorage();
 
   /// The maximum number of retries for verify approval/denial of an enrollment request
   final int _maxEnrollmentAuthenticationRetryInHours = 48;
@@ -394,7 +382,7 @@ class AtAuthServiceImpl implements AtAuthService {
             enrollmentInfo.enrollmentId, atLookUp!.atChops!);
 
     // updating enrollmentStore
-    
+
     await keyChainManager.writeToEnrollmentStore(
       _atSign,
       jsonEncode(enrollmentInfo),

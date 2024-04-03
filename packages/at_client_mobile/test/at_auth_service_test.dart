@@ -60,8 +60,6 @@ void main() {
       mockAtLookUp = MockAtLookUp();
       mockPackageInfo = MockPackageInfo();
 
-      authServiceImpl.enrollmentKeychainStore = mockBiometricStorage;
-
       authServiceImpl.keyChainManager.biometricStorage = mockBiometricStorage;
       authServiceImpl.keyChainManager.packageInfo = mockPackageInfo;
 
