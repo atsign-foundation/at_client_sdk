@@ -137,7 +137,7 @@ jobs:
         run: dart run test/check_docker_readiness.dart
 
       - name: Run PKAM
-        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+        run: docker exec test-virtualenv-1 supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
