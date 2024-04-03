@@ -130,14 +130,14 @@ jobs:
       # Start docker container to run functional tests
       - name: Start docker instance
         working-directory: tests/at_functional_test/test
-        run: docker-compose pull && docker-compose up -d
+        run: docker compose pull && docker compose up -d
 
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
 
       - name: Run PKAM
-        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+        run: docker exec test-virtualenv-1 supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -161,7 +161,7 @@ jobs:
       # stop docker containers
       - name: stop docker containers
         working-directory: tests/at_functional_test/test
-        run: docker-compose down
+        run: docker compose down
 
   end2end_tests_prep:
     # Don't run on PRs from a fork as the secrets aren't available
