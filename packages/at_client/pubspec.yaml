@@ -36,17 +36,12 @@ dependencies:
   at_chops: ^2.0.0
   at_lookup: ^3.0.46
   at_persistence_spec: ^2.0.14
-  at_persistence_secondary_server: ^3.0.61
+  at_persistence_secondary_server: ^3.0.62
   meta: ^1.8.0
   version: ^3.0.2
 
 #TODO replace with published version
 dependency_overrides:
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server
-      path: packages/at_persistence_secondary_server
-      ref: trunk
   at_commons:
     git:
       url: https://github.com/atsign-foundation/at_libraries
