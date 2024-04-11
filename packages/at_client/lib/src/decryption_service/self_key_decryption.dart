@@ -30,8 +30,8 @@ class SelfKeyDecryption implements AtKeyDecryption {
     }
 
     // Get SelfEncryptionKey from atChops
-    // To support backward compatibility of at_client_mobile, if SelfEncryptionKey is null in atChops,
-    // fetch from LocalSecondary and set it to AtChops Instance.
+    // https://github.com/atsign-foundation/at_client_sdk/issues/1294 causes selfEncryptionKey to be null in atChops.
+    // Fetch from LocalSecondary until the above issue is fixed.
     String? selfEncryptionKey =
         _atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
     if (selfEncryptionKey.isNullOrEmpty) {
@@ -47,9 +47,6 @@ class SelfKeyDecryption implements AtKeyDecryption {
           intent: Intent.fetchSelfEncryptionKey,
           exceptionScenario: ExceptionScenario.encryptionFailed);
     }
-    // If SelfEncryptionKey is found in local secondary, set it to AtChops instance.
-    _atClient.atChops?.atChopsKeys.selfEncryptionKey =
-        AESKey(selfEncryptionKey!);
 
     InitialisationVector iV;
     if (atKey.metadata.ivNonce != null) {
