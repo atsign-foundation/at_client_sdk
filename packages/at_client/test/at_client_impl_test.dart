@@ -11,6 +11,8 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/test_utils.dart';
+
 class MockAtCompactionJob extends Mock implements AtCompactionJob {
   bool isCronScheduled = false;
 
@@ -362,6 +364,23 @@ void main() {
     });
     tearDown(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
+    });
+  });
+  group('A group of test to validate max length of a key', () {
+    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    test('test max length for put method', () async {
+      AtClient? client = await AtClientImpl.create(
+          '@alice', 'buzz', AtClientPreference(),
+          remoteSecondary: mockRemoteSecondary);
+      var key = TestUtils.createRandomString(250);
+      var atKey = AtKey.fromString('$key@alice');
+
+      expect(
+          () async => await client.put(atKey, 'hello'),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message ==
+                  'Key length exceeds maximum permissible length of 248 characters')));
     });
   });
 }
