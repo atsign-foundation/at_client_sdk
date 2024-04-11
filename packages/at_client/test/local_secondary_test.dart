@@ -8,6 +8,8 @@ import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'test_utils/test_utils.dart';
+
 class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
   static const String hiddenKey1 = 'public:__location.wavi@alice';
   static const String hiddenKey2 = '_profilePic.wavi@alice';
@@ -161,6 +163,57 @@ void main() {
           await localSecondary.executeVerb(verbBuilder, sync: false);
       expect(executeResult, isNotNull);
       expect(executeResult!.startsWith('data:'), true);
+    });
+
+    test('test update verb builder max key length check', () async {
+      final atClientManager = AtClientManager(atSign);
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive';
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atClientManager: atClientManager);
+      final localSecondary = LocalSecondary(atClient);
+      var key = TestUtils.createRandomString(250);
+      final verbBuilder = UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = key
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true))
+        ..value = 'alice@gmail.com';
+      expect(
+          () async =>
+              await localSecondary.executeVerb(verbBuilder, sync: false),
+          throwsA(predicate((dynamic e) =>
+              e is DataStoreException &&
+              e.message ==
+                  'key length ${'public:'.length + key.length + atSign.length} is greater than max allowed 248 chars')));
+    });
+
+    test('test update verb builder max key length check for cached key',
+        () async {
+      final atClientManager = AtClientManager(atSign);
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive';
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atClientManager: atClientManager);
+      final localSecondary = LocalSecondary(atClient);
+      var key = TestUtils.createRandomString(250);
+      final verbBuilder = UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = key
+          ..sharedBy = atSign
+          ..metadata = (Metadata()
+            ..isCached = true
+            ..isPublic = true))
+        ..value = 'alice@gmail.com';
+      expect(
+          () async =>
+              await localSecondary.executeVerb(verbBuilder, sync: false),
+          throwsA(predicate((dynamic e) =>
+              e is DataStoreException &&
+              e.message ==
+                  'key length ${'cached:'.length + 'public:'.length + key.length + atSign.length} is greater than max allowed 255 chars')));
     });
 
     test('test llookup verb builder', () async {
