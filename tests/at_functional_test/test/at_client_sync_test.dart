@@ -46,10 +46,9 @@ void main() {
     expect(serverCommitIdAfterPut! > serverCommitId!, true);
     // Getting value from remote secondary
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey()
-      ..key = 'twitter.wavi'
-      ..sharedWith = sharedWithAtSign
-      ..sharedBy = atSign)
+      ..atKey = (AtKey.shared('twitter.wavi', sharedBy: atSign)
+            ..sharedWith(sharedWithAtSign))
+          .build()
       ..operation = 'all';
     var getResponse =
         await atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
@@ -69,17 +68,15 @@ void main() {
     // twitter.me@alice🛠
     var value = 'alice.linkedin';
     var updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey =
-          AtKey.public('linkedin', namespace: namespace, sharedBy: atSign)
-              .build()
+      ..atKey = AtKey.public('linkedin', namespace: namespace, sharedBy: atSign)
+          .build()
       ..value = value;
     var updateResponse =
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
     // Waits until key is synced to the remote secondary
     await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
-        syncOptions: SyncOptions()
-          ..key = updateVerbBuilder.atKey.toString());
+        syncOptions: SyncOptions()..key = updateVerbBuilder.atKey.toString());
     // Getting server commit id after put
     var localEntryAfterSync =
         await SyncUtil().getLastSyncedEntry('', atSign: atSign);
@@ -137,10 +134,10 @@ void main() {
     expect(serverCommitIdAfterPut! > serverCommitId!, true);
     // Getting value from remote secondary
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey() 
-      ..key ='quora.wavi'
-      ..sharedWith = sharedWithAtSign
-      ..sharedBy = atSign)
+      ..atKey = (AtKey()
+        ..key = 'quora.wavi'
+        ..sharedWith = sharedWithAtSign
+        ..sharedBy = atSign)
       ..operation = 'all';
     var getResponse =
         await atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
@@ -167,10 +164,10 @@ void main() {
     await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
         syncOptions: SyncOptions()..key = atKey.toString());
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey() 
-      ..key ='discord.wavi'
-      ..sharedWith = sharedWithAtSign
-      ..sharedBy = atSign)
+      ..atKey = (AtKey()
+        ..key = 'discord.wavi'
+        ..sharedWith = sharedWithAtSign
+        ..sharedBy = atSign)
       ..operation = 'all';
     var getResponse =
         await atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
@@ -199,9 +196,9 @@ void main() {
     expect(localEntryAfterSync!.atKey, isNot('local:localkey.wavi$atSign'));
     print('local synced entry $localEntryAfterSync');
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey() 
-      ..key ='local:localkey.wavi'
-      ..sharedBy = atSign)
+      ..atKey = (AtKey()
+        ..key = 'local:localkey.wavi'
+        ..sharedBy = atSign)
       ..operation = 'all';
     expect(
         () async => await atClient
@@ -227,9 +224,9 @@ void main() {
     await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
         syncOptions: SyncOptions()..key = atKey.toString());
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey =(AtKey() 
-      ..key= 'key1.wavi'
-      ..sharedBy = atSign)
+      ..atKey = (AtKey()
+        ..key = 'key1.wavi'
+        ..sharedBy = atSign)
       ..operation = 'all';
     var getResponse =
         await atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);
@@ -259,10 +256,10 @@ void main() {
         syncOptions: SyncOptions()..key = atKey.toString());
 
     var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey() 
-      ..key = 'testkey.wavi'
-      ..sharedBy = atSign
-      ..metadata = (Metadata() ..isPublic = true))
+      ..atKey = (AtKey()
+        ..key = 'testkey.wavi'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isPublic = true))
       ..operation = 'all';
     var getResponse =
         await atClient.getRemoteSecondary()!.executeVerb(llookupVerbBuilder);

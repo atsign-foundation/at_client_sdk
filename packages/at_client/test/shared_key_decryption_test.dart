@@ -189,12 +189,16 @@ void main() {
   });
 
   test('test to check shared key decryption with IV', () async {
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+
+    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
+    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
+    var atChopsImpl = AtChopsImpl(atChopsKeys);
+
+    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';
 

@@ -1,5 +1,3 @@
-// ignore_for_file: deprecated_member_use
-
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
@@ -30,7 +28,7 @@ class AtClientAuthenticator implements AtClientAuth {
   }
 
   Future<bool> cramAuth(String cramSecret) async {
-    return await atLookUp.authenticate_cram(cramSecret);
+    return await atLookUp.cramAuthenticate(cramSecret);
   }
 
   Future<bool> pkamAuth(String privateKey) async {
@@ -52,7 +50,7 @@ class AtClientAuthenticator implements AtClientAuth {
     if (atClientPreference.cramSecret != null) {
       logger.finer('private key is empty. Performing cram');
       var isCramSuccessful = await atLookupInitialAuth
-          .authenticate_cram(atClientPreference.cramSecret);
+          .cramAuthenticate(atClientPreference.cramSecret!);
       // If cram auth is not successful, return false.
       if (!isCramSuccessful) {
         return false;

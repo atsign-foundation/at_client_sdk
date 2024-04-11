@@ -9,6 +9,7 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
+import 'package:uuid/uuid.dart';
 
 class PreferenceFactory extends AtCollectionModelFactory<Preference> {
   static final PreferenceFactory _singleton = PreferenceFactory._internal();
@@ -338,6 +339,7 @@ void main() async {
   });
 
   test('Model operations - unshare() and delete() test', () async {
+    String random = Uuid().v4().hashCode.toString();
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -347,7 +349,7 @@ void main() async {
     );
 
     var fourthPhone = Phone()
-      ..id = 'personal phone'
+      ..id = 'personal phone $random'
       ..namespace = 'buzz'
       ..collectionName = 'phone'
       ..phoneNumber = '4444';
