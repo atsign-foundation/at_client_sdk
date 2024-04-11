@@ -50,7 +50,7 @@ void main() {
           currentAtsign, 'buzz', AtClientPreference(),
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, AtAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests =
@@ -102,7 +102,7 @@ void main() {
           currentAtsign, 'random_namespace', AtClientPreference(),
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, AtAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests = await clientImpl.enrollmentService
@@ -145,7 +145,7 @@ void main() {
           currentAtsign, 'random_namespace_1', AtClientPreference(),
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, AtAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests = await clientImpl.enrollmentService

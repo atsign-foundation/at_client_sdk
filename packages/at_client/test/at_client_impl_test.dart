@@ -1,6 +1,10 @@
+import 'dart:convert';
+
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -293,7 +297,7 @@ void main() {
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
-      List<PendingEnrollmentRequest> requests =
+      List<Enrollment> requests =
           await clientImpl.enrollmentService.fetchEnrollmentRequests();
       expect(requests.length, 3);
       expect(requests[0].enrollmentId,
