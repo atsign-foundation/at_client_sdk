@@ -1,8 +1,11 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:encrypt/encrypt.dart';
 
 ///Class responsible for encrypting the selfKey's
 class SelfKeyEncryption implements AtKeyEncryption {
@@ -18,6 +21,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value,
       {bool storeSharedKeyEncryptedWithData = true}) async {
+    String? selfEncryptionKey;
     if (value is! String) {
       _logger.severe(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
@@ -25,14 +29,26 @@ class SelfKeyEncryption implements AtKeyEncryption {
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
 
-    if (atClient.atChops == null ||
-        atClient.atChops!.atChopsKeys.selfEncryptionKey == null) {
-      throw SelfKeyNotFoundException(
-          'Failed to encrypt the data caused by Self encryption key not found');
+    // Get SelfEncryptionKey from atChops
+    // To support backward compatibility of at_client_mobile, if SelfEncryptionKey is null in atChops,
+    // fetch from LocalSecondary and set it to AtChops Instance.
+    selfEncryptionKey = atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
+    if (selfEncryptionKey.isNullOrEmpty) {
+      // Fetch Self Encryption Key from Local Secondary
+      // Remove this call after the atChops has self encryption key populated from AtClientMobile.
+      selfEncryptionKey =
+          await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
     }
-    // Get AES key for current atSign
-    var selfEncryptionKey =
-        atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
+    // If selfEncryptionKey is null in atChops and in Local Secondary throw exception.
+    if (selfEncryptionKey.isNullOrEmpty) {
+      throw SelfKeyNotFoundException(
+          'Failed to encrypt the data caused by Self encryption key not found',
+          intent: Intent.fetchSelfEncryptionKey,
+          exceptionScenario: ExceptionScenario.encryptionFailed);
+    }
+    // If SelfEncryptionKey is found in local secondary, set it to AtChops instance.
+    atClient.atChops?.atChopsKeys.selfEncryptionKey =
+        AESKey(selfEncryptionKey!);
 
     AtEncryptionResult encryptionResultFromAtChops;
     try {
@@ -52,5 +68,18 @@ class SelfKeyEncryption implements AtKeyEncryption {
       rethrow;
     }
     return encryptionResultFromAtChops.result;
+  }
+
+  Future<String?> _getSelfEncryptionKey(LocalSecondary localSecondary) async {
+    String? selfEncryptionKey;
+    try {
+      selfEncryptionKey = await localSecondary.getEncryptionSelfKey();
+    } on KeyNotFoundException {
+      throw SelfKeyNotFoundException(
+          'Self encryption key is not set for current atSign',
+          intent: Intent.fetchSelfEncryptionKey,
+          exceptionScenario: ExceptionScenario.encryptionFailed);
+    }
+    return selfEncryptionKey;
   }
 }

@@ -29,14 +29,27 @@ class SelfKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
 
-    if (_atClient.atChops == null ||
-        _atClient.atChops!.atChopsKeys.selfEncryptionKey == null) {
-      throw SelfKeyNotFoundException(
-          'Failed to decrypt the key: ${atKey.toString()} caused by self encryption key not found');
+    // Get SelfEncryptionKey from atChops
+    // To support backward compatibility of at_client_mobile, if SelfEncryptionKey is null in atChops,
+    // fetch from LocalSecondary and set it to AtChops Instance.
+    String? selfEncryptionKey =
+        _atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
+    if (selfEncryptionKey.isNullOrEmpty) {
+      // Fetch Self Encryption Key from Local Secondary
+      // Remove this call after the atChops has self encryption key populated from AtClientMobile.
+      selfEncryptionKey =
+          await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
     }
-
-    var selfEncryptionKey =
-        _atClient.atChops!.atChopsKeys.selfEncryptionKey!.key;
+    // If selfEncryptionKey is null in atChops and in Local Secondary throw exception.
+    if (selfEncryptionKey.isNullOrEmpty) {
+      throw SelfKeyNotFoundException(
+          'Failed to decrypt the key: ${atKey.toString()} caused by self encryption key not found',
+          intent: Intent.fetchSelfEncryptionKey,
+          exceptionScenario: ExceptionScenario.encryptionFailed);
+    }
+    // If SelfEncryptionKey is found in local secondary, set it to AtChops instance.
+    _atClient.atChops?.atChopsKeys.selfEncryptionKey =
+        AESKey(selfEncryptionKey!);
 
     InitialisationVector iV;
     if (atKey.metadata.ivNonce != null) {
@@ -47,7 +60,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
     AtEncryptionResult decryptionResultFromAtChops;
     try {
       var encryptionAlgo = AESEncryptionAlgo(
-          AESKey(DefaultResponseParser().parse(selfEncryptionKey).response));
+          AESKey(DefaultResponseParser().parse(selfEncryptionKey!).response));
       decryptionResultFromAtChops = _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
