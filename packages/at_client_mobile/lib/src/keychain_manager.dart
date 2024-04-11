@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
@@ -485,6 +486,10 @@ class KeyChainManager {
   RSAKeypair generateKeyPair() {
     var rsaKeypair = RSAKeypair.fromRandom();
     return rsaKeypair;
+  }
+
+  String generateAESKey() {
+    return encrypt.AES(encrypt.Key.fromSecureRandom(32)).key.base64;
   }
 
   /// Function to get cram secret from keychain

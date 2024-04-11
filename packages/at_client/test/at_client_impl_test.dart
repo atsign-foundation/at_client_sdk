@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -293,38 +295,30 @@ void main() {
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'buzz', AtClientPreference(),
           remoteSecondary: mockRemoteSecondary);
+      client.enrollmentService =
+          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
-      List<EnrollmentRequest> requests =
-          await clientImpl.fetchEnrollmentRequests(EnrollListRequestParam());
+      List<PendingEnrollmentRequest> requests =
+          await clientImpl.enrollmentService.fetchEnrollmentRequests();
       expect(requests.length, 3);
-      expect(requests[0].enrollmentKey, enrollKey1);
+      expect(requests[0].enrollmentId,
+          enrollKey1.substring(0, enrollKey1.indexOf('.')));
       expect(requests[0].appName, jsonDecode(enrollValue1)['appName']);
       expect(requests[0].deviceName, jsonDecode(enrollValue1)['deviceName']);
       expect(requests[0].namespace, jsonDecode(enrollValue1)['namespace']);
-      // the following statement asserts that the enrollment.enrollmentId getter fetches the correct enrollment id
-      expect(requests[0].enrollmentKey.contains(enrollKey1), true);
 
-      expect(requests[1].enrollmentKey, enrollKey2);
+      expect(requests[1].enrollmentId,
+          enrollKey2.substring(0, enrollKey1.indexOf('.')));
       expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
       expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
       expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
-      expect(requests[1].enrollmentKey.contains(enrollKey2), true);
 
-      expect(requests[2].enrollmentKey, enrollKey3);
+      expect(requests[2].enrollmentId,
+          enrollKey3.substring(0, enrollKey1.indexOf('.')));
       expect(requests[2].appName, jsonDecode(enrollValue3)['appName']);
       expect(requests[2].deviceName, jsonDecode(enrollValue3)['deviceName']);
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
-      expect(requests[2].enrollmentKey.contains(enrollKey3), true);
-    });
-
-    test('validate EnrollRequest.extractEnrollmentId()', () {
-      String enrollmentKey =
-          '0acdeb4d-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage@random';
-      String enrollmentId = '0acdeb4d-1a2e-43e4-93bd-378f1d366ea7';
-
-      expect(
-          EnrollmentRequest.extractEnrollmentId(enrollmentKey), enrollmentId);
     });
   });
 

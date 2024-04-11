@@ -93,8 +93,9 @@ void main() {
           mockSecondaryAddressFinder;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
-      AtChops atChops =
-          AtChopsImpl(AtChopsKeys.create(atEncryptionKeyPair, null));
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
+      atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
+      AtChops atChops = AtChopsImpl(atChopsKeys);
       atClient = await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
           remoteSecondary: mockRemoteSecondary, atChops: atChops);
       localStore = atClient.getLocalSecondary()!.keyStore!;

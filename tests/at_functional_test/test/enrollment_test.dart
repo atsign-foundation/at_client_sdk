@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -27,10 +31,148 @@ void main() {
     await setLastReceivedNotificationDateTime();
   });
 
-  void stopSubscriptions() {
+  void stopSubscriptions(AtClientManager atClientManager) {
     atClientManager.atClient.notificationService.stopAllSubscriptions();
     print('subscriptions stopped');
   }
+
+  group('Group of tests for APKAM scnearios using at_auth', () {
+    test('A test to verify onboarding and initial enrollment using at_auth',
+        () async {
+      var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
+      var atAuth = atAuthBase.atAuth();
+      final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
+        ..appName = 'wavi'
+        ..deviceName = 'pixel'
+        ..enableEnrollment = true
+        ..rootDomain = 'vip.ve.atsign.zone';
+      // onboard with enable enrollment set
+      var atOnboardingResponse =
+          await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
+      print('atOnboardingResponse: $atOnboardingResponse');
+      expect(atOnboardingResponse.isSuccessful, true);
+      expect(atOnboardingResponse.atAuthKeys, isNotNull);
+      expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
+      expect(atOnboardingResponse.enrollmentId, isNotEmpty);
+      // generate keys file
+      await _generateAtKeysFile(
+          apkamAtSign,
+          atOnboardingResponse.enrollmentId,
+          atOnboardingResponse.atAuthKeys!,
+          'test/testData/$apkamAtSign.atKeys');
+
+      // auth using generated keysFile
+      var atAuthResponse = await atAuth.authenticate(AtAuthRequest(apkamAtSign)
+        ..atKeysFilePath = 'test/testData/$apkamAtSign.atKeys'
+        ..rootDomain = 'vip.ve.atsign.zone');
+      print('atAuthResponse: $atAuthResponse');
+      expect(atAuthResponse.isSuccessful, true);
+      expect(atAuthResponse.atAuthKeys, isNotNull);
+
+      // create atclient instance
+      var atClientPreference = AtClientPreference()
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..commitLogPath = 'test/hive/commit/'
+        ..hiveStoragePath = 'test/hive/client'
+        ..isLocalStoreRequired = true;
+
+      final atClientManager = await AtClientManager(apkamAtSign)
+          .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
+              atChops: atAuth.atChops);
+      //var scanResult = await atClientManager.atClient.getKeys();
+      var scanResult = await atClientManager.atClient
+          .getRemoteSecondary()
+          ?.executeCommand('scan\n', auth: true);
+      final atClient = atClientManager.atClient;
+      // check for keys in __manage namespace
+      expect(
+          scanResult?.contains(
+              '${atOnboardingResponse.enrollmentId}.default_enc_private_key.__manage$apkamAtSign'),
+          true);
+      expect(
+          scanResult?.contains(
+              '${atOnboardingResponse.enrollmentId}.default_self_enc_key.__manage$apkamAtSign'),
+          true);
+      expect(
+          scanResult?.contains(
+              '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign'),
+          true);
+      // check whether at client can create keys in different namespaces
+      // #TODO change below logic to atClient.put once we have enrollment namespace checks in put method
+      var putWaviKeyReponse = await atClient
+          .getRemoteSecondary()!
+          .executeCommand('update:phone.wavi$apkamAtSign 1234\n');
+      expect(putWaviKeyReponse, isNotEmpty);
+      putWaviKeyReponse = putWaviKeyReponse!.replaceFirst('data:', '');
+      expect(int.parse(putWaviKeyReponse), greaterThan(0));
+      var putBuzzKeyReponse = await atClient
+          .getRemoteSecondary()!
+          .executeCommand('update:email.buzz$apkamAtSign test@gmail.com\n');
+      expect(putBuzzKeyReponse, isNotEmpty);
+      putBuzzKeyReponse = putBuzzKeyReponse!.replaceFirst('data:', '');
+      expect(int.parse(putBuzzKeyReponse), greaterThan(0));
+    });
+
+    test('A test to verify new enrollment and approval from privileged client',
+        () async {
+      // auth and listen to notifications from privileged client
+      var atSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
+      var atAuth = atAuthBase.atAuth();
+      var atAuthResponse = await atAuth.authenticate(AtAuthRequest(atSign)
+        ..atKeysFilePath = 'test/testData/$atSign.atKeys'
+        ..rootDomain = 'vip.ve.atsign.zone');
+      print('atAuthResponse: $atAuthResponse');
+      expect(atAuthResponse.isSuccessful, true);
+      expect(atAuthResponse.atAuthKeys, isNotNull);
+
+      // create atclient instance
+      var atClientPreference = AtClientPreference()
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..commitLogPath = 'test/hive/commit/'
+        ..hiveStoragePath = 'test/hive/client'
+        ..isLocalStoreRequired = true;
+
+      final atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign, namespace, atClientPreference,
+              atChops: atAuth.atChops,
+              enrollmentId: atAuthResponse.enrollmentId);
+      final atClient = atClientManager.atClient;
+      // get otp
+      var otpResponse = await atClient
+          .getRemoteSecondary()!
+          .executeCommand('otp:get\n', auth: true);
+      expect(otpResponse, isNotEmpty);
+      otpResponse = otpResponse!.replaceFirst('data:', '');
+      print('otpResponse: $otpResponse');
+      await setLastReceivedNotificationDateTime();
+      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          appName: 'buzz',
+          deviceName: 'iphone',
+          namespaces: {'buzz': 'rw'},
+          otp: otpResponse);
+      var atEnrollment = atAuthBase.atEnrollment(atSign);
+      print('submitting new enrollment');
+      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      var newEnrollmentResponse =
+          await atEnrollment.submit(enrollmentRequest, newAtLookup);
+      expect(newEnrollmentResponse.enrollmentId, isNotEmpty);
+      expect(newEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
+      print('completed new enrollment request');
+      var completer = Completer<void>(); // Create a Completer
+
+      // listen for notification from privileged client and invoke callback which approves the enrollment
+      atClient.notificationService
+          .subscribe(regex: '.__manage')
+          .listen(expectAsync1((notification) async {
+            print('got enroll notification');
+            await _notificationCallback(
+                notification, atClientManager.atClient, 'approve');
+            completer.complete();
+            stopSubscriptions(atClientManager);
+          }, count: 1, max: -1));
+      await completer.future;
+    });
+  });
 
   group('A group of tests for OTP and SPP', () {
     test(
@@ -88,8 +230,60 @@ void main() {
 
     test('A test to verify getOTP returns OTP', () async {
       AtResponse atResponse = await atClientManager.atClient.getOTP();
+
       expect(atResponse.response.isNotEmpty, true);
-      expect(atResponse.response.length, 6);
+      var otp = atResponse.response;
+      expect(otp.length, 6);
+      expect(
+          otp.contains('0') || otp.contains('o') || otp.contains('O'), false);
+      // check whether otp contains atleast one number and one alphabet
+      expect(RegExp(r'^(?=.*[a-zA-Z])(?=.*\d).+$').hasMatch(otp), true);
+    });
+    test('A test to verify invalid OTP results in error response from server',
+        () async {
+      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          appName: 'buzz',
+          deviceName: 'iphone',
+          namespaces: {'buzz': 'rw'},
+          otp: 'a1b2c3'); //random invalid OTP
+      var atEnrollment = atAuthBase.atEnrollment(atSign);
+      print('submitting new enrollment');
+      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      expect(
+          () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
+          throwsA(predicate((dynamic e) =>
+              e is AtLookUpException &&
+              e.errorCode == 'AT0011' &&
+              e.errorMessage!
+                  .contains('invalid otp. Cannot process enroll request'))));
+    });
+    test(
+        'A test to verify same OTP used twice results in error response from server',
+        () async {
+      AtResponse atResponse = await atClientManager.atClient.getOTP();
+
+      expect(atResponse.response.isNotEmpty, true);
+      var otp = atResponse.response;
+      expect(otp.length, 6);
+      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          appName: 'buzz',
+          deviceName: 'iphone',
+          namespaces: {'buzz': 'rw'},
+          otp: otp); //random invalid OTP
+      var atEnrollment = atAuthBase.atEnrollment(atSign);
+      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      var enrollmentResponse =
+          await atEnrollment.submit(enrollmentRequest, newAtLookup);
+      expect(enrollmentResponse.enrollmentId, isNotEmpty);
+      expect(enrollmentResponse.enrollStatus, EnrollmentStatus.pending);
+      // submit another enrollment with same OTP
+      expect(
+          () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
+          throwsA(predicate((dynamic e) =>
+              e is AtLookUpException &&
+              e.errorCode == 'AT0011' &&
+              e.errorMessage!
+                  .contains('invalid otp. Cannot process enroll request'))));
     });
   });
 
@@ -106,12 +300,12 @@ void main() {
         .executeCommand('cram:$cramDigest\n');
     print('CRAM Result: $cramResult');
 
-    //2. send enroll request. #TODO replace below command with call to enroll method in at_client_spec once
-    // https://github.com/atsign-foundation/at_client_sdk/issues/1078 is completed
+    //2. send enroll request.
     var encryptedDefaultEncPrivateKey = EncryptionUtil.encryptValue(
         aliceDefaultEncryptionPrivateKey, aliceApkamSymmetricKey);
     var encryptedSelfEncKey = EncryptionUtil.encryptValue(
         aliceSelfEncryptionKey, aliceApkamSymmetricKey);
+    var atEnrollmentBase = atAuthBase.atEnrollment(atSign);
     var enrollRequest =
         'enroll:request:{"appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
     var enrollResponseFromServer =
@@ -130,26 +324,37 @@ void main() {
 
     var remoteSecondary_2 = RemoteSecondary(atSign, getClient2Preferences());
     var secondApkamPublicKey = pkamPublicKeyMap[
-        '@bob🛠']; //choose any pkam public key part from @alice🛠
-    var newEnrollRequest =
-        'enroll:request:{"appName":"buzz","deviceName":"pixel","namespaces":{"buzz":"rw"},"otp":"$otp","apkamPublicKey":"$secondApkamPublicKey"}\n';
-    var newEnrollResponse =
-        await remoteSecondary_2.executeCommand(newEnrollRequest);
-    print('EnrollmentResponse: $newEnrollResponse');
-    expect(newEnrollResponse, isNotEmpty);
-
-    newEnrollResponse = newEnrollResponse!.replaceFirst('data:', '');
-    var enrollJson = jsonDecode(newEnrollResponse);
-    var enrollmentIdFromServer = enrollJson['enrollmentId'];
+        '@bob🛠']; //choose any pkam public key apart from @alice🛠. Instead of generating new key we just use a public key from demo credentials for testing
+    var apkamSymmetricKey = apkamSymmetricKeyMap[atSign];
+    var encryptedApkamSymmetricKey = EncryptionUtil.encryptKey(
+        apkamSymmetricKey!, encryptionPublicKeyMap[atSign]!);
+    var newEnrollmentRequest = EnrollmentRequest(
+        appName: "buzz",
+        deviceName: "pixel",
+        otp: otp,
+        namespaces: {"buzz": "rw"},
+        apkamPublicKey: secondApkamPublicKey,
+        encryptedAPKAMSymmetricKey: encryptedApkamSymmetricKey);
+    var newEnrollmentResponse = await atEnrollmentBase.submit(
+        newEnrollmentRequest, remoteSecondary_2.atLookUp);
+    var enrollmentIdFromServer = newEnrollmentResponse.enrollmentId;
     expect(enrollmentIdFromServer, isNotEmpty);
-    expect(enrollJson['status'], 'pending');
+    expect(newEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
     atClientManager.atClient.notificationService
         .subscribe(regex: '.new.enrollments.__manage')
         .listen(expectAsync1((enrollNotification) {
           print('got enrollment notification: $enrollNotification');
           expect(enrollNotification.key,
               '$enrollmentIdFromServer.new.enrollments.__manage');
-          stopSubscriptions();
+          expect(enrollNotification.value, isNotNull);
+          var notificationValueJson = jsonDecode(enrollNotification.value!);
+          expect(notificationValueJson['appName'], 'buzz');
+          expect(notificationValueJson['deviceName'], 'pixel');
+          expect(notificationValueJson['namespace']['buzz'], 'rw');
+          expect(
+              notificationValueJson['encryptedApkamSymmetricKey'], isNotEmpty);
+
+          stopSubscriptions(atClientManager);
         }, count: 1, max: 1));
   });
 
@@ -191,24 +396,21 @@ void main() {
     expect(enrollResponse2JsonDecoded['status'], 'pending');
 
     // fetch enrollment requests through client
-    List<EnrollmentRequest> enrollmentRequests =
-        await client.fetchEnrollmentRequests(EnrollListRequestParam());
+    List<PendingEnrollmentRequest> enrollmentRequests =
+        await client.enrollmentService.fetchEnrollmentRequests();
 
     expect(enrollmentRequests.length > 2, true);
 
-    String firstEnrollmentKey =
-        getEnrollmentKey(enrollResponse1JsonDecoded['enrollmentId'], atSign);
-    String secondEnrollmentKey =
-        getEnrollmentKey(enrollResponse2JsonDecoded['enrollmentId'], atSign);
     int matchCount = 0;
     for (var request in enrollmentRequests) {
-      if (request.enrollmentKey == firstEnrollmentKey) {
-        expect(request.namespace['new_app'], 'rw');
+      if (request.enrollmentId == enrollResponse1JsonDecoded['enrollmentId']) {
+        expect(request.namespace!['new_app'], 'rw');
         expect(request.deviceName, 'pixel');
         matchCount++;
-      } else if (request.enrollmentKey == secondEnrollmentKey) {
-        expect(request.namespace['new_app'], 'rw');
-        expect(request.namespace['wavi'], 'r');
+      } else if (request.enrollmentId ==
+          enrollResponse2JsonDecoded['enrollmentId']) {
+        expect(request.namespace!['new_app'], 'rw');
+        expect(request.namespace!['wavi'], 'r');
         expect(request.deviceName, 'pixel7');
         matchCount++;
       }
@@ -251,4 +453,60 @@ AtClientPreference getClient2Preferences() {
     ..hiveStoragePath = 'test/hive/client_2'
     ..isLocalStoreRequired = true
     ..rootDomain = 'vip.ve.atsign.zone';
+}
+
+Future<void> _generateAtKeysFile(String atSign, String? currentEnrollmentId,
+    AtAuthKeys atAuthKeys, String keysFilePath) async {
+  final atKeysMap = <String, String>{
+    'aesPkamPublicKey': EncryptionUtil.encryptValue(
+        atAuthKeys.apkamPublicKey!, atAuthKeys.defaultSelfEncryptionKey!),
+    'aesPkamPrivateKey': EncryptionUtil.encryptValue(
+        atAuthKeys.apkamPrivateKey!, atAuthKeys.defaultSelfEncryptionKey!),
+    'aesEncryptPublicKey': EncryptionUtil.encryptValue(
+        atAuthKeys.defaultEncryptionPublicKey!,
+        atAuthKeys.defaultSelfEncryptionKey!),
+    'aesEncryptPrivateKey': EncryptionUtil.encryptValue(
+        atAuthKeys.defaultEncryptionPrivateKey!,
+        atAuthKeys.defaultSelfEncryptionKey!),
+    'selfEncryptionKey': atAuthKeys.defaultSelfEncryptionKey!,
+    atSign: atAuthKeys.defaultSelfEncryptionKey!,
+    'apkamSymmetricKey': atAuthKeys.apkamSymmetricKey!
+  };
+
+  if (currentEnrollmentId != null) {
+    atKeysMap['enrollmentId'] = currentEnrollmentId;
+  }
+
+  File atKeysFile = File(keysFilePath);
+
+  if (!atKeysFile.existsSync()) {
+    atKeysFile.createSync(recursive: true);
+  }
+  IOSink fileWriter = atKeysFile.openWrite();
+
+  //generating .atKeys file at path provided in onboardingConfig
+  fileWriter.write(jsonEncode(atKeysMap));
+  await fileWriter.flush();
+  await fileWriter.close();
+}
+
+Future<void> _notificationCallback(
+    AtNotification notification, AtClient atClient, String response) async {
+  print('enroll notification received: ${notification.toString()}');
+  final notificationKey = notification.key;
+  final enrollmentId =
+      notificationKey.substring(0, notificationKey.indexOf('.new.enrollments'));
+  var enrollParamsJson = {};
+  enrollParamsJson['enrollmentId'] = enrollmentId;
+  final encryptedApkamSymmetricKey =
+      jsonDecode(notification.value!)['encryptedApkamSymmetricKey'];
+  var atEnrollment = atAuthBase.atEnrollment(atClient.getCurrentAtSign()!);
+  EnrollmentRequestDecision enrollmentRequestDecision =
+      EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
+          enrollmentId: enrollmentId,
+          encryptedAPKAMSymmetricKey: encryptedApkamSymmetricKey));
+  var approvalResponse = await atEnrollment.approve(
+      enrollmentRequestDecision, atClient.getRemoteSecondary()!.atLookUp);
+  print('approvalResponse: $approvalResponse');
+  expect(approvalResponse.enrollStatus, EnrollmentStatus.approved);
 }
