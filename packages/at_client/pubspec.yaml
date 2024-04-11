@@ -31,7 +31,7 @@ dependencies:
   async: ^2.9.0
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^4.0.5
+  at_commons: ^4.0.6
   at_utils: ^3.0.16
   at_chops: ^2.0.0
   at_lookup: ^3.0.46
@@ -39,14 +39,6 @@ dependencies:
   at_persistence_secondary_server: ^3.0.62
   meta: ^1.8.0
   version: ^3.0.2
-
-#TODO replace with published version
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries
-      path: packages/at_commons
-      ref: keylength_validation_changes
 
 dev_dependencies:
   lints: ^2.1.1
