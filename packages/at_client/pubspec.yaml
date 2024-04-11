@@ -35,17 +35,11 @@ dependencies:
   at_utils: ^3.0.16
   at_chops: ^2.0.0
   at_lookup: ^3.0.46
+  at_auth: ^2.0.0
   at_persistence_spec: ^2.0.14
   at_persistence_secondary_server: ^3.0.61
   meta: ^1.8.0
   version: ^3.0.2
-
-dependency_overrides:
-  at_auth:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_auth
-      ref: refactor_enrollment_methods
 
 dev_dependencies:
   lints: ^2.1.1

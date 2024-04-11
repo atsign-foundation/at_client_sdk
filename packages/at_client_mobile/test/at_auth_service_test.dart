@@ -235,7 +235,7 @@ void main() {
               otp: 'ABC123',
               namespaces: {'wavi': 'rw'})),
           throwsA(predicate((dynamic e) =>
-              e is InvalidRequestException &&
+              e is AtEnrollmentException &&
               e.message ==
                   'Cannot submit new enrollment request until the pending enrollment request is fulfilled')));
     });
