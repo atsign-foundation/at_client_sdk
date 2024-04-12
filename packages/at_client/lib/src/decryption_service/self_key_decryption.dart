@@ -29,14 +29,24 @@ class SelfKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
 
-    if (_atClient.atChops == null ||
-        _atClient.atChops!.atChopsKeys.selfEncryptionKey == null) {
-      throw SelfKeyNotFoundException(
-          'Failed to decrypt the key: ${atKey.toString()} caused by self encryption key not found');
+    // Get SelfEncryptionKey from atChops
+    // https://github.com/atsign-foundation/at_client_sdk/issues/1294 causes selfEncryptionKey to be null in atChops.
+    // Fetch from LocalSecondary until the above issue is fixed.
+    String? selfEncryptionKey =
+        _atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
+    if (selfEncryptionKey.isNullOrEmpty) {
+      // Fetch Self Encryption Key from Local Secondary
+      // Remove this call after the atChops has self encryption key populated from AtClientMobile.
+      selfEncryptionKey =
+          await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
     }
-
-    var selfEncryptionKey =
-        _atClient.atChops!.atChopsKeys.selfEncryptionKey!.key;
+    // If selfEncryptionKey is null in atChops and in Local Secondary throw exception.
+    if (selfEncryptionKey.isNullOrEmpty) {
+      throw SelfKeyNotFoundException(
+          'Failed to decrypt the key: ${atKey.toString()} caused by self encryption key not found',
+          intent: Intent.fetchSelfEncryptionKey,
+          exceptionScenario: ExceptionScenario.encryptionFailed);
+    }
 
     InitialisationVector iV;
     if (atKey.metadata.ivNonce != null) {
@@ -47,7 +57,7 @@ class SelfKeyDecryption implements AtKeyDecryption {
     AtEncryptionResult decryptionResultFromAtChops;
     try {
       var encryptionAlgo = AESEncryptionAlgo(
-          AESKey(DefaultResponseParser().parse(selfEncryptionKey).response));
+          AESKey(DefaultResponseParser().parse(selfEncryptionKey!).response));
       decryptionResultFromAtChops = _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
