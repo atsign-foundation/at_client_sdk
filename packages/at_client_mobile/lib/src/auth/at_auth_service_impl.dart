@@ -220,8 +220,8 @@ class AtAuthServiceImpl implements AtAuthService {
   }
 
   @override
-  Future<AtEnrollmentResponse> enroll(EnrollmentRequest enrollmentRequest,
-      {String? keysFilePath}) async {
+  Future<AtEnrollmentResponse> enroll(
+      EnrollmentRequest enrollmentRequest) async {
     // Only one enrollment request can be submitted at a time.
     // Subsequent requests cannot be submitted until the pending one is fulfilled.
 
@@ -244,8 +244,7 @@ class AtAuthServiceImpl implements AtAuthService {
       DateTime.now().toUtc().millisecondsSinceEpoch,
       enrollmentRequest.namespaces,
     );
-    enrollmentInfo.keysFilePath = keysFilePath;
-    // Store the enrollment keys into keychain to generate the AtKeys file if an enrollment is approved.
+    // Store the enrollment keys into keychain to store the auth keys into keychain, if an enrollment is approved.
     await keyChainManager.writeToEnrollmentStore(
         _atSign, jsonEncode(enrollmentInfo));
     return atEnrollmentResponse;
@@ -370,8 +369,6 @@ class AtAuthServiceImpl implements AtAuthService {
   /// remove the enrollment info from keychain.
   Future<void> _handleAuthenticatedEnrollment(
       EnrollmentInfo enrollmentInfo) async {
-    _logger.info('Enrollment: ${enrollmentInfo.enrollmentId} is authenticated');
-
     // Get the decrypted (plain text) "Encryption Private Key" and "AES Symmetric Key"
     // from the secondary server.
     enrollmentInfo.atAuthKeys.defaultEncryptionPrivateKey =
@@ -380,16 +377,11 @@ class AtAuthServiceImpl implements AtAuthService {
     enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey =
         await _getDefaultSelfEncryptionKey(
             enrollmentInfo.enrollmentId, atLookUp!.atChops!);
-
-    // updating enrollmentStore
-
-    await keyChainManager.writeToEnrollmentStore(
-      _atSign,
-      jsonEncode(enrollmentInfo),
-    );
-
-    await _generateAtKeys(enrollmentInfo.atAuthKeys, atLookUp!.atChops!,
-        enrollmentInfo.keysFilePath);
+    // Store the auth keys into keychain manager for subsequent authentications
+    await _storeToKeyChainManager(_atSign, enrollmentInfo.atAuthKeys);
+    await keyChainManager.deleteEnrollmentStore(_atSign);
+    _logger.info(
+        'Enrollment Id: ${enrollmentInfo.atAuthKeys.enrollmentId} is approved and authentication keys are stored in the keychain');
     _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.approved);
     atLookUp?.close();
   }
@@ -417,61 +409,6 @@ class AtAuthServiceImpl implements AtAuthService {
         'Enrollment: ${enrollmentInfo.enrollmentId} failed to authenticate. Retrying...');
     _secondsUntilNextRun = _secondsUntilNextRun * 2;
     _initEnrollmentAuthScheduler(enrollmentInfo);
-  }
-
-  /// On approving an enrollment request, generates atKeys file which is used to
-  /// authenticate an atSign via APKAM.
-  Future<void> _generateAtKeys(
-      AtAuthKeys atAuthKeys, AtChops atChops, String? filePath) async {
-    Map<String, String?> apkamBackupKeys = atAuthKeys.toJson();
-
-    atChops.atChopsKeys.atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        atAuthKeys.defaultEncryptionPublicKey!,
-        atAuthKeys.defaultEncryptionPrivateKey!);
-
-    atChops.atChopsKeys.selfEncryptionKey =
-        AESKey(atAuthKeys.defaultSelfEncryptionKey!);
-
-    // Add atSign to the backup keys file.
-    apkamBackupKeys[_atSign] = atChops.atChopsKeys.selfEncryptionKey!.key;
-
-    try {
-      apkamBackupKeys[defaultEncryptionPublicKey] = atChops
-          .encryptString(
-              atAuthKeys.defaultEncryptionPublicKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-
-      apkamBackupKeys[defaultEncryptionPrivateKey] = atChops
-          .encryptString(
-              atAuthKeys.defaultEncryptionPrivateKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-
-      apkamBackupKeys[apkamPublicKey] = atChops
-          .encryptString(atAuthKeys.apkamPublicKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-
-      apkamBackupKeys[apkamPrivateKey] = atChops
-          .encryptString(atAuthKeys.apkamPrivateKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-    } on Exception catch (e) {
-      _logger.severe(
-          'Failed to generate the atKeys file for enrollmentId - ${atAuthKeys.enrollmentId} caused by ${e.toString()}');
-      return;
-    } on Error catch (e) {
-      _logger.severe(
-          'Failed to generate the atKeys file for enrollmentId - ${atAuthKeys.enrollmentId} caused by ${e.toString()}');
-      return;
-    }
-
-    /// When enrollment request is approved, enrollment data is copied to keychain and enrollment data is deleted
-    await _storeToKeyChainManager(_atSign, atAuthKeys);
-    await keyChainManager.deleteEnrollmentStore(_atSign);
-    _logger.info(
-        'atKeys file for enrollment id - ${atAuthKeys.enrollmentId} is saved in');
   }
 
   /// Retrieves the encrypted "encryption private key" from the server and decrypts.
