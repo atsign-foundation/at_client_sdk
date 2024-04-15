@@ -16,22 +16,17 @@ dependencies:
   biometric_storage: ^5.0.0
   hive: ^2.0.4
   crypton: ^2.2.1
-  at_commons: ^4.0.1
+  at_commons: ^4.0.5
   at_utils: ^3.0.16
   at_chops: ^2.0.0
   at_lookup: ^3.0.46
   at_client: ^3.0.75
-  at_auth: ^1.0.0
+  at_auth: ^2.0.0
   at_file_saver: 0.1.2
 
 dependency_overrides:
   at_client:
     path: ../at_client
-  at_auth:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_auth
-      ref: trunk
 
 dev_dependencies:
   lints: ^2.0.0

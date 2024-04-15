@@ -12,4 +12,4 @@ You may find it useful to read the [atPlatform overview](https://docs.atsign.com
 ## Give it a try
 
 This package includes some simple sample code in
-the [example](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/at_client/example/bin/example.dart)
+the [example](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client/example/bin/example.dart)

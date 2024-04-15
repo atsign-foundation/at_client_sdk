@@ -306,16 +306,16 @@ void main() {
     var encryptedSelfEncKey = EncryptionUtil.encryptValue(
         aliceSelfEncryptionKey, aliceApkamSymmetricKey);
     var atEnrollmentBase = atAuthBase.atEnrollment(atSign);
-    var enrollmentRequest = FirstEnrollmentRequest(
-        appName: "wavi",
-        deviceName: "pixel",
-        apkamPublicKey: alicePkamPublicKey,
-        encryptedDefaultEncryptionPrivateKey: encryptedDefaultEncPrivateKey,
-        encryptedDefaultSelfEncryptionKey: encryptedSelfEncKey);
-    var firstEnrollmentResponse = await atEnrollmentBase.submit(
-        enrollmentRequest, atClient.getRemoteSecondary()!.atLookUp);
-    expect(firstEnrollmentResponse.enrollmentId, isNotEmpty);
-    expect(firstEnrollmentResponse.enrollStatus, EnrollmentStatus.approved);
+    var enrollRequest =
+        'enroll:request:{"appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+    var enrollResponseFromServer =
+        await atClient.getRemoteSecondary()!.executeCommand(enrollRequest);
+    expect(enrollResponseFromServer, isNotEmpty);
+    enrollResponseFromServer =
+        enrollResponseFromServer?.replaceFirst('data:', '');
+    var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
+    expect(enrollResponseJson['enrollmentId'], isNotEmpty);
+    expect(enrollResponseJson['status'], 'approved');
     // Fetch OTP
     var otpResponse =
         await atClient.getRemoteSecondary()!.executeCommand('otp:get\n');
