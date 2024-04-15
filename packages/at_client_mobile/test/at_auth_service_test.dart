@@ -8,9 +8,9 @@ import 'package:at_client_mobile/src/auth/at_auth_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:biometric_storage/biometric_storage.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:test/test.dart';
-import 'package:mocktail/mocktail.dart';
 
 class MockBiometricStorage extends Mock implements BiometricStorage {}
 
@@ -50,7 +50,6 @@ void main() {
     late MockKeychainBiometricStorageFile mockBiometricStorageKeychainFile;
     late MockBiometricStorage mockBiometricStorage;
     late MockAtLookUp mockAtLookUp;
-    late MockPackageInfo mockPackageInfo;
 
     setUp(() {
       authServiceImpl = AtAuthServiceImpl(atSign, atClientPreference);
@@ -58,11 +57,8 @@ void main() {
       mockBiometricStorage = MockBiometricStorage();
       mockBiometricStorageKeychainFile = MockKeychainBiometricStorageFile();
       mockAtLookUp = MockAtLookUp();
-      mockPackageInfo = MockPackageInfo();
 
       authServiceImpl.keyChainManager.biometricStorage = mockBiometricStorage;
-      authServiceImpl.keyChainManager.packageInfo = mockPackageInfo;
-
       authServiceImpl.atLookUp = mockAtLookUp;
     });
 

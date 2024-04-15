@@ -22,9 +22,12 @@ class AtAuthServiceImpl implements AtAuthService {
   String _atSign;
   final AtClientPreference _atClientPreference;
 
+  @visibleForTesting
   KeyChainManager keyChainManager = KeyChainManager.getInstance();
-  AtClientManager atClientManager = AtClientManager.getInstance();
-  late AtAuth atAuth;
+
+  late AtAuth _atAuth;
+
+  @visibleForTesting
   late AtEnrollmentBase atEnrollmentBase;
 
   /// The maximum number of retries for verify approval/denial of an enrollment request
@@ -36,9 +39,6 @@ class AtAuthServiceImpl implements AtAuthService {
   /// A boolean flag which represents the "enrollmentAuthScheduler" running status.
   bool _enrollmentAuthSchedulerStarted = false;
 
-  /// The key name which stores the [_EnrollmentInfo] in the key-chain.
-  final enrollmentInfoKey = 'enrollmentInfo';
-
   final Map<String, Completer<EnrollmentStatus>> _outcomes = {};
 
   AtAuthServiceImpl(this._atSign, this._atClientPreference) {
@@ -47,7 +47,7 @@ class AtAuthServiceImpl implements AtAuthService {
     if (!_atSign.startsWith('@')) {
       _atSign = '@$_atSign';
     }
-    atAuth = atAuthBase.atAuth();
+    _atAuth = atAuthBase.atAuth();
     atEnrollmentBase = atAuthBase.atEnrollment(_atSign);
   }
 
@@ -68,13 +68,13 @@ class AtAuthServiceImpl implements AtAuthService {
       atAuthRequest.atAuthKeys = await _fetchKeysFromKeychainManager();
     }
     // Invoke authenticate method in AtAuth package.
-    AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
+    AtAuthResponse atAuthResponse = await _atAuth.authenticate(atAuthRequest);
     // If authentication is failed, return the atAuthResponse. Do nothing.
     if (atAuthResponse.isSuccessful == false) {
       return atAuthResponse;
     }
     // If authentication is successful, initialize AtClient instance.
-    await _init(atAuth.atChops!, enrollmentId: atAuthResponse.enrollmentId);
+    await _init(_atAuth.atChops!, enrollmentId: atAuthResponse.enrollmentId);
     // When an atSign is authenticated via the .atKeys on a new device, the keys
     // will not be present in keychain manager. Add keys to key-chain manager.
     AtsignKey? atSignKey = await keyChainManager.readAtsign(name: _atSign);
@@ -124,17 +124,17 @@ class AtAuthServiceImpl implements AtAuthService {
           'CRAM Secret cannot be null or empty for atSign: $_atSign');
     }
     AtOnboardingResponse atOnboardingResponse =
-        await atAuth.onboard(atOnboardingRequest, cramSecret);
+        await _atAuth.onboard(atOnboardingRequest, cramSecret);
     // If onboarding is not successful, return the onboarding response
     // with the isSuccessful set to false.
     if (!atOnboardingResponse.isSuccessful) {
       return atOnboardingResponse;
     }
-    if (atAuth.atChops == null) {
+    if (_atAuth.atChops == null) {
       throw AtAuthenticationException(
           'Failed to onboard atSign: $_atSign. AtChops is not initialized in AtAuth Package');
     }
-    await _init(atAuth.atChops!,
+    await _init(_atAuth.atChops!,
         enrollmentId: atOnboardingResponse.enrollmentId);
     await _storeToKeyChainManager(
         atOnboardingResponse.atSign, atOnboardingResponse.atAuthKeys);

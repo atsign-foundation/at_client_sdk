@@ -5,9 +5,9 @@ import 'dart:typed_data';
 
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:biometric_storage/biometric_storage.dart';
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'package:biometric_storage/biometric_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
@@ -26,7 +26,7 @@ class KeyChainManager {
   static final KeyChainManager _singleton = KeyChainManager._internal();
 
   static final _logger = AtSignLogger('KeyChainUtil');
-  late PackageInfo packageInfo;
+  late PackageInfo _packageInfo;
 
   KeyChainManager._internal();
 
@@ -667,8 +667,8 @@ class KeyChainManager {
   }) async {
     String packageName = '';
     try {
-      packageInfo = await PackageInfo.fromPlatform();
-      packageName = packageInfo.packageName;
+      _packageInfo = await PackageInfo.fromPlatform();
+      packageName = _packageInfo.packageName;
     } catch (e, s) {
       _logger.warning('Get PackageInfo', e, s);
     }
@@ -752,8 +752,8 @@ class KeyChainManager {
     if (Platform.isWindows) {
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       await store.write(dataList.length.toString());
-      packageInfo = await PackageInfo.fromPlatform();
-      final packageName = packageInfo.packageName;
+      _packageInfo = await PackageInfo.fromPlatform();
+      final packageName = _packageInfo.packageName;
 
       for (int i = 0; i < dataList.length; i++) {
         final dataStore = await BiometricStorage().getStorage(
@@ -776,8 +776,8 @@ class KeyChainManager {
   }) async {
     if (Platform.isWindows) {
       final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
-      packageInfo = await PackageInfo.fromPlatform();
-      final packageName = packageInfo.packageName;
+      _packageInfo = await PackageInfo.fromPlatform();
+      final packageName = _packageInfo.packageName;
       final results = <String>[];
       for (int i = 0; i < segmentCount; i++) {
         final dataStore = await biometricStorage.getStorage(
