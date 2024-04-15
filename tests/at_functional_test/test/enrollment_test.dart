@@ -397,7 +397,7 @@ void main() {
 
     // fetch enrollment requests through client
     List<PendingEnrollmentRequest> enrollmentRequests =
-        await client.enrollmentService.fetchEnrollmentRequests();
+        await client.enrollmentService!.fetchEnrollmentRequests();
 
     expect(enrollmentRequests.length > 2, true);
 
