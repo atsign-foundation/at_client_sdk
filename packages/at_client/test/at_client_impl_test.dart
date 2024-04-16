@@ -299,7 +299,7 @@ void main() {
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
-      List<PendingEnrollmentRequest> requests =
+      List<Enrollment> requests =
           await clientImpl.enrollmentService.fetchEnrollmentRequests();
       expect(requests.length, 3);
       expect(requests[0].enrollmentId,
