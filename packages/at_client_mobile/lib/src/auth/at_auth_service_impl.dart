@@ -41,6 +41,12 @@ class AtAuthServiceImpl implements AtAuthService {
 
   final Map<String, Completer<EnrollmentStatus>> _outcomes = {};
 
+  /// Returns an instance of [AtAuthService]
+  ///
+  /// Usage:
+  /// ```dart
+  ///  AtAuthService authService = AtClientMobile.authService(_atsign!, _atClientPreference);
+  /// ```
   AtAuthServiceImpl(this._atSign, this._atClientPreference) {
     // If the '@' symbol is omitted, it leads to an incorrect format for the AtKey when retrieving the
     // encrypted defaultEncryptionPrivateKey and encrypted defaultSelfEncryptionKey.

@@ -2,12 +2,12 @@
 import 'dart:convert';
 import 'dart:core';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:flutter/cupertino.dart';
 
 class AtClientService {
@@ -454,6 +454,8 @@ class AtClientService {
         decryptedAtKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]!,
         decryptedAtKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE]!);
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    atChopsKeys.selfEncryptionKey = AESKey(
+        decryptedAtKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE]!);
     final atChops = AtChopsImpl(atChopsKeys);
     return atChops;
   }
