@@ -102,13 +102,11 @@ abstract class AtAuthService {
   ///
   ///  String enrollmentId = atAuthService.enroll(enrollmentRequest);
   /// ```
-  /// The "enroll" method optionally accepts a file path to save the generated .atKeys file when an enrollment is approved.
   ///
   /// Returns a [Future] representing EnrollmentId.
   ///
   /// Throws an [InvalidRequestException] if a new enrollment is submitted while there is already a pending enrollment.
-  Future<AtEnrollmentResponse> enroll(EnrollmentRequest enrollmentRequest,
-      {String keysFilePath});
+  Future<AtEnrollmentResponse> enroll(EnrollmentRequest enrollmentRequest);
 
   /// Provides the final enrollment status.
   ///
