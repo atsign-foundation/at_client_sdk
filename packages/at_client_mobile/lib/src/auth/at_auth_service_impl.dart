@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -9,7 +8,6 @@ import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:biometric_storage/biometric_storage.dart';
 import 'package:flutter/cupertino.dart';
 
 class AtAuthServiceImpl implements AtAuthService {
@@ -387,6 +385,13 @@ class AtAuthServiceImpl implements AtAuthService {
             enrollmentInfo.enrollmentId, atLookUp!.atChops!);
     // Store the auth keys into keychain manager for subsequent authentications
     await _storeToKeyChainManager(_atSign, enrollmentInfo.atAuthKeys);
+    // Store enrolled namespace to local secondary to perform authorization checks
+    // when perform CURD operation on keystore.
+    String enrollmentKey = '${enrollmentInfo.enrollmentId}.new.enrollments';
+    AtKey atKey =
+        AtKey.local(enrollmentKey, _atSign, namespace: '__manage').build();
+    String value = jsonEncode(enrollmentInfo.namespace);
+    await _atClient!.put(atKey, value);
     await keyChainManager.deleteEnrollmentStore(_atSign);
     _logger.info(
         'Enrollment Id: ${enrollmentInfo.atAuthKeys.enrollmentId} is approved and authentication keys are stored in the keychain');
