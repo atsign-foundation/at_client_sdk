@@ -24,20 +24,13 @@ class AtAuthServiceImpl implements AtAuthService {
   String _atSign;
   final AtClientPreference _atClientPreference;
 
-  final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
-  AtClientManager atClientManager = AtClientManager.getInstance();
-  late AtAuth atAuth;
-  late AtEnrollmentBase atEnrollmentBase;
-
-  /// A flutter key-chain to store the enrollment keys (APKAM key-pair and APKAM
-  /// Symmetric key) on submission of enrollment request.
-  ///
-  /// In the event of app closure following the submission of an enrollment request,
-  /// the enrollment keys may be lost. To facilitate APKAM authentication retries,
-  /// the keys are stored in the key-chain.
-  /// Removal of the keys occurs upon successful approval or denial of the enrollment.
   @visibleForTesting
-  BiometricStorage enrollmentKeychainStore = BiometricStorage();
+  KeyChainManager keyChainManager = KeyChainManager.getInstance();
+
+  late AtAuth _atAuth;
+
+  @visibleForTesting
+  late AtEnrollmentBase atEnrollmentBase;
 
   /// The maximum number of retries for verify approval/denial of an enrollment request
   final int _maxEnrollmentAuthenticationRetryInHours = 48;
@@ -48,18 +41,21 @@ class AtAuthServiceImpl implements AtAuthService {
   /// A boolean flag which represents the "enrollmentAuthScheduler" running status.
   bool _enrollmentAuthSchedulerStarted = false;
 
-  /// The key name which stores the [_EnrollmentInfo] in the key-chain.
-  final enrollmentInfoKey = 'enrollmentInfo';
-
   final Map<String, Completer<EnrollmentStatus>> _outcomes = {};
 
+  /// Returns an instance of [AtAuthService]
+  ///
+  /// Usage:
+  /// ```dart
+  ///  AtAuthService authService = AtClientMobile.authService(_atsign!, _atClientPreference);
+  /// ```
   AtAuthServiceImpl(this._atSign, this._atClientPreference) {
     // If the '@' symbol is omitted, it leads to an incorrect format for the AtKey when retrieving the
     // encrypted defaultEncryptionPrivateKey and encrypted defaultSelfEncryptionKey.
     if (!_atSign.startsWith('@')) {
       _atSign = '@$_atSign';
     }
-    atAuth = atAuthBase.atAuth();
+    _atAuth = atAuthBase.atAuth();
     atEnrollmentBase = atAuthBase.atEnrollment(_atSign);
   }
 
@@ -80,16 +76,16 @@ class AtAuthServiceImpl implements AtAuthService {
       atAuthRequest.atAuthKeys = await _fetchKeysFromKeychainManager();
     }
     // Invoke authenticate method in AtAuth package.
-    AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
+    AtAuthResponse atAuthResponse = await _atAuth.authenticate(atAuthRequest);
     // If authentication is failed, return the atAuthResponse. Do nothing.
     if (atAuthResponse.isSuccessful == false) {
       return atAuthResponse;
     }
     // If authentication is successful, initialize AtClient instance.
-    await _init(atAuth.atChops!, enrollmentId: atAuthResponse.enrollmentId);
+    await _init(_atAuth.atChops!, enrollmentId: atAuthResponse.enrollmentId);
     // When an atSign is authenticated via the .atKeys on a new device, the keys
     // will not be present in keychain manager. Add keys to key-chain manager.
-    AtsignKey? atSignKey = await _keyChainManager.readAtsign(name: _atSign);
+    AtsignKey? atSignKey = await keyChainManager.readAtsign(name: _atSign);
     if (atSignKey == null) {
       await _storeToKeyChainManager(_atSign, atAuthResponse.atAuthKeys);
     }
@@ -97,7 +93,7 @@ class AtAuthServiceImpl implements AtAuthService {
   }
 
   Future<AtAuthKeys> _fetchKeysFromKeychainManager() async {
-    AtsignKey? atSignKey = await _keyChainManager.readAtsign(name: _atSign);
+    AtsignKey? atSignKey = await keyChainManager.readAtsign(name: _atSign);
     if (atSignKey == null) {
       throw AtAuthenticationException(
           'Failed to authenticate. Keys not found in Keychain manager for atSign: $_atSign');
@@ -117,7 +113,7 @@ class AtAuthServiceImpl implements AtAuthService {
 
   @override
   Future<bool> isOnboarded(String atSign) async {
-    AtsignKey? atsignKey = await _keyChainManager.readAtsign(name: atSign);
+    AtsignKey? atsignKey = await keyChainManager.readAtsign(name: atSign);
     if (atsignKey == null) {
       return false;
     }
@@ -136,17 +132,17 @@ class AtAuthServiceImpl implements AtAuthService {
           'CRAM Secret cannot be null or empty for atSign: $_atSign');
     }
     AtOnboardingResponse atOnboardingResponse =
-        await atAuth.onboard(atOnboardingRequest, cramSecret);
+        await _atAuth.onboard(atOnboardingRequest, cramSecret);
     // If onboarding is not successful, return the onboarding response
     // with the isSuccessful set to false.
     if (!atOnboardingResponse.isSuccessful) {
       return atOnboardingResponse;
     }
-    if (atAuth.atChops == null) {
+    if (_atAuth.atChops == null) {
       throw AtAuthenticationException(
           'Failed to onboard atSign: $_atSign. AtChops is not initialized in AtAuth Package');
     }
-    await _init(atAuth.atChops!,
+    await _init(_atAuth.atChops!,
         enrollmentId: atOnboardingResponse.enrollmentId);
     await _storeToKeyChainManager(
         atOnboardingResponse.atSign, atOnboardingResponse.atAuthKeys);
@@ -162,7 +158,7 @@ class AtAuthServiceImpl implements AtAuthService {
           'Failed to store keys in Keychain manager for atSign: $_atSign. AtAuthKeys instance is null');
     }
 
-    var atSignItem = await _keyChainManager.readAtsign(name: atSign) ??
+    var atSignItem = await keyChainManager.readAtsign(name: atSign) ??
         AtsignKey(atSign: atSign);
     atSignItem = atSignItem.copyWith(
         pkamPrivateKey: atAuthKeys.apkamPrivateKey,
@@ -173,7 +169,7 @@ class AtAuthServiceImpl implements AtAuthService {
         apkamSymmetricKey: atAuthKeys.apkamSymmetricKey,
         enrollmentId: atAuthKeys.enrollmentId);
 
-    await _keyChainManager.storeAtSign(atSign: atSignItem);
+    await keyChainManager.storeAtSign(atSign: atSignItem);
   }
 
   Future<void> _persistKeysLocalSecondary(AtAuthKeys? atAuthKeys) async {
@@ -232,12 +228,13 @@ class AtAuthServiceImpl implements AtAuthService {
   }
 
   @override
-  Future<AtEnrollmentResponse> enroll(EnrollmentRequest enrollmentRequest,
-      {String? keysFilePath}) async {
+  Future<AtEnrollmentResponse> enroll(
+      EnrollmentRequest enrollmentRequest) async {
     // Only one enrollment request can be submitted at a time.
     // Subsequent requests cannot be submitted until the pending one is fulfilled.
-    var enrollmentStore = await _getEnrollmentStorage();
-    String? enrollmentInfoJsonString = await enrollmentStore.read();
+
+    String? enrollmentInfoJsonString =
+        await keyChainManager.readFromEnrollmentStore(_atSign);
     // if enrollmentInfoJsonString is not null, it indicates that there is a pending
     // enrollment request. So, do not allow another enrollment request.
     if (enrollmentInfoJsonString != null) {
@@ -255,17 +252,16 @@ class AtAuthServiceImpl implements AtAuthService {
       DateTime.now().toUtc().millisecondsSinceEpoch,
       enrollmentRequest.namespaces,
     );
-    enrollmentInfo.keysFilePath = keysFilePath;
-    // Store the enrollment keys into keychain to generate the AtKeys file if an enrollment is approved.
-    await enrollmentStore.write(jsonEncode(enrollmentInfo));
+    // Store the enrollment keys into keychain to store the auth keys into keychain, if an enrollment is approved.
+    await keyChainManager.writeToEnrollmentStore(
+        _atSign, jsonEncode(enrollmentInfo));
     return atEnrollmentResponse;
   }
 
   @override
   Future<EnrollmentStatus> getFinalEnrollmentStatus() async {
-    var enrollmentStore = await _getEnrollmentStorage();
-
-    String? enrollmentInfoJsonString = await enrollmentStore.read();
+    String? enrollmentInfoJsonString =
+        await keyChainManager.readFromEnrollmentStore(_atSign);
     // If there is no enrollment data in keychain, then the enrollment
     // is expired and hence deleted from the keychain.
     if (enrollmentInfoJsonString == null) {
@@ -286,24 +282,14 @@ class AtAuthServiceImpl implements AtAuthService {
 
   @override
   Future<EnrollmentInfo?> getSentEnrollmentRequest() async {
-    var enrollmentStore = await _getEnrollmentStorage();
-    String? enrollmentInfoJsonString = await enrollmentStore.read();
+    String? enrollmentInfoJsonString =
+        await keyChainManager.readFromEnrollmentStore(_atSign);
     if (enrollmentInfoJsonString != null) {
       EnrollmentInfo enrollmentInfo =
           EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
       return enrollmentInfo;
     }
     return null;
-  }
-
-  Future<BiometricStorageFile> _getEnrollmentStorage() async {
-    final data = await enrollmentKeychainStore.getStorage(
-      '${_atSign}_$enrollmentInfoKey',
-      options: StorageFileInitOptions(
-        authenticationRequired: false,
-      ),
-    );
-    return data;
   }
 
   void _initEnrollmentAuthScheduler(EnrollmentInfo enrollmentInfo) {
@@ -342,7 +328,6 @@ class AtAuthServiceImpl implements AtAuthService {
 
   Future<bool> _canProceedWithAuthentication(
       EnrollmentInfo enrollmentInfo) async {
-    var enrollmentStore = await _getEnrollmentStorage();
     // If "_maxEnrollmentAuthenticationRetryInHours" exceeds 48 hours then
     // stop retrying for enrollment approval and remove enrollmentInfo from
     // keychain.
@@ -356,7 +341,7 @@ class AtAuthServiceImpl implements AtAuthService {
           'EnrollmentId: ${enrollmentInfo.enrollmentId} has reached the maximum number of retries. Retry attempts have been stopped.');
       // If enrollment retry has reached the limit, do no retry. Remove
       // the enrollment info from the keychain manager.
-      await enrollmentStore.delete();
+      await keyChainManager.deleteEnrollmentStore(_atSign);
       return false;
     }
     return true;
@@ -392,9 +377,6 @@ class AtAuthServiceImpl implements AtAuthService {
   /// remove the enrollment info from keychain.
   Future<void> _handleAuthenticatedEnrollment(
       EnrollmentInfo enrollmentInfo) async {
-    _logger.info('Enrollment: ${enrollmentInfo.enrollmentId} is authenticated');
-
-    var enrollmentStore = await _getEnrollmentStorage();
     // Get the decrypted (plain text) "Encryption Private Key" and "AES Symmetric Key"
     // from the secondary server.
     enrollmentInfo.atAuthKeys.defaultEncryptionPrivateKey =
@@ -403,17 +385,11 @@ class AtAuthServiceImpl implements AtAuthService {
     enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey =
         await _getDefaultSelfEncryptionKey(
             enrollmentInfo.enrollmentId, atLookUp!.atChops!);
-    await _generateAtKeys(enrollmentInfo.atAuthKeys, atLookUp!.atChops!,
-        enrollmentInfo.keysFilePath);
-    // Store enrolled namespace to local secondary to perform authorization checks
-    // when perform CURD operation on keystore.
-    String enrollmentKey = '${enrollmentInfo.enrollmentId}.new.enrollments';
-    AtKey atKey =
-        AtKey.local(enrollmentKey, _atSign, namespace: '__manage').build();
-    String value = jsonEncode(enrollmentInfo.namespace);
-    await _atClient!.put(atKey, value);
-    // Remove the keys from key-chain manager
-    await enrollmentStore.delete();
+    // Store the auth keys into keychain manager for subsequent authentications
+    await _storeToKeyChainManager(_atSign, enrollmentInfo.atAuthKeys);
+    await keyChainManager.deleteEnrollmentStore(_atSign);
+    _logger.info(
+        'Enrollment Id: ${enrollmentInfo.atAuthKeys.enrollmentId} is approved and authentication keys are stored in the keychain');
     _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.approved);
     atLookUp?.close();
   }
@@ -433,7 +409,7 @@ class AtAuthServiceImpl implements AtAuthService {
     if (e.message.contains('AT0025')) {
       _logger.info(
           'Enrollment id: ${enrollmentInfo.enrollmentId} is denied. Stopping authentication retry.');
-      (await _getEnrollmentStorage()).delete();
+      await keyChainManager.deleteEnrollmentStore(_atSign);
       _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.denied);
       return;
     }
@@ -441,73 +417,6 @@ class AtAuthServiceImpl implements AtAuthService {
         'Enrollment: ${enrollmentInfo.enrollmentId} failed to authenticate. Retrying...');
     _secondsUntilNextRun = _secondsUntilNextRun * 2;
     _initEnrollmentAuthScheduler(enrollmentInfo);
-  }
-
-  /// On approving an enrollment request, generates atKeys file which is used to
-  /// authenticate an atSign via APKAM.
-  Future<void> _generateAtKeys(
-      AtAuthKeys atAuthKeys, AtChops atChops, String? filePath) async {
-    Map<String, String?> apkamBackupKeys = atAuthKeys.toJson();
-
-    atChops.atChopsKeys.atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        atAuthKeys.defaultEncryptionPublicKey!,
-        atAuthKeys.defaultEncryptionPrivateKey!);
-
-    atChops.atChopsKeys.selfEncryptionKey =
-        AESKey(atAuthKeys.defaultSelfEncryptionKey!);
-
-    // Add atSign to the backup keys file.
-    apkamBackupKeys[_atSign] = atChops.atChopsKeys.selfEncryptionKey!.key;
-
-    try {
-      apkamBackupKeys[defaultEncryptionPublicKey] = atChops
-          .encryptString(
-              atAuthKeys.defaultEncryptionPublicKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-
-      apkamBackupKeys[defaultEncryptionPrivateKey] = atChops
-          .encryptString(
-              atAuthKeys.defaultEncryptionPrivateKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-
-      apkamBackupKeys[apkamPublicKey] = atChops
-          .encryptString(atAuthKeys.apkamPublicKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-
-      apkamBackupKeys[apkamPrivateKey] = atChops
-          .encryptString(atAuthKeys.apkamPrivateKey!, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-    } on Exception catch (e) {
-      _logger.severe(
-          'Failed to generate the atKeys file for enrollmentId - ${atAuthKeys.enrollmentId} caused by ${e.toString()}');
-      return;
-    } on Error catch (e) {
-      _logger.severe(
-          'Failed to generate the atKeys file for enrollmentId - ${atAuthKeys.enrollmentId} caused by ${e.toString()}');
-      return;
-    }
-
-    String atKeysEncodedString = jsonEncode(apkamBackupKeys);
-    String fileName = '${_atSign}_apkam_key';
-    print('atkey file content: $atKeysEncodedString');
-    if (filePath != null && filePath.isNotEmpty) {
-      try {
-        var atKeyFileDirectory =
-            await Directory(filePath + Platform.pathSeparator).create();
-        final file = File(atKeyFileDirectory.path + fileName);
-        // Write the file
-        await file.writeAsString(atKeysEncodedString);
-      } catch (e) {
-        _logger.severe(
-            'Failed to save atKey for- ${atAuthKeys.enrollmentId} caused by ${e.toString()}');
-      }
-    }
-    _logger.info(
-        'atKeys file for enrollment id - ${atAuthKeys.enrollmentId} is saved in');
   }
 
   /// Retrieves the encrypted "encryption private key" from the server and decrypts.

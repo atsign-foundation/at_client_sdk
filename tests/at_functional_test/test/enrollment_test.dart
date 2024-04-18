@@ -373,7 +373,7 @@ void main() {
     var apkamPublicKey =
         pkamPublicKeyMap['@eve🛠']; // can be any random public key
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"]}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -396,8 +396,8 @@ void main() {
     expect(enrollResponse2JsonDecoded['status'], 'pending');
 
     // fetch enrollment requests through client
-    List<PendingEnrollmentRequest> enrollmentRequests =
-        await client.enrollmentService!.fetchEnrollmentRequests();
+    List<Enrollment> enrollmentRequests =
+        await client.enrollmentService.fetchEnrollmentRequests();
 
     expect(enrollmentRequests.length > 2, true);
 

@@ -11,15 +11,13 @@ class EnrollmentServiceImpl implements EnrollmentService {
   EnrollmentServiceImpl(this._atClient, this._atEnrollmentImpl);
 
   @override
-  Future<List<PendingEnrollmentRequest>> fetchEnrollmentRequests(
-      {EnrollListRequestParam? enrollmentListRequest}) async {
-    // enrollmentListRequestParams for now is not  used
-    // A server side enhancement request is created. https://github.com/atsign-foundation/at_server/issues/1748
-    // On implementation of this enhancement/feature, the enrollListRequestParam object can be made use of
+  Future<List<Enrollment>> fetchEnrollmentRequests(
+      {EnrollmentListRequestParam? enrollmentListParams}) async {
     EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
       ..operation = EnrollOperationEnum.list
-      ..appName = enrollmentListRequest?.appName
-      ..deviceName = enrollmentListRequest?.deviceName;
+      ..appName = enrollmentListParams?.appName
+      ..deviceName = enrollmentListParams?.deviceName
+      ..enrollmentStatusFilter = enrollmentListParams?.enrollmentListFilter;
 
     var response = await _atClient
         .getRemoteSecondary()
@@ -32,13 +30,13 @@ class EnrollmentServiceImpl implements EnrollmentService {
     return enrollmentKey.split('.')[0];
   }
 
-  List<PendingEnrollmentRequest> _formatEnrollListResponse(response) {
+  List<Enrollment> _formatEnrollListResponse(response) {
     response = response?.replaceFirst('data:', '');
     Map<String, dynamic> enrollRequests = jsonDecode(response!);
-    List<PendingEnrollmentRequest> enrollRequestsFormatted = [];
+    List<Enrollment> enrollRequestsFormatted = [];
     for (MapEntry enrollmentRequest in enrollRequests.entries) {
-      PendingEnrollmentRequest enrollmentRequestResponse =
-          PendingEnrollmentRequest.fromJSON(enrollmentRequest.value);
+      Enrollment enrollmentRequestResponse =
+          Enrollment.fromJSON(enrollmentRequest.value);
       enrollmentRequestResponse.enrollmentId =
           extractEnrollmentId(enrollmentRequest.key);
       enrollRequestsFormatted.add(enrollmentRequestResponse);
