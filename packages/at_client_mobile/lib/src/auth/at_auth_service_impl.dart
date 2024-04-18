@@ -405,6 +405,12 @@ class AtAuthServiceImpl implements AtAuthService {
             enrollmentInfo.enrollmentId, atLookUp!.atChops!);
     await _generateAtKeys(enrollmentInfo.atAuthKeys, atLookUp!.atChops!,
         enrollmentInfo.keysFilePath);
+    // Store enrolled namespace to local secondary to perform authorization checks
+    // when perform CURD operation on keystore.
+    String enrollmentKey =
+        '${enrollmentInfo.enrollmentId}.new.enrollments.__manage$_atSign';
+    String value = jsonEncode(enrollmentInfo.namespace);
+    await _atClient!.getLocalSecondary()!.keyStore!.put(enrollmentKey, value);
     // Remove the keys from key-chain manager
     await enrollmentStore.delete();
     _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.approved);
