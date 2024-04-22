@@ -274,12 +274,7 @@ class LocalSecondary implements Secondary {
         _isReservedKey(key)) {
       return true;
     }
-    if (_enrollmentDetails!.enrollmentStatus != EnrollmentStatus.approved) {
-      _logger.warning(
-          'Enrollment state for $enrollmentId is ${_enrollmentDetails!.enrollmentStatus}');
-      return false;
-    }
-    final enrollNamespaces = _enrollmentDetails!.namespaces;
+    final enrollNamespaces = _enrollmentDetails!.namespace;
     var keyNamespace = AtKey.fromString(key).namespace;
     _logger.finer('enrollNamespaces:$enrollNamespaces');
     _logger.finer('keyNamespace:$keyNamespace');
@@ -312,25 +307,14 @@ class LocalSecondary implements Secondary {
       return null;
     }
 
-    var serverEnrollmentKey =
-        '$enrollmentId.new.enrollments.__manage${_atClient.getCurrentAtSign()}';
-    _logger.finer('serverEnrollmentKey: $serverEnrollmentKey');
-    //#TODO improvement - store enrollment details on local secondary after auth is success.Remove call to server.
-    var response = await _atClient
-        .getRemoteSecondary()
-        ?.executeCommand('llookup:$serverEnrollmentKey\n', auth: true);
-    if (response == null || response.isEmpty || response == 'data:null') {
+    var enrollmentInfo = await keyStore?.get(
+        '$enrollmentId.new.enrollments.__manage${_atClient.getCurrentAtSign()}');
+    if (enrollmentInfo == null) {
       throw AtKeyNotFoundException(
           'Enrollment key for enrollmentId: $enrollmentId not found in server');
     }
-    response = response.replaceFirst('data:', '');
-    var enrollJson = jsonDecode(response);
-    _enrollmentDetails = EnrollmentDetails();
-    _enrollmentDetails!.appName = enrollJson[AtConstants.appName];
-    _enrollmentDetails!.deviceName = enrollJson[AtConstants.deviceName];
-    _enrollmentDetails!.namespaces = enrollJson[AtConstants.apkamNamespaces];
-    _enrollmentDetails!.enrollmentStatus =
-        getEnrollStatusFromString(enrollJson['approval']['state']);
+    _enrollmentDetails =
+        EnrollmentDetails.fromJSON(jsonDecode(enrollmentInfo.data));
     return _enrollmentDetails!;
   }
 

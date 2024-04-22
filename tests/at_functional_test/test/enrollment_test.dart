@@ -5,9 +5,11 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/service/enrollment_details.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/src/model/at_data.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -44,7 +46,6 @@ void main() {
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel'
-        ..enableEnrollment = true
         ..rootDomain = 'vip.ve.atsign.zone';
       // onboard with enable enrollment set
       var atOnboardingResponse =
@@ -116,7 +117,7 @@ void main() {
     test('A test to verify new enrollment and approval from privileged client',
         () async {
       // auth and listen to notifications from privileged client
-      var atSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
+      String atSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
       var atAuth = atAuthBase.atAuth();
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(atSign)
         ..atKeysFilePath = 'test/testData/$atSign.atKeys'
@@ -137,6 +138,15 @@ void main() {
               atChops: atAuth.atChops,
               enrollmentId: atAuthResponse.enrollmentId);
       final atClient = atClientManager.atClient;
+      // Insert the key into local secondary keystore.
+      String key =
+          '${atAuthResponse.enrollmentId}.new.enrollments.__manage$atSign';
+      EnrollmentDetails enrollmentDetails = EnrollmentDetails();
+      enrollmentDetails.namespace = {'wavi': 'rw'};
+      await atClient
+          .getLocalSecondary()
+          ?.keyStore
+          ?.put(key, AtData()..data = jsonEncode(enrollmentDetails));
       // get otp
       var otpResponse = await atClient
           .getRemoteSecondary()!
@@ -397,7 +407,7 @@ void main() {
 
     // fetch enrollment requests through client
     List<Enrollment> enrollmentRequests =
-        await client.enrollmentService.fetchEnrollmentRequests();
+        await client.enrollmentService!.fetchEnrollmentRequests();
 
     expect(enrollmentRequests.length > 2, true);
 
@@ -417,6 +427,11 @@ void main() {
     }
     // this counter is to assert that the list of requests has exactly two request matches
     expect(matchCount, 2);
+  });
+
+  tearDown(() {
+    AtClientManager.getInstance().reset();
+    AtClientImpl.atClientInstanceMap.clear();
   });
 }
 

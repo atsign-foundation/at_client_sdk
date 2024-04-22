@@ -483,11 +483,14 @@ class AtAuthServiceImpl implements AtAuthService {
   /// when performing CURD operation on local secondary server
   Future<void> _storeEnrollmentInfoIntoLocalSecondary(
       EnrollmentInfo enrollmentInfo) async {
-    String enrollmentKey = '${enrollmentInfo.enrollmentId}.new.enrollments';
-    AtKey atKey =
-        AtKey.local(enrollmentKey, _atSign, namespace: '__manage').build();
+    String enrollmentKey =
+        '${enrollmentInfo.enrollmentId}.new.enrollments.__manage$_atSign';
     String value = jsonEncode(enrollmentInfo.namespace);
-    await _atClient!.put(atKey, value);
+    // The "put" function in AtClient will call the executeVerb function which in turn calls the "_isAuthorized" in the local secondary.
+    // The "_isAuthorized" method fetches enrollment info from the key-store. Since there is no enrollment info, it returns null which
+    // throws AtKeyNotFoundException.
+    // So, directly add the enrollment key to the keystore.
+    await _atClient!.getLocalSecondary()?.keyStore?.put(enrollmentKey, value);
   }
 
   AtChops _buildAtChops(EnrollmentInfo enrollmentInfo) {

@@ -1,8 +1,13 @@
-import 'package:at_client/at_client.dart';
-
 class EnrollmentDetails {
-  late String appName;
-  late String deviceName;
-  late Map<String, dynamic> namespaces;
-  late EnrollmentStatus enrollmentStatus;
+  late Map<String, dynamic> namespace;
+
+  static EnrollmentDetails fromJSON(Map<String, dynamic> json) {
+    return EnrollmentDetails()..namespace = json['namespace'];
+  }
+
+  Map<String, dynamic> toJson() {
+    Map<String, dynamic> map = {};
+    map['namespace'] = namespace;
+    return map;
+  }
 }
