@@ -2,12 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/enrollment_details.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockLocalKeyStore extends Mock implements SecondaryKeyStore {}
 
@@ -18,27 +17,27 @@ void main() {
   group(
       'A group of authorization test on update/delete verbs in local secondary',
       () {
-    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     setUp(() async => await setupLocalStorage(storageDir, atSign));
     tearDown(() async => await tearDownLocalStorage(storageDir));
+
     test(
         'update/delete on different namespaces by enrollment with * namespace access',
         () async {
       final testEnrollmentId = 'aaa111';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$testEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"__manage":"rw","*":"rw"},"approval":{"state":"approved"}}'));
       var atClient = await AtClientImpl.create(
           '@alice',
           'all',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$testEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data = jsonEncode(EnrollmentDetails()
+              ..namespace = {"__manage": "rw", "*": "rw"}));
       //1. create a self key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -120,24 +119,25 @@ void main() {
       expect(deleteReservedKeyResult, isNotNull);
       expect(deleteReservedKeyResult!.startsWith('data:'), true);
     });
+
     test(
         'update on different namespaces by enrollment with specific namespace access',
         () async {
       final testEnrollmentId = 'aaa111';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$testEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"wavi":"rw"},"approval":{"state":"approved"}}'));
       var atClient = await AtClientImpl.create(
           '@alice',
           'all',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$testEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data =
+                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
       //1. create a self key in wavi namespace should pass
       var waviKey = AtKey()
         ..key = 'phone'
@@ -204,20 +204,20 @@ void main() {
         'delete on different namespaces by enrollment with specific namespace access',
         () async {
       final testEnrollmentId = 'aaa111';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$testEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"__manage":"rw","*":"rw"},"approval":{"state":"approved"}}'));
       var atClient = await AtClientImpl.create(
           '@alice',
           'all',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$testEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data = jsonEncode(EnrollmentDetails()
+              ..namespace = {"__manage": "rw", "*": "rw"}));
       //1. create a self key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -276,20 +276,20 @@ void main() {
       AtClientImpl.atClientInstanceMap.remove(atSign);
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$newEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"wavi":"rw"},"approval":{"state":"approved"}}'));
       var enrolledAtClient = await AtClientImpl.create(
           '@alice',
           'wavi',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$newEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data =
+                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
       // delete self key in wavi namespace should pass
       var deleteBuilder = DeleteVerbBuilder()..atKey = waviKey;
       var deleteWaviKeyResult = await enrolledAtClient
@@ -328,27 +328,27 @@ void main() {
   });
   group('A group of authorization tests on llookup verb in local secondary',
       () {
-    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     setUp(() async => await setupLocalStorage(storageDir, atSign));
     tearDown(() async => await tearDownLocalStorage(storageDir));
     test(
         'get method on different namespaces can be accessed by enrollment with * namespace access',
         () async {
       final testEnrollmentId = 'aaa111';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$testEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"__manage":"rw","*":"rw"},"approval":{"state":"approved"}}'));
       var atClient = await AtClientImpl.create(
           '@alice',
           'all',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$testEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data = jsonEncode(EnrollmentDetails()
+              ..namespace = {"__manage": "rw", "*": "rw"}));
+
       //1. create a key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -429,20 +429,19 @@ void main() {
         'get method checks on enrollment with specific namespace(e.g wavi) access',
         () async {
       final privilegedEnrollment = 'aaa111';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$privilegedEnrollment.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"*":"rw"},"approval":{"state":"approved"}}'));
       var atClient = await AtClientImpl.create(
           '@alice',
           'all',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = privilegedEnrollment;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$privilegedEnrollment.new.enrollments.__manage@alice',
+          AtData()
+            ..data = jsonEncode(EnrollmentDetails()..namespace = {"*": "rw"}));
       //1. create a key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -497,20 +496,20 @@ void main() {
       AtClientImpl.atClientInstanceMap.remove(atSign);
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$newEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"wavi":"rw"},"approval":{"state":"approved"}}'));
       var enrolledAtClient = await AtClientImpl.create(
           '@alice',
           'wavi',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$newEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data =
+                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
       // llookup on wavi namespace should be allowed
       var waviLookupBuilder = LLookupVerbBuilder()..atKey = waviKey;
       var waviResult = await enrolledAtClient
@@ -547,26 +546,25 @@ void main() {
     });
   });
   group('A group of authorization tests on scan verb in local secondary', () {
-    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     setUp(() async => await setupLocalStorage(storageDir, atSign));
     tearDown(() async => await tearDownLocalStorage(storageDir));
     test('scan method return all keys on an enrollment with * namespace access',
         () async {
       final testEnrollmentId = 'aaa111';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$testEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"__manage":"rw","*":"rw"},"approval":{"state":"approved"}}'));
       var atClient = await AtClientImpl.create(
           '@alice',
           'all',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$testEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data = jsonEncode(EnrollmentDetails()
+              ..namespace = {"__manage": "rw", "*": "rw"}));
       //1. create a key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -633,20 +631,20 @@ void main() {
       AtClientImpl.atClientInstanceMap.remove(atSign);
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
-      when(() =>
-          mockRemoteSecondary.executeCommand(
-              'llookup:$newEnrollmentId.new.enrollments.__manage@alice\n',
-              auth: true)).thenAnswer((_) => Future.value(
-          'data:{"appName":"wavi","deviceName":"iphone","namespaces":{"wavi":"rw"},"approval":{"state":"approved"}}'));
       var enrolledAtClient = await AtClientImpl.create(
           '@alice',
           'wavi',
           AtClientPreference()
             ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: mockRemoteSecondary);
+            ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
+      // Insert the enrollment info into the local secondary.
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$newEnrollmentId.new.enrollments.__manage@alice',
+          AtData()
+            ..data =
+                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
       // enrolled client should be able to see wavi key and reserved key in scan. Buzz key and no namespace keys should not be returned
       enrolledAtClient.enrollmentId = newEnrollmentId;
       var enrolledClientScanResult = await enrolledAtClient

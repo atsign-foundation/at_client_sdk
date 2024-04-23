@@ -7,6 +7,7 @@ import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -485,12 +486,19 @@ class AtAuthServiceImpl implements AtAuthService {
       EnrollmentInfo enrollmentInfo) async {
     String enrollmentKey =
         '${enrollmentInfo.enrollmentId}.new.enrollments.__manage$_atSign';
-    String value = jsonEncode(enrollmentInfo.namespace);
+    AtData atData = AtData()..data = jsonEncode(enrollmentInfo.namespace);
     // The "put" function in AtClient will call the executeVerb function which in turn calls the "_isAuthorized" in the local secondary.
     // The "_isAuthorized" method fetches enrollment info from the key-store. Since there is no enrollment info, it returns null which
     // throws AtKeyNotFoundException.
     // So, directly add the enrollment key to the keystore.
-    await _atClient!.getLocalSecondary()?.keyStore?.put(enrollmentKey, value);
+
+    // During submission of enrollment, the enrollment details are stored in the server. Upon approval of an enrollment,
+    // store a copy of enrollment into local secondary for the performing the authorization.
+    // So setting skipCommit to true to prevent key being sync to remote secondary.
+    await _atClient!
+        .getLocalSecondary()
+        ?.keyStore
+        ?.put(enrollmentKey, atData, skipCommit: true);
   }
 
   AtChops _buildAtChops(EnrollmentInfo enrollmentInfo) {
