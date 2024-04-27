@@ -405,7 +405,7 @@ void main() {
     for (var request in enrollmentRequests) {
       if (request.enrollmentId == enrollResponse1JsonDecoded['enrollmentId']) {
         expect(request.namespace!['new_app'], 'rw');
-        expect(request.deviceName, 'pixel');
+        expect(request.deviceName, 'pixel4');
         matchCount++;
       } else if (request.enrollmentId ==
           enrollResponse2JsonDecoded['enrollmentId']) {
