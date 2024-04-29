@@ -36,15 +36,14 @@ void main() {
     print('subscriptions stopped');
   }
 
-  group('Group of tests for APKAM scnearios using at_auth', () {
+  group('Group of tests for APKAM scenarios using at_auth', () {
     test('A test to verify onboarding and initial enrollment using at_auth',
         () async {
       var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
       var atAuth = atAuthBase.atAuth();
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
-        ..deviceName = 'pixel'
-        ..enableEnrollment = true
+        ..deviceName = 'pixel1'
         ..rootDomain = 'vip.ve.atsign.zone';
       // onboard with enable enrollment set
       var atOnboardingResponse =
@@ -99,18 +98,18 @@ void main() {
           true);
       // check whether at client can create keys in different namespaces
       // #TODO change below logic to atClient.put once we have enrollment namespace checks in put method
-      var putWaviKeyReponse = await atClient
+      var putWaviKeyResponse = await atClient
           .getRemoteSecondary()!
           .executeCommand('update:phone.wavi$apkamAtSign 1234\n');
-      expect(putWaviKeyReponse, isNotEmpty);
-      putWaviKeyReponse = putWaviKeyReponse!.replaceFirst('data:', '');
-      expect(int.parse(putWaviKeyReponse), greaterThan(0));
-      var putBuzzKeyReponse = await atClient
+      expect(putWaviKeyResponse, isNotEmpty);
+      putWaviKeyResponse = putWaviKeyResponse!.replaceFirst('data:', '');
+      expect(int.parse(putWaviKeyResponse), greaterThan(0));
+      var putBuzzKeyResponse = await atClient
           .getRemoteSecondary()!
           .executeCommand('update:email.buzz$apkamAtSign test@gmail.com\n');
-      expect(putBuzzKeyReponse, isNotEmpty);
-      putBuzzKeyReponse = putBuzzKeyReponse!.replaceFirst('data:', '');
-      expect(int.parse(putBuzzKeyReponse), greaterThan(0));
+      expect(putBuzzKeyResponse, isNotEmpty);
+      putBuzzKeyResponse = putBuzzKeyResponse!.replaceFirst('data:', '');
+      expect(int.parse(putBuzzKeyResponse), greaterThan(0));
     });
 
     test('A test to verify new enrollment and approval from privileged client',
@@ -196,7 +195,7 @@ void main() {
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
           aliceSelfEncryptionKey, aliceApkamSymmetricKey);
       var enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel2","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
       var enrollResponseFromServer = await atClientManager.atClient
           .getRemoteSecondary()!
           .executeCommand(enrollRequest);
@@ -218,7 +217,7 @@ void main() {
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
       // 5. Send enrollment request
       enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"otp":"$spp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel3","namespaces":{"wavi":"rw"},"otp":"$spp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
       String? serverResponse = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand(enrollRequest, auth: false);
@@ -236,7 +235,7 @@ void main() {
       expect(otp.length, 6);
       expect(
           otp.contains('0') || otp.contains('o') || otp.contains('O'), false);
-      // check whether otp contains atleast one number and one alphabet
+      // check whether otp contains at least one number and one alphabet
       expect(RegExp(r'^(?=.*[a-zA-Z])(?=.*\d).+$').hasMatch(otp), true);
     });
     test('A test to verify invalid OTP results in error response from server',
@@ -307,7 +306,7 @@ void main() {
         aliceSelfEncryptionKey, aliceApkamSymmetricKey);
     var atEnrollmentBase = atAuthBase.atEnrollment(atSign);
     var enrollRequest =
-        'enroll:request:{"appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+        'enroll:request:{"appName":"wavi","deviceName":"pixel4","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
     var enrollResponseFromServer =
         await atClient.getRemoteSecondary()!.executeCommand(enrollRequest);
     expect(enrollResponseFromServer, isNotEmpty);
@@ -330,7 +329,7 @@ void main() {
         apkamSymmetricKey!, encryptionPublicKeyMap[atSign]!);
     var newEnrollmentRequest = EnrollmentRequest(
         appName: "buzz",
-        deviceName: "pixel",
+        deviceName: "pixel5",
         otp: otp,
         namespaces: {"buzz": "rw"},
         apkamPublicKey: secondApkamPublicKey,
@@ -349,7 +348,7 @@ void main() {
           expect(enrollNotification.value, isNotNull);
           var notificationValueJson = jsonDecode(enrollNotification.value!);
           expect(notificationValueJson['appName'], 'buzz');
-          expect(notificationValueJson['deviceName'], 'pixel');
+          expect(notificationValueJson['deviceName'], 'pixel5');
           expect(notificationValueJson['namespace']['buzz'], 'rw');
           expect(
               notificationValueJson['encryptedApkamSymmetricKey'], isNotEmpty);
@@ -373,7 +372,7 @@ void main() {
     var apkamPublicKey =
         pkamPublicKeyMap['@eve🛠']; // can be any random public key
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"]}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel6","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"]}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -405,7 +404,7 @@ void main() {
     for (var request in enrollmentRequests) {
       if (request.enrollmentId == enrollResponse1JsonDecoded['enrollmentId']) {
         expect(request.namespace!['new_app'], 'rw');
-        expect(request.deviceName, 'pixel');
+        expect(request.deviceName, 'pixel6');
         matchCount++;
       } else if (request.enrollmentId ==
           enrollResponse2JsonDecoded['enrollmentId']) {
