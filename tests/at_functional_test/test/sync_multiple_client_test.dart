@@ -288,7 +288,7 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
 }
 
 Future<void> startClient(ChildIsolatePreferences clientParameters) async {
-  var atClientPreferences = _getAtClientPreference(currentAtSign,
+  var atClientPreferences = _getAtClientPreference(currentAtSign, clientParameters.clientId.name,
       hiveStoragePath: clientParameters.hiveStoragePath,
       commitLogPath: clientParameters.commitLogPath);
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
@@ -303,7 +303,7 @@ Future<void> waitForSyncToComplete({String clientId = ''}) async {
   if ((await atClientManager.atClient.syncService.isInSync())) {
     _logger.info(_logger.getLogMessageWithClientParticulars(
         atClientManager.atClient.getPreferences()!.atClientParticulars,
-        '($clientId)|Client and Server are in Sync'));
+        '($clientId)| Client and Server are in Sync'));
     return;
   }
   isSyncCompleted = false;
@@ -311,11 +311,10 @@ Future<void> waitForSyncToComplete({String clientId = ''}) async {
       atClientManager.atClient.getPreferences()!.atClientParticulars,
       '($clientId): Client and Server are not in Sync... Initializing sync process'));
   atClientManager.atClient.syncService.sync();
-  while (!isSyncCompleted) { /// ToDo: how will isSyncCompleted be set to true if we are stuck in loop ?
+  while (!isSyncCompleted) {
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         atClientManager.atClient.getPreferences()!.atClientParticulars,
         '($clientId) SyncCompletedStatus: $isSyncCompleted'));
-    /// ToDo: why call sync in a while loop?
     atClientManager.atClient.syncService.sync();
     await Future.delayed(Duration(milliseconds: 20));
   }
@@ -413,14 +412,14 @@ bool assertCommitEntries(
     serverCommitLogMap,
     Map<String, Map<String, dynamic>> clientOneCommitLog,
     Map<String, Map<String, dynamic>> clientTwoCommitLog) {
+  assert(clientOneCommitLog.length > 1);
   for (MapEntry<String, Map<String, dynamic>> mapEntry
       in clientOneCommitLog.entries) {
-    // ensures that keys not created by this test are not compared
+    // ignore keys NOT created by this test
     if (!(atKeyList.contains(AtKey.fromString(mapEntry.key).key))) {
       continue;
     }
     // Compare server commit id with both client's commit log
-    /// ToDo: investigate: clientOneCommitLog not being checked
     if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
         (serverCommitLogMap[mapEntry.key][0] !=
             clientTwoCommitLog[mapEntry.key]!['commitId'])) {
@@ -451,7 +450,7 @@ class MySyncProgressListener extends SyncProgressListener {
   }
 }
 
-AtClientPreference _getAtClientPreference(String currentAtSign,
+AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,
     {required String hiveStoragePath, required String commitLogPath}) {
   var preference = AtClientPreference();
   preference.hiveStoragePath = hiveStoragePath;
@@ -460,7 +459,7 @@ AtClientPreference _getAtClientPreference(String currentAtSign,
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   preference.atClientParticulars = AtClientParticulars()
-    ..appName = 'wavi'
+    ..appName = 'wavi_$clientId'
     ..appVersion = '3.0.2'
     ..platform = 'android';
   return preference;
