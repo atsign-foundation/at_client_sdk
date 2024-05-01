@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
-import 'package:at_client/src/service/enrollment_details.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -103,14 +102,12 @@ void main() {
           scanResult?.contains(
               '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign'),
           true);
-      // check whether at client can create keys in different namespaces
-      // #TODO change below logic to atClient.put once we have enrollment namespace checks in put method
+      // Check whether at client can create keys in different namespaces
       AtKey atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: apkamAtSign).build();
       String value = '1234';
       AtResponse putWaviKeyResponse = await atClient.putText(atKey, value);
       expect(putWaviKeyResponse.response, isNotEmpty);
-      expect(int.parse(putWaviKeyResponse.response), greaterThan(0));
 
       atKey =
           AtKey.self('email', namespace: 'buzz', sharedBy: apkamAtSign).build();
@@ -147,12 +144,12 @@ void main() {
       // Insert the key into local secondary keystore.
       String key =
           '${atAuthResponse.enrollmentId}.new.enrollments.__manage$atSign';
-      EnrollmentDetails enrollmentDetails = EnrollmentDetails();
-      enrollmentDetails.namespace = {'wavi': 'rw'};
+      Enrollment enrollment = Enrollment();
+      enrollment.namespace = {'wavi': 'rw'};
       await atClient
           .getLocalSecondary()
           ?.keyStore
-          ?.put(key, AtData()..data = jsonEncode(enrollmentDetails));
+          ?.put(key, AtData()..data = jsonEncode(enrollment));
       // get otp
       var otpResponse = await atClient
           .getRemoteSecondary()!

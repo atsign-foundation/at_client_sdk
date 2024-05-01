@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/enrollment_details.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
@@ -36,8 +35,8 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$testEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data = jsonEncode(EnrollmentDetails()
-              ..namespace = {"__manage": "rw", "*": "rw"}));
+            ..data = jsonEncode(
+                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
       //1. create a self key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -136,8 +135,7 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$testEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data =
-                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
+            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       //1. create a self key in wavi namespace should pass
       var waviKey = AtKey()
         ..key = 'phone'
@@ -216,8 +214,8 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$testEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data = jsonEncode(EnrollmentDetails()
-              ..namespace = {"__manage": "rw", "*": "rw"}));
+            ..data = jsonEncode(
+                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
       //1. create a self key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -288,8 +286,7 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$newEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data =
-                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
+            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       // delete self key in wavi namespace should pass
       var deleteBuilder = DeleteVerbBuilder()..atKey = waviKey;
       var deleteWaviKeyResult = await enrolledAtClient
@@ -346,8 +343,8 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$testEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data = jsonEncode(EnrollmentDetails()
-              ..namespace = {"__manage": "rw", "*": "rw"}));
+            ..data = jsonEncode(
+                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
 
       //1. create a key in wavi namespace
       var waviKey = AtKey()
@@ -440,8 +437,7 @@ void main() {
       // Insert the enrollment info into the local secondary.
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$privilegedEnrollment.new.enrollments.__manage@alice',
-          AtData()
-            ..data = jsonEncode(EnrollmentDetails()..namespace = {"*": "rw"}));
+          AtData()..data = jsonEncode(Enrollment()..namespace = {"*": "rw"}));
       //1. create a key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -508,8 +504,7 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$newEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data =
-                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
+            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       // llookup on wavi namespace should be allowed
       var waviLookupBuilder = LLookupVerbBuilder()..atKey = waviKey;
       var waviResult = await enrolledAtClient
@@ -563,8 +558,8 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$testEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data = jsonEncode(EnrollmentDetails()
-              ..namespace = {"__manage": "rw", "*": "rw"}));
+            ..data = jsonEncode(
+                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
       //1. create a key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -643,8 +638,7 @@ void main() {
       await atClient.getLocalSecondary()?.keyStore?.put(
           '$newEnrollmentId.new.enrollments.__manage@alice',
           AtData()
-            ..data =
-                jsonEncode(EnrollmentDetails()..namespace = {"wavi": "rw"}));
+            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       // enrolled client should be able to see wavi key and reserved key in scan. Buzz key and no namespace keys should not be returned
       enrolledAtClient.enrollmentId = newEnrollmentId;
       var enrolledClientScanResult = await enrolledAtClient
