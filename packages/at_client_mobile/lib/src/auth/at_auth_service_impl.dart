@@ -486,7 +486,8 @@ class AtAuthServiceImpl implements AtAuthService {
       EnrollmentInfo enrollmentInfo) async {
     String enrollmentKey =
         '${enrollmentInfo.enrollmentId}.new.enrollments.__manage$_atSign';
-    AtData atData = AtData()..data = jsonEncode(enrollmentInfo.namespace);
+    Enrollment enrollment = Enrollment()..namespace = enrollmentInfo.namespace;
+    AtData atData = AtData()..data = jsonEncode(enrollment);
     // The "put" function in AtClient will call the executeVerb function which in turn calls the "_isAuthorized" in the local secondary.
     // The "_isAuthorized" method fetches enrollment info from the key-store. Since there is no enrollment info, it returns null which
     // throws AtKeyNotFoundException.

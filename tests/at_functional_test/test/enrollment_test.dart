@@ -5,9 +5,11 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/service/enrollment_details.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/src/model/at_data.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -29,6 +31,11 @@ void main() {
     aliceSelfEncryptionKey = aesKeyMap[atSign]!;
     alicePkamPublicKey = pkamPublicKeyMap[atSign]!;
     await setLastReceivedNotificationDateTime();
+  });
+
+  tearDown(() {
+    AtClientManager.getInstance().reset();
+    AtClientImpl.atClientInstanceMap.clear();
   });
 
   void stopSubscriptions(AtClientManager atClientManager) {
@@ -98,18 +105,19 @@ void main() {
           true);
       // check whether at client can create keys in different namespaces
       // #TODO change below logic to atClient.put once we have enrollment namespace checks in put method
-      var putWaviKeyResponse = await atClient
-          .getRemoteSecondary()!
-          .executeCommand('update:phone.wavi$apkamAtSign 1234\n');
-      expect(putWaviKeyResponse, isNotEmpty);
-      putWaviKeyResponse = putWaviKeyResponse!.replaceFirst('data:', '');
-      expect(int.parse(putWaviKeyResponse), greaterThan(0));
-      var putBuzzKeyResponse = await atClient
-          .getRemoteSecondary()!
-          .executeCommand('update:email.buzz$apkamAtSign test@gmail.com\n');
-      expect(putBuzzKeyResponse, isNotEmpty);
-      putBuzzKeyResponse = putBuzzKeyResponse!.replaceFirst('data:', '');
-      expect(int.parse(putBuzzKeyResponse), greaterThan(0));
+      AtKey atKey =
+          AtKey.self('phone', namespace: 'wavi', sharedBy: apkamAtSign).build();
+      String value = '1234';
+      AtResponse putWaviKeyResponse = await atClient.putText(atKey, value);
+      expect(putWaviKeyResponse.response, isNotEmpty);
+      expect(int.parse(putWaviKeyResponse.response), greaterThan(0));
+
+      atKey =
+          AtKey.self('email', namespace: 'buzz', sharedBy: apkamAtSign).build();
+      value = 'test@gmail.com';
+      AtResponse putBuzzKeyResponse = await atClient.putText(atKey, value);
+      expect(putBuzzKeyResponse.response, isNotEmpty);
+      expect(int.parse(putBuzzKeyResponse.response), greaterThan(0));
     });
 
     test('A test to verify new enrollment and approval from privileged client',
@@ -136,6 +144,15 @@ void main() {
               atChops: atAuth.atChops,
               enrollmentId: atAuthResponse.enrollmentId);
       final atClient = atClientManager.atClient;
+      // Insert the key into local secondary keystore.
+      String key =
+          '${atAuthResponse.enrollmentId}.new.enrollments.__manage$atSign';
+      EnrollmentDetails enrollmentDetails = EnrollmentDetails();
+      enrollmentDetails.namespace = {'wavi': 'rw'};
+      await atClient
+          .getLocalSecondary()
+          ?.keyStore
+          ?.put(key, AtData()..data = jsonEncode(enrollmentDetails));
       // get otp
       var otpResponse = await atClient
           .getRemoteSecondary()!
@@ -396,7 +413,7 @@ void main() {
 
     // fetch enrollment requests through client
     List<Enrollment> enrollmentRequests =
-        await client.enrollmentService.fetchEnrollmentRequests();
+        await client.enrollmentService!.fetchEnrollmentRequests();
 
     expect(enrollmentRequests.length > 2, true);
 

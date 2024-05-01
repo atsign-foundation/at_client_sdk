@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/service/enrollment_details.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -31,7 +30,7 @@ class LocalSecondary implements Secondary {
   AtTelemetryService? telemetry;
 
   // temporarily cache enrollmentDetails until we store in local secondary
-  EnrollmentDetails? _enrollmentDetails;
+  Enrollment? _enrollment;
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.
@@ -71,7 +70,7 @@ class LocalSecondary implements Secondary {
     try {
       dynamic updateResult;
       var updateKey = builder.buildKey();
-      if (!await _isAuthorized(updateKey, builder)) {
+      if (!await isEnrollmentAuthorizedForOperation(updateKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform update on $updateKey due to insufficient privilege');
       }
@@ -100,7 +99,7 @@ class LocalSecondary implements Secondary {
     var llookupKey = '';
     try {
       llookupKey = builder.buildKey();
-      if (!await _isAuthorized(llookupKey, builder)) {
+      if (!await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform llookup on $llookupKey due to insufficient privilege');
       }
@@ -124,7 +123,7 @@ class LocalSecondary implements Secondary {
 
   Future<String> _delete(DeleteVerbBuilder builder) async {
     var deleteKey = builder.buildKey();
-    if (!await _isAuthorized(deleteKey, builder)) {
+    if (!await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
       throw UnAuthorizedException(
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
@@ -157,7 +156,8 @@ class LocalSecondary implements Secondary {
       keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
       final keysToRemove = <String>[];
       await Future.forEach(keys, (key) async {
-        if (!(await _isAuthorized(key.toString(), builder))) {
+        if (!(await isEnrollmentAuthorizedForOperation(
+            key.toString(), builder))) {
           keysToRemove.add(key.toString());
         }
       });
@@ -265,21 +265,21 @@ class LocalSecondary implements Secondary {
     return isStored != null ? true : false;
   }
 
-  Future<bool> _isAuthorized(String key, VerbBuilder verbBuilder) async {
+  Future<bool> isEnrollmentAuthorizedForOperation(
+      String key, VerbBuilder verbBuilder) async {
     // if there is no enrollment, return true
-    var enrollmentId = _atClient.enrollmentId;
-    _enrollmentDetails ??= await _getEnrollmentDetails();
-    if (enrollmentId == null ||
-        _enrollmentDetails == null ||
+    _enrollment ??= await _getEnrollmentDetails();
+    if (_atClient.enrollmentId == null ||
+        _enrollment == null ||
         _isReservedKey(key)) {
       return true;
     }
-    final enrollNamespaces = _enrollmentDetails!.namespace;
+    final enrollNamespaces = _enrollment!.namespace;
     var keyNamespace = AtKey.fromString(key).namespace;
     _logger.finer('enrollNamespaces:$enrollNamespaces');
     _logger.finer('keyNamespace:$keyNamespace');
     // * denotes access to all namespaces.
-    final access = enrollNamespaces.containsKey('*')
+    final access = enrollNamespaces!.containsKey('*')
         ? enrollNamespaces['*']
         : enrollNamespaces[keyNamespace];
     _logger.finer('access:$access');
@@ -301,21 +301,57 @@ class LocalSecondary implements Secondary {
         _isWriteAllowed(verbBuilder, access);
   }
 
-  Future<EnrollmentDetails?> _getEnrollmentDetails() async {
-    var enrollmentId = _atClient.enrollmentId;
-    if (enrollmentId == null) {
+  Future<Enrollment?> _getEnrollmentDetails() async {
+    if (_atClient.enrollmentId == null) {
       return null;
     }
 
-    var enrollmentInfo = await keyStore?.get(
-        '$enrollmentId.new.enrollments.__manage${_atClient.getCurrentAtSign()}');
-    if (enrollmentInfo == null) {
-      throw AtKeyNotFoundException(
-          'Enrollment key for enrollmentId: $enrollmentId not found in server');
+    // Fetch enrollment information from local secondary
+    AtData? enrollmentInfoFromLocalSecondary;
+    try {
+      enrollmentInfoFromLocalSecondary = await keyStore?.get(
+          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}');
+    } on Exception {
+      _logger.finer(
+          'Enrollment information for id: ${_atClient.enrollmentId} not found in local secondary. Fetching from server');
     }
-    _enrollmentDetails =
-        EnrollmentDetails.fromJSON(jsonDecode(enrollmentInfo.data));
-    return _enrollmentDetails!;
+
+    // If enrollmentInfo is not found in local secondary, fetch the info from the remote secondary server and cache it in local
+    // secondary.
+    String? enrollmentInfoFromServer;
+    if (enrollmentInfoFromLocalSecondary == null) {
+      try {
+        enrollmentInfoFromServer = await _atClient
+            .getRemoteSecondary()
+            ?.executeCommand(
+                'enroll:fetch:{"enrollmentId":"${_atClient.enrollmentId}"}\n',
+                auth: true);
+      } on AtException catch (e) {
+        _logger.finer(
+            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
+      } on AtLookUpException catch (e) {
+        _logger.finer(
+            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
+      }
+      enrollmentInfoFromServer =
+          enrollmentInfoFromServer?.replaceAll('data:', '');
+      Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
+      _enrollment = Enrollment()..namespace = enrollmentDetailsMap['namespace'];
+
+      AtData atData = AtData()..data = jsonEncode(_enrollment);
+      await keyStore?.put(
+          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}',
+          atData);
+    } else {
+      _enrollment = Enrollment.fromJSON(
+          jsonDecode(enrollmentInfoFromLocalSecondary.data!));
+    }
+
+    if (_enrollment == null) {
+      throw AtKeyNotFoundException(
+          'Enrollment key for enrollmentId: ${_atClient.enrollmentId} not found in server');
+    }
+    return _enrollment!;
   }
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {
