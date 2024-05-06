@@ -37,13 +37,6 @@ void main() {
     AtClientImpl.atClientInstanceMap.clear();
   });
 
-  void stopSubscriptions(AtClientManager atClientManager) {
-    atClientManager.atClient.stopCompactionJob();
-    atClientManager.atClient.syncService.removeAllProgressListeners();
-    atClientManager.atClient.notificationService.stopAllSubscriptions();
-    print('subscriptions stopped');
-  }
-
   group('A group of tests for APKAM scenarios using at_auth', () {
     test('A test to verify onboarding and initial enrollment using at_auth',
         () async {
@@ -310,42 +303,36 @@ void main() {
     });
 
     test(
-            'A test to validate client can authenticate with an approved enrollment',
-                () async {
-              // Submit an enrollment request with at_auth package
-              AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(
-                  atSign);
-              int random = Uuid()
-                  .v4()
-                  .hashCode;
-              AtLookUp atLookUp = AtLookupImpl(
-                  atSign,
-                  atClientManager.atClient.getPreferences()!.rootDomain,
-                  atClientManager.atClient.getPreferences()!.rootPort);
+        'A test to validate client can authenticate with an approved enrollment',
+        () async {
+      // Submit an enrollment request with at_auth package
+      AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
+      int random = Uuid().v4().hashCode;
+      AtLookUp atLookUp = AtLookupImpl(
+          atSign,
+          atClientManager.atClient.getPreferences()!.rootDomain,
+          atClientManager.atClient.getPreferences()!.rootPort);
 
-              EnrollmentRequest enrollmentRequest = EnrollmentRequest(
-                  appName: 'wavi-$random',
-                  deviceName: 'iphone',
-                  otp: 'ABC123',
-                  namespaces: {'wavi': 'rw'});
-              AtEnrollmentResponse? atEnrollmentResponse =
-              await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-              expect(
-                  atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
+      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+              appName: 'wavi-$random',
+              deviceName: 'iphone',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'});
+          AtEnrollmentResponse? atEnrollmentResponse =
+          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+          expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
-              // Use enroll fetch to get the encryptedAPKAMSymmetricKey
-              String? enrollmentFetchResponse = await AtClientManager
-                  .getInstance()
-                  .atClient
-                  .getRemoteSecondary()
-                  ?.executeCommand(
-                  'enroll:fetch:{"enrollmentId":"${atEnrollmentResponse
-                      .enrollmentId}"}\n',
-                  auth: true);
-              enrollmentFetchResponse =
-                  enrollmentFetchResponse?.replaceAll('data:', '');
-              Enrollment enrollment =
-              Enrollment.fromJSON(jsonDecode(enrollmentFetchResponse!));
+      // Use enroll fetch to get the encryptedAPKAMSymmetricKey
+      String? enrollmentFetchResponse = await AtClientManager.getInstance()
+          .atClient
+          .getRemoteSecondary()
+          ?.executeCommand(
+              'enroll:fetch:{"enrollmentId":"${atEnrollmentResponse.enrollmentId}"}\n',
+              auth: true);
+      enrollmentFetchResponse =
+          enrollmentFetchResponse?.replaceAll('data:', '');
+      Enrollment enrollment =
+          Enrollment.fromJSON(jsonDecode(enrollmentFetchResponse!));
 
       // Approve enrollment
       AtEnrollmentResponse? approveEnrollmentResponse =
@@ -365,49 +352,141 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
-              AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair
-                  .create(
-                  encryptionPublicKeyMap[atSign]!,
-                  encryptionPrivateKeyMap[atSign]!);
-              AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-                  atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
-                  atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
-              AtChopsKeys atChopsKeys =
-              AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-              AtChops atChops = AtChopsImpl(atChopsKeys);
+      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+          encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
+      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
+      AtChopsKeys atChopsKeys =
+          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      AtChops atChops = AtChopsImpl(atChopsKeys);
 
-              await AtClientManager.getInstance().setCurrentAtSign(
-                  atSign, namespace, TestUtils.getPreference(atSign),
-                  atChops: atChops,
-                  enrollmentId: atEnrollmentResponse.enrollmentId);
+      // Authenticate the atSign
+          AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
+          AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+          atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
+          atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
+          atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
+          encryptionPrivateKeyMap[atSign]!;
+          atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
+          aesKeyMap[atSign];
+          atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
 
-              // Insert key which has access to namespace authorized by enrollment.
-              AtKey atKey =
-              AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
-              String value = '123';
-              AtResponse atResponse =
+          AtAuthResponse atAuthResponse = await atAuth.authenticate(
+              atAuthRequest);
+          expect(atAuthResponse.isSuccessful, true);
+
+          // After authentication is successful, create an instance of atClient with enrollment Id
+          // to perform put operation.
+          await AtClientManager.getInstance().setCurrentAtSign(
+              atSign, namespace, TestUtils.getPreference(atSign),
+              atChops: atChops,
+              enrollmentId: atEnrollmentResponse.enrollmentId);
+
+      // Insert key which has access to namespace authorized by enrollment.
+      AtKey atKey =
+          AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
+      String value = '123';
+      AtResponse atResponse =
+          await AtClientManager.getInstance().atClient.putText(atKey, value);
+      expect(atResponse.response, isNotEmpty);
+
+      // Insert key which DO NOT have access to namespace authorized by enrollment.
+          atKey =
+              AtKey.self('phone', namespace: 'buzz', sharedBy: atSign).build();
+          expect(
+                  () async =>
               await AtClientManager
                   .getInstance()
                   .atClient
-                  .putText(atKey, value);
-              expect(atResponse.response, isNotEmpty);
+                  .putText(atKey, value),
+              throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+                  e.message ==
+                      'Cannot perform update on phone.buzz@alice🛠 due to insufficient privilege')));
+        });
 
-              // Insert key which DO NOT have access to namespace authorized by enrollment.
-              atKey = AtKey.self('phone', namespace: 'buzz', sharedBy: atSign)
-                  .build();
-              //await AtClientManager.getInstance().atClient.putText(atKey, value);
+    test(
+        'A test to validate client fails to authenticate with an denied enrollment',
+            () async {
+          // Submit an enrollment request with at_auth package
+          AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
+          int random = Uuid()
+              .v4()
+              .hashCode;
+          AtLookUp atLookUp = AtLookupImpl(
+              atSign,
+              atClientManager.atClient.getPreferences()!.rootDomain,
+              atClientManager.atClient.getPreferences()!.rootPort);
 
-              expect(
-                      () async =>
-                  await AtClientManager
-                      .getInstance()
-                      .atClient
-                      .putText(atKey, value),
-                  throwsA(predicate((dynamic e) =>
-                  e is AtClientException &&
-                      e.message ==
-                          'Cannot perform update on phone.buzz@alice🛠 due to insufficient privilege')));
-            });
+          EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+              appName: 'wavi-$random',
+              deviceName: 'iphone',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'});
+          AtEnrollmentResponse? atEnrollmentResponse =
+          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+          expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
+
+          // Use enroll fetch to get the encryptedAPKAMSymmetricKey
+          String? enrollmentFetchResponse = await AtClientManager
+              .getInstance()
+              .atClient
+              .getRemoteSecondary()
+              ?.executeCommand(
+              'enroll:fetch:{"enrollmentId":"${atEnrollmentResponse
+                  .enrollmentId}"}\n',
+              auth: true);
+          enrollmentFetchResponse =
+              enrollmentFetchResponse?.replaceAll('data:', '');
+          Enrollment.fromJSON(jsonDecode(enrollmentFetchResponse!));
+
+          // Approve enrollment
+          AtEnrollmentResponse? approveEnrollmentResponse =
+          await AtClientManager
+              .getInstance()
+              .atClient
+              .enrollmentService
+              ?.deny(
+              EnrollmentRequestDecision.denied(
+                  atEnrollmentResponse.enrollmentId));
+          expect(
+              approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.denied);
+
+          // Set AtClient to null and authenticate with the new auth keys generated for enrollment
+          AtClientManager.getInstance().reset();
+          AtClientImpl.atClientInstanceMap.clear();
+
+          // Get AtChops from the AtAuthKeys
+          AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+              encryptionPublicKeyMap[atSign]!,
+              encryptionPrivateKeyMap[atSign]!);
+          AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
+              atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
+              atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
+          AtChopsKeys atChopsKeys =
+          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+          AtChops atChops = AtChopsImpl(atChopsKeys);
+
+          // Authenticate the atSign
+          AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
+          AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+          atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
+          atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
+          atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
+          encryptionPrivateKeyMap[atSign]!;
+          atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
+          aesKeyMap[atSign];
+          atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
+
+          expect(
+                  () async => await atAuth.authenticate(atAuthRequest),
+              throwsA(predicate((dynamic e) =>
+              e is AtAuthenticationException &&
+                  e.message.contains(
+                      'AT0025:enrollment_id: ${atAuthRequest
+                          .enrollmentId} is denied'))));
+        });
       });
 }
 
