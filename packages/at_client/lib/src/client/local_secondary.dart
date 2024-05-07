@@ -336,12 +336,21 @@ class LocalSecondary implements Secondary {
       enrollmentInfoFromServer =
           enrollmentInfoFromServer?.replaceAll('data:', '');
       Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
-      _enrollment = Enrollment()..namespace = enrollmentDetailsMap['namespace'];
+      _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
+      _enrollment = Enrollment()
+        ..appName = enrollmentDetailsMap['appName']
+        ..deviceName = enrollmentDetailsMap['deviceName']
+        ..namespace = enrollmentDetailsMap['namespace']
+        ..encryptedAPKAMSymmetricKey =
+            enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
 
       AtData atData = AtData()..data = jsonEncode(_enrollment);
+      // The enrollment data is fetch from server, Set skipCommit to true to prevent
+      // the key sync back to server
       await keyStore?.put(
           '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}',
-          atData);
+          atData,
+          skipCommit: true);
     } else {
       _enrollment = Enrollment.fromJSON(
           jsonDecode(enrollmentInfoFromLocalSecondary.data!));

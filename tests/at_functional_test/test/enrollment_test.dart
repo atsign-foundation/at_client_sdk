@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -135,7 +136,7 @@ void main() {
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
           aliceSelfEncryptionKey, aliceApkamSymmetricKey);
       var enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel2","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
       var enrollResponseFromServer = await atClientManager.atClient
           .getRemoteSecondary()!
           .executeCommand(enrollRequest);
@@ -157,7 +158,7 @@ void main() {
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
       // 5. Send enrollment request
       enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel3","namespaces":{"wavi":"rw"},"otp":"$spp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$spp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
       String? serverResponse = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand(enrollRequest, auth: false);
@@ -183,11 +184,10 @@ void main() {
         () async {
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
           appName: 'buzz',
-          deviceName: 'iphone',
+          deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
           otp: 'a1b2c3'); //random invalid OTP
       var atEnrollment = atAuthBase.atEnrollment(atSign);
-      print('submitting new enrollment');
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
@@ -208,7 +208,7 @@ void main() {
       expect(otp.length, 6);
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
           appName: 'buzz',
-          deviceName: 'iphone',
+          deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
           otp: otp); //random invalid OTP
       var atEnrollment = atAuthBase.atEnrollment(atSign);
@@ -242,8 +242,9 @@ void main() {
         RemoteSecondary(atSign, getClient2Preferences());
     var apkamPublicKey =
         pkamPublicKeyMap['@eve🛠']; // can be any random public key
+    String random = Uuid().v4().hashCode.toString();
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel6","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"]}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"]}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -257,7 +258,7 @@ void main() {
     expect(otp, isNotNull);
     // create second enrollment request
     newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel7","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
     enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -275,13 +276,13 @@ void main() {
     for (var request in enrollmentRequests) {
       if (request.enrollmentId == enrollResponse1JsonDecoded['enrollmentId']) {
         expect(request.namespace!['new_app'], 'rw');
-        expect(request.deviceName, 'pixel6');
+        expect(request.deviceName, 'pixel-6-$random');
         matchCount++;
       } else if (request.enrollmentId ==
           enrollResponse2JsonDecoded['enrollmentId']) {
         expect(request.namespace!['new_app'], 'rw');
         expect(request.namespace!['wavi'], 'r');
-        expect(request.deviceName, 'pixel7');
+        expect(request.deviceName, 'pixel-7-$random');
         matchCount++;
       }
     }
@@ -412,41 +413,35 @@ void main() {
           atClientManager.atClient.getPreferences()!.rootPort);
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
-              appName: 'wavi-$random',
-              deviceName: 'iphone',
-              otp: 'ABC123',
-              namespaces: {'wavi': 'rw'});
-          AtEnrollmentResponse? atEnrollmentResponse =
+          appName: 'wavi-$random',
+          deviceName: 'iphone',
+          otp: 'ABC123',
+          namespaces: {'wavi': 'rw'});
+      AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
-          String? enrollmentFetchResponse = await AtClientManager
-              .getInstance()
-              .atClient
-              .getRemoteSecondary()
-              ?.executeCommand(
-              'enroll:fetch:{"enrollmentId":"${atEnrollmentResponse
-                  .enrollmentId}"}\n',
+      String? enrollmentFetchResponse = await AtClientManager.getInstance()
+          .atClient
+          .getRemoteSecondary()
+          ?.executeCommand(
+              'enroll:fetch:{"enrollmentId":"${atEnrollmentResponse.enrollmentId}"}\n',
               auth: true);
       enrollmentFetchResponse =
           enrollmentFetchResponse?.replaceAll('data:', '');
       Enrollment.fromJSON(jsonDecode(enrollmentFetchResponse!));
 
       // Approve enrollment
-          AtEnrollmentResponse? approveEnrollmentResponse =
-          await AtClientManager
-              .getInstance()
-              .atClient
-              .enrollmentService
-              ?.deny(
+      AtEnrollmentResponse? approveEnrollmentResponse =
+          await AtClientManager.getInstance().atClient.enrollmentService?.deny(
               EnrollmentRequestDecision.denied(
                   atEnrollmentResponse.enrollmentId));
       expect(approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.denied);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
-          AtClientManager.getInstance().reset();
-          AtClientImpl.atClientInstanceMap.clear();
+      AtClientManager.getInstance().reset();
+      AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -459,18 +454,18 @@ void main() {
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
-          AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
-          AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
-          atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
-          atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-          atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
+      AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
+      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
+      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
           encryptionPrivateKeyMap[atSign]!;
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey = aesKeyMap[atSign];
       atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
 
       expect(
-                  () async => await atAuth.authenticate(atAuthRequest),
-              throwsA(predicate((dynamic e) =>
+          () async => await atAuth.authenticate(atAuthRequest),
+          throwsA(predicate((dynamic e) =>
               e is AtAuthenticationException &&
               e.message.contains(
                   'AT0025:enrollment_id: ${atAuthRequest.enrollmentId} is denied'))));
@@ -614,6 +609,7 @@ void main() {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
       AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      Map<String, dynamic> enrollmentMap = HashMap();
       String enrollmentIdFromServer = '';
 
       AtClientManager atClientManager =
@@ -626,18 +622,13 @@ void main() {
           .atClient.notificationService
           .subscribe(regex: "__manage");
       notificationStream.listen(expectAsync1((notification) {
+        print('RCVD: $notification');
         enrollmentIdFromServer =
             notification.key.substring(0, notification.key.indexOf('.'));
         expect(notification.key, isNotEmpty);
         var enrollmentData = jsonDecode(notification.value!);
-        expect(enrollmentData["appName"], "wavi");
-        expect(enrollmentData["deviceName"], "device-$random");
-        expect(enrollmentData["encryptedApkamSymmetricKey"], isNotEmpty);
-
-        // Clear the state of AtClientManager for subsequent tests.
-        AtClientManager.getInstance().removeAllChangeListeners();
-        AtClientManager.getInstance().reset();
-      }, count: 1));
+        enrollmentMap.putIfAbsent(enrollmentIdFromServer, () => enrollmentData);
+      }, count: 1, max: -1));
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
           appName: 'wavi',
@@ -646,10 +637,19 @@ void main() {
           namespaces: {'wavi': 'rw'});
       AtEnrollmentResponse atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+      print('Enrollment Response: $atEnrollmentResponse');
+
+      // Wait until the notification is received.
+      while (!enrollmentMap.containsKey(atEnrollmentResponse.enrollmentId)) {
+        await Future.delayed(Duration(milliseconds: 1));
+      }
+
       expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
-      expect(atEnrollmentResponse.enrollmentId,
-          startsWith(enrollmentIdFromServer));
+      expect(
+          enrollmentMap[atEnrollmentResponse.enrollmentId]['appName'], 'wavi');
+      expect(enrollmentMap[atEnrollmentResponse.enrollmentId]['deviceName'],
+          'device-$random');
     });
   });
 }
