@@ -20,11 +20,12 @@ void main() async {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace);
+        .testInitializer(currentAtSign, namespace, authType: authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace);
+        .testInitializer(sharedWithAtSign, namespace, authType: authType);
   });
 
   /// The purpose of this test verify the following:

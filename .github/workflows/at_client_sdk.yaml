@@ -263,6 +263,10 @@ jobs:
       - name: Config for @cicd1/4
         run: mv tests/at_end2end_test/config/config14.yaml tests/at_end2end_test/config/config.yaml
 
+      - name: Submit and approve enrollment request
+        working-directory: tests/at_end2end_test
+        run: dart run test/enrollment_setup.dart
+
       # Run end-to-end test
       - name: End to end test
         # Needs a secret, so don't run for Dependabot PRs

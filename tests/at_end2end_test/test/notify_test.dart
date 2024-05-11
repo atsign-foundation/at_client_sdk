@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:at_end2end_test/src/test_initializers.dart';
-import 'package:at_end2end_test/src/test_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/manager/monitor.dart';
-import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
+import 'package:at_client/src/response/notification_response_parser.dart';
+import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_end2end_test/config/config_util.dart';
+import 'package:at_end2end_test/src/test_initializers.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
+import 'package:uuid/uuid.dart';
 
 void main() async {
   late AtClientManager currentAtClientManager;
@@ -22,11 +22,12 @@ void main() async {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace);
+        .testInitializer(currentAtSign, namespace, authType: authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace);
+        .testInitializer(sharedWithAtSign, namespace, authType: authType);
   });
 
   test(

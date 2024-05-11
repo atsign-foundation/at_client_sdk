@@ -3,7 +3,6 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
-
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -17,11 +16,12 @@ void main() async {
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedByAtSign, namespace);
+        .testInitializer(sharedByAtSign, namespace, authType: authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace);
+        .testInitializer(sharedWithAtSign, namespace, authType: authType);
   });
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
