@@ -165,7 +165,7 @@ class NotificationParams {
   String? get value => _value;
 
   OperationEnum get operation => _operation;
-  
+
   @Deprecated('Use only MessageType.key, MessageType.text has been deprecated ')
   MessageTypeEnum get messageType => _messageType;
 
