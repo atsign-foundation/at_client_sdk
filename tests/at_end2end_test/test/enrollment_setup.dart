@@ -127,6 +127,16 @@ void main() {
       print('Completed writing keys file for $currentAtSign');
     });
   }
+
+  tearDownAll(() async {
+    AtClientManager.getInstance().removeAllChangeListeners();
+    AtClientManager.getInstance()
+        .atClient
+        .notificationService
+        .stopAllSubscriptions();
+    await AtClientManager.getInstance().atClient.stopCompactionJob();
+    exit(0);
+  });
 }
 
 /// Writes the atKeys to the file.
