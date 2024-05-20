@@ -21,13 +21,20 @@ const String apkamSymmetricKey = 'apkamSymmetricKey';
 const String enrollmentId = 'enrollmentId';
 
 void main() {
-  var atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
+  List atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
+  String namespace = 'wavi';
 
-  for (var atSign in atSignList) {
-    String currentAtSign = atSign;
-    String namespace = 'wavi';
+  // Complete the initial sync for submitting the enrollment request to prevent time-out issues.
+  setUp(() async {
+    for (var atSign in atSignList) {
+      await TestSuiteInitializer.getInstance()
+          .testInitializer(atSign, namespace, authType: 'pkam');
+    }
+  });
 
-    test('A test to submit and approve an enrollment for $atSign', () async {
+  for (var currentAtSign in atSignList) {
+    test('A test to submit and approve an enrollment for $currentAtSign',
+        () async {
       // Set SPP at the start of enrollment tests to pass as OTP.
       await TestSuiteInitializer.getInstance()
           .testInitializer(currentAtSign, namespace, authType: 'pkam');
