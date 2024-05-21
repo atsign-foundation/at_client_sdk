@@ -16,7 +16,7 @@ final namespace = 'wavi';
 void main() {
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()

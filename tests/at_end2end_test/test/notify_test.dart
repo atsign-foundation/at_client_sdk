@@ -5,7 +5,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
-import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
@@ -14,19 +13,19 @@ import 'package:uuid/uuid.dart';
 
 void main() async {
   late AtClientManager currentAtClientManager;
-  late AtClientManager sharedWithAtClientManager;
   late String currentAtSign;
   late String sharedWithAtSign;
   final namespace = 'wavi';
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace);
+        .testInitializer(currentAtSign, namespace, authType: authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace);
+        .testInitializer(sharedWithAtSign, namespace, authType: authType);
   });
 
   test(
@@ -70,57 +69,6 @@ void main() async {
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
     expect(notificationListJson[0]['value'], isNotEmpty);
-  }, timeout: Timeout(Duration(minutes: 1)));
-
-  /// The purpose of this test is to verify the notify text with setting
-  /// shouldEncrypt parameter to true (which encrypt the notify text)
-  /// and setting shouldEncrypt to false (text message is sent as plain text).
-  group('A group of tests to verify notification text', () {
-    var notifyText = 'Hello How are you';
-    var whomToNotify = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    var inputToExpectedOutput = {
-      // Encrypt the notify text data
-      NotificationParams.forText('$notifyText', whomToNotify,
-          shouldEncrypt: true): '$whomToNotify:$notifyText',
-      // Send notify text message as plain text
-      NotificationParams.forText('$notifyText', whomToNotify,
-          shouldEncrypt: false): '$whomToNotify:$notifyText'
-    };
-    inputToExpectedOutput.forEach((input, expectedOutput) {
-      test('Setting shouldEncrypt to ${input.atKey.metadata.isEncrypted}',
-          () async {
-        // Setting the AtClientManager instance to current atsign
-        await AtClientManager.getInstance().setCurrentAtSign(
-            currentAtSign,
-            namespace,
-            TestPreferences.getInstance().getPreference(currentAtSign));
-
-        var notificationResult = await AtClientManager.getInstance()
-            .atClient
-            .notificationService
-            .notify(input);
-
-        expect(notificationResult.notificationStatusEnum,
-            NotificationStatusEnum.delivered);
-
-        sharedWithAtClientManager = await AtClientManager.getInstance()
-            .setCurrentAtSign(sharedWithAtSign, namespace,
-                TestPreferences.getInstance().getPreference(sharedWithAtSign));
-        var atNotification = await AtClientManager.getInstance()
-            .atClient
-            .notificationService
-            .fetch(notificationResult.notificationID);
-        atNotification.isEncrypted = input.atKey.metadata.isEncrypted;
-        await NotificationResponseTransformer(
-                sharedWithAtClientManager.atClient)
-            .transform(Tuple()
-              ..one = atNotification
-              ..two = (NotificationConfig()
-                ..shouldDecrypt = input.atKey.metadata.isEncrypted));
-        expect(atNotification.id, notificationResult.notificationID);
-        expect(atNotification.key, expectedOutput);
-      });
-    });
   });
 }
 

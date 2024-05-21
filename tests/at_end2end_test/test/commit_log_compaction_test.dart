@@ -2,8 +2,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
-import 'package:test/test.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:test/test.dart';
 
 late String firstAtSign;
 late String secondAtSign;
@@ -21,7 +21,7 @@ final namespace = 'wavi';
 
 Future<void> setUpMethod() async {
   firstAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-  secondAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+  secondAtSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
   // Initialize the atSigns which
   // 1. Initializes the local storage
   // 2. sets the encryption key pair
