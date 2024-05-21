@@ -25,7 +25,7 @@ void main() {
   String namespace = 'wavi';
 
   // Complete the initial sync for submitting the enrollment request to prevent time-out issues.
-  setUp(() async {
+  setUpAll(() async {
     for (var atSign in atSignList) {
       await TestSuiteInitializer.getInstance()
           .testInitializer(atSign, namespace, authType: 'pkam');

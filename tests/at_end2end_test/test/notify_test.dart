@@ -40,7 +40,7 @@ void main() async {
       ..key = 'phone$randomValue'
       ..sharedWith = sharedWithAtSign
       ..metadata = (Metadata()..ttr = 60000)
-      ..namespace = 'e2etest';
+      ..namespace = namespace;
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
