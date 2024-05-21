@@ -22,12 +22,11 @@ void main() async {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType: authType);
+        .testInitializer(currentAtSign, namespace);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType: authType);
+        .testInitializer(sharedWithAtSign, namespace);
   });
 
   test(
