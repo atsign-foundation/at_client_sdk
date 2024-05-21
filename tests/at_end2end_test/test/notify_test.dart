@@ -1,10 +1,6 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/monitor.dart';
-import 'package:at_client/src/preference/monitor_preference.dart';
-import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
@@ -70,51 +66,4 @@ void main() async {
     expect(notificationListJson[0]['to'], sharedWithAtSign);
     expect(notificationListJson[0]['value'], isNotEmpty);
   });
-}
-
-/// Class responsible for getting the notifications from the cloud secondary
-class MonitorForNotification {
-  String notificationId;
-  String atSign;
-  int epochMillsNow;
-  StreamController streamController;
-  Monitor? monitor;
-
-  MonitorForNotification(this.notificationId, this.atSign, this.epochMillsNow,
-      this.streamController);
-
-  Future<void> init() async {
-    monitor = Monitor(
-        _onMonitorSuccess,
-        _onMonitorError,
-        atSign,
-        TestPreferences.getInstance().getPreference(atSign),
-        MonitorPreference()
-          ..lastNotificationTime = epochMillsNow
-          ..keepAlive = false,
-        _onMonitorRetry);
-
-    await monitor?.start(lastNotificationTime: epochMillsNow);
-  }
-
-  Future<void> _onMonitorSuccess(String notificationStr) async {
-    if (notificationStr.contains(notificationId)) {
-      final notificationResponseParser = NotificationResponseParser();
-      final atNotifications =
-          await notificationResponseParser.getAtNotifications(
-              notificationResponseParser.parse(notificationStr));
-      for (var element in atNotifications) {
-        streamController.add(element);
-      }
-      monitor?.stop();
-    }
-  }
-
-  //Dummy implementation for error
-  void _onMonitorError(arg1) {
-    print(arg1);
-  }
-
-  // Dummy implementation for retry callback
-  void _onMonitorRetry() {}
 }
