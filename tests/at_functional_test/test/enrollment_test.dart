@@ -344,7 +344,7 @@ void main() {
         .listen(expectAsync1((enrollNotification) {
           print('got enrollment notification: $enrollNotification');
           expect(enrollNotification.key,
-              '$enrollmentIdFromServer.new.enrollments.__manage');
+              '$enrollmentIdFromServer.new.enrollments.__manage${atClientManager.atClient.getCurrentAtSign()}');
           expect(enrollNotification.value, isNotNull);
           var notificationValueJson = jsonDecode(enrollNotification.value!);
           expect(notificationValueJson['appName'], 'buzz');

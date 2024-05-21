@@ -355,7 +355,7 @@ void main() async {
       ..phoneNumber = '4444';
     await fourthPhone.save();
     await fourthPhone.share([secondAtSign]);
-    expect(await fourthPhone.sharedWith(), ['@ce2e2']);
+    expect(await fourthPhone.sharedWith(), ['@ce2e4']);
     await fourthPhone.share([thirdAtSign]);
     expect(await fourthPhone.sharedWith(), ['@ce2e2', '@ce2e3']);
     await fourthPhone.share([fourthAtSign]);
