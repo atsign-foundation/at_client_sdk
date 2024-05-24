@@ -3,8 +3,7 @@ import 'package:at_end2end_test/src/at_encryption_key_initializers.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-
-import 'at_credentials.dart';
+import 'package:at_demo_data/at_demo_data.dart' as at_demo_data;
 
 class TestSuiteInitializer {
   static final TestSuiteInitializer _singleton =
@@ -35,17 +34,14 @@ class TestSuiteInitializer {
       var result = await atClientManager.atClient
           .getLocalSecondary()!
           .getEncryptionPublicKey(atSign);
-      assert(result ==
-          AtCredentials
-              .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
+      assert(result == at_demo_data.encryptionPublicKeyMap[atSign]!);
 
       // verify if the private key is in the local secondary
       result = await atClientManager.atClient
           .getLocalSecondary()!
           .getEncryptionPrivateKey();
       assert(result ==
-          AtCredentials
-              .credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY]);
+          at_demo_data.encryptionPrivateKeyMap[atSign]!);
     } on Exception catch (e) {
       print('Exception in setting the encryption: $e');
     }

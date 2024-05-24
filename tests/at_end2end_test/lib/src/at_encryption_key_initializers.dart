@@ -1,7 +1,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
 import '../utils/test_constants.dart';
-import 'at_credentials.dart';
+import 'package:at_demo_data/at_demo_data.dart' as at_demo_data;
 import 'package:at_chops/at_chops.dart';
 
 /// The class is responsible for loading all the encryption of the atSign to the
@@ -41,8 +41,7 @@ class AtEncryptionKeysLoader {
     // Set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(
         AtConstants.atEncryptionPrivateKey,
-        AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY]);
+        at_demo_data.encryptionPrivateKeyMap[atSign]!);
     if (result) {
       _logger.info('encryption private key was set successfully');
     } else {
@@ -52,9 +51,7 @@ class AtEncryptionKeysLoader {
     var encryptionPublicKeyAtKey =
         '${AtConstants.atEncryptionPublicKey}$atSign';
     result = await atClient.getLocalSecondary()!.putValue(
-        encryptionPublicKeyAtKey,
-        AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
+        encryptionPublicKeyAtKey, at_demo_data.encryptionPublicKeyMap[atSign]!);
     if (result) {
       _logger.info('encryption public key was set successfully.');
     } else {
@@ -63,9 +60,7 @@ class AtEncryptionKeysLoader {
 
     // set self encryption key
     result = await atClient.getLocalSecondary()!.putValue(
-        AtConstants.atEncryptionSelfKey,
-        AtCredentials
-            .credentialsMap[atSign]![TestConstants.SELF_ENCRYPTION_KEY]);
+        AtConstants.atEncryptionSelfKey, at_demo_data.cramKeyMap[atSign]!);
     if (result) {
       _logger.info('self encryption key was set successfully');
     } else {
@@ -75,17 +70,14 @@ class AtEncryptionKeysLoader {
 
   AtChops createAtChopsFromDemoKeys(String atSign) {
     var atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY],
-        AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY]);
+        at_demo_data.encryptionPublicKeyMap[atSign]!,
+        at_demo_data.encryptionPrivateKeyMap[atSign]!);
     var atPkamKeyPair = AtPkamKeyPair.create(
-        AtCredentials.credentialsMap[atSign]![TestConstants.PKAM_PUBLIC_KEY],
-        AtCredentials.credentialsMap[atSign]![TestConstants.PKAM_PRIVATE_KEY]);
+        at_demo_data.pkamPublicKeyMap[atSign]!,
+        at_demo_data.pkamPrivateKeyMap[atSign]!);
     AtChopsKeys atChopsKeys =
         AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    atChopsKeys.selfEncryptionKey = AESKey(AtCredentials
-        .credentialsMap[atSign]![TestConstants.SELF_ENCRYPTION_KEY]);
+    atChopsKeys.selfEncryptionKey = AESKey(at_demo_data.cramKeyMap[atSign]!);
     return AtChopsImpl(atChopsKeys);
   }
 }
