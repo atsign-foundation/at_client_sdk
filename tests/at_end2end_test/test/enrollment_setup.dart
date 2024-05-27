@@ -78,12 +78,13 @@ void main() {
           await AtClientManager.getInstance()
               .atClient
               .enrollmentService
-              .approve(EnrollmentRequestDecision.approved(
+              ?.approve(EnrollmentRequestDecision.approved(
                   ApprovedRequestDecisionBuilder(
                       enrollmentId: atEnrollmentResponse.enrollmentId,
                       encryptedAPKAMSymmetricKey:
                           enrollment.encryptedAPKAMSymmetricKey!)));
-      expect(approveEnrollmentResponse.enrollStatus, EnrollmentStatus.approved);
+      expect(
+          approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
