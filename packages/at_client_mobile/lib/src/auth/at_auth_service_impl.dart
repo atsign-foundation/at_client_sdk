@@ -7,6 +7,7 @@ import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -303,6 +304,9 @@ class AtAuthServiceImpl implements AtAuthService {
 
   Future<void> _enrollmentAuthenticationScheduler(
       EnrollmentInfo enrollmentInfo) async {
+    _enrollmentAuthSchedulerStarted = true;
+    _logger.finest(
+        'Polling for authentication for the enrollment id: ${enrollmentInfo.enrollmentId}');
     try {
       // If "_canProceedWithAuthentication" returns false,
       // stop the enrollment authentication scheduler.
@@ -385,6 +389,11 @@ class AtAuthServiceImpl implements AtAuthService {
             enrollmentInfo.enrollmentId, atLookUp!.atChops!);
     // Store the auth keys into keychain manager for subsequent authentications
     await _storeToKeyChainManager(_atSign, enrollmentInfo.atAuthKeys);
+    AtChops atChops = _buildAtChops(enrollmentInfo);
+    await _initAtClient(atChops, enrollmentId: enrollmentInfo.enrollmentId);
+    // Store enrolled namespace to local secondary to perform authorization checks
+    // when perform CURD operation on keystore.
+    await _storeEnrollmentInfoIntoLocalSecondary(enrollmentInfo);
     await keyChainManager.deleteEnrollmentStore(_atSign);
     _logger.info(
         'Enrollment Id: ${enrollmentInfo.atAuthKeys.enrollmentId} is approved and authentication keys are stored in the keychain');
@@ -472,5 +481,47 @@ class AtAuthServiceImpl implements AtAuthService {
         selfEncryptionKeyFromServer, EncryptionKeyType.aes256,
         keyName: 'apkamSymmetricKey', iv: AtChopsUtil.generateIVLegacy());
     return atEncryptionResult.result;
+  }
+
+  /// Stores the enrolled namespace in the local secondary to perform authorization checks
+  /// when performing CURD operation on local secondary server
+  Future<void> _storeEnrollmentInfoIntoLocalSecondary(
+      EnrollmentInfo enrollmentInfo) async {
+    String enrollmentKey =
+        '${enrollmentInfo.enrollmentId}.new.enrollments.__manage$_atSign';
+    Enrollment enrollment = Enrollment()..namespace = enrollmentInfo.namespace;
+    AtData atData = AtData()..data = jsonEncode(enrollment);
+    // The "put" function in AtClient will call the executeVerb function which in turn calls the "_isAuthorized" in the local secondary.
+    // The "_isAuthorized" method fetches enrollment info from the key-store. Since there is no enrollment info, it returns null which
+    // throws AtKeyNotFoundException.
+    // So, directly add the enrollment key to the keystore.
+
+    // During submission of enrollment, the enrollment details are stored in the server. Upon approval of an enrollment,
+    // store a copy of enrollment into local secondary for the performing the authorization.
+    // So setting skipCommit to true to prevent key being sync to remote secondary.
+    await _atClient!
+        .getLocalSecondary()
+        ?.keyStore
+        ?.put(enrollmentKey, atData, skipCommit: true);
+  }
+
+  AtChops _buildAtChops(EnrollmentInfo enrollmentInfo) {
+    AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+        enrollmentInfo.atAuthKeys.defaultEncryptionPublicKey!,
+        enrollmentInfo.atAuthKeys.defaultEncryptionPrivateKey!);
+
+    AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
+        enrollmentInfo.atAuthKeys.apkamPublicKey!,
+        enrollmentInfo.atAuthKeys.apkamPrivateKey!);
+
+    AtChopsKeys atChopsKeys =
+        AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    atChopsKeys.selfEncryptionKey =
+        AESKey(enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey!);
+    atChopsKeys.apkamSymmetricKey =
+        AESKey(enrollmentInfo.atAuthKeys.apkamSymmetricKey!);
+
+    AtChops atChops = AtChopsImpl(atChopsKeys);
+    return atChops;
   }
 }

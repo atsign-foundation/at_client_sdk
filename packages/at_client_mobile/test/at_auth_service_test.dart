@@ -32,6 +32,18 @@ class MockPackageInfo extends Mock implements PackageInfo {
   fromPlatform() {}
 }
 
+class MockAtServiceFactor extends Mock implements AtServiceFactory {}
+
+class MockAtClient extends Mock implements AtClient {}
+
+class MockLocalSecondary extends Mock implements LocalSecondary {}
+
+class MockNotificationService extends Mock implements NotificationService {}
+
+class MockSyncService extends Mock implements SyncService {}
+
+class MockEnrollmentService extends Mock implements EnrollmentService {}
+
 class FakeStorageFileInitOptions extends Fake
     implements StorageFileInitOptions {}
 
@@ -39,10 +51,15 @@ class FakeLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
+class FakeAtClientPreference extends Fake implements AtClientPreference {}
+
+class FakeAtKey extends Fake implements AtKey {}
+
 void main() {
   group('A group of tests related to submission of enrollment request', () {
     String atSign = '@alice';
-    AtClientPreference atClientPreference = AtClientPreference();
+    AtClientPreference atClientPreference = AtClientPreference()
+      ..namespace = 'me';
 
     late AtAuthServiceImpl authServiceImpl;
     MockAtEnrollmentBase mockAtEnrollmentBase;
@@ -275,6 +292,9 @@ void main() {
     });
 
     test('A test to verify enrollment approved', () async {
+      registerFallbackValue(FakeAtClientPreference());
+      registerFallbackValue(FakeAtKey());
+
       String encryptedDefaultEncryptionPrivateKey =
           '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';
       String encryptedDefaultSelfEncryptionKey =
@@ -301,6 +321,9 @@ void main() {
           AESKey('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=');
 
       AtChops atChops = AtChopsImpl(atChopsKeys);
+      AtServiceFactory mockAtServiceFactory = MockAtServiceFactor();
+      AtClient mockAtClient = MockAtClient();
+      LocalSecondary mockLocalSecondary = MockLocalSecondary();
 
       when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo',
               options: any(named: 'options')))
@@ -391,6 +414,42 @@ void main() {
               auth: true)).thenAnswer((invocation) => Future.value(
           'data:${jsonEncode({'value': encryptedDefaultSelfEncryptionKey})}'));
 
+      when(() => mockAtServiceFactory.atClient(
+              any(that: startsWith('@alice')),
+              any(that: startsWith('me')),
+              any(that: FakeAtClientPreferenceMatcher()),
+              AtClientManager.getInstance(),
+              atChops: any(named: "atChops"),
+              enrollmentId: '010ad3dc-02ee-41c6-b74b-c82f5122b181'))
+          .thenAnswer((_) => Future.value(mockAtClient));
+
+      NotificationService mockNotificationService = MockNotificationService();
+
+      when(() => mockAtServiceFactory.notificationService(
+              mockAtClient, AtClientManager.getInstance()))
+          .thenAnswer((_) => Future.value(mockNotificationService));
+
+      when(() => mockAtServiceFactory.syncService(mockAtClient,
+              AtClientManager.getInstance(), mockNotificationService))
+          .thenAnswer((_) => Future.value(MockSyncService()));
+
+      when(() => mockAtServiceFactory.enrollmentService(mockAtClient))
+          .thenAnswer((_) => MockEnrollmentService());
+
+      authServiceImpl.atServiceFactory = mockAtServiceFactory;
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => mockLocalSecondary);
+
+      when(() => mockAtClient.put(
+              any(that: FakeAtKeyMatcher()), any(that: contains('wavi'))))
+          .thenAnswer((Invocation invocation) async {
+        expect(
+            'local:010ad3dc-02ee-41c6-b74b-c82f5122b181.new.enrollments.__manage@alice',
+            invocation.positionalArguments[0].toString());
+        expect('{"wavi":"rw"}', invocation.positionalArguments[1].toString());
+        return Future.value(true);
+      });
+
       Future<EnrollmentStatus> enrollmentStatus =
           authServiceImpl.getFinalEnrollmentStatus();
 
@@ -440,6 +499,36 @@ class EnrollmentRequestMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is EnrollmentRequest) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class FakeAtClientPreferenceMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtClientPreference) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class FakeAtKeyMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey) {
       return true;
     }
     return false;
