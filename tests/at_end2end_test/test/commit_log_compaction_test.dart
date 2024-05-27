@@ -21,7 +21,7 @@ final namespace = 'wavi';
 
 Future<void> setUpMethod() async {
   firstAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-  secondAtSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
+  secondAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
   // Initialize the atSigns which
   // 1. Initializes the local storage
   // 2. sets the encryption key pair

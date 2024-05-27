@@ -355,15 +355,35 @@ void main() async {
       ..phoneNumber = '4444';
     await fourthPhone.save();
     await fourthPhone.share([secondAtSign]);
-    expect(await fourthPhone.sharedWith(), ['@ce2e2']);
-    await fourthPhone.share([thirdAtSign]);
-    expect(await fourthPhone.sharedWith(), ['@ce2e2', '@ce2e3']);
-    await fourthPhone.share([fourthAtSign]);
-    expect(await fourthPhone.sharedWith(), ['@ce2e2', '@ce2e3', '@ce2e4']);
+    expect(await fourthPhone.sharedWith(),
+        [ConfigUtil.getYaml()['atSign']['secondAtSign']]);
+
+    var shareResponse = await fourthPhone.share([thirdAtSign]);
+    expect(shareResponse, true);
+    List<String> atSignsList = await fourthPhone.sharedWith();
+    expect(atSignsList.length, 2);
+    expect(atSignsList.contains(ConfigUtil.getYaml()['atSign']['secondAtSign']),
+        true);
+    expect(atSignsList.contains(ConfigUtil.getYaml()['atSign']['thirdAtSign']),
+        true);
+    atSignsList.clear();
+
+    shareResponse = await fourthPhone.share([fourthAtSign]);
+    expect(shareResponse, true);
+    atSignsList = await fourthPhone.sharedWith();
+    expect(atSignsList.length, 3);
+    expect(atSignsList.contains(ConfigUtil.getYaml()['atSign']['secondAtSign']),
+        true);
+    expect(atSignsList.contains(ConfigUtil.getYaml()['atSign']['thirdAtSign']),
+        true);
+    expect(atSignsList.contains(ConfigUtil.getYaml()['atSign']['fourthAtSign']),
+        true);
+    atSignsList.clear();
 
     // Unshare now
     await fourthPhone.unshare(atSigns: [thirdAtSign, fourthAtSign]);
-    expect(await fourthPhone.sharedWith(), ['@ce2e2']);
+    expect(await fourthPhone.sharedWith(),
+        [ConfigUtil.getYaml()['atSign']['secondAtSign']]);
     await fourthPhone.unshare(atSigns: [secondAtSign]);
     await fourthPhone.delete();
     expect(await fourthPhone.sharedWith(), []);

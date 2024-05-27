@@ -18,7 +18,7 @@ void main() {
   setUpAll(() async {
     AtSignLogger.root_level = 'SHOUT';
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atSign_2 = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
+    atSign_2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 
     await TestSuiteInitializer.getInstance()
         .testInitializer(atSign_1, namespace);

@@ -15,7 +15,7 @@ void main() async {
 
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()

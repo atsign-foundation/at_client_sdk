@@ -22,7 +22,7 @@ void main() async {
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 
     await TestSuiteInitializer.getInstance()
         .testInitializer(currentAtSign, namespace);
