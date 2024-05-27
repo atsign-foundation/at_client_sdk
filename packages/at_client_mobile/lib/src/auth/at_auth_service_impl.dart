@@ -304,6 +304,9 @@ class AtAuthServiceImpl implements AtAuthService {
 
   Future<void> _enrollmentAuthenticationScheduler(
       EnrollmentInfo enrollmentInfo) async {
+    _enrollmentAuthSchedulerStarted = true;
+    _logger.finest(
+        'Polling for authentication for the enrollment id: ${enrollmentInfo.enrollmentId}');
     try {
       // If "_canProceedWithAuthentication" returns false,
       // stop the enrollment authentication scheduler.

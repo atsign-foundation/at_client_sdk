@@ -267,6 +267,12 @@ class LocalSecondary implements Secondary {
 
   Future<bool> isEnrollmentAuthorizedForOperation(
       String key, VerbBuilder verbBuilder) async {
+    AtKey atKey = AtKey.fromString(key);
+    // Enrollment authorization check does not apply to local key.
+    // So, skip authorization check if key type is local or key starts with "local:"
+    if (key.startsWith('local:') || atKey is LocalKey) {
+      return true;
+    }
     // if there is no enrollment, return true
     _enrollment ??= await _getEnrollmentDetails();
     if (_atClient.enrollmentId == null ||
