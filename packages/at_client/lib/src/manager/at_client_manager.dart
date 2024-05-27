@@ -145,6 +145,12 @@ class AtClientManager {
   removeAllChangeListeners() {
     _changeListeners.clear();
   }
+
+  // NOT a part of API. For functional tests.
+  void reset() {
+    removeAllChangeListeners();
+    _currentAtClient = null;
+  }
 }
 
 abstract class AtServiceFactory {
