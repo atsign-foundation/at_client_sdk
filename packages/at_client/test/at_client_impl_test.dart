@@ -300,7 +300,7 @@ void main() {
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests =
-          await clientImpl.enrollmentService.fetchEnrollmentRequests();
+          await clientImpl.enrollmentService!.fetchEnrollmentRequests();
       expect(requests.length, 3);
       expect(requests[0].enrollmentId,
           enrollKey1.substring(0, enrollKey1.indexOf('.')));
