@@ -1,7 +1,6 @@
-## 3.0.77
-- chore: deprecate NotificationParams.forText()
 ## 3.0.76
 - feat: Introduce mechanism to identify and delete expired keys
+- chore: deprecate NotificationParams.forText()
 ## 3.0.75
 - feat: Introduce feature to fetch enrollment requests from the server
 ## 3.0.74
