@@ -6,6 +6,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -22,13 +23,13 @@ const String enrollmentId = 'enrollmentId';
 
 void main() {
   List atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
-  String namespace = 'wavi';
+  String namespace = TestConstants.namespace;
 
   // Complete the initial sync for submitting the enrollment request to prevent time-out issues.
   setUpAll(() async {
     for (var atSign in atSignList) {
       await TestSuiteInitializer.getInstance()
-          .testInitializer(atSign, namespace, authType: 'pkam');
+          .testInitializer(atSign, namespace, 'pkam');
     }
   });
 
@@ -37,7 +38,7 @@ void main() {
         () async {
       // Set SPP at the start of enrollment tests to pass as OTP.
       await TestSuiteInitializer.getInstance()
-          .testInitializer(currentAtSign, namespace, authType: 'pkam');
+          .testInitializer(currentAtSign, namespace, 'pkam');
       // Set SPP into the Remote Secondary
       var atResponse =
           await AtClientManager.getInstance().atClient.setSPP('ABC123');
@@ -56,7 +57,7 @@ void main() {
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
-          namespaces: {'wavi': 'rw', 'buzz': 'rw'});
+          namespaces: {TestConstants.namespace: 'rw'});
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);

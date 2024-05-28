@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -11,7 +12,7 @@ void main() async {
   late AtClientManager currentAtClientManager;
   late String currentAtSign;
   late String sharedWithAtSign;
-  final namespace = 'wavi';
+  final namespace = TestConstants.namespace;
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -19,9 +20,9 @@ void main() async {
     String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType: authType);
+        .testInitializer(currentAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType: authType);
+        .testInitializer(sharedWithAtSign, namespace, authType);
   });
 
   test(

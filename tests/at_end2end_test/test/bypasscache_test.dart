@@ -3,14 +3,14 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
-
 
 void main() async {
   late String sharedByAtSign;
   late String sharedWithAtSign;
-  final namespace = 'wavi';
+  final namespace = TestConstants.namespace;
   var uuid = Uuid();
 
   setUpAll(() async {
@@ -19,9 +19,9 @@ void main() async {
     String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedByAtSign, namespace, authType: authType);
+        .testInitializer(sharedByAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType: authType);
+        .testInitializer(sharedWithAtSign, namespace, authType);
   });
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {

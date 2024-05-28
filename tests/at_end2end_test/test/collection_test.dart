@@ -226,14 +226,16 @@ void main() async {
     thirdAtSign = ConfigUtil.getYaml()['atSign']['thirdAtSign'];
     fourthAtSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
 
+    String authType = ConfigUtil.getYaml()['authType'];
+
     await TestSuiteInitializer.getInstance()
-        .testInitializer(firstAtSign, namespace);
+        .testInitializer(firstAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(secondAtSign, namespace);
+        .testInitializer(secondAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(thirdAtSign, namespace);
+        .testInitializer(thirdAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(fourthAtSign, namespace);
+        .testInitializer(fourthAtSign, namespace, authType);
   });
 
   test('Model operations - save() with reshare() as true test', () async {

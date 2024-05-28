@@ -19,8 +19,8 @@ class TestSuiteInitializer {
     return _singleton;
   }
 
-  Future<void> testInitializer(String atSign, String namespace,
-      {String authType = 'pkam'}) async {
+  Future<void> testInitializer(
+      String atSign, String namespace, String authType) async {
     try {
       late AtChops atChops;
       AtAuthResponse? atAuthResponse;

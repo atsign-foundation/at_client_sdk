@@ -39,7 +39,7 @@ abstract class EnrollmentService {
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision);
 
-  /// Denies an enrollment request. When an enrollment is denied, the requesting app is
+  /// Denies an enrollment request. When an enrollment is denied, the requesting app is prevented from login into the application.
   ///
   /// Example:
   ///
@@ -52,5 +52,21 @@ abstract class EnrollmentService {
   ///    AtEnrollmentResponse atEnrollmentResponse = await atClientManager.atClient
   ///                                                      .encryptionService.deny(enrollmentRequestDecision);
   Future<AtEnrollmentResponse> deny(
+      EnrollmentRequestDecision enrollmentRequestDecision);
+
+  /// Revokes an approved enrollment. When an enrollment ID is revoked, it becomes expired and cannot be used further.
+  ///
+  /// Example:
+  ///
+  /// ```dart
+  /// AtClientManager atClientManager = await AtClientManager.getInstance()
+  ///                              .setCurrentAtSign('@alice', 'me', AtClientPreferences());
+  ///
+  ///     EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
+  ///
+  ///    AtEnrollmentResponse atEnrollmentResponse = await atClientManager.atClient
+  ///                                                      .encryptionService.revoke(enrollmentRequestDecision);
+  /// ```
+  Future<AtEnrollmentResponse> revoke(
       EnrollmentRequestDecision enrollmentRequestDecision);
 }
