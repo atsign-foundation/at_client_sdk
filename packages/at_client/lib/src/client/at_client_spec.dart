@@ -46,9 +46,9 @@ abstract class AtClient {
 
   NotificationService get notificationService;
 
-  set enrollmentService(EnrollmentService enrollmentService);
+  set enrollmentService(EnrollmentService? enrollmentService);
 
-  EnrollmentService get enrollmentService;
+  EnrollmentService? get enrollmentService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);

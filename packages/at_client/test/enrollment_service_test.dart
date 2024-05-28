@@ -3,10 +3,11 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import '../lib/src/service/enrollment_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
+
+import '../lib/src/service/enrollment_service_impl.dart';
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
@@ -54,7 +55,7 @@ void main() {
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests =
-          await clientImpl.enrollmentService.fetchEnrollmentRequests();
+          await clientImpl.enrollmentService!.fetchEnrollmentRequests();
       expect(requests.length, 3);
       expect(requests[0].enrollmentId,
           enrollKey1.substring(0, enrollKey1.indexOf('.')));
@@ -105,7 +106,7 @@ void main() {
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
-      List<Enrollment> requests = await clientImpl.enrollmentService
+      List<Enrollment> requests = await clientImpl.enrollmentService!
           .fetchEnrollmentRequests(enrollmentListParams: listRequestParam);
       expect(requests.length, 2);
       expect(requests[0].enrollmentId,
@@ -148,7 +149,7 @@ void main() {
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
       AtClientImpl? clientImpl = client as AtClientImpl;
 
-      List<Enrollment> requests = await clientImpl.enrollmentService
+      List<Enrollment> requests = await clientImpl.enrollmentService!
           .fetchEnrollmentRequests(enrollmentListParams: listRequestParam);
       expect(requests.length, 2);
       expect(requests[0].enrollmentId,

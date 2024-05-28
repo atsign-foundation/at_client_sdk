@@ -35,7 +35,7 @@ dependencies:
   at_utils: ^3.0.16
   at_chops: ^2.0.0
   at_lookup: ^3.0.46
-  at_auth: ^2.0.0
+  at_auth: ^2.0.2
   at_persistence_spec: ^2.0.14
   at_persistence_secondary_server: ^3.0.62
   meta: ^1.8.0
