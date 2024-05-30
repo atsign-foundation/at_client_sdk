@@ -44,8 +44,9 @@ void main() {
           await AtClientManager.getInstance()
               .atClient
               .enrollmentService
-              ?.revoke(
-                  EnrollmentRequestDecision.revoked(enrollment.enrollmentId!));
+              ?.revoke(EnrollmentRequestDecision.revoked(
+                  enrollment.enrollmentId!,
+                  force: true));
         }
       }
     });
