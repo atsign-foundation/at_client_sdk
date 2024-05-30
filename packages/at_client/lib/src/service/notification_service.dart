@@ -166,7 +166,7 @@ class NotificationParams {
 
   OperationEnum get operation => _operation;
 
-  @Deprecated('Use only MessageType.key, MessageType.text has been deprecated ')
+  @Deprecated('Use MessageType.key')
   MessageTypeEnum get messageType => _messageType;
 
   PriorityEnum get priority => _priority;
