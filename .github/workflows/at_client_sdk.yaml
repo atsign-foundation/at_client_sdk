@@ -48,7 +48,7 @@ jobs:
       # Run unit tests
       - name: Run at_client unit tests, with code coverage measurement
         working-directory: packages/at_client
-        run: dart test --concurrency=1 --coverage="coverage"
+        run: dart run test --concurrency=1 --coverage="coverage"
 
       - name: Convert at_client coverage to LCOV format
         working-directory: packages/at_client
@@ -278,7 +278,7 @@ jobs:
       # the approved enrollment requests are set to revoked state.
       - name: Enrollment setup teardown
         # Even if the tests fail in the above step, we need to clean up the enrollments.
-        # Therefore, we set this to "always" to ensure this step runs regardless of the outcome of the previous step.
-        if: ${{ always() }}
+        # Therefore, we set this to "!cancelled()" to ensure this step runs regardless of the outcome of the previous step.
+        if: ${{ !cancelled() }}
         working-directory: tests/at_end2end_test
         run: dart run test/enrollment_teardown.dart

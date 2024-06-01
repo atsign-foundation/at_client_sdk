@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
@@ -53,4 +55,14 @@ void main() {
       }
     });
   }
+
+  tearDownAll(() async {
+    AtClientManager.getInstance().removeAllChangeListeners();
+    AtClientManager.getInstance()
+        .atClient
+        .notificationService
+        .stopAllSubscriptions();
+    await AtClientManager.getInstance().atClient.stopCompactionJob();
+    exit(0);
+  });
 }

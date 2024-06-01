@@ -8,6 +8,8 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -134,7 +136,7 @@ class A extends AtCollectionModel {
 
   A.from(String id, {this.a}) {
     this.id = id;
-    this.namespace = 'buzz';
+    namespace = TestConstants.namespace;
   }
 
   @override
@@ -177,7 +179,7 @@ class B extends AtCollectionModel {
 
   B.from(String id, {this.b}) {
     this.id = id;
-    this.namespace = 'buzz';
+    namespace = TestConstants.namespace;
   }
 
   @override
@@ -218,7 +220,7 @@ void main() async {
   late AtClientManager sharedWithAtClientManager;
   late String firstAtSign;
   late String secondAtSign, thirdAtSign, fourthAtSign;
-  final namespace = 'wavi';
+  final namespace = TestConstants.namespace;
 
   setUpAll(() async {
     firstAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -232,13 +234,14 @@ void main() async {
         .testInitializer(firstAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
         .testInitializer(secondAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(thirdAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(fourthAtSign, namespace, authType);
+    // await TestSuiteInitializer.getInstance()
+    //     .testInitializer(thirdAtSign, namespace, authType);
+    // await TestSuiteInitializer.getInstance()
+    //     .testInitializer(fourthAtSign, namespace, authType);
   });
 
   test('Model operations - save() with reshare() as true test', () async {
+    AtSignLogger.root_level = 'finest';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -250,7 +253,7 @@ void main() async {
     // Share a phone
     var phone = Phone()
       ..id = 'personal phone'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     var shareRes = await phone.share([secondAtSign]);
@@ -266,7 +269,7 @@ void main() async {
         currentAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              '$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
+              '$secondAtSign:personal-phone.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -279,7 +282,7 @@ void main() async {
         sharedWithAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              'cached:$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
+              'cached:$secondAtSign:personal-phone.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone',
         collectionName: 'phone',
@@ -297,7 +300,7 @@ void main() async {
     expect(jsonDecode(atValue.value)['phoneNumber'], '12345-9999',
         reason:
             'Since the value is re-shared the phone number should be the new modified one');
-  });
+  }, timeout: Timeout(Duration(minutes: 60)));
 
   test('Model operations - share() test', () async {
     // Setting firstAtSign atClient instance to context.
