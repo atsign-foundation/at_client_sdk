@@ -267,17 +267,17 @@ class LocalSecondary implements Secondary {
 
   Future<bool> isEnrollmentAuthorizedForOperation(
       String key, VerbBuilder verbBuilder) async {
-    AtKey atKey = AtKey.fromString(key);
-    // Enrollment authorization check does not apply to local key.
-    // So, skip authorization check if key type is local or key starts with "local:"
-    if (key.startsWith('local:') || atKey is LocalKey) {
-      return true;
-    }
+    //AtKey atKey = AtKey.fromString(key);
+    // // Enrollment authorization check does not apply to local key.
+    // // So, skip authorization check if key type is local or key starts with "local:"
+    // if (key.startsWith('local:') || atKey is LocalKey) {
+    //   return true;
+    // }
     // if there is no enrollment, return true
     _enrollment ??= await _getEnrollmentDetails();
     if (_atClient.enrollmentId == null ||
         _enrollment == null ||
-        _isReservedKey(key)) {
+        _shouldSkipKeyFromEnrollmentAuthorization(key)) {
       return true;
     }
     final enrollNamespaces = _enrollment!.namespace;
@@ -385,9 +385,17 @@ class LocalSecondary implements Secondary {
         access == 'rw';
   }
 
-  bool _isReservedKey(String? atKey) {
-    return atKey == null
-        ? false
-        : AtKey.getKeyType(atKey) == KeyType.reservedKey;
+  /// The enrollment authorization check does not include the following KeyTypes.
+  /// Therefore, return true to skip the authorization check.
+  /// This applies to Reserved keys, Cached shared keys, Cached public keys, and local keys
+  bool _shouldSkipKeyFromEnrollmentAuthorization(String? atKey) {
+    if (atKey == null) {
+      return false;
+    }
+    KeyType keyType = AtKey.getKeyType(atKey);
+    return (keyType == KeyType.reservedKey ||
+        keyType == KeyType.cachedSharedKey ||
+        keyType == KeyType.cachedPublicKey ||
+        keyType == KeyType.localKey);
   }
 }

@@ -25,6 +25,7 @@ void main() {
       // At end of the end-to-end test suite execution, deny all the pending enrollments.
       if (pendingEnrollments != null && pendingEnrollments.isNotEmpty) {
         for (Enrollment enrollment in pendingEnrollments) {
+          print('Denying the enrollment permission for id: $enrollment');
           await AtClientManager.getInstance().atClient.enrollmentService?.deny(
               EnrollmentRequestDecision.denied(enrollment.enrollmentId!));
         }
@@ -41,6 +42,7 @@ void main() {
       // At end of the end-to-end test suite execution, revoke all the approved enrollments.
       if (approvedEnrollments != null && approvedEnrollments.isNotEmpty) {
         for (Enrollment enrollment in approvedEnrollments) {
+          print('Revoking the enrollment permission for id: $enrollment');
           await AtClientManager.getInstance()
               .atClient
               .enrollmentService
