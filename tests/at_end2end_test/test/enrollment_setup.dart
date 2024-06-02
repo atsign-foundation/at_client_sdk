@@ -134,7 +134,7 @@ void main() {
       expect(atAuthResponse.isSuccessful, true);
       writeAtKeysToFile(currentAtSign, atAuthResponse.atAuthKeys!);
       print(
-          'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: $enrollmentId with access to ${enrollmentRequest.namespaces}');
+          'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: ${atEnrollmentResponse.enrollmentId} with access to ${enrollmentRequest.namespaces}');
     });
   }
 

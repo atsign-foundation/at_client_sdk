@@ -234,10 +234,10 @@ void main() async {
         .testInitializer(firstAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
         .testInitializer(secondAtSign, namespace, authType);
-    // await TestSuiteInitializer.getInstance()
-    //     .testInitializer(thirdAtSign, namespace, authType);
-    // await TestSuiteInitializer.getInstance()
-    //     .testInitializer(fourthAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(thirdAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance()
+        .testInitializer(fourthAtSign, namespace, authType);
   });
 
   test('Model operations - save() with reshare() as true test', () async {
@@ -286,7 +286,7 @@ void main() async {
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone',
         collectionName: 'phone',
-        namespace: 'buzz');
+        namespace: TestConstants.namespace);
 
     List<String> keys =
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
@@ -313,7 +313,7 @@ void main() async {
     // Share a phone
     var phone = Phone()
       ..id = 'personal phone'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     var shareRes = await phone.share([secondAtSign]);
@@ -322,7 +322,7 @@ void main() async {
         currentAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              '$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
+              '$secondAtSign:personal-phone.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -337,7 +337,7 @@ void main() async {
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone',
         collectionName: 'phone',
-        namespace: 'buzz');
+        namespace: TestConstants.namespace);
     var getResult =
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
     expect(getResult.length, 1);
@@ -355,7 +355,7 @@ void main() async {
 
     var fourthPhone = Phone()
       ..id = 'personal phone $random'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '4444';
     await fourthPhone.save();
@@ -394,7 +394,9 @@ void main() async {
     expect(await fourthPhone.sharedWith(), []);
     expect(
       () async => await AtCollectionModel.getModel(
-          id: 'fourth phone', namespace: 'buzz', collectionName: 'phone'),
+          id: 'fourth phone',
+          namespace: TestConstants.namespace,
+          collectionName: 'phone'),
       throwsA(isA<Exception>()),
     );
   });
@@ -422,7 +424,8 @@ void main() async {
     await E2ESyncService.getInstance().syncData(
         currentAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
-          ..key = '$secondAtSign:b1.b.atcollectionmodel.buzz.wavi$firstAtSign');
+          ..key =
+              '$secondAtSign:b1.b.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
 
     var res = await AtCollectionModel.getModelsSharedWith(secondAtSign);
     expect(res.isEmpty, false,
@@ -525,7 +528,7 @@ void main() async {
   });
 
   test(
-      'Query methods - Test retreival of shared models with and without factories',
+      'Query methods - Test retrieval of shared models with and without factories',
       () async {
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
@@ -542,7 +545,7 @@ void main() async {
 
     Preference preference = Preference()
       ..id = 'pizza preference'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'preference'
       ..preference = pizzaPreferences;
     await preference.save();
@@ -551,7 +554,7 @@ void main() async {
 
     var contact = Contact()
       ..id = 'jagan'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'contact'
       ..atSign = '@jagan'
       ..nickname = 'jagan';
@@ -559,7 +562,7 @@ void main() async {
 
     Phone phone = Phone()
       ..id = 'my another phone'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '1122';
     await phone.share([secondAtSign]);
@@ -640,13 +643,13 @@ void main() async {
     // Share a phone
     var p1 = Phone()
       ..id = 'p1'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     await p1.save();
     var p2 = Phone()
       ..id = 'p2'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     await p2.save();
@@ -688,14 +691,14 @@ void main() async {
 
     Phone fifthPhone = Phone()
       ..id = 'fifth phone'
-      ..namespace = 'buzz'
+      ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '55555';
 
     await fifthPhone.streams.save(share: false).forEach(
       (AtOperationItemStatus element) {
         expect(element.complete, true);
-        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel');
         expect(element.atSign, firstAtSign);
         expect(element.operation, Operation.save);
       },
@@ -704,21 +707,21 @@ void main() async {
     await fifthPhone.streams.share([secondAtSign]).forEach(
       (AtOperationItemStatus element) {
         expect(element.complete, true);
-        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel');
       },
     );
 
     await fifthPhone.streams.share([thirdAtSign]).forEach(
       (AtOperationItemStatus element) {
         expect(element.complete, true);
-        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel');
       },
     );
 
     await fifthPhone.streams.share([fourthAtSign]).forEach(
       (AtOperationItemStatus element) {
         expect(element.complete, true);
-        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel');
       },
     );
 
@@ -727,14 +730,14 @@ void main() async {
         .unshare(atSigns: [thirdAtSign, fourthAtSign]).forEach(
       (AtOperationItemStatus element) {
         expect(element.complete, true);
-        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel');
       },
     );
 
     await fifthPhone.streams.delete().forEach(
       (AtOperationItemStatus element) {
         expect(element.complete, true);
-        expect(element.key, 'fifth-phone.phone.atcollectionmodel.buzz');
+        expect(element.key, 'fifth-phone.phone.atcollectionmodel');
       },
     );
 
