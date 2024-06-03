@@ -9,7 +9,6 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -221,6 +220,7 @@ void main() async {
   late String firstAtSign;
   late String secondAtSign, thirdAtSign, fourthAtSign;
   final namespace = TestConstants.namespace;
+  int randomId = Uuid().v4().hashCode;
 
   setUpAll(() async {
     firstAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -241,7 +241,6 @@ void main() async {
   });
 
   test('Model operations - save() with reshare() as true test', () async {
-    AtSignLogger.root_level = 'finest';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -252,7 +251,7 @@ void main() async {
 
     // Share a phone
     var phone = Phone()
-      ..id = 'personal phone'
+      ..id = 'personal phone-$randomId'
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
@@ -269,7 +268,7 @@ void main() async {
         currentAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              '$secondAtSign:personal-phone.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
+              '$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -282,9 +281,9 @@ void main() async {
         sharedWithAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              'cached:$secondAtSign:personal-phone.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
+              'cached:$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
     var regex = CollectionUtil.makeRegex(
-        formattedId: 'personal-phone',
+        formattedId: 'personal-phone-$randomId',
         collectionName: 'phone',
         namespace: TestConstants.namespace);
 
@@ -300,7 +299,7 @@ void main() async {
     expect(jsonDecode(atValue.value)['phoneNumber'], '12345-9999',
         reason:
             'Since the value is re-shared the phone number should be the new modified one');
-  }, timeout: Timeout(Duration(minutes: 60)));
+  });
 
   test('Model operations - share() test', () async {
     // Setting firstAtSign atClient instance to context.
@@ -312,7 +311,7 @@ void main() async {
     );
     // Share a phone
     var phone = Phone()
-      ..id = 'personal phone'
+      ..id = 'personal phone-$randomId'
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
@@ -322,7 +321,7 @@ void main() async {
         currentAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              '$secondAtSign:personal-phone.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
+              '$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -335,7 +334,7 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
     var regex = CollectionUtil.makeRegex(
-        formattedId: 'personal-phone',
+        formattedId: 'personal-phone-$randomId',
         collectionName: 'phone',
         namespace: TestConstants.namespace);
     var getResult =
@@ -344,7 +343,6 @@ void main() async {
   });
 
   test('Model operations - unshare() and delete() test', () async {
-    String random = Uuid().v4().hashCode.toString();
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -354,7 +352,7 @@ void main() async {
     );
 
     var fourthPhone = Phone()
-      ..id = 'personal phone $random'
+      ..id = 'personal phone-$randomId'
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '4444';
