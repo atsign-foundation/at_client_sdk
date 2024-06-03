@@ -24,7 +24,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_server/
       path: packages/at_persistence_secondary_server
-      ref: persistence_impl_refactoring
+      ref: secondary_persistence_impl_new
   at_persistence_spec:
     git:
       url: https://github.com/atsign-foundation/at_server/
