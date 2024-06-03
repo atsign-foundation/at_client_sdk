@@ -15,7 +15,7 @@ atSign:
   fourthAtSign: '@ce2e2'
 
 enrollment:
-  atsignList: [ '@ce2e1', '@ce2e4' ]
+  atsignList: [ '@ce2e1', '@ce2e4', '@ce2e3', '@ce2e2' ]
 
 authType: 'apkam'
 filePath: 'atKeys'
