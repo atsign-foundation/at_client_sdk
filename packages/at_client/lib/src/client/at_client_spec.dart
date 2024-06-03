@@ -1,12 +1,12 @@
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -45,6 +45,10 @@ abstract class AtClient {
   set notificationService(NotificationService notificationService);
 
   NotificationService get notificationService;
+
+  set enrollmentService(EnrollmentService? enrollmentService);
+
+  EnrollmentService? get enrollmentService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
@@ -612,18 +616,4 @@ abstract class AtClient {
   String? getCurrentAtSign();
 
   EncryptionService? get encryptionService;
-
-  /// Fetches all enrollment requests from the corresponding atServer; Formats the requests into a
-  /// List<[EnrollmentResponse]>
-  ///
-  /// Responses can be filtered using params provided through [EnrollListRequestParam]
-  /// ```
-  /// e.g.
-  /// List<EnrollmentRequest> enrollmentRequests = fetchEnrollmentRequests(EnrollRequestParams());
-  /// enrollmentRequests now contains all the enrollment requests fetched from the server in the for of
-  /// EnrollmentRequest objects
-  /// ```
-  @experimental
-  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
-      EnrollListRequestParam enrollmentListRequest);
 }

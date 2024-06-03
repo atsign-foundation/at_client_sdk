@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_base2e15/at_base2e15.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
@@ -31,7 +32,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
@@ -103,6 +103,16 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
   }
+
+  EnrollmentService? _enrollmentService;
+
+  @override
+  set enrollmentService(EnrollmentService? enrollmentService) {
+    _enrollmentService = enrollmentService;
+  }
+
+  @override
+  EnrollmentService? get enrollmentService => _enrollmentService;
 
   @override
   NotificationService get notificationService => _notificationService;
@@ -661,36 +671,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     return AtChopsImpl(atChopsKeys);
-  }
-
-  @override
-  Future<List<EnrollmentRequest>> fetchEnrollmentRequests(
-      EnrollListRequestParam enrollmentListRequestParams) async {
-    // enrollmentListRequestParams for now is not  used
-    // A server side enhancement request is created. https://github.com/atsign-foundation/at_server/issues/1748
-    // On implementation of this enhancement/feature, the enrollListRequestParam object can be made use of
-    EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
-      ..operation = EnrollOperationEnum.list
-      ..appName = enrollmentListRequestParams.appName
-      ..deviceName = enrollmentListRequestParams.deviceName;
-
-    var response = await getRemoteSecondary()
-        ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
-
-    return _formatEnrollListResponse(response);
-  }
-
-  List<EnrollmentRequest> _formatEnrollListResponse(response) {
-    response = response?.replaceFirst('data:', '');
-    Map<String, dynamic> enrollRequests = jsonDecode(response!);
-    List<EnrollmentRequest> enrollRequestsFormatted = [];
-    EnrollmentRequest? enrollment;
-    for (var request in enrollRequests.entries) {
-      enrollment = EnrollmentRequest.fromJson(request.value);
-      enrollment.enrollmentKey = request.key;
-      enrollRequestsFormatted.add(enrollment);
-    }
-    return enrollRequestsFormatted;
   }
 
   @override

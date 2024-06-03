@@ -1,12 +1,13 @@
+// ignore_for_file: deprecated_export_use
 import 'dart:convert';
 import 'dart:core';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:flutter/cupertino.dart';
 
 class AtClientService {
@@ -34,8 +35,6 @@ class AtClientService {
   Future<bool> _init(
       String atSign, AtClientPreference preference, AtChops atChops) async {
     atClientAuthenticator ??= AtClientAuthenticator();
-    // ignore: deprecated_member_use
-    preference.useAtChops = true;
     await atClientManager.setCurrentAtSign(
         atSign, preference.namespace, preference,
         atChops: atChops);
@@ -189,6 +188,7 @@ class AtClientService {
 
   ///Returns `true` on successfully authenticating [atsign] with [cramSecret]/[privateKey].
   /// if pkam is successful, encryption keys will be set for the user.
+  @Deprecated('Use AtAuthService.authenticate method')
   Future<bool> authenticate(
       String atsign, AtClientPreference atClientPreference,
       {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
@@ -347,6 +347,7 @@ class AtClientService {
   ///Returns `true` on successfully completing onboarding.
   /// Throws [OnboardingStatus.atSignNotFound] exception if atsign not found.
   /// Throws [OnboardingStatus.privateKeyNotFound] exception if privatekey not found.
+  @Deprecated('Use AtAuthService.onboard method')
   Future<bool> onboard(
       {required AtClientPreference atClientPreference, String? atsign}) async {
     AtChops? atChops;
@@ -453,6 +454,8 @@ class AtClientService {
         decryptedAtKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]!,
         decryptedAtKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE]!);
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    atChopsKeys.selfEncryptionKey = AESKey(
+        decryptedAtKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE]!);
     final atChops = AtChopsImpl(atChopsKeys);
     return atChops;
   }
@@ -465,6 +468,8 @@ class BackupKeyConstants {
   static const String ENCRYPTION_PUBLIC_KEY_FROM_FILE = 'aesEncryptPublicKey';
   static const String ENCRYPTION_PRIVATE_KEY_FROM_FILE = 'aesEncryptPrivateKey';
   static const String SELF_ENCRYPTION_KEY_FROM_FILE = 'selfEncryptionKey';
+  static const String APKAM_SYMMETRIC_KEY_FROM_FILE = 'apkamSymmetricKey';
+  static const String APKAM_ENROLLMENT_ID_FROM_FILE = 'enrollmentId';
 }
 
 class KeychainUtil {
@@ -533,40 +538,42 @@ class KeychainUtil {
   }
 
   static Future<Map<String, String>> getEncryptedKeys(String atsign) async {
-    var aesEncryptedKeys = {};
-    // encrypt pkamPublicKey with AES key
-    var pkamPublicKey = await getPkamPublicKey(atsign);
-    var aesEncryptionKey = await getAESKey(atsign);
-    var encryptedPkamPublicKey =
-        EncryptionUtil.encryptValue(pkamPublicKey!, aesEncryptionKey!);
-    aesEncryptedKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
+    AtsignKey? atsignKeyData = await _keyChainManager.readAtsign(name: atsign);
+
+    if (atsignKeyData == null) {
+      throw AtClientException.message(
+          "Failed to fetch the keys for the atsign: $atsign");
+    }
+
+    Map<String, String> encryptedAtKeysMap = <String, String>{};
+
+    String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
-    // encrypt pkamPrivateKey with AES key
-    var pkamPrivateKey = await getPkamPrivateKey(atsign);
-    var encryptedPkamPrivateKey =
-        EncryptionUtil.encryptValue(pkamPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
+    String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
-    // encrypt encryption public key with AES key
-    var encryptionPublicKey = await getEncryptionPublicKey(atsign);
-    var encryptedEncryptionPublicKey =
-        EncryptionUtil.encryptValue(encryptionPublicKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
+    String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
-    // encrypt encryption private key with AES key
-    var encryptionPrivateKey = await getEncryptionPrivateKey(atsign);
-    var encryptedEncryptionPrivateKey =
-        EncryptionUtil.encryptValue(encryptionPrivateKey!, aesEncryptionKey);
-    aesEncryptedKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
+    String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
-    // store  self encryption key as it is.This will be same as AES key in key zip file
-    var selfEncryptionKey = await getSelfEncryptionKey(atsign);
-    aesEncryptedKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
-        selfEncryptionKey;
-    return Map<String, String>.from(aesEncryptedKeys);
+    encryptedAtKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
+        atsignKeyData.selfEncryptionKey!;
+    encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
+        atsignKeyData.apkamSymmetricKey!;
+    encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
+        atsignKeyData.enrollmentId!;
+
+    return encryptedAtKeysMap;
   }
 }

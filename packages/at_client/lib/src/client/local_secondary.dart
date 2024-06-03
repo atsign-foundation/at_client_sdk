@@ -29,6 +29,9 @@ class LocalSecondary implements Secondary {
   @experimental
   AtTelemetryService? telemetry;
 
+  // temporarily cache enrollmentDetails until we store in local secondary
+  Enrollment? _enrollment;
+
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.
   /// if [sync] is set to false, no sync operation is done.
@@ -67,6 +70,10 @@ class LocalSecondary implements Secondary {
     try {
       dynamic updateResult;
       var updateKey = builder.buildKey();
+      if (!await isEnrollmentAuthorizedForOperation(updateKey, builder)) {
+        throw UnAuthorizedException(
+            'Cannot perform update on $updateKey due to insufficient privilege');
+      }
       switch (builder.operation) {
         case AtConstants.updateMeta:
           var atMetadata =
@@ -91,6 +98,10 @@ class LocalSecondary implements Secondary {
     var llookupKey = '';
     try {
       llookupKey = builder.buildKey();
+      if (!await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
+        throw UnAuthorizedException(
+            'Cannot perform llookup on $llookupKey due to insufficient privilege');
+      }
       var llookupMeta = await keyStore!.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
       String? result;
@@ -110,8 +121,13 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _delete(DeleteVerbBuilder builder) async {
+    var deleteKey = builder.buildKey();
+    if (!await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
+      throw UnAuthorizedException(
+          'Cannot perform delete on $deleteKey due to insufficient privilege');
+    }
     try {
-      var deleteResult = await keyStore!.remove(builder.buildKey());
+      var deleteResult = await keyStore!.remove(deleteKey);
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
@@ -137,6 +153,14 @@ class LocalSecondary implements Secondary {
             (element) => element!.startsWith(builder.sharedWith!) == true);
       }
       keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
+      final keysToRemove = <String>[];
+      await Future.forEach(keys, (key) async {
+        if (!(await isEnrollmentAuthorizedForOperation(
+            key.toString(), builder))) {
+          keysToRemove.add(key.toString());
+        }
+      });
+      keys.removeWhere((key) => keysToRemove.contains(key));
       var keyString = keys.toString();
       // Apply regex on keyString to remove unnecessary characters and spaces
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
@@ -238,5 +262,131 @@ class LocalSecondary implements Secondary {
     var atData = AtData()..data = value;
     isStored = await keyStore!.put(key, atData);
     return isStored != null ? true : false;
+  }
+
+  Future<bool> isEnrollmentAuthorizedForOperation(
+      String key, VerbBuilder verbBuilder) async {
+    AtKey atKey = AtKey.fromString(key);
+    // Enrollment authorization check does not apply to local key.
+    // So, skip authorization check if key type is local or key starts with "local:"
+    if (key.startsWith('local:') || atKey is LocalKey) {
+      return true;
+    }
+    // if there is no enrollment, return true
+    _enrollment ??= await _getEnrollmentDetails();
+    if (_atClient.enrollmentId == null ||
+        _enrollment == null ||
+        _isReservedKey(key)) {
+      return true;
+    }
+    final enrollNamespaces = _enrollment!.namespace;
+    var keyNamespace = AtKey.fromString(key).namespace;
+    _logger.finer('enrollNamespaces:$enrollNamespaces');
+    _logger.finer('keyNamespace:$keyNamespace');
+    // * denotes access to all namespaces.
+    final access = enrollNamespaces!.containsKey('*')
+        ? enrollNamespaces['*']
+        : enrollNamespaces[keyNamespace];
+    _logger.finer('access:$access');
+
+    _logger.shout(
+        'Verb builder: $verbBuilder, keyNamespace: $keyNamespace, access: $access');
+
+    if (access == null) {
+      return false;
+    }
+    if (keyNamespace == null && enrollNamespaces.containsKey('*')) {
+      if (_isReadAllowed(verbBuilder, access) ||
+          _isWriteAllowed(verbBuilder, access)) {
+        return true;
+      }
+      return false;
+    }
+    return _isReadAllowed(verbBuilder, access) ||
+        _isWriteAllowed(verbBuilder, access);
+  }
+
+  Future<Enrollment?> _getEnrollmentDetails() async {
+    if (_atClient.enrollmentId == null) {
+      return null;
+    }
+
+    // Fetch enrollment information from local secondary
+    AtData? enrollmentInfoFromLocalSecondary;
+    try {
+      enrollmentInfoFromLocalSecondary = await keyStore?.get(
+          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}');
+    } on Exception {
+      _logger.finer(
+          'Enrollment information for id: ${_atClient.enrollmentId} not found in local secondary. Fetching from server');
+    }
+
+    // If enrollmentInfo is not found in local secondary, fetch the info from the remote secondary server and cache it in local
+    // secondary.
+    String? enrollmentInfoFromServer;
+    if (enrollmentInfoFromLocalSecondary == null) {
+      try {
+        enrollmentInfoFromServer = await _atClient
+            .getRemoteSecondary()
+            ?.executeCommand(
+                'enroll:fetch:{"enrollmentId":"${_atClient.enrollmentId}"}\n',
+                auth: true);
+      } on AtException catch (e) {
+        _logger.finer(
+            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
+      } on AtLookUpException catch (e) {
+        _logger.finer(
+            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
+      }
+      enrollmentInfoFromServer =
+          enrollmentInfoFromServer?.replaceAll('data:', '');
+      Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
+      _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
+      _enrollment = Enrollment()
+        ..appName = enrollmentDetailsMap['appName']
+        ..deviceName = enrollmentDetailsMap['deviceName']
+        ..namespace = enrollmentDetailsMap['namespace']
+        ..encryptedAPKAMSymmetricKey =
+            enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
+
+      AtData atData = AtData()..data = jsonEncode(_enrollment);
+      // The enrollment data is fetch from server, Set skipCommit to true to prevent
+      // the key sync back to server
+      await keyStore?.put(
+          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}',
+          atData,
+          skipCommit: true);
+    } else {
+      _enrollment = Enrollment.fromJSON(
+          jsonDecode(enrollmentInfoFromLocalSecondary.data!));
+    }
+
+    if (_enrollment == null) {
+      throw AtKeyNotFoundException(
+          'Enrollment key for enrollmentId: ${_atClient.enrollmentId} not found in server');
+    }
+    return _enrollment!;
+  }
+
+  bool _isReadAllowed(VerbBuilder verbBuilder, String access) {
+    return (verbBuilder is LLookupVerbBuilder ||
+            verbBuilder is LookupVerbBuilder ||
+            verbBuilder is ScanVerbBuilder) &&
+        (access == 'r' || access == 'rw');
+  }
+
+  bool _isWriteAllowed(VerbBuilder verbBuilder, String access) {
+    return (verbBuilder is UpdateVerbBuilder ||
+            verbBuilder is DeleteVerbBuilder ||
+            verbBuilder is NotifyVerbBuilder ||
+            verbBuilder is NotifyAllVerbBuilder ||
+            verbBuilder is NotifyRemoveVerbBuilder) &&
+        access == 'rw';
+  }
+
+  bool _isReservedKey(String? atKey) {
+    return atKey == null
+        ? false
+        : AtKey.getKeyType(atKey) == KeyType.reservedKey;
   }
 }

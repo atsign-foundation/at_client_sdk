@@ -997,8 +997,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   Future<void> _pullToLocal(
       VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
-    var verbResult =
-        await _atClient.getLocalSecondary()!.executeVerb(builder, sync: false);
+    String? verbResult;
+    try {
+      verbResult = await _atClient
+          .getLocalSecondary()!
+          .executeVerb(builder, sync: false);
+    } on UnAuthorizedException catch (e) {
+      _logger.finer(
+          'Failed to sync ${(builder as UpdateVerbBuilder).atKey.toString()} caused by ${e.toString()}');
+    }
     if (verbResult == null) {
       return;
     }
