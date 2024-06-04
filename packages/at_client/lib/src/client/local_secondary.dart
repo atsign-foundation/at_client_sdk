@@ -272,29 +272,34 @@ class LocalSecondary implements Secondary {
     if (_atClient.enrollmentId == null ||
         _enrollment == null ||
         _shouldSkipKeyFromEnrollmentAuthorization(key)) {
+      _logger.finest('Skipping enrollment authorization check for key: $key');
       return true;
     }
     final enrollNamespaces = _enrollment!.namespace;
     var keyNamespace = AtKey.fromString(key).namespace;
-    _logger.finer('enrollNamespaces:$enrollNamespaces');
-    _logger.finer('keyNamespace:$keyNamespace');
+    _logger.finest(
+        'Checking for enrollment authorization for key: $key with enrollmentId : ${_atClient.enrollmentId} for namespace: $keyNamespace');
     // * denotes access to all namespaces.
     final access = enrollNamespaces!.containsKey('*')
         ? enrollNamespaces['*']
         : enrollNamespaces[keyNamespace];
-    _logger.finer('access:$access');
-
-    _logger.shout(
-        'Verb builder: $verbBuilder, keyNamespace: $keyNamespace, access: $access');
 
     if (access == null) {
+      _logger.finer(
+          'Access permissions not found for the enrollment id: ${_atClient.enrollmentId}. Not authorized for the operation');
       return false;
     }
     if (keyNamespace == null && enrollNamespaces.containsKey('*')) {
+      _logger.finer(
+          'Access permissions for the the enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace');
       if (_isReadAllowed(verbBuilder, access) ||
           _isWriteAllowed(verbBuilder, access)) {
+        _logger.finest(
+            'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is authorized to perform operation');
         return true;
       }
+      _logger.finest(
+          'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is not authorized to perform operation');
       return false;
     }
     return _isReadAllowed(verbBuilder, access) ||

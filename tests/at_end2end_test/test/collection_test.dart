@@ -674,9 +674,7 @@ void main() async {
         expect(sharedWithAtSigns.contains(secondAtSign), true);
       }
     }
-  },
-      skip:
-          'Test fails with APKAM E2E tests. Skipping temporarily because collections is not in use');
+  });
 
   test('Model operations - save and incremental share with stream', () async {
     // Setting firstAtSign atClient instance to context.
