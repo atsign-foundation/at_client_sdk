@@ -27,6 +27,16 @@ dependencies:
 dependency_overrides:
   at_client:
     path: ../at_client
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server/
+      path: packages/at_persistence_secondary_server
+      ref: secondary_persistence_impl_new
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server/
+      path: packages/at_persistence_spec
+      ref: persistence_spec_refactoring
 
 dev_dependencies:
   lints: ^2.0.0
