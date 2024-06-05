@@ -120,6 +120,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
   Future<List<T>>
       getModelsSharedByAnyAtSign<T extends AtCollectionModel>() async {
     var regex = CollectionUtil.makeRegex();
+    _logger.finer('Getting sharedBy Models using regex: $regex');
     // Get all collection model keys
     var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     // From all of the shared collection keys retain the ones where sharedBy is not null and it not the current atSign
@@ -155,6 +156,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
 
     for (var atKey in collectionAtKeys) {
       try {
+        _logger.finer('Converting atKey: $atKey to the collection model');
         var atValue = await getAtClient().get(atKey);
         var atValueJson = jsonDecode(atValue.value);
 

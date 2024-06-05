@@ -9,6 +9,7 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -215,6 +216,7 @@ class BFactory extends AtCollectionModelFactory<B> {
 }
 
 void main() async {
+  AtSignLogger.root_level = 'finest';
   late AtClientManager currentAtClientManager;
   late AtClientManager sharedWithAtClientManager;
   late String firstAtSign;
@@ -515,6 +517,10 @@ void main() async {
     AtCollectionModel.registerFactories(
         [AFactory.getInstance(), BFactory.getInstance()]);
     var res = await AtCollectionModel.getModelsSharedByAnyAtSign();
+    print(
+        'Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test | getModelsSharedByAnyAtSign response length : ${res.length}');
+    print(
+        'Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test | getModelsSharedByAnyAtSign response  $res');
     expect(res.isEmpty, false,
         reason: 'Expect the models shared by to be non-empty');
     expect(res.length >= 4, true,
@@ -630,6 +636,7 @@ void main() async {
   });
 
   test('Query methods - Test retrieval of sharedWithAnyAtSign', () async {
+    AtSignLogger.root_level = 'finest';
     // Setting firstAtSign atClient instance to context.
     currentAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -662,10 +669,16 @@ void main() async {
 
     var atCollectionModelList =
         await AtCollectionModel.getModelsSharedWithAnyAtSign();
+    print(
+        'Test retrieval of sharedWithAnyAtSign | Length of getModelsSharedWithAnyAtSign : ${atCollectionModelList.length}');
     expect(atCollectionModelList.length, greaterThanOrEqualTo(1));
 
     for (AtCollectionModel atCollection in atCollectionModelList) {
       List sharedWithAtSigns = await atCollection.sharedWith();
+      print(
+          'Test retrieval of sharedWithAnyAtSign  | sharedWithAtSign: $sharedWithAtSigns');
+      print(
+          'Test retrieval of sharedWithAnyAtSign | AtCollection id: ${atCollection.id} | Name : ${atCollection.collectionName}');
       if (atCollection.id == 'aId') {
         expect(sharedWithAtSigns.contains(secondAtSign), true);
         expect(sharedWithAtSigns.contains(thirdAtSign), true);

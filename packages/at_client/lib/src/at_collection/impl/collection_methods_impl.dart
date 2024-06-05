@@ -5,6 +5,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+
 import '../collections.dart';
 
 /// [AtCollectionMethodImpl] have the implementation of all the methods available in collections package.
@@ -111,6 +112,7 @@ class AtCollectionMethodImpl {
     );
 
     late AtOperationItemStatus selfKeyUpdateStatus;
+    _logger.finer('Saving key $selfKey');
     await save(jsonEncodedData: jsonEncodedData, options: options, share: false)
         .forEach((AtOperationItemStatus event) {
       selfKeyUpdateStatus = event;
@@ -138,6 +140,7 @@ class AtCollectionMethodImpl {
           operation: Operation.share);
 
       try {
+        _logger.finer('Sharing key $sharedAtKey');
         var res = await _put(sharedAtKey, jsonEncodedData);
         atOperationItemStatus.complete = res;
         yield atOperationItemStatus;
