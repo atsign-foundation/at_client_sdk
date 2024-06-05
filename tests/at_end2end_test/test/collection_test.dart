@@ -216,7 +216,6 @@ class BFactory extends AtCollectionModelFactory<B> {
 }
 
 void main() async {
-  AtSignLogger.root_level = 'finest';
   late AtClientManager currentAtClientManager;
   late AtClientManager sharedWithAtClientManager;
   late String firstAtSign;
@@ -517,10 +516,6 @@ void main() async {
     AtCollectionModel.registerFactories(
         [AFactory.getInstance(), BFactory.getInstance()]);
     var res = await AtCollectionModel.getModelsSharedByAnyAtSign();
-    print(
-        'Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test | getModelsSharedByAnyAtSign response length : ${res.length}');
-    print(
-        'Query method - AtCollectionModel.getModelsSharedByAnyAtSign() test | getModelsSharedByAnyAtSign response  $res');
     expect(res.isEmpty, false,
         reason: 'Expect the models shared by to be non-empty');
     expect(res.length >= 4, true,
@@ -647,20 +642,20 @@ void main() async {
 
     // Share a phone
     var p1 = Phone()
-      ..id = 'p1'
+      ..id = 'p1$randomId'
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     await p1.save();
     var p2 = Phone()
-      ..id = 'p2'
+      ..id = 'p2$randomId'
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
     await p2.save();
     await p2.share([secondAtSign]);
 
-    var a = A.from('aId', a: 'aId');
+    var a = A.from('aId$randomId', a: 'aId$randomId');
     await a.save();
     await a.share([secondAtSign, thirdAtSign]);
 
@@ -669,21 +664,15 @@ void main() async {
 
     var atCollectionModelList =
         await AtCollectionModel.getModelsSharedWithAnyAtSign();
-    print(
-        'Test retrieval of sharedWithAnyAtSign | Length of getModelsSharedWithAnyAtSign : ${atCollectionModelList.length}');
     expect(atCollectionModelList.length, greaterThanOrEqualTo(1));
 
     for (AtCollectionModel atCollection in atCollectionModelList) {
       List sharedWithAtSigns = await atCollection.sharedWith();
-      print(
-          'Test retrieval of sharedWithAnyAtSign  | sharedWithAtSign: $sharedWithAtSigns');
-      print(
-          'Test retrieval of sharedWithAnyAtSign | AtCollection id: ${atCollection.id} | Name : ${atCollection.collectionName}');
-      if (atCollection.id == 'aId') {
+      if (atCollection.id == 'aId$randomId') {
         expect(sharedWithAtSigns.contains(secondAtSign), true);
         expect(sharedWithAtSigns.contains(thirdAtSign), true);
       }
-      if (atCollection.id == 'p2') {
+      if (atCollection.id == 'p2$randomId') {
         expect(sharedWithAtSigns.contains(secondAtSign), true);
       }
     }
