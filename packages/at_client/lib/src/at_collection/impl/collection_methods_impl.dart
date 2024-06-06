@@ -112,7 +112,6 @@ class AtCollectionMethodImpl {
     );
 
     late AtOperationItemStatus selfKeyUpdateStatus;
-    _logger.finer('Saving key $selfKey');
     await save(jsonEncodedData: jsonEncodedData, options: options, share: false)
         .forEach((AtOperationItemStatus event) {
       selfKeyUpdateStatus = event;
@@ -140,7 +139,6 @@ class AtCollectionMethodImpl {
           operation: Operation.share);
 
       try {
-        _logger.finer('Sharing key $sharedAtKey');
         var res = await _put(sharedAtKey, jsonEncodedData);
         atOperationItemStatus.complete = res;
         yield atOperationItemStatus;

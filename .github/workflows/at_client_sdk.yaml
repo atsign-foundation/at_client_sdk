@@ -48,7 +48,7 @@ jobs:
       # Run unit tests
       - name: Run at_client unit tests, with code coverage measurement
         working-directory: packages/at_client
-        run: dart run test --concurrency=1 --coverage="coverage"
+        run: dart test --concurrency=1 --coverage="coverage"
 
       - name: Convert at_client coverage to LCOV format
         working-directory: packages/at_client
