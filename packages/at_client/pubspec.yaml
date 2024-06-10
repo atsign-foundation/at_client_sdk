@@ -17,7 +17,7 @@ environment:
 dependencies:
   path: ^1.8.2
   hive: ^2.2.3
-  asn1lib: ">=1.4.1 <=1.5.0"
+  asn1lib: ^1.5.3
   crypton: ">=2.1.0 <=2.2.1"
   encrypt: ">=5.0.1 <=5.0.3"
   cron: ^0.5.1
@@ -42,9 +42,9 @@ dependencies:
   version: ^3.0.2
 
 dev_dependencies:
-  lints: ^2.1.1
+  lints: ^4.0.0
   test: ^1.21.4
   at_demo_data: ^1.0.1
   coverage: ^1.5.0
-  mocktail: ^0.3.0
-  dart_code_metrics: ^4.17.0
+  mocktail: ^1.0.3
+  dart_code_metrics: ^5.7.6
