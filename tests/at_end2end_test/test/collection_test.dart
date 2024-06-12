@@ -219,6 +219,7 @@ void main() async {
   late String firstAtSign;
   late String secondAtSign, thirdAtSign, fourthAtSign;
   final namespace = 'wavi';
+  int randomId = Uuid().v4().hashCode;
 
   setUpAll(() async {
     firstAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -247,7 +248,7 @@ void main() async {
 
     // Share a phone
     var phone = Phone()
-      ..id = 'personal phone'
+      ..id = 'personal phone-$randomId'
       ..namespace = 'buzz'
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
@@ -264,7 +265,7 @@ void main() async {
         currentAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              '$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
+              '$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.buzz.wavi$firstAtSign');
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -277,9 +278,9 @@ void main() async {
         sharedWithAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              'cached:$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
+              'cached:$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.buzz.wavi$firstAtSign');
     var regex = CollectionUtil.makeRegex(
-        formattedId: 'personal-phone',
+        formattedId: 'personal-phone-$randomId',
         collectionName: 'phone',
         namespace: 'buzz');
 
@@ -307,7 +308,7 @@ void main() async {
     );
     // Share a phone
     var phone = Phone()
-      ..id = 'personal phone'
+      ..id = 'personal phone-$randomId'
       ..namespace = 'buzz'
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
@@ -317,7 +318,7 @@ void main() async {
         currentAtClientManager.atClient.syncService,
         syncOptions: SyncOptions()
           ..key =
-              '$secondAtSign:personal-phone.phone.atcollectionmodel.buzz.wavi$firstAtSign');
+              '$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.buzz.wavi$firstAtSign');
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -330,7 +331,7 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
     var regex = CollectionUtil.makeRegex(
-        formattedId: 'personal-phone',
+        formattedId: 'personal-phone-$randomId',
         collectionName: 'phone',
         namespace: 'buzz');
     var getResult =

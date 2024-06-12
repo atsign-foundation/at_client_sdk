@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:collection';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -628,6 +629,8 @@ void main() {
         var enrollmentData = jsonDecode(notification.value!);
         enrollmentMap.putIfAbsent(enrollmentIdFromServer, () => enrollmentData);
       }, count: 1, max: -1));
+      // Adding 5 seconds time duration for the monitor connection to start and accept the incoming notifications.
+      await Future.delayed(Duration(seconds: 5));
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
           appName: 'wavi',
@@ -650,7 +653,8 @@ void main() {
       expect(enrollmentMap[atEnrollmentResponse.enrollmentId]['deviceName'],
           'device-$random');
     });
-  });
+    //To prevent failure due to latency, adding timeout for client to receive notifications sent from the server.
+  }, timeout: Timeout(Duration(minutes: 1)));
 }
 
 AtClientPreference getClient2Preferences() {
