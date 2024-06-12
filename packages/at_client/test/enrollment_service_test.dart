@@ -1,17 +1,29 @@
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
+import 'package:uuid/uuid.dart';
 
-import '../lib/src/service/enrollment_service_impl.dart';
+import 'test_utils/test_utils.dart';
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
+class MockSyncService extends Mock implements SyncService {}
+
+class FakeLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
+
 void main() {
+  String currentAtSign = '@alice';
+  String sharedWithAtSign = '@bob';
+
   group('A group of tests related to apkam/enrollments', () {
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
@@ -165,4 +177,104 @@ void main() {
       expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
     });
   });
+
+  group(
+      'A group of tests related to put operation when authenticated with apkam',
+      () {
+    late AtClient atClient;
+    AtSignLogger.root_level = 'finest';
+    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    setUp(() async {
+      String enrollmentId = Uuid().v4();
+      atClient = await AtClientImpl.create(
+          currentAtSign,
+          'wavi',
+          AtClientPreference()
+            ..isLocalStoreRequired = true
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          enrollmentId: enrollmentId,
+          atChops: await TestUtils.getAtChops(),
+          remoteSecondary: mockRemoteSecondary);
+      atClient.syncService = MockSyncService();
+
+      String key = '$enrollmentId.new.enrollments.__manage$currentAtSign';
+      AtData atData = AtData()
+        ..data = jsonEncode(Enrollment()
+          ..appName = 'wavi'
+          ..deviceName = 'iphone'
+          ..namespace = {'wavi': 'rw'}
+          ..enrollmentId = enrollmentId);
+
+      // Store enrollment data
+      await atClient.getLocalSecondary()?.keyStore?.put(key, atData);
+
+      AtEncryptionResult? atEncryptionResult = atClient.atChops?.encryptString(
+          TestUtils.selfEncryptionKey, EncryptionKeyType.rsa2048);
+
+      // Store "currentAtSign" encrypted symmetric key : shared_key.bob@alice
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          'shared_key.bob$currentAtSign',
+          AtData()..data = atEncryptionResult?.result);
+
+      // Store the "sharedWith" atsign's encrypted shared key: @bob:shared_key@alice
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          '$sharedWithAtSign:shared_key$currentAtSign',
+          AtData()..data = atEncryptionResult?.result);
+      // Store the "sharedWith" atSign's encryption public key cached in current atSign
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          'cached:public:publickey$sharedWithAtSign',
+          AtData()..data = TestUtils.encryptionPublicKey);
+
+      // Store cached sharedkey
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          'cached:@alice:shared_key@bob',
+          AtData()..data = atEncryptionResult?.result);
+
+      // Store cached sharedkey
+      await atClient.getLocalSecondary()?.keyStore?.put(
+          'public:publickey@alice',
+          AtData()..data = TestUtils.encryptionPublicKey);
+    });
+    test(
+        'A test to verify put operation is successful for the authorized namespace',
+        () async {
+      AtKey atKey =
+          (AtKey.shared('phone')..sharedWith(sharedWithAtSign)).build();
+      bool putResponse = await atClient.put(atKey, '1234');
+      expect(putResponse, true);
+    });
+
+    test(
+        'A test to verify get operation is successful for the authorized namespace',
+        () async {
+      FakeLookupVerbBuilder fakeLookupVerbBuilder = FakeLookupVerbBuilder();
+      registerFallbackValue(fakeLookupVerbBuilder);
+      when(() => mockRemoteSecondary.executeVerb(any(that: LookupKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:${jsonEncode({
+                    'data': 'cmsGZtiviv0MDSz4vPZ7FQ==',
+                    'key': '$currentAtSign:phone.wavi$sharedWithAtSign'
+                  })}'));
+      AtKey atKey = AtKey()
+        ..key = 'phone'
+        ..sharedBy = sharedWithAtSign
+        ..namespace = 'wavi';
+      AtValue atValue = await atClient.get(atKey);
+      expect(atValue.value, '1234');
+    });
+  });
+}
+
+class LookupKeyMatcher extends Matcher {
+  @override
+  Description describe(Description description) => description.add(
+      'A custom matcher to match the encrypted shared key for update verb builder');
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is LookupVerbBuilder && item.atKey.key.contains('phone')) {
+      return true;
+    }
+    return false;
+  }
 }
