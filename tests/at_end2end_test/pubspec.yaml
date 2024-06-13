@@ -13,6 +13,23 @@ dependencies:
   at_client:
     path: ../../packages/at_client
 
+dependency_overrides:
+  at_client:
+    git:
+      url: https://github.com/atsign-foundation/at_client_sdk/
+      path: packages/at_client
+      ref: uptake_persistence_refactoring
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server/
+      path: packages/at_persistence_secondary_server
+      ref: secondary_persistence_impl_new
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server/
+      path: packages/at_persistence_spec
+      ref: persistence_spec_refactoring
+
 dev_dependencies:
   test: ^1.24.3
   lints: ^2.0.0
