@@ -30,7 +30,8 @@ class LocalSecondary implements Secondary {
   AtTelemetryService? telemetry;
 
   // temporarily cache enrollmentDetails until we store in local secondary
-  Enrollment? _enrollment;
+  @visibleForTesting
+  Enrollment? enrollment;
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.
@@ -265,17 +266,18 @@ class LocalSecondary implements Secondary {
     return isStored != null ? true : false;
   }
 
+  @visibleForTesting
   Future<bool> isEnrollmentAuthorizedForOperation(
       String key, VerbBuilder verbBuilder) async {
     // if there is no enrollment, return true
-    _enrollment ??= await _getEnrollmentDetails();
+    enrollment ??= await _getEnrollmentDetails();
     if (_atClient.enrollmentId == null ||
-        _enrollment == null ||
+        enrollment == null ||
         _shouldSkipKeyFromEnrollmentAuthorization(key)) {
       _logger.finest('Skipping enrollment authorization check for key: $key');
       return true;
     }
-    final enrollNamespaces = _enrollment!.namespace;
+    final enrollNamespaces = enrollment!.namespace;
     var keyNamespace = AtKey.fromString(key).namespace;
     _logger.finest(
         'Checking for enrollment authorization for key: $key with enrollmentId : ${_atClient.enrollmentId} for namespace: $keyNamespace');
@@ -342,14 +344,14 @@ class LocalSecondary implements Secondary {
           enrollmentInfoFromServer?.replaceAll('data:', '');
       Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
       _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
-      _enrollment = Enrollment()
+      enrollment = Enrollment()
         ..appName = enrollmentDetailsMap['appName']
         ..deviceName = enrollmentDetailsMap['deviceName']
         ..namespace = enrollmentDetailsMap['namespace']
         ..encryptedAPKAMSymmetricKey =
             enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
 
-      AtData atData = AtData()..data = jsonEncode(_enrollment);
+      AtData atData = AtData()..data = jsonEncode(enrollment);
       // The enrollment data is fetch from server, Set skipCommit to true to prevent
       // the key sync back to server
       await keyStore?.put(
@@ -357,15 +359,15 @@ class LocalSecondary implements Secondary {
           atData,
           skipCommit: true);
     } else {
-      _enrollment = Enrollment.fromJSON(
+      enrollment = Enrollment.fromJSON(
           jsonDecode(enrollmentInfoFromLocalSecondary.data!));
     }
 
-    if (_enrollment == null) {
+    if (enrollment == null) {
       throw AtKeyNotFoundException(
           'Enrollment key for enrollmentId: ${_atClient.enrollmentId} not found in server');
     }
-    return _enrollment!;
+    return enrollment!;
   }
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {

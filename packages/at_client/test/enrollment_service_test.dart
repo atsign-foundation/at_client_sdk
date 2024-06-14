@@ -7,8 +7,7 @@ import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:test/expect.dart';
-import 'package:test/scaffolding.dart';
+import 'package:test/test.dart';
 
 import 'test_utils/test_utils.dart';
 
@@ -26,6 +25,7 @@ void main() {
   String enrollmentId = 'abc123';
 
   setUpAll(() async {
+    AtChops atChops = await TestUtils.getAtChops();
     atClient = await AtClientImpl.create(
         currentAtSign,
         'wavi',
@@ -34,7 +34,7 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/commit',
         enrollmentId: enrollmentId,
-        atChops: await TestUtils.getAtChops(),
+        atChops: atChops,
         remoteSecondary: mockRemoteSecondary);
     atClient.syncService = MockSyncService();
 
@@ -49,8 +49,8 @@ void main() {
     // Store enrollment data
     await atClient.getLocalSecondary()?.keyStore?.put(key, atData);
 
-    AtEncryptionResult? atEncryptionResult = atClient.atChops
-        ?.encryptString(TestUtils.selfEncryptionKey, EncryptionKeyType.rsa2048);
+    AtEncryptionResult? atEncryptionResult = atClient.atChops?.encryptString(
+        atChops.atChopsKeys.selfEncryptionKey!.key, EncryptionKeyType.rsa2048);
 
     // Store "currentAtSign" encrypted symmetric key : shared_key.bob@alice
     await atClient.getLocalSecondary()?.keyStore?.put(
@@ -64,7 +64,9 @@ void main() {
     // Store the "sharedWith" atSign's encryption public key cached in current atSign
     await atClient.getLocalSecondary()?.keyStore?.put(
         'cached:public:publickey$sharedWithAtSign',
-        AtData()..data = TestUtils.encryptionPublicKey);
+        AtData()
+          ..data =
+              atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey);
 
     // Store cached sharedkey
     await atClient.getLocalSecondary()?.keyStore?.put(
@@ -72,8 +74,11 @@ void main() {
         AtData()..data = atEncryptionResult?.result);
 
     // Store cached sharedkey
-    await atClient.getLocalSecondary()?.keyStore?.put('public:publickey@alice',
-        AtData()..data = TestUtils.encryptionPublicKey);
+    await atClient.getLocalSecondary()?.keyStore?.put(
+        'public:publickey@alice',
+        AtData()
+          ..data =
+              atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey);
   });
 
   group('A group of tests related to apkam/enrollments', () {
@@ -244,11 +249,14 @@ void main() {
     test(
         'A test to verify get operation is successful for the authorized namespace',
         () async {
+      AtEncryptionResult? encryptedValue = atClient.atChops?.encryptString(
+          '1234', EncryptionKeyType.aes256,
+          iv: AtChopsUtil.generateIVLegacy());
       FakeLookupVerbBuilder fakeLookupVerbBuilder = FakeLookupVerbBuilder();
       registerFallbackValue(fakeLookupVerbBuilder);
       when(() => mockRemoteSecondary.executeVerb(any(that: LookupKeyMatcher())))
           .thenAnswer((_) => Future.value('data:${jsonEncode({
-                    'data': 'cmsGZtiviv0MDSz4vPZ7FQ==',
+                    'data': encryptedValue?.result,
                     'key': '$currentAtSign:phone.wavi$sharedWithAtSign'
                   })}'));
       AtKey atKey = AtKey()
@@ -257,6 +265,278 @@ void main() {
         ..namespace = 'wavi';
       AtValue atValue = await atClient.get(atKey);
       expect(atValue.value, '1234');
+    });
+  });
+
+  group(
+      'A group of tests related to enrollment authorization with read allowed',
+      () {
+    test('test llookup on cached:@bob:shared_key@alice', () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          'cached:@bob:shared_key@alice', LLookupVerbBuilder());
+      expect(authorized, true);
+    });
+
+    test('test llookup on cached public key', () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          'cached:public:phone.fubar@alice', LLookupVerbBuilder());
+      expect(authorized, true);
+    });
+
+    test(
+        'test get on shared key with read-write access with unauthorized namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.unauth@alice', LookupVerbBuilder());
+      expect(authorized, false);
+    });
+
+    test('test get on shared key with read access with enrolled namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "r"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.fubar@alice', LookupVerbBuilder());
+      expect(authorized, true);
+    });
+
+    test('test scan on shared key with read access with unauthorized namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "r"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.unauth@alice', ScanVerbBuilder());
+      expect(authorized, false);
+    });
+  });
+
+  group(
+      'A group of tests related to enrollment authorization with read-write allowed',
+      () {
+    test(
+        'test update on shared key with only read access to enrollment namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "r"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.fubar@alice', UpdateVerbBuilder());
+      expect(authorized, false);
+    });
+
+    test(
+        'test update on shared key with read-write access to enrollment namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.fubar@alice', UpdateVerbBuilder());
+      expect(authorized, true);
+    });
+
+    test(
+        'test update on shared key with read-write access with unauthorized namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.unauth@alice', UpdateVerbBuilder());
+      expect(authorized, false);
+    });
+
+    test(
+        'test update on public key with read-write access to enrollment namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          'public:phone.fubar@alice', UpdateVerbBuilder());
+      expect(authorized, true);
+    });
+
+    test(
+        'test update on public key with read-write access with unauthorized namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          'public:phone.unauth@alice', UpdateVerbBuilder());
+      expect(authorized, false);
+    });
+
+    test(
+        'test notify on shared key with read-write access with enrolled namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          'public:phone.fubar@alice', NotifyVerbBuilder());
+      expect(authorized, true);
+    });
+
+    test('test notify on shared key with read access with enrolled namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "r"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          'public:phone.fubar@alice', NotifyVerbBuilder());
+      expect(authorized, false);
+    });
+
+    test(
+        'test notify on shared key with read-write access with unauthorized namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          'public:phone.unauth@alice', NotifyVerbBuilder());
+      expect(authorized, false);
+    });
+
+    test(
+        'test delete on shared key with read-write access with enrolled namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "rw"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.fubar@alice', DeleteVerbBuilder());
+      expect(authorized, true);
+    });
+
+    test('test delete on shared key with read access with enrolled namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "r"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.fubar@alice', DeleteVerbBuilder());
+      expect(authorized, false);
+    });
+
+    test(
+        'test delete on shared key with read-write access with unauthorized namespace',
+        () async {
+      final testEnrollmentId = 'aaa111';
+      LocalSecondary ls = LocalSecondary(atClient);
+
+      ls.enrollment = Enrollment()
+        ..enrollmentId = testEnrollmentId
+        ..appName = 'testApkamAuthCachedLLookup'
+        ..deviceName = 'testDevice'
+        ..namespace = {"fubar": "r"};
+
+      final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
+          '@bob:phone.unauth@alice', DeleteVerbBuilder());
+      expect(authorized, false);
     });
   });
 }
