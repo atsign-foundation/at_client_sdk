@@ -266,7 +266,6 @@ class LocalSecondary implements Secondary {
     return isStored != null ? true : false;
   }
 
-  @visibleForTesting
   Future<bool> isEnrollmentAuthorizedForOperation(
       String key, VerbBuilder verbBuilder) async {
     // if there is no enrollment, return true
