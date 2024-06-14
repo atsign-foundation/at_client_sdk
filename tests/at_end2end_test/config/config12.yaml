@@ -13,3 +13,6 @@ atSign:
   secondAtSign: '@ce2e2'
   thirdAtSign: '@ce2e3'
   fourthAtSign: '@ce2e4'
+
+authType: 'pkam'
+    

@@ -5,6 +5,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+
 import '../collections.dart';
 
 /// [AtCollectionMethodImpl] have the implementation of all the methods available in collections package.

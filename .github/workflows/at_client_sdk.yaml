@@ -263,9 +263,22 @@ jobs:
       - name: Config for @cicd1/4
         run: mv tests/at_end2end_test/config/config14.yaml tests/at_end2end_test/config/config.yaml
 
+      - name: Submit and approve enrollment request
+        working-directory: tests/at_end2end_test
+        run: dart run test/enrollment_setup.dart
+
       # Run end-to-end test
       - name: End to end test
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
         run: dart test --concurrency=1
+
+      # Makes all the enrollment requests inactive. The pending enrollment request are set to denied state and
+      # the approved enrollment requests are set to revoked state.
+      - name: Enrollment setup teardown
+        # Even if the tests fail in the above step, we need to clean up the enrollments.
+        # Therefore, we set this to "!cancelled()" to ensure this step runs regardless of the outcome of the previous step.
+        if: ${{ !cancelled() }}
+        working-directory: tests/at_end2end_test
+        run: dart run test/enrollment_teardown.dart
