@@ -1,3 +1,15 @@
+## 3.2.16
+- build[deps]: Upgraded dependencies for the following packages:
+    - package_info_plus: ^8.0.0
+    - at_client: ^3.0.76
+    - test: ^1.25.2
+    - mocktail: ^1.0.4
+- feat: Introduce AtAuthService replace AtClientService for the following operations
+    - authenticate
+    - onboard
+    - enroll
+    - getFinalEnrollmentStatus
+    - getSentEnrollmentRequest
 ## 3.2.15
 - build[deps]: Upgraded dependencies for the following packages:
   - at_chops to v2.0.0 
