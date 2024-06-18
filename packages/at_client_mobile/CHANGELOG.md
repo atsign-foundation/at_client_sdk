@@ -4,7 +4,7 @@
     - at_client: ^3.0.76
     - test: ^1.25.2
     - mocktail: ^1.0.4
-- feat: Introduce AtAuthService replace AtClientService for the following operations
+- feat: Introduce AtAuthService to replace AtClientService for the following operations
     - authenticate
     - onboard
     - enroll
