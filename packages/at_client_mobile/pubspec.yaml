@@ -22,7 +22,9 @@ dependencies:
   at_lookup: ^3.0.46
   at_client: ^3.0.76
   at_auth: ^2.0.4
-  at_file_saver: 0.1.2
+  at_file_saver: ^0.1.2
+  encrypt: ^5.0.3
+  at_persistence_secondary_server: ^3.0.62
 
 dev_dependencies:
   lints: ^4.0.0
