@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:biometric_storage/biometric_storage.dart';
@@ -12,6 +13,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
+import 'auth_constants.dart';
 
 const String _kDefaultKeystoreAccount = '@atsigns';
 const String enrollmentInfoKey = 'enrollmentInfo';
@@ -814,5 +817,45 @@ class KeyChainManager {
       return null;
     }
     return texts.join();
+  }
+
+  Future<Map<String, String>> getEncryptedKeys(String atsign) async {
+    AtsignKey? atsignKeyData = await readAtsign(name: atsign);
+
+    if (atsignKeyData == null) {
+      throw AtClientException.message(
+          "Failed to fetch the keys for the atsign: $atsign");
+    }
+
+    Map<String, String> encryptedAtKeysMap = <String, String>{};
+
+    String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
+        encryptedPkamPublicKey;
+
+    String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
+        encryptedPkamPrivateKey;
+
+    String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
+        encryptedEncryptionPublicKey;
+
+    String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
+        encryptedEncryptionPrivateKey;
+
+    encryptedAtKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
+        atsignKeyData.selfEncryptionKey!;
+    encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
+        atsignKeyData.apkamSymmetricKey!;
+    encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
+        atsignKeyData.enrollmentId!;
+
+    return encryptedAtKeysMap;
   }
 }
