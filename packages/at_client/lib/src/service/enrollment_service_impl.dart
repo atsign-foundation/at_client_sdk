@@ -57,4 +57,11 @@ class EnrollmentServiceImpl implements EnrollmentService {
     return _atEnrollmentImpl.deny(
         enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp);
   }
+
+  @override
+  Future<AtEnrollmentResponse> revoke(
+      EnrollmentRequestDecision enrollmentRequestDecision) async {
+    return _atEnrollmentImpl.revoke(
+        enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp);
+  }
 }

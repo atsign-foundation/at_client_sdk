@@ -30,7 +30,8 @@ class LocalSecondary implements Secondary {
   AtTelemetryService? telemetry;
 
   // temporarily cache enrollmentDetails until we store in local secondary
-  Enrollment? _enrollment;
+  @visibleForTesting
+  Enrollment? enrollment;
 
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.
@@ -267,40 +268,39 @@ class LocalSecondary implements Secondary {
 
   Future<bool> isEnrollmentAuthorizedForOperation(
       String key, VerbBuilder verbBuilder) async {
-    AtKey atKey = AtKey.fromString(key);
-    // Enrollment authorization check does not apply to local key.
-    // So, skip authorization check if key type is local or key starts with "local:"
-    if (key.startsWith('local:') || atKey is LocalKey) {
-      return true;
-    }
     // if there is no enrollment, return true
-    _enrollment ??= await _getEnrollmentDetails();
+    enrollment ??= await _getEnrollmentDetails();
     if (_atClient.enrollmentId == null ||
-        _enrollment == null ||
-        _isReservedKey(key)) {
+        enrollment == null ||
+        _shouldSkipKeyFromEnrollmentAuthorization(key)) {
+      _logger.finest('Skipping enrollment authorization check for key: $key');
       return true;
     }
-    final enrollNamespaces = _enrollment!.namespace;
+    final enrollNamespaces = enrollment!.namespace;
     var keyNamespace = AtKey.fromString(key).namespace;
-    _logger.finer('enrollNamespaces:$enrollNamespaces');
-    _logger.finer('keyNamespace:$keyNamespace');
+    _logger.finest(
+        'Checking for enrollment authorization for key: $key with enrollmentId : ${_atClient.enrollmentId} for namespace: $keyNamespace');
     // * denotes access to all namespaces.
     final access = enrollNamespaces!.containsKey('*')
         ? enrollNamespaces['*']
         : enrollNamespaces[keyNamespace];
-    _logger.finer('access:$access');
-
-    _logger.shout(
-        'Verb builder: $verbBuilder, keyNamespace: $keyNamespace, access: $access');
 
     if (access == null) {
+      _logger.finer(
+          'Access permissions not found for the enrollment id: ${_atClient.enrollmentId}. Not authorized for the operation');
       return false;
     }
     if (keyNamespace == null && enrollNamespaces.containsKey('*')) {
+      _logger.finer(
+          'Access permissions for the the enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace');
       if (_isReadAllowed(verbBuilder, access) ||
           _isWriteAllowed(verbBuilder, access)) {
+        _logger.finest(
+            'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is authorized to perform operation');
         return true;
       }
+      _logger.finest(
+          'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is not authorized to perform operation');
       return false;
     }
     return _isReadAllowed(verbBuilder, access) ||
@@ -343,14 +343,14 @@ class LocalSecondary implements Secondary {
           enrollmentInfoFromServer?.replaceAll('data:', '');
       Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
       _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
-      _enrollment = Enrollment()
+      enrollment = Enrollment()
         ..appName = enrollmentDetailsMap['appName']
         ..deviceName = enrollmentDetailsMap['deviceName']
         ..namespace = enrollmentDetailsMap['namespace']
         ..encryptedAPKAMSymmetricKey =
             enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
 
-      AtData atData = AtData()..data = jsonEncode(_enrollment);
+      AtData atData = AtData()..data = jsonEncode(enrollment);
       // The enrollment data is fetch from server, Set skipCommit to true to prevent
       // the key sync back to server
       await keyStore?.put(
@@ -358,15 +358,15 @@ class LocalSecondary implements Secondary {
           atData,
           skipCommit: true);
     } else {
-      _enrollment = Enrollment.fromJSON(
+      enrollment = Enrollment.fromJSON(
           jsonDecode(enrollmentInfoFromLocalSecondary.data!));
     }
 
-    if (_enrollment == null) {
+    if (enrollment == null) {
       throw AtKeyNotFoundException(
           'Enrollment key for enrollmentId: ${_atClient.enrollmentId} not found in server');
     }
-    return _enrollment!;
+    return enrollment!;
   }
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {
@@ -385,9 +385,17 @@ class LocalSecondary implements Secondary {
         access == 'rw';
   }
 
-  bool _isReservedKey(String? atKey) {
-    return atKey == null
-        ? false
-        : AtKey.getKeyType(atKey) == KeyType.reservedKey;
+  /// The enrollment authorization check does not include the following KeyTypes.
+  /// Therefore, return true to skip the authorization check.
+  /// This applies to Reserved keys, Cached shared keys, Cached public keys, and local keys
+  bool _shouldSkipKeyFromEnrollmentAuthorization(String? atKey) {
+    if (atKey == null) {
+      return false;
+    }
+    KeyType keyType = AtKey.getKeyType(atKey);
+    return (keyType == KeyType.reservedKey ||
+        keyType == KeyType.cachedSharedKey ||
+        keyType == KeyType.cachedPublicKey ||
+        keyType == KeyType.localKey);
   }
 }

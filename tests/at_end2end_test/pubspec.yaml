@@ -10,6 +10,7 @@ environment:
 
 dependencies:
   at_demo_data: ^1.0.1
+  at_auth: ^2.0.4
   at_client:
     path: ../../packages/at_client
 

@@ -1,16 +1,17 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 import 'package:version/version.dart';
 
 void main() {
   late String atSign_1;
   late String atSign_2;
-  final namespace = 'e2e_encryption_test';
+  final namespace = TestConstants.namespace;
 
   var clearText = 'Some clear text';
 
@@ -19,11 +20,12 @@ void main() {
     AtSignLogger.root_level = 'SHOUT';
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atSign_2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign_1, namespace);
+        .testInitializer(atSign_1, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign_2, namespace);
+        .testInitializer(atSign_2, namespace, authType);
   });
 
   tearDownAll(() {
@@ -148,7 +150,8 @@ void main() {
       AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
       await E2ESyncService.getInstance().syncData(atClient_2.syncService);
 
-      var getResult = await atClient_2.get(atKey, getRequestOptions: GetRequestOptions()..bypassCache = true);
+      var getResult = await atClient_2.get(atKey,
+          getRequestOptions: GetRequestOptions()..bypassCache = true);
       expect(getResult.value, clearText);
     }, timeout: Timeout(Duration(minutes: 5)));
 
