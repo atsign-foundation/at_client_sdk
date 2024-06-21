@@ -569,10 +569,18 @@ class KeychainUtil {
 
     encryptedAtKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
         atsignKeyData.selfEncryptionKey!;
-    encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
-        atsignKeyData.apkamSymmetricKey!;
-    encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
-        atsignKeyData.enrollmentId!;
+    // The atKeys file generated previous to APKAM feature will not have the
+    // apkam_symmetric_key. Hence adding null check to prevent null-pointer exception.
+    if (atsignKeyData.apkamSymmetricKey != null) {
+      encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
+          atsignKeyData.apkamSymmetricKey!;
+    }
+    // The atKeys file generated previous to APKAM feature will not have the
+    // enrollment-id. Hence adding null check to prevent null-pointer exception.
+    if (atsignKeyData.enrollmentId != null) {
+      encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
+          atsignKeyData.enrollmentId!;
+    }
 
     return encryptedAtKeysMap;
   }
