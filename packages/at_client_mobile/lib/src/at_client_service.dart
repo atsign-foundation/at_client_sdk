@@ -10,6 +10,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/cupertino.dart';
 
+@Deprecated('Use AtClientMobile.authService')
 class AtClientService {
   final AtSignLogger _logger = AtSignLogger('AtClientService');
   AtClient? _atClient;
@@ -581,7 +582,6 @@ class KeychainUtil {
       encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
           atsignKeyData.enrollmentId!;
     }
-
     return encryptedAtKeysMap;
   }
 }
