@@ -1,3 +1,5 @@
+## 3.2.17
+- fix: Export "BackupKeyConstants" and "getEncryptedKeys"
 ## 3.2.16
 - build[deps]: Upgraded dependencies for the following packages:
     - package_info_plus: ^8.0.0
