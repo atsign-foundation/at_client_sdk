@@ -9,8 +9,8 @@ class AtClientMobile {
   /// Example:
   ///
   ///  AtAuthService authService = AtClientMobile.authService(_atsign!, _atClientPreference);
-  static AtAuthService authService(String atSign,
-      AtClientPreference atClientPreference,
+  static AtAuthService authService(
+      String atSign, AtClientPreference atClientPreference,
       {AtLookUp? atLookUp}) {
     return AtAuthServiceImpl(atSign, atClientPreference, atLookUp: atLookUp);
   }
