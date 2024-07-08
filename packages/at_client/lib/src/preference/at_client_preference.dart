@@ -68,8 +68,8 @@ class AtClientPreference {
 
   /// Time interval for the scheduled task that removes expired keys from local keyStore
   ///
-  /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 0 and 59]
-  Duration expiryCheckTimeInterval = Duration(minutes: 1);
+  /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
+  Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
   ///[OptionalParameter] when set to true logs TLS Keys to file.
   bool decryptPackets = false;
