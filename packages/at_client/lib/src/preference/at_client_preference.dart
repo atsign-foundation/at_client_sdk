@@ -67,7 +67,9 @@ class AtClientPreference {
   Duration monitorHeartbeatInterval = Duration(seconds: 10);
 
   /// Time interval for the scheduled task that removes expired keys from local keyStore
-  Duration expiryCheckTimeInterval = Duration(minutes: 10);
+  ///
+  /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 0 and 59]
+  Duration expiryCheckTimeInterval = Duration(minutes: 1);
 
   ///[OptionalParameter] when set to true logs TLS Keys to file.
   bool decryptPackets = false;
@@ -98,6 +100,7 @@ class AtClientPreference {
   bool useAtChops = true;
 
   /// Which version of the atProtocol this client will use.
+  /// Note that this is different from the version of the
   /// Note that this is different from the version of the
   /// atProtocol that the client supports, which is set in
   /// [AtClientConfig]
