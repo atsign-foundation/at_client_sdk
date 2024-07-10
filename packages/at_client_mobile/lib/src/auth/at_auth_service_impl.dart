@@ -82,6 +82,8 @@ class AtAuthServiceImpl implements AtAuthService {
       // check if the atSign is already onboarded. If already onboarded, initialize atClient for offline usage.
       if (await isOnboarded(_atSign)) {
         // Initialize atClient for offline access.
+        _logger.info(
+            'Network connectivity not available. Initializing at_client for offline usage');
         await _init(_atAuth.atChops!, enrollmentId: atAuthRequest.enrollmentId);
         return atAuthResponse
           ..isSuccessful = true
