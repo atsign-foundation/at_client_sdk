@@ -44,6 +44,7 @@ class SplitterSink extends ByteConversionSinkBase {
 
 class ListSink extends Sink<List<int>> {
   final List<List<int>> list = <List<int>>[];
+
   @override
   void add(List<int> data) => list.add(data);
 

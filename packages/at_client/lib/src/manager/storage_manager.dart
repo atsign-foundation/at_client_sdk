@@ -28,10 +28,10 @@ class StorageManager {
         commitLogPath: commitLogPath,
         enableCommitId: false);
     // Initialize Persistence
-    var manager = SecondaryPersistenceStoreFactory.getInstance()
+    var hivePersistenceManager = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)!
         .getHivePersistenceManager()!;
-    await manager.init(storagePath);
+    await hivePersistenceManager.init(storagePath);
     var hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(currentAtSign)!
         .getSecondaryKeyStore()!;
@@ -41,8 +41,8 @@ class StorageManager {
         .getSecondaryKeyStoreManager()!;
     await hiveKeyStore.initialize();
     keyStoreManager.keyStore = hiveKeyStore;
-    manager.scheduleKeyExpireTask(null,
-        runTimeInterval: preferences!.expiryCheckTimeInterval);
+    hivePersistenceManager
+        .scheduleKeyExpireTask(preferences?.expiryCheckTimeInterval.inMinutes);
     isStorageInitialized = true;
   }
 }
