@@ -23,6 +23,7 @@ void main() {
   late String aliceDefaultEncryptionPrivateKey;
   late String aliceSelfEncryptionKey;
   late String alicePkamPublicKey;
+  String encryptedAPKAMSymmetricKey = '';
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -31,6 +32,8 @@ void main() {
     aliceDefaultEncryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
     aliceSelfEncryptionKey = aesKeyMap[atSign]!;
     alicePkamPublicKey = pkamPublicKeyMap[atSign]!;
+    encryptedAPKAMSymmetricKey = EncryptionUtil.encryptKey(
+        aliceApkamSymmetricKey, encryptionPublicKeyMap[atSign]!);
   });
 
   tearDown(() {
@@ -158,7 +161,7 @@ void main() {
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
       // 5. Send enrollment request
       enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$spp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$spp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
       String? serverResponse = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand(enrollRequest, auth: false);
@@ -244,7 +247,7 @@ void main() {
         pkamPublicKeyMap['@eve🛠']; // can be any random public key
     String random = Uuid().v4().hashCode.toString();
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"]}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"],"encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -258,7 +261,7 @@ void main() {
     expect(otp, isNotNull);
     // create second enrollment request
     newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
