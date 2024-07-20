@@ -1,6 +1,7 @@
 ## 3.0.77
 - fix: Fix the keys expiry job not being triggered
 - chore: deprecate NotificationParams.forText()
+- feat: Add "allowAtClientOfflineAccess" feature flag to retain the existing app's behaviour.
 ## 3.0.76
 - feat: Introduce mechanism to identify and delete expired keys
 - feat: Introduce enrollment service to support enrollment operations:

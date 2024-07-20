@@ -116,6 +116,12 @@ class AtClientPreference {
 
   //hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
+
+  /// Determines if the client is allowed offline access.
+  ///
+  /// When set to `true`, the client can operate without an internet connection.
+  /// When set to `false`, an internet connection is required.
+  bool allowAtClientOfflineAccess = false;
 }
 
 @Deprecated("Use SyncService")
