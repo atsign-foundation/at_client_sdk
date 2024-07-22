@@ -38,7 +38,10 @@ void main() {
         remoteSecondary: mockRemoteSecondary);
     atClient.syncService = MockSyncService();
 
-    String key = '$enrollmentId.new.enrollments.__manage$currentAtSign';
+    var localEnrollmentKey = AtKey()
+      ..isLocal = true
+      ..key = enrollmentId
+      ..sharedBy = '@alice';
     AtData atData = AtData()
       ..data = jsonEncode(Enrollment()
         ..appName = 'wavi'
@@ -47,7 +50,10 @@ void main() {
         ..enrollmentId = enrollmentId);
 
     // Store enrollment data
-    await atClient.getLocalSecondary()?.keyStore?.put(key, atData);
+    await atClient
+        .getLocalSecondary()
+        ?.keyStore
+        ?.put(localEnrollmentKey.toString(), atData);
 
     AtEncryptionResult? atEncryptionResult = atClient.atChops?.encryptString(
         atChops.atChopsKeys.selfEncryptionKey!.key, EncryptionKeyType.rsa2048);
