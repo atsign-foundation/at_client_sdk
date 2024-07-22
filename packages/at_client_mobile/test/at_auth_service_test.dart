@@ -4,13 +4,17 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_client_mobile/src/auth/at_auth_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:biometric_storage/biometric_storage.dart';
+import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:test/test.dart';
+
+import 'at_client_service_test.dart';
 
 class MockBiometricStorage extends Mock implements BiometricStorage {}
 
@@ -69,14 +73,14 @@ void main() {
     late MockAtLookUp mockAtLookUp;
 
     setUp(() {
-      authServiceImpl = AtAuthServiceImpl(atSign, atClientPreference);
       mockBiometricStorageEnrollmentFile = MockEnrollmentBiometricStorageFile();
       mockBiometricStorage = MockBiometricStorage();
       mockBiometricStorageKeychainFile = MockKeychainBiometricStorageFile();
       mockAtLookUp = MockAtLookUp();
 
+      authServiceImpl =
+          AtAuthServiceImpl(atSign, atClientPreference, atLookUp: mockAtLookUp);
       authServiceImpl.keyChainManager.biometricStorage = mockBiometricStorage;
-      authServiceImpl.atLookUp = mockAtLookUp;
     });
 
     test('A test to verify submission of enrollment', () async {
@@ -463,6 +467,146 @@ void main() {
 
     tearDown(() => tearDownMethod(mockBiometricStorageEnrollmentFile,
         mockAtLookUp, mockBiometricStorage));
+  });
+
+  group('A group of tests related to authenticate an atSign', () {
+    String atSign = '@alice';
+    AtClientPreference atClientPreference = AtClientPreference()
+      ..namespace = 'me';
+
+    test(
+        'A test to verify AtClient initializes successfully in offline mode upon network failure when keychain manager contains keys',
+        () async {
+      KeyChainManager mockKeyChainManager = MockKeyChainManager();
+      RSAKeypair pkamKeyPair = KeyChainManager.getInstance().generateKeyPair();
+      RSAKeypair encryptionKeyPair =
+          KeyChainManager.getInstance().generateKeyPair();
+      String selfEncryptionKey = KeyChainManager.getInstance().generateAESKey();
+      AtAuthService atAuthService =
+          AtClientMobile.authService(atSign, atClientPreference);
+      (atAuthService as AtAuthServiceImpl).keyChainManager =
+          mockKeyChainManager;
+
+      AtsignKey atsignKey = AtsignKey(
+          atSign: atSign,
+          encryptionPublicKey: encryptionKeyPair.publicKey.toString());
+
+      // Mock object to return keys from keychain manager
+      when(() => mockKeyChainManager.readAtsign(name: atSign))
+          .thenAnswer((_) => Future.value(atsignKey));
+
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+      atAuthRequest.atAuthKeys = AtAuthKeys()
+        ..apkamPrivateKey = pkamKeyPair.privateKey.toString()
+        ..apkamPublicKey = pkamKeyPair.publicKey.toString()
+        ..defaultEncryptionPublicKey = encryptionKeyPair.publicKey.toString()
+        ..defaultEncryptionPrivateKey = encryptionKeyPair.privateKey.toString()
+        ..defaultSelfEncryptionKey = selfEncryptionKey
+        ..enrollmentId = '123';
+
+      AtAuthResponse atAuthResponse =
+          await atAuthService.authenticate(atAuthRequest);
+
+      expect(atAuthResponse.isSuccessful, true);
+      expect(atAuthResponse.atSign, atSign);
+      expect(atAuthResponse.atAuthKeys?.apkamPublicKey,
+          pkamKeyPair.publicKey.toString());
+      expect(atAuthResponse.atAuthKeys?.apkamPrivateKey,
+          pkamKeyPair.privateKey.toString());
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey,
+          encryptionKeyPair.privateKey.toString());
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey,
+          encryptionKeyPair.publicKey.toString());
+      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey,
+          selfEncryptionKey);
+    });
+
+    test(
+        'A test to verify atClient initialization fails when network is offline and keychain manager does not have keys',
+        () async {
+      KeyChainManager mockKeyChainManager = MockKeyChainManager();
+      RSAKeypair pkamKeyPair = KeyChainManager.getInstance().generateKeyPair();
+      RSAKeypair encryptionKeyPair =
+          KeyChainManager.getInstance().generateKeyPair();
+      AtAuthService atAuthService =
+          AtClientMobile.authService(atSign, atClientPreference);
+      (atAuthService as AtAuthServiceImpl).keyChainManager =
+          mockKeyChainManager;
+
+      AtsignKey atsignKey = AtsignKey(atSign: atSign, encryptionPublicKey: '');
+
+      // Mock object to return keys from keychain manager
+      when(() => mockKeyChainManager.readAtsign(name: atSign))
+          .thenAnswer((_) => Future.value(atsignKey));
+
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+      atAuthRequest.atAuthKeys = AtAuthKeys()
+        ..apkamPrivateKey = pkamKeyPair.privateKey.toString()
+        ..apkamPublicKey = pkamKeyPair.publicKey.toString()
+        ..defaultEncryptionPublicKey = encryptionKeyPair.publicKey.toString()
+        ..defaultEncryptionPrivateKey = encryptionKeyPair.privateKey.toString()
+        ..defaultSelfEncryptionKey =
+            KeyChainManager.getInstance().generateAESKey();
+
+      AtAuthResponse atAuthResponse =
+          await atAuthService.authenticate(atAuthRequest);
+
+      expect(atAuthResponse.isSuccessful, false);
+    });
+
+    test(
+        'A test to verify authentication is successful when pkamAuthentication returns true',
+        () async {
+      KeyChainManager mockKeyChainManager = MockKeyChainManager();
+      AtLookUp mockAtLookup = MockAtLookUp();
+
+      RSAKeypair pkamKeyPair = KeyChainManager.getInstance().generateKeyPair();
+      RSAKeypair encryptionKeyPair =
+          KeyChainManager.getInstance().generateKeyPair();
+      String selfEncryptionKey = KeyChainManager.getInstance().generateAESKey();
+      AtAuthService atAuthService = AtClientMobile.authService(
+          atSign, atClientPreference,
+          atLookUp: mockAtLookup);
+      (atAuthService as AtAuthServiceImpl).keyChainManager =
+          mockKeyChainManager;
+
+      AtsignKey atsignKey = AtsignKey(
+          atSign: atSign,
+          encryptionPublicKey: encryptionKeyPair.publicKey.toString());
+
+      // Mock object to return keys from keychain manager
+      when(() => mockKeyChainManager.readAtsign(name: atSign))
+          .thenAnswer((_) => Future.value(atsignKey));
+
+      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: '123'))
+          .thenAnswer((_) => Future.value(true));
+
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+      atAuthRequest.atAuthKeys = AtAuthKeys()
+        ..apkamPrivateKey = pkamKeyPair.privateKey.toString()
+        ..apkamPublicKey = pkamKeyPair.publicKey.toString()
+        ..defaultEncryptionPublicKey = encryptionKeyPair.publicKey.toString()
+        ..defaultEncryptionPrivateKey = encryptionKeyPair.privateKey.toString()
+        ..defaultSelfEncryptionKey = selfEncryptionKey
+        ..enrollmentId = '123';
+
+      AtAuthResponse atAuthResponse =
+          await atAuthService.authenticate(atAuthRequest);
+
+      expect(atAuthResponse.isSuccessful, true);
+      expect(atAuthResponse.atSign, atSign);
+      expect(atAuthResponse.atAuthKeys?.enrollmentId, '123');
+      expect(atAuthResponse.atAuthKeys?.apkamPublicKey,
+          pkamKeyPair.publicKey.toString());
+      expect(atAuthResponse.atAuthKeys?.apkamPrivateKey,
+          pkamKeyPair.privateKey.toString());
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey,
+          encryptionKeyPair.privateKey.toString());
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey,
+          encryptionKeyPair.publicKey.toString());
+      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey,
+          selfEncryptionKey);
+    });
   });
 }
 
