@@ -242,6 +242,22 @@ class NotificationServiceImpl
                     .transform(Tuple()
                       ..one = atNotification
                       ..two = notificationConfig);
+            // When client is authenticate with enrollment id, For notifications
+            // related to enrollment approval or denial requests, verify the enrolled
+            // namespaces are authorised by the client enrollment. Notify the client
+            // only if all namespaces in the enrollment request are authorised by the
+            // client enrollment. This ensures that the client receives only relevant notifications.
+            // For the legacy atKeys which does not have enrollment id, will be able to perform
+            // the operations. Therefore, this condition does not apply.
+            if ((_atClient.enrollmentId != null &&
+                    _atClient.enrollmentId!.isNotEmpty) &&
+                transformedNotification.key.contains('__manage')) {
+              if (await validateEnrollmentNamespaceAuthorisation(jsonDecode(
+                      transformedNotification.value!)['namespace']) ==
+                  false) {
+                return;
+              }
+            }
 
             if (notificationConfig.regex != emptyRegex) {
               if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
@@ -259,6 +275,55 @@ class NotificationServiceImpl
       _logger.severe(
           'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
     }
+  }
+
+  @visibleForTesting
+  Future<bool> validateEnrollmentNamespaceAuthorisation(
+      Map<String, dynamic> enrollmentNamespaces) async {
+    AtKey enrollmentKey =
+        AtKey.local('${_atClient.enrollmentId}', _atClient.getCurrentAtSign()!)
+            .build();
+    at_persistence_secondary_server.AtData? atData = await _atClient
+        .getLocalSecondary()
+        ?.keyStore
+        ?.get(enrollmentKey.toString());
+
+    if (atData == null || atData.data == null) {
+      _logger.finer(
+          'Failed to authorise namespaces caused by enrollment data not found for enrollment id: ${_atClient.enrollmentId}');
+      return false;
+    }
+
+    Map authorisedNamespaces = jsonDecode(atData.data!);
+    // To perform enrollment operations, client should have access to "__manage" namespace.
+    if (authorisedNamespaces.containsKey('__manage') == false) {
+      return false;
+    }
+    bool isAuthorised = false;
+    // Iterate over each namespace in the enrollment request. If any of the namespace is not authorised, return false.
+    for (var enrolledNamespaceEntry in enrollmentNamespaces.entries) {
+      // Iterates over each namespace in the authorised list of namespaces (the list of namespaces the client is enrolled with) to
+      // verify if the client is authorised for the namespaces in the enrollment request.
+      isAuthorised = false;
+      for (var authorisedNamespaceEntry in authorisedNamespaces.entries) {
+        if ('.${enrolledNamespaceEntry.key}'
+            .endsWith('.${authorisedNamespaceEntry.key}')) {
+          if (authorisedNamespaceEntry.value == 'rw' ||
+              (authorisedNamespaceEntry.value! == 'r' &&
+                  enrolledNamespaceEntry.value == 'r')) {
+            isAuthorised = true;
+            break;
+          } else {
+            isAuthorised = false;
+          }
+        }
+      }
+      // At the end of each namespace validation, if the authorisation fails, break there. Do not continue.
+      if (isAuthorised == false) {
+        return isAuthorised;
+      }
+    }
+    return isAuthorised;
   }
 
   @visibleForTesting

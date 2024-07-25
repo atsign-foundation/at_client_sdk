@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
@@ -12,8 +14,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_client/src/response/at_notification.dart' as at_notification;
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:uuid/uuid.dart';
 
 String? lastNotificationJson;
@@ -1106,6 +1106,91 @@ void main() {
       expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 2);
       // And we should have no calls queued
       expect(notificationServiceImpl.monitorRestartQueued, false);
+    });
+  });
+
+  group('A group of tests to assert validateEnrollmentNamespaceAuthorisation',
+      () {
+    test('A test to verify with namespace authorisation with hierarchies',
+        () async {
+      when(() => mockAtClientImpl.enrollmentId).thenAnswer((_) => '123');
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .get('local:123@alice')).thenAnswer((_) async => AtData()
+        ..data =
+            jsonEncode({'data.buzz': 'rw', 'my_app': 'r', '__manage': 'rw'}));
+
+      NotificationServiceImpl notificationServiceImpl =
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
+
+      // Both the namespaces are authorised.
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation(
+                  {'data.buzz': 'rw', 'my_app': 'r'}),
+          true);
+      // The namespace is authorised.
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation(
+                  {'orders.data.buzz': 'rw'}),
+          true);
+      // The namespace is authorised.
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation({'data.buzz': 'r'}),
+          true);
+      // One namespace is authorised and "my_app" namespace does not have access.
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation(
+                  {'data.buzz': 'rw', 'my_app': 'rw'}),
+          false);
+      // One namespace is authorised and other other namespace does not have access.
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation(
+                  {'data.buzz': 'rw', 'wavi': 'rw'}),
+          false);
+      // Namespace with super set access is not authorised.
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation(
+                  {'buzz': 'rw', 'my_app': 'r'}),
+          false);
+      // Approving app with read access and enrolling app requesting for rw access.
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation({'my_app': 'rw'}),
+          false);
+    });
+
+    test(
+        'A test to verify when enrolled namespace does not have access to __manage namespace',
+        () async {
+      when(() => mockAtClientImpl.enrollmentId).thenAnswer((_) => '123');
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .get('local:123@alice')).thenAnswer((_) async => AtData()
+        ..data = jsonEncode({
+          'data.buzz': 'rw',
+          'my_app': 'r',
+        }));
+
+      NotificationServiceImpl notificationServiceImpl =
+          await NotificationServiceImpl.create(mockAtClientImpl,
+              atClientManager: mockAtClientManager,
+              monitor: mockMonitor) as NotificationServiceImpl;
+
+      expect(
+          await notificationServiceImpl
+              .validateEnrollmentNamespaceAuthorisation(
+                  {'data.buzz': 'rw', 'my_app': 'r'}),
+          false);
     });
   });
 }
