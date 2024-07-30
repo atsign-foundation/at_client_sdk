@@ -502,8 +502,10 @@ class AtAuthServiceImpl implements AtAuthService {
   /// when performing CURD operation on local secondary server
   Future<void> _storeEnrollmentInfoIntoLocalSecondary(
       EnrollmentInfo enrollmentInfo) async {
-    String enrollmentKey =
-        '${enrollmentInfo.enrollmentId}.new.enrollments.__manage$_atSign';
+    var localEnrollmentKey = AtKey()
+      ..isLocal = true
+      ..key = enrollmentInfo.enrollmentId
+      ..sharedBy = _atSign;
     Enrollment enrollment = Enrollment()..namespace = enrollmentInfo.namespace;
     AtData atData = AtData()..data = jsonEncode(enrollment);
     // The "put" function in AtClient will call the executeVerb function which in turn calls the "_isAuthorized" in the local secondary.
@@ -517,7 +519,7 @@ class AtAuthServiceImpl implements AtAuthService {
     await _atClient!
         .getLocalSecondary()
         ?.keyStore
-        ?.put(enrollmentKey, atData, skipCommit: true);
+        ?.put(localEnrollmentKey.toString(), atData);
   }
 
   AtChops _buildAtChops(EnrollmentInfo enrollmentInfo) {

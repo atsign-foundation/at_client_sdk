@@ -1,3 +1,5 @@
+## 3.2.18
+- fix:  fix: rename enrollment details key to local key
 ## 3.2.17
 - fix: Export "BackupKeyConstants" and "getEncryptedKeys"
 ## 3.2.16

@@ -32,8 +32,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey = AtKey()
+        ..isLocal = true
+        ..key = testEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$testEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
                 Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
@@ -132,8 +136,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey = AtKey()
+        ..isLocal = true
+        ..key = testEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$testEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       //1. create a self key in wavi namespace should pass
@@ -211,8 +219,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey = AtKey()
+        ..isLocal = true
+        ..key = testEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$testEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
                 Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
@@ -283,8 +295,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey_2 = AtKey()
+        ..isLocal = true
+        ..key = newEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$newEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey_2.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       // delete self key in wavi namespace should pass
@@ -340,8 +356,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey = AtKey()
+        ..isLocal = true
+        ..key = testEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$testEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
                 Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
@@ -435,8 +455,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = privilegedEnrollment;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey = AtKey()
+        ..isLocal = true
+        ..key = privilegedEnrollment
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$privilegedEnrollment.new.enrollments.__manage@alice',
+          localEnrollmentKey.toString(),
           AtData()..data = jsonEncode(Enrollment()..namespace = {"*": "rw"}));
       //1. create a key in wavi namespace
       var waviKey = AtKey()
@@ -501,8 +525,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey_2 = AtKey()
+        ..isLocal = true
+        ..key = newEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$newEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey_2.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       // llookup on wavi namespace should be allowed
@@ -555,8 +583,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey = AtKey()
+        ..isLocal = true
+        ..key = testEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$testEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
                 Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
@@ -635,8 +667,12 @@ void main() {
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
       // Insert the enrollment info into the local secondary.
+      var localEnrollmentKey_2 = AtKey()
+        ..isLocal = true
+        ..key = newEnrollmentId
+        ..sharedBy = '@alice';
       await atClient.getLocalSecondary()?.keyStore?.put(
-          '$newEnrollmentId.new.enrollments.__manage@alice',
+          localEnrollmentKey_2.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
       // enrolled client should be able to see wavi key and reserved key in scan. Buzz key and no namespace keys should not be returned

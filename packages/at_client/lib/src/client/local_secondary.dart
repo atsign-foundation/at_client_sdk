@@ -316,7 +316,7 @@ class LocalSecondary implements Secondary {
     AtData? enrollmentInfoFromLocalSecondary;
     try {
       enrollmentInfoFromLocalSecondary = await keyStore?.get(
-          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}');
+          'local:${_atClient.enrollmentId}${_atClient.getCurrentAtSign()}');
     } on Exception {
       _logger.finer(
           'Enrollment information for id: ${_atClient.enrollmentId} not found in local secondary. Fetching from server');
