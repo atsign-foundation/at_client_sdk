@@ -33,6 +33,7 @@ class AtNotification {
           json['metadata'][AtConstants.sharedKeyEncryptedEncryptingKeyName];
       metadata.skeEncAlgo =
           json['metadata'][AtConstants.sharedKeyEncryptedEncryptingAlgo];
+      metadata.sharedKeyEnc = json['metadata'][AtConstants.sharedKeyEncrypted];
     }
 
     return AtNotification(json['id'], json['key'], json['from'], json['to'],
