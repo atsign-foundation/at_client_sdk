@@ -12,7 +12,8 @@ String sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 String authType = ConfigUtil.getYaml()['authType'];
 
 void main() {
-  String notifyKey = '$sharedWithAtSign:phone.wavi$currentAtSign';
+  String notifyKey =
+      '$sharedWithAtSign:phone.${TestConstants.namespace}$currentAtSign';
   String value = '+91 9868123123';
 
   test('A test to send and receive notification with isolate', () async {
