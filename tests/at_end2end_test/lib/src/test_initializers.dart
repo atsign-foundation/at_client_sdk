@@ -19,8 +19,9 @@ class TestSuiteInitializer {
     return _singleton;
   }
 
-  Future<void> testInitializer(
-      String atSign, String namespace, String authType) async {
+  Future<void> testInitializer(String atSign, String namespace, String authType,
+      {bool enableInitialSync = true,
+      AtClientPreference? atClientPreference}) async {
     try {
       late AtChops atChops;
       AtAuthResponse? atAuthResponse;
@@ -36,18 +37,21 @@ class TestSuiteInitializer {
         atChops = createAtChopsFromDemoKeys(atSign);
       }
 
+      atClientPreference ??=
+          TestPreferences.getInstance().getPreference(atSign);
       // Create the atClientManager for the atSign
       var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace,
-              TestPreferences.getInstance().getPreference(atSign),
+          .setCurrentAtSign(atSign, namespace, atClientPreference,
               atChops: atChops, enrollmentId: atAuthResponse?.enrollmentId);
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(atClientManager.atClient, atSign);
 
-      await E2ESyncService.getInstance().syncData(
-          atClientManager.atClient.syncService,
-          syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
+      if (enableInitialSync) {
+        await E2ESyncService.getInstance().syncData(
+            atClientManager.atClient.syncService,
+            syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
+      }
 
       // verify if the public key is in the local secondary
       var result = await atClientManager.atClient
