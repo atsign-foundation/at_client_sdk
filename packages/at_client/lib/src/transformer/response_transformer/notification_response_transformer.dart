@@ -56,11 +56,13 @@ class NotificationResponseTransformer
     }
 
     if (atNotification.messageType.isNotNull &&
-        atNotification.messageType!.toLowerCase().contains('text') &&
-        (atNotification.isEncrypted != null && atNotification.isEncrypted!)) {
-      // decrypt the text message;
-      var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
-      atNotification.key = '${atNotification.to}:$decryptedValue';
+        atNotification.messageType!.toLowerCase().contains('text')) {
+      // decrypt the text message if isEncrypted is true
+      if (atNotification.isEncrypted != null && atNotification.isEncrypted == true) {
+        var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
+        atNotification.key = '${atNotification.to}:$decryptedValue';
+      }
+      // do not decrypt if isEncrypted is null or set to false
       return atNotification;
     } else if ((atNotification.value.isNotNull) &&
         (config.shouldDecrypt && atNotification.id != '-1') &&
