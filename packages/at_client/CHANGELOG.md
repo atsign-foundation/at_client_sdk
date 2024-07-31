@@ -1,5 +1,3 @@
-## 3.0.78
-- fix: rename enrollment details key to local key
 ## 3.0.77
 - fix: Fix the keys expiry job not being triggered
 - chore: deprecate NotificationParams.forText()
