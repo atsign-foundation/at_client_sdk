@@ -1,3 +1,5 @@
+## 3.0.77+1
+- fix: remove incorrect version 3.0.78 from changelog
 ## 3.0.77
 - fix: Fix the keys expiry job not being triggered
 - chore: deprecate NotificationParams.forText()
