@@ -1,3 +1,5 @@
+## 3.0.78
+- chore: publish clean version 3.0.78
 ## 3.0.77+1
 - fix: remove incorrect version 3.0.78 from changelog
 ## 3.0.77
