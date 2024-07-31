@@ -1,6 +1,6 @@
 ## 3.2.19
 - build[deps]: Upgraded dependencies for the following packages:
-    - at_client: 3.0.77+1
+    - at_client: 3.0.78
 ## 3.2.18
 - fix:  fix: rename enrollment details key to local key
 ## 3.2.17
