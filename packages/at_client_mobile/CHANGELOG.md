@@ -1,11 +1,10 @@
-## 3.2.19
+## 3.2.18
+- fix:  fix: rename enrollment details key to local key
 - build[deps]: Upgraded dependencies for the following packages:
     - at_client: 3.0.78
     - at_lookup: 3.0.47
     - at_auth: 2.0.5
     - at_commons: 4.0.11
-## 3.2.18
-- fix:  fix: rename enrollment details key to local key
 ## 3.2.17
 - fix: Export "BackupKeyConstants" and "getEncryptedKeys"
 ## 3.2.16
