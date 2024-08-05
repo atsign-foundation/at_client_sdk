@@ -77,8 +77,8 @@ class NotificationResponseTransformer
     return atNotification;
   }
 
-  // Decrypt the notification key only if isEncrypted false is set to true or
-  // not set(for backward compatibility where default behavior is encrypt the notification key)
+  // Decrypt the notification key only if isEncrypted flag is set to true or
+  // null (for backward compatibility - default behavior is decrypt the notification key)
   bool _shouldDecryptKey(bool? isEncrypted) {
     return isEncrypted == null || isEncrypted == true;
   }
