@@ -57,14 +57,13 @@ class NotificationResponseTransformer
 
     if (atNotification.messageType.isNotNull &&
         atNotification.messageType!.toLowerCase().contains('text')) {
-      // decrypt the text message if isEncrypted is true
-      if (atNotification.isEncrypted != null && atNotification.isEncrypted == true) {
+      if (_shouldDecryptKey(atNotification.isEncrypted)) {
         var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
         atNotification.key = '${atNotification.to}:$decryptedValue';
       }
-      // do not decrypt if isEncrypted is null or set to false
       return atNotification;
-    } else if ((atNotification.value.isNotNull) &&
+    }
+    if ((atNotification.value.isNotNull) &&
         (config.shouldDecrypt && atNotification.id != '-1') &&
         // The shared_key (which is a reserved key) has different decryption process
         // and is not a user created key.
@@ -76,6 +75,12 @@ class NotificationResponseTransformer
       return atNotification;
     }
     return atNotification;
+  }
+
+  // Decrypt the notification key only if isEncrypted false is set to true or
+  // not set(for backward compatibility where default behavior is encrypt the notification key)
+  bool _shouldDecryptKey(bool? isEncrypted) {
+    return isEncrypted == null || isEncrypted == true;
   }
 
   Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
