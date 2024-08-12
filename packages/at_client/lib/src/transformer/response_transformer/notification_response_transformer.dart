@@ -56,22 +56,24 @@ class NotificationResponseTransformer
     }
 
     if (atNotification.messageType.isNotNull &&
-        atNotification.messageType!.toLowerCase().contains('text')) {
-      if (_shouldDecryptKey(atNotification.isEncrypted)) {
-        var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
-        atNotification.key = '${atNotification.to}:$decryptedValue';
-      }
+        atNotification.messageType!.toLowerCase().contains('text') &&
+        (atNotification.isEncrypted != null && atNotification.isEncrypted!)) {
+      // decrypt the text message;
+      var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
+      atNotification.key = '${atNotification.to}:$decryptedValue';
       return atNotification;
     }
-    if ((atNotification.value.isNotNull) &&
-        (config.shouldDecrypt && atNotification.id != '-1') &&
+    if (atNotification.value.isNotNull &&
+        atNotification.id != '-1' &&
         // The shared_key (which is a reserved key) has different decryption process
         // and is not a user created key.
         // Hence do not decrypt if key's are reserved keys
         AtKey.getKeyType(atKey.toString()) != KeyType.reservedKey) {
-      // decrypt the value
-      atNotification.value =
-          await _getDecryptedValue(atKey, atNotification.value!);
+      // decrypt the notification value only if isEncrypted is not set to false
+      if (atNotification.isEncrypted != false) {
+        atNotification.value =
+            await _getDecryptedValue(atKey, atNotification.value!);
+      }
       return atNotification;
     }
     return atNotification;
