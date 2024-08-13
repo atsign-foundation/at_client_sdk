@@ -353,6 +353,32 @@ void main() {
       expect(transformedNotification.value, 'encryptedValue');
     });
 
+    test(
+        'A test to verify notification value is not decrypted when isEncrypted is set to true and should decrypt is false',
+        () async {
+      var isEncrypted = true;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          'key-1',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          isEncrypted,
+          value: 'encryptedValue');
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = false));
+      expect(transformedNotification.value, 'encryptedValue');
+    });
+
     test('A test to verify notification is returned as is', () async {
       var isEncrypted = false;
       var atNotification = at_notification.AtNotification(

@@ -22,6 +22,7 @@ class NotificationResponseTransformer
       Tuple<AtNotification, NotificationConfig> tuple) async {
     // prepare the atKey from the atNotification object.
     AtNotification atNotification = tuple.one;
+    NotificationConfig notificationConfig = tuple.two;
     String sharedBy = atNotification.from;
     String sharedWith = atNotification.to;
     var key = atNotification.key;
@@ -68,8 +69,9 @@ class NotificationResponseTransformer
         // and is not a user created key.
         // Hence do not decrypt if key's are reserved keys
         AtKey.getKeyType(atKey.toString()) != KeyType.reservedKey) {
-      // decrypt the notification value only if isEncrypted is not set to false
-      if (atNotification.isEncrypted != false) {
+      // decrypt the notification value only if isEncrypted is not set to false and shouldDecrypt is set to true
+      if (atNotification.isEncrypted != false &&
+          notificationConfig.shouldDecrypt) {
         atNotification.value =
             await _getDecryptedValue(atKey, atNotification.value!);
       }
