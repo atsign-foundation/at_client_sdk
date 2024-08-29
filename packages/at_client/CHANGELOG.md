@@ -3,6 +3,8 @@
   to fetch directly from the atServer rather than the client-side synced 
   cache. This flag was added to `PutRequestOptions` and 
   `DeleteRequestOptions` in version 3.0.60
+- fix: Ensure that `NotificationResponseTransformer` does not attempt to 
+  decrypt when `atNotification.isEncrypted == false`
 ## 3.0.78
 - chore: publish clean version 3.0.78
 ## 3.0.77+1
