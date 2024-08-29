@@ -394,6 +394,7 @@ class NotificationServiceImpl
   @visibleForTesting
   void notificationValueValidation(
       NotificationParams notificationParams, NotifyVerbBuilder builder) {
+    // ignore: deprecated_member_use_from_same_package
     switch (notificationParams.messageType) {
       case MessageTypeEnum.key:
         // Since value is not mandatory in AtNotification, perform validation only if
@@ -405,6 +406,7 @@ class NotificationServiceImpl
         }
         break;
 
+      // ignore: deprecated_member_use
       case MessageTypeEnum.text:
         // When messageType is text, the "text" to notify is added to the key. Hence validating
         // the key length

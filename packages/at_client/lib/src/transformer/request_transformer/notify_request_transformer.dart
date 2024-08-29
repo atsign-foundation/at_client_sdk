@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use_from_same_package
+
 import 'dart:async';
 
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -56,6 +58,7 @@ class NotificationRequestTransformer
       builder.atKey.key = AtClientUtil.getKeyWithNameSpace(
           notificationParams.atKey, atClientPreference);
     }
+    // ignore: deprecated_member_use
     if (notificationParams.messageType == MessageTypeEnum.text) {
       if (notificationParams.atKey.metadata.isEncrypted) {
         builder.atKey.key = await _encryptNotificationValue(

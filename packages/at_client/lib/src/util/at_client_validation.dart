@@ -133,6 +133,7 @@ class AtClientValidation {
     // And the text may of course contain spaces.
     // However, for validation purposes, 'key' should not have spaces.
     // Hence we only validate the 'key' if notification type is not 'text'.
+    // ignore: deprecated_member_use_from_same_package, deprecated_member_use
     if (notificationParams.messageType != MessageTypeEnum.text) {
       AtClientValidation.validateKey(notificationParams.atKey.key);
       ValidationResult validationResult = AtKeyValidators.get().validate(
