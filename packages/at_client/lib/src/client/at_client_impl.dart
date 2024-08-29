@@ -346,7 +346,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      secondary = SecondaryManager.getSecondary(this, verbBuilder);
+      if (getRequestOptions?.useRemoteAtServer == true) {
+        secondary = getRemoteSecondary()!;
+      } else {
+        secondary = SecondaryManager.getSecondary(this, verbBuilder);
+      }
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
       if (getResponse == null ||

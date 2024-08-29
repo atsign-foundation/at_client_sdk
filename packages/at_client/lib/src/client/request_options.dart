@@ -8,6 +8,9 @@ class GetRequestOptions extends RequestOptions {
   /// Whether the `get` request should bypass this atSign's cache of data owned
   /// by another atSign
   bool bypassCache = false;
+
+  /// Whether to send this get request directly to the remote atServer
+  bool useRemoteAtServer = false;
 }
 
 /// Parameters that application code can optionally provide when calling
@@ -24,6 +27,6 @@ class PutRequestOptions extends RequestOptions {
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.delete`
 class DeleteRequestOptions extends RequestOptions {
-  /// Whether to send this update request directly to the remote atServer
+  /// Whether to send this delete request directly to the remote atServer
   bool useRemoteAtServer = false;
 }
