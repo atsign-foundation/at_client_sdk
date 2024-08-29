@@ -446,7 +446,8 @@ void main() {
           var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
           if (builder.atKey.toString() == atKey.toString()) {
             print(
-                'mockRemoteSecondary.executeVerb with UpdateVerbBuilder for ${builder.atKey.toString()} as expected');
+                'mockRemoteSecondary.executeVerb with UpdateVerbBuilder'
+                    ' for ${builder.atKey.toString()} as expected');
             executedRemotely = true;
             return 'data:10';
           } else if (builder.atKey.toString() != '@bob:shared_key@alice') {
@@ -490,7 +491,8 @@ void main() {
           print('DeleteVerbBuilder: ${builder.buildCommand()}');
           if (builder.buildKey() == atKey.toString()) {
             print(
-                'mockRemoteSecondary.executeVerb with DeleteVerbBuilder for ${builder.atKey.toString()} as expected');
+                'mockRemoteSecondary.executeVerb with DeleteVerbBuilder'
+                    ' for ${builder.atKey.toString()} as expected');
             executedRemotely = true;
             return 'data:10';
           } else {
@@ -512,6 +514,79 @@ void main() {
         await checkDeleteBehaviour(false);
       });
     });
+
+    group('Tests for GetRequestOptions.useRemoteAtServer', () {
+      test('GetRequestOptions.useRemoteAtServer defaults to false', () {
+        GetRequestOptions gro = GetRequestOptions();
+        expect(gro.useRemoteAtServer, false);
+      });
+
+      test('get self key when useRemoteAtServer set to false', () async {
+        bool executedRemotely = false;
+        // Make a self key - by default, this will be looked up locally using
+        // an LLookup
+        var atKey = AtKey.fromString(
+            'test_get_self_key_when_remote_is_false'
+                '.${atClient.getPreferences()!.namespace!}'
+                '${atClient.getCurrentAtSign()!}');
+        when(() => mockRemoteSecondary.executeVerb(
+            any(that: isA<LLookupVerbBuilder>()))).thenAnswer((invocation) async {
+          var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+          if (builder.atKey.toString() == atKey.toString()) {
+            print(
+                'mockRemoteSecondary.executeVerb with LLookupVerbBuilder'
+                    ' for ${builder.atKey.toString()} as expected');
+            executedRemotely = true;
+            return 'data:null';
+          } else {
+            return 'data:null';
+          }
+        });
+        dynamic caught;
+        try {
+          await atClient.get(atKey,
+              getRequestOptions: GetRequestOptions()
+                ..useRemoteAtServer = false);
+        } catch (e) {
+          caught = e;
+        }
+        expect (caught, isA<AtKeyNotFoundException>());
+        expect(executedRemotely, false);
+      });
+
+      test('get self key when useRemoteAtServer set to true', () async {
+        bool executedRemotely = false;
+        // Make a self key - by default, this will be looked up locally
+        var atKey = AtKey.fromString(
+            'test_get_self_key_when_remote_is_true'
+                '.${atClient.getPreferences()!.namespace!}'
+                '${atClient.getCurrentAtSign()!}');
+        when(() => mockRemoteSecondary.executeVerb(
+            any(that: isA<LLookupVerbBuilder>()))).thenAnswer((invocation) async {
+          var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+          if (builder.atKey.toString() == atKey.toString()) {
+            print(
+                'mockRemoteSecondary.executeVerb with LLookupVerbBuilder'
+                    ' for ${builder.atKey.toString()} as expected');
+            executedRemotely = true;
+            return 'data:null';
+          } else {
+            return 'data:null';
+          }
+        });
+        dynamic caught;
+        try {
+          await atClient.get(atKey,
+              getRequestOptions: GetRequestOptions()
+                ..useRemoteAtServer = true);
+        } catch (e) {
+          caught = e;
+        }
+        expect (caught, isNull);
+        expect(executedRemotely, true);
+      });
+    });
+
     group(
         'Verify that my new shared symmetric keys are sent first to remote atServer',
         () {
