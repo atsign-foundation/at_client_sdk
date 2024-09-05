@@ -39,6 +39,7 @@ class AtRpcClient implements AtRpcCallbacks {
       domainNameSpace: domainNameSpace,
       callbacks: this,
       allowList: {},
+      allowAll: false,
     );
     rpc.start();
   }
@@ -156,18 +157,27 @@ class AtRpc {
   /// attempt and 3 retries
   int maxSendAttempts = 4;
 
-  AtRpc(
-      {required this.atClient,
-      required this.baseNameSpace,
-      this.rpcsNameSpace = '__rpcs',
-      required this.domainNameSpace,
-      required this.callbacks,
-      required this.allowList});
+  /// Allow requests which are not on the allow list.
+  /// **NOTE**: It is the application's request handling code's
+  /// responsibility to handle this appropriately, for example by checking
+  /// the `fromAtSign` against the `allowList` and acting accordingly.
+  ///
+  final bool allowAll;
+
+  AtRpc({
+    required this.atClient,
+    required this.baseNameSpace,
+    this.rpcsNameSpace = '__rpcs',
+    required this.domainNameSpace,
+    required this.callbacks,
+    required this.allowList,
+    this.allowAll = false,
+  });
 
   /// Starts listening for notifications of the requests and responses
   /// in the `$domainNameSpace.$rpcsNameSpace.$baseNameSpace` namespace
   void start() {
-    logger.info('allowList is $allowList');
+    logger.info('allowList is $allowList; allowAll is $allowAll');
     var regex = 'request.\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
     logger.info('Subscribing to $regex');
 
@@ -261,9 +271,16 @@ class AtRpc {
   @visibleForTesting
   Future<void> handleRequestNotification(AtNotification notification) async {
     if (!allowList.contains(notification.from)) {
-      logger.info(
-          'Ignoring notification from non-allowed atSign ${notification.from} : $notification');
-      return;
+      if (allowAll) {
+        logger.warning('Will handle request from atSign ${notification.from}'
+            ' which is not on allowList (but allowAll is true)'
+            ' : $notification');
+      } else {
+        logger.shout('Ignoring request from atSign ${notification.from}'
+            ' which is not on the allowList (and allowAll is false)'
+            ' : $notification');
+        return;
+      }
     }
 
     // request key should be like:
@@ -338,9 +355,16 @@ class AtRpc {
   @visibleForTesting
   Future<void> handleResponseNotification(AtNotification notification) async {
     if (!allowList.contains(notification.from)) {
-      logger.info(
-          'Ignoring notification from non-allowed atSign ${notification.from} : $notification');
-      return;
+      if (allowAll) {
+        logger.warning('Will handle response from atSign ${notification.from}'
+            ' which is not on allowList (but allowAll is true)'
+            ' : $notification');
+      } else {
+        logger.shout('Ignoring response from atSign ${notification.from}'
+            ' which is not on the allowList (and allowAll is false)'
+            ' : $notification');
+        return;
+      }
     }
 
     // response key should be like:
