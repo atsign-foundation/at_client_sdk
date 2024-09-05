@@ -4,7 +4,7 @@ description: The at_client library is the non-platform specific Client SDK which
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 3.1.0
+version: 3.2.0
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -18,8 +18,8 @@ dependencies:
   path: ^1.8.2
   hive: ^2.2.3
   asn1lib: ^1.5.3
-  crypton: ">=2.1.0 <=2.2.1"
-  encrypt: ">=5.0.1 <=5.0.3"
+  crypton: ^2.2.1
+  encrypt: ^5.0.3
   cron: ^0.5.1
   convert: ^3.0.2
   uuid: ^3.0.7
@@ -47,4 +47,3 @@ dev_dependencies:
   at_demo_data: ^1.0.1
   coverage: ^1.5.0
   mocktail: ^1.0.3
-  dart_code_metrics: ^5.7.6
