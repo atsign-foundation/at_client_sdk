@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use_from_same_package
+
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
@@ -171,6 +173,7 @@ void main() {
       //upper case should be preserved in forText notifications
       expect(notifyVerbBuilder.atKey.key, 'Hi How are you');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      // ignore: deprecated_member_use
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -189,6 +192,7 @@ void main() {
           .transform(notificationParams);
       expect(notifyVerbBuilder.atKey.key, 'encryptedValue');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      // ignore: deprecated_member_use
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -235,6 +239,7 @@ void main() {
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
+          // ignore: deprecated_member_use
           MessageTypeEnum.text.toString(),
           isEncrypted);
       var notificationResponseTransformer =
@@ -260,6 +265,7 @@ void main() {
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
+          // ignore: deprecated_member_use
           MessageTypeEnum.text.toString(),
           isEncrypted);
       var notificationResponseTransformer =

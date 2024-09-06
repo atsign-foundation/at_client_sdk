@@ -1,3 +1,5 @@
+## 3.2.0
+- feat: add `allowAll` flag (defaults to false) to AtRpc
 ## 3.1.0
 - feat: add `useRemoteAtServer` flag to `GetRequestOptions` to allow clients 
   to fetch directly from the atServer rather than the client-side synced 
