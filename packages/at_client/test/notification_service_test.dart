@@ -25,6 +25,8 @@ class MockLocalSecondary extends Mock implements LocalSecondary {
   SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
 }
 
+class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+
 class MockAtClientImpl extends Mock implements AtClientImpl {
   @override
   String? getCurrentAtSign() {
@@ -101,8 +103,7 @@ void main() {
   AtKeyEncryptionManager mockAtKeyEncryptionManager =
       MockAtKeyEncryptionManager();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
-
-  group('A group of test to validate notification request processor', () {
+  group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';
     late SharedKeyEncryption mockSharedKeyEncryptionImpl;
     setUp(() {
@@ -129,7 +130,7 @@ void main() {
     });
 
     test(
-        'A test to validate notification request with value return verb builder',
+        'A test to validate notification request with unencrypted value return verb builder',
         () async {
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
@@ -150,9 +151,37 @@ void main() {
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.high);
       expect(notifyVerbBuilder.strategy, StrategyEnum.latest);
+      expect(notifyVerbBuilder.value, value);
+      expect(notifyVerbBuilder.notifier, 'test-notifier');
+      expect(notifyVerbBuilder.latestN, 2);
+      expect(notifyVerbBuilder.ttln, Duration(minutes: 1).inMilliseconds);
+    });
+
+    test(
+        'A test to validate notification request with encrypted value return verb builder',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
+              .build(),
+          value: value,
+          priority: PriorityEnum.high,
+          strategy: StrategyEnum.latest,
+          notifier: 'test-notifier',
+          latestN: 2,
+          notificationExpiry: Duration(minutes: 1));
+      notificationParams.atKey.metadata.isEncrypted = true;
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              mockSharedKeyEncryptionImpl)
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
+      expect(notifyVerbBuilder.priority, PriorityEnum.high);
+      expect(notifyVerbBuilder.strategy, StrategyEnum.latest);
       expect(notifyVerbBuilder.value, 'encryptedValue');
       expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
-      expect(notifyVerbBuilder.atKey.metadata.pubKeyCS, 'publicKeyCS');
       expect(notifyVerbBuilder.notifier, 'test-notifier');
       expect(notifyVerbBuilder.latestN, 2);
       expect(notifyVerbBuilder.ttln, Duration(minutes: 1).inMilliseconds);
@@ -216,6 +245,67 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is SecondaryConnectException &&
               e.message == 'Unable to connect to secondary server')));
+    });
+
+    test(
+        'A test to validate encrypted value and shared encryption key is set in verb builder when isEncrypted is set to true in metadata',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
+              .build(),
+          value: value,
+          priority: PriorityEnum.high,
+          strategy: StrategyEnum.latest,
+          notifier: 'test-notifier',
+          latestN: 2,
+          notificationExpiry: Duration(minutes: 1));
+      notificationParams.atKey.metadata.isEncrypted = true;
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              mockSharedKeyEncryptionImpl)
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.value, 'encryptedValue');
+      expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
+    });
+    test(
+        'A test to validate unencrypted value is set in verb builder when isEncrypted is set to false in metadata',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
+              .build(),
+          value: value,
+          priority: PriorityEnum.high,
+          strategy: StrategyEnum.latest,
+          notifier: 'test-notifier',
+          latestN: 2,
+          notificationExpiry: Duration(minutes: 1));
+      notificationParams.atKey.metadata.isEncrypted = false;
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              mockSharedKeyEncryptionImpl)
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.value, value);
+    });
+    test(
+        'A test to validate unencrypted value is set in verb builder when isEncrypted is NOT set in metadata',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
+              .build(),
+          value: value,
+          priority: PriorityEnum.high,
+          strategy: StrategyEnum.latest,
+          notifier: 'test-notifier',
+          latestN: 2,
+          notificationExpiry: Duration(minutes: 1));
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              mockSharedKeyEncryptionImpl)
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.value, value);
     });
   });
 

@@ -319,6 +319,7 @@ class NotificationServiceImpl
           true, // this was the behaviour before introducing this parameter
       bool checkForFinalDeliveryStatus =
           true, // this was the behaviour before introducing this parameter
+      bool encryptValue = true,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -331,6 +332,7 @@ class NotificationServiceImpl
     }
 
     try {
+      notificationParams.atKey.metadata.isEncrypted = encryptValue;
       // If sharedBy atSign is null, default to current atSign.
       if (notificationParams.atKey.sharedBy.isNull) {
         notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
