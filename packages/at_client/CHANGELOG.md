@@ -1,3 +1,5 @@
+## 3.2.1
+- feat: add optional param `encryptValue` to notify method
 ## 3.2.0
 - feat: add `allowAll` flag (defaults to false) to AtRpc
 ## 3.1.0
