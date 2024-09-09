@@ -83,6 +83,25 @@ void main() {
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
   });
 
+  test('verify unencrypted value is returned when encryptValue is set to false',
+      () async {
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = sharedWithAtSign
+      ..namespace = namespace;
+    var value = '+1 100 200 300';
+    var notificationResult = await atClientManager.atClient.notificationService
+        .notify(NotificationParams.forUpdate(phoneKey, value: value),
+            encryptValue: false);
+    var notificationId = notificationResult.notificationID;
+    var notification = await atClientManager.atClient.notificationService
+        .fetch(notificationId);
+    print('Notification ID: ${notification.id}');
+    print('Notification value: ${notification.value}');
+    print('Notification key: ${notification.key}');
+    expect(notification.value, value);
+  });
+
   test('notify deletion of a key to sharedWith atSign', () async {
     var phoneKey = AtKey()
       ..key = 'phone'
@@ -217,12 +236,10 @@ void main() {
     }
   });
 
-   group('A group of tests for notification fetch', () {
+  group('A group of tests for notification fetch', () {
     test('A test to verify non existent notification', () async {
       await AtClientManager.getInstance().setCurrentAtSign(
-          currentAtSign,
-          namespace,
-          TestUtils.getPreference(currentAtSign));
+          currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
       var notificationResult = await AtClientManager.getInstance()
           .atClient
           .notificationService
@@ -235,9 +252,7 @@ void main() {
       for (int i = 0; i < 10; i++) {
         print('Testing notification expiry - test run #$i');
         await AtClientManager.getInstance().setCurrentAtSign(
-            currentAtSign,
-            namespace,
-            TestUtils.getPreference(currentAtSign));
+            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
         var atKey = (AtKey.shared('test-notification-expiry',
                 namespace: 'wavi', sharedBy: currentAtSign)
               ..sharedWith(sharedWithAtSign))
