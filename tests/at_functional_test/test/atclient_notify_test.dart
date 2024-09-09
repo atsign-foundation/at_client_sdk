@@ -79,8 +79,13 @@ void main() {
       ..sharedWith = sharedWithAtSign
       ..namespace = namespace;
     var value = '+1 100 200 300';
-    await atClientManager.atClient.notificationService
+    var notificationResult = await atClientManager.atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
+    var notification = await atClientManager.atClient.notificationService
+        .fetch(notificationResult.notificationID);
+    print(notification.value);
+    // encrypted value should not be equal to actual value
+    expect(notification.value == value, false);
   });
 
   test('verify unencrypted value is returned when encryptValue is set to false',
@@ -96,9 +101,6 @@ void main() {
     var notificationId = notificationResult.notificationID;
     var notification = await atClientManager.atClient.notificationService
         .fetch(notificationId);
-    print('Notification ID: ${notification.id}');
-    print('Notification value: ${notification.value}');
-    print('Notification key: ${notification.key}');
     expect(notification.value, value);
   });
 
