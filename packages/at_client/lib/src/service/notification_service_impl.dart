@@ -319,7 +319,8 @@ class NotificationServiceImpl
           true, // this was the behaviour before introducing this parameter
       bool checkForFinalDeliveryStatus =
           true, // this was the behaviour before introducing this parameter
-      bool encryptValue = true, // this was the behaviour before introducing this parameter
+      bool encryptValue =
+          true, // this was the behaviour before introducing this parameter
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
