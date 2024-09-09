@@ -50,6 +50,7 @@ void main() {
   });
 
   test('Verify namespace is mandatory for private key', () {
+    // ignore: deprecated_member_use
     AtKey atKey = AtKey.private('key_no_namespace1').build()
       ..sharedBy = '@noname1';
     AtClientPreference preference = AtClientPreference()..namespace = null;
