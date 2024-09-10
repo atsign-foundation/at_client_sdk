@@ -66,5 +66,48 @@ void main() async {
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
     expect(notificationListJson[0]['value'], isNotEmpty);
+    expect(notificationListJson[0]['value'] != value,
+        true); //encrypted value should be different from actual value
+  });
+  test('Notify a key with value by setting encryptValue to false', () async {
+    var uuid = Uuid();
+    // Generate  uuid
+    var randomValue = uuid.v4();
+    var phoneKey = AtKey()
+      ..key = 'phone$randomValue'
+      ..sharedWith = sharedWithAtSign
+      ..metadata = (Metadata()..ttr = 60000)
+      ..namespace = namespace;
+
+    // Appending a random number as a last number to generate a new phone number
+    // for each run.
+    var value = '+1 100 200 30';
+    // Setting currentAtSign atClient instance to context.
+    currentAtClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(currentAtSign, namespace,
+            TestPreferences.getInstance().getPreference(currentAtSign));
+    final notificationResult = await currentAtClientManager
+        .atClient.notificationService
+        .notify(NotificationParams.forUpdate(phoneKey, value: value),
+            encryptValue: false);
+    expect(notificationResult, isNotNull);
+    expect(notificationResult.notificationStatusEnum,
+        NotificationStatusEnum.delivered);
+
+    // Setting sharedWithAtSign atClient instance to context.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign,
+        namespace,
+        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    var notificationListResult = await AtClientManager.getInstance()
+        .atClient
+        .notifyList(regex: 'phone$randomValue');
+    expect(notificationListResult, isNotEmpty);
+    notificationListResult = notificationListResult.replaceFirst('data:', '');
+    final notificationListJson = jsonDecode(notificationListResult);
+    print(notificationListJson);
+    expect(notificationListJson[0]['from'], currentAtSign);
+    expect(notificationListJson[0]['to'], sharedWithAtSign);
+    expect(notificationListJson[0]['value'], value);
   });
 }
