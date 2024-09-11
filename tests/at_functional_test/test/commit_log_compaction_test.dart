@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
@@ -7,12 +8,15 @@ import 'test_utils.dart';
 late AtClientManager atClientManager;
 late String sharedWithAtSign;
 AtCommitLog? atCommitLog;
-String currentAtSign = '@alice🛠';
+late String currentAtSign;
 var preference = TestUtils.getPreference(currentAtSign);
 String namespace = 'wavi';
 
 Future<void> setUpMethod() async {
+  currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
+  // Stopping the compaction job to prevent the compaction running in background.
+  await atClientManager.atClient.stopCompactionJob();
 }
 
 void main() {

@@ -1,7 +1,9 @@
+import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -79,9 +81,9 @@ class AtClientManager {
         'Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
     _atSign = atSign;
     var previousAtClient = _currentAtClient;
-    _currentAtClient = await serviceFactory
-        .atClient(_atSign, namespace, preference, this, atChops: atChops);
-    _currentAtClient?.enrollmentId = enrollmentId;
+    _currentAtClient = await serviceFactory.atClient(
+        _atSign, namespace, preference, this,
+        atChops: atChops, enrollmentId: enrollmentId);
     final switchAtSignEvent =
         SwitchAtSignEvent(previousAtClient, _currentAtClient!);
     _notifyListeners(switchAtSignEvent);
@@ -93,6 +95,10 @@ class AtClientManager {
     var syncService = await serviceFactory.syncService(
         _currentAtClient!, this, notificationService);
     _currentAtClient!.syncService = syncService;
+
+    EnrollmentService enrollmentService =
+        serviceFactory.enrollmentService(_currentAtClient!);
+    _currentAtClient!.enrollmentService = enrollmentService;
 
     _logger.info("setCurrentAtSign complete");
 
@@ -139,27 +145,37 @@ class AtClientManager {
   removeAllChangeListeners() {
     _changeListeners.clear();
   }
+
+  // NOT a part of API. For functional tests.
+  void reset() {
+    removeAllChangeListeners();
+    _currentAtClient = null;
+  }
 }
 
 abstract class AtServiceFactory {
   Future<AtClient> atClient(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops});
+      {AtChops? atChops, String? enrollmentId});
 
   Future<NotificationService> notificationService(
       AtClient atClient, AtClientManager atClientManager);
 
   Future<SyncService> syncService(AtClient atClient,
       AtClientManager atClientManager, NotificationService notificationService);
+
+  EnrollmentService enrollmentService(AtClient atClient);
 }
 
 class DefaultAtServiceFactory implements AtServiceFactory {
   @override
   Future<AtClient> atClient(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops}) async {
+      {AtChops? atChops, String? enrollmentId}) async {
     return await AtClientImpl.create(atSign, namespace, preference,
-        atClientManager: atClientManager, atChops: atChops);
+        atClientManager: atClientManager,
+        atChops: atChops,
+        enrollmentId: enrollmentId);
   }
 
   @override
@@ -177,5 +193,12 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     return await SyncServiceImpl.create(atClient,
         atClientManager: atClientManager,
         notificationService: notificationService);
+  }
+
+  @override
+  EnrollmentService enrollmentService(AtClient atClient) {
+    AtEnrollmentBase atEnrollmentBase =
+        atAuthBase.atEnrollment(atClient.getCurrentAtSign()!);
+    return EnrollmentServiceImpl(atClient, atEnrollmentBase);
   }
 }

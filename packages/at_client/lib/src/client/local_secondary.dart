@@ -29,6 +29,10 @@ class LocalSecondary implements Secondary {
   @experimental
   AtTelemetryService? telemetry;
 
+  // temporarily cache enrollmentDetails until we store in local secondary
+  @visibleForTesting
+  Enrollment? enrollment;
+
   /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
   /// set to true then data is synced from local to remote.
   /// if [sync] is set to false, no sync operation is done.
@@ -67,48 +71,21 @@ class LocalSecondary implements Secondary {
     try {
       dynamic updateResult;
       var updateKey = builder.buildKey();
+      if (!await isEnrollmentAuthorizedForOperation(updateKey, builder)) {
+        throw UnAuthorizedException(
+            'Cannot perform update on $updateKey due to insufficient privilege');
+      }
       switch (builder.operation) {
         case AtConstants.updateMeta:
-          var metadata = Metadata();
-          metadata
-            ..ttl = builder.ttl
-            ..ttb = builder.ttb
-            ..ttr = builder.ttr
-            ..ccd = builder.ccd
-            ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted
-            ..sharedKeyEnc = builder.sharedKeyEncrypted
-            ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding
-            ..encKeyName = builder.encKeyName
-            ..encAlgo = builder.encAlgo
-            ..ivNonce = builder.ivNonce
-            ..skeEncKeyName = builder.skeEncKeyName
-            ..skeEncAlgo = builder.skeEncAlgo;
-          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
+          var atMetadata =
+              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          var metadata = Metadata();
-          metadata
-            ..ttl = builder.ttl
-            ..ttb = builder.ttb
-            ..ttr = builder.ttr
-            ..ccd = builder.ccd
-            ..isBinary = builder.isBinary
-            ..isEncrypted = builder.isEncrypted
-            ..dataSignature = builder.dataSignature
-            ..sharedKeyEnc = builder.sharedKeyEncrypted
-            ..pubKeyCS = builder.pubKeyChecksum
-            ..encoding = builder.encoding
-            ..encKeyName = builder.encKeyName
-            ..encAlgo = builder.encAlgo
-            ..ivNonce = builder.ivNonce
-            ..skeEncKeyName = builder.skeEncKeyName
-            ..skeEncAlgo = builder.skeEncAlgo;
-          var atMetadata = AtMetaData.fromCommonsMetadata(metadata);
+          var atMetadata =
+              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
@@ -123,6 +100,10 @@ class LocalSecondary implements Secondary {
     var llookupKey = '';
     try {
       llookupKey = builder.buildKey();
+      if (!await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
+        throw UnAuthorizedException(
+            'Cannot perform llookup on $llookupKey due to insufficient privilege');
+      }
       var llookupMeta = await keyStore!.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
       String? result;
@@ -142,8 +123,13 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _delete(DeleteVerbBuilder builder) async {
+    var deleteKey = builder.buildKey();
+    if (!await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
+      throw UnAuthorizedException(
+          'Cannot perform delete on $deleteKey due to insufficient privilege');
+    }
     try {
-      var deleteResult = await keyStore!.remove(builder.buildKey());
+      var deleteResult = await keyStore!.remove(deleteKey);
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
@@ -169,6 +155,14 @@ class LocalSecondary implements Secondary {
             (element) => element!.startsWith(builder.sharedWith!) == true);
       }
       keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
+      final keysToRemove = <String>[];
+      await Future.forEach(keys, (key) async {
+        if (!(await isEnrollmentAuthorizedForOperation(
+            key.toString(), builder))) {
+          keysToRemove.add(key.toString());
+        }
+      });
+      keys.removeWhere((key) => keysToRemove.contains(key));
       var keyString = keys.toString();
       // Apply regex on keyString to remove unnecessary characters and spaces
       keyString = keyString.replaceFirst(RegExp(r'^\['), '');
@@ -270,5 +264,138 @@ class LocalSecondary implements Secondary {
     var atData = AtData()..data = value;
     isStored = await keyStore!.put(key, atData);
     return isStored != null ? true : false;
+  }
+
+  Future<bool> isEnrollmentAuthorizedForOperation(
+      String key, VerbBuilder verbBuilder) async {
+    // if there is no enrollment, return true
+    enrollment ??= await _getEnrollmentDetails();
+    if (_atClient.enrollmentId == null ||
+        enrollment == null ||
+        _shouldSkipKeyFromEnrollmentAuthorization(key)) {
+      _logger.finest('Skipping enrollment authorization check for key: $key');
+      return true;
+    }
+    final enrollNamespaces = enrollment!.namespace;
+    var keyNamespace = AtKey.fromString(key).namespace;
+    _logger.finest(
+        'Checking for enrollment authorization for key: $key with enrollmentId : ${_atClient.enrollmentId} for namespace: $keyNamespace');
+    // * denotes access to all namespaces.
+    final access = enrollNamespaces!.containsKey('*')
+        ? enrollNamespaces['*']
+        : enrollNamespaces[keyNamespace];
+
+    if (access == null) {
+      _logger.finer(
+          'Access permissions not found for the enrollment id: ${_atClient.enrollmentId}. Not authorized for the operation');
+      return false;
+    }
+    if (keyNamespace == null && enrollNamespaces.containsKey('*')) {
+      _logger.finer(
+          'Access permissions for the the enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace');
+      if (_isReadAllowed(verbBuilder, access) ||
+          _isWriteAllowed(verbBuilder, access)) {
+        _logger.finest(
+            'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is authorized to perform operation');
+        return true;
+      }
+      _logger.finest(
+          'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is not authorized to perform operation');
+      return false;
+    }
+    return _isReadAllowed(verbBuilder, access) ||
+        _isWriteAllowed(verbBuilder, access);
+  }
+
+  Future<Enrollment?> _getEnrollmentDetails() async {
+    if (_atClient.enrollmentId == null) {
+      return null;
+    }
+
+    // Fetch enrollment information from local secondary
+    AtData? enrollmentInfoFromLocalSecondary;
+    try {
+      enrollmentInfoFromLocalSecondary = await keyStore?.get(
+          'local:${_atClient.enrollmentId}${_atClient.getCurrentAtSign()}');
+    } on Exception {
+      _logger.finer(
+          'Enrollment information for id: ${_atClient.enrollmentId} not found in local secondary. Fetching from server');
+    }
+
+    // If enrollmentInfo is not found in local secondary, fetch the info from the remote secondary server and cache it in local
+    // secondary.
+    String? enrollmentInfoFromServer;
+    if (enrollmentInfoFromLocalSecondary == null) {
+      try {
+        enrollmentInfoFromServer = await _atClient
+            .getRemoteSecondary()
+            ?.executeCommand(
+                'enroll:fetch:{"enrollmentId":"${_atClient.enrollmentId}"}\n',
+                auth: true);
+      } on AtException catch (e) {
+        _logger.finer(
+            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
+      } on AtLookUpException catch (e) {
+        _logger.finer(
+            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
+      }
+      enrollmentInfoFromServer =
+          enrollmentInfoFromServer?.replaceAll('data:', '');
+      Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
+      _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
+      enrollment = Enrollment()
+        ..appName = enrollmentDetailsMap['appName']
+        ..deviceName = enrollmentDetailsMap['deviceName']
+        ..namespace = enrollmentDetailsMap['namespace']
+        ..encryptedAPKAMSymmetricKey =
+            enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
+
+      AtData atData = AtData()..data = jsonEncode(enrollment);
+      // The enrollment data is fetch from server, Set skipCommit to true to prevent
+      // the key sync back to server
+      await keyStore?.put(
+          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}',
+          atData,
+          skipCommit: true);
+    } else {
+      enrollment = Enrollment.fromJSON(
+          jsonDecode(enrollmentInfoFromLocalSecondary.data!));
+    }
+
+    if (enrollment == null) {
+      throw AtKeyNotFoundException(
+          'Enrollment key for enrollmentId: ${_atClient.enrollmentId} not found in server');
+    }
+    return enrollment!;
+  }
+
+  bool _isReadAllowed(VerbBuilder verbBuilder, String access) {
+    return (verbBuilder is LLookupVerbBuilder ||
+            verbBuilder is LookupVerbBuilder ||
+            verbBuilder is ScanVerbBuilder) &&
+        (access == 'r' || access == 'rw');
+  }
+
+  bool _isWriteAllowed(VerbBuilder verbBuilder, String access) {
+    return (verbBuilder is UpdateVerbBuilder ||
+            verbBuilder is DeleteVerbBuilder ||
+            verbBuilder is NotifyVerbBuilder ||
+            verbBuilder is NotifyAllVerbBuilder ||
+            verbBuilder is NotifyRemoveVerbBuilder) &&
+        access == 'rw';
+  }
+
+  /// The enrollment authorization check does not include the following KeyTypes.
+  /// Therefore, return true to skip the authorization check.
+  /// This applies to Reserved keys, Cached shared keys, Cached public keys, and local keys
+  bool _shouldSkipKeyFromEnrollmentAuthorization(String? atKey) {
+    if (atKey == null) {
+      return false;
+    }
+    KeyType keyType = AtKey.getKeyType(atKey);
+    return (keyType == KeyType.reservedKey ||
+        keyType == KeyType.cachedSharedKey ||
+        keyType == KeyType.cachedPublicKey ||
+        keyType == KeyType.localKey);
   }
 }

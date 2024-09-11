@@ -6,6 +6,7 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -14,17 +15,18 @@ void main() async {
   late AtClientManager sharedWithAtClientManager;
   late String currentAtSign;
   late String sharedWithAtSign;
-  final namespace = 'wavi';
+  final namespace = TestConstants.namespace;
   var uuid = Uuid();
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace);
+        .testInitializer(currentAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace);
+        .testInitializer(sharedWithAtSign, namespace, authType);
   });
 
   /// The purpose of this test verify the following:
@@ -150,7 +152,7 @@ void main() async {
     var result = await currentAtClientManager.atClient
         .getRemoteSecondary()!
         .executeCommand(
-            'update:ttl:300000:${locationKey.toString()} $encryptedValue\n',
+            'update:ttl:300000:sharedKeyEnc:${locationKey.metadata.sharedKeyEnc}:pubKeyCS:${locationKey.metadata.pubKeyCS}:${locationKey.toString()} $encryptedValue\n',
             auth: true);
     expect(result != null, true);
     await E2ESyncService.getInstance()

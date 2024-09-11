@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_export_use
+// ignore_for_file: deprecated_member_use_from_same_package
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
@@ -303,8 +305,8 @@ void main() {
           sync: true)).thenAnswer((invocation) async {
         var verbBuilder = invocation.positionalArguments[0];
         if (verbBuilder is UpdateVerbBuilder &&
-            verbBuilder.atKeyObj.toString() == 'public:publickey$atSign') {
-          ttrOfPublicKeyFromUpdateVerbBuilder = verbBuilder.metadata.ttr;
+            verbBuilder.atKey.toString() == 'public:publickey$atSign') {
+          ttrOfPublicKeyFromUpdateVerbBuilder = verbBuilder.atKey.metadata.ttr;
         }
         return 'data:1';
       });

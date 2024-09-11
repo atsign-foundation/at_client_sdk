@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -9,10 +10,11 @@ import 'test_utils.dart';
 void main() async {
   late AtClientManager atClientManager;
   late MySyncProgressListener mySyncProgressListener;
-  final atSign = '@alice🛠';
+  late String atSign;
   String namespace = 'wavi';
 
   setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
@@ -35,10 +37,12 @@ void main() async {
     // Update the key directly to remote secondary for having
     // the conflict key during sync
     final updateVerbBuilder = UpdateVerbBuilder()
-      ..sharedBy = atSign
-      ..atKey = 'phone_0.wavi'
-      ..value = 'sMBnYFctMOg+lqX67ah9UA==' //encrypted value of 4
-      ..isEncrypted = true;
+      ..atKey = (AtKey()
+        ..key = 'phone_0.wavi'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isEncrypted = true))
+      ..value = 'sMBnYFctMOg+lqX67ah9UA=='; //encrypted value of 4
+
     await atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(updateVerbBuilder);
@@ -78,10 +82,12 @@ void main() async {
     // conflicting key during sync
     final remoteSecondary = atClientManager.atClient.getRemoteSecondary()!;
     final updateVerbBuilder = UpdateVerbBuilder()
-      ..sharedBy = atSign
-      ..atKey = 'test.$namespace'
-      ..ttl = 2
-      ..isPublic = true
+      ..atKey = (AtKey()
+        ..key = 'test.$namespace'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()
+          ..ttl = 2
+          ..isPublic = true))
       ..value = 'randomvalue';
     await remoteSecondary.executeVerb(updateVerbBuilder);
     // Wait for 12 milliseconds to the key to expire

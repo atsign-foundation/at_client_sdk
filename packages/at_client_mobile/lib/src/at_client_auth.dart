@@ -5,11 +5,13 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 
+@Deprecated('Use AtClientMobile.authService')
 abstract class AtClientAuth {
   Future<bool> performInitialAuth(
       String atSign, AtClientPreference atClientPreference);
 }
 
+@Deprecated('Use AtClientMobile.authService')
 class AtClientAuthenticator implements AtClientAuth {
   KeyChainManager _keyChainManager = KeyChainManager.getInstance();
   late AtLookupImpl atLookUp;
@@ -28,7 +30,7 @@ class AtClientAuthenticator implements AtClientAuth {
   }
 
   Future<bool> cramAuth(String cramSecret) async {
-    return await atLookUp.authenticate_cram(cramSecret);
+    return await atLookUp.cramAuthenticate(cramSecret);
   }
 
   Future<bool> pkamAuth(String privateKey) async {
@@ -50,7 +52,7 @@ class AtClientAuthenticator implements AtClientAuth {
     if (atClientPreference.cramSecret != null) {
       logger.finer('private key is empty. Performing cram');
       var isCramSuccessful = await atLookupInitialAuth
-          .authenticate_cram(atClientPreference.cramSecret);
+          .cramAuthenticate(atClientPreference.cramSecret!);
       // If cram auth is not successful, return false.
       if (!isCramSuccessful) {
         return false;
@@ -68,7 +70,8 @@ class AtClientAuthenticator implements AtClientAuth {
         }
         // send public key to remote Secondary server
         logger.finer('updating pkam public key to server');
-        var updateCommand = 'update:$AT_PKAM_PUBLIC_KEY $publicKey\n';
+        var updateCommand =
+            'update:${AtConstants.atPkamPublicKey} $publicKey\n';
         // auth is false since already cram authenticated
         var pkamUpdateResult = await atLookupInitialAuth
             .executeCommand(updateCommand, auth: false);
@@ -103,7 +106,8 @@ class AtClientAuthenticator implements AtClientAuth {
           );
           await _keyChainManager.storeAtSign(atSign: atSignItem);
         }
-        var deleteBuilder = DeleteVerbBuilder()..atKey = AT_CRAM_SECRET;
+        var deleteBuilder = DeleteVerbBuilder()
+          ..atKey = (AtKey()..key = AtConstants.atCramSecret);
         var deleteResponse =
             await atLookupInitialAuth.executeVerb(deleteBuilder);
         logger.finer('cram secret delete response : $deleteResponse');

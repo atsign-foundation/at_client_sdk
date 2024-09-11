@@ -11,6 +11,7 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -18,16 +19,17 @@ void main() async {
   late AtClientManager atClientManager;
   late String currentAtSign;
   late String sharedWithAtSign;
-  final namespace = 'wavi';
+  final namespace = TestConstants.namespace;
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace);
+        .testInitializer(currentAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace);
+        .testInitializer(sharedWithAtSign, namespace, authType);
   });
 
   group('KeyStreamMixin group', () {
@@ -80,9 +82,10 @@ void main() async {
     });
 
     test('getKeys', () async {
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(currentAtSign, namespace,
-              TestPreferences.getInstance().getPreference(currentAtSign));
+      atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(currentAtSign));
       await Future.wait([
         atClientManager.atClient.put(key, randomValue),
         atClientManager.atClient.put(key2, randomValue2)
@@ -225,7 +228,7 @@ void main() async {
           TestPreferences.getInstance().getPreference(sharedWithAtSign));
       keyStream = MapKeyStream<String, String>(
         regex: '$namespace@',
-        convert: (key, value) => MapEntry(key.key!, value.value),
+        convert: (key, value) => MapEntry(key.key, value.value),
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
         shouldGetKeys: false,
@@ -283,14 +286,16 @@ void main() async {
       currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
       sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
       // Create atClient instance for currentAtSign
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(currentAtSign, namespace,
-              TestPreferences.getInstance().getPreference(currentAtSign));
+      await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(currentAtSign));
 
       // Create atClient instance for atSign2
-      await AtClientManager.getInstance()
-          .setCurrentAtSign(sharedWithAtSign, namespace,
-              TestPreferences.getInstance().getPreference(sharedWithAtSign));
+      await AtClientManager.getInstance().setCurrentAtSign(
+          sharedWithAtSign,
+          namespace,
+          TestPreferences.getInstance().getPreference(sharedWithAtSign));
       // Set Encryption Keys for sharedWithAtSign
       keyStream = KeyStreamImpl(
         regex: '$namespace@',

@@ -18,6 +18,6 @@ class StreamEncryption extends AbstractAtKeyEncryption {
         storeSharedKeyEncryptedWithData: storeSharedKeyEncryptedWithData);
     // Encrypt value using sharedKey
     return EncryptionUtil.encryptBytes(value, sharedKey,
-        ivBase64: atKey.metadata?.ivNonce);
+        ivBase64: atKey.metadata.ivNonce);
   }
 }

@@ -1,6 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_commons/at_commons.dart';
+import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
@@ -8,11 +8,13 @@ import 'test_utils.dart';
 void main() {
   late AtClientManager atClientManager;
   late AtClient atClient;
-  var sharedWithAtSign = '@bob🛠';
-  var currentAtSign = '@alice🛠';
-  var namespace = 'wavi';
+  late String currentAtSign;
+  late String sharedWithAtSign;
+  final namespace = 'wavi';
 
   setUpAll(() async {
+    currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
     atClient = atClientManager.atClient;
   });
@@ -40,7 +42,7 @@ void main() {
         AtKeyEncryptionManager(atClient).get(phoneKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(phoneKey, value);
     var result = await atClient.getRemoteSecondary()!.executeCommand(
-        'update:sharedKeyEnc:${phoneKey.metadata?.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata?.pubKeyCS}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
+        'update:sharedKeyEnc:${phoneKey.metadata.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata.pubKeyCS}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
         auth: true);
     expect(result != null, true);
     await FunctionalTestSyncService.getInstance()

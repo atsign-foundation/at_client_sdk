@@ -62,8 +62,9 @@ void main() {
     var myEncryptedBobSharedKey = EncryptionUtil.encryptKey(
         bobSharedKey, alicesRSAKeyPair.publicKey.toString());
     var llookupMySharedKeyForBob = LLookupVerbBuilder()
-      ..atKey = '${AtConstants.atEncryptionSharedKey}.bob'
-      ..sharedBy = '@alice';
+      ..atKey = (AtKey()
+        ..key = '${AtConstants.atEncryptionSharedKey}.bob'
+        ..sharedBy = '@alice');
 
     var victorSymKey = EncryptionUtil.generateAESKey();
     var myEncryptedVicSymKey = EncryptionUtil.encryptKey(
@@ -92,8 +93,9 @@ void main() {
           mockSecondaryAddressFinder;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
-      AtChops atChops =
-          AtChopsImpl(AtChopsKeys.create(atEncryptionKeyPair, null));
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
+      atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
+      AtChops atChops = AtChopsImpl(atChopsKeys);
       atClient = await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
           remoteSecondary: mockRemoteSecondary, atChops: atChops);
       localStore = atClient.getLocalSecondary()!.keyStore!;
@@ -137,7 +139,8 @@ void main() {
           throw SecondaryConnectException(
               'Mock remote atServer is unavailable');
         }
-        var val = remotePLookupMap['${builder.atKey}${builder.sharedBy}'];
+        var val =
+            remotePLookupMap['${builder.atKey.key}${builder.atKey.sharedBy}'];
         if (val != null) {
           return val;
         } else {
@@ -159,7 +162,7 @@ void main() {
           throw SecondaryConnectException(
               'Mock remote atServer is unavailable');
         }
-        var val = remoteLLookupMap[builder.atKeyObj.toString()];
+        var val = remoteLLookupMap[builder.atKey.toString()];
         if (val != null) {
           return val;
         } else {
@@ -182,7 +185,7 @@ void main() {
           throw SecondaryConnectException(
               'Mock remote atServer is unavailable');
         }
-        remoteUpdatedMap[builder.atKeyObj.toString()] = builder.value;
+        remoteUpdatedMap[builder.atKey.toString()] = builder.value;
         return 'data:${remoteCommitId++}';
       });
 
@@ -199,7 +202,7 @@ void main() {
           throw SecondaryConnectException(
               'Mock remote atServer is unavailable');
         }
-        remoteDeletedSet.add(builder.atKeyObj.toString());
+        remoteDeletedSet.add(builder.atKey.toString());
         return 'data:${remoteCommitId++}';
       });
     });
@@ -210,7 +213,7 @@ void main() {
 
         var atKey = AtKey.self('test_put').build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNull);
+        expect(atKey.metadata.ivNonce, isNull);
 
         var atData = await (atClient
             .getLocalSecondary()!
@@ -229,7 +232,7 @@ void main() {
 
         var atKey = AtKey.self('test_put').build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNull);
+        expect(atKey.metadata.ivNonce, isNull);
 
         var atData = await (atClient
             .getLocalSecondary()!
@@ -249,7 +252,7 @@ void main() {
 
         var atKey = AtKey.self('test_put').build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNotNull);
+        expect(atKey.metadata.ivNonce, isNotNull);
 
         var atData = await (atClient
             .getLocalSecondary()!
@@ -265,7 +268,7 @@ void main() {
             false);
         expect(
             EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
-                ivBase64: atKey.metadata?.ivNonce),
+                ivBase64: atKey.metadata.ivNonce),
             clearText);
 
         var getResult = await atClient.get(atKey);
@@ -277,7 +280,7 @@ void main() {
 
         var atKey = AtKey.self('test_put').build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNotNull);
+        expect(atKey.metadata.ivNonce, isNotNull);
 
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
 
@@ -295,7 +298,7 @@ void main() {
             false);
         expect(
             EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
-                ivBase64: atKey.metadata?.ivNonce),
+                ivBase64: atKey.metadata.ivNonce),
             clearText);
 
         var getResult = await atClient.get(atKey);
@@ -309,7 +312,7 @@ void main() {
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNull);
+        expect(atKey.metadata.ivNonce, isNull);
 
         var atData = await (atClient
             .getLocalSecondary()!
@@ -328,7 +331,7 @@ void main() {
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNull);
+        expect(atKey.metadata.ivNonce, isNull);
 
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
         var atData = await (atClient
@@ -348,7 +351,7 @@ void main() {
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNotNull);
+        expect(atKey.metadata.ivNonce, isNotNull);
 
         var atData = await (atClient
             .getLocalSecondary()!
@@ -366,7 +369,7 @@ void main() {
             wrappedDecryptSucceeds(
                 cipherText: cipherText,
                 aesKey: selfEncryptionKey,
-                ivBase64: atKey.metadata?.ivNonce,
+                ivBase64: atKey.metadata.ivNonce,
                 clearText: clearText),
             false);
         expect(
@@ -378,7 +381,7 @@ void main() {
             false);
         expect(
             EncryptionUtil.decryptValue(cipherText, bobSharedKey,
-                ivBase64: atKey.metadata?.ivNonce),
+                ivBase64: atKey.metadata.ivNonce),
             clearText);
 
         var getResult = await atClient.get(atKey);
@@ -390,7 +393,7 @@ void main() {
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
-        expect(atKey.metadata?.ivNonce, isNotNull);
+        expect(atKey.metadata.ivNonce, isNotNull);
 
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
         var atData = await (atClient
@@ -409,7 +412,7 @@ void main() {
             wrappedDecryptSucceeds(
                 cipherText: cipherText,
                 aesKey: selfEncryptionKey,
-                ivBase64: atKey.metadata?.ivNonce,
+                ivBase64: atKey.metadata.ivNonce,
                 clearText: clearText),
             false);
         expect(
@@ -421,7 +424,7 @@ void main() {
             false);
         expect(
             EncryptionUtil.decryptValue(cipherText, bobSharedKey,
-                ivBase64: atKey.metadata?.ivNonce),
+                ivBase64: atKey.metadata.ivNonce),
             clearText);
 
         var getResult = await atClient.get(atKey);
@@ -441,12 +444,12 @@ void main() {
             any(that: isA<UpdateVerbBuilder>()),
             sync: true)).thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
-          if (builder.atKeyObj.toString() == atKey.toString()) {
-            print(
-                'mockRemoteSecondary.executeVerb with UpdateVerbBuilder for ${builder.atKeyObj.toString()} as expected');
+          if (builder.atKey.toString() == atKey.toString()) {
+            print('mockRemoteSecondary.executeVerb with UpdateVerbBuilder'
+                ' for ${builder.atKey.toString()} as expected');
             executedRemotely = true;
             return 'data:10';
-          } else if (builder.atKeyObj.toString() != '@bob:shared_key@alice') {
+          } else if (builder.atKey.toString() != '@bob:shared_key@alice') {
             print(builder.buildCommand());
             throw Exception(
                 'mockRemoteSecondary.executeVerb called with unexpected UpdateVerbBuilder');
@@ -486,8 +489,8 @@ void main() {
           var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
           print('DeleteVerbBuilder: ${builder.buildCommand()}');
           if (builder.buildKey() == atKey.toString()) {
-            print(
-                'mockRemoteSecondary.executeVerb with DeleteVerbBuilder for ${builder.atKeyObj.toString()} as expected');
+            print('mockRemoteSecondary.executeVerb with DeleteVerbBuilder'
+                ' for ${builder.atKey.toString()} as expected');
             executedRemotely = true;
             return 'data:10';
           } else {
@@ -509,6 +512,76 @@ void main() {
         await checkDeleteBehaviour(false);
       });
     });
+
+    group('Tests for GetRequestOptions.useRemoteAtServer', () {
+      test('GetRequestOptions.useRemoteAtServer defaults to false', () {
+        GetRequestOptions gro = GetRequestOptions();
+        expect(gro.useRemoteAtServer, false);
+      });
+
+      test('get self key when useRemoteAtServer set to false', () async {
+        bool executedRemotely = false;
+        // Make a self key - by default, this will be looked up locally using
+        // an LLookup
+        var atKey = AtKey.fromString('test_get_self_key_when_remote_is_false'
+            '.${atClient.getPreferences()!.namespace!}'
+            '${atClient.getCurrentAtSign()!}');
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: isA<LLookupVerbBuilder>())))
+            .thenAnswer((invocation) async {
+          var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+          if (builder.atKey.toString() == atKey.toString()) {
+            print('mockRemoteSecondary.executeVerb with LLookupVerbBuilder'
+                ' for ${builder.atKey.toString()} as expected');
+            executedRemotely = true;
+            return 'data:null';
+          } else {
+            return 'data:null';
+          }
+        });
+        dynamic caught;
+        try {
+          await atClient.get(atKey,
+              getRequestOptions: GetRequestOptions()
+                ..useRemoteAtServer = false);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught, isA<AtKeyNotFoundException>());
+        expect(executedRemotely, false);
+      });
+
+      test('get self key when useRemoteAtServer set to true', () async {
+        bool executedRemotely = false;
+        // Make a self key - by default, this will be looked up locally
+        var atKey = AtKey.fromString('test_get_self_key_when_remote_is_true'
+            '.${atClient.getPreferences()!.namespace!}'
+            '${atClient.getCurrentAtSign()!}');
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: isA<LLookupVerbBuilder>())))
+            .thenAnswer((invocation) async {
+          var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+          if (builder.atKey.toString() == atKey.toString()) {
+            print('mockRemoteSecondary.executeVerb with LLookupVerbBuilder'
+                ' for ${builder.atKey.toString()} as expected');
+            executedRemotely = true;
+            return 'data:null';
+          } else {
+            return 'data:null';
+          }
+        });
+        dynamic caught;
+        try {
+          await atClient.get(atKey,
+              getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught, isNull);
+        expect(executedRemotely, true);
+      });
+    });
+
     group(
         'Verify that my new shared symmetric keys are sent first to remote atServer',
         () {

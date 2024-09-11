@@ -1,3 +1,40 @@
+## 3.2.18
+- fix:  fix: rename enrollment details key to local key
+- build[deps]: Upgraded dependencies for the following packages:
+    - at_client: 3.0.78
+    - at_lookup: 3.0.47
+    - at_auth: 2.0.5
+    - at_commons: 4.0.11
+## 3.2.17
+- fix: Export "BackupKeyConstants" and "getEncryptedKeys"
+## 3.2.16
+- build[deps]: Upgraded dependencies for the following packages:
+    - package_info_plus: ^8.0.0
+    - at_client: ^3.0.76
+    - test: ^1.25.2
+    - mocktail: ^1.0.4
+- feat: Introduce AtAuthService to replace AtClientService for the following operations
+    - authenticate
+    - onboard
+    - enroll
+    - getFinalEnrollmentStatus
+    - getSentEnrollmentRequest
+## 3.2.15
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_chops to v2.0.0 
+  - at_lookup to v3.0.46
+  - at_commons to v4.0.1
+  - at_client to v3.0.75
+  - package_info_plus: ^5.0.0
+# 3.2.14
+  build[deps]: Upgraded dependencies for the following packages:
+    - at_commons to v4.0.0
+    - at_utils to v3.0.16
+    - at_lookup to v3.0.44
+    - at_chops to v1.0.7
+    - at_client to v3.0.73
+## 3.2.13
+- fix: Introduce the "isOnboarded" function to confirm the successful onboarding of the atSign.
 ## 3.2.12
 - fix: Fixed the issue biometric_storage dependency not working on Windows when using Dart 3
 ## 3.2.11

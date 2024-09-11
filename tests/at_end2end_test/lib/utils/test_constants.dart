@@ -4,4 +4,5 @@ class TestConstants {
   static final ENCRYPTION_PRIVATE_KEY = 'encryptionPrivateKey';
   static final ENCRYPTION_PUBLIC_KEY = 'encryptionPublicKey';
   static final SELF_ENCRYPTION_KEY = 'selfEncryptionKey';
+  static final namespace = 'e2e_test';
 }

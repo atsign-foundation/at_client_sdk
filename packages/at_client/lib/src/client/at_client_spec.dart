@@ -1,18 +1,12 @@
 import 'dart:io';
 
-import 'package:at_client/src/client/local_secondary.dart';
-import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/client/request_options.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -25,6 +19,7 @@ abstract class AtClient {
 
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
+
   @experimental
   AtTelemetryService? get telemetry;
 
@@ -44,10 +39,16 @@ abstract class AtClient {
   String? get enrollmentId;
 
   set syncService(SyncService syncService);
+
   SyncService get syncService;
 
   set notificationService(NotificationService notificationService);
+
   NotificationService get notificationService;
+
+  set enrollmentService(EnrollmentService? enrollmentService);
+
+  EnrollmentService? get enrollmentService;
 
   /// Sets the preferences such as sync strategy, storage path etc., for the client.
   void setPreferences(AtClientPreference preference);
@@ -547,6 +548,49 @@ abstract class AtClient {
   /// Performs deletion only if consent is true
   void deleteLocalSecondaryStorageWithConsent(
       {required bool userConsentToDeleteLocalStorage});
+
+  /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
+  /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
+  /// an enrollment request. Only the connections which have access to manage
+  /// namespace are allowed to set SPP
+  ///
+  /// Returns "ok" when SPP is set successfully.
+  ///
+  /// Throws [InvalidPinException] when an invalid SPP is provided.
+  ///
+  /// Throws [AtClientException] when an enrollmentId does not exist.
+  ///
+  /// Throws [AtClientException] when an enrollmentId does not have access to "__manage"
+  /// namespace.
+  ///
+  /// ```dart
+  /// AtResponse sppResponse = await atClient.setSPP(ABC123);
+  /// ```
+  Future<AtResponse> setSPP(String otp);
+
+  /// Returns an OTP (One-Time Password) from the secondary server.
+  ///
+  ///
+  /// Example usage:
+  /// ```dart
+  /// AtResponse otpResponse = await atClient.getOTP();
+  /// ```
+  ///
+  Future<AtResponse> getOTP();
+
+  /// Initiates a compaction job for the commit log.
+  ///
+  /// The [commitLogCompactionTimeIntervalInMins] parameter specifies the time interval,
+  /// in minutes, after which the commit log should be compacted. By default, it is set
+  /// to 11 minutes.
+  ///
+  /// The compaction job removes duplicate entries of a key from the commit log that are already synced
+  /// to the remote secondary. Only the latest commit entry of the key is retained.
+  /// Uncommitted entries that are duplicates will not be removed/compacted.
+  Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
+
+  /// Stops the commit log compaction job
+  Future<void> stopCompactionJob();
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]

@@ -1,3 +1,56 @@
+## 3.2.0
+- feat: add `allowAll` flag (defaults to false) to AtRpc
+## 3.1.0
+- feat: add `useRemoteAtServer` flag to `GetRequestOptions` to allow clients 
+  to fetch directly from the atServer rather than the client-side synced 
+  cache. This flag was added to `PutRequestOptions` and 
+  `DeleteRequestOptions` in version 3.0.60
+- fix: Ensure that `NotificationResponseTransformer` does not attempt to 
+  decrypt when `atNotification.isEncrypted == false`
+## 3.0.78
+- chore: publish clean version 3.0.78
+## 3.0.77+1
+- fix: remove incorrect version 3.0.78 from changelog
+## 3.0.77
+- fix: Fix the keys expiry job not being triggered
+- chore: deprecate NotificationParams.forText()
+- feat: Store enrollment details in local key
+- fix: Add "sharedKeyEnc" to the metadata
+## 3.0.76
+- feat: Introduce mechanism to identify and delete expired keys
+- feat: Introduce enrollment service to support enrollment operations:
+  - Submit enrollment request(s)
+  - Approve, Deny and Revoke enrollment request(s)
+## 3.0.75
+- feat: Introduce feature to fetch enrollment requests from the server
+## 3.0.74
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_chops to v2.0.0
+  - at_lookup to v3.0.45
+## 3.0.73
+- build[deps]: Upgraded dependencies for the following packages:
+    - at_commons to v4.0.0
+    - at_utils to v3.0.16
+    - at_lookup to v3.0.44
+    - at_chops to v1.0.7
+    - at_persistence_secondary_server to v3.0.60
+- feat: Replace encryption methods from EncryptionUtils with AtChops method 
+## 3.0.72
+- chore: Minor change to allow us to support dart 
+  versions both before and after 3.2.0 specifically for this
+  [Dart breaking change](https://github.com/dart-lang/sdk/issues/52801) 
+  which was
+  [introduced](https://github.com/dart-lang/sdk/blob/main/CHANGELOG.md)
+  in dart 3.2.0
+## 3.0.71
+- feat: Replace decryption methods from EncryptionUtil with AtChops methods
+## 3.0.70
+- build[deps]: Upgraded dependencies for the following packages:
+  - asn1lib: `>=1.4.1 <=1.5.0`, crypton: `>=2.1.0 <=2.2.1`, encrypt: `>=5.0.1 <=5.0.3`, crypto: `^3.0.3`
+## 3.0.69
+- feat: Add AtRpcClient for a much cleaner developer experience for sending AtRpc requests
+## 3.0.68
+- feat: have AtRpc use ephemeral notifications
 ## 3.0.67
 - feat: Make enrollment available to SyncService/NotificationService for authentication
 ## 3.0.66

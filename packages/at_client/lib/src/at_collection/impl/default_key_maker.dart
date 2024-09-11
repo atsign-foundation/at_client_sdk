@@ -14,11 +14,12 @@ class DefaultKeyMaker implements KeyMaker {
       required String namespace,
       ObjectLifeCycleOptions? objectLifeCycleOptions}) {
     return AtKey()
-      ..key = '$keyId.$collectionName.atcollectionmodel.$namespace'
+      ..key = '$keyId.$collectionName.atcollectionmodel'
+      ..namespace = namespace
       ..metadata = Metadata()
-      ..metadata!.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
-      ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
-      ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
+      ..metadata.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
+      ..metadata.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
+      ..metadata.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
       ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 
@@ -33,13 +34,14 @@ class DefaultKeyMaker implements KeyMaker {
         objectLifeCycleOptions?.cacheRefreshIntervalOnRecipient.inSeconds;
 
     return AtKey()
-      ..key = '$keyId.$collectionName.atcollectionmodel.$namespace'
+      ..key = '$keyId.$collectionName.atcollectionmodel'
+      ..namespace = namespace
       ..sharedWith = sharedWith
       ..metadata = Metadata()
-      ..metadata!.ttr = ttrInSeconds ?? -1
-      ..metadata!.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
-      ..metadata!.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
-      ..metadata!.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
+      ..metadata.ttr = ttrInSeconds ?? -1
+      ..metadata.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
+      ..metadata.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
+      ..metadata.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
       ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 }

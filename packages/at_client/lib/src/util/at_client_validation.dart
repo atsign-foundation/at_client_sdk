@@ -97,8 +97,8 @@ class AtClientValidation {
     }
     // If key starts with 'cached:' (or) if the metadata of key has isCached set to true; it represent
     // a cached key. Prevent client updating the cached key. Hence throw exception.
-    if (atKey.key!.startsWith('${AtConstants.cached}:') ||
-        (atKey.metadata != null && atKey.metadata!.isCached)) {
+    if (atKey.key.startsWith('${AtConstants.cached}:') ||
+        (atKey.metadata.isCached)) {
       throw AtKeyException('Cannot create/update a cached key');
     }
     // If namespace is not set on key and in preferences, throw exception
@@ -133,6 +133,7 @@ class AtClientValidation {
     // And the text may of course contain spaces.
     // However, for validation purposes, 'key' should not have spaces.
     // Hence we only validate the 'key' if notification type is not 'text'.
+    // ignore: deprecated_member_use_from_same_package, deprecated_member_use
     if (notificationParams.messageType != MessageTypeEnum.text) {
       AtClientValidation.validateKey(notificationParams.atKey.key);
       ValidationResult validationResult = AtKeyValidators.get().validate(

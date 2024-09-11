@@ -5,7 +5,15 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
   - package-ecosystem: "pip"
     directory: "/tools" # Location of package manifests
     schedule:
       interval: "daily"
+    groups:
+      pip:
+        patterns:
+          - "*"

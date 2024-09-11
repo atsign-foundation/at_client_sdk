@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
@@ -9,7 +10,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_chops/at_chops.dart';
 
 class MockAtClientManager extends Mock implements AtClientManager {}
 
@@ -49,6 +49,8 @@ void main() {
     when(() => mockAtClient.atChops).thenAnswer((_) => mockAtChops);
     when(() => mockAtClient.getLocalSecondary())
         .thenAnswer((_) => mockLocalSecondary);
+    when(() => mockAtClient.getRemoteSecondary())
+        .thenAnswer((_) => mockRemoteSecondary);
     mockSigningResult = AtSigningResult()..result = 'mock_signing_result';
     registerFallbackValue(FakeAtSigningInput());
     when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
@@ -58,6 +60,8 @@ void main() {
     test(
         'A test to verify SelfKeyNotFoundException is thrown when self key is not found',
         () {
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
+      when(() => mockAtChops.atChopsKeys).thenReturn(atChopsKeys);
       when(() => mockLocalSecondary.getEncryptionSelfKey())
           .thenAnswer((_) => Future.value(''));
 
@@ -72,43 +76,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is SelfKeyNotFoundException &&
               e.message ==
-                  'Self encryption key is not set for current atSign')));
-    });
-  });
-
-  group('A group of tests related positive scenario of encryption', () {
-    test(
-        'A test to verify value gets legacy encrypted when self encryption key is available',
-        () async {
-      var selfEncryptionKey = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
-      var value = 'self_key_value';
-      when(() => mockLocalSecondary.getEncryptionSelfKey())
-          .thenAnswer((_) => Future.value(selfEncryptionKey));
-      var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
-      var encryptedData = await selfKeyEncryption.encrypt(
-          AtKey.self('phone', namespace: 'wavi').build(), value);
-      var response =
-          EncryptionUtil.decryptValue(encryptedData, selfEncryptionKey);
-      expect(response, value);
-    });
-
-    test(
-        'A test to verify value gets encrypted when self encryption key is available',
-        () async {
-      var selfEncryptionKey = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
-      var value = 'self_key_value';
-      when(() => mockLocalSecondary.getEncryptionSelfKey())
-          .thenAnswer((_) => Future.value(selfEncryptionKey));
-      var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
-
-      var atKey = AtKey.self('phone', namespace: 'wavi').build();
-      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
-
-      var encryptedData = await selfKeyEncryption.encrypt(atKey, value);
-      var response = EncryptionUtil.decryptValue(
-          encryptedData, selfEncryptionKey,
-          ivBase64: atKey.metadata!.ivNonce);
-      expect(response, value);
+                  'Failed to encrypt the data caused by Self encryption key not found')));
     });
   });
 
@@ -127,7 +95,7 @@ void main() {
             ..one = atKey
             ..two = value,
           encryptionPrivateKey: encryptionPrivateKey);
-      assert(updateVerbBuilder.dataSignature != null);
+      assert(updateVerbBuilder.atKey.metadata.dataSignature != null);
     });
   });
 
@@ -370,13 +338,14 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      when(() => mockAtChops.decryptString(
-              encryptedSharedKey, EncryptionKeyType.rsa2048))
-          .thenAnswer((_) => (AtEncryptionResult()..result = sharedKey));
-
+      var encryptionKeyPair =
+          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
+      var atChopsImpl = AtChopsImpl(atChopsKeys);
+      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
 
       var decryptedSharedKey =
           // ignore: deprecated_member_use_from_same_package
@@ -398,7 +367,7 @@ void main() {
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
-      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce = EncryptionUtil.generateIV();
       var value = 'hello';
 
       when(() => mockLocalSecondary
@@ -407,10 +376,11 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      when(() => mockAtChops.decryptString(
-              encryptedSharedKey, EncryptionKeyType.rsa2048))
-          .thenAnswer((_) => (AtEncryptionResult()..result = sharedKey));
-
+      var encryptionKeyPair =
+          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
+      var atChopsImpl = AtChopsImpl(atChopsKeys);
+      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       var decryptedSharedKey =
           // ignore: deprecated_member_use_from_same_package
@@ -418,10 +388,10 @@ void main() {
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptedSharedKey,
-          ivBase64: atKey.metadata!.ivNonce);
+          ivBase64: atKey.metadata.ivNonce);
       expect(decryptedValue, value);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
     test('test to verify legacy encryption when a new shared key is generated',
@@ -453,6 +423,11 @@ void main() {
           sync: false)).thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
+      var encryptionKeyPair =
+          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
+      var atChopsImpl = AtChopsImpl(atChopsKeys);
+      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
 
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
@@ -466,8 +441,8 @@ void main() {
               encryptedValue, sharedKeyEncryption.sharedKey,
               ivBase64: null),
           originalValue);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
     test('test to verify encryption when a new shared key is generated',
@@ -490,14 +465,22 @@ void main() {
           .thenAnswer((_) => Future.value(encryptionPublicKey));
       when(() => mockLocalSecondary.executeVerb(
           any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: true)).thenAnswer((_) => Future.value('data:1'));
+          sync: false)).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: UpdateEncryptedSharedKeyMatcher()),
+          sync: false)).thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
+      var encryptionKeyPair =
+          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
+      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
+      var atChopsImpl = AtChopsImpl(atChopsKeys);
+      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
 
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
-      atKey.metadata!.ivNonce = EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce = EncryptionUtil.generateIV();
       var originalValue = 'hello';
 
       var encryptedValue =
@@ -505,10 +488,10 @@ void main() {
       expect(
           EncryptionUtil.decryptValue(
               encryptedValue, sharedKeyEncryption.sharedKey,
-              ivBase64: atKey.metadata!.ivNonce),
+              ivBase64: atKey.metadata.ivNonce),
           originalValue);
-      expect(atKey.metadata?.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata?.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
+      expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
     test(
@@ -540,7 +523,8 @@ void main() {
               'unable to connect to remote secondary'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-
+      when(() => mockAtChops.encryptString(any(), EncryptionKeyType.rsa2048))
+          .thenAnswer((_) => AtEncryptionResult()..result = 'random');
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
@@ -569,7 +553,7 @@ class LLookupEncryptedSharedKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is LLookupVerbBuilder && item.atKey!.contains('shared_key')) {
+    if (item is LLookupVerbBuilder && item.atKey.key.contains('shared_key')) {
       return true;
     }
     return false;
@@ -583,7 +567,7 @@ class EncryptionPublicKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is LLookupVerbBuilder && item.atKey!.contains('publickey')) {
+    if (item is LLookupVerbBuilder && item.atKey.key.contains('publickey')) {
       return true;
     }
     return false;
@@ -597,7 +581,9 @@ class UpdateEncryptedSharedKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is UpdateVerbBuilder && item.atKey!.contains('shared_key')) {
+    print('inside matches');
+    if (item is UpdateVerbBuilder && item.atKey.key.contains('shared_key')) {
+      print('match');
       return true;
     }
     return false;

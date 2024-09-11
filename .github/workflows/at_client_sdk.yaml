@@ -19,15 +19,21 @@ permissions:  # added using https://github.com/step-security/secure-workflows
 jobs:
   unit_tests_and_code_analysis:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dart-channel: [stable,beta]
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
-      # Note: This workflow uses the latest stable version of the Dart SDK.
-      # You can specify other versions if desired, see documentation here:
-      # https://github.com/dart-lang/setup-dart/blob/main/README.md
-      - uses: dart-lang/setup-dart@b64355ae6ca0b5d484f0106a033dd1388965d06d # v1.6.0
+      - uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
         with:
-          sdk: stable
+          sdk: ${{ matrix.dart-channel}}
+
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: 'stable'
+          cache-dependency-path: tools/osv-scanner/go.sum
 
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
@@ -49,7 +55,7 @@ jobs:
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       - name: Upload at_client coverage to Codecov
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
+        uses: codecov/codecov-action@e28ff129e5465c2c0dcc6f003fc735cb6ae0c673 # v4.5.0
         with:
           file: packages/at_client/unit_test_coverage.lcov
           flags: at_client_unit_tests
@@ -80,7 +86,7 @@ jobs:
         run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       - name: Upload at_client_mobile coverage to Codecov
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
+        uses: codecov/codecov-action@e28ff129e5465c2c0dcc6f003fc735cb6ae0c673 # v4.5.0
         with:
           file: packages/at_client_mobile/unit_test_coverage.lcov
           flags: at_client_mobile_unit_tests
@@ -90,17 +96,28 @@ jobs:
         working-directory: packages
         run: dart format . -o none --set-exit-if-changed
 
+      # Runs osv-scanner to find any vulnerable Dart dependencies
+      # It needs to look at pubspec.lock files, which is why it's
+      # placed here, as the `dart pub get` above will create them
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client/pubspec.lock
+          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
+
   functional_tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dart-channel: [stable,beta]
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
-      # Note: This workflow uses the latest stable version of the Dart SDK.
-      # You can specify other versions if desired, see documentation here:
-      # https://github.com/dart-lang/setup-dart/blob/main/README.md
-      - uses: dart-lang/setup-dart@b64355ae6ca0b5d484f0106a033dd1388965d06d # v1.6.0
+      - uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
         with:
-          sdk: stable
+          sdk: ${{ matrix.dart-channel}}
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
@@ -113,14 +130,14 @@ jobs:
       # Start docker container to run functional tests
       - name: Start docker instance
         working-directory: tests/at_functional_test/test
-        run: docker-compose pull && docker-compose up -d
+        run: docker compose pull && docker compose up -d
 
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
 
       - name: Run PKAM
-        run: docker exec test_virtualenv_1 supervisorctl start pkamLoad
+        run: docker exec test-virtualenv-1 supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -136,7 +153,7 @@ jobs:
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
+        uses: codecov/codecov-action@e28ff129e5465c2c0dcc6f003fc735cb6ae0c673 # v4.5.0
         with:
           file: tests/at_functional_test/functional_test_coverage.lcov
           flags: functional_tests
@@ -144,7 +161,7 @@ jobs:
       # stop docker containers
       - name: stop docker containers
         working-directory: tests/at_functional_test/test
-        run: docker-compose down
+        run: docker compose down
 
   end2end_tests_prep:
     # Don't run on PRs from a fork as the secrets aren't available
@@ -155,7 +172,7 @@ jobs:
       - name: update image on cicd VMs
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: appleboy/ssh-action@55dabf81b49d4120609345970c91507e2d734799 # v1.0.0
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
           username: ubuntu
@@ -171,8 +188,8 @@ jobs:
     needs: [ end2end_tests_prep ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      - uses: dart-lang/setup-dart@b64355ae6ca0b5d484f0106a033dd1388965d06d # v1.6.0
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
         with:
           sdk: stable
 
@@ -211,7 +228,7 @@ jobs:
       - name: Upload coverage to Codecov
         # Needs LCOV report to upload, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
+        uses: codecov/codecov-action@e28ff129e5465c2c0dcc6f003fc735cb6ae0c673 # v4.5.0
         with:
           file: tests/at_end2end_test/end2end_test_coverage.lcov
           flags: end2end_tests
@@ -222,8 +239,8 @@ jobs:
     if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      - uses: dart-lang/setup-dart@b64355ae6ca0b5d484f0106a033dd1388965d06d # v1.6.0
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
         with:
           sdk: stable
 
@@ -246,9 +263,22 @@ jobs:
       - name: Config for @cicd1/4
         run: mv tests/at_end2end_test/config/config14.yaml tests/at_end2end_test/config/config.yaml
 
+      - name: Submit and approve enrollment request
+        working-directory: tests/at_end2end_test
+        run: dart run test/enrollment_setup.dart
+
       # Run end-to-end test
       - name: End to end test
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
         run: dart test --concurrency=1
+
+      # Makes all the enrollment requests inactive. The pending enrollment request are set to denied state and
+      # the approved enrollment requests are set to revoked state.
+      - name: Enrollment setup teardown
+        # Even if the tests fail in the above step, we need to clean up the enrollments.
+        # Therefore, we set this to "!cancelled()" to ensure this step runs regardless of the outcome of the previous step.
+        if: ${{ !cancelled() }}
+        working-directory: tests/at_end2end_test
+        run: dart run test/enrollment_teardown.dart

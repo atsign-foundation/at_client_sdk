@@ -1,5 +1,5 @@
 name: at_client_example
-description: An example application to demostrate the at_client package usage.
+description: An example application to demonstrate the at_client package usage.
 version: 1.0.0
 
 environment:

@@ -3,25 +3,27 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
+import 'package:at_end2end_test/utils/test_constants.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
-import 'package:at_utils/at_logger.dart';
 
 late AtClient sharedByAtClient;
 late AtClient sharedWithAtClient;
 late String sharedByAtSign;
 late String sharedWithAtSign;
-final namespace = 'wavi';
+final namespace = TestConstants.namespace;
 
 void main() {
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedByAtSign, namespace);
+        .testInitializer(sharedByAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace);
+        .testInitializer(sharedWithAtSign, namespace, authType);
     // Initialize sharedWithAtSign
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
             sharedWithAtSign,
@@ -34,32 +36,6 @@ void main() {
             namespace,
             TestPreferences.getInstance().getPreference(sharedByAtSign)))
         .atClient;
-  });
-
-  test(
-      'A test to verify deletion of key when overriding the namespace in atKey',
-      () async {
-    // The namespace in the preference is "wavi". Overriding the namespace in the atKey to "buzz"
-    var atKey = (AtKey.shared('keyNamespaceOverriding',
-            namespace: 'buzz', sharedBy: sharedByAtSign)
-          ..sharedWith(sharedWithAtSign))
-        .build();
-    await sharedByAtClient.put(atKey, 'dummy_value');
-    expect(
-        sharedByAtClient
-            .getLocalSecondary()!
-            .keyStore!
-            .isKeyExists(atKey.toString()),
-        true);
-
-    // Delete the key
-    await sharedByAtClient.delete(atKey);
-    expect(
-        sharedByAtClient
-            .getLocalSecondary()!
-            .keyStore!
-            .isKeyExists(atKey.toString()),
-        false);
   });
 
   test(

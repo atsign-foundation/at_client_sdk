@@ -5,8 +5,8 @@ import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_client/at_client.dart';
 
-import 'package:at_functional_test/src/at_demo_credentials.dart'
-    as demo_credentials;
+import 'package:at_demo_data/at_demo_data.dart';
+
 
 class TestUtils {
   static AtClientPreference getPreference(String atsign) {
@@ -22,7 +22,7 @@ class TestUtils {
   }
 
   static String generatePKAMDigest(String atSign, String challenge) {
-    var privateKey = demo_credentials.pkamPrivateKeyMap[atSign]!;
+    var privateKey = pkamPrivateKeyMap[atSign]!;
     privateKey = privateKey.trim();
     var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
@@ -32,7 +32,7 @@ class TestUtils {
   }
 
   static String generateCramDigest(String atSign, String challenge) {
-    var cramSecret = demo_credentials.cramKeyMap[atSign];
+    var cramSecret = cramKeyMap[atSign];
     var combo = '$cramSecret$challenge';
     var bytes = utf8.encode(combo);
     var digest = sha512.convert(bytes);
@@ -51,5 +51,17 @@ class TestUtils {
     await encryptionKeysLoader.setEncryptionKeys(
         atClientManager.atClient, currentAtSign);
     return atClientManager;
+  }
+
+  static String formatCommand(String command){
+    if(!command.contains('\n')) return '$command\n';
+    return command;
+  }
+
+  static Future<String?> executeCommandAndParse(AtClient? client, command, {bool auth = false, RemoteSecondary? remoteSecondary}) async {
+    remoteSecondary ??= client?.getRemoteSecondary();
+    String? response = await remoteSecondary?.executeCommand(formatCommand(command), auth: auth);
+    print('Command: $command -> Response: $response');
+    return response?.replaceFirst('data:', '');
   }
 }

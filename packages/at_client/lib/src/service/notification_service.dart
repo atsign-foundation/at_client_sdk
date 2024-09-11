@@ -166,6 +166,7 @@ class NotificationParams {
 
   OperationEnum get operation => _operation;
 
+  @Deprecated('Use MessageType.key')
   MessageTypeEnum get messageType => _messageType;
 
   PriorityEnum get priority => _priority;
@@ -224,6 +225,7 @@ class NotificationParams {
   /// Returns [NotificationParams] to send a text message to another atSign.
   /// forText notifications are case-sensitive
   /// platform level lower case enforcement will not apply to forText notifications
+  @Deprecated('use NotificationService.notify() instead')
   static NotificationParams forText(String text, String whomToNotify,
       {bool shouldEncrypt = false}) {
     var atKey = AtKey()

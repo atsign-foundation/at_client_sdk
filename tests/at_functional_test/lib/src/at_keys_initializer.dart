@@ -1,6 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
-import 'at_demo_credentials.dart' as demo_credentials;
+import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_chops/at_chops.dart';
 
 /// The class is responsible for loading all the encryption of the atSign to the
@@ -39,8 +39,7 @@ class AtEncryptionKeysLoader {
     bool result;
     // Set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(
-        AtConstants.atEncryptionPrivateKey,
-        demo_credentials.encryptionPrivateKeyMap[atSign]!);
+        AtConstants.atEncryptionPrivateKey, encryptionPrivateKeyMap[atSign]!);
     if (result) {
       _logger.info('encryption private key was set successfully');
     } else {
@@ -49,9 +48,9 @@ class AtEncryptionKeysLoader {
     // set encryption public key. this key should be synced to the remote secondary
     var encryptionPublicKeyAtKey =
         '${AtConstants.atEncryptionPublicKey}$atSign';
-    result = await atClient.getLocalSecondary()!.putValue(
-        encryptionPublicKeyAtKey,
-        demo_credentials.encryptionPublicKeyMap[atSign]!);
+    result = await atClient
+        .getLocalSecondary()!
+        .putValue(encryptionPublicKeyAtKey, encryptionPublicKeyMap[atSign]!);
     if (result) {
       _logger.info('encryption public key was set successfully.');
     } else {
@@ -59,26 +58,27 @@ class AtEncryptionKeysLoader {
     }
 
     // set self encryption key
-    result = await atClient.getLocalSecondary()!.putValue(
-        AtConstants.atEncryptionSelfKey, demo_credentials.aesKeyMap[atSign]!);
+    result = await atClient
+        .getLocalSecondary()!
+        .putValue(AtConstants.atEncryptionSelfKey, aesKeyMap[atSign]!);
     if (result) {
       _logger.info('self encryption key was set successfully');
     } else {
       _logger.severe('failed to set self encryption key');
     }
     // set pkam keys
-    result = await atClient.getLocalSecondary()!.putValue(
-        AtConstants.atPkamPublicKey,
-        demo_credentials.pkamPublicKeyMap[atSign]!);
+    result = await atClient
+        .getLocalSecondary()!
+        .putValue(AtConstants.atPkamPublicKey, pkamPublicKeyMap[atSign]!);
     if (result) {
       _logger.info('pkam public key was set successfully');
     } else {
       _logger.severe('failed to pkam public key');
     }
 
-    result = await atClient.getLocalSecondary()!.putValue(
-        AtConstants.atPkamPrivateKey,
-        demo_credentials.pkamPrivateKeyMap[atSign]!);
+    result = await atClient
+        .getLocalSecondary()!
+        .putValue(AtConstants.atPkamPrivateKey, pkamPrivateKeyMap[atSign]!);
     if (result) {
       _logger.info('pkam private key was set successfully');
     } else {
@@ -88,12 +88,11 @@ class AtEncryptionKeysLoader {
 
   AtChops createAtChopsFromDemoKeys(String atSign) {
     var atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        demo_credentials.encryptionPublicKeyMap[atSign]!,
-        demo_credentials.encryptionPrivateKeyMap[atSign]!);
+        encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
     var atPkamKeyPair = AtPkamKeyPair.create(
-        demo_credentials.pkamPublicKeyMap[atSign]!,
-        demo_credentials.pkamPrivateKeyMap[atSign]!);
+        pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!);
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
     return AtChopsImpl(atChopsKeys);
   }
 }

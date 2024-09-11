@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use_from_same_package
+
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
@@ -65,8 +67,8 @@ class MockSharedKeyEncryptionImpl extends Mock implements SharedKeyEncryption {
     //Set encryptionMetadata to atKey metadata
     atKey.metadata = Metadata();
     if (storeSharedKeyEncryptedWithData) {
-      atKey.metadata!.sharedKeyEnc = 'sharedKeyEnc';
-      atKey.metadata!.pubKeyCS = 'publicKeyCS';
+      atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
+      atKey.metadata.pubKeyCS = 'publicKeyCS';
     }
     return 'encryptedValue';
   }
@@ -119,8 +121,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               SharedKeyEncryption(mockAtClientImpl))
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey, 'phone.wavi');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -145,14 +147,14 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey, 'phone.wavi');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.high);
       expect(notifyVerbBuilder.strategy, StrategyEnum.latest);
       expect(notifyVerbBuilder.value, 'encryptedValue');
-      expect(notifyVerbBuilder.sharedKeyEncrypted, 'sharedKeyEnc');
-      expect(notifyVerbBuilder.pubKeyChecksum, 'publicKeyCS');
+      expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
+      expect(notifyVerbBuilder.atKey.metadata.pubKeyCS, 'publicKeyCS');
       expect(notifyVerbBuilder.notifier, 'test-notifier');
       expect(notifyVerbBuilder.latestN, 2);
       expect(notifyVerbBuilder.ttln, Duration(minutes: 1).inMilliseconds);
@@ -169,8 +171,9 @@ void main() {
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
       //upper case should be preserved in forText notifications
-      expect(notifyVerbBuilder.atKey, 'Hi How are you');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'Hi How are you');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      // ignore: deprecated_member_use
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -187,8 +190,9 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey, 'encryptedValue');
-      expect(notifyVerbBuilder.sharedWith, '@bob');
+      expect(notifyVerbBuilder.atKey.key, 'encryptedValue');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      // ignore: deprecated_member_use
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
       expect(notifyVerbBuilder.strategy, StrategyEnum.all);
@@ -235,6 +239,7 @@ void main() {
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
+          // ignore: deprecated_member_use
           MessageTypeEnum.text.toString(),
           isEncrypted);
       var notificationResponseTransformer =
@@ -260,6 +265,7 @@ void main() {
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
+          // ignore: deprecated_member_use
           MessageTypeEnum.text.toString(),
           isEncrypted);
       var notificationResponseTransformer =
@@ -276,9 +282,9 @@ void main() {
     });
 
     test(
-        'A test to verify notification key is decrypted when shouldDecrypt is set to true',
+        'A test to verify notification value is decrypted when isEncrypted is set to null',
         () async {
-      var isEncrypted = false;
+      bool? isEncrypted;
       var atNotification = at_notification.AtNotification(
           '124',
           'key-1',
@@ -302,9 +308,61 @@ void main() {
     });
 
     test(
-        'A test to verify notification key is not decrypted when shouldDecrypt is set to false',
+        'A test to verify notification value is decrypted when isEncrypted is set to true',
+        () async {
+      bool isEncrypted = true;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          'key-1',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          isEncrypted,
+          value: 'encryptedValue');
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = true));
+      expect(transformedNotification.value, 'decryptedValue');
+    });
+
+    test(
+        'A test to verify notification value is not decrypted when isEncrypted is set to false',
         () async {
       var isEncrypted = false;
+      var atNotification = at_notification.AtNotification(
+          '124',
+          'key-1',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          isEncrypted,
+          value: 'encryptedValue');
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
+      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+
+      var transformedNotification =
+          await notificationResponseTransformer.transform(Tuple()
+            ..one = atNotification
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = false));
+      expect(transformedNotification.value, 'encryptedValue');
+    });
+
+    test(
+        'A test to verify notification value is not decrypted when isEncrypted is set to true and should decrypt is false',
+        () async {
+      var isEncrypted = true;
       var atNotification = at_notification.AtNotification(
           '124',
           'key-1',
@@ -486,7 +544,7 @@ void main() {
       NotificationParams notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
       NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
-        ..atKey = atKey.toString()
+        ..atKey = atKey
         ..messageType = MessageTypeEnum.key
         ..value = 'demo-value';
 
@@ -509,7 +567,7 @@ void main() {
       NotificationParams notificationParams =
           NotificationParams.forText('Hello bob', '@bob');
       NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
-        ..atKey = '@bob:Hello bob';
+        ..atKey.key = '@bob:Hello bob';
 
       expect(
           () => notificationServiceImpl.notificationValueValidation(
@@ -1117,7 +1175,7 @@ class StatsAtKeyMatcher extends Matcher {
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key!.contains('_latestNotificationIdv2')) {
+    if (item is AtKey && item.key.contains('_latestNotificationIdv2')) {
       return true;
     }
     return false;

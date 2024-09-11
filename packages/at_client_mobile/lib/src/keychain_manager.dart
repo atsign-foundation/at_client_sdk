@@ -3,16 +3,22 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 import 'package:biometric_storage/biometric_storage.dart';
+import 'package:crypton/crypton.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'auth_constants.dart';
+
 const String _kDefaultKeystoreAccount = '@atsigns';
+const String enrollmentInfoKey = 'enrollmentInfo';
+
 const int _kDataSchemeVersion = 1;
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
@@ -23,6 +29,7 @@ class KeyChainManager {
   static final KeyChainManager _singleton = KeyChainManager._internal();
 
   static final _logger = AtSignLogger('KeyChainUtil');
+  late PackageInfo _packageInfo;
 
   KeyChainManager._internal();
 
@@ -487,6 +494,10 @@ class KeyChainManager {
     return rsaKeypair;
   }
 
+  String generateAESKey() {
+    return encrypt.AES(encrypt.Key.fromSecureRandom(32)).key.base64;
+  }
+
   /// Function to get cram secret from keychain
   Future<String?> getCramSecret(String atSign) async {
     return getSecretFromKeychain(atSign);
@@ -659,8 +670,8 @@ class KeyChainManager {
   }) async {
     String packageName = '';
     try {
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      packageName = packageInfo.packageName;
+      _packageInfo = await PackageInfo.fromPlatform();
+      packageName = _packageInfo.packageName;
     } catch (e, s) {
       _logger.warning('Get PackageInfo', e, s);
     }
@@ -669,6 +680,17 @@ class KeyChainManager {
       useSharedStorage
           ? '$_kDefaultKeystoreAccount:shared'
           : '$_kDefaultKeystoreAccount:$packageName',
+      options: StorageFileInitOptions(
+        authenticationRequired: false,
+      ),
+    );
+
+    return data;
+  }
+
+  Future<BiometricStorageFile> getEnrollmentStorage(String atSign) async {
+    final data = await biometricStorage.getStorage(
+      '${atSign}_$enrollmentInfoKey',
       options: StorageFileInitOptions(
         authenticationRequired: false,
       ),
@@ -708,6 +730,21 @@ class KeyChainManager {
     return result;
   }
 
+  writeToEnrollmentStore(String atSign, String data) async {
+    final store = await getEnrollmentStorage(atSign);
+    await _writeDataToStore(store: store, data: data);
+  }
+
+  Future<String?> readFromEnrollmentStore(String atSign) async {
+    final store = await getEnrollmentStorage(atSign);
+    return await _readDataFromStore(store: store);
+  }
+
+  deleteEnrollmentStore(String atSign) async {
+    final store = await getEnrollmentStorage(atSign);
+    await store.delete();
+  }
+
   /// The function write String data to BiometricStorageFile
   /// If Platform is Windows, data will separated into segments before save. Because in Window, BiometricStorage limit the data length saved
   Future<void> _writeDataToStore({
@@ -718,8 +755,8 @@ class KeyChainManager {
     if (Platform.isWindows) {
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       await store.write(dataList.length.toString());
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      final packageName = packageInfo.packageName;
+      _packageInfo = await PackageInfo.fromPlatform();
+      final packageName = _packageInfo.packageName;
 
       for (int i = 0; i < dataList.length; i++) {
         final dataStore = await BiometricStorage().getStorage(
@@ -742,8 +779,8 @@ class KeyChainManager {
   }) async {
     if (Platform.isWindows) {
       final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      final packageName = packageInfo.packageName;
+      _packageInfo = await PackageInfo.fromPlatform();
+      final packageName = _packageInfo.packageName;
       final results = <String>[];
       for (int i = 0; i < segmentCount; i++) {
         final dataStore = await biometricStorage.getStorage(
@@ -780,5 +817,51 @@ class KeyChainManager {
       return null;
     }
     return texts.join();
+  }
+
+  Future<Map<String, String>> getEncryptedKeys(String atsign) async {
+    AtsignKey? atsignKeyData = await readAtsign(name: atsign);
+
+    if (atsignKeyData == null) {
+      throw AtClientException.message(
+          "Failed to fetch the keys for the atsign: $atsign");
+    }
+
+    Map<String, String> encryptedAtKeysMap = <String, String>{};
+
+    String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
+        encryptedPkamPublicKey;
+
+    String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.pkamPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
+        encryptedPkamPrivateKey;
+
+    String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPublicKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
+        encryptedEncryptionPublicKey;
+
+    String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
+        atsignKeyData.encryptionPrivateKey!, atsignKeyData.selfEncryptionKey!);
+    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
+        encryptedEncryptionPrivateKey;
+    encryptedAtKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
+        atsignKeyData.selfEncryptionKey!;
+    // The atKeys file generated previous to APKAM feature will not have the
+    // apkam_symmetric_key. Hence adding null check to prevent null-pointer exception.
+    if (atsignKeyData.apkamSymmetricKey != null) {
+      encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
+          atsignKeyData.apkamSymmetricKey!;
+    }
+    // The atKeys file generated previous to APKAM feature will not have the
+    // enrollment-id. Hence adding null check to prevent null-pointer exception.
+    if (atsignKeyData.enrollmentId != null) {
+      encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
+          atsignKeyData.enrollmentId!;
+    }
+    return encryptedAtKeysMap;
   }
 }

@@ -5,6 +5,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+
 import '../collections.dart';
 
 /// [AtCollectionMethodImpl] have the implementation of all the methods available in collections package.
@@ -41,7 +42,7 @@ class AtCollectionMethodImpl {
     _logger.finest('Self key to be used : $atKey');
     var atOperationItemStatus = AtOperationItemStatus(
         atSign: atKey.sharedBy ?? '',
-        key: atKey.key ?? '',
+        key: atKey.key,
         complete: false,
         operation: Operation.save);
     try {
@@ -76,7 +77,7 @@ class AtCollectionMethodImpl {
       _logger.finest('Update shared key $sharedKey');
       var atOperationItemStatus = AtOperationItemStatus(
           atSign: sharedKey.sharedWith ?? '',
-          key: sharedKey.key ?? '',
+          key: sharedKey.key,
           complete: false,
           operation: Operation.share);
       try {
@@ -133,7 +134,7 @@ class AtCollectionMethodImpl {
 
       var atOperationItemStatus = AtOperationItemStatus(
           atSign: atSign,
-          key: selfKey.key ?? '',
+          key: selfKey.key,
           complete: false,
           operation: Operation.share);
 
@@ -164,7 +165,7 @@ class AtCollectionMethodImpl {
 
     yield AtOperationItemStatus(
         atSign: selfAtKey.sharedWith ?? '',
-        key: selfAtKey.key ?? '',
+        key: selfAtKey.key,
         complete: isSelfKeyDeleted,
         operation: Operation.delete);
   }
@@ -192,7 +193,7 @@ class AtCollectionMethodImpl {
     for (var sharedKey in sharedAtKeys) {
       var atOperationItemStatus = AtOperationItemStatus(
           atSign: sharedKey.sharedWith ?? '',
-          key: sharedKey.key ?? '',
+          key: sharedKey.key,
           complete: false,
           operation: Operation.unshare);
 

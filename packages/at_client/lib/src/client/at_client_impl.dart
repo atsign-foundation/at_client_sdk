@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_base2e15/at_base2e15.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
@@ -31,7 +32,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
@@ -105,6 +105,16 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _notificationService = notificationService;
   }
 
+  EnrollmentService? _enrollmentService;
+
+  @override
+  set enrollmentService(EnrollmentService? enrollmentService) {
+    _enrollmentService = enrollmentService;
+  }
+
+  @override
+  EnrollmentService? get enrollmentService => _enrollmentService;
+
   @override
   NotificationService get notificationService => _notificationService;
 
@@ -129,7 +139,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
-      AtClientConfig? atClientConfig}) async {
+      AtClientConfig? atClientConfig,
+      String? enrollmentId}) async {
     atClientManager ??= AtClientManager.getInstance();
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -145,12 +156,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           localSecondaryKeyStore: localSecondaryKeyStore,
           atChops: atChops,
           atClientCommitLogCompaction: atClientCommitLogCompaction,
-          atClientConfig: atClientConfig);
+          atClientConfig: atClientConfig,
+          enrollmentId: enrollmentId);
 
       await atClientImpl._init();
     }
 
-    await atClientImpl!._startCompactionJob();
+    await atClientImpl!.startCompactionJob();
     atClientManager.listenToAtSignChange(atClientImpl);
 
     atClientInstanceMap[currentAtSign] = atClientImpl;
@@ -164,7 +176,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
-      AtClientConfig? atClientConfig}) {
+      AtClientConfig? atClientConfig,
+      this.enrollmentId}) {
     _atSign = AtUtils.fixAtSign(theAtSign);
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -209,7 +222,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _cascadeSetTelemetryService();
   }
 
-  Future<void> _startCompactionJob() async {
+  @override
+  Future<void> startCompactionJob(
+      {Duration? commitLogCompactionDuration}) async {
+    commitLogCompactionDuration ??= Duration(
+        minutes:
+            AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins);
     AtCompactionJob atCompactionJob = AtCompactionJob(
         (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
         SecondaryPersistenceStoreFactory.getInstance()
@@ -221,9 +239,15 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _atClientConfig ??= AtClientConfig.getInstance();
 
     if (!_atClientCommitLogCompaction!.isCompactionJobRunning()) {
-      _atClientCommitLogCompaction!.scheduleCompaction(
-          _atClientConfig!.commitLogCompactionTimeIntervalInMins);
+      _atClientCommitLogCompaction!
+          .scheduleCompaction(commitLogCompactionDuration.inMinutes);
     }
+  }
+
+  @override
+  Future<void> stopCompactionJob() async {
+    _logger.info('Stopping the commit log compaction job');
+    await _atClientCommitLogCompaction?.stopCompactionJob();
   }
 
   /// Does nothing unless a telemetry service has been injected
@@ -295,23 +319,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   Future<bool> _delete(AtKey atKey,
       {DeleteRequestOptions? deleteRequestOptions}) async {
-    // If metadata is null, initialize metadata
-    atKey.metadata ??= Metadata();
-    String keyWithNamespace;
-    if (atKey.metadata!.namespaceAware) {
-      keyWithNamespace = AtClientUtil.getKeyWithNameSpace(atKey, _preference!);
-    } else {
-      keyWithNamespace = atKey.key!;
-    }
     atKey.sharedBy ??= _atSign;
-    var builder = DeleteVerbBuilder()
-      ..isLocal = atKey.isLocal
-      ..isCached = atKey.metadata!.isCached
-      ..isPublic =
-          (atKey.metadata!.isPublic == null) ? false : atKey.metadata!.isPublic!
-      ..sharedWith = atKey.sharedWith
-      ..atKey = keyWithNamespace
-      ..sharedBy = atKey.sharedBy;
+    // When namespace is not set in AtKey.namespace, default it to namespace from
+    // AtClientPreferences
+    if (atKey.metadata.namespaceAware) {
+      atKey.namespace ??= preference?.namespace;
+    }
+    var builder = DeleteVerbBuilder()..atKey = atKey;
     var secondary = getSecondary();
     if (deleteRequestOptions != null &&
         deleteRequestOptions.useRemoteAtServer) {
@@ -333,7 +347,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      secondary = SecondaryManager.getSecondary(this, verbBuilder);
+      if (getRequestOptions?.useRemoteAtServer == true) {
+        secondary = getRemoteSecondary()!;
+      } else {
+        secondary = SecondaryManager.getSecondary(this, verbBuilder);
+      }
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
       if (getResponse == null ||
@@ -442,10 +460,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<AtResponse> putText(AtKey atKey, String value,
       {PutRequestOptions? putRequestOptions}) async {
     try {
-      // Set the default metadata if not already set.
-      atKey.metadata ??= Metadata();
       // Setting metadata.isBinary to false for putText
-      atKey.metadata!.isBinary = false;
+      atKey.metadata.isBinary = false;
       return await _putInternal(atKey, value, putRequestOptions);
     } on AtException catch (e) {
       throw AtExceptionManager.createException(e);
@@ -457,10 +473,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<AtResponse> putBinary(AtKey atKey, List<int> value,
       {PutRequestOptions? putRequestOptions}) async {
     try {
-      // Set the default metadata if not already set.
-      atKey.metadata ??= Metadata();
       // Setting metadata.isBinary to true for putBinary
-      atKey.metadata!.isBinary = true;
+      atKey.metadata.isBinary = true;
       // Base2e15.encode method converts the List<int> type to String.
       return await _putInternal(
           atKey, Base2e15.encode(value), putRequestOptions);
@@ -471,7 +485,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   @visibleForTesting
   ensureLowerCase(AtKey atKey) {
-    if ((atKey.key != null && upperCaseRegex.hasMatch(atKey.key!)) ||
+    if (upperCaseRegex.hasMatch(atKey.key) ||
         (atKey.namespace != null &&
             upperCaseRegex.hasMatch(atKey.namespace!))) {
       _logger.finer('AtKey: ${atKey.toString()} previously contained upper case'
@@ -488,12 +502,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (atKey.sharedBy.isNull) {
       atKey.sharedBy = _atSign;
     }
-    if (atKey.metadata!.namespaceAware) {
+    if (atKey.metadata.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
     }
 
     if (preference!.atProtocolEmitted >= Version(2, 0, 0)) {
-      atKey.metadata!.ivNonce ??= EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     }
     ensureLowerCase(atKey);
 
@@ -522,7 +536,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
     //Get encryptionPrivateKey for public key to signData
     String? encryptionPrivateKey;
-    if (atKey.metadata!.isPublic != null && atKey.metadata!.isPublic! == true) {
+    if (atKey.metadata.isPublic == true) {
       encryptionPrivateKey = await _localSecondary?.getEncryptionPrivateKey();
     }
     // Transform put request
@@ -546,7 +560,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     // Execute the verb builder
     var putResponse = await secondary.executeVerb(verbBuilder,
-        sync: SyncUtil.shouldSync(atKey.key!));
+        sync: SyncUtil.shouldSync(atKey.key));
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
       return AtResponse()..isError = true;
@@ -582,27 +596,17 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> putMeta(AtKey atKey) async {
     var updateKey = atKey.key;
-    var metadata = atKey.metadata!;
+    var metadata = atKey.metadata;
     if (metadata.namespaceAware) {
-      updateKey = _getKeyWithNamespace(atKey.key!);
+      updateKey = _getKeyWithNamespace(atKey.key);
     }
-    var sharedWith = atKey.sharedWith;
     var builder = UpdateVerbBuilder();
     builder
-      ..atKey = updateKey
-      ..sharedBy = _atSign
-      ..sharedWith = sharedWith
-      ..ttl = metadata.ttl
-      ..ttb = metadata.ttb
-      ..ttr = metadata.ttr
-      ..ccd = metadata.ccd
-      ..isBinary = metadata.isBinary
-      ..isEncrypted = metadata.isEncrypted
-      ..dataSignature = metadata.dataSignature
+      ..atKey = atKey
       ..operation = AtConstants.updateMeta;
 
     var updateMetaResult = await getSecondary()
-        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey!));
+        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey));
     return updateMetaResult != null;
   }
 
@@ -771,9 +775,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           ..key = key
           ..sharedWith = sharedWithAtSign
           ..metadata = Metadata()
-          ..metadata!.ttr = -1
+          ..metadata.ttr = -1
           // file transfer key will be deleted after 30 days
-          ..metadata!.ttl = 2592000000
+          ..metadata.ttl = 2592000000
           ..sharedBy = _atSign;
 
         var notificationResult = await notificationService.notify(
@@ -902,6 +906,48 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       print('error in downloadFile: $e');
       return [];
     }
+  }
+
+  @override
+  Future<AtResponse> setSPP(String spp) async {
+    // SPP should be 6 characters PIN. Throw exception if its less
+    // or more than 6 characters
+    if (spp.length != 6) {
+      throw InvalidPinException.message("$spp should be 6 characters");
+    }
+    // Validate the SPP. The SPP should contain only alpha-numeric characters.
+    // Any special characters or any characters other than aplha-numeric characters
+    // are not allowed. Throw an exception
+    bool hasMatch = RegExp(r'[\W-]+').hasMatch(spp);
+    if (hasMatch) {
+      throw InvalidPinException.message("$spp is not a valid SPP");
+    }
+    String? otpVerbResponse;
+    try {
+      otpVerbResponse =
+          await _remoteSecondary?.executeCommand('otp:put:$spp\n', auth: true);
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    } on AtException catch (e) {
+      throw AtClientException.message(e.message);
+    }
+    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    return AtResponse()..response = otpVerbResponse!;
+  }
+
+  @override
+  Future<AtResponse> getOTP() async {
+    String? otpVerbResponse;
+    try {
+      otpVerbResponse =
+          await _remoteSecondary?.executeCommand('otp:get\n', auth: true);
+    } on AtLookUpException catch (e) {
+      throw AtClientException(e.errorCode, e.errorMessage);
+    } on AtException catch (e) {
+      throw AtClientException.message(e.message);
+    }
+    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    return AtResponse()..response = otpVerbResponse!;
   }
 
   @override
@@ -1058,7 +1104,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       PriorityEnum? priority,
       StrategyEnum? strategy,
       int? latestN,
-      String? notifier = SYSTEM,
+      String? notifier = AtConstants.system,
       bool isDedicated = false}) async {
     AtKeyValidators.get().validate(
         atKey.toString(),
