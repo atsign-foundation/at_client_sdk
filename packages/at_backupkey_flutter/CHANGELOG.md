@@ -1,3 +1,8 @@
+## 4.0.16
+
+- **FIX**: Replaced the use of file_selector with file_picker
+- **CHORE**: Updated dependencies in the example app
+
 ## 4.0.15
 
 - **FIX**: Resolved Static analysis messages
