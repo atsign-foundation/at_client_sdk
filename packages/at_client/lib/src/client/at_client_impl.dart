@@ -984,10 +984,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       return false;
     }
     // Fetch EncryptionPublicKey from RemoteSecondary
+    AtKey encPublicKey = AtKey.fromString('publickey$getCurrentAtSign()');
     try {
       PLookupVerbBuilder plookup = PLookupVerbBuilder()
-        ..atKey = 'publickey'
-        ..sharedBy = getCurrentAtSign();
+        ..atKey = encPublicKey;
       remotePublicKey = await getRemoteSecondary()?.executeVerb(plookup);
     } on Exception catch (e) {
       _logger.info('Caught exception during public key lookup | $e');
@@ -996,8 +996,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       // this fallback is for when reset status check is performed on an
       //unauthenticated connection
       LookupVerbBuilder lookup = LookupVerbBuilder()
-        ..atKey = 'publickey' //AT_ENCRYPTION_PUBLIC_KEY
-        ..sharedBy = getCurrentAtSign();
+        ..atKey = encPublicKey;
       remotePublicKey = await getRemoteSecondary()?.executeVerb(lookup);
     }
 
