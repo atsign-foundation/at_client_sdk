@@ -108,7 +108,7 @@ void main() async {
     print(notificationListJson);
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
-    expect(notificationListJson[0]['isEncrypted'], 'false');
+    expect(notificationListJson[0]['isEncrypted'], false);
     expect(notificationListJson[0]['value'], value);
   });
 }
