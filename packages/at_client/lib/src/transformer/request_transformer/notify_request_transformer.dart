@@ -26,10 +26,14 @@ class NotificationRequestTransformer
     // prepares notification builder
     NotifyVerbBuilder builder = await _prepareNotificationBuilder(
         notificationParams, atClientPreference);
-    // If notification value is not null, encrypt the value
-    if (notificationParams.value.isNotNull) {
+    // If notification value is set and metadata.isEncrypted is true, encrypt
+    // the value.
+    if (notificationParams.value.isNotNull &&
+        notificationParams.atKey.metadata.isEncrypted) {
       builder.value = await _encryptNotificationValue(
           notificationParams.atKey, notificationParams.value!);
+    } else {
+      builder.value = notificationParams.value;
     }
     // add metadata to notify verb builder.
     // Encrypt the data and then call addMetadataToBuilder method inorder to
