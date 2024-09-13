@@ -33,6 +33,7 @@ class NoOpNotificationService implements NotificationService {
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {bool waitForFinalDeliveryStatus = true,
       bool checkForFinalDeliveryStatus = true,
+      bool encryptValue = true,
       Function(NotificationResult p1)? onSuccess,
       Function(NotificationResult p1)? onError,
       Function(NotificationResult p1)? onSentToSecondary}) {
