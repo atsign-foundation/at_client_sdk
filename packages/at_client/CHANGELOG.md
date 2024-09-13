@@ -1,5 +1,11 @@
 ## 3.2.1
 - feat: add optional param `encryptValue` to notify method
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_commons to v4.1.1
+  - at_utils to v3.0.18
+  - at_lookup to v3.0.48
+  - at_auth to v2.0.5
+  - at_persistence_secondary_server to v3.0.63
 ## 3.2.0
 - feat: add `allowAll` flag (defaults to false) to AtRpc
 ## 3.1.0
