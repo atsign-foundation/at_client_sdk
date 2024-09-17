@@ -66,9 +66,11 @@ class GetResponseTransformer
       try {
         atValue.value =
             await decryptionService.decrypt(tuple.one, atValue.value) as String;
-      } on AtException {
-        atValue.value = AtDecoderImpl()
-            .decodeData(atValue.value, atValue.metadata!.encoding!);
+      } on Exception {
+        if (atValue.metadata!.encoding != null) {
+          atValue.value = AtDecoderImpl()
+              .decodeData(atValue.value, atValue.metadata!.encoding!);
+        }
       }
     }
     // After decrypting the data, if data is binary, decode the data
