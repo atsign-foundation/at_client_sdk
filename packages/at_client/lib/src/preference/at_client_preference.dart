@@ -101,7 +101,6 @@ class AtClientPreference {
 
   /// Which version of the atProtocol this client will use.
   /// Note that this is different from the version of the
-  /// Note that this is different from the version of the
   /// atProtocol that the client supports, which is set in
   /// [AtClientConfig]
   /// This instance variable is experimental, for now

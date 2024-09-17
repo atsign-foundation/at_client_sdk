@@ -35,13 +35,22 @@ class GetResponseTransformer
       atValue.metadata = metadata;
       tuple.one.metadata = metadata!;
     }
-
     // For public and cached public keys, data is not encrypted.
+    if (_isKeyPublic(decodedResponse['key']) &&
+        (atValue.metadata!.encoding.isNotNull)) {
+      atValue.value = AtDecoderImpl()
+          .decodeData(atValue.value, atValue.metadata!.encoding!);
+      if (tuple.one.metadata.isBinary) {
+        atValue.value = Base2e15.decode(atValue.value);
+      }
+      return atValue;
+    }
+
+    var decryptionService = AtKeyDecryptionManager(_atClient)
+        .get(tuple.one, _atClient.getCurrentAtSign()!);
     // Decrypt the data, for other keys
-    if (!(decodedResponse['key'].startsWith('public:')) &&
-        !(decodedResponse['key'].startsWith('cached:public:'))) {
-      var decryptionService = AtKeyDecryptionManager(_atClient)
-          .get(tuple.one, _atClient.getCurrentAtSign()!);
+    // For new encrypted data  after AtClient v3.2.1, isEncrypted will be true by default
+    if (atValue.metadata != null && atValue.metadata!.isEncrypted) {
       try {
         atValue.value =
             await decryptionService.decrypt(tuple.one, atValue.value) as String;
@@ -51,14 +60,17 @@ class GetResponseTransformer
         rethrow;
       }
     }
-
-    if (((decodedResponse['key'].startsWith('public:')) ||
-            (decodedResponse['key'].startsWith('cached:public:'))) &&
-        (atValue.metadata!.encoding.isNotNull)) {
-      atValue.value = AtDecoderImpl()
-          .decodeData(atValue.value, atValue.metadata!.encoding!);
+    // for old data, try decrypting the value. if decryption fails, set the original value.
+    if (atValue.metadata == null ||
+        (atValue.metadata != null && atValue.metadata!.isEncrypted == false)) {
+      try {
+        atValue.value =
+            await decryptionService.decrypt(tuple.one, atValue.value) as String;
+      } on AtException {
+        atValue.value = AtDecoderImpl()
+            .decodeData(atValue.value, atValue.metadata!.encoding!);
+      }
     }
-
     // After decrypting the data, if data is binary, decode the data
     // For cached keys, isBinary is not on server-side. Hence getting
     // isBinary from AtKey.
