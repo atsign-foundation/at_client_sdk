@@ -43,11 +43,13 @@ void main() {
         .put(phoneKey, value, putRequestOptions: putRequestOptions);
     expect(putResult, true);
     // get the value from local keystore to check whether it is not encrypted
-    var getResult = await atClientManager.atClient
+    var getKeyStoreResult = await atClientManager.atClient
         .getLocalSecondary()!
         .keyStore!
         .get(phoneKey.toString());
-    print(getResult);
+    expect(getKeyStoreResult.data, value);
+    var getResult = await atClientManager.atClient.get(phoneKey);
+    expect(getResult.value, value);
   });
 
   test('put method - create a public key', () async {
