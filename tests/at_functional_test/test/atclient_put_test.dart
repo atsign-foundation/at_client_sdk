@@ -38,7 +38,7 @@ void main() {
       ..sharedWith = '@bob🛠'
       ..sharedBy = atSign;
     var value = '+1 100 200 300';
-    final putRequestOptions = PutRequestOptions()..isEncrypted = false;
+    final putRequestOptions = PutRequestOptions()..shouldEncrypt = false;
     var putResult = await atClientManager.atClient
         .put(phoneKey, value, putRequestOptions: putRequestOptions);
     expect(putResult, true);

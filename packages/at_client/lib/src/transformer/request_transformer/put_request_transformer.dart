@@ -40,7 +40,7 @@ class PutRequestTransformer
     final atKey = updateVerbBuilder.atKey;
     final metadata = atKey.metadata;
     // Check if the data needs to be encrypted for non-public keys
-    if (!_isPublicKey(metadata) && options.isEncrypted) {
+    if (!_isPublicKey(metadata) && options.shouldEncrypt) {
       await _encryptData(updateVerbBuilder, options);
     } else {
       // Sign the data for public keys
