@@ -20,7 +20,6 @@ void main() {
   });
 
   test('put method - create a key sharing to other atSign', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'phone'
       ..sharedWith = '@bob🛠';
@@ -31,8 +30,27 @@ void main() {
     expect(getResult.value, value);
   });
 
+  test(
+      'put method - create a key sharing to other atSign with isEncrypted set to false',
+      () async {
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠'
+      ..sharedBy = atSign;
+    var value = '+1 100 200 300';
+    final putRequestOptions = PutRequestOptions()..isEncrypted = false;
+    var putResult = await atClientManager.atClient
+        .put(phoneKey, value, putRequestOptions: putRequestOptions);
+    expect(putResult, true);
+    // get the value from local keystore to check whether it is not encrypted
+    var getResult = await atClientManager.atClient
+        .getLocalSecondary()!
+        .keyStore!
+        .get(phoneKey.toString());
+    print(getResult);
+  });
+
   test('put method - create a public key', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'location'
       ..metadata = (Metadata()..isPublic = true);
@@ -45,7 +63,6 @@ void main() {
   });
 
   test('put method - create a self key with sharedWith populated', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'country'
       ..sharedWith = atSign;
@@ -59,7 +76,6 @@ void main() {
 
   test('put method - create a self key with sharedWith not populated',
       () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()..key = 'mobile';
     var value = '+1 100 200 300';
     var putResult = await atClientManager.atClient.put(phoneKey, value);
@@ -70,7 +86,6 @@ void main() {
   });
 
   test('put method - create a key with binary data', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'image'
       ..metadata = (Metadata()..isBinary = true);
@@ -86,7 +101,6 @@ void main() {
   });
 
   test('put method - create a public key with binary data', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'image'
       ..metadata = (Metadata()
@@ -106,7 +120,6 @@ void main() {
   });
 
   test('put method - create a public key', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'city'
       ..metadata = (Metadata()..isPublic = true);
