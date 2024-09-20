@@ -288,7 +288,8 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
 }
 
 Future<void> startClient(ChildIsolatePreferences clientParameters) async {
-  var atClientPreferences = _getAtClientPreference(currentAtSign, clientParameters.clientId.name,
+  var atClientPreferences = _getAtClientPreference(
+      currentAtSign, clientParameters.clientId.name,
       hiveStoragePath: clientParameters.hiveStoragePath,
       commitLogPath: clientParameters.commitLogPath);
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
@@ -419,6 +420,7 @@ bool assertCommitEntries(
     if (!(atKeyList.contains(AtKey.fromString(mapEntry.key).key))) {
       continue;
     }
+    _logger.info('mapEntry: $mapEntry');
     // Compare server commit id with both client's commit log
     if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
         (serverCommitLogMap[mapEntry.key][0] !=
