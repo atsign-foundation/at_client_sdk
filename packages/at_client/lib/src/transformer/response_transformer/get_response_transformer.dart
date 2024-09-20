@@ -51,7 +51,6 @@ class GetResponseTransformer
       // for old data, try decrypting the value. if decryption fails, set the original value.
       try {
         atValue.value = await _decrypt(atValue, decryptionService, tuple.one);
-        tuple.one.metadata.isEncrypted = true;
       } on FormatException {
         // trying to decrypt plain data will result in FormatException.
         if (atValue.metadata!.encoding != null) {

@@ -20,7 +20,6 @@ class MockAtKeyDecryptionManager extends Mock
 class MockAtKeyDecryption extends Mock implements AtKeyDecryption {}
 
 void main() {
-  AtClient mockAtClient = MockAtClient();
   group('A group of test for GetResponseTransformer', () {
     late MockAtClient mockAtClient;
     late MockAtKeyDecryptionManager mockDecryptionManager;
