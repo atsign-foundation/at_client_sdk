@@ -18,7 +18,7 @@ import 'package:at_commons/at_commons.dart';
 class GetResponseTransformer
     implements Transformer<Tuple<AtKey, String>, AtValue> {
   late final AtClient _atClient;
-
+  AtKeyDecryptionManager? decryptionManager;
   GetResponseTransformer(this._atClient);
 
   @override
@@ -40,9 +40,9 @@ class GetResponseTransformer
     if (_isKeyPublic(decodedResponse['key'])) {
       return _handlePublicData(atValue, tuple);
     }
-
-    var decryptionService = AtKeyDecryptionManager(_atClient)
-        .get(tuple.one, _atClient.getCurrentAtSign()!);
+    decryptionManager ??= AtKeyDecryptionManager(_atClient);
+    var decryptionService =
+        decryptionManager!.get(tuple.one, _atClient.getCurrentAtSign()!);
     // Decrypt the data, for other keys
     // For new encrypted data after AtClient v3.2.1, isEncrypted will be true by default
     if (_shouldDecrypt(atValue.metadata)) {
@@ -52,8 +52,6 @@ class GetResponseTransformer
       try {
         atValue.value = await _decrypt(atValue, decryptionService, tuple.one);
         tuple.one.metadata.isEncrypted = true;
-        // update the same key with isEncrypted set in metadata
-        // await _atClient.putMeta(tuple.one);
       } on FormatException {
         // trying to decrypt plain data will result in FormatException.
         if (atValue.metadata!.encoding != null) {
