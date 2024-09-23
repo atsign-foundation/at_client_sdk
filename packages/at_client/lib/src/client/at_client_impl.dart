@@ -52,6 +52,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
+  StorageManager? _storageManager;
   static final upperCaseRegex = RegExp(r'[A-Z]');
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
@@ -197,8 +198,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<void> _init() async {
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
-        var storageManager = StorageManager(preference);
-        await storageManager.init(_atSign, preference!.keyStoreSecret);
+        _storageManager = StorageManager(preference);
+        await _storageManager?.init(_atSign, preference!.keyStoreSecret);
       }
 
       _localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
@@ -548,7 +549,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     // will not be null.
     if (verbBuilder.value.length > _preference!.maxDataSize) {
       throw BufferOverFlowException(
-          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
+          'The length of value exceeds the maximum allowed length.'
+          ' Maximum buffer size is ${_preference!.maxDataSize} bytes.'
+          ' Found ${value.toString().length} bytes');
     }
 
     Secondary secondary = SecondaryManager.getSecondary(this, verbBuilder);
@@ -964,6 +967,111 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       _atClientCommitLogCompaction!.stopCompactionJob();
       _atClientManager.removeChangeListeners(this);
     }
+  }
+
+  @override
+  Future<bool> isSecondaryReset() async {
+    String? localPublicKey, remotePublicKey;
+    _logger.finer('Performing Remote Secondary reset check');
+    // Fetch EncryptionPublicKey from LocalSecondary
+    try {
+      localPublicKey = await getLocalSecondary()
+          ?.getEncryptionPublicKey(getCurrentAtSign()!);
+    } on Exception catch (e) {
+      _logger.severe(
+          'Exception caused fetch EncryptionPublicKey from LocalSecondary.'
+          ' Unable to complete reset check | Cause $e');
+      return false;
+    }
+    // Fetch EncryptionPublicKey from RemoteSecondary
+    AtKey encPublicKey = AtKey.fromString('publickey$getCurrentAtSign()');
+    try {
+      PLookupVerbBuilder plookup = PLookupVerbBuilder()
+        ..atKey = encPublicKey;
+      remotePublicKey = await getRemoteSecondary()?.executeVerb(plookup);
+    } on Exception catch (e) {
+      _logger.info('Caught exception during public key lookup | $e');
+      _logger.info('Retrying fetch public key');
+      // try fetching the ENCRYPTION_PUB_KEY using lookup verb
+      // this fallback is for when reset status check is performed on an
+      //unauthenticated connection
+      LookupVerbBuilder lookup = LookupVerbBuilder()
+        ..atKey = encPublicKey;
+      remotePublicKey = await getRemoteSecondary()?.executeVerb(lookup);
+    }
+
+    // secondary response is in format 'data:publickey'. Removing 'data:' from response
+    if (remotePublicKey!.contains('data:')) {
+      remotePublicKey = remotePublicKey.replaceFirst('data:', '');
+    } else {
+      _logger.info(
+          'Fetched potential invalid remote Public encryption key: $remotePublicKey');
+      remotePublicKey = null;
+    }
+
+    if (localPublicKey.isNull) {
+      _logger.severe('Could not fetch EncryptionPublicKey from LocalSecondary.'
+          ' Unable to complete reset check');
+      return false;
+    } else if (remotePublicKey.isNull) {
+      _logger.severe('Could not fetch EncryptionPublicKey from RemoteSecondary.'
+          ' Unable to complete reset check');
+      return false;
+    }
+
+    if (localPublicKey != remotePublicKey) {
+      _logger.shout(
+          'AtEncryptionPublicKey on local secondary and remote secondary are different.'
+          'This indicates remote secondary has been reset.'
+          'Please delete localStorage and restart the client');
+      _logger.info('To delete localSecondary, call '
+          'AtClientImpl.deleteLocalSecondaryStorageWithConsent() with user consent');
+      _logger.finer('EncryptionPublicKey on LocalSecondary: $localPublicKey');
+      _logger.finer('EncryptionPublicKey on RemoteSecondary: $remotePublicKey');
+      return true;
+    }
+    _logger.info('Remote Secondary is NOT reset. Status ok');
+    return false;
+  }
+
+  @override
+  Future<void> deleteLocalSecondaryStorageWithConsent(
+      {required bool userConsentToDeleteLocalStorage}) async {
+    _logger.shout(
+        'Consent to delete LocalSecondary storage received: $userConsentToDeleteLocalStorage');
+    if (!userConsentToDeleteLocalStorage) {
+      throw AtClientException.message(
+          'User consent not provided. Unable to delete local storage without consent');
+    }
+    await StorageManager(_preference).close(_atSign);
+    try {
+      _deleteLocalStorage(_preference!.commitLogPath!, isHiveStorage: false);
+    } on Exception catch (e) {
+      _logger.finer('Unable to delete CommitLog storage | Cause: $e');
+      throw AtIOException(e.toString());
+    }
+    // Delete hive storage
+    try {
+      _deleteLocalStorage(_preference!.hiveStoragePath!, isHiveStorage: true);
+    } on Exception catch (e) {
+      _logger.finer('Unable to delete hive storage | Cause: $e');
+      throw AtIOException(e.toString());
+    }
+  }
+
+  void _deleteLocalStorage(String storageDirectory,
+      {required bool isHiveStorage}) {
+    String storageType = isHiveStorage ? 'hive' : 'commitLog';
+    _logger.info('Deleting $storageType storage at path: $storageDirectory');
+
+    Directory storageDir = Directory(storageDirectory);
+    if (!storageDir.existsSync()) {
+      throw AtClientException.message(
+          '$storageType storage not found at path: $storageDirectory.'
+          ' Please provide a valid $storageType storage directory path');
+    }
+    Directory(storageDirectory).deleteSync(recursive: true);
+    _logger.info('Successfully deleted $storageType storage');
   }
 
   // TODO v4 - remove the follow methods in version 4 of at_client package

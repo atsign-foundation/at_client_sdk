@@ -535,6 +535,20 @@ abstract class AtClient {
       Function streamCompletionCallBack,
       Function streamReceiveCallBack);
 
+  /// Performs a check to see if RemoteSecondary has been reset
+  /// returns true if the RemoteSecondary has been reset, false otherwise
+  Future<bool> isSecondaryReset();
+
+  /// Deletes a client's local secondary storage
+  ///
+  /// [To be used when remote secondary has been reset]
+  ///
+  /// Requires user consent passed as a method parameter.
+  ///
+  /// Performs deletion only if consent is true
+  void deleteLocalSecondaryStorageWithConsent(
+      {required bool userConsentToDeleteLocalStorage});
+
   /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
   /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
   /// an enrollment request. Only the connections which have access to manage

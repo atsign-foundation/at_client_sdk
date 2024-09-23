@@ -7,6 +7,7 @@ import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -28,6 +29,9 @@ class MockAtCompactionJob extends Mock implements AtCompactionJob {
 }
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+
+class MockSecondaryKeystore extends Mock implements SecondaryKeyStore {}
+
 
 void main() {
   group('A group of at client impl create tests', () {
@@ -259,6 +263,48 @@ void main() {
       expect(key.key, 'uppercase'); //key should be converted to lower case
     });
   });
+
+  group('Group of tests verify client behaviour on remote secondary reset', () {
+    registerFallbackValue(MockRemoteSecondary());
+    registerFallbackValue(LookupVerbBuilder());
+
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    SecondaryKeyStore mockKeystore = MockSecondaryKeystore();
+    AtClient client;
+
+    test('Verify isSecondaryReset() functionality - negative case', () async {
+      AtData responseObj = AtData()
+        ..data = 'incorrectLocalEncPublicKey';
+      when(() => mockRemoteSecondary.executeVerb(any())).thenAnswer(
+              (invocation) => Future.value('data:incorrectRemoteEncPublicKey'));
+      when(() => mockKeystore.get(any()))
+          .thenAnswer((invocation) => Future.value(responseObj));
+
+      client = await AtClientImpl.create('@alice47', 'resetLocalTest',
+          AtClientPreference()
+            ..isLocalStoreRequired = true,
+          remoteSecondary: mockRemoteSecondary,
+          localSecondaryKeyStore: mockKeystore);
+      expect(await client.isSecondaryReset(), true);
+    });
+
+    test('Verify isSecondaryReset() functionality - positive case', () async {
+      AtData responseObj = AtData()
+        ..data = 'correctEncPublicKey';
+      when(() => mockRemoteSecondary.executeVerb(any()))
+          .thenAnswer((invocation) => Future.value('data:correctEncPublicKey'));
+      when(() => mockKeystore.get(any()))
+          .thenAnswer((invocation) => Future.value(responseObj));
+
+      client = await AtClientImpl.create('@alice47', 'resetLocalTest',
+          AtClientPreference()
+            ..isLocalStoreRequired = true,
+          remoteSecondary: mockRemoteSecondary,
+          localSecondaryKeyStore: mockKeystore);
+      expect(await client.isSecondaryReset(), false);
+    });
+  });
+
 
   group('A group of tests related to apkam/enrollments', () {
     test(
