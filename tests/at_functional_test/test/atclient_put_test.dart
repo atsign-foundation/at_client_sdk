@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
@@ -19,15 +20,26 @@ void main() {
     atClientManager.atClient.syncService.sync();
   });
 
-  test('put method - create a key sharing to other atSign', () async {
+  test(
+      'put method - create a key sharing to other atSign and verify metadata isEncrypted from server',
+      () async {
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = '@bob🛠'
+      ..sharedBy = atSign;
     var value = '+1 100 200 300';
     var putResult = await atClientManager.atClient.put(phoneKey, value);
     expect(putResult, true);
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
+    expect(getResult.metadata?.isEncrypted, true);
+    await FunctionalTestSyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()..key = phoneKey.toString());
+    // fetch the key from remote and verify isEncrypted
+    var getResultRemote = await atClientManager.atClient.get(phoneKey,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    expect(getResultRemote.metadata?.isEncrypted, true);
   });
 
   test(
@@ -50,6 +62,14 @@ void main() {
     expect(getKeyStoreResult.data, value);
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
+    expect(getResult.metadata?.isEncrypted, false);
+    await FunctionalTestSyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()..key = phoneKey.toString());
+    // fetch the key from remote and verify isEncrypted
+    var getResultRemote = await atClientManager.atClient.get(phoneKey,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    expect(getResultRemote.metadata?.isEncrypted, false);
   });
 
   test('put method - create a public key', () async {
