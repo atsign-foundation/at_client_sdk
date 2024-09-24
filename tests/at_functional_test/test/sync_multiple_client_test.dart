@@ -419,6 +419,7 @@ bool assertCommitEntries(
     if (!(atKeyList.contains(AtKey.fromString(mapEntry.key).key))) {
       continue;
     }
+    _logger.info('mapEntry: $mapEntry');
     // Compare server commit id with both client's commit log
     if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
         (serverCommitLogMap[mapEntry.key][0] !=
