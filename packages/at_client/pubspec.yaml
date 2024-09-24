@@ -50,7 +50,7 @@ dependency_overrides:
   at_lookup:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
-      ref: update_isencrypted_changes
+      ref: at_lookup_publish
       path: packages/at_lookup
 
 dev_dependencies:
