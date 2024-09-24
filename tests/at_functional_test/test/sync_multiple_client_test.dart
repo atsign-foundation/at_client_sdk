@@ -362,6 +362,7 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
   var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
       ?.executeCommand('info:brief\n');
+  print('infoResponse: $infoResponse');
   infoResponse = infoResponse?.replaceAll('data:', '');
   var serverVersion = await jsonDecode(infoResponse!)['version'];
   if (Version.parse(serverVersion.split('+')[0]) >= Version(3, 0, 32)) {
