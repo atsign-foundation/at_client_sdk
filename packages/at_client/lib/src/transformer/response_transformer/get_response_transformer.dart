@@ -44,7 +44,8 @@ class GetResponseTransformer
     var decryptionService =
         decryptionManager!.get(tuple.one, _atClient.getCurrentAtSign()!);
     // Decrypt the data, for other keys
-    // For new encrypted data after AtClient v3.2.1, isEncrypted will be true by default
+    // For new encrypted data after AtClient v3.2.1, isEncrypted will be true(default value for PutRequestOptions.shouldEncrypt) for self and shared keys
+    // isEncrypted will be false if client sets PutRequestOptions.shouldEncrypt to false
     if (_shouldDecrypt(atValue.metadata)) {
       atValue.value = await _decrypt(atValue, decryptionService, tuple.one);
     } else {
