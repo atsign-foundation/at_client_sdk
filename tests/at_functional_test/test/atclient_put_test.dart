@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
@@ -19,20 +20,59 @@ void main() {
     atClientManager.atClient.syncService.sync();
   });
 
-  test('put method - create a key sharing to other atSign', () async {
-    // phone.me@alice🛠
+  test(
+      'put method - create a key sharing to other atSign and verify metadata isEncrypted from server',
+      () async {
     var phoneKey = AtKey()
       ..key = 'phone'
-      ..sharedWith = '@bob🛠';
+      ..sharedWith = '@bob🛠'
+      ..sharedBy = atSign;
     var value = '+1 100 200 300';
     var putResult = await atClientManager.atClient.put(phoneKey, value);
     expect(putResult, true);
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
+    expect(getResult.metadata?.isEncrypted, true);
+    await FunctionalTestSyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()..key = phoneKey.toString());
+    // fetch the key from remote and verify isEncrypted
+    var getResultRemote = await atClientManager.atClient.get(phoneKey,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    expect(getResultRemote.metadata?.isEncrypted, true);
+  });
+
+  test(
+      'put method - create a key sharing to other atSign with isEncrypted set to false',
+      () async {
+    var phoneKey = AtKey()
+      ..key = 'phone'
+      ..sharedWith = '@bob🛠'
+      ..sharedBy = atSign;
+    var value = '+1 100 200 300';
+    final putRequestOptions = PutRequestOptions()..shouldEncrypt = false;
+    var putResult = await atClientManager.atClient
+        .put(phoneKey, value, putRequestOptions: putRequestOptions);
+    expect(putResult, true);
+    // get the value from local keystore to check whether it is not encrypted
+    var getKeyStoreResult = await atClientManager.atClient
+        .getLocalSecondary()!
+        .keyStore!
+        .get(phoneKey.toString());
+    expect(getKeyStoreResult.data, value);
+    var getResult = await atClientManager.atClient.get(phoneKey);
+    expect(getResult.value, value);
+    expect(getResult.metadata?.isEncrypted, false);
+    await FunctionalTestSyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()..key = phoneKey.toString());
+    // fetch the key from remote and verify isEncrypted
+    var getResultRemote = await atClientManager.atClient.get(phoneKey,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    expect(getResultRemote.metadata?.isEncrypted, false);
   });
 
   test('put method - create a public key', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'location'
       ..metadata = (Metadata()..isPublic = true);
@@ -45,7 +85,6 @@ void main() {
   });
 
   test('put method - create a self key with sharedWith populated', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'country'
       ..sharedWith = atSign;
@@ -59,7 +98,6 @@ void main() {
 
   test('put method - create a self key with sharedWith not populated',
       () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()..key = 'mobile';
     var value = '+1 100 200 300';
     var putResult = await atClientManager.atClient.put(phoneKey, value);
@@ -70,7 +108,6 @@ void main() {
   });
 
   test('put method - create a key with binary data', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'image'
       ..metadata = (Metadata()..isBinary = true);
@@ -86,7 +123,6 @@ void main() {
   });
 
   test('put method - create a public key with binary data', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'image'
       ..metadata = (Metadata()
@@ -106,7 +142,6 @@ void main() {
   });
 
   test('put method - create a public key', () async {
-    // phone.me@alice🛠
     var phoneKey = AtKey()
       ..key = 'city'
       ..metadata = (Metadata()..isPublic = true);
