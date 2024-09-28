@@ -41,18 +41,6 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      ref: update_isencrypted_changes
-      path: packages/at_commons
-  at_lookup:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      ref: at_lookup_publish
-      path: packages/at_lookup
-
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.21.4
