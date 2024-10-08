@@ -41,6 +41,12 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      path: packages/at_persistence_secondary_server
+      ref: commit_log_special_key_bug
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.21.4
