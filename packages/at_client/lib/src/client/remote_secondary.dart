@@ -139,7 +139,7 @@ class RemoteSecondary implements Secondary {
   }
 
   void addStreamData(List<int> data) {
-    atLookUp.connection!.getSocket().add(data);
+    atLookUp.connection!.underlying.add(data);
   }
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to

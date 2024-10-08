@@ -60,7 +60,7 @@ void main() {
     reset(mockAtChops);
     when(() => mockRemoteSecondary.findSecondaryUrl())
         .thenAnswer((_) async => fakeSecondaryUrl);
-    when(() => mockOutboundConnection.getSocket())
+    when(() => mockOutboundConnection.underlying)
         .thenAnswer((_) => mockSocket);
     when(() => mockMonitorOutboundConnectionFactory.createConnection(
             fakeSecondaryUrl,

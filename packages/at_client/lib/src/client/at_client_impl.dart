@@ -699,7 +699,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
-      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
+      remoteSecondary.atLookUp.connection!.underlying.add(encryptedData);
       var streamResult = await remoteSecondary.atLookUp.messageListener
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
       if (streamResult.startsWith('stream:done')) {

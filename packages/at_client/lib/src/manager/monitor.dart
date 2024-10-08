@@ -172,7 +172,7 @@ class Monitor {
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
       runZonedGuarded(() {
-        _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
+        _monitorConnection!.underlying.listen(_messageHandler, onDone: () {
           _logger.info(
               'socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
           _callCloseStopAndRetry();
