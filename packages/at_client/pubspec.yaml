@@ -47,6 +47,11 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_server.git
       path: packages/at_persistence_secondary_server
       ref: commit_log_special_key_bug
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      ref: special_key_bug
+      path: packages/at_commons
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.21.4
