@@ -31,6 +31,13 @@ dependencies:
    at_cli_commons: ^1.2.0
    at_persistence_secondary_server: ^3.0.64
    duration: ^4.0.3
+   crypto: ^3.0.5
+
+dependency_overrides:
+  at_auth:
+    path: ../at_auth
+  at_cli_commons:
+    path: ../at_cli_commons
 
 dev_dependencies:
   lints: ^2.1.0

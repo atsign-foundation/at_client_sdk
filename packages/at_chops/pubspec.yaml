@@ -17,6 +17,7 @@ dependencies:
   pointycastle: ^3.7.4
   at_commons: ^5.0.0
   at_utils: ^3.0.19
+  cryptography: ^2.7.0
 
 dev_dependencies:
   lints: ^3.0.0

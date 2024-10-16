@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -5,26 +6,30 @@ import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/key/at_key_pair.dart';
 import 'package:at_chops/src/key/at_private_key.dart';
 import 'package:at_chops/src/key/at_public_key.dart';
+import 'package:at_chops/src/model/hash_params.dart';
 
 /// Interface for encrypting and decrypting data. Check [DefaultEncryptionAlgo] for sample implementation.
-abstract class AtEncryptionAlgorithm {
+abstract class AtEncryptionAlgorithm<T, V> {
   /// Encrypts the passed bytes. Bytes are passed as [Uint8List]. Encode String data type to [Uint8List] using [utf8.encode].
-  Uint8List encrypt(Uint8List plainData);
+  V encrypt(T plainData);
 
   /// Decrypts the passed encrypted bytes.
-  Uint8List decrypt(Uint8List encryptedData);
+  V decrypt(T encryptedData);
 }
 
 /// Interface for symmetric encryption algorithms. Check [AESEncryptionAlgo] for sample implementation.
-abstract class SymmetricEncryptionAlgorithm extends AtEncryptionAlgorithm {
+abstract class SymmetricEncryptionAlgorithm<T, V>
+    extends AtEncryptionAlgorithm<T, V> {
   @override
-  Uint8List encrypt(Uint8List plainData, {InitialisationVector iv});
+  V encrypt(T plainData, {InitialisationVector iv});
+
   @override
-  Uint8List decrypt(Uint8List encryptedData, {InitialisationVector iv});
+  V decrypt(T encryptedData, {InitialisationVector iv});
 }
 
 /// Interface for asymmetric encryption algorithms. Check [DefaultEncryptionAlgo] for sample implementation.
-abstract class ASymmetricEncryptionAlgorithm extends AtEncryptionAlgorithm {
+abstract class ASymmetricEncryptionAlgorithm
+    extends AtEncryptionAlgorithm<Uint8List, Uint8List> {
   AtPublicKey? atPublicKey;
   AtPrivateKey? atPrivateKey;
 
@@ -48,7 +53,7 @@ abstract class AtSigningAlgorithm {
 }
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.
-abstract class AtHashingAlgorithm {
+abstract class AtHashingAlgorithm<K, V> {
   /// Hashes the passed data
-  String hash(Uint8List data);
+  FutureOr<V> hash(K data, {covariant HashParams? hashParams});
 }

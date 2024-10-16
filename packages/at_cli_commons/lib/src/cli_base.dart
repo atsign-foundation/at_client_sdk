@@ -19,19 +19,19 @@ class CLIBase {
     ..addFlag('help', negatable: false, help: 'Usage instructions')
     ..addOption('atsign',
         abbr: 'a', mandatory: true, help: 'This client\'s atSign')
-    ..addOption('namespace', abbr: 'n', mandatory: true, help: 'Namespace')
-    ..addOption('key-file',
+    ..addOption('namespace', abbr: 'n', mandatory: true, help: 'Namespace')..addOption(
+        'key-file',
         abbr: 'k',
         mandatory: false,
         help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
     ..addOption('cram-secret',
         abbr: 'c', mandatory: false, help: 'atSign\'s cram secret')
-    ..addOption('home-dir', abbr: 'h', mandatory: false, help: 'home directory')
-    ..addOption('storage-dir',
+    ..addOption('home-dir', abbr: 'h', mandatory: false, help: 'home directory')..addOption(
+        'storage-dir',
         abbr: 's',
         mandatory: false,
-        help: 'directory for this client\'s local storage files')
-    ..addOption('root-domain',
+        help: 'directory for this client\'s local storage files')..addOption(
+        'root-domain',
         abbr: 'd',
         mandatory: false,
         help: 'Root Domain',
@@ -92,6 +92,7 @@ class CLIBase {
   final String? storageDir;
   final String? downloadDir;
   final String? cramSecret;
+  final String? passPhrase;
   final bool syncDisabled;
   final int maxConnectAttempts;
 
@@ -120,19 +121,19 @@ class CLIBase {
   ///     cliBase.logger.logger.level = Level.FINEST;
   /// ```
   /// Throws an [IllegalArgumentException] if the parameters fail validation.
-  CLIBase({
-    required String atSign,
-    required this.nameSpace,
-    required this.rootDomain,
-    this.homeDir,
-    this.verbose = false,
-    this.atKeysFilePath,
-    this.storageDir,
-    this.downloadDir,
-    this.cramSecret,
-    this.syncDisabled = false,
-    this.maxConnectAttempts = defaultMaxConnectAttempts,
-  }) {
+  CLIBase(
+      {required String atSign,
+      required this.nameSpace,
+      required this.rootDomain,
+      this.homeDir,
+      this.verbose = false,
+      this.atKeysFilePath,
+      this.storageDir,
+      this.downloadDir,
+      this.cramSecret,
+      this.syncDisabled = false,
+      this.maxConnectAttempts = defaultMaxConnectAttempts,
+      this.passPhrase}) {
     this.atSign = AtUtils.fixAtSign(atSign);
     if (homeDir == null) {
       if (atKeysFilePath == null) {
@@ -196,7 +197,8 @@ class CLIBase {
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
       ..cramSecret = cramSecret
-      ..atProtocolEmitted = Version(2, 0, 0);
+      ..atProtocolEmitted = Version(2, 0, 0)
+      ..passPhrase = passPhrase;
 
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atSign, atOnboardingConfig,

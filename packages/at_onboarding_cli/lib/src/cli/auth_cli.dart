@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_cli_commons/at_cli_commons.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
@@ -290,17 +291,17 @@ Future<AtClient> createAtClient(ArgResults ar) async {
   );
 
   CLIBase cliBase = CLIBase(
-    atSign: atSign,
-    atKeysFilePath: ar[AuthCliArgs.argNameAtKeys],
-    nameSpace: nameSpace,
-    rootDomain: ar[AuthCliArgs.argNameAtDirectoryFqdn],
-    homeDir: getHomeDirectory(),
-    storageDir: storageDir!.path,
-    verbose: ar[AuthCliArgs.argNameVerbose] || ar[AuthCliArgs.argNameDebug],
-    syncDisabled: true,
-    maxConnectAttempts: int.parse(
-        ar[AuthCliArgs.argNameMaxConnectAttempts]), // 10 * 3 == 30 seconds
-  );
+      atSign: atSign,
+      atKeysFilePath: ar[AuthCliArgs.argNameAtKeys],
+      nameSpace: nameSpace,
+      rootDomain: ar[AuthCliArgs.argNameAtDirectoryFqdn],
+      homeDir: getHomeDirectory(),
+      storageDir: storageDir!.path,
+      verbose: ar[AuthCliArgs.argNameVerbose] || ar[AuthCliArgs.argNameDebug],
+      syncDisabled: true,
+      maxConnectAttempts: int.parse(ar[AuthCliArgs.argNameMaxConnectAttempts]),
+      // 10 * 3 == 30 seconds
+      passPhrase: ar[AuthCliArgs.argNamePassPhrase]);
 
   await cliBase.init();
 
@@ -996,7 +997,10 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     ..rootDomain = ar[AuthCliArgs.argNameAtDirectoryFqdn]
     ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
     ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
-    ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys];
+    ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
+    ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
+    ..hashingAlgoType =
+        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 
   return AtOnboardingServiceImpl(atSign, atOnboardingPreference);
 }

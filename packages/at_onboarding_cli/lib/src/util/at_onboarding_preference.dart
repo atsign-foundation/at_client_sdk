@@ -27,4 +27,6 @@ class AtOnboardingPreference extends AtClientPreference {
 
   @Deprecated("No longer used")
   int apkamAuthRetryDurationMins = 30;
+
+  String? passPhrase;
 }
