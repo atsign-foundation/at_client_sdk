@@ -1,3 +1,7 @@
+## 3.3.0
+- feat: add the AtClientBindings mixin which was initially added to the 
+  noports_core package but has broader applicability.
+
 ## 3.2.2
 - build[deps]: Upgraded dependencies for the following packages:
   - at_commons to v5.0.0
