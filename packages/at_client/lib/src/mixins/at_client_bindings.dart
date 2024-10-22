@@ -7,12 +7,12 @@ mixin AtClientBindings {
   AtSignLogger get logger;
 
   Future<void> notify(
-      AtKey atKey,
-      String value, {
-        required bool checkForFinalDeliveryStatus,
-        required bool waitForFinalDeliveryStatus,
-        required Duration ttln,
-      }) async {
+    AtKey atKey,
+    String value, {
+    required bool checkForFinalDeliveryStatus,
+    required bool waitForFinalDeliveryStatus,
+    required Duration ttln,
+  }) async {
     await atClient.notificationService.notify(
       NotificationParams.forUpdate(atKey,
           value: value, notificationExpiry: ttln),
