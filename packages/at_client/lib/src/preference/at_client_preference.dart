@@ -115,6 +115,9 @@ class AtClientPreference {
 
   //hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
+
+  @experimental
+  bool skipDeletes = false;
 }
 
 @Deprecated("Use SyncService")

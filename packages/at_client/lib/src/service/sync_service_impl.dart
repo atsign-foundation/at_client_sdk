@@ -235,7 +235,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final localCommitIdBeforeSync = await _getLocalCommitId();
 
       // Hint for the casual reader - main sync algorithm is in [syncInternal]
-      final syncResult = await syncInternal(serverCommitId, syncRequest);
+      final syncResult = await syncInternal(serverCommitId, syncRequest,
+          localCommitIdBeforeSync: localCommitIdBeforeSync);
 
       _syncComplete(syncRequest);
       syncProgress.syncStatus = syncResult.syncStatus;
@@ -347,8 +348,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @visibleForTesting
-  Future<SyncResult> syncInternal(
-      int serverCommitId, SyncRequest syncRequest) async {
+  Future<SyncResult> syncInternal(int serverCommitId, SyncRequest syncRequest,
+      {int? localCommitIdBeforeSync}) async {
     var syncResult = syncRequest.result!;
     _logger.finer('Sync in progress');
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
@@ -366,7 +367,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'Pulling changes into local secondary | lastReceivedServerCommitId $lastReceivedServerCommitId | serverCommitId $serverCommitId'));
       // Hint to casual reader: This is where we sync new changes from the server to this client
       final keyInfoList = await _syncFromServer(
-          serverCommitId, lastReceivedServerCommitId, unCommittedEntries);
+          serverCommitId, lastReceivedServerCommitId, unCommittedEntries,
+          localCommitIdBeforeSync: localCommitIdBeforeSync);
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
@@ -429,10 +431,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Syncs the cloud secondary changes to local secondary.
-  Future<List<KeyInfo>> _syncFromServer(
-      int serverCommitId,
-      int lastReceivedServerCommitId,
-      List<CommitEntry> uncommittedEntries) async {
+  Future<List<KeyInfo>> _syncFromServer(int serverCommitId,
+      int lastReceivedServerCommitId, List<CommitEntry> uncommittedEntries,
+      {int? localCommitIdBeforeSync}) async {
     // Iterates until serverCommitId is greater than lastReceivedServerCommitId.
     // replacing localCommitId with lastReceivedServerCommitId fixes infinite loop issue
     // in certain scenarios e.g server has a commit entry that need not be synced on client side,
@@ -445,7 +446,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           "lastReceivedServerCommitId": lastReceivedServerCommitId
         });
         List<dynamic> listOfCommitEntriesFromServer =
-            await _getEntriesToSyncFromServer(lastReceivedServerCommitId);
+            await _getEntriesToSyncFromServer(lastReceivedServerCommitId,
+                localCommitIdBeforeSync: localCommitIdBeforeSync);
         if (listOfCommitEntriesFromServer.isEmpty) {
           _logger.finer(_logger.getLogMessageWithClientParticulars(
               _atClient.getPreferences()!.atClientParticulars,
@@ -538,12 +540,16 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Takes the last received server commit id and fetches the entries that are above the given
   /// commit-id to sync into the local keystore.
   Future<List<dynamic>> _getEntriesToSyncFromServer(
-      int lastReceivedServerCommitId) async {
+      int lastReceivedServerCommitId,
+      {int? localCommitIdBeforeSync}) async {
     var syncBuilder = SyncVerbBuilder()
       ..commitId = lastReceivedServerCommitId
       ..regex = _atClient.getPreferences()!.syncRegex
       ..limit = _atClient.getPreferences()!.syncPageLimit
       ..isPaginated = true;
+    if (localCommitIdBeforeSync == -1) {
+      syncBuilder.skipDeletes = true;
+    }
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
         'syncBuilder ${syncBuilder.buildCommand()}'));

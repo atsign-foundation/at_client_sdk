@@ -41,6 +41,13 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_commons
+      ref: sync_skip_delete
+
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.21.4
