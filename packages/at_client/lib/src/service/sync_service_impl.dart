@@ -25,6 +25,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncRequestTriggerInSeconds = 3,
       syncRunIntervalSeconds = 5,
       queueSize = 5;
+  //#TODO move to config
+  static const int syncDeltaForSkipDeletes = 10;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
@@ -446,7 +448,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           "lastReceivedServerCommitId": lastReceivedServerCommitId
         });
         List<dynamic> listOfCommitEntriesFromServer =
-            await _getEntriesToSyncFromServer(lastReceivedServerCommitId,
+            await _getEntriesToSyncFromServer(
+                serverCommitId, lastReceivedServerCommitId,
                 localCommitIdBeforeSync: localCommitIdBeforeSync);
         if (listOfCommitEntriesFromServer.isEmpty) {
           _logger.finer(_logger.getLogMessageWithClientParticulars(
@@ -540,14 +543,18 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Takes the last received server commit id and fetches the entries that are above the given
   /// commit-id to sync into the local keystore.
   Future<List<dynamic>> _getEntriesToSyncFromServer(
-      int lastReceivedServerCommitId,
+      int serverCommitId, int lastReceivedServerCommitId,
       {int? localCommitIdBeforeSync}) async {
     var syncBuilder = SyncVerbBuilder()
       ..commitId = lastReceivedServerCommitId
       ..regex = _atClient.getPreferences()!.syncRegex
       ..limit = _atClient.getPreferences()!.syncPageLimit
       ..isPaginated = true;
-    if (localCommitIdBeforeSync == -1) {
+    print('atclient skip flag: ${_atClient.getPreferences()!.skipDeletes}');
+    if (_atClient.getPreferences()!.skipDeletes &&
+        _shouldSetSkipDeletes(serverCommitId, localCommitIdBeforeSync!)) {
+      //#TODO remove print
+      print('setting skip deletes');
       syncBuilder.skipDeletes = true;
     }
     _logger.finer(_logger.getLogMessageWithClientParticulars(
@@ -555,6 +562,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         'syncBuilder ${syncBuilder.buildCommand()}'));
     List syncResponseJson = [];
     try {
+      print('syncing entries from server');
       syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
           .parse(await _remoteSecondary.executeVerb(syncBuilder))
           .response);
@@ -569,6 +577,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _atClient.getPreferences()!.atClientParticulars,
         'syncResponse $syncResponseJson'));
     return syncResponseJson;
+  }
+
+  bool _shouldSetSkipDeletes(int serverCommitId, int localCommitIdBeforeSync) {
+    //#TODO remove print
+    print(
+        'server commitId : $serverCommitId localCommitId: $localCommitIdBeforeSync');
+    print('diff in commit id: ${serverCommitId - localCommitIdBeforeSync}');
+    return serverCommitId - localCommitIdBeforeSync > syncDeltaForSkipDeletes;
   }
 
   Future<ConflictInfo?> _setConflictInfo(final serverCommitEntry) async {
