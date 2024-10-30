@@ -38,6 +38,8 @@ dependency_overrides:
     path: ../at_auth
   at_cli_commons:
     path: ../at_cli_commons
+  at_chops:
+    path: ../at_chops
 
 dev_dependencies:
   lints: ^2.1.0
