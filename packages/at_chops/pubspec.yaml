@@ -1,6 +1,6 @@
 name: at_chops
 description: Package for at_protocol cryptographic and hashing operations
-version: 2.0.2
+version: 2.1.0
 repository: https://github.com/atsign-foundation/at_libraries
 
 environment:
