@@ -312,7 +312,7 @@ class AtAuthImpl implements AtAuth {
 
       if (atEncrypted.hashingAlgoType == null) {
         throw AtDecryptionException(
-            'Hashing algo type is required for decryption of AtKeys file');
+            'Hashing algo type is required for decryption of password protected atKeys file');
       }
 
       String decryptedAtKeys =
