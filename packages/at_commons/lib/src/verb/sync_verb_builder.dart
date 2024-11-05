@@ -9,7 +9,7 @@ class SyncVerbBuilder implements VerbBuilder {
 
   bool isPaginated = false;
 
-  bool skipDeletes = false;
+  int? skipDeletesUntil;
 
   @override
   String buildCommand() {
@@ -21,8 +21,8 @@ class SyncVerbBuilder implements VerbBuilder {
     if (isPaginated) {
       serverCommandBuffer.write(':limit:$limit');
     }
-    if (skipDeletes) {
-      serverCommandBuffer.write(':skipDeletes:true');
+    if (skipDeletesUntil != null) {
+      serverCommandBuffer.write(':skipDeletesUntil:$skipDeletesUntil');
     }
     if (regex != null && regex!.isNotEmpty) {
       serverCommandBuffer.write(':$regex');
