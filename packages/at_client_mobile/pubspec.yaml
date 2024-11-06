@@ -26,6 +26,20 @@ dependencies:
   encrypt: ^5.0.3
   at_persistence_secondary_server: ^3.0.64
 
+dependency_overrides:
+  at_client:
+    path: ../at_client
+  at_auth:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_auth
+      ref: 604-support-password-protected-encryption-ofatkeys-files
+  at_chops:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_chops
+      ref: 604-support-password-protected-encryption-ofatkeys-files
+
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.25.2
