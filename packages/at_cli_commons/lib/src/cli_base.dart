@@ -42,8 +42,8 @@ class CLIBase {
     ..addOption('max-connect-attempts',
         help: 'Number of times to attempt to initially connect to atServer.'
             ' Note: there is a 3-second delay between connection attempts.',
-        defaultsTo: defaultMaxConnectAttempts.toString())
-    ..addOption('passPhrase',
+        defaultsTo: defaultMaxConnectAttempts.toString())..addOption(
+        'pass-phrase',
         abbr: 'P',
         help:
             'Pass Phrase to encrypt/decrypt the password protected atKeys file',
@@ -83,7 +83,7 @@ class CLIBase {
         cramSecret: parsedArgs['cram-secret'],
         syncDisabled: parsedArgs['never-sync'],
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
-        passPhrase: parsedArgs['passPhrase']);
+        passPhrase: parsedArgs['pass-phrase']);
 
     await cliBase.init();
 

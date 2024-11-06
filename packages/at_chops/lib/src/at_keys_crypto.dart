@@ -3,9 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_chops/src/algorithm/argon2id_hashing_algo.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/default_hashing_algo.dart';
+import 'package:at_chops/src/algorithm/at_hashing_algo_factory.dart';
 import 'package:at_chops/src/model/hash_params.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -111,10 +110,8 @@ class _AtKeysCryptoImpl implements AtKeysCrypto {
   /// hashed key.
   Future<String> _getHashKey(String passPhrase, HashingAlgoType hashingAlgoType,
       {HashParams? hashParams}) async {
-    if (hashingAlgoType == HashingAlgoType.argon2id) {
-      AtHashingAlgorithm atHashingAlgorithm = Argon2idHashingAlgo();
-      return await atHashingAlgorithm.hash(passPhrase, hashParams: hashParams);
-    }
-    return DefaultHash().hash(passPhrase.codeUnits);
+    AtHashingAlgorithm atHashingAlgorithm =
+        AtHashingAlgorithmFactory.getHashingAlgorithm(hashingAlgoType);
+    return await atHashingAlgorithm.hash(passPhrase, hashParams: hashParams);
   }
 }

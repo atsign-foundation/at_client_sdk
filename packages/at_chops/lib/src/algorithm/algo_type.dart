@@ -10,17 +10,8 @@ enum HashingAlgoType {
   argon2id;
 
   static HashingAlgoType fromString(String name) {
-    switch (name.toLowerCase()) {
-      case 'sha256':
-        return HashingAlgoType.sha256;
-      case 'sha512':
-        return HashingAlgoType.sha512;
-      case 'md5':
-        return HashingAlgoType.md5;
-      case 'argon2id':
-        return HashingAlgoType.argon2id;
-      default:
-        throw AtException('Invalid hashing algo type');
-    }
+    return HashingAlgoType.values.firstWhere(
+        (algo) => algo.name == name.toLowerCase(),
+        orElse: () => throw AtException('Invalid hashing algo type'));
   }
 }
