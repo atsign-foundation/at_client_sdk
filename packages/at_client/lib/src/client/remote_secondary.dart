@@ -28,7 +28,7 @@ class RemoteSecondary implements Secondary {
   final AtChops? atChops;
 
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey, this.atChops, String? enrollmentId}) {
+      {String? privateKey, this.atChops, String? enrollmentId, bool useWebSocket = false}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -43,7 +43,8 @@ class RemoteSecondary implements Secondary {
         secondaryAddressFinder:
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
-        clientConfig: _getClientConfig());
+        clientConfig: _getClientConfig(),
+        useWebSocket: useWebSocket);
     atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
