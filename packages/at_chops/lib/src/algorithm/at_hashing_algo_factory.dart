@@ -20,8 +20,6 @@ class AtHashingAlgorithmFactory {
   /// Throws an [AtException] if an unsupported hashing algorithm is passed.
   static AtHashingAlgorithm getHashingAlgorithm(HashingAlgoType algoType) {
     switch (algoType) {
-      case HashingAlgoType.md5:
-        return DefaultHash();
       case HashingAlgoType.argon2id:
         return Argon2idHashingAlgo();
       default:
