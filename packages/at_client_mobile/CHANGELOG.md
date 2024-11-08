@@ -1,3 +1,11 @@
+## 3.2.19
+- build[deps]: Upgraded dependencies for the following packages:
+    - at_client: 3.2.2
+    - at_lookup: 3.0.49
+    - at_auth: 2.0.7
+    - at_commons: 5.0.0
+    - at_chops: 2.0.1
+    - at_utils: 3.0.19
 ## 3.2.18
 - fix:  fix: rename enrollment details key to local key
 - build[deps]: Upgraded dependencies for the following packages:

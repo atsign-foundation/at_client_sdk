@@ -37,38 +37,58 @@ class PutRequestTransformer
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedBy);
     // Setting updateVerbBuilder.value
     updateVerbBuilder.value = tuple.two;
-
-    //Encrypt the data for non public keys
-    if (!updateVerbBuilder.atKey.metadata.isPublic) {
-      var encryptionService = AtKeyEncryptionManager(_atClient)
-          .get(updateVerbBuilder.atKey, _atClient.getCurrentAtSign()!);
-      try {
-        updateVerbBuilder.value = await encryptionService.encrypt(
-            updateVerbBuilder.atKey, updateVerbBuilder.value,
-            storeSharedKeyEncryptedWithData:
-                options.storeSharedKeyEncryptedMetadata);
-      } on AtException catch (e) {
-        e.stack(AtChainedException(Intent.shareData,
-            ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
-        rethrow;
-      }
+    final atKey = updateVerbBuilder.atKey;
+    final metadata = atKey.metadata;
+    // Check if the data needs to be encrypted for non-public keys
+    if (!_isPublicKey(metadata) && options.shouldEncrypt) {
+      await _encryptData(updateVerbBuilder, options);
     } else {
-      if (encryptionPrivateKey.isNull) {
-        throw AtPrivateKeyNotFoundException('Failed to sign the public data');
+      // Sign the data for public keys
+      if (_isPublicKey(metadata)) {
+        _signPublicData(updateVerbBuilder, encryptionPrivateKey);
       }
-      final atSigningInput = AtSigningInput(updateVerbBuilder.value)
-        ..signingMode = AtSigningMode.data;
-      final signingResult = _atClient.atChops!.sign(atSigningInput);
-      updateVerbBuilder.atKey.metadata.dataSignature = signingResult.result;
-      // Encode the public data if it contains new line characters
-      if (updateVerbBuilder.value.contains('\n')) {
-        updateVerbBuilder.value =
-            AtEncoderImpl().encodeData(updateVerbBuilder.value, encodingType);
-        updateVerbBuilder.atKey.metadata.encoding =
-            encodingType.toShortString();
-      }
+      // Encode the data if it contains new line characters
+      _encodeIfValueContainsNewLine(updateVerbBuilder);
     }
 
     return updateVerbBuilder;
   }
+
+  Future<void> _encryptData(
+      UpdateVerbBuilder updateVerbBuilder, PutRequestOptions options) async {
+    var encryptionService = AtKeyEncryptionManager(_atClient)
+        .get(updateVerbBuilder.atKey, _atClient.getCurrentAtSign()!);
+    try {
+      updateVerbBuilder.value = await encryptionService.encrypt(
+          updateVerbBuilder.atKey, updateVerbBuilder.value,
+          storeSharedKeyEncryptedWithData:
+              options.storeSharedKeyEncryptedMetadata);
+      updateVerbBuilder.atKey.metadata.isEncrypted = true;
+    } on AtException catch (e) {
+      e.stack(AtChainedException(Intent.shareData,
+          ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
+      rethrow;
+    }
+  }
+
+  void _signPublicData(
+      UpdateVerbBuilder updateVerbBuilder, String? encryptionPrivateKey) {
+    if (encryptionPrivateKey.isNull) {
+      throw AtPrivateKeyNotFoundException('Failed to sign the public data');
+    }
+    final atSigningInput = AtSigningInput(updateVerbBuilder.value)
+      ..signingMode = AtSigningMode.data;
+    final signingResult = _atClient.atChops!.sign(atSigningInput);
+    updateVerbBuilder.atKey.metadata.dataSignature = signingResult.result;
+  }
+
+  void _encodeIfValueContainsNewLine(UpdateVerbBuilder updateVerbBuilder) {
+    if (updateVerbBuilder.value.contains('\n')) {
+      updateVerbBuilder.value =
+          AtEncoderImpl().encodeData(updateVerbBuilder.value, encodingType);
+      updateVerbBuilder.atKey.metadata.encoding = encodingType.toShortString();
+    }
+  }
+
+  bool _isPublicKey(Metadata metadata) => metadata.isPublic;
 }

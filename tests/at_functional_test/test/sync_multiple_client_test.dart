@@ -65,7 +65,7 @@ final String clientOneHiveKeyStorePath = 'test/hive/client1';
 final String clientTwoHiveKeyStorePath = 'test/hive/client2';
 late Isolate clientOneIsolate;
 late Isolate clientTwoIsolate;
-
+int N = 35;
 void main() async {
   var mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
   SyncServiceImpl.syncRequestThreshold = 1;
@@ -73,6 +73,7 @@ void main() async {
   SyncServiceImpl.syncRunIntervalSeconds = 1;
   SyncServiceImpl.queueSize = 1;
   String uniqueId = Uuid().v4().hashCode.toString();
+
   List<String> atKeyEntityList = [
     'country-$uniqueId',
     'phone-$uniqueId',
@@ -80,6 +81,14 @@ void main() async {
     'worknumber-$uniqueId',
     'city-$uniqueId'
   ];
+  // create 35 keys
+  for (int i = 1; i <= 7; i++) {
+    atKeyEntityList.add('country_$i-$uniqueId');
+    atKeyEntityList.add('phone_$i-$uniqueId');
+    atKeyEntityList.add('location_$i-$uniqueId');
+    atKeyEntityList.add('worknumber_$i-$uniqueId');
+    atKeyEntityList.add('city_$i-$uniqueId');
+  }
 
   var clientInitializationParameters = {
     'client1': ChildIsolatePreferences()
@@ -215,7 +224,7 @@ void mainIsolateMessageListener(data) {
 }
 
 Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
-  int numberOfRepetitions = 5;
+  int numberOfRepetitions = N;
   int counter = 0;
   var random = Random();
 
@@ -258,7 +267,7 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
 
   // Execute Update/delete operation on the client
   for (counter = 0; counter < numberOfRepetitions; counter++) {
-    AtKey atKey = (AtKey.self(clientParameters.localKeysList[random.nextInt(5)],
+    AtKey atKey = (AtKey.self(clientParameters.localKeysList[random.nextInt(N)],
             namespace: namespace, sharedBy: currentAtSign))
         .build();
     _childIsolateLogger
@@ -288,7 +297,8 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
 }
 
 Future<void> startClient(ChildIsolatePreferences clientParameters) async {
-  var atClientPreferences = _getAtClientPreference(currentAtSign, clientParameters.clientId.name,
+  var atClientPreferences = _getAtClientPreference(
+      currentAtSign, clientParameters.clientId.name,
       hiveStoragePath: clientParameters.hiveStoragePath,
       commitLogPath: clientParameters.commitLogPath);
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
@@ -419,6 +429,7 @@ bool assertCommitEntries(
     if (!(atKeyList.contains(AtKey.fromString(mapEntry.key).key))) {
       continue;
     }
+    _logger.info('mapEntry: $mapEntry');
     // Compare server commit id with both client's commit log
     if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
         (serverCommitLogMap[mapEntry.key][0] !=

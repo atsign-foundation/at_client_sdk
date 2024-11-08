@@ -22,6 +22,10 @@ class PutRequestOptions extends RequestOptions {
 
   /// Whether to send this update request directly to the remote atServer
   bool useRemoteAtServer = false;
+
+  /// Except public keys, shared keys and self keys are encrypted by default.
+  /// If client prefers not to encrypt a shared key or self key/ use their own encryption scheme, set this flag to false.
+  bool shouldEncrypt = true;
 }
 
 /// Parameters that application code can optionally provide when calling

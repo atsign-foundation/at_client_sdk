@@ -1,3 +1,15 @@
+## 3.3.0
+- feat: add the AtClientBindings mixin which was initially added to the 
+  noports_core package but has broader applicability.
+
+## 3.2.2
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_commons to v5.0.0
+  - at_utils to v3.0.19
+  - at_lookup to v3.0.49
+  - at_auth to v2.0.7
+  - at_persistence_secondary_server to v3.0.64
+  - at_chops to v2.0.1
 ## 3.2.1
 - feat: add optional param `encryptValue` to notify method
 - build[deps]: Upgraded dependencies for the following packages:

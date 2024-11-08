@@ -1,6 +1,6 @@
 name: at_client_mobile
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 3.2.18
+version: 3.2.19
 repository: https://github.com/atsign-foundation/at_client_sdk/packages
 homepage: https://docs.atsign.com/
 
@@ -16,15 +16,15 @@ dependencies:
   biometric_storage: ^5.0.0
   hive: ^2.0.4
   crypton: ^2.2.1
-  at_commons: ^4.0.11
-  at_utils: ^3.0.16
-  at_chops: ^2.0.0
-  at_lookup: ^3.0.47
-  at_client: ^3.0.78
-  at_auth: ^2.0.5
+  at_commons: ^5.0.0
+  at_utils: ^3.0.19
+  at_chops: ^2.0.1
+  at_lookup: ^3.0.49
+  at_client: ^3.2.2
+  at_auth: ^2.0.7
   at_file_saver: ^0.1.2
   encrypt: ^5.0.3
-  at_persistence_secondary_server: ^3.0.62
+  at_persistence_secondary_server: ^3.0.64
 
 dev_dependencies:
   lints: ^4.0.0
