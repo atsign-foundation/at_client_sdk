@@ -28,7 +28,10 @@ class RemoteSecondary implements Secondary {
   final AtChops? atChops;
 
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey, this.atChops, String? enrollmentId, bool useWebSocket = false}) {
+      {String? privateKey,
+      this.atChops,
+      String? enrollmentId,
+      bool useWebSocket = false}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
