@@ -50,8 +50,7 @@ void main() {
       () {
     test('Test asymmetric encryption/decryption using rsa 2048 key pair', () {
       var rsa2048KeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
-      var defaultEncryptionAlgo =
-          RsaEncryptionAlgo.fromKeyPair(rsa2048KeyPair);
+      var defaultEncryptionAlgo = RsaEncryptionAlgo.fromKeyPair(rsa2048KeyPair);
       var dataToEncrypt = 'Hello World12!@';
       var encryptedData =
           defaultEncryptionAlgo.encrypt(utf8.encode(dataToEncrypt));
