@@ -114,6 +114,9 @@ void main() async {
       when(() => mockAtClient.put(
               any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:${jsonEncode([
                     {
@@ -156,6 +159,9 @@ void main() async {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       var serverCommitId = 2;
       var syncRequest = SyncRequest()..result = SyncResult();
@@ -196,6 +202,9 @@ void main() async {
                   ])}'));
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
 
@@ -285,6 +294,9 @@ void main() async {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       var serverCommitId = 2;
       var syncRequest = SyncRequest()..result = SyncResult();
@@ -322,6 +334,21 @@ class LastReceivedServerCommitIdMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is AtKey && item.key.startsWith('lastreceivedservercommitid')) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class InitialSyncDoneFlagMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key.startsWith('isinitialsyncdone')) {
       return true;
     }
     return false;
