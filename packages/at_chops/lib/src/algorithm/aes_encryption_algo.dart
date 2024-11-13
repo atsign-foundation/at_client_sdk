@@ -62,7 +62,7 @@ class StringAESEncryptor
   /// mandatory for the AES decryption process.
   ///
   /// - [encryptedData]: The Base64-encoded string that represents the encrypted data.
-  /// - [iv]: The Initialisation Vector used during encryption. Must be the same
+  /// - [iv]: The Initialisation Vector used during decryption. Must be the same
   ///   IV that was used to encrypt the data.
   ///
   /// Returns a [String] that represents the decrypted data.
@@ -82,19 +82,21 @@ class StringAESEncryptor
   }
 
   /// Encrypts the given [plainData] using AES encryption and an optional [iv].
-  ///
-  /// If no [iv] is provided, a random 16-byte IV will be generated using
-  /// [AtChopsUtil.generateRandomIV]. The resulting encrypted data will be
-  /// Base64-encoded.
+  /// The resulting encrypted data will be Base64-encoded.
   ///
   /// - [plainData]: The string that needs to be encrypted.
   /// - [iv]: The Initialisation Vector used for encryption. If not provided,
-  ///   a random 16-byte IV will be generated.
+  ///   AtEncryptionException will be thrown.
   ///
   /// Returns a [String] that contains the encrypted data, encoded in Base64 format.
+  ///
+  /// Throws an [AtEncryptionException] if the [iv] is missing.
   @override
   String encrypt(String plainData, {InitialisationVector? iv}) {
-    iv ??= AtChopsUtil.generateRandomIV(16);
+    if (iv == null) {
+      throw AtEncryptionException(
+          'Initialisation Vector (IV) is required for encryption');
+    }
     var aesEncrypter = Encrypter(AES(Key.fromBase64(_aesKey.key)));
     final encrypted = aesEncrypter.encrypt(plainData, iv: IV(iv.ivBytes));
     return encrypted.base64;
