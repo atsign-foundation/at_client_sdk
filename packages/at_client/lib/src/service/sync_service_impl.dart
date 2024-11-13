@@ -520,7 +520,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       }
       if (_closeToIsInSync(serverCommitId, lastReceivedServerCommitId)) {
         print('*** setting initial sync done');
-        await _atClient.put(_isInitialSyncDone, AtData()..data = 'true');
+        await _atClient.put(_isInitialSyncDone, 'true');
       }
     } finally {
       // The put method persists the lastReceivedServerCommitId which will be used to
