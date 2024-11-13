@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -271,5 +273,46 @@ void main() {
     expect(transformedValue.value, value);
     expect(
         transformedValue.metadata!.updatedAt!.isBefore(DateTime.now()), true);
+  });
+
+  test(
+      'Verify delete keys are not synced to server when skipDeletesUntil is set',
+      () async {
+    var atClient = atClientManager.atClient;
+    var serverCommitId = await SyncUtil()
+        .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
+    for (int i = 0; i < 10; i++) {
+      var value = 'alice.linkedin$i';
+      var atKey =
+          AtKey.public('linkedin_$i', namespace: namespace, sharedBy: atSign)
+              .build();
+      var updateVerbBuilder = UpdateVerbBuilder()
+        ..atKey = atKey
+        ..value = value;
+      var updateResponse =
+          await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
+      expect(updateResponse.isNotEmpty, true);
+      var deleteVerbBuilder = DeleteVerbBuilder()..atKey = atKey;
+      await atClient.getRemoteSecondary()!.executeVerb(deleteVerbBuilder);
+    }
+    atClient.getPreferences()!.skipDeletes = true;
+    var syncVerbBuilder = SyncVerbBuilder()
+      ..skipDeletesUntil = (serverCommitId! + 50)
+      ..commitId = -1
+      ..isPaginated = true
+      ..limit = 15;
+    var syncResponse =
+        await atClient.getRemoteSecondary()!.executeVerb(syncVerbBuilder);
+    final syncJson = jsonDecode(syncResponse.replaceFirst('data:', ''));
+    print(syncJson);
+    Map<String, String> commitMap = {};
+    for (var syncEntry in syncJson) {
+      commitMap[syncEntry['atKey']] = syncEntry['operation'];
+    }
+    for (int i = 0; i < 9; i++) {
+      expect(commitMap.containsKey('public:linkedin_$i.wavi$atSign'), false);
+    }
+    // last delete entry should be present
+    expect(commitMap.containsKey('public:linkedin_9.wavi$atSign'), true);
   });
 }
