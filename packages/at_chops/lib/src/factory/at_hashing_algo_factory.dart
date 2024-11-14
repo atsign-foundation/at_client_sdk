@@ -8,7 +8,7 @@ import 'package:at_commons/at_commons.dart';
 /// based on the specified [HashingAlgoType].
 ///
 /// The [AtHashingAlgorithmFactory] class provides a static method
-/// [getHashingAlgorithm] which returns the appropriate hashing algorithm
+/// [withHashingAlgorithm] which returns the appropriate hashing algorithm
 /// implementation corresponding to the provided [HashingAlgoType].
 class AtHashingAlgorithmFactory {
   /// Returns an instance of [AtHashingAlgorithm] based on the provided [HashingAlgoType].
@@ -18,10 +18,12 @@ class AtHashingAlgorithmFactory {
   /// - [HashingAlgoType.argon2id]: returns an instance of [Argon2idHashingAlgo] (Argon2id hashing).
   ///
   /// Throws an [AtException] if an unsupported hashing algorithm is passed.
-  static AtHashingAlgorithm getHashingAlgorithm(HashingAlgoType algoType) {
+  static AtHashingAlgorithm withHashingAlgorithm(HashingAlgoType algoType) {
     switch (algoType) {
       case HashingAlgoType.argon2id:
         return Argon2idHashingAlgo();
+      case HashingAlgoType.sha512:
+        return SHA512HashingAlgo();
       default:
         throw AtException('Unsupported hashing algorithm');
     }
