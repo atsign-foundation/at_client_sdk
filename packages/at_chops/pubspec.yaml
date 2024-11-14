@@ -1,6 +1,6 @@
 name: at_chops
 description: Package for at_protocol cryptographic and hashing operations
-version: 2.1.0
+version: 2.2.0
 repository: https://github.com/atsign-foundation/at_libraries
 
 environment:
@@ -17,6 +17,7 @@ dependencies:
   pointycastle: ^3.7.4
   at_commons: ^5.0.0
   at_utils: ^3.0.19
+  cryptography: ^2.7.0
 
 dev_dependencies:
   lints: ^3.0.0

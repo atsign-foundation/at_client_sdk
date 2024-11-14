@@ -7,10 +7,10 @@ import 'package:at_chops/src/algorithm/aes_encryption_algo.dart';
 import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/algorithm/rsa_encryption_algo.dart';
 import 'package:at_chops/src/algorithm/default_signing_algo.dart';
 import 'package:at_chops/src/algorithm/ecc_signing_algo.dart';
 import 'package:at_chops/src/algorithm/pkam_signing_algo.dart';
+import 'package:at_chops/src/algorithm/rsa_encryption_algo.dart';
 import 'package:at_chops/src/at_chops_base.dart';
 import 'package:at_chops/src/key/at_key_pair.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
@@ -24,6 +24,8 @@ import 'package:at_chops/src/metadata/signing_metadata.dart';
 import 'package:at_chops/src/metadata/signing_result.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+
+import 'algorithm/default_hashing_algo.dart';
 
 class AtChopsImpl extends AtChops {
   AtChopsImpl(super.atChopsKeys);
@@ -143,7 +145,10 @@ class AtChopsImpl extends AtChops {
 
   @override
   String hash(Uint8List signedData, AtHashingAlgorithm hashingAlgorithm) {
-    return hashingAlgorithm.hash(signedData);
+    if (hashingAlgorithm.runtimeType == DefaultHash) {
+      return DefaultHash().hash(signedData);
+    }
+    throw AtException('$hashingAlgorithm is not supported');
   }
 
   @override
