@@ -296,8 +296,8 @@ void main() {
       await atClient.getRemoteSecondary()!.executeVerb(deleteVerbBuilder);
     }
     var syncVerbBuilder = SyncVerbBuilder()
-      ..skipDeletesUntil = (serverCommitId! + 50)
-      ..commitId = -1
+      ..skipDeletesUntil = (serverCommitId! + 25)
+      ..commitId = serverCommitId
       ..isPaginated = true
       ..limit = 15;
     var syncResponse =
@@ -377,8 +377,8 @@ void main() {
       await atClient.getRemoteSecondary()!.executeVerb(deleteVerbBuilder);
     }
     var syncVerbBuilder = SyncVerbBuilder()
-      ..skipDeletesUntil = (serverCommitId! + 50)
-      ..commitId = -1
+      ..skipDeletesUntil = (serverCommitId! + 25)
+      ..commitId = serverCommitId
       ..isPaginated = true
       ..limit = 15;
     var syncResponse =
