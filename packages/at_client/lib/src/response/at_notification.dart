@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 
 class AtNotification {
@@ -34,6 +36,10 @@ class AtNotification {
       metadata.skeEncAlgo =
           json['metadata'][AtConstants.sharedKeyEncryptedEncryptingAlgo];
       metadata.sharedKeyEnc = json['metadata'][AtConstants.sharedKeyEncrypted];
+      var publicKeyHash =
+          jsonDecode(json['metadata'][AtConstants.sharedWithPublicKeyHash]);
+      metadata.pubKeyHash =
+          PublicKeyHash(publicKeyHash['hash'], publicKeyHash['hashingAlgo']);
     }
 
     return AtNotification(json['id'], json['key'], json['from'], json['to'],

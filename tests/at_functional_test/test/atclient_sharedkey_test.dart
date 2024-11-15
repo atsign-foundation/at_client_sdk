@@ -3,6 +3,7 @@ import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
+
 import 'test_utils.dart';
 
 void main() {

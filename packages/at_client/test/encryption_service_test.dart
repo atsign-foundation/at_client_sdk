@@ -392,6 +392,8 @@ void main() {
       expect(decryptedValue, value);
       expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.pubKeyHash?.hash.isNotNullOrEmpty, true);
+      expect(atKey.metadata.pubKeyHash?.hashingAlgo.isNotNullOrEmpty, true);
     });
 
     test('test to verify legacy encryption when a new shared key is generated',
@@ -492,6 +494,8 @@ void main() {
           originalValue);
       expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.pubKeyHash?.hash.isNotNullOrEmpty, true);
+      expect(atKey.metadata.pubKeyHash?.hashingAlgo.isNotNullOrEmpty, true);
     });
 
     test(

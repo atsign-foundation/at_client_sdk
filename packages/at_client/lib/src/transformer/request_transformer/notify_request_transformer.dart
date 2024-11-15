@@ -2,13 +2,13 @@
 
 import 'dart:async';
 
+import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_client/src/encryption_service/encryption.dart';
 
 /// Class is responsible for taking the [NotificationParams] and converting into [NotifyVerbBuilder]
 class NotificationRequestTransformer
@@ -96,6 +96,8 @@ class NotificationRequestTransformer
         notificationParams.atKey.metadata.skeEncKeyName;
     builder.atKey.metadata.skeEncAlgo =
         notificationParams.atKey.metadata.skeEncAlgo;
+    builder.atKey.metadata.pubKeyHash =
+        notificationParams.atKey.metadata.pubKeyHash;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {

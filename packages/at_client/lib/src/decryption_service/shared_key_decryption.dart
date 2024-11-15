@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -5,7 +6,6 @@ import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_chops/at_chops.dart';
 
 /// Class responsible for decrypting the value of shared key's that are not owned
 /// by currentAtSign
@@ -50,14 +50,26 @@ class SharedKeyDecryption implements AtKeyDecryption {
           intent: Intent.fetchEncryptionPublicKey,
           exceptionScenario: ExceptionScenario.localVerbExecutionFailed);
     }
-    if (currentAtSignPublicKey != null &&
-        (atKey.metadata.pubKeyCS != null &&
-            atKey.metadata.pubKeyCS !=
-                EncryptionUtil.md5CheckSum(currentAtSignPublicKey))) {
+    if (currentAtSignPublicKey.isNullOrEmpty) {
+      throw AtPublicKeyNotFoundException('Public key cannot be null or empty');
+    }
+
+    final isPubKeyHashMismatch = atKey.metadata.pubKeyHash != null &&
+        atKey.metadata.pubKeyHash?.hash !=
+            AtChops.hashWith(HashingAlgoType.fromString(
+                    atKey.metadata.pubKeyHash!.hashingAlgo))
+                .hash(currentAtSignPublicKey!.codeUnits);
+
+    final isPubKeyCSMismatch = atKey.metadata.pubKeyCS != null &&
+        atKey.metadata.pubKeyCS !=
+            EncryptionUtil.md5CheckSum(currentAtSignPublicKey!);
+
+    if (isPubKeyHashMismatch || isPubKeyCSMismatch) {
       throw AtPublicKeyChangeException(
-          'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
-          intent: Intent.fetchEncryptionPublicKey,
-          exceptionScenario: ExceptionScenario.decryptionFailed);
+        'Public key has changed. Cannot decrypt shared key ${atKey.toString()}',
+        intent: Intent.fetchEncryptionPublicKey,
+        exceptionScenario: ExceptionScenario.decryptionFailed,
+      );
     }
 
     AtEncryptionResult decryptionResultFromAtChops;

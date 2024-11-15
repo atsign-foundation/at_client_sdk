@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/encryption_service/encryption.dart';
@@ -9,7 +10,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
-import 'package:at_chops/at_chops.dart';
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
 abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
@@ -49,8 +49,15 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
     if (storeSharedKeyEncryptedWithData) {
       atKey.metadata.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
+      // This is a legacy checksum with MD5 algo.
       atKey.metadata.pubKeyCS =
           EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
+      // Hashed the encryption public key with sha512. This is to ensure the encryption
+      // public key of the receiver are same during encryption and decryption process.
+      String hash = await AtChops.hashWith(HashingAlgoType.sha512)
+          .hash((await _getSharedWithPublicKey(atKey)).codeUnits);
+      atKey.metadata.pubKeyHash =
+          PublicKeyHash(hash, HashingAlgoType.sha512.name);
     }
   }
 
