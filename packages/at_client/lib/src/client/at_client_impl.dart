@@ -555,9 +555,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (putRequestOptions != null && putRequestOptions.useRemoteAtServer) {
       secondary = getRemoteSecondary()!;
     }
-    // Execute the verb builder
-    var putResponse = await secondary.executeVerb(verbBuilder,
-        sync: SyncUtil.shouldSync(atKey.key));
+    // DO NOT sync local keys to server
+    bool shouldSync = atKey.isLocal ? false : SyncUtil.shouldSync(atKey.key);
+    var putResponse =
+        await secondary.executeVerb(verbBuilder, sync: shouldSync);
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
       return AtResponse()..isError = true;

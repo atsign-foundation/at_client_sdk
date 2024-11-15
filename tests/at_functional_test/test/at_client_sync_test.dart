@@ -295,7 +295,6 @@ void main() {
       var deleteVerbBuilder = DeleteVerbBuilder()..atKey = atKey;
       await atClient.getRemoteSecondary()!.executeVerb(deleteVerbBuilder);
     }
-    atClient.getPreferences()!.skipDeletes = true;
     var syncVerbBuilder = SyncVerbBuilder()
       ..skipDeletesUntil = (serverCommitId! + 50)
       ..commitId = -1
@@ -314,5 +313,93 @@ void main() {
     }
     // last delete entry should be present
     expect(commitMap.containsKey('public:linkedin_9.wavi$atSign'), true);
+  });
+
+  test('Verify sync response when skip deletes and regex are set', () async {
+    var atClient = atClientManager.atClient;
+    var serverCommitId = await SyncUtil()
+        .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
+    for (int i = 0; i < 3; i++) {
+      var value = 'alice.linkedin$i';
+      var atKey =
+          AtKey.public('linkedin_$i', namespace: namespace, sharedBy: atSign)
+              .build();
+      var updateVerbBuilder = UpdateVerbBuilder()
+        ..atKey = atKey
+        ..value = value;
+      var updateResponse =
+          await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
+      expect(updateResponse.isNotEmpty, true);
+    }
+    // update/delete keys in wavi namespace
+    for (int i = 3; i < 5; i++) {
+      var value = 'alice.linkedin$i';
+      var atKey =
+          AtKey.public('linkedin_$i', namespace: namespace, sharedBy: atSign)
+              .build();
+      var updateVerbBuilder = UpdateVerbBuilder()
+        ..atKey = atKey
+        ..value = value;
+      var updateResponse =
+          await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
+      expect(updateResponse.isNotEmpty, true);
+      var deleteVerbBuilder = DeleteVerbBuilder()..atKey = atKey;
+      await atClient.getRemoteSecondary()!.executeVerb(deleteVerbBuilder);
+    }
+
+    // update te keys in buzz namespace
+    for (int i = 5; i < 7; i++) {
+      var value = 'alice.linkedin$i';
+      var atKey =
+          AtKey.public('linkedin_$i', namespace: 'buzz', sharedBy: atSign)
+              .build();
+      var updateVerbBuilder = UpdateVerbBuilder()
+        ..atKey = atKey
+        ..value = value;
+      var updateResponse =
+          await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
+      expect(updateResponse.isNotEmpty, true);
+    }
+
+    // update /delete keys in buzz namespace
+    for (int i = 7; i < 10; i++) {
+      var value = 'alice.linkedin$i';
+      var atKey =
+          AtKey.public('linkedin_$i', namespace: 'buzz', sharedBy: atSign)
+              .build();
+      var updateVerbBuilder = UpdateVerbBuilder()
+        ..atKey = atKey
+        ..value = value;
+      var updateResponse =
+          await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
+      expect(updateResponse.isNotEmpty, true);
+      var deleteVerbBuilder = DeleteVerbBuilder()..atKey = atKey;
+      await atClient.getRemoteSecondary()!.executeVerb(deleteVerbBuilder);
+    }
+    var syncVerbBuilder = SyncVerbBuilder()
+      ..skipDeletesUntil = (serverCommitId! + 50)
+      ..commitId = -1
+      ..isPaginated = true
+      ..limit = 15;
+    var syncResponse =
+        await atClient.getRemoteSecondary()!.executeVerb(syncVerbBuilder);
+    final syncJson = jsonDecode(syncResponse.replaceFirst('data:', ''));
+    print(syncJson);
+    Map<String, String> commitMap = {};
+    for (var syncEntry in syncJson) {
+      commitMap[syncEntry['atKey']] = syncEntry['operation'];
+    }
+    for (int i = 0; i < 3; i++) {
+      expect(commitMap.containsKey('public:linkedin_$i.wavi$atSign'), true);
+    }
+    for (int i = 3; i < 5; i++) {
+      expect(commitMap.containsKey('public:linkedin_$i.wavi$atSign'), false);
+    }
+    for (int i = 5; i < 7; i++) {
+      expect(commitMap.containsKey('public:linkedin_$i.wavi$atSign'), false);
+    }
+    // last delete entry should NOT be present due to namespace buzz not matching
+    // TODO verify this checks since regex doesnt' match
+    expect(commitMap.containsKey('public:linkedin_9.buzz$atSign'), true);
   });
 }

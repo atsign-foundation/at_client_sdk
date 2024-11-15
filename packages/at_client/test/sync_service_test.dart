@@ -183,6 +183,8 @@ void main() async {
       when(() => mockAtClient.put(
               any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.put(any(that: SkilDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
       when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) =>
           Future.value(
               CommitEntry('phone.wavi', CommitOp.UPDATE, DateTime.now())
@@ -202,6 +204,9 @@ void main() async {
                   ])}'));
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.get(any(that: SkilDeletesUntilMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
       when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
@@ -334,6 +339,21 @@ class LastReceivedServerCommitIdMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is AtKey && item.key.startsWith('lastreceivedservercommitid')) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class SkilDeletesUntilMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key.startsWith('skipdeletesuntil')) {
       return true;
     }
     return false;
