@@ -159,6 +159,9 @@ void main() async {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
       when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
@@ -183,7 +186,7 @@ void main() async {
       when(() => mockAtClient.put(
               any(that: LastReceivedServerCommitIdMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
-      when(() => mockAtClient.put(any(that: SkilDeletesUntilMatcher()), any()))
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtCommitLog.lastSyncedEntry()).thenAnswer((_) =>
           Future.value(
@@ -206,7 +209,7 @@ void main() async {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
-      when(() => mockAtClient.get(any(that: SkilDeletesUntilMatcher())))
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
       when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
@@ -345,7 +348,7 @@ class LastReceivedServerCommitIdMatcher extends Matcher {
   }
 }
 
-class SkilDeletesUntilMatcher extends Matcher {
+class SkipDeletesUntilMatcher extends Matcher {
   @override
   Description describe(Description description) {
     return description;

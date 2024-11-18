@@ -68,9 +68,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// A local AtKey to persist the last received server commitId
   late final AtKey _lastReceivedServerCommitIdAtKey;
 
-  /// A local AtKey to check whether initial sync is done or not
-  late final AtKey _isInitialSyncDone;
-
   /// A local AtKey to store skipDeletesUntil value
   late final AtKey _skipDeletesUntilCommitId;
 
@@ -100,8 +97,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
-    _isInitialSyncDone =
-        AtKey.local('isinitialsyncdone', currentAtSign).build();
     _skipDeletesUntilCommitId =
         AtKey.local('skipdeletesuntil', currentAtSign).build();
     atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
@@ -453,25 +448,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     List<KeyInfo> keyInfoList = [];
     try {
       int? skipDeletesUntil;
-      AtValue? isInitialSyncDone;
-      try {
-        isInitialSyncDone = await _atClient.get(_isInitialSyncDone);
-      } on AtKeyNotFoundException {
-        //ignore
-      }
-      // Set skipDeletesUntil when local commit id is -1 and
-      // isInitialSyncDone is not set
-      if (localCommitIdBeforeSync == -1 && isInitialSyncDone == null) {
-        _logger.info('setting skipDeletes for initial sync');
+      if (localCommitIdBeforeSync == -1) {
+        skipDeletesUntil = serverCommitId;
+        await _atClient.put(
+            _skipDeletesUntilCommitId, skipDeletesUntil.toString());
+      } else {
         try {
           skipDeletesUntil =
               int.parse((await _atClient.get(_skipDeletesUntilCommitId)).value);
         } on AtKeyNotFoundException {
-          skipDeletesUntil = serverCommitId;
-          await _atClient.put(
-              _skipDeletesUntilCommitId, skipDeletesUntil.toString());
+          // do nothing
         }
-        _logger.info('skipDeletesUntil: $skipDeletesUntil');
       }
       while (serverCommitId > lastReceivedServerCommitId) {
         _sendTelemetry('_syncFromServer.whileLoop', {
@@ -479,7 +466,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           "lastReceivedServerCommitId": lastReceivedServerCommitId
         });
         List<dynamic> listOfCommitEntriesFromServer =
-            await _getEntriesToSyncFromServer(lastReceivedServerCommitId,
+            await _getEntriesToSyncFromServer(
+                lastReceivedServerCommitId, serverCommitId,
                 localCommitIdBeforeSync: localCommitIdBeforeSync,
                 skipDeletesUntil: skipDeletesUntil);
         if (listOfCommitEntriesFromServer.isEmpty) {
@@ -533,11 +521,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
               'Updating lastReceivedServerCommitId to $lastReceivedServerCommitId');
         }
       }
-      if (isInitialSyncDone == null &&
-          _shouldSkipDeletes(skipDeletesUntil, lastReceivedServerCommitId)) {
-        _logger.info('*** setting initial sync done');
-        await _atClient.put(_isInitialSyncDone, 'true');
-      }
     } finally {
       // The put method persists the lastReceivedServerCommitId which will be used to
       // fetch the next set of entries to sync from server
@@ -579,15 +562,14 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Takes the last received server commit id and fetches the entries that are above the given
   /// commit-id to sync into the local keystore.
   Future<List<dynamic>> _getEntriesToSyncFromServer(
-      int lastReceivedServerCommitId,
-      {int? localCommitIdBeforeSync,
-      int? skipDeletesUntil}) async {
+      int lastReceivedServerCommitId, int serverCommitId,
+      {int? localCommitIdBeforeSync, int? skipDeletesUntil}) async {
     var syncBuilder = SyncVerbBuilder()
       ..commitId = lastReceivedServerCommitId
       ..regex = _atClient.getPreferences()!.syncRegex
       ..limit = _atClient.getPreferences()!.syncPageLimit
       ..isPaginated = true;
-    if (skipDeletesUntil != null) {
+    if (_shouldSkipDeletes(skipDeletesUntil, serverCommitId)) {
       syncBuilder.skipDeletesUntil = skipDeletesUntil;
     }
 
@@ -612,12 +594,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return syncResponseJson;
   }
 
-  bool _shouldSkipDeletes(
-      int? skipDeletesUntil, int lastReceivedServerCommitId) {
+  bool _shouldSkipDeletes(int? skipDeletesUntil, int serverCommitId) {
     if (skipDeletesUntil == null) {
       return false;
     }
-    return lastReceivedServerCommitId >= skipDeletesUntil;
+    return serverCommitId >= skipDeletesUntil;
   }
 
   Future<ConflictInfo?> _setConflictInfo(final serverCommitEntry) async {

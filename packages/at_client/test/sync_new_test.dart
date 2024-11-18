@@ -4347,6 +4347,314 @@ void main() {
       syncServiceImpl.clearSyncEntities();
     });
   });
+
+  group('A group of tests to verify sync skip delete', () {
+    AtClient mockAtClient = MockAtClient();
+    AtClientManager mockAtClientManager = MockAtClientManager();
+    NotificationServiceImpl mockNotificationService =
+        MockNotificationServiceImpl();
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    setUp(() async {
+      TestResources.atsign = '@nadia';
+      await TestResources.setupLocalStorage(TestResources.atsign);
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+    });
+    test('A test to verify skip deletes is passed when localCommitId is -1',
+        () async {
+      //----------------- setup-----------------
+      HiveKeystore? keystore =
+          TestResources.getHiveKeyStore(TestResources.atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: StatsVerbBuilderMatcher())))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"10"}]'));
+      var serverResponseWithAllCommits = 'data:['
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":5,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":7,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":8,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":9,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      var serverResponseDeleteCommitsSkipped = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(named: "sync"))).thenAnswer((invocation) {
+        final passedBuilder =
+            invocation.positionalArguments[0] as SyncVerbBuilder;
+        return passedBuilder.skipDeletesUntil != null
+            ? Future.value(serverResponseDeleteCommitsSkipped)
+            : Future.value(serverResponseWithAllCommits);
+      });
+
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth"))).thenAnswer(
+          (invocation) => Future.value('data:[{"id":1,"response":{"data":"3"}},'
+              '{"id":2,"response":{"data":"4"}}]'));
+
+      //---------------------------operation----------------------------------
+      var syncResult = await syncService.syncInternal(
+          10, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: -1);
+      print(syncResult.keyInfoList);
+      Map<String, CommitOp> commitResponseMap = {};
+      for (var keyInfo in syncResult.keyInfoList) {
+        commitResponseMap[keyInfo.key] = keyInfo.commitOp;
+      }
+      expect(commitResponseMap['public:self_key_1.wavi@bob'], null);
+      expect(
+          commitResponseMap['public:self_key_2.wavi@bob'], CommitOp.UPDATE_ALL);
+      expect(commitResponseMap['public:from_remote_key1.wavi@bob'], null);
+      expect(commitResponseMap['public:from_remote_key2.demo@bob'],
+          CommitOp.UPDATE_ALL);
+      //clearing sync objects
+      syncService.clearSyncEntities();
+    });
+    test(
+        'A test to verify skip deletes is passed when localCommitId is greater than -1',
+        () async {
+      //----------------- setup-----------------
+      HiveKeystore? keystore =
+          TestResources.getHiveKeyStore(TestResources.atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: StatsVerbBuilderMatcher())))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"10"}]'));
+      var serverResponseWithAllCommits = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":8,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":9,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      var serverResponseDeleteCommitsSkipped = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(named: "sync"))).thenAnswer((invocation) {
+        final passedBuilder =
+            invocation.positionalArguments[0] as SyncVerbBuilder;
+        return passedBuilder.skipDeletesUntil != null
+            ? Future.value(serverResponseDeleteCommitsSkipped)
+            : Future.value(serverResponseWithAllCommits);
+      });
+
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth"))).thenAnswer(
+          (invocation) => Future.value('data:[{"id":1,"response":{"data":"3"}},'
+              '{"id":2,"response":{"data":"4"}}]'));
+
+      //---------------------------operation----------------------------------
+      var syncResult = await syncService.syncInternal(
+          10, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: 5);
+      print(syncResult.keyInfoList);
+      Map<String, CommitOp> commitResponseMap = {};
+      for (var keyInfo in syncResult.keyInfoList) {
+        commitResponseMap[keyInfo.key] = keyInfo.commitOp;
+      }
+      expect(commitResponseMap['public:self_key_1.wavi@bob'], CommitOp.DELETE);
+      expect(
+          commitResponseMap['public:self_key_2.wavi@bob'], CommitOp.UPDATE_ALL);
+      expect(commitResponseMap['public:from_remote_key1.demo@bob'],
+          CommitOp.DELETE);
+      expect(commitResponseMap['public:from_remote_key2.demo@bob'],
+          CommitOp.UPDATE_ALL);
+      //clearing sync objects
+      syncService.clearSyncEntities();
+    });
+    test(
+        'A test to verify skip deletes is passed when localCommitId is greater than -1 and skipDeletesUntil is saved in local. This checks the scenario when initial sync terminated in between',
+        () async {
+      //----------------- setup-----------------
+      HiveKeystore? keystore =
+          TestResources.getHiveKeyStore(TestResources.atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '10'));
+
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: StatsVerbBuilderMatcher())))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"10"}]'));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '7'));
+      var serverResponseWithAllCommits = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":8,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":9,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      var serverResponseDeleteCommitsSkipped = 'data:['
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(named: "sync"))).thenAnswer((invocation) {
+        final passedBuilder =
+            invocation.positionalArguments[0] as SyncVerbBuilder;
+        return passedBuilder.skipDeletesUntil != null
+            ? Future.value(serverResponseDeleteCommitsSkipped)
+            : Future.value(serverResponseWithAllCommits);
+      });
+
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth"))).thenAnswer(
+          (invocation) => Future.value('data:[{"id":1,"response":{"data":"3"}},'
+              '{"id":2,"response":{"data":"4"}}]'));
+
+      //---------------------------operation----------------------------------
+      var syncResult = await syncService.syncInternal(
+          10, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: 7);
+      print(syncResult.keyInfoList);
+      Map<String, CommitOp> commitResponseMap = {};
+      for (var keyInfo in syncResult.keyInfoList) {
+        commitResponseMap[keyInfo.key] = keyInfo.commitOp;
+      }
+      expect(commitResponseMap['public:from_remote_key2.demo@bob'],
+          CommitOp.UPDATE_ALL);
+      //clearing sync objects
+      syncService.clearSyncEntities();
+    });
+    tearDown(() async {
+      await TestResources.tearDownLocalStorage();
+      resetMocktailState();
+    });
+  });
 }
 
 class CustomSyncProgressListener extends SyncProgressListener {
