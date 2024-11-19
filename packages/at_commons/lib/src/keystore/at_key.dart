@@ -566,8 +566,7 @@ class Metadata {
       sb.write(':${AtConstants.sharedWithPublicKeyCheckSum}:$pubKeyCS');
     }
     if (pubKeyHash != null) {
-      sb.write(
-          ':${AtConstants.sharedWithPublicKeyHashValue}:${pubKeyHash!.hash}');
+      sb.write(':${AtConstants.sharedWithPublicKeyHash}:${pubKeyHash!.hash}');
       sb.write(
           ':${AtConstants.sharedWithPublicKeyHashingAlgo}:${pubKeyHash!.hashingAlgo}');
     }
