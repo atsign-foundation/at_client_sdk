@@ -937,7 +937,7 @@ void main() {
         ..ttr = -1;
       var metadataFragment = metadata.toAtProtocolFragment();
       expect(metadataFragment,
-          contains('${AtConstants.sharedWithPublicKeyHashValue}:randomhash'));
+          contains('${AtConstants.sharedWithPublicKeyHash}:randomhash'));
       expect(metadataFragment,
           contains('${AtConstants.sharedWithPublicKeyHashingAlgo}:sha512'));
     });
