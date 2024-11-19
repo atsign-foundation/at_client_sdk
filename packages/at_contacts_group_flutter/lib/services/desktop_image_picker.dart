@@ -4,22 +4,30 @@ import 'dart:typed_data';
 import 'package:at_contacts_group_flutter/services/navigation_service.dart';
 import 'package:at_contacts_group_flutter/widgets/custom_toast.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:image_compression/image_compression.dart';
 
 Future<Uint8List?> desktopImagePicker() async {
   AtSignLogger atSignLogger = AtSignLogger('desktopImagePicker');
   try {
-    final files = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowedExtensions: ['jpg', 'png', 'jpeg'],
+    // ignore: omit_local_variable_types
+    const XTypeGroup typeGroup = XTypeGroup(
+      label: 'images',
+      extensions: ['jpg', 'png', 'jpeg'],
     );
-    if (files == null || files.count == 0) {
+    final List<XFile> files = await openFiles(acceptedTypeGroups: [typeGroup]);
+    // final files = await FilePicker.platform.pickFiles(
+    //   type: FileType.image,
+    //   allowedExtensions: ['jpg', 'png', 'jpeg'],
+    // );
+    if (files.isEmpty) {
       return null;
     }
+    // if (files == null || files.count == 0) {
+    //   return null;
+    // }
     // ignore: omit_local_variable_types
-    final XFile file = files.xFiles[0];
+    final XFile file = files[0];
 
     final input = ImageFile(
       rawBytes: await file.readAsBytes(),

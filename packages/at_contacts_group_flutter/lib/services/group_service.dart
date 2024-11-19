@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 // ignore: import_of_legacy_library_into_null_safe
 import 'package:at_client_mobile/at_client_mobile.dart';
@@ -168,11 +169,19 @@ class GroupService {
   }) async {
     try {
       var groupIds = await atContactImpl.listGroupIds();
+      // TODO: Delete log
+      log(groupIds.join(',').toString());
       var groupList = <AtGroup>[];
 
       for (var i = 0; i < groupIds.length; i++) {
-        var groupDetail = await (getGroupDetail(groupIds[i]!));
-        if (groupDetail != null) groupList.add(groupDetail);
+        try {
+          var groupDetail = await (getGroupDetail(groupIds[i]!));
+          // TODO : delete log
+          log('Details: ${groupDetail?.displayName}');
+          if (groupDetail != null) groupList.add(groupDetail);
+        } catch (e) {
+          log(e.toString());
+        }
       }
 
       for (AtGroup group in groupList) {
@@ -198,6 +207,7 @@ class GroupService {
         atGroupSink.add(groupList);
       }
     } catch (e) {
+      log(e.toString());
       atGroupSink.add([]);
     }
   }
@@ -283,7 +293,7 @@ class GroupService {
       var result = await atContactImpl.deleteGroup(group);
       await getAllGroupsDetails(); //updating group list sink
       return result;
-    } catch (e) {
+    } on Exception catch (e) {
       atSignLogger.severe('error in deleting group: $e');
       return null;
     }
@@ -317,10 +327,7 @@ class GroupService {
       /// contacts list is already present, we do not fetch it again.
       if (allContacts.isNotEmpty) {
         listContact.sort((a, b) {
-          int? index = a.atSign
-              .toString()
-              .substring(1)
-              .compareTo((b.atSign).toString().substring(1));
+          int? index = a.atSign.toString().substring(1).compareTo((b.atSign).toString().substring(1));
           return index;
         });
 
