@@ -1,6 +1,6 @@
 ## 6.1.10
 
-- **FIX** Replace depreciated `withOpacity` method with `withValues`
+- **FIX** Replace depreciated `withOpacity` method with `withValues`.
 
 ## 6.1.9
 
