@@ -25,8 +25,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncRequestTriggerInSeconds = 3,
       syncRunIntervalSeconds = 5,
       queueSize = 5;
-  //#TODO move to config
-  static const int initialSyncDelta = 10;
   late final AtClient _atClient;
   late final RemoteSecondary _remoteSecondary;
   late final NotificationServiceImpl _statsNotificationListener;
@@ -447,19 +445,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
     try {
-      int? skipDeletesUntil;
-      if (localCommitIdBeforeSync == -1) {
-        skipDeletesUntil = serverCommitId;
-        await _atClient.put(
-            _skipDeletesUntilCommitId, skipDeletesUntil.toString());
-      } else {
-        try {
-          skipDeletesUntil =
-              int.parse((await _atClient.get(_skipDeletesUntilCommitId)).value);
-        } on AtKeyNotFoundException {
-          // do nothing
-        }
-      }
+      int? skipDeletesUntil =
+          await putSkipDeletesUntil(localCommitIdBeforeSync, serverCommitId);
+
       while (serverCommitId > lastReceivedServerCommitId) {
         _sendTelemetry('_syncFromServer.whileLoop', {
           "serverCommitId": serverCommitId,
@@ -592,6 +580,21 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _atClient.getPreferences()!.atClientParticulars,
         'syncResponse $syncResponseJson'));
     return syncResponseJson;
+  }
+
+  @visibleForTesting
+  Future<int?> putSkipDeletesUntil(
+      int? localCommitIdBeforeSync, int serverCommitId) async {
+    if (localCommitIdBeforeSync == -1) {
+      await _atClient.put(_skipDeletesUntilCommitId, serverCommitId.toString());
+      return serverCommitId;
+    }
+    try {
+      return int.parse((await _atClient.get(_skipDeletesUntilCommitId)).value);
+    } on AtKeyNotFoundException {
+      // do nothing
+    }
+    return null;
   }
 
   bool _shouldSkipDeletes(int? skipDeletesUntil, int serverCommitId) {

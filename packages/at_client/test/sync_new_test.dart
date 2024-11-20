@@ -4371,6 +4371,53 @@ void main() {
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
     });
+    test(
+        'A test to verify putSkipDeletes returns server commitID when localCommitId is -1',
+        () async {
+      SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
+          mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      int? skipDeletesUntil =
+          await syncServiceImpl.putSkipDeletesUntil(-1, 100);
+      expect(skipDeletesUntil, 100);
+    });
+    test(
+        'A test to verify putSkipDeletes returns stored skipDeletesUntil when localCommitId is greater than -1',
+        () async {
+      SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
+          mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '40'));
+      int? skipDeletesUntil =
+          await syncServiceImpl.putSkipDeletesUntil(25, 100);
+      expect(skipDeletesUntil, 40);
+    });
+    test(
+        'A test to verify putSkipDeletes returns null when localCommitId is greater than -1 and skipDeletesUntil is not stored in local secondary',
+        () async {
+      SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
+          mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      int? skipDeletesUntil =
+          await syncServiceImpl.putSkipDeletesUntil(25, 100);
+      expect(skipDeletesUntil, null);
+    });
     test('A test to verify skip deletes is passed when localCommitId is -1',
         () async {
       //----------------- setup-----------------

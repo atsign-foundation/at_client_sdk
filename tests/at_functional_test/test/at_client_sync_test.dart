@@ -276,7 +276,7 @@ void main() {
   });
 
   test(
-      'Verify delete keys are not synced to server when skipDeletesUntil is set',
+      'Verify delete keys are not synced from server when skipDeletesUntil is set',
       () async {
     var atClient = atClientManager.atClient;
     var serverCommitId = await SyncUtil()
@@ -347,7 +347,7 @@ void main() {
       await atClient.getRemoteSecondary()!.executeVerb(deleteVerbBuilder);
     }
 
-    // update te keys in buzz namespace
+    // update the keys in buzz namespace
     for (int i = 5; i < 7; i++) {
       var value = 'alice.linkedin$i';
       var atKey =
@@ -378,6 +378,7 @@ void main() {
     }
     var syncVerbBuilder = SyncVerbBuilder()
       ..skipDeletesUntil = (serverCommitId! + 25)
+      ..regex = '.wavi'
       ..commitId = serverCommitId
       ..isPaginated = true
       ..limit = 15;
@@ -399,7 +400,6 @@ void main() {
       expect(commitMap.containsKey('public:linkedin_$i.wavi$atSign'), false);
     }
     // last delete entry should NOT be present due to namespace buzz not matching
-    // TODO verify this checks since regex doesnt' match
-    expect(commitMap.containsKey('public:linkedin_9.buzz$atSign'), true);
+    expect(commitMap.containsKey('public:linkedin_9.buzz$atSign'), false);
   });
 }
