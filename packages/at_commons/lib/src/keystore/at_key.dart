@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:at_commons/src/keystore/at_key_builder_impl.dart';
+import 'package:at_commons/src/keystore/public_key_hash.dart';
 import 'package:at_commons/src/utils/at_key_regex_utils.dart';
 import 'package:at_commons/src/utils/string_utils.dart';
-import 'package:at_commons/src/keystore/public_key_hash.dart';
 import 'package:meta/meta.dart';
 
 import '../at_constants.dart';
@@ -521,14 +523,7 @@ class Metadata {
 
   @override
   String toString() {
-    return 'Metadata{ttl: $ttl, ttb: $ttb, ttr: $ttr,ccd: $ccd, isPublic: $isPublic, isHidden: $isHidden'
-        ', availableAt : ${availableAt?.toUtc().toString()}, expiresAt : ${expiresAt?.toUtc().toString()}'
-        ', refreshAt : ${refreshAt?.toUtc().toString()}, createdAt : ${createdAt?.toUtc().toString()}'
-        ', updatedAt : ${updatedAt?.toUtc().toString()}, isBinary : $isBinary, isEncrypted : $isEncrypted'
-        ', isCached : $isCached, dataSignature: $dataSignature, sharedKeyStatus: $sharedKeyStatus'
-        ', encryptedSharedKey: $sharedKeyEnc, pubKeyHash: $pubKeyHash, encoding: $encoding'
-        ', encKeyName: $encKeyName, encAlgo: $encAlgo, ivNonce: $ivNonce'
-        ', skeEncKeyName: $skeEncKeyName, skeEncAlgo: $skeEncAlgo}';
+    return 'Metadata{${jsonEncode(toJson())}}';
   }
 
   /// Creates a fragment which can be included in any atProtocol commands which use
@@ -571,10 +566,9 @@ class Metadata {
       sb.write(':${AtConstants.sharedWithPublicKeyCheckSum}:$pubKeyCS');
     }
     if (pubKeyHash != null) {
+      sb.write(':${AtConstants.sharedWithPublicKeyHash}:${pubKeyHash!.hash}');
       sb.write(
-          ':${AtConstants.sharedWithPublicKeyHashValue}:${pubKeyHash!.hash}');
-      sb.write(
-          ':${AtConstants.sharedWithPublicKeyHashAlgo}:${pubKeyHash!.publicKeyHashingAlgo.name}');
+          ':${AtConstants.sharedWithPublicKeyHashingAlgo}:${pubKeyHash!.hashingAlgo}');
     }
     if (encoding.isNotNullOrEmpty) {
       sb.write(':${AtConstants.encoding}:$encoding');

@@ -8,3 +8,11 @@ class DefaultHash implements AtHashingAlgorithm<List<int>, String> {
     return md5.convert(data).toString();
   }
 }
+
+class SHA512HashingAlgo implements AtHashingAlgorithm<List<int>, String> {
+  @override
+  String hash(List<int> data, {covariant HashParams? hashParams}) {
+    Digest digest = sha512.convert(data);
+    return digest.toString();
+  }
+}
