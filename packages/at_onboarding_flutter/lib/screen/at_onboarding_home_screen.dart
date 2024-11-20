@@ -141,7 +141,7 @@ class _AtOnboardingHomeScreenState extends State<AtOnboardingHomeScreen> {
               child: Container(
                 // width: _dialogWidth,
                 decoration: BoxDecoration(
-                    color: theme.primaryColor.withOpacity(0.1),
+                    color: theme.primaryColor.withValues(alpha: .1),
                     borderRadius: BorderRadius.circular(AtOnboardingDimens.borderRadius)),
                 padding: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
                 margin: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
