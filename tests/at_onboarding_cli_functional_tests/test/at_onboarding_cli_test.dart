@@ -148,10 +148,10 @@ void main() {
       bool status = await atOnboardingService.onboard();
       expect(status, true);
       // verify whether ttr is set in public encryption key
-      final atClient = await atOnboardingService.atClient;
-      final encryptionPublicKey = await atClient!
-          .getRemoteSecondary()
-          ?.executeCommand('lookup:all:publickey$atSign\n');
+      final atLookup = AtLookupImpl(atSign, atOnboardingPreference.rootDomain,
+          atOnboardingPreference.rootPort);
+      final encryptionPublicKey =
+          await atLookup.executeCommand('lookup:all:publickey$atSign\n');
       print('encryptionPublicKey: $encryptionPublicKey');
       bool status2 = await atOnboardingService.authenticate();
       expect(status2, true);
@@ -159,6 +159,7 @@ void main() {
 
       /// Assert .atKeys file is generated for the atSign
       expect(await File(atOnboardingPreference.atKeysFilePath!).exists(), true);
+      await atLookup.close();
     });
 
     tearDown(() async {
