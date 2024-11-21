@@ -155,7 +155,7 @@ void main() {
       expect(encryptionPublicKey, isNotNull);
       encryptionPublicKey = encryptionPublicKey?.replaceFirst('data:', '');
       expect(jsonDecode(encryptionPublicKey!)['metaData'], isNotNull);
-      expect(jsonDecode(encryptionPublicKey)['metaData']['ttr'], '-1');
+      expect(jsonDecode(encryptionPublicKey)['metaData']['ttr'], -1);
       print('encryptionPublicKey: $encryptionPublicKey');
       bool status2 = await atOnboardingService.authenticate();
       expect(status2, true);
