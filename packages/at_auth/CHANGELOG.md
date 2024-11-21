@@ -1,3 +1,5 @@
+## 2.0.9
+- fix: Set ttr=-1 for encryption publickey during onboard
 ## 2.0.8
 - feat: Add "passPhrase" in "AtAuthRequest" to support password protected atKeys file
 - build[deps]: Upgraded the following packages:
