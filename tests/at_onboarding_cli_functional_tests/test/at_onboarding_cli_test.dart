@@ -150,8 +150,12 @@ void main() {
       // verify whether ttr is set in public encryption key
       final atLookup = AtLookupImpl(atSign, atOnboardingPreference.rootDomain,
           atOnboardingPreference.rootPort);
-      final encryptionPublicKey =
+      var encryptionPublicKey =
           await atLookup.executeCommand('lookup:all:publickey$atSign\n');
+      expect(encryptionPublicKey, isNotNull);
+      encryptionPublicKey = encryptionPublicKey?.replaceFirst('data:', '');
+      expect(jsonDecode(encryptionPublicKey!)['metaData'], isNotNull);
+      expect(jsonDecode(encryptionPublicKey)['metaData']['ttr'], '-1');
       print('encryptionPublicKey: $encryptionPublicKey');
       bool status2 = await atOnboardingService.authenticate();
       expect(status2, true);
