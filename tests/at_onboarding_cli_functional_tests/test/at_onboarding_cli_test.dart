@@ -147,6 +147,12 @@ void main() {
           AtOnboardingServiceImpl(atSign, atOnboardingPreference);
       bool status = await atOnboardingService.onboard();
       expect(status, true);
+      // verify whether ttr is set in public encryption key
+      final atClient = await atOnboardingService.atClient;
+      final encryptionPublicKey = await atClient!
+          .getRemoteSecondary()
+          ?.executeCommand('lookup:all:publickey$atSign\n');
+      print('encryptionPublicKey: $encryptionPublicKey');
       bool status2 = await atOnboardingService.authenticate();
       expect(status2, true);
       expect(await atOnboardingService.isOnboarded(), true);
