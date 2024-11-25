@@ -19,14 +19,6 @@ dependencies:
   meta: ^1.11.0
   path: ^1.9.0
 
-dependency_overrides:
-  at_onboarding_cli:
-    path: ../at_onboarding_cli
-  at_auth:
-    path: ../at_auth
-  at_chops:
-    path: ../at_chops
-
 dev_dependencies:
   lints: ^3.0.0
   test: ^1.24.9
