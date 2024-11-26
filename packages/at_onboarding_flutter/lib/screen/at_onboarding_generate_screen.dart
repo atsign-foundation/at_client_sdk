@@ -507,7 +507,7 @@ class _AtOnboardingGenerateScreenState
         await _showAlertDialog(
           AtOnboardingLocalizations.current.error_authenticated_failed,
         );
-      } else {
+      } else if (authResponse != AtOnboardingResponseStatus.authSuccess) {
         await showErrorDialog(
           AtOnboardingLocalizations.current.msg_response_time_out,
         );
