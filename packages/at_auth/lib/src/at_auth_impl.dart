@@ -164,7 +164,9 @@ class AtAuthImpl implements AtAuth {
       ..atKey = (AtKey()
         ..key = 'publickey'
         ..sharedBy = atOnboardingRequest.atSign
-        ..metadata = (Metadata()..isPublic = true))
+        ..metadata = (Metadata()
+          ..isPublic = true
+          ..ttr = -1))
       ..value = encryptionPublicKey;
     String? encryptKeyUpdateResult = await atLookUp!.executeVerb(updateBuilder);
     _logger.info('Encryption public key update result $encryptKeyUpdateResult');
