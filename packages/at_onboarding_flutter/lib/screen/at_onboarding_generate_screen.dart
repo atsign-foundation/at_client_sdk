@@ -474,11 +474,12 @@ class _AtOnboardingGenerateScreenState
 
       await Future.delayed(const Duration(seconds: 10));
 
-      authResponse = await _onboardingService.authenticate(
-        verifiedAtSign,
-        cramSecret: cramSecret,
-        status: OnboardingStatus.ACTIVATE,
+      String? previousAtsign = _onboardingService.currentAtsign;
+      _onboardingService.setAtsign = verifiedAtSign;
+      authResponse = await _onboardingService.onboard(
+        cramSecret: secret,
       );
+
       _inprogressDialog.close();
       if (authResponse == AtOnboardingResponseStatus.authSuccess) {
         if (!mounted) return;
@@ -494,7 +495,11 @@ class _AtOnboardingGenerateScreenState
         if (!mounted) return;
         Navigator.pop(
             context, AtOnboardingResult.success(atsign: verifiedAtSign));
-      } else if (authResponse == AtOnboardingResponseStatus.serverNotReached) {
+      } else {
+        _onboardingService.setAtsign = previousAtsign;
+      }
+
+      if (authResponse == AtOnboardingResponseStatus.serverNotReached) {
         await _showAlertDialog(
           AtOnboardingLocalizations.current.msg_atSign_unreachable,
         );

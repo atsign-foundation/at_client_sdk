@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_onboarding_flutter/at_onboarding_result.dart';
 import 'package:at_onboarding_flutter/localizations/generated/l10n.dart';
@@ -103,7 +104,8 @@ class _AtOnboardingActivateScreenState
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      AtOnboardingLocalizations.current.msg_wait_fetching_atSign,
+                      AtOnboardingLocalizations
+                          .current.msg_wait_fetching_atSign,
                     ),
                   ],
                 ),
@@ -146,7 +148,7 @@ class _AtOnboardingActivateScreenState
       data = jsonDecode(data);
 
       AtOnboardingOTPResult? result;
-      if(context.mounted) {
+      if (context.mounted) {
         result = await AtOnboardingOTPScreen.push(
           context: context,
           atSign: atsign ?? (widget.atSign ?? ''),
@@ -219,8 +221,11 @@ class _AtOnboardingActivateScreenState
       _onboardingService.setAtClientPreference =
           widget.config.atClientPreference;
 
-      authResponse = await _onboardingService.authenticate(atsign,
-          cramSecret: secret, status: OnboardingStatus.ACTIVATE);
+      String? previousAtsign = _onboardingService.currentAtsign;
+      _onboardingService.setAtsign = atsign;
+      authResponse = await _onboardingService.onboard(
+        cramSecret: secret,
+      );
 
       int round = 1;
       atSignStatus = await _onboardingService.checkAtSignServerStatus(atsign);
@@ -233,6 +238,11 @@ class _AtOnboardingActivateScreenState
         round++;
         atSignStatus = await _onboardingService.checkAtSignServerStatus(atsign);
         debugPrint("currentAtSignStatus: $atSignStatus");
+      }
+
+      if (authResponse != AtOnboardingResponseStatus.authSuccess ||
+          atSignStatus == ServerStatus.teapot) {
+        _onboardingService.setAtsign = previousAtsign;
       }
 
       if (authResponse == AtOnboardingResponseStatus.authSuccess) {
