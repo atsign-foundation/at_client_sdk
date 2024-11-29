@@ -1,3 +1,7 @@
+## 1.8.1
+- build[deps]: upgrade: \
+  at_auth to 2.0.9 | at_chops to 2.2.0 | at_client to 3.3.0 \
+  at_commons to 5.0.2 | at_cli_commons to 1.2.1 | at_persistence_secondary_server to 3.0.65
 ## 1.8.0
 - feat: add `unrevoke` command to the activate CLI
 - feat: add `delete` command to the activate CLI
