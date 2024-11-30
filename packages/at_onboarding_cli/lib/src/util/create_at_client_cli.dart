@@ -74,7 +74,7 @@ Future<AtClient> createAtClient(
     stderr.writeln();
     var msg = 'Failed to connect after $attempts attempts';
     stderr.writeln(chalk.brightRed(msg));
-    throw SecondaryServerConnectivityException(msg);
+    throw UnAuthenticatedException(msg);
   }
   stderr.writeln(chalk.brightGreen('Connected'));
   // Get the AtClient which the onboardingService just authenticated

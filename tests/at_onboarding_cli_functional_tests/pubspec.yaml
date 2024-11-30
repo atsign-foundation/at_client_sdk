@@ -10,6 +10,7 @@ dependencies:
   at_lookup: ^3.0.49
   at_client: ^3.2.2
   at_commons: ^5.0.0
+  at_demo_data: ^1.2.0
 
 dependency_overrides:
   at_auth:

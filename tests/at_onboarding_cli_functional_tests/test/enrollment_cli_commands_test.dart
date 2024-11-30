@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
@@ -21,8 +22,7 @@ void main() {
         getOnboardingPreference(atSign,
             '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys')
           // Fetched cram key from the at_demos repo.
-          ..cramSecret =
-              '15cdce8f92bcf7e742d5b75dc51ec06d798952f8bf7e8ff4c2b6448e5f7c2c12b570fe945f04011455fdc49cacdf9393d9c1ac4609ec71c1a0b0c213578e7ec7');
+          ..cramSecret = cramKeyMap[atSign]);
 
     bool onboardingStatus = await atOnboardingService.onboard();
     expect(onboardingStatus, true);
