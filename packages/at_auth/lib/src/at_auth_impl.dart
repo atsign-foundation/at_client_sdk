@@ -49,11 +49,9 @@ class AtAuthImpl implements AtAuth {
     AtAuthKeys? atAuthKeys;
     var enrollmentIdFromRequest = atAuthRequest.enrollmentId;
     if (atAuthRequest.atKeysFilePath != null) {
-      atAuthKeys = _decryptAtKeysFile(
-          await _readAtKeysFile(atAuthRequest.atKeysFilePath),
-          atAuthRequest.authMode);
+      atAuthKeys = await _prepareAtAuthKeysFromFilePath(atAuthRequest);
     } else if (atAuthRequest.encryptedKeysMap != null) {
-      atAuthKeys = _decryptAtKeysFile(
+      atAuthKeys = _decryptAtKeysWithSelfEncKey(
           atAuthRequest.encryptedKeysMap!, PkamAuthMode.keysFile);
     } else {
       atAuthKeys = atAuthRequest.atAuthKeys;
@@ -166,7 +164,9 @@ class AtAuthImpl implements AtAuth {
       ..atKey = (AtKey()
         ..key = 'publickey'
         ..sharedBy = atOnboardingRequest.atSign
-        ..metadata = (Metadata()..isPublic = true))
+        ..metadata = (Metadata()
+          ..isPublic = true
+          ..ttr = -1))
       ..value = encryptionPublicKey;
     String? encryptKeyUpdateResult = await atLookUp!.executeVerb(updateBuilder);
     _logger.info('Encryption public key update result $encryptKeyUpdateResult');
@@ -247,7 +247,7 @@ class AtAuthImpl implements AtAuth {
     return enrollmentIdFromServer!;
   }
 
-  AtAuthKeys _decryptAtKeysFile(
+  AtAuthKeys _decryptAtKeysWithSelfEncKey(
       Map<String, dynamic> jsonData, PkamAuthMode authMode) {
     var securityKeys = AtAuthKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey]!;
@@ -285,21 +285,46 @@ class AtAuthImpl implements AtAuth {
 
   ///method to read and return data from .atKeysFile
   ///returns map containing encryption keys
-  Future<Map<String, String>> _readAtKeysFile(String? atKeysFilePath) async {
-    if (atKeysFilePath == null || atKeysFilePath.isEmpty) {
+  Future<AtAuthKeys> _prepareAtAuthKeysFromFilePath(
+      AtAuthRequest atAuthRequest) async {
+    if (atAuthRequest.atKeysFilePath == null ||
+        atAuthRequest.atKeysFilePath!.isEmpty) {
       throw AtException(
           'atKeys filePath is empty. atKeysFile is required to authenticate');
     }
-    if (!File(atKeysFilePath).existsSync()) {
+    if (!File(atAuthRequest.atKeysFilePath!).existsSync()) {
       throw AtException(
-          'provided keys file does not exist. Please check whether the file path $atKeysFilePath is valid');
+          'provided keys file does not exist. Please check whether the file path ${atAuthRequest.atKeysFilePath} is valid');
     }
-    String atAuthData = await File(atKeysFilePath).readAsString();
-    Map<String, String> jsonData = <String, String>{};
-    json.decode(atAuthData).forEach((String key, dynamic value) {
-      jsonData[key] = value.toString();
-    });
-    return jsonData;
+
+    String atAuthData =
+        await File(atAuthRequest.atKeysFilePath!).readAsString();
+    Map<String, dynamic> decodedAtKeysData = jsonDecode(atAuthData);
+    // If it contains "iv(InitializationVector)", it means the data is encrypted with a
+    // passphrase. Decrypt it.
+    if (decodedAtKeysData.containsKey('iv') &&
+        atAuthRequest.passPhrase.isNullOrEmpty) {
+      throw AtDecryptionException(
+          'Pass Phrase is required for password protected atKeys file');
+    }
+    if (decodedAtKeysData.containsKey('iv')) {
+      _logger.info(
+          'Found encrypted atKeys files. Decrypting with the given pass-phrase');
+      AtEncrypted atEncrypted = AtEncrypted.fromJson(decodedAtKeysData);
+
+      if (atEncrypted.hashingAlgoType == null) {
+        throw AtDecryptionException(
+            'Hashing algo type is required for decryption of password protected atKeys file');
+      }
+
+      String decryptedAtKeys =
+          await AtKeysCrypto.fromHashingAlgorithm(atEncrypted.hashingAlgoType!)
+              .decrypt(atEncrypted, atAuthRequest.passPhrase!);
+      decodedAtKeysData = jsonDecode(decryptedAtKeys);
+    }
+    // This is to decrypt the atKeys encrypted with self Encryption key.
+    return _decryptAtKeysWithSelfEncKey(
+        decodedAtKeysData, atAuthRequest.authMode);
   }
 
   AtAuthKeys _generateKeyPairs(PkamAuthMode authMode, {String? publicKeyId}) {

@@ -39,6 +39,8 @@ class VerbSyntax {
       r'(:isEncrypted:(?<isEncrypted>true|false))?'
       r'(:sharedKeyEnc:(?<sharedKeyEnc>[^:@\s]+))?'
       r'(:pubKeyCS:(?<pubKeyCS>[^:@\s]+))?'
+      r'(:pubKeyHash:(?<pubKeyHash>[^:@\s]+))?'
+      r'(:hashingAlgo:(?<hashingAlgo>[^:@\s]+))?'
       r'(:encoding:(?<encoding>[^:@\s]+))?'
       r'(:encKeyName:(?<encKeyName>[^:@\s]+))?'
       r'(:encAlgo:(?<encAlgo>[^:@\s]+))?'

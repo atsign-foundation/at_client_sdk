@@ -64,7 +64,7 @@ class AtConstants {
   static const String sharedWithPublicKeyCheckSum = 'pubKeyCS';
   static const String sharedWithPublicKeyHash = 'pubKeyHash';
   static const String sharedWithPublicKeyHashValue = 'hash';
-  static const String sharedWithPublicKeyHashAlgo = 'algo';
+  static const String sharedWithPublicKeyHashingAlgo = 'hashingAlgo';
   static const String sharedKeyEncryptedEncryptingKeyName = 'skeEncKeyName';
   static const String sharedKeyEncryptedEncryptingAlgo = 'skeEncAlgo';
   static const String firstByte = '#';

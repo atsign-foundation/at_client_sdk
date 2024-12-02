@@ -2,6 +2,10 @@
 - feat: add `unrevoke` command to the activate CLI
 - feat: add `delete` command to the activate CLI
 - fix: When submitting an enrollment request, check for write permissions of AtKeys file path.
+- build[deps]: upgrade: \
+  at_auth to 2.0.9 | at_chops to 2.2.0 | at_client to 3.3.0 \
+  at_commons to 5.0.2 | at_cli_commons to 1.2.1 | at_persistence_secondary_server to 3.0.65
+- feat: Support password protection of atKeys file with a pass phrase
 ## 1.7.0
 - feat: add `auto` command to the activate CLI 
 ## 1.6.4

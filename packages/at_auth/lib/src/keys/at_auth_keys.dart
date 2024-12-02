@@ -14,6 +14,7 @@ class AtAuthKeys {
 
   AtAuthKeys();
 
+  @Deprecated('Use toJson()')
   Map<String, String?> toMap() {
     var keysMap = <String, String?>{};
     keysMap[auth_constants.apkamPrivateKey] = apkamPrivateKey;

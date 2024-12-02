@@ -10,6 +10,7 @@ dependencies:
   at_lookup: ^3.0.49
   at_client: ^3.2.2
   at_commons: ^5.0.0
+  at_demo_data: ^1.2.0
 
 dependency_overrides:
   at_auth:
@@ -18,6 +19,10 @@ dependency_overrides:
     path: ../../packages/at_onboarding_cli
   at_commons:
     path: ../../packages/at_commons
+  at_chops:
+    path: ../../packages/at_chops
+  at_cli_commons:
+    path: ../../packages/at_cli_commons
 
 dev_dependencies:
   lints: ^1.0.0

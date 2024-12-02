@@ -1,8 +1,11 @@
 import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:path/path.dart' as path;
 
 class HomeDirectoryUtil {
+  static const String defaultPathUniqueID = 'singleton';
+
   static final homeDir = getHomeDirectory();
 
   static String? getHomeDirectory() {
@@ -49,5 +52,63 @@ class HomeDirectoryUtil {
         HomeDirectoryUtil.getStorageDirectory(atsign,
             enrollmentId: enrollmentId),
         'hive');
+  }
+
+  /// Generate a path like this:
+  /// $baseDir/.atsign/storage/$atSign/$progName/$uniqueID
+  /// (normalized to use platform-specific path separator)
+  static String standardAtClientStoragePath({
+    required String baseDir,
+    required String atSign,
+    required String progName, // e.g. npt, sshnp, sshnpd, srvd etc
+    String uniqueID = defaultPathUniqueID,
+  }) {
+    return path.normalize('$baseDir'
+            '/.atsign'
+            '/storage'
+            '/$atSign'
+            '/$progName'
+            '/$uniqueID'
+        .replaceAll('/', Platform.pathSeparator));
+  }
+
+  Directory standardWindowsAtClientStorageDir({
+    required String atSign,
+    required String progName, // e.g. npt, sshnp, sshnpd, srvd etc
+    required String uniqueID,
+  }) {
+    return Directory(standardAtClientStoragePath(
+      baseDir: Platform.environment['TEMP']!,
+      atSign: atSign,
+      progName: progName,
+      uniqueID: uniqueID,
+    ));
+  }
+
+  /// Generate a path like this:
+  /// $baseDir/.atsign/storage/$atSign/$progName/$uniqueID
+  /// (normalized to use platform-specific path separator)
+  /// where baseDir is either
+  /// - for Windows: `Platform.environment['TEMP']`
+  /// - for others: [getHomeDirectory]
+  static Directory standardAtClientStorageDir({
+    required String atSign,
+    required String progName, // e.g. npt, sshnp, sshnpd, srvd etc
+    required String uniqueID,
+  }) {
+    if (Platform.isWindows) {
+      return standardAtClientStorageDir(
+        atSign: atSign,
+        progName: progName,
+        uniqueID: uniqueID,
+      );
+    } else {
+      return Directory(standardAtClientStoragePath(
+        baseDir: getHomeDirectory()!,
+        atSign: atSign,
+        progName: progName,
+        uniqueID: uniqueID,
+      ));
+    }
   }
 }

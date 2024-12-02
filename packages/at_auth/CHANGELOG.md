@@ -1,3 +1,13 @@
+## 2.0.9
+- fix:Enable caching of encryption public key
+## 2.0.8
+- feat: Add "passPhrase" in "AtAuthRequest" to support password protected atKeys file
+- build[deps]: Upgraded the following packages:
+  - at_commons to v5.0.2
+  - at_auth to v2.2.0
+  - lints to v5.0.0
+  - test to v1.25.8
+  - mocktail to v1.0.4
 ## 2.0.7
 - build[deps]: Upgraded the following packages:
   - at_commons to v5.0.0

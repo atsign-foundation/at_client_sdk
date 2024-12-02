@@ -428,9 +428,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     atKeysFile.createSync(recursive: true);
     IOSink fileWriter = atKeysFile.openWrite();
+    String encodedAtKeysString = jsonEncode(atKeysMap);
 
+    if (atOnboardingPreference.passPhrase != null) {
+      AtEncrypted atEncrypted = await AtKeysCrypto.fromHashingAlgorithm(
+              atOnboardingPreference.hashingAlgoType)
+          .encrypt(encodedAtKeysString, atOnboardingPreference.passPhrase!);
+      encodedAtKeysString = atEncrypted.toString();
+      stdout.writeln(
+          '[Information] Encrypted atKeys file with the given pass phrase');
+    }
     //generating .atKeys file at path provided in onboardingConfig
-    fileWriter.write(jsonEncode(atKeysMap));
+    fileWriter.write(encodedAtKeysString);
     await fileWriter.flush();
     await fileWriter.close();
     stdout.writeln(
@@ -441,10 +450,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   ///back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
-  Future<void> _persistKeysLocalSecondary() async {
-    //when authenticating keys need to be fetched from atKeys file
-    at_auth.AtAuthKeys atAuthKeys = _decryptAtKeysFile(
-        (await readAtKeysFile(atOnboardingPreference.atKeysFilePath)));
+  Future<void> _persistKeysLocalSecondary(at_auth.AtAuthKeys atAuthKeys) async {
     //backup keys into local secondary
     bool? response = await atClient
         ?.getLocalSecondary()
@@ -481,7 +487,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       ..authMode = atOnboardingPreference.authMode
       ..rootDomain = atOnboardingPreference.rootDomain
       ..rootPort = atOnboardingPreference.rootPort
-      ..publicKeyId = atOnboardingPreference.publicKeyId;
+      ..publicKeyId = atOnboardingPreference.publicKeyId
+      ..passPhrase = atOnboardingPreference.passPhrase;
     var atAuthResponse = await atAuth!.authenticate(atAuthRequest);
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&
@@ -489,7 +496,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       logger.finer('Calling persist keys to local secondary');
       await _initAtClient(atAuth!.atChops!,
           enrollmentId: atAuthResponse.enrollmentId);
-      await _persistKeysLocalSecondary();
+      await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys!);
     }
 
     return atAuthResponse.isSuccessful;
@@ -509,33 +516,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       jsonData[key] = value.toString();
     });
     return jsonData;
-  }
-
-  ///method to extract decryption key from atKeysData
-  ///returns self_encryption_key
-  String _getDecryptionKey(Map<String, String>? jsonData) {
-    return jsonData![AuthKeyType.selfEncryptionKey]!;
-  }
-
-  at_auth.AtAuthKeys _decryptAtKeysFile(Map<String, String> jsonData) {
-    var atAuthKeys = at_auth.AtAuthKeys();
-    String decryptionKey = _getDecryptionKey(jsonData);
-    atAuthKeys.defaultEncryptionPublicKey = EncryptionUtil.decryptValue(
-        jsonData[AuthKeyType.encryptionPublicKey]!, decryptionKey);
-    atAuthKeys.defaultEncryptionPrivateKey = EncryptionUtil.decryptValue(
-        jsonData[AuthKeyType.encryptionPrivateKey]!, decryptionKey);
-    atAuthKeys.defaultSelfEncryptionKey = decryptionKey;
-    atAuthKeys.apkamPublicKey = EncryptionUtil.decryptValue(
-        jsonData[AuthKeyType.pkamPublicKey]!, decryptionKey);
-    // pkam private key will not be saved in keyfile if auth mode is sim/any other secure element.
-    // decrypt the private key only when auth mode is keysFile
-    if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      atAuthKeys.apkamPrivateKey = EncryptionUtil.decryptValue(
-          jsonData[AuthKeyType.pkamPrivateKey]!, decryptionKey);
-    }
-    atAuthKeys.apkamSymmetricKey = jsonData[AuthKeyType.apkamSymmetricKey];
-    atAuthKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
-    return atAuthKeys;
   }
 
   ///generates random RSA keypair

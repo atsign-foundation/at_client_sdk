@@ -1,3 +1,6 @@
+## 1.2.1
+- fix: fix impl of `standardAtClientStoragePath`
+
 ## 1.2.0
 - feat: Add `standardAtClientStoragePath` and `standardAtClientStorageDir` 
   to utils.dart

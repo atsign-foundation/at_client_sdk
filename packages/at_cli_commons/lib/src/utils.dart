@@ -1,34 +1,59 @@
 import 'dart:io';
 import 'package:at_client/at_client.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as path;
 
+const String defaultPathUniqueID = 'singleton';
+
+/// Generate a path like this:
+/// $baseDir/.atsign/storage/$atSign/$progName/$uniqueID
+/// (normalized to use platform-specific path separator)
 String standardAtClientStoragePath({
   required String baseDir,
   required String atSign,
   required String progName, // e.g. npt, sshnp, sshnpd, srvd etc
-  String uniqueID = 'single',
+  String uniqueID = defaultPathUniqueID,
 }) {
   return path.normalize('$baseDir'
           '/.atsign'
           '/storage'
           '/$atSign'
-          '/.$progName'
+          '/$progName'
           '/$uniqueID'
       .replaceAll('/', Platform.pathSeparator));
 }
 
+@visibleForTesting
+Directory standardWindowsAtClientStorageDir({
+  required String atSign,
+  required String progName, // e.g. npt, sshnp, sshnpd, srvd etc
+  required String uniqueID,
+}) {
+  return Directory(standardAtClientStoragePath(
+    baseDir: Platform.environment['TEMP']!,
+    atSign: atSign,
+    progName: progName,
+    uniqueID: uniqueID,
+  ));
+}
+
+/// Generate a path like this:
+/// $baseDir/.atsign/storage/$atSign/$progName/$uniqueID
+/// (normalized to use platform-specific path separator)
+/// where baseDir is either
+/// - for Windows: `Platform.environment['TEMP']`
+/// - for others: [getHomeDirectory]
 Directory standardAtClientStorageDir({
   required String atSign,
   required String progName, // e.g. npt, sshnp, sshnpd, srvd etc
   required String uniqueID,
 }) {
   if (Platform.isWindows) {
-    return Directory(standardAtClientStoragePath(
-      baseDir: Platform.environment['TEMP']!,
+    return standardAtClientStorageDir(
       atSign: atSign,
       progName: progName,
       uniqueID: uniqueID,
-    ));
+    );
   } else {
     return Directory(standardAtClientStoragePath(
       baseDir: getHomeDirectory()!,
@@ -98,11 +123,13 @@ bool checkNonAscii(String test) {
   }
 }
 
+/// $homeDirectory/.atsign/keys/${atSign}_key.atKeys
 String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
   return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
       .replaceAll('/', Platform.pathSeparator);
 }
 
+/// '$homeDirectory/.ssh/'
 String getDefaultSshDirectory(String homeDirectory) {
   return '$homeDirectory/.ssh/'.replaceAll('/', Platform.pathSeparator);
 }

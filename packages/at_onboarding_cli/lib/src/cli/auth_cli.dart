@@ -4,12 +4,13 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
-import 'package:at_cli_commons/at_cli_commons.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_exceptions.dart';
+import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
 import 'package:at_onboarding_cli/src/util/print_full_parser_usage.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:duration/duration.dart';
@@ -148,7 +149,13 @@ Future<int> wrappedMain(List<String> arguments) async {
         // enrollment requests is used solely to defend against ddos attacks
         // where users are bombarded with spurious enrollment requests.
         await setSpp(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.otp:
         // generate a one-time-passcode for this atSign. This is a passcode
@@ -159,35 +166,86 @@ Future<int> wrappedMain(List<String> arguments) async {
         // enrollment requests is used solely to defend against ddos attacks
         // where users are bombarded with spurious enrollment requests.
         await generateOtp(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.interactive:
         // Interactive session for various enrollment management activities:
         // - listing, approving, denying and revoking enrollments
         // - setting spp, generating otp, etc
         await interactive(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.list:
-        await list(commandArgResults, await createAtClient(commandArgResults));
+        await list(
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.fetch:
-        await fetch(commandArgResults, await createAtClient(commandArgResults));
+        await fetch(
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.approve:
         await approve(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.auto:
         await autoApprove(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.deny:
-        await deny(commandArgResults, await createAtClient(commandArgResults));
+        await deny(
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.revoke:
         await revoke(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.enroll:
         // App which doesn't have auth keys and is not the first app.
@@ -199,11 +257,23 @@ Future<int> wrappedMain(List<String> arguments) async {
 
       case AuthCliCommand.unrevoke:
         await unrevoke(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.delete:
         await deleteEnrollment(
-            commandArgResults, await createAtClient(commandArgResults));
+            commandArgResults,
+            await createAtClient(
+                atSign: commandArgResults[AuthCliArgs.argNameAtSign],
+                atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
+                rootDomain:
+                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
     }
   } on ArgumentError catch (e) {
     stderr
@@ -278,33 +348,6 @@ Future<int> status(ArgResults ar) async {
 
   stderr.writeln('returning 0: found public:publickey$atSign OK');
   return 0;
-}
-
-Future<AtClient> createAtClient(ArgResults ar) async {
-  String nameSpace = 'at_activate';
-  String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  storageDir = standardAtClientStorageDir(
-    atSign: atSign,
-    progName: nameSpace,
-    uniqueID: '${DateTime.now().millisecondsSinceEpoch}',
-  );
-
-  CLIBase cliBase = CLIBase(
-    atSign: atSign,
-    atKeysFilePath: ar[AuthCliArgs.argNameAtKeys],
-    nameSpace: nameSpace,
-    rootDomain: ar[AuthCliArgs.argNameAtDirectoryFqdn],
-    homeDir: getHomeDirectory(),
-    storageDir: storageDir!.path,
-    verbose: ar[AuthCliArgs.argNameVerbose] || ar[AuthCliArgs.argNameDebug],
-    syncDisabled: true,
-    maxConnectAttempts: int.parse(
-        ar[AuthCliArgs.argNameMaxConnectAttempts]), // 10 * 3 == 30 seconds
-  );
-
-  await cliBase.init();
-
-  return cliBase.atClient;
 }
 
 /// When a cramSecret arg is not supplied, we first use the registrar API
@@ -996,7 +1039,10 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     ..rootDomain = ar[AuthCliArgs.argNameAtDirectoryFqdn]
     ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
     ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
-    ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys];
+    ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
+    ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
+    ..hashingAlgoType =
+        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 
   return AtOnboardingServiceImpl(atSign, atOnboardingPreference);
 }

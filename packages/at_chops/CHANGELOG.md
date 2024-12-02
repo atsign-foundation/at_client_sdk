@@ -1,3 +1,16 @@
+## 2.2.0
+- feat: Implement "argon2id" hashing algorithm to generate hash from a given passphrase.
+- feat: Add generics to "AtEncryptionAlgorithm" and "AtHashingAlgorithm" to support multiple data types in their
+  implementations.
+- build[deps]: Upgraded the following packages:
+  - at_commons to v5.0.2
+  - args to v2.6.0
+  - lints to v5.0.0
+  - test to v1.25.8
+  - collection to v1.19.1
+## 2.1.0
+- feat: New library available called `at_chops_types` which provides type definitions for using custom algorithms with
+  at_chops
 ## 2.0.1
 - fix: throw Exception when input IV is null for decryption(with Symmetric Encryption)
 - build[deps]: Upgraded the following packages:

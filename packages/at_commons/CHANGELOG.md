@@ -1,5 +1,15 @@
-## 5.0.2
+## 5.1.0
 - feat: Introduce skipDeletes for sync:from verb
+## 5.0.2
+- fix: Add "publicKeyHash" and "hashingAlgo" type to metadata.
+- build[deps]: Upgraded the following package:
+  - json_annotation to v4.9.0
+  - meta to v1.16.0
+  - build_runner to v2.4.13
+  - json_serializable to v6.9.0
+  - lints to v5.0.0
+  - test to v1.25.8
+  - test_process to v2.1.0
 ## 5.0.1
 - fix: export regex utils class
 ## 5.0.0
@@ -12,7 +22,6 @@
 ## 4.1.0
 - feat: Add "unrevoke" operation to the enroll verb to restore revoked APKAM keys
 - fix: Add isEncrypted flag to notify command for both true and false
-
 ## 4.0.11
 - chore: deprecate MessageTypeEnum.text
 - fix: remove deprecated annotation from Metadata.pubKeyCS

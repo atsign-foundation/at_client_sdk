@@ -155,6 +155,13 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
     builder.atKey.metadata.skeEncAlgo =
         verbParams[AtConstants.sharedKeyEncryptedEncryptingAlgo];
 
+    if (verbParams[AtConstants.sharedWithPublicKeyHash] != null &&
+        verbParams[AtConstants.sharedWithPublicKeyHashingAlgo] != null) {
+      builder.atKey.metadata.pubKeyHash = PublicKeyHash(
+          verbParams[AtConstants.sharedWithPublicKeyHash]!,
+          verbParams[AtConstants.sharedWithPublicKeyHashingAlgo]!);
+    }
+
     builder.value = verbParams[AtConstants.value];
 
     return builder;

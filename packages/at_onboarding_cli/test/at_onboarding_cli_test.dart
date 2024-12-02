@@ -56,8 +56,17 @@ void main() {
           atSign, '.wavi', getAtClientPreferenceAlice());
       when(() => mockAtLookup.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
-      when(() => mockAtAuth.authenticate(any())).thenAnswer(
-          (_) => Future.value(AtAuthResponse(atSign)..isSuccessful = true));
+      when(() => mockAtAuth.authenticate(any()))
+          .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
+            ..isSuccessful = true
+            ..atAuthKeys = (AtAuthKeys()
+              ..apkamPublicKey = 'dummy_apkam_public_key'
+              ..apkamPrivateKey = 'dummy_private_key'
+              ..defaultSelfEncryptionKey = 'dummy_self_encryption_key'
+              ..defaultEncryptionPrivateKey = 'dummy_enc_priv_key'
+              ..defaultEncryptionPublicKey = 'dummy_enc_pub_key'
+              ..apkamSymmetricKey = 'dummy_apkam_sym_key'
+              ..enrollmentId = 'dummy_enroll_id')));
       when(() => mockAtAuth.atChops)
           .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
       var authResult = await onboardingService.authenticate();

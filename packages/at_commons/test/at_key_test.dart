@@ -919,25 +919,27 @@ void main() {
     test('Test to verify metadata toJson method when public key hash is set',
         () {
       var metadata = Metadata()
-        ..pubKeyHash = PublicKeyHash('randomhash', PublicKeyHashingAlgo.sha512)
+        ..pubKeyHash = PublicKeyHash('randomhash', 'sha512')
         ..isPublic = false
         ..ttr = -1;
       var metadataJson = metadata.toJson();
       expect(metadataJson[AtConstants.sharedWithPublicKeyHash]['hash'],
           'randomhash');
-      expect(metadataJson[AtConstants.sharedWithPublicKeyHash]['algo'],
-          PublicKeyHashingAlgo.sha512.name);
+      expect(metadataJson[AtConstants.sharedWithPublicKeyHash]['hashingAlgo'],
+          'sha512');
     });
     test(
         'Test to verify metadata toProtocol fragment method when public key hash is set',
         () {
       var metadata = Metadata()
-        ..pubKeyHash = PublicKeyHash('randomhash', PublicKeyHashingAlgo.sha512)
+        ..pubKeyHash = PublicKeyHash('randomhash', 'sha512')
         ..isPublic = false
         ..ttr = -1;
       var metadataFragment = metadata.toAtProtocolFragment();
-      expect(metadataFragment, contains('hash:randomhash'));
-      expect(metadataFragment, contains('algo:sha512'));
+      expect(metadataFragment,
+          contains('${AtConstants.sharedWithPublicKeyHash}:randomhash'));
+      expect(metadataFragment,
+          contains('${AtConstants.sharedWithPublicKeyHashingAlgo}:sha512'));
     });
     test('Test to verify metadata fromJson method when public key hash is set',
         () {
@@ -946,12 +948,14 @@ void main() {
       jsonMap['isBinary'] = false;
       jsonMap['isEncrypted'] = true;
       jsonMap['isPublic'] = false;
-      jsonMap['pubKeyHash'] = {'hash': 'randomhash', 'algo': 'sha512'};
+      jsonMap['pubKeyHash'] = {
+        AtConstants.sharedWithPublicKeyHashValue: 'randomhash',
+        AtConstants.sharedWithPublicKeyHashingAlgo: 'sha512'
+      };
       var metadataObject = Metadata.fromJson(jsonMap);
       expect(metadataObject.pubKeyHash, isNotNull);
       expect(metadataObject.pubKeyHash!.hash, 'randomhash');
-      expect(metadataObject.pubKeyHash!.publicKeyHashingAlgo,
-          PublicKeyHashingAlgo.sha512);
+      expect(metadataObject.pubKeyHash!.hashingAlgo, 'sha512');
     });
     test(
         'Test to verify metadata fromJson method when public key hash is not set',
@@ -1017,7 +1021,7 @@ void main() {
         ..isEncrypted = true
         ..isCached = false
         ..sharedKeyEnc = 'dummy_shared_key_enc'
-        ..pubKeyHash = PublicKeyHash('test_hash', PublicKeyHashingAlgo.sha256)
+        ..pubKeyHash = PublicKeyHash('test_hash', 'sha256')
         ..encoding = 'base64'
         ..encKeyName = 'key_12345.__shared_keys.wavi'
         ..encAlgo = 'RSA'
@@ -1042,8 +1046,12 @@ void main() {
       expect(metadataMap['isEncrypted'], true);
       expect(metadataMap['isCached'], false);
       expect(metadataMap['sharedKeyEnc'], 'dummy_shared_key_enc');
-      expect(metadataMap['pubKeyHash']['hash'], 'test_hash');
-      expect(metadataMap['pubKeyHash']['algo'], 'sha256');
+      expect(
+          metadataMap['pubKeyHash'][AtConstants.sharedWithPublicKeyHashValue],
+          'test_hash');
+      expect(
+          metadataMap['pubKeyHash'][AtConstants.sharedWithPublicKeyHashingAlgo],
+          'sha256');
       expect(metadataMap['encoding'], 'base64');
       expect(metadataMap['encKeyName'], 'key_12345.__shared_keys.wavi');
       expect(metadataMap['encAlgo'], 'RSA');
