@@ -1,5 +1,5 @@
 ## 5.1.0
-- feat: Introduce skipDeletes for sync:from verb
+- feat: Introduce skipDeletesUntil for sync:from verb
 ## 5.0.2
 - fix: Add "publicKeyHash" and "hashingAlgo" type to metadata.
 - build[deps]: Upgraded the following package:
