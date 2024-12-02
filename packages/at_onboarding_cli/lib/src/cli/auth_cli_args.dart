@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
 
@@ -110,6 +111,8 @@ class AuthCliArgs {
   static const argNameExpiry = 'expiry';
   static const argAbbrExpiry = 'e';
   static const argNameAutoApproveExisting = 'approve-existing';
+  static const argNamePassPhrase = 'passPhrase';
+  static const argNameHashingAlgoType = 'hashingAlgoType';
 
   ArgParser get parser {
     return _aap;
@@ -267,7 +270,17 @@ class AuthCliArgs {
       mandatory: false,
       hide: !forOnboard,
     );
-
+    p.addOption(argNamePassPhrase,
+        abbr: 'P',
+        help:
+            'Pass Phrase to encrypt/decrypt the password protected atKeys file',
+        mandatory: false,
+        hide: hide);
+    p.addOption(argNameHashingAlgoType,
+        help: 'Hashing algorithm type. Defaults to argon2id',
+        mandatory: false,
+        defaultsTo: HashingAlgoType.argon2id.name,
+        hide: hide);
     return p;
   }
 

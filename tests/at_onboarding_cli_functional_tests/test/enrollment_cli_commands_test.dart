@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
@@ -11,6 +13,33 @@ void main() {
   String atSign = '@sitaram🛠';
   String apkamKeysFilePath = 'storage/keys/@sitaram-apkam.atKeys';
   final logger = AtSignLogger('E2E Test');
+  late AtOnboardingService atOnboardingService;
+
+  // Runs once before all tests.
+  setUpAll(() async {
+    atOnboardingService = AtOnboardingServiceImpl(
+        atSign,
+        getOnboardingPreference(atSign,
+            '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys')
+          // Fetched cram key from the at_demos repo.
+          ..cramSecret = cramKeyMap[atSign]);
+
+    bool onboardingStatus = await atOnboardingService.onboard();
+    expect(onboardingStatus, true);
+    // Set SPP
+    List<String> args = [
+      'spp',
+      '-s',
+      'ABC123',
+      '-a',
+      atSign,
+      '-r',
+      'vip.ve.atsign.zone'
+    ];
+    var res = await auth_cli.wrappedMain(args);
+    // Zero indicates successful completion.
+    expect(res, 0);
+  });
 
   group('A group of tests to validate enrollment commands', () {
     /// The test verifies the following scenario's
@@ -26,30 +55,6 @@ void main() {
     test(
         'A test to verify end-to-end flow of approve revoke unrevoke of an enrollment',
         () async {
-      AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
-          atSign,
-          getOnboardingPreference(atSign,
-              '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys')
-            // Fetched cram key from the at_demos repo.
-            ..cramSecret =
-                '15cdce8f92bcf7e742d5b75dc51ec06d798952f8bf7e8ff4c2b6448e5f7c2c12b570fe945f04011455fdc49cacdf9393d9c1ac4609ec71c1a0b0c213578e7ec7');
-
-      bool onboardingStatus = await atOnboardingService.onboard();
-      expect(onboardingStatus, true);
-      // Set SPP
-      List<String> args = [
-        'spp',
-        '-s',
-        'ABC123',
-        '-a',
-        atSign,
-        '-r',
-        'vip.ve.atsign.zone'
-      ];
-      var res = await auth_cli.wrappedMain(args);
-      // Zero indicates successful completion.
-      expect(res, 0);
-
       // Submit enrollment request
       AtEnrollmentResponse atEnrollmentResponse = await atOnboardingService
           .sendEnrollRequest(
@@ -60,7 +65,7 @@ void main() {
       expect(atEnrollmentResponse.enrollmentId.isNotEmpty, true);
 
       // Approve enrollment request
-      args = [
+      List<String> args = [
         'approve',
         '-a',
         atSign,
@@ -69,7 +74,7 @@ void main() {
         '-i',
         atEnrollmentResponse.enrollmentId
       ];
-      res = await auth_cli.wrappedMain(args);
+      var res = await auth_cli.wrappedMain(args);
       expect(res, 0);
       logger.info(
           'Approved enrollment with enrollmentId: ${atEnrollmentResponse.enrollmentId}');
@@ -125,11 +130,75 @@ void main() {
           enrollmentId: atEnrollmentResponse.enrollmentId);
       expect(authResponse, true);
     });
+
+    test('A test to verify password protected of atKeys file', () async {
+      // Set pass-phrase to encrypt the atKeys file upon approval of enrollment request.
+      (atOnboardingService as AtOnboardingServiceImpl)
+          .atOnboardingPreference
+          .passPhrase = 'abcd';
+      (atOnboardingService as AtOnboardingServiceImpl)
+          .atOnboardingPreference
+          .hashingAlgoType = HashingAlgoType.argon2id;
+      // Submit enrollment request
+      AtEnrollmentResponse atEnrollmentResponse = await atOnboardingService
+          .sendEnrollRequest(
+              'buzz', 'local-device', 'ABC123', {'e2etest': 'rw'});
+      logger.info(
+          'Submitted enrollment successfully with enrollmentId: ${atEnrollmentResponse.enrollmentId}');
+      expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
+      expect(atEnrollmentResponse.enrollmentId.isNotEmpty, true);
+      // Approve enrollment request
+      List<String> args = [
+        'approve',
+        '-a',
+        atSign,
+        '-r',
+        'vip.ve.atsign.zone',
+        '-i',
+        atEnrollmentResponse.enrollmentId
+      ];
+      var res = await auth_cli.wrappedMain(args);
+      expect(res, 0);
+      logger.info(
+          'Approved enrollment with enrollmentId: ${atEnrollmentResponse.enrollmentId}');
+
+      // Generate Atkeys file for the enrollment request.
+      await atOnboardingService.awaitApproval(atEnrollmentResponse);
+      await atOnboardingService.createAtKeysFile(atEnrollmentResponse,
+          atKeysFile:
+              File('storage/keys/@sitaram-apkam-password-protected.atKeys'));
+
+      // Authenticate with APKAM keys
+      (atOnboardingService as AtOnboardingServiceImpl)
+              .atOnboardingPreference
+              .atKeysFilePath =
+          'storage/keys/@sitaram-apkam-password-protected.atKeys';
+      bool authResponse = await atOnboardingService.authenticate(
+          enrollmentId: atEnrollmentResponse.enrollmentId);
+      expect(authResponse, true);
+
+      // Run list to ensure the pass-phase is indeed working as expected
+      args = [
+        'list',
+        '-a',
+        atSign,
+        '-r',
+        'vip.ve.atsign.zone',
+        '-P',
+        (atOnboardingService as AtOnboardingServiceImpl)
+            .atOnboardingPreference
+            .passPhrase!,
+        '-k',
+        'storage/keys/@sitaram-apkam-password-protected.atKeys'
+      ];
+      res = await auth_cli.wrappedMain(args);
+      // Zero indicate successful completion.
+      expect(res, 0);
+    });
   });
 
-  tearDown(() {
-    File file = File(apkamKeysFilePath);
-    file.deleteSync();
+  tearDownAll(() {
+    Directory('storage').deleteSync(recursive: true);
   });
 }
 

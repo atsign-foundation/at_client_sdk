@@ -27,4 +27,7 @@ class AtOnboardingPreference extends AtClientPreference {
 
   @Deprecated("No longer used")
   int apkamAuthRetryDurationMins = 30;
+
+  /// The password (or pass-phrase) with which the atKeys file is encrypted/decrypted.
+  String? passPhrase;
 }
