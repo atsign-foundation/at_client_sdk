@@ -1,3 +1,9 @@
+## 2.0.5
+- build[deps]: Upgraded dependencies for the following packages:
+    - at_client_mobile: 3.2.19
+    - at_commons: 5.0.0
+    - at_lookup: 3.0.49
+    - at_utils: 3.0.19
 ## 2.0.4:
 
 - **CHORE**: Kotlin version increase to 1.8.20

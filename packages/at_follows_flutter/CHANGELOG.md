@@ -1,3 +1,11 @@
+## 3.0.14
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_client: 3.2.2
+  - at_client_mobile: 3.2.19
+  - at_commons: 5.0.0
+  - at_server_status: 1.0.5
+  - at_lookup: 3.0.49
+  - at_utils: 3.0.19
 ## 3.0.13:
 
 - **FIX**: Depreciated AtClientService methods replaced with AtAuthService methods

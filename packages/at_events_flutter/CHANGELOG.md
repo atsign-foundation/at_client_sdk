@@ -1,3 +1,14 @@
+## 3.1.15
+- build[deps]: Upgraded dependencies for the following packages:
+    - at_client: 3.2.2
+    - at_client_mobile: 3.2.19
+    - at_commons: 5.0.0
+    - at_contact: 3.0.9
+    - at_contacts_flutter: 4.0.16
+    - at_contacts_group_flutter: 4.0.17
+    - at_location_flutter: 3.1.14
+    - at_lookup: 3.0.49
+    - at_utils: 3.0.19
 ## 3.1.14:
 
 - **CHORE**: Bumped up all dependency versions

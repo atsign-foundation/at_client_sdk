@@ -2,8 +2,13 @@
 
 - **CHORE**: Kotlin version increased from 1.7.10 to 1.8.20
 - **CHORE**: Major version increase of file_picker from ^6.1.1 to ^8.1.1
-- **CHORE**: Updated dependencies
 - **FIX**: Replaced the depreciated KeychainUtil.getPrivateKey method
+- build[deps]: Upgraded dependencies for the following packages:
+    - at_client: 3.2.2
+    - at_client_mobile: 3.2.19
+    - at_commons: 5.0.0
+    - at_contact: 3.0.9
+    - at_lookup: 3.0.49
 
 ## 3.0.12:
 

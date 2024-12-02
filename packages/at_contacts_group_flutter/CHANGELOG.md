@@ -1,3 +1,10 @@
+## 4.0.17
+- build[deps]: Upgraded dependencies for the following packages:
+    - at_client_mobile: 3.2.19
+    - at_commons: 5.0.0
+    - at_contact: 3.0.9
+    - at_contacts_flutter: 4.0.16
+    - at_utils: 3.0.19
 ## 4.0.16
 
 - **CHORE**: Kotlin version updated from ^1.7.10 to 1.8.20

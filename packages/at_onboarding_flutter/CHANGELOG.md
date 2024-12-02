@@ -1,3 +1,10 @@
+## 6.1.9
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_client: 3.2.2
+  - at_client_mobile: 3.2.19
+  - at_auth: 2.0.7
+  - at_commons: 5.0.0
+  - at_utils: 3.0.19
 ## 6.1.8
 
 - **CHORE**: Updated dependencies

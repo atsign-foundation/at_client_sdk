@@ -11,8 +11,8 @@ environment:
 
 dependencies:
   at_app_flutter: ^5.2.0
-  at_client_mobile: ^3.2.17
-  at_onboarding_flutter: ^6.1.8
+  at_client_mobile: ^3.2.19
+  at_onboarding_flutter: ^6.1.9
   cupertino_icons: ^1.0.6
   flutter:
     sdk: flutter

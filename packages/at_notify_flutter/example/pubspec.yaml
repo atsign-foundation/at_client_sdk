@@ -28,11 +28,11 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   at_app_flutter: ^5.2.0
-  at_client_mobile: ^3.2.17
-  at_lookup: ^3.0.47
+  at_client_mobile: ^3.2.19
+  at_lookup: ^3.0.49
   at_notify_flutter:
     path: ../
-  at_onboarding_flutter: ^6.1.7
+  at_onboarding_flutter: ^6.1.9
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

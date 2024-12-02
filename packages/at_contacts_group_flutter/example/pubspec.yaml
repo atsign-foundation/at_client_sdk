@@ -30,9 +30,9 @@ environment:
 dependencies:
   # at_contacts_flutter: ^4.0.0
   at_app_flutter: ^5.2.0
-  at_backupkey_flutter: ^4.0.10
-  at_client_mobile: ^3.2.17
-  at_contacts_flutter: ^4.0.14
+  at_backupkey_flutter: ^4.0.16
+  at_client_mobile: ^3.2.19
+  at_contacts_flutter: ^4.0.16
   at_contacts_group_flutter:
     # When depending on this package from a real application you should use:
     #   at_contacts_group_flutter: ^x.y.z
@@ -41,7 +41,8 @@ dependencies:
     # the parent directory to use the current plugin's version.
     path: ../
   at_onboarding_flutter: ^6.1.8
-  
+  at_onboarding_flutter: ^6.1.9
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.6

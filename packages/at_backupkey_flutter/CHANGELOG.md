@@ -1,7 +1,12 @@
-## 4.0.16
-
+## 4.0.17
 - **FIX**: Replaced the use of file_selector with file_picker
 - **CHORE**: Updated dependencies in the example app
+
+## 4.0.16
+
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_client_mobile: 3.2.19
+  - at_utils: 3.0.19
 
 ## 4.0.15
 
