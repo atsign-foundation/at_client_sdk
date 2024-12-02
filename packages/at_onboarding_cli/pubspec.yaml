@@ -1,6 +1,6 @@
 name: at_onboarding_cli
 description: Dart tools for initial client onboarding, subsequent client enrollment, and enrollment management.
-version: 1.8.1
+version: 1.8.0
 repository: https://github.com/atsign-foundation/at_libraries
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -34,7 +34,7 @@ dependencies:
    chalkdart: ^2.0.9
 
 dev_dependencies:
-  lints: ^2.1.0
-  test: ^1.24.2
+  lints: ^5.0.0
+  test: ^1.25.8
   at_demo_data: ^1.0.0
   mocktail: ^1.0.3
