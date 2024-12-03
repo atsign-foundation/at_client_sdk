@@ -69,4 +69,17 @@ void main() {
     command = command.replaceAll('\n', '');
     assert(regex.hasMatch(command));
   });
+
+  test('build sync stream verb command with skipDeletes', () {
+    var syncVerbBuilder = SyncVerbBuilder()
+      ..commitId = -1
+      ..isPaginated = true
+      ..limit = 5
+      ..skipDeletesUntil = 20;
+    var command = syncVerbBuilder.buildCommand();
+    expect(command, 'sync:from:-1:limit:5:skipDeletesUntil:20\n');
+    var regex = RegExp(VerbSyntax.syncFrom);
+    command = command.replaceAll('\n', '');
+    assert(regex.hasMatch(command));
+  });
 }
