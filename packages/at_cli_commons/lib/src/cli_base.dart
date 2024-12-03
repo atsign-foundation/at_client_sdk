@@ -41,7 +41,12 @@ class CLIBase {
     ..addOption('max-connect-attempts',
         help: 'Number of times to attempt to initially connect to atServer.'
             ' Note: there is a 3-second delay between connection attempts.',
-        defaultsTo: defaultMaxConnectAttempts.toString());
+        defaultsTo: defaultMaxConnectAttempts.toString())
+    ..addOption('passPhrase',
+        abbr: 'P',
+        help:
+            'Pass Phrase to encrypt/decrypt the password protected atKeys file',
+        mandatory: false);
 
   /// Constructs a CLIBase from a list of command-line arguments
   /// and calls [init] on it.
@@ -67,17 +72,17 @@ class CLIBase {
     }
 
     CLIBase cliBase = CLIBase(
-      atSign: parsedArgs['atsign'],
-      atKeysFilePath: parsedArgs['key-file'],
-      nameSpace: parsedArgs['namespace'],
-      rootDomain: parsedArgs['root-domain'],
-      homeDir: getHomeDirectory(),
-      storageDir: parsedArgs['storage-dir'],
-      verbose: parsedArgs['verbose'],
-      cramSecret: parsedArgs['cram-secret'],
-      syncDisabled: parsedArgs['never-sync'],
-      maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
-    );
+        atSign: parsedArgs['atsign'],
+        atKeysFilePath: parsedArgs['key-file'],
+        nameSpace: parsedArgs['namespace'],
+        rootDomain: parsedArgs['root-domain'],
+        homeDir: getHomeDirectory(),
+        storageDir: parsedArgs['storage-dir'],
+        verbose: parsedArgs['verbose'],
+        cramSecret: parsedArgs['cram-secret'],
+        syncDisabled: parsedArgs['never-sync'],
+        maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
+        passPhrase: parsedArgs['passPhrase']);
 
     await cliBase.init();
 
@@ -92,6 +97,7 @@ class CLIBase {
   final String? storageDir;
   final String? downloadDir;
   final String? cramSecret;
+  final String? passPhrase;
   final bool syncDisabled;
   final int maxConnectAttempts;
 
@@ -120,19 +126,19 @@ class CLIBase {
   ///     cliBase.logger.logger.level = Level.FINEST;
   /// ```
   /// Throws an [IllegalArgumentException] if the parameters fail validation.
-  CLIBase({
-    required String atSign,
-    required this.nameSpace,
-    required this.rootDomain,
-    this.homeDir,
-    this.verbose = false,
-    this.atKeysFilePath,
-    this.storageDir,
-    this.downloadDir,
-    this.cramSecret,
-    this.syncDisabled = false,
-    this.maxConnectAttempts = defaultMaxConnectAttempts,
-  }) {
+  CLIBase(
+      {required String atSign,
+      required this.nameSpace,
+      required this.rootDomain,
+      this.homeDir,
+      this.verbose = false,
+      this.atKeysFilePath,
+      this.storageDir,
+      this.downloadDir,
+      this.cramSecret,
+      this.syncDisabled = false,
+      this.maxConnectAttempts = defaultMaxConnectAttempts,
+      this.passPhrase}) {
     this.atSign = AtUtils.fixAtSign(atSign);
     if (homeDir == null) {
       if (atKeysFilePath == null) {
@@ -196,7 +202,8 @@ class CLIBase {
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
       ..cramSecret = cramSecret
-      ..atProtocolEmitted = Version(2, 0, 0);
+      ..atProtocolEmitted = Version(2, 0, 0)
+      ..passPhrase = passPhrase;
 
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atSign, atOnboardingConfig,

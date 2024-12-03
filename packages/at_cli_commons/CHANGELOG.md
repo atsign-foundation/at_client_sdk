@@ -1,3 +1,11 @@
+## 1.3.0
+- feat: Add passPhrase as optional argument to "CLIBase" to support password protected atKeys file.
+- build: Upgraded the following dependencies
+  - args to v2.6.0
+  - at_client to v3.3.0
+  - at_onboarding_cli to v1.8.0
+  - test to v1.25.9
+
 ## 1.2.1
 - fix: fix impl of `standardAtClientStoragePath`
 
