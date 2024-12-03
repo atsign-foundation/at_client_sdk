@@ -1,11 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'dart:io';
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 
 import '../util/atsign_preference.dart';
 import '../util/custom_arg_parser.dart';
@@ -33,7 +33,8 @@ void main(List<String> args) async {
     atClientManager.atClient.notificationService
         .subscribe(regex: '.__manage')
         .listen((notification) {
-      _notificationCallback(notification, atClientManager.atClient, atAuthKeys);
+      _notificationCallback(
+          notification, atClientManager.atClient, atAuthKeys, atChops);
     });
   } on Exception catch (e, trace) {
     print(e.toString());
@@ -44,7 +45,7 @@ void main(List<String> args) async {
 }
 
 Future<void> _notificationCallback(AtNotification notification,
-    AtClient atClient, AtAuthKeys atAuthKeys) async {
+    AtClient atClient, AtAuthKeys atAuthKeys, AtChops atChops) async {
   print('alice enroll notification received: ${notification.toString()}');
   final notificationKey = notification.key;
   final enrollmentId =
@@ -64,8 +65,10 @@ Future<void> _notificationCallback(AtNotification notification,
       encryptedAPKAMSymmetricKey =
           jsonDecode(notification.value!)['encryptedApkamSymmetricKey'];
     }
-    final apkamSymmetricKey = EncryptionUtil.decryptKey(
-        encryptedAPKAMSymmetricKey, atAuthKeys.defaultEncryptionPrivateKey!);
+
+    final apkamSymmetricKey = atChops
+        .decryptString(encryptedAPKAMSymmetricKey, EncryptionKeyType.rsa2048)
+        .result;
     print('decrypted apkam symmetric key: $apkamSymmetricKey');
     var encryptedDefaultPrivateEncKey = EncryptionUtil.encryptValue(
         atAuthKeys.defaultEncryptionPrivateKey!, apkamSymmetricKey);
