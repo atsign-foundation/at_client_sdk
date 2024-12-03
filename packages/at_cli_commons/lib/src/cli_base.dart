@@ -41,8 +41,8 @@ class CLIBase {
     ..addOption('max-connect-attempts',
         help: 'Number of times to attempt to initially connect to atServer.'
             ' Note: there is a 3-second delay between connection attempts.',
-        defaultsTo: defaultMaxConnectAttempts.toString())..addOption(
-        'passPhrase',
+        defaultsTo: defaultMaxConnectAttempts.toString())
+    ..addOption('passPhrase',
         abbr: 'P',
         help:
             'Pass Phrase to encrypt/decrypt the password protected atKeys file',
