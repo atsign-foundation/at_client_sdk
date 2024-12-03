@@ -1,26 +1,20 @@
 import 'package:at_client/at_client.dart';
 
 class AtOnboardingException extends AtClientException {
-  AtOnboardingException(message,
-      {Intent? intent, ExceptionScenario? exceptionScenario})
-      : super.message(message,
-            intent: intent, exceptionScenario: exceptionScenario);
+  AtOnboardingException(super.message, {super.intent, super.exceptionScenario})
+      : super.message();
 }
 
 class AtActivateException extends AtOnboardingException {
-  AtActivateException(message,
-      {Intent? intent, ExceptionScenario? exceptionScenario})
-      : super(message, intent: intent, exceptionScenario: exceptionScenario);
+  AtActivateException(super.message, {super.intent, super.exceptionScenario});
 }
 
 class AtAuthenticationFailureException extends AtOnboardingException {
-  AtAuthenticationFailureException(message,
-      {Intent? intent, ExceptionScenario? exceptionScenario})
-      : super(message, intent: intent, exceptionScenario: exceptionScenario);
+  AtAuthenticationFailureException(super.message,
+      {super.intent, super.exceptionScenario});
 }
 
 class InvalidResourceException extends AtOnboardingException {
-  InvalidResourceException(message,
-      {Intent? intent, ExceptionScenario? exceptionScenario})
-      : super(message, intent: intent, exceptionScenario: exceptionScenario);
+  InvalidResourceException(super.message,
+      {super.intent, super.exceptionScenario});
 }
