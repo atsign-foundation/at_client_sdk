@@ -31,7 +31,7 @@ class RemoteSecondary implements Secondary {
       {String? privateKey,
       this.atChops,
       String? enrollmentId,
-      bool useWebSocket = false}) {
+      AtLookupOutboundConnectionFactory? atLookupOutboundConnectionFactory}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -47,7 +47,7 @@ class RemoteSecondary implements Secondary {
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
         clientConfig: _getClientConfig(),
-        useWebSocket: useWebSocket);
+        atOutboundConnectionFactory: atLookupOutboundConnectionFactory );
     atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
