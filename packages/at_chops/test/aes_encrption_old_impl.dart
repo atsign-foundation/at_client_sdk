@@ -1,53 +1,31 @@
-import 'dart:async';
 import 'dart:typed_data';
-import 'dart:convert';
-import 'package:at_chops/src/algorithm/aes_ctr_factory.dart';
-import 'package:at_chops/src/algorithm/padding/padding.dart';
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/padding/padding_params.dart';
-import 'package:at_chops/src/algorithm/padding/pkcs7padding.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:encrypt/encrypt.dart';
-import 'package:better_cryptography/better_cryptography.dart';
 
-/// A class that provides AES encryption and decryption for Uint8List,
-/// implementing the [SymmetricEncryptionAlgorithm] interface.
-class AESEncryptionAlgo
+/// Old AES implementation. Used for testing backward compatibility.
+class AESEncryptionAlgoV1
     implements SymmetricEncryptionAlgorithm<Uint8List, Uint8List> {
   final AESKey _aesKey;
-  PaddingAlgorithm? paddingAlgo;
-  AESEncryptionAlgo(this._aesKey) {
-    paddingAlgo ??= PKCS7Padding(PaddingParams()..blockSize = 16);
+
+  AESEncryptionAlgoV1(this._aesKey);
+
+  @override
+  Uint8List encrypt(Uint8List plainData, {InitialisationVector? iv}) {
+    var aesEncrypter = Encrypter(AES(Key.fromBase64(_aesKey.key)));
+    final encrypted =
+        aesEncrypter.encryptBytes(plainData, iv: _getIVFromBytes(iv?.ivBytes));
+    return encrypted.bytes;
   }
 
   @override
-  FutureOr<Uint8List> encrypt(Uint8List plainData,
-      {InitialisationVector? iv}) async {
-    final encryptionAlgo = AesCtrFactory.createEncryptionAlgo(_aesKey);
-    var paddedData = paddingAlgo!.addPadding(plainData);
-    final secretKey = await encryptionAlgo
-        .newSecretKeyFromBytes(base64Decode(_aesKey.toString()));
-    var secretBox = await encryptionAlgo.encrypt(paddedData,
-        nonce: _getIVFromBytes(iv?.ivBytes)!.bytes, secretKey: secretKey);
-    return Uint8List.fromList(secretBox.cipherText);
-  }
-
-  @override
-  FutureOr<Uint8List> decrypt(Uint8List encryptedData,
-      {InitialisationVector? iv}) async {
-    final encryptionAlgo = AesCtrFactory.createEncryptionAlgo(_aesKey);
-    var secretBox = SecretBox(
-      encryptedData,
-      nonce: _getIVFromBytes(iv?.ivBytes)!.bytes,
-      mac: Mac.empty,
-    );
-    final secretKey = await encryptionAlgo
-        .newSecretKeyFromBytes(base64Decode(_aesKey.toString()));
-    var decryptedBytesWithPadding =
-        await encryptionAlgo.decrypt(secretBox, secretKey: secretKey);
-    var decryptedBytes = paddingAlgo!.removePadding(decryptedBytesWithPadding);
-    return Uint8List.fromList(decryptedBytes);
+  Uint8List decrypt(Uint8List encryptedData, {InitialisationVector? iv}) {
+    var aesKey = AES(Key.fromBase64(_aesKey.toString()));
+    var decrypter = Encrypter(aesKey);
+    return Uint8List.fromList(decrypter.decryptBytes(Encrypted(encryptedData),
+        iv: _getIVFromBytes(iv?.ivBytes)));
   }
 
   IV? _getIVFromBytes(Uint8List? ivBytes) {

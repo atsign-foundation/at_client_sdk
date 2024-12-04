@@ -14,10 +14,11 @@ dependencies:
   ecdsa: ^0.1.0
   dart_periphery: ^0.9.5
   elliptic: ^0.3.10
-  pointycastle: ^3.7.4
+  pointycastle: ^3.9.1
   at_commons: ^5.0.2
   at_utils: ^3.0.19
   cryptography: ^2.7.0
+  better_cryptography: ^1.0.0+1
 
 dev_dependencies:
   lints: ^5.0.0

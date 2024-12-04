@@ -41,11 +41,11 @@ void main(List<String> args) async {
   final data = 'Hello World';
   //1.1 encrypt the data using [atEncryptionKeyPair.publicKey]
   final encryptionResult =
-      atChops.encryptString(data, EncryptionKeyType.rsa2048);
+      await atChops.encryptString(data, EncryptionKeyType.rsa2048);
 
   //1.2 decrypt the data using [atEncryptionKeyPair.privateKey]
-  final decryptionResult =
-      atChops.decryptString(encryptionResult.result, EncryptionKeyType.rsa2048);
+  final decryptionResult = await atChops.decryptString(
+      encryptionResult.result, EncryptionKeyType.rsa2048);
   assert(data == decryptionResult.result, true);
 
   // 2 - Signing and data verification using asymmetric key pair

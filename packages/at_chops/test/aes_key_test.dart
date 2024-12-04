@@ -22,5 +22,32 @@ void main() {
       final aesKey_2 = AESKey.generate(32);
       expect(aesKey_1, isNot(aesKey_2));
     });
+    test('check random key generated length for 128 bit key', () {
+      final aesKey = AESKey.generate(16);
+      expect(aesKey.getLength(), 16);
+    });
+    test('check random key generated  length for 192 bit key', () {
+      final aesKey = AESKey.generate(24);
+      expect(aesKey.getLength(), 24);
+    });
+    test('check random key generated  length for 256 bit key', () {
+      final aesKey = AESKey.generate(32);
+      expect(aesKey.getLength(), 32);
+    });
+    test('verify key length for 256 bit key constructed from string', () {
+      final aesKey_1 = AESKey.generate(32);
+      final aesKey = AESKey(aesKey_1.key);
+      expect(aesKey.getLength(), 32);
+    });
+    test('verify key length for 192 bit key constructed from string', () {
+      final aesKey_1 = AESKey.generate(24);
+      final aesKey = AESKey(aesKey_1.key);
+      expect(aesKey.getLength(), 24);
+    });
+    test('verify key length for 128 bit key constructed from string', () {
+      final aesKey_1 = AESKey.generate(16);
+      final aesKey = AESKey(aesKey_1.key);
+      expect(aesKey.getLength(), 16);
+    });
   });
 }

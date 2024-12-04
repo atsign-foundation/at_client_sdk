@@ -11,14 +11,14 @@ import 'package:test/test.dart';
 void main() {
   AtSignLogger.root_level = 'finest';
   group('A group of tests for encryption and decryption', () {
-    test('Test rsa encryption/decryption string', () {
+    test('Test rsa encryption/decryption string', () async {
       final atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
       final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
       final atChops = AtChopsImpl(atChopsKeys);
       final data = 'Hello World';
 
       final encryptionResult =
-          atChops.encryptString(data, EncryptionKeyType.rsa2048);
+          await atChops.encryptString(data, EncryptionKeyType.rsa2048);
       expect(encryptionResult.atEncryptionMetaData, isNotNull);
       expect(encryptionResult.result, isNotEmpty);
       expect(encryptionResult.atEncryptionMetaData.encryptionKeyType,
@@ -26,7 +26,7 @@ void main() {
       expect(encryptionResult.atEncryptionMetaData.atEncryptionAlgorithm,
           'RsaEncryptionAlgo');
 
-      final decryptionResult = atChops.decryptString(
+      final decryptionResult = await atChops.decryptString(
           encryptionResult.result, EncryptionKeyType.rsa2048);
       expect(decryptionResult.atEncryptionMetaData, isNotNull);
       expect(decryptionResult.result, isNotEmpty);
@@ -37,14 +37,15 @@ void main() {
       expect(decryptionResult.result, data);
     });
 
-    test('Test symmetric encrypt/decrypt bytes with initialisation vector', () {
+    test('Test symmetric encrypt/decrypt bytes with initialisation vector',
+        () async {
       String data = 'Hello World';
       final aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       final atChopsKeys = AtChopsKeys()..selfEncryptionKey = aesKey;
       final atChops = AtChopsImpl(atChopsKeys);
       final iv = AtChopsUtil.generateRandomIV(16);
 
-      final encryptionResult = atChops.encryptBytes(
+      final encryptionResult = await atChops.encryptBytes(
           // ignore: unnecessary_cast
           utf8.encode(data) as Uint8List,
           EncryptionKeyType.aes256,
@@ -57,7 +58,7 @@ void main() {
           'AESEncryptionAlgo');
       expect(encryptionResult.atEncryptionMetaData.iv, iv);
 
-      final decryptionResult = atChops.decryptBytes(
+      final decryptionResult = await atChops.decryptBytes(
           encryptionResult.result, EncryptionKeyType.aes256,
           iv: iv);
       expect(decryptionResult.result, isNotEmpty);
@@ -69,14 +70,14 @@ void main() {
       expect(utf8.decode(decryptionResult.result), data);
     });
 
-    test('Test symmetric encrypt/decrypt bytes with emoji char', () {
+    test('Test symmetric encrypt/decrypt bytes with emoji char', () async {
       String data = 'Hello World🛠';
       final aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       final atChopsKeys = AtChopsKeys()..selfEncryptionKey = aesKey;
       final atChops = AtChopsImpl(atChopsKeys);
       final iv = AtChopsUtil.generateRandomIV(16);
 
-      final encryptionResult = atChops.encryptBytes(
+      final encryptionResult = await atChops.encryptBytes(
           // ignore: unnecessary_cast
           utf8.encode(data) as Uint8List,
           EncryptionKeyType.aes256,
@@ -89,7 +90,7 @@ void main() {
           'AESEncryptionAlgo');
       expect(encryptionResult.atEncryptionMetaData.iv, iv);
 
-      final decryptionResult = atChops.decryptBytes(
+      final decryptionResult = await atChops.decryptBytes(
           encryptionResult.result, EncryptionKeyType.aes256,
           iv: iv);
       expect(decryptionResult.result, isNotEmpty);
@@ -101,14 +102,14 @@ void main() {
       expect(utf8.decode(decryptionResult.result), data);
     });
 
-    test('Test symmetric encrypt/decrypt bytes with special chars', () {
+    test('Test symmetric encrypt/decrypt bytes with special chars', () async {
       String data = 'Hello World🛠';
       final aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       final atChopsKeys = AtChopsKeys()..selfEncryptionKey = aesKey;
       final atChops = AtChopsImpl(atChopsKeys);
       final iv = AtChopsUtil.generateRandomIV(16);
 
-      final encryptionResult = atChops.encryptBytes(
+      final encryptionResult = await atChops.encryptBytes(
           // ignore: unnecessary_cast
           utf8.encode(data) as Uint8List,
           EncryptionKeyType.aes256,
@@ -121,7 +122,7 @@ void main() {
           'AESEncryptionAlgo');
       expect(encryptionResult.atEncryptionMetaData.iv, iv);
 
-      final decryptionResult = atChops.decryptBytes(
+      final decryptionResult = await atChops.decryptBytes(
           encryptionResult.result, EncryptionKeyType.aes256,
           iv: iv);
       expect(decryptionResult.result, isNotEmpty);
@@ -134,7 +135,7 @@ void main() {
     });
 
     test('Test symmetric encrypt/decrypt string with initialisation vector',
-        () {
+        () async {
       String data = 'Hello World';
       final aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       final atChopsKeys = AtChopsKeys()..selfEncryptionKey = aesKey;
@@ -142,7 +143,7 @@ void main() {
       final iv = AtChopsUtil.generateRandomIV(16);
 
       final encryptionResult =
-          atChops.encryptString(data, EncryptionKeyType.aes256, iv: iv);
+          await atChops.encryptString(data, EncryptionKeyType.aes256, iv: iv);
       expect(encryptionResult.atEncryptionMetaData, isNotNull);
       expect(encryptionResult.result, isNotEmpty);
       expect(encryptionResult.atEncryptionMetaData.encryptionKeyType,
@@ -151,7 +152,7 @@ void main() {
           'AESEncryptionAlgo');
       expect(encryptionResult.atEncryptionMetaData.iv, iv);
 
-      final decryptionResult = atChops.decryptString(
+      final decryptionResult = await atChops.decryptString(
           encryptionResult.result, EncryptionKeyType.aes256,
           iv: iv);
       expect(decryptionResult.result, isNotEmpty);
@@ -163,7 +164,7 @@ void main() {
       expect(decryptionResult.result, data);
     });
 
-    test('Test symmetric encrypt/decrypt string with special chars', () {
+    test('Test symmetric encrypt/decrypt string with special chars', () async {
       String data = 'Hello``*+%';
       final aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       final atChopsKeys = AtChopsKeys()..selfEncryptionKey = aesKey;
@@ -171,7 +172,7 @@ void main() {
       final iv = AtChopsUtil.generateRandomIV(16);
 
       final encryptionResult =
-          atChops.encryptString(data, EncryptionKeyType.aes256, iv: iv);
+          await atChops.encryptString(data, EncryptionKeyType.aes256, iv: iv);
       expect(encryptionResult.atEncryptionMetaData, isNotNull);
       expect(encryptionResult.result, isNotEmpty);
       expect(encryptionResult.atEncryptionMetaData.encryptionKeyType,
@@ -180,7 +181,7 @@ void main() {
           'AESEncryptionAlgo');
       expect(encryptionResult.atEncryptionMetaData.iv, iv);
 
-      final decryptionResult = atChops.decryptString(
+      final decryptionResult = await atChops.decryptString(
           encryptionResult.result, EncryptionKeyType.aes256,
           iv: iv);
       expect(decryptionResult.result, isNotEmpty);
@@ -192,7 +193,7 @@ void main() {
       expect(decryptionResult.result, data);
     });
 
-    test('Test symmetric encrypt/decrypt string with emoji', () {
+    test('Test symmetric encrypt/decrypt string with emoji', () async {
       String data = 'Hello World🛠';
       final aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       final atChopsKeys = AtChopsKeys()..selfEncryptionKey = aesKey;
@@ -200,7 +201,7 @@ void main() {
       final iv = AtChopsUtil.generateRandomIV(16);
 
       final encryptionResult =
-          atChops.encryptString(data, EncryptionKeyType.aes256, iv: iv);
+          await atChops.encryptString(data, EncryptionKeyType.aes256, iv: iv);
       expect(encryptionResult.atEncryptionMetaData, isNotNull);
       expect(encryptionResult.result, isNotEmpty);
       expect(encryptionResult.atEncryptionMetaData.encryptionKeyType,
@@ -209,7 +210,7 @@ void main() {
           'AESEncryptionAlgo');
       expect(encryptionResult.atEncryptionMetaData.iv, iv);
 
-      final decryptionResult = atChops.decryptString(
+      final decryptionResult = await atChops.decryptString(
           encryptionResult.result, EncryptionKeyType.aes256,
           iv: iv);
       expect(decryptionResult.result, isNotEmpty);
@@ -221,18 +222,18 @@ void main() {
       expect(decryptionResult.result, data);
     });
 
-    test('validate decryption behaviour with null iv', () {
+    test('validate decryption behaviour with null iv', () async {
       final aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       final atChopsKeys = AtChopsKeys()..selfEncryptionKey = aesKey;
       final atChops = AtChopsImpl(atChopsKeys);
 
       var iv = AtChopsUtil.generateRandomIV(15);
       var utf8EncData = utf8.encode('abcd');
-      var encryptionResult =
-          atChops.encryptBytes(utf8EncData, EncryptionKeyType.aes256, iv: iv);
+      var encryptionResult = await atChops
+          .encryptBytes(utf8EncData, EncryptionKeyType.aes256, iv: iv);
 
       expect(
-          () => atChops.decryptBytes(
+          () async => await atChops.decryptBytes(
               encryptionResult.result, EncryptionKeyType.aes256, iv: null),
           throwsA(predicate((e) =>
               e is AtDecryptionException &&

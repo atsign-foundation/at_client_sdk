@@ -1,0 +1,3 @@
+class PaddingParams {
+  int? blockSize;
+}

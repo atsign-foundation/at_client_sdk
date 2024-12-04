@@ -1,5 +1,6 @@
 // ignore_for_file: unnecessary_cast
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -9,6 +10,8 @@ import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/default_signing_algo.dart';
 import 'package:at_chops/src/algorithm/ecc_signing_algo.dart';
+import 'package:at_chops/src/algorithm/padding/padding_params.dart';
+import 'package:at_chops/src/algorithm/padding/pkcs7padding.dart';
 import 'package:at_chops/src/algorithm/pkam_signing_algo.dart';
 import 'package:at_chops/src/algorithm/rsa_encryption_algo.dart';
 import 'package:at_chops/src/at_chops_base.dart';
@@ -33,11 +36,11 @@ class AtChopsImpl extends AtChops {
   final AtSignLogger _logger = AtSignLogger('AtChopsImpl');
 
   @override
-  AtEncryptionResult decryptBytes(
+  FutureOr<AtEncryptionResult> decryptBytes(
       Uint8List data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,
-      InitialisationVector? iv}) {
+      InitialisationVector? iv}) async {
     try {
       encryptionAlgorithm ??=
           _getEncryptionAlgorithm(encryptionKeyType, keyName)!;
@@ -52,7 +55,8 @@ class AtChopsImpl extends AtChops {
         ..atEncryptionMetaData = atEncryptionMetaData
         ..atEncryptionResultType = AtEncryptionResultType.bytes;
       if (encryptionAlgorithm is SymmetricEncryptionAlgorithm) {
-        atEncryptionResult.result = encryptionAlgorithm.decrypt(data, iv: iv!);
+        atEncryptionResult.result =
+            await encryptionAlgorithm.decrypt(data, iv: iv!);
         atEncryptionMetaData.iv = iv;
       } else {
         atEncryptionResult.result = encryptionAlgorithm.decrypt(data);
@@ -70,13 +74,13 @@ class AtChopsImpl extends AtChops {
   /// Decode the encrypted string to base64.
   /// Decode the encrypted byte to utf8 to support emoji chars.
   @override
-  AtEncryptionResult decryptString(
+  FutureOr<AtEncryptionResult> decryptString(
       String data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,
-      InitialisationVector? iv}) {
+      InitialisationVector? iv}) async {
     try {
-      final decryptionResult = decryptBytes(
+      final decryptionResult = await decryptBytes(
           base64Decode(data), encryptionKeyType,
           encryptionAlgorithm: encryptionAlgorithm, keyName: keyName, iv: iv);
       final atEncryptionResult = AtEncryptionResult()
@@ -90,11 +94,11 @@ class AtChopsImpl extends AtChops {
   }
 
   @override
-  AtEncryptionResult encryptBytes(
+  FutureOr<AtEncryptionResult> encryptBytes(
       Uint8List data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,
-      InitialisationVector? iv}) {
+      InitialisationVector? iv}) async {
     try {
       encryptionAlgorithm ??=
           _getEncryptionAlgorithm(encryptionKeyType, keyName)!;
@@ -105,7 +109,8 @@ class AtChopsImpl extends AtChops {
         ..atEncryptionMetaData = atEncryptionMetaData
         ..atEncryptionResultType = AtEncryptionResultType.bytes;
       if (encryptionAlgorithm is SymmetricEncryptionAlgorithm) {
-        atEncryptionResult.result = encryptionAlgorithm.encrypt(data, iv: iv!);
+        atEncryptionResult.result =
+            await encryptionAlgorithm.encrypt(data, iv: iv!);
         atEncryptionMetaData.iv = iv;
       } else {
         atEncryptionResult.result = encryptionAlgorithm.encrypt(data);
@@ -123,14 +128,14 @@ class AtChopsImpl extends AtChops {
   /// Encode the input string to utf8 to support emoji chars.
   /// Encode the encrypted bytes to base64.
   @override
-  AtEncryptionResult encryptString(
+  FutureOr<AtEncryptionResult> encryptString(
       String data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,
-      InitialisationVector? iv}) {
+      InitialisationVector? iv}) async {
     try {
       final utfEncodedData = utf8.encode(data);
-      final encryptionResult = encryptBytes(
+      final encryptionResult = await encryptBytes(
           Uint8List.fromList(utfEncodedData), encryptionKeyType,
           keyName: keyName, encryptionAlgorithm: encryptionAlgorithm, iv: iv);
       final atEncryptionResult = AtEncryptionResult()
