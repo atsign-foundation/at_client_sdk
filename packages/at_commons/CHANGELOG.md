@@ -1,3 +1,5 @@
+## 5.1.1
+- fix: Introduce IV params for apkam enrollment flow
 ## 5.1.0
 - feat: Introduce skipDeletesUntil for sync:from verb
 ## 5.0.2
