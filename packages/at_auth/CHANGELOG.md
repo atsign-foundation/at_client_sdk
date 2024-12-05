@@ -1,3 +1,5 @@
+## 2.0.10
+- fix: Replace legacy IVs with random IVs for encrypting "defaultEncryptionPrivateKey" and "selfEncryptionKey" in APKAM flow
 ## 2.0.9
 - fix:Enable caching of encryption public key
 ## 2.0.8

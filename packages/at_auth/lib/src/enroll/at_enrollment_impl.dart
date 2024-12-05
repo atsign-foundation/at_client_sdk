@@ -43,10 +43,6 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
       ..appName = baseEnrollmentRequest.appName
       ..deviceName = baseEnrollmentRequest.deviceName;
     enrollVerbBuilder.apkamPublicKey = baseEnrollmentRequest.apkamPublicKey;
-    enrollVerbBuilder.encryptedDefaultEncryptionPrivateKey =
-        baseEnrollmentRequest.encryptedDefaultEncryptionPrivateKey;
-    enrollVerbBuilder.encryptedDefaultSelfEncryptionKey =
-        baseEnrollmentRequest.encryptedDefaultSelfEncryptionKey;
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
@@ -116,6 +112,8 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
     // Set the APKAM Symmetric key to the AtChops Instance.
     atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
 
+    InitialisationVector encryptionPrivateKeyIV =
+        AtChopsUtil.generateRandomIV(16);
     // Fetch the encryptionPrivateKey from the atChops and encrypt with APKAM Symmetric key.
     String encryptedDefaultEncryptionPrivateKey = atLookUp.atChops
         ?.encryptString(
@@ -123,21 +121,27 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
                 .privateKey,
             EncryptionKeyType.aes256,
             keyName: 'apkamSymmetricKey',
-            iv: AtChopsUtil.generateIVLegacy())
+            iv: encryptionPrivateKeyIV)
         .result;
 
+    InitialisationVector selfEncryptionKeyIV = AtChopsUtil.generateRandomIV(16);
     // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
     String encryptedDefaultSelfEncryptionKey = atLookUp.atChops
         ?.encryptString(atLookUp.atChops!.atChopsKeys.selfEncryptionKey!.key,
             EncryptionKeyType.aes256,
-            keyName: 'apkamSymmetricKey', iv: AtChopsUtil.generateIVLegacy())
+            keyName: 'apkamSymmetricKey', iv: selfEncryptionKeyIV)
         .result;
 
     String command = 'enroll:approve:${jsonEncode({
           'enrollmentId': enrollmentRequestDecision.enrollmentId,
           'encryptedDefaultEncryptionPrivateKey':
               encryptedDefaultEncryptionPrivateKey,
-          'encryptedDefaultSelfEncryptionKey': encryptedDefaultSelfEncryptionKey
+          AtConstants.apkamEncryptionPrivateKeyIV:
+              base64Encode(encryptionPrivateKeyIV.ivBytes),
+          'encryptedDefaultSelfEncryptionKey':
+              encryptedDefaultSelfEncryptionKey,
+          AtConstants.apkamSelfEncryptionKeyIV:
+              base64Encode(selfEncryptionKeyIV.ivBytes)
         })}';
 
     String? enrollResponse =

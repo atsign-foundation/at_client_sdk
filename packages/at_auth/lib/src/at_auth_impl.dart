@@ -203,32 +203,13 @@ class AtAuthImpl implements AtAuth {
       AtLookUp atLookup) async {
     atOnboardingRequest.appName ??= _defaultAppNameForOnboarding;
     atOnboardingRequest.deviceName ??= _defaultDeviceNameForOnboarding;
-    AESEncryptionAlgo symmetricEncryptionAlgo =
-        AESEncryptionAlgo(AESKey(atAuthKeys.apkamSymmetricKey!));
-    // Encrypt the defaultEncryptionPrivateKey with APKAM Symmetric key
-    String encryptedDefaultEncryptionPrivateKey = atChops!
-        .encryptString(
-            atAuthKeys.defaultEncryptionPrivateKey!, EncryptionKeyType.aes256,
-            encryptionAlgorithm: symmetricEncryptionAlgo,
-            iv: AtChopsUtil.generateIVLegacy())
-        .result;
-    // Encrypt the Self Encryption Key with APKAM Symmetric key
-    String encryptedDefaultSelfEncryptionKey = atChops!
-        .encryptString(
-            atAuthKeys.defaultSelfEncryptionKey!, EncryptionKeyType.aes256,
-            encryptionAlgorithm: symmetricEncryptionAlgo,
-            iv: AtChopsUtil.generateIVLegacy())
-        .result;
 
     _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
         appName: atOnboardingRequest.appName!,
         deviceName: atOnboardingRequest.deviceName!,
-        apkamPublicKey: atAuthKeys.apkamPublicKey!,
-        encryptedDefaultEncryptionPrivateKey:
-            encryptedDefaultEncryptionPrivateKey,
-        encryptedDefaultSelfEncryptionKey: encryptedDefaultSelfEncryptionKey);
+        apkamPublicKey: atAuthKeys.apkamPublicKey!);
 
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
