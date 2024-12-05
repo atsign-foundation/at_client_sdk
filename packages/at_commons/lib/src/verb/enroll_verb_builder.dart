@@ -33,7 +33,15 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
   String? encryptedDefaultEncryptedPrivateKey;
 
   String? encryptedDefaultEncryptionPrivateKey;
+
+  /// Initialisation vector used during symmetric encryption of the default encryption key.
+  String? encPrivateKeyIV;
+
   String? encryptedDefaultSelfEncryptionKey;
+
+  /// Initialisation vector used during symmetric encryption of the default self encryption key.
+  String? selfEncKeyIV;
+
   String? encryptedAPKAMSymmetricKey;
 
   /// Used to force revoke the enrollment request.
@@ -64,7 +72,9 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
       ..namespaces = namespaces
       ..encryptedDefaultEncryptionPrivateKey =
           encryptedDefaultEncryptionPrivateKey
+      ..encPrivateKeyIV = encPrivateKeyIV
       ..encryptedDefaultSelfEncryptionKey = encryptedDefaultSelfEncryptionKey
+      ..selfEncKeyIV = selfEncKeyIV
       ..encryptedAPKAMSymmetricKey = encryptedAPKAMSymmetricKey
       ..enrollmentStatusFilter = enrollmentStatusFilter
       ..apkamKeysExpiryDuration = apkamKeysExpiryDuration;
