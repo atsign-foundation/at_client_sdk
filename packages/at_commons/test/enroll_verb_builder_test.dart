@@ -32,10 +32,12 @@ void main() {
         ..apkamPublicKey = 'abcd1234'
         ..encryptedAPKAMSymmetricKey = 'dummy_pkam_sym_key'
         ..encryptedDefaultEncryptionPrivateKey = 'dummy_encrypted_private_key'
-        ..encryptedDefaultSelfEncryptionKey = 'dummy_self_encryption_key';
+        ..encPrivateKeyIV = 'dummy_iv_for_enc_private_key'
+        ..encryptedDefaultSelfEncryptionKey = 'dummy_self_encryption_key'
+        ..selfEncKeyIV = 'dummy_iv_for_self_encryption_key';
       var command = enrollVerbBuilder.buildCommand();
       expect(command,
-          'enroll:approve:{"enrollmentId":"123","appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptionPrivateKey":"dummy_encrypted_private_key","encryptedDefaultSelfEncryptionKey":"dummy_self_encryption_key","encryptedAPKAMSymmetricKey":"dummy_pkam_sym_key","apkamPublicKey":"abcd1234"}\n');
+          'enroll:approve:{"enrollmentId":"123","appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptionPrivateKey":"dummy_encrypted_private_key","encPrivateKeyIV":"dummy_iv_for_enc_private_key","encryptedDefaultSelfEncryptionKey":"dummy_self_encryption_key","selfEncKeyIV":"dummy_iv_for_self_encryption_key","encryptedAPKAMSymmetricKey":"dummy_pkam_sym_key","apkamPublicKey":"abcd1234"}\n');
     });
 
     test('A test to verify enroll deny operation', () {

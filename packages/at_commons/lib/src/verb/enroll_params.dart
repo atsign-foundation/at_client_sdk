@@ -11,7 +11,9 @@ class EnrollParams {
   Map<String, String>? namespaces;
   String? otp;
   String? encryptedDefaultEncryptionPrivateKey;
+  String? encPrivateKeyIV;
   String? encryptedDefaultSelfEncryptionKey;
+  String? selfEncKeyIV;
   String? encryptedAPKAMSymmetricKey;
   String? apkamPublicKey;
   List<EnrollmentStatus>? enrollmentStatusFilter;

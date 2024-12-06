@@ -9,7 +9,7 @@ void main() {
   group('A group of tests related to enroll verb', () {
     test('A test to verify enroll request params', () {
       String command =
-          'enroll:request:{"enrollmentId":"1234","appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw","__manage":"r"},"encryptedDefaultEncryptionPrivateKey":"dummy_encrypted_private_key","encryptedDefaultSelfEncryptionKey":"dummy_self_encryption_key","encryptedAPKAMSymmetricKey":"dummy_pkam_sym_key","apkamPublicKey":"abcd1234"}';
+          'enroll:request:{"enrollmentId":"1234","appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw","__manage":"r"},"encryptedDefaultEncryptionPrivateKey":"dummy_encrypted_private_key","encryptedDefaultSelfEncryptionKey":"dummy_self_encryption_key", "encryptedAPKAMSymmetricKey":"dummy_pkam_sym_key","apkamPublicKey":"abcd1234"}';
       expect(RegExp(VerbSyntax.enroll).hasMatch(command), true);
       command = command.replaceAll('enroll:request:', '');
       var enrollParams = jsonDecode(command);
@@ -28,7 +28,7 @@ void main() {
 
     test('A test to verify enroll approve params', () {
       String command =
-          'enroll:approve:{"enrollmentId":"123","appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptionPrivateKey":"dummy_encrypted_private_key","encryptedDefaultSelfEncryptionKey":"dummy_self_encryption_key","encryptedAPKAMSymmetricKey":"dummy_pkam_sym_key","apkamPublicKey":"abcd1234"}';
+          'enroll:approve:{"enrollmentId":"123","appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptionPrivateKey":"dummy_encrypted_private_key","encPrivateKeyIV":"MHz0FJD63Dm3y5/w2fc+qw==","encryptedDefaultSelfEncryptionKey":"dummy_self_encryption_key","selfEncKeyIV":"G7GXk44cpIFACy31MSaUkA==","encryptedAPKAMSymmetricKey":"dummy_pkam_sym_key","apkamPublicKey":"abcd1234"}';
       expect(RegExp(VerbSyntax.enroll).hasMatch(command), true);
       command = command.replaceAll('enroll:approve:', '');
       var enrollParams = jsonDecode(command);
@@ -38,8 +38,10 @@ void main() {
       expect(enrollParams['namespaces']['wavi'], 'rw');
       expect(enrollParams['encryptedDefaultEncryptionPrivateKey'],
           'dummy_encrypted_private_key');
+      expect(enrollParams['encPrivateKeyIV'], 'MHz0FJD63Dm3y5/w2fc+qw==');
       expect(enrollParams['encryptedDefaultSelfEncryptionKey'],
           'dummy_self_encryption_key');
+      expect(enrollParams['selfEncKeyIV'], 'G7GXk44cpIFACy31MSaUkA==');
       expect(enrollParams['encryptedAPKAMSymmetricKey'], 'dummy_pkam_sym_key');
       expect(enrollParams['apkamPublicKey'], 'abcd1234');
     });
