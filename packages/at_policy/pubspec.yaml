@@ -13,10 +13,6 @@ dependencies:
   json_annotation: ^4.9.0
 
 dependency_overrides:
-  dartssh2:
-    git:
-      url: https://github.com/atsign-foundation/dartssh2
-      ref: trunk
   args:
     git:
       ref: gkc/show-aliases-in-usage
