@@ -48,7 +48,7 @@ abstract class PolicyService implements AtRpcCallbacks {
     required AtClient atClient,
     required String baseNamespace,
     required PolicyRequestHandler handler,
-    String policyRequestNamespace = 'requests.policy',
+    String policyRequestNamespace = 'policy',
     String? loggingAtsign,
     Set<String>? allowList,
     bool allowAll = true,
