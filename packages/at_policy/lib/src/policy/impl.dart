@@ -108,12 +108,12 @@ class PolicyServiceImpl with AtClientBindings implements PolicyService {
 
       final event = PolicyLogEvent(
         timestamp: DateTime.now().millisecondsSinceEpoch,
-        deviceAtsign: fromAtSign,
+        serviceAtsign: fromAtSign,
         policyAtsign: atClient.getCurrentAtSign(),
-        devicename: policyRequest.serviceName,
-        deviceGroupName: policyRequest.serviceGroupName,
+        serviceName: policyRequest.serviceName,
+        serviceGroupName: policyRequest.serviceGroupName,
         clientAtsign: policyRequest.clientAtsign,
-        eventType: PolicyLogEventType.requestFromDevice,
+        eventType: PolicyLogEventType.request,
         eventDetails: {'intents': policyRequest.intents},
         message: '',
       );

@@ -62,46 +62,13 @@ Map<String, dynamic> _$PolicyResponseToJson(PolicyResponse instance) =>
       'policyDetails': instance.policyDetails.map((e) => e.toJson()).toList(),
     };
 
-DeviceInfo _$DeviceInfoFromJson(Map<String, dynamic> json) => DeviceInfo(
-      timestamp: (json['timestamp'] as num).toInt(),
-      deviceAtsign: json['deviceAtsign'] as String,
-      policyAtsign: json['policyAtsign'] as String?,
-      devicename: json['devicename'] as String,
-      deviceGroupName: json['deviceGroupName'] as String,
-      managerAtsigns: (json['managerAtsigns'] as List<dynamic>)
-          .map((e) => e as String)
-          .toList(),
-      version: json['version'] as String,
-      corePackageVersion: json['corePackageVersion'] as String,
-      supportedFeatures: json['supportedFeatures'] as Map<String, dynamic>,
-      allowedServices: (json['allowedServices'] as List<dynamic>)
-          .map((e) => e as String)
-          .toList(),
-      status: json['status'] as String?,
-    );
-
-Map<String, dynamic> _$DeviceInfoToJson(DeviceInfo instance) =>
-    <String, dynamic>{
-      'timestamp': instance.timestamp,
-      'deviceAtsign': instance.deviceAtsign,
-      'policyAtsign': instance.policyAtsign,
-      'devicename': instance.devicename,
-      'deviceGroupName': instance.deviceGroupName,
-      'managerAtsigns': instance.managerAtsigns,
-      'version': instance.version,
-      'corePackageVersion': instance.corePackageVersion,
-      'supportedFeatures': instance.supportedFeatures,
-      'allowedServices': instance.allowedServices,
-      'status': instance.status,
-    };
-
 PolicyLogEvent _$PolicyLogEventFromJson(Map<String, dynamic> json) =>
     PolicyLogEvent(
       timestamp: (json['timestamp'] as num).toInt(),
-      deviceAtsign: json['deviceAtsign'] as String,
+      serviceAtsign: json['serviceAtsign'] as String,
       policyAtsign: json['policyAtsign'] as String?,
-      devicename: json['devicename'] as String,
-      deviceGroupName: json['deviceGroupName'] as String,
+      serviceName: json['serviceName'] as String,
+      serviceGroupName: json['serviceGroupName'] as String,
       clientAtsign: json['clientAtsign'] as String,
       eventType: $enumDecode(_$PolicyLogEventTypeEnumMap, json['eventType']),
       eventDetails: json['eventDetails'] as Map<String, dynamic>,
@@ -111,10 +78,10 @@ PolicyLogEvent _$PolicyLogEventFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$PolicyLogEventToJson(PolicyLogEvent instance) =>
     <String, dynamic>{
       'timestamp': instance.timestamp,
-      'deviceAtsign': instance.deviceAtsign,
+      'serviceAtsign': instance.serviceAtsign,
       'policyAtsign': instance.policyAtsign,
-      'devicename': instance.devicename,
-      'deviceGroupName': instance.deviceGroupName,
+      'serviceName': instance.serviceName,
+      'serviceGroupName': instance.serviceGroupName,
       'clientAtsign': instance.clientAtsign,
       'eventType': _$PolicyLogEventTypeEnumMap[instance.eventType]!,
       'message': instance.message,
@@ -122,7 +89,7 @@ Map<String, dynamic> _$PolicyLogEventToJson(PolicyLogEvent instance) =>
     };
 
 const _$PolicyLogEventTypeEnumMap = {
-  PolicyLogEventType.requestFromDevice: 'requestFromDevice',
-  PolicyLogEventType.responseToDevice: 'responseToDevice',
-  PolicyLogEventType.deviceDecision: 'deviceDecision',
+  PolicyLogEventType.request: 'request',
+  PolicyLogEventType.response: 'response',
+  PolicyLogEventType.decision: 'decision',
 };

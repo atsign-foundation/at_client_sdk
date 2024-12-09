@@ -108,62 +108,30 @@ class PolicyResponse {
   String toString() => jsonPrettyPrinter.convert(toJson());
 }
 
-abstract class CoreDeviceInfo {
+abstract class CoreServiceInfo {
   final int timestamp;
-  final String deviceAtsign;
+  final String serviceAtsign;
   final String? policyAtsign;
-  final String devicename;
-  final String deviceGroupName;
+  final String serviceName;
+  final String serviceGroupName;
 
-  CoreDeviceInfo({
+  CoreServiceInfo({
     required this.timestamp,
-    required this.deviceAtsign,
+    required this.serviceAtsign,
     required this.policyAtsign,
-    required this.devicename,
-    required this.deviceGroupName,
+    required this.serviceName,
+    required this.serviceGroupName,
   });
-}
-
-@JsonSerializable(explicitToJson: true)
-class DeviceInfo extends CoreDeviceInfo {
-  final List<String> managerAtsigns;
-  final String version;
-  final String corePackageVersion;
-  final Map<String, dynamic> supportedFeatures;
-  final List<String> allowedServices; // aka permitOpens
-  String? status;
-
-  DeviceInfo({
-    required super.timestamp,
-    required super.deviceAtsign,
-    required super.policyAtsign,
-    required super.devicename,
-    required super.deviceGroupName,
-    required this.managerAtsigns,
-    required this.version,
-    required this.corePackageVersion,
-    required this.supportedFeatures,
-    required this.allowedServices,
-    this.status,
-  });
-
-  Map<String, dynamic> toJson() => _$DeviceInfoToJson(this);
-
-  static DeviceInfo fromJson(Map<String, dynamic> json) =>
-      _$DeviceInfoFromJson(json);
-
-  @override
-  String toString() => jsonPrettyPrinter.convert(toJson());
 }
 
 enum PolicyLogEventType {
-  requestFromDevice,
-  responseToDevice,
-  deviceDecision,
+  request,
+  response,
+  decision,
 }
 
 @JsonSerializable(explicitToJson: true)
-class PolicyLogEvent extends CoreDeviceInfo {
+class PolicyLogEvent extends CoreServiceInfo {
   final String clientAtsign;
   final PolicyLogEventType eventType;
   final String? message;
@@ -171,10 +139,10 @@ class PolicyLogEvent extends CoreDeviceInfo {
 
   PolicyLogEvent({
     required super.timestamp,
-    required super.deviceAtsign,
+    required super.serviceAtsign,
     required super.policyAtsign,
-    required super.devicename,
-    required super.deviceGroupName,
+    required super.serviceName,
+    required super.serviceGroupName,
     required this.clientAtsign,
     required this.eventType,
     required this.eventDetails,
