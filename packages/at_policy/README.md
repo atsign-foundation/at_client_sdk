@@ -20,6 +20,5 @@ See full worked examples in the [example](example/README.md) directory.
 
 This is freely licensed open source code, so feel free to use it as is, suggest
 changes or enhancements or create your own version.
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for
-detailed guidance on how to set up tools, tests and make a pull request.on. 
-See CONTRIBUTING.md for detailed guidance on how to set up tools, tests and make a pull request.
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for detailed guidance on how to
+set up tools, tests and make a pull request.
