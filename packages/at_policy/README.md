@@ -7,7 +7,7 @@
 # at_policy
 
 ## Introduction
-The at_policy libraries provide generic scaffolding for building policy 
+The at_policy library provides generic scaffolding for building policy 
 management services which policy enforcement endpoints communicate with via 
 atProtocol and therefore get all the benefits of using atProtocol - outbound 
 communication only, end-to-end encryption, using atSigns rather than IP 

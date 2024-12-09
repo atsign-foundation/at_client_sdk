@@ -1,4 +1,4 @@
-name: example
+name: at_policy_example
 description: Simple at_policy usage examples
 version: 1.0.0
 publish_to: none
