@@ -13,6 +13,7 @@ void main() {
   AtSignLogger.root_level = 'shout';
   AtClient atClient = MockAtClient();
   NotificationService notificationService = MockNotificationService();
+
   setUpAll(() {
     registerFallbackValue(NotificationParams());
     when(() => atClient.getCurrentAtSign()).thenReturn('@policy');
@@ -27,7 +28,9 @@ void main() {
       return NotificationResult();
     });
   });
+
   late PolicyService ps;
+
   setUp(() {
     ps = PolicyServiceImpl(
       atClient: atClient,
@@ -40,7 +43,7 @@ void main() {
     );
   });
 
-  AtRpcReq _createRpcPolicyRequest(List<PolicyIntent> intents) {
+  AtRpcReq createRpcPolicyRequest(List<PolicyIntent> intents) {
     PolicyRequest req = PolicyRequest(
       serviceAtsign: '@service',
       serviceName: 'service_1',
@@ -55,9 +58,11 @@ void main() {
   }
 
   test('Test happy path', () async {
-    AtRpcResp rpcResp = await ps.handleRequest(_createRpcPolicyRequest([
+    AtRpcResp rpcResp = await ps.handleRequest(
+        createRpcPolicyRequest([
           PolicyIntent(intent: 'emote', params: {'emotion': 'happiness'})
-        ]), '@service');
+        ]),
+        '@service');
     PolicyResponse pr = PolicyResponse.fromJson(rpcResp.payload);
     expect(pr.policyDetails.length, 1);
     expect(pr.policyDetails[0].intent, 'emote');
@@ -68,9 +73,11 @@ void main() {
   });
 
   test('Test negative response', () async {
-    AtRpcResp rpcResp = await ps.handleRequest(_createRpcPolicyRequest([
+    AtRpcResp rpcResp = await ps.handleRequest(
+        createRpcPolicyRequest([
           PolicyIntent(intent: 'emote', params: {'emotion': 'anger'})
-        ]), '@service');
+        ]),
+        '@service');
     PolicyResponse pr = PolicyResponse.fromJson(rpcResp.payload);
     expect(pr.policyDetails.length, 1);
     expect(pr.policyDetails[0].intent, 'emote');
@@ -81,31 +88,34 @@ void main() {
   });
 
   test('Test null request', () async {
-    AtRpcResp rpcResp = await ps.handleRequest(AtRpcReq(
-      reqId: DateTime.now().microsecondsSinceEpoch,
-      payload: {},
-    ), '@service');
+    AtRpcResp rpcResp = await ps.handleRequest(
+        AtRpcReq(
+          reqId: DateTime.now().microsecondsSinceEpoch,
+          payload: {},
+        ),
+        '@service');
     expect(rpcResp.respType, AtRpcRespType.nack);
     expect(rpcResp.message, contains('Failed PolicyRequest.fromJson'));
   });
 
   test('Test malformed request', () async {
-    AtRpcResp rpcResp = await ps.handleRequest(AtRpcReq(
-      reqId: DateTime.now().microsecondsSinceEpoch,
-      payload: {'foo':12345,'bar':false},
-    ), '@service');
+    AtRpcResp rpcResp = await ps.handleRequest(
+        AtRpcReq(
+          reqId: DateTime.now().microsecondsSinceEpoch,
+          payload: {'foo': 12345, 'bar': false},
+        ),
+        '@service');
     expect(rpcResp.respType, AtRpcRespType.nack);
     expect(rpcResp.message, contains('Failed PolicyRequest.fromJson'));
   });
 
   test('Test unknown intent', () async {
-    AtRpcResp rpcResp = await ps.handleRequest(_createRpcPolicyRequest([
-      PolicyIntent(intent: 'dance', params: {})
-    ]), '@service');
+    AtRpcResp rpcResp = await ps.handleRequest(
+        createRpcPolicyRequest([PolicyIntent(intent: 'dance', params: {})]),
+        '@service');
     expect(rpcResp.respType, AtRpcRespType.error);
     expect(rpcResp.payload['message'], contains('Unknown intent: dance'));
   });
-
 }
 
 class TestHandler implements PolicyRequestHandler {
@@ -141,7 +151,10 @@ class TestHandler implements PolicyRequestHandler {
             default:
               resp.policyDetails.add(PolicyDetail(
                 intent: intent.intent,
-                info: {'allowed': false, 'message': 'Expressing $emotion is not allowed'},
+                info: {
+                  'allowed': false,
+                  'message': 'Expressing $emotion is not allowed'
+                },
               ));
           }
         default:

@@ -80,7 +80,7 @@ class PolicyServiceImpl with AtClientBindings implements PolicyService {
     logger.info('Received request from $fromAtSign: '
         '${jsonPrettyPrinter.convert(rpcRequest.toJson())}');
 
-    Map <String, dynamic> requestPayload = rpcRequest.payload;
+    Map<String, dynamic> requestPayload = rpcRequest.payload;
     if (requestTransformer != null) {
       requestPayload = await requestTransformer!(requestPayload);
     }
@@ -142,7 +142,7 @@ class PolicyServiceImpl with AtClientBindings implements PolicyService {
           reqId: rpcRequest.reqId,
           respType: AtRpcRespType.success,
           payload: responsePayload);
-    } catch (e, st) {
+    } catch (e) {
       logger.severe('Exception: $e');
       policyResponse = PolicyResponse(
         message: 'Exception: $e',

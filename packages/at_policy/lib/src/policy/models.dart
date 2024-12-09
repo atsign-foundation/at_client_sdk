@@ -82,7 +82,8 @@ class PolicyResponse {
     Set<String> intents = {};
     for (final i in policyDetails) {
       if (intents.contains(i.intent)) {
-        throw IllegalArgumentException('More than one PolicyDetail provided for intent: ${i.intent}');
+        throw IllegalArgumentException(
+            'More than one PolicyDetail provided for intent: ${i.intent}');
       } else {
         intents.add(i.intent);
       }

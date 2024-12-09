@@ -27,9 +27,7 @@ void main(List<String> args) async {
 
 class DemoPolicyRequestHandler implements PolicyRequestHandler {
   @override
-  Future<PolicyResponse> getPolicyDetails(
-      PolicyRequest req) async {
-
+  Future<PolicyResponse> getPolicyDetails(PolicyRequest req) async {
     stdout.writeln(chalk.blue('Received request $req'));
 
     stdout.write('(A)pprove or (D)eny? : ');

@@ -37,12 +37,9 @@ void main(List<String> args) async {
       }
 
       try {
-
-
         var response = await rpc
-            .call({'reqType': RequestType.values[reqType - 1].name})
-            .timeout(Duration(seconds: 15));
-
+            .call({'reqType': RequestType.values[reqType - 1].name}).timeout(
+                Duration(seconds: 15));
 
         stdout.writeln(chalk.green(response));
       } on TimeoutException {
@@ -51,7 +48,6 @@ void main(List<String> args) async {
         stderr.writeln(chalk.brightRed(e));
       }
     }
-
   } catch (e) {
     print(e);
     print(CLIBase.argsParser.usage);
