@@ -106,7 +106,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     /// - If found existing in either local or atServer, decrypt it and return
     encryptedSharedKey =
         defaultResponseParser.parse(encryptedSharedKey!).response;
-    final decryptionResult = _atClient.atChops!
+    final decryptionResult = await _atClient.atChops!
         .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
     return decryptionResult.result;
   }
@@ -124,7 +124,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     var newSymmetricKeyBase64 =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
     // Encrypt the new symmetric key with our public key
-    var atChopsEncryptionResult = _atClient.atChops!
+    var atChopsEncryptionResult = await _atClient.atChops!
         .encryptString(newSymmetricKeyBase64, EncryptionKeyType.rsa2048);
     var encryptedSharedKeyMyCopy = atChopsEncryptionResult.result;
     _logger.info(
@@ -211,7 +211,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     ///         (ii) Encrypt the symmetric key with their public key
     var rsaEncryptionAlgo = RsaEncryptionAlgo();
     rsaEncryptionAlgo.atPublicKey = AtPublicKey.fromString(sharedWithPublicKey);
-    var encryptionResult = _atClient.atChops!.encryptString(
+    var encryptionResult = await _atClient.atChops!.encryptString(
         symmetricKeyBase64, EncryptionKeyType.rsa2048,
         encryptionAlgorithm: rsaEncryptionAlgo);
     theirEncryptedCopy = encryptionResult.result;

@@ -68,11 +68,11 @@ class SharedKeyDecryption implements AtKeyDecryption {
       } else {
         iV = AtChopsUtil.generateIVLegacy();
       }
-      final decryptionResult = _atClient.atChops!
+      final decryptionResult = await _atClient.atChops!
           .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
       var encryptionAlgo = AESEncryptionAlgo(AESKey(
           DefaultResponseParser().parse(decryptionResult.result).response));
-      decryptionResultFromAtChops = _atClient.atChops!.decryptString(
+      decryptionResultFromAtChops = await _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
     } on AtDecryptionException catch (e) {
