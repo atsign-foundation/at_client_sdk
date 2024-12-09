@@ -1,0 +1,19 @@
+# Defines a default set of lint rules enforced for
+# projects at Google. For details and rationale,
+# see https://pub.dev/packages/lints.
+include: package:lints/recommended.yaml
+
+# For lint rules and documentation, see http://dart-lang.github.io/linter/lints.
+# Uncomment to specify additional rules.
+linter:
+  rules:
+    annotate_overrides: true
+    prefer_final_fields: true
+    implicit_call_tearoffs: true
+    camel_case_types : true
+    unnecessary_string_interpolations : true
+    unnecessary_brace_in_string_interps: true
+    await_only_futures : true
+    unawaited_futures: true
+    depend_on_referenced_packages : false
+    avoid_function_literals_in_foreach_calls: true
