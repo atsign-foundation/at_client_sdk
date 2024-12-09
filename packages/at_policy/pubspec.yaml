@@ -1,0 +1,31 @@
+name: at_policy
+description: Policy management via atProtocol
+version: 1.0.0
+repository: https://github.com/atsign-foundation/noports
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  at_client: ^3.3.0
+  at_cli_commons: ^1.2.0
+  at_utils: ^3.0.19
+  json_annotation: ^4.9.0
+
+dependency_overrides:
+  dartssh2:
+    git:
+      url: https://github.com/atsign-foundation/dartssh2
+      ref: trunk
+  args:
+    git:
+      ref: gkc/show-aliases-in-usage
+      url: https://github.com/gkc/args
+
+dev_dependencies:
+  build_runner: ^2.4.12
+  json_serializable: ^6.8.0
+  build_version: ^2.1.1
+  lints: ^4.0.0
+  mocktail: ^1.0.1
+  test: ^1.24.4
