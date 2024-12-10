@@ -445,8 +445,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
     try {
-      int? skipDeletesUntil =
-          await putSkipDeletesUntil(localCommitIdBeforeSync, serverCommitId);
+      int? skipDeletesUntil = await setAndGetSkipDeletesUntil(
+          localCommitIdBeforeSync, serverCommitId);
 
       while (serverCommitId > lastReceivedServerCommitId) {
         _sendTelemetry('_syncFromServer.whileLoop', {
@@ -548,7 +548,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Takes the last received server commit id and fetches the entries that are above the given
-  /// commit-id to sync into the local keystore.
+  /// commit-id to sync into the local keystore. If [skipDeletesUntil] is set then delete commit entries
+  /// with commit-id greater than [skipDeletesUntil] will not be synced from server.
   Future<List<dynamic>> _getEntriesToSyncFromServer(
       int lastReceivedServerCommitId, int serverCommitId,
       {int? localCommitIdBeforeSync, int? skipDeletesUntil}) async {
@@ -583,7 +584,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @visibleForTesting
-  Future<int?> putSkipDeletesUntil(
+
+  /// When a new client is authenticated, set the [_skipDeletesUntilCommitId] to [serverCommitId] for initial sync
+  /// If initial sync is interrupted before client fully syncs from the server and client authenticates again, retrieve
+  /// [_skipDeletesUntilCommitId] from local secondary and return
+  Future<int?> setAndGetSkipDeletesUntil(
       int? localCommitIdBeforeSync, int serverCommitId) async {
     if (localCommitIdBeforeSync == -1) {
       await _atClient.put(_skipDeletesUntilCommitId, serverCommitId.toString());

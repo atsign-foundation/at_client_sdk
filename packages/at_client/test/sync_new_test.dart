@@ -4382,7 +4382,7 @@ void main() {
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       int? skipDeletesUntil =
-          await syncServiceImpl.putSkipDeletesUntil(-1, 100);
+          await syncServiceImpl.setAndGetSkipDeletesUntil(-1, 100);
       expect(skipDeletesUntil, 100);
     });
     test(
@@ -4398,7 +4398,7 @@ void main() {
       when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
           .thenAnswer((_) => Future.value(AtValue()..value = '40'));
       int? skipDeletesUntil =
-          await syncServiceImpl.putSkipDeletesUntil(25, 100);
+          await syncServiceImpl.setAndGetSkipDeletesUntil(25, 100);
       expect(skipDeletesUntil, 40);
     });
     test(
@@ -4415,7 +4415,7 @@ void main() {
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
       int? skipDeletesUntil =
-          await syncServiceImpl.putSkipDeletesUntil(25, 100);
+          await syncServiceImpl.setAndGetSkipDeletesUntil(25, 100);
       expect(skipDeletesUntil, null);
     });
     test('A test to verify skip deletes is passed when localCommitId is -1',
