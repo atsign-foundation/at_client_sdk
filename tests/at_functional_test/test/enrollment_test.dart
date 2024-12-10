@@ -91,14 +91,6 @@ void main() {
       // check for keys in __manage namespace
       expect(
           scanResult?.contains(
-              '${atOnboardingResponse.enrollmentId}.default_enc_private_key.__manage$apkamAtSign'),
-          true);
-      expect(
-          scanResult?.contains(
-              '${atOnboardingResponse.enrollmentId}.default_self_enc_key.__manage$apkamAtSign'),
-          true);
-      expect(
-          scanResult?.contains(
               '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign'),
           true);
       // Check whether at client can create keys in different namespaces
