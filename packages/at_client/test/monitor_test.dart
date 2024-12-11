@@ -18,7 +18,7 @@ class MockSecureSocket extends Mock implements SecureSocket {}
 
 class MockStreamSubscription<T> extends Mock implements StreamSubscription<T> {}
 
-class MockOutboundConnection extends Mock implements OutboundConnection {}
+class MockAtConnection extends Mock implements AtConnection {}
 
 class MockMonitorOutboundConnectionFactory extends Mock
     implements MonitorOutboundConnectionFactory {}
@@ -34,7 +34,7 @@ void main() {
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   MonitorOutboundConnectionFactory mockMonitorOutboundConnectionFactory =
       MockMonitorOutboundConnectionFactory();
-  OutboundConnection mockOutboundConnection = MockOutboundConnection();
+  AtConnection mockOutboundConnection = MockAtConnection();
   SecureSocket mockSocket = MockSecureSocket();
   MonitorPreference monitorPreference = MonitorPreference()..keepAlive = true;
   AtChops mockAtChops = MockAtChops();

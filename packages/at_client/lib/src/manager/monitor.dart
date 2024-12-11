@@ -45,7 +45,7 @@ class Monitor {
 
   late AtClientPreference _preference;
 
-  OutboundConnection? _monitorConnection;
+  AtConnection? _monitorConnection;
 
   late RemoteSecondary _remoteSecondary;
 
@@ -294,7 +294,7 @@ class Monitor {
     _logger.finer('Monitor connection authentication successful');
   }
 
-  Future<OutboundConnection> _createNewConnection(
+  Future<AtConnection> _createNewConnection(
       String toAtSign, String rootDomain, int rootPort) async {
     //1. look up the secondary url for this atsign
     var secondaryUrl = await _remoteSecondary.findSecondaryUrl();
@@ -451,7 +451,7 @@ class Monitor {
 enum MonitorStatus { notStarted, started, stopped, errored }
 
 class MonitorOutboundConnectionFactory {
-  Future<OutboundConnection> createConnection(String secondaryUrl,
+  Future<AtConnection> createConnection(String secondaryUrl,
       {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
@@ -464,7 +464,7 @@ class MonitorOutboundConnectionFactory {
 
     SecureSocket secureSocket = await SecureSocketUtil.createSecureSocket(
         host, port, secureSocketConfig);
-    return OutboundConnectionImpl(secureSocket);
+    return AtSocketConnection(secureSocket);
   }
 
   List<String> _getSecondaryInfo(String url) {

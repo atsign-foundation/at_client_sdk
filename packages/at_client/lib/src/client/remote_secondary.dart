@@ -31,7 +31,7 @@ class RemoteSecondary implements Secondary {
       {String? privateKey,
       this.atChops,
       String? enrollmentId,
-      AtLookupOutboundConnectionFactory? atLookupOutboundConnectionFactory}) {
+      AtConnectionFactory? atConnectionFactory}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -47,7 +47,7 @@ class RemoteSecondary implements Secondary {
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
         clientConfig: _getClientConfig(),
-        atOutboundConnectionFactory: atLookupOutboundConnectionFactory );
+        atConnectionFactory: atConnectionFactory );
     atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
@@ -177,7 +177,7 @@ class RemoteSecondary implements Secondary {
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback]
   ///[Deprecated] Use [AtClient.notificationService]
   @Deprecated('Use AtClient.notificationService')
-  Future<OutboundConnection> monitor(
+  Future<AtConnection> monitor(
       String command, Function? notificationCallBack, String privateKey) {
     return MonitorClient(privateKey).executeMonitorVerb(
         command, _atSign, _preference.rootDomain, _preference.rootPort,
