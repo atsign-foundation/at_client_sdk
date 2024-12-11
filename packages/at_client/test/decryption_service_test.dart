@@ -1,15 +1,15 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
+import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/decryption_service/local_key_decryption.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
-import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:at_chops/at_chops.dart';
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
@@ -55,8 +55,7 @@ void main() {
   });
 
   group('A group of positive test mock test to verify decryption service', () {
-    test(
-        'A test to verify decryption is successful when all keys are found - with publicKeyCS set',
+    test('A test to verify decryption is successful when all keys are found',
         () async {
       var encryptionPrivateKey =
           'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCrGPCsZtFf1xhALzrtnfjRlr9p6RdKMNPd2Z5RkOvUsvZuK56aR2Sc7Yl6HqPFi5rr1Xd4SwNXTfZIgVxpU4QoTyNjyFUWrWHoo2NQ0lUX75HAWYIzQf706HfkGmmDBOGoUEVJPLvQv9vPMpIofZYj9WTiWo9zBTRT8EbPNTF1RJHWQNfgs3xYkX16FfutBvS/B5TYZWDXpwVFwuGh0FF2gL3/wZvp6Qq5PXnV/iiF3mrF46kXXE04WAeizsF1u2nP8OuwdLkSk0I1zka81Xrpey/yRcbOEwK9zG5c6XsgqwCILEhLIBvYX/LRacllkxBci5ivZaSBsx41Jsc+Hw69AgMBAAECggEAOO8jpzrPkUTSHQmaYlee5J91MpkN1vJIjhpMRHglAbJLrn11WYFISbABf1GSzbmW48M07iKIChU3Twk85w+TepZbAGk5Z0Jqwi8cbViQWFav+YHPgZ8EaBqzSoQ/eAm3zXpok+ZR2TT+wAPj/vVLcMvHtkrMUUn6D7R0256nxo1u+fdJ5vsBefhSKR23zNfp+ynU54s20Gc4ejqDujbIow+aiJZv9y/asPG5UdSWN6ykhoPlOCv+VqAlGT7OWFKAMTUfIZb1UsqCIYKN+BNbwFBkFcuzr8AM5Xxd1DoNcBVdLOY6j+6k2kd4U0XxvLAhE0FZDVt5J82jGtmDJQyRQQKBgQDjFixG3XnXArYnM8667+LrdIK2UGbxu94pMjRR16g7v+miShASdcxzmBr/oDAHJrSwYg4t6QIyarj0nIfUqUNefQS28qjDBuQRMHwAcYcZZ5QwynJZsyHu5KP/Hqm2V4C7mU84jpKygiDQl9GSXIsIldQ+5ADrAvpFVkyNOwGFpwKBgQDA4dCHpFFmW2BcFIHXn3fpg2JPNSnXBmVl64QRVKUj30As5KMpgULiP5qP9KfogYArm+S+p6uK5s6kqdLDNOMwqCGLD21n8EOzOjtd1bbzxuC/OUu1SCmmqMd64Y+StNj5lxx1FmkbGT96kAM20QnvUdz1U1KeCODprL5z4L9c+wKBgQCztaBklHEPjr3IWF+J4L2byCCJVyegtiQiRfDRs/EXF9E09ZeyhDbAY+c51PMtNZxY2cCO5I8whvTH3/g+e5Us+ZL5lR+o95MVZ2E6mJ1ppWbJFe1Yv0JjY93Ez+dOvgDKdZEUGQBO9Fwzt3HKeiItMSU+gAGZ+klFBf6e5ctWkQKBgFckbpspwOD2vaU8WqE5Weq1QjA4+6s7J4qRijxuOqHnVk4yCglRbg9b3w/U4BtqjqalKwZ8KEN8HbZFR4SMG2y7OVRjZvGDmoKZ94JgcOTYYGfkkfDYJoE2VdGNoNkOPc0d2WyI8HmewZA1Ck60yMFIAgUQXQ4rQrowImemDa8LAoGAYc8Tp8LUNj4fYzTA0zE7YwBga0eTB8F9eHYhimAhBRScG5FYQHlGgNvwfAATclJfX2ikBRHidWUYGM/4+z10ZX+98uwGEwPgUWJCy8mLJ6CJb88a0j7LQjOYd5ZT+Qi96X5Y4RRYj7/2CHaq1KvoywqsGoaVaiTK1opj33c7F64=';
@@ -69,41 +68,6 @@ void main() {
       atKey.metadata = Metadata()
         ..sharedKeyEnc = sharedKeyEnc
         ..pubKeyCS = 'd4f6d9483907286a0563b9fdeb01aa61';
-
-      when(() => mockLocalSecondary.getEncryptionPrivateKey())
-          .thenAnswer((_) => Future.value(encryptionPrivateKey));
-
-      when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => atClientPreferenceWithAtChops);
-      final atChopsKeys = AtChopsKeys.create(
-          AtEncryptionKeyPair.create('', encryptionPrivateKey), null);
-      when(() => mockAtClientImpl.atChops)
-          .thenAnswer((_) => AtChopsImpl(atChopsKeys));
-      var sharedKeyDecryption = SharedKeyDecryption(mockAtClientImpl);
-      var result = await sharedKeyDecryption.decrypt(atKey, encryptedValue);
-      expect(result, 'hello');
-      when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => atClientPreferenceWithAtChops);
-
-      expect(await sharedKeyDecryption.decrypt(atKey, encryptedValue), 'hello');
-    });
-
-    test(
-        'A test to verify decryption is successful when all keys are found - with publicKeyHash set',
-        () async {
-      var encryptionPrivateKey =
-          'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCrGPCsZtFf1xhALzrtnfjRlr9p6RdKMNPd2Z5RkOvUsvZuK56aR2Sc7Yl6HqPFi5rr1Xd4SwNXTfZIgVxpU4QoTyNjyFUWrWHoo2NQ0lUX75HAWYIzQf706HfkGmmDBOGoUEVJPLvQv9vPMpIofZYj9WTiWo9zBTRT8EbPNTF1RJHWQNfgs3xYkX16FfutBvS/B5TYZWDXpwVFwuGh0FF2gL3/wZvp6Qq5PXnV/iiF3mrF46kXXE04WAeizsF1u2nP8OuwdLkSk0I1zka81Xrpey/yRcbOEwK9zG5c6XsgqwCILEhLIBvYX/LRacllkxBci5ivZaSBsx41Jsc+Hw69AgMBAAECggEAOO8jpzrPkUTSHQmaYlee5J91MpkN1vJIjhpMRHglAbJLrn11WYFISbABf1GSzbmW48M07iKIChU3Twk85w+TepZbAGk5Z0Jqwi8cbViQWFav+YHPgZ8EaBqzSoQ/eAm3zXpok+ZR2TT+wAPj/vVLcMvHtkrMUUn6D7R0256nxo1u+fdJ5vsBefhSKR23zNfp+ynU54s20Gc4ejqDujbIow+aiJZv9y/asPG5UdSWN6ykhoPlOCv+VqAlGT7OWFKAMTUfIZb1UsqCIYKN+BNbwFBkFcuzr8AM5Xxd1DoNcBVdLOY6j+6k2kd4U0XxvLAhE0FZDVt5J82jGtmDJQyRQQKBgQDjFixG3XnXArYnM8667+LrdIK2UGbxu94pMjRR16g7v+miShASdcxzmBr/oDAHJrSwYg4t6QIyarj0nIfUqUNefQS28qjDBuQRMHwAcYcZZ5QwynJZsyHu5KP/Hqm2V4C7mU84jpKygiDQl9GSXIsIldQ+5ADrAvpFVkyNOwGFpwKBgQDA4dCHpFFmW2BcFIHXn3fpg2JPNSnXBmVl64QRVKUj30As5KMpgULiP5qP9KfogYArm+S+p6uK5s6kqdLDNOMwqCGLD21n8EOzOjtd1bbzxuC/OUu1SCmmqMd64Y+StNj5lxx1FmkbGT96kAM20QnvUdz1U1KeCODprL5z4L9c+wKBgQCztaBklHEPjr3IWF+J4L2byCCJVyegtiQiRfDRs/EXF9E09ZeyhDbAY+c51PMtNZxY2cCO5I8whvTH3/g+e5Us+ZL5lR+o95MVZ2E6mJ1ppWbJFe1Yv0JjY93Ez+dOvgDKdZEUGQBO9Fwzt3HKeiItMSU+gAGZ+klFBf6e5ctWkQKBgFckbpspwOD2vaU8WqE5Weq1QjA4+6s7J4qRijxuOqHnVk4yCglRbg9b3w/U4BtqjqalKwZ8KEN8HbZFR4SMG2y7OVRjZvGDmoKZ94JgcOTYYGfkkfDYJoE2VdGNoNkOPc0d2WyI8HmewZA1Ck60yMFIAgUQXQ4rQrowImemDa8LAoGAYc8Tp8LUNj4fYzTA0zE7YwBga0eTB8F9eHYhimAhBRScG5FYQHlGgNvwfAATclJfX2ikBRHidWUYGM/4+z10ZX+98uwGEwPgUWJCy8mLJ6CJb88a0j7LQjOYd5ZT+Qi96X5Y4RRYj7/2CHaq1KvoywqsGoaVaiTK1opj33c7F64=';
-      var encryptedValue = 'xTdYWFLRc2Gv2ACnMZbP4A==';
-      var sharedKeyEnc =
-          'T3VaG/MMd7ZFnKMCCQUqIOM4dDiLiZXeIZkXJ3p13jn4EXU6FWgygCbG/8aUrMr3riPO+Il4CwIvGrulGXsKzx9sjBxsFAhTDczzvOt0a52UJFxIjJGkC7mAuprLa23dRI/zUfvxEd6fgXVDT5k8itOO0ykOcb9syEtvzg+vZhniVODz7yu9gh0R1iQDxebM5mCPbGKNlEkdGJq6wGBvn26p2fq5CaPyIBHRU2B+DIaBEKnVmK2WomJnrCbLtYFlGGmtsMkCVfllBJSW3i6SZ1m080Yt07qtjnsWobK1FT+2i07Q+uGEaSjIr5eUyPeN4V5L1ZmsnXk92w+vhD0k0w==';
-      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
-            ..sharedWith('@alice'))
-          .build();
-      atKey.metadata = Metadata()
-        ..sharedKeyEnc = sharedKeyEnc
-        ..pubKeyHash = PublicKeyHash(
-            '6ba753ba818686f6a1a91e27012518e398a4880533fefadd596dfd151d4661b848ab0438e01eaf5a5b6de1f4da4ed011812b3e57390f963b29a1fe023f265207',
-            HashingAlgoType.sha512.name);
 
       when(() => mockLocalSecondary.getEncryptionPrivateKey())
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
@@ -169,32 +133,6 @@ void main() {
           () async =>
               await sharedKeyDecryptionWithAtChops.decrypt(atKey, '123'),
           throwsA(predicate((dynamic e) => e is Exception)));
-    });
-
-    test('A test to verify exception is thrown when publicKeyHash mismatch',
-        () {
-      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@xyz')
-            ..sharedWith('@bob'))
-          .build();
-      atKey.metadata = Metadata()
-        ..sharedKeyEnc = 'dummy_shared_key'
-        ..pubKeyCS = 'd4f6d9483907286a0563b9fdeb01aa61'
-        ..pubKeyHash = PublicKeyHash('dummy_hash', HashingAlgoType.sha512.name);
-
-      when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => atClientPreferenceWithAtChops);
-      var sharedKeyDecryptionWithAtChops =
-          SharedKeyDecryption(mockAtClientImpl);
-      final atChopsKeys =
-          AtChopsKeys.create(AtEncryptionKeyPair.create('', ''), null);
-      when(() => mockAtClientImpl.atChops)
-          .thenAnswer((_) => AtChopsImpl(atChopsKeys));
-      when(() => mockLocalSecondary.getEncryptionPublicKey('@xyz'))
-          .thenAnswer((_) => Future.value('dummy_encryption_public_key'));
-      expect(
-          () async =>
-              await sharedKeyDecryptionWithAtChops.decrypt(atKey, '123'),
-          throwsA(predicate((dynamic e) => e is AtPublicKeyChangeException)));
     });
 
     // The AtLookup verb throws exception is stacked by the executeVerb in remote secondary

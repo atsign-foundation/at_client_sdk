@@ -14,14 +14,6 @@ dependencies:
   at_client:
     path: ../../packages/at_client
 
-dependency_overrides:
-  at_commons: ^5.0.2
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      path: packages/at_persistence_secondary_server
-      ref: 2121-uptake-public-key-hash-at-persistence_secondary-server
-
 dev_dependencies:
   test: ^1.25.8
   lints: ^2.0.0
