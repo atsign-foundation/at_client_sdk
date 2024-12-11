@@ -1,3 +1,5 @@
+## 3.0.50
+- fix: Supply default values for sync:from deprecated params
 ## 3.0.49
 - build[deps]: Upgraded the following packages:
   - at_commons to v5.0.0

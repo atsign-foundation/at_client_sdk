@@ -406,6 +406,9 @@ class AtLookupImpl implements AtLookUp {
   }
 
   Future<String> _sync(SyncVerbBuilder builder) async {
+    // default values for deprecated params.
+    builder.isPaginated = true;
+    builder.limit = 10;
     var atCommand = builder.buildCommand();
     return await _process(atCommand, auth: true);
   }
