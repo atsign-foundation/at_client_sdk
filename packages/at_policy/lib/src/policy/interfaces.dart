@@ -52,6 +52,8 @@ abstract class PolicyService implements AtRpcCallbacks {
     String? loggingAtsign,
     Set<String>? allowList,
     bool allowAll = true,
+    RpcTransformer? requestTransformer,
+    RpcTransformer? responseTransformer,
   }) {
     return PolicyServiceImpl(
       atClient: atClient,
@@ -61,6 +63,8 @@ abstract class PolicyService implements AtRpcCallbacks {
       loggingAtsign: loggingAtsign ?? atClient.getCurrentAtSign()!,
       allowList: allowList ?? {},
       allowAll: allowAll,
+      requestTransformer: requestTransformer,
+      responseTransformer: responseTransformer,
     );
   }
 }
