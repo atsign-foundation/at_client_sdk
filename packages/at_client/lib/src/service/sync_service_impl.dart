@@ -539,6 +539,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// commit-id to sync into the local keystore.
   Future<List<dynamic>> _getEntriesToSyncFromServer(
       int lastReceivedServerCommitId) async {
+    // Sync verb syntax has to be changed before removing these deprecations
     var syncBuilder = SyncVerbBuilder()
       ..commitId = lastReceivedServerCommitId
       ..regex = _atClient.getPreferences()!.syncRegex
@@ -767,13 +768,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Throws [AtClientException] if cloud secondary is not reachable
   @override
   Future<bool> isInSync() async {
-    late RemoteSecondary remoteSecondary;
     try {
-      remoteSecondary = RemoteSecondary(
-          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
-          atChops: _atClient.atChops);
-      var serverCommitId =
-          await _getServerCommitId(remoteSecondary: remoteSecondary);
+      var serverCommitId = await _getServerCommitId();
 
       var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
 
@@ -794,8 +790,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
       _logger.severe('exception in isInSync $cause');
       throw AtClientException.message(e.toString());
-    } finally {
-      unawaited(remoteSecondary.atLookUp.close());
     }
   }
 
@@ -804,8 +798,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    var serverCommitId =
-        await _getServerCommitId(remoteSecondary: _remoteSecondary);
+    var serverCommitId = await _getServerCommitId();
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
@@ -823,11 +816,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
   ///Throws [AtLookUpException] if secondary is not reachable
-  Future<int> _getServerCommitId({RemoteSecondary? remoteSecondary}) async {
-    remoteSecondary ??= _remoteSecondary;
+  Future<int> _getServerCommitId() async {
     // ignore: no_leading_underscores_for_local_identifiers
     var _serverCommitId = await syncUtil.getLatestServerCommitId(
-        remoteSecondary, _atClient.getPreferences()!.syncRegex);
+        _remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
     _serverCommitId ??= -1;
     _logger.info(_logger.getLogMessageWithClientParticulars(
