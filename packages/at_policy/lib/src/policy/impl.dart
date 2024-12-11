@@ -35,12 +35,6 @@ class PolicyServiceImpl with AtClientBindings implements PolicyService {
   @override
   final bool allowAll;
 
-  @override
-  RpcTransformer? requestTransformer;
-
-  @override
-  RpcTransformer? responseTransformer;
-
   late final AtRpc rpc;
 
   static const JsonEncoder jsonPrettyPrinter = JsonEncoder.withIndent('    ');
@@ -53,8 +47,6 @@ class PolicyServiceImpl with AtClientBindings implements PolicyService {
     required this.loggingAtsign,
     required this.allowList,
     required this.allowAll,
-    this.requestTransformer,
-    this.responseTransformer,
   }) {
     rpc = AtRpc(
       atClient: atClient,
@@ -80,14 +72,9 @@ class PolicyServiceImpl with AtClientBindings implements PolicyService {
     logger.info('Received request from $fromAtSign: '
         '${jsonPrettyPrinter.convert(rpcRequest.toJson())}');
 
-    Map<String, dynamic> requestPayload = rpcRequest.payload;
-    if (requestTransformer != null) {
-      requestPayload = await requestTransformer!(requestPayload);
-    }
     PolicyRequest policyRequest;
-
     try {
-      policyRequest = PolicyRequest.fromJson(requestPayload);
+      policyRequest = PolicyRequest.fromJson(rpcRequest.payload);
     } catch (e) {
       final msg = 'Failed PolicyRequest.fromJson: ${e.toString()}';
       logger.severe(msg);
@@ -130,32 +117,25 @@ class PolicyServiceImpl with AtClientBindings implements PolicyService {
           '\n$st');
     }
 
-    PolicyResponse policyResponse;
     AtRpcResp rpcResponse;
     try {
-      policyResponse = await handler.getPolicyDetails(policyRequest);
-      Map<String, dynamic> responsePayload = policyResponse.toJson();
-      if (responseTransformer != null) {
-        responsePayload = await responseTransformer!(responsePayload);
-      }
+      PolicyResponse policyResponse =
+          await handler.getPolicyDetails(policyRequest);
       rpcResponse = AtRpcResp(
           reqId: rpcRequest.reqId,
           respType: AtRpcRespType.success,
-          payload: responsePayload);
+          payload: policyResponse.toJson());
     } catch (e) {
       logger.severe('Exception: $e');
-      policyResponse = PolicyResponse(
-        message: 'Exception: $e',
-        policyDetails: [],
-      );
-      Map<String, dynamic> responsePayload = policyResponse.toJson();
-      if (responseTransformer != null) {
-        responsePayload = await responseTransformer!(responsePayload);
-      }
       rpcResponse = AtRpcResp(
-          reqId: rpcRequest.reqId,
-          respType: AtRpcRespType.error,
-          payload: responsePayload);
+        reqId: rpcRequest.reqId,
+        respType: AtRpcRespType.error,
+        payload: PolicyResponse(
+          message: 'Exception: $e',
+          policyDetails: [],
+        ).toJson(),
+        message: 'Exception: $e',
+      );
     }
 
     return rpcResponse;
