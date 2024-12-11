@@ -9,9 +9,6 @@ abstract class PolicyRequestHandler {
   Future<PolicyResponse> getPolicyDetails(PolicyRequest req);
 }
 
-typedef RpcTransformer = Future<Map<String, dynamic>> Function(
-    Map<String, dynamic>);
-
 /// - Listens for requests for policy info from services
 /// - Returns info for each of the policy intents in the request.
 abstract class PolicyService implements AtRpcCallbacks {
@@ -37,13 +34,6 @@ abstract class PolicyService implements AtRpcCallbacks {
 
   bool get allowAll;
 
-  /// For handling requests where the request payload json is not a
-  /// [PolicyRequest], but it can be transformed into one. e.g. legacy requests
-  RpcTransformer? requestTransformer;
-
-  /// Transform PolicyResponses into some other (e.g. legacy) format
-  RpcTransformer? responseTransformer;
-
   factory PolicyService({
     required AtClient atClient,
     required String baseNamespace,
@@ -52,8 +42,6 @@ abstract class PolicyService implements AtRpcCallbacks {
     String? loggingAtsign,
     Set<String>? allowList,
     bool allowAll = true,
-    RpcTransformer? requestTransformer,
-    RpcTransformer? responseTransformer,
   }) {
     return PolicyServiceImpl(
       atClient: atClient,
@@ -63,8 +51,6 @@ abstract class PolicyService implements AtRpcCallbacks {
       loggingAtsign: loggingAtsign ?? atClient.getCurrentAtSign()!,
       allowList: allowList ?? {},
       allowAll: allowAll,
-      requestTransformer: requestTransformer,
-      responseTransformer: responseTransformer,
     );
   }
 }
