@@ -16,7 +16,10 @@ dependency_overrides:
   at_auth:
     path: ../../packages/at_auth
   at_onboarding_cli:
-    path: ../../packages/at_onboarding_cli
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_onboarding_cli
+      ref: at-onboarding-cli-apkam-different-ivs
   at_commons:
     path: ../../packages/at_commons
   at_chops:
