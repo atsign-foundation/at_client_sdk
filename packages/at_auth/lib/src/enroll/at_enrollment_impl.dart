@@ -138,7 +138,7 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
               encryptedDefaultEncryptionPrivateKey,
           AtConstants.apkamEncryptionPrivateKeyIV:
               base64Encode(encryptionPrivateKeyIV.ivBytes),
-          'encryptedDefaultSelfEncryptionKey':
+          AtConstants.apkamEncryptedDefaultSelfEncryptionKey:
               encryptedDefaultSelfEncryptionKey,
           AtConstants.apkamSelfEncryptionKeyIV:
               base64Encode(selfEncryptionKeyIV.ivBytes)
