@@ -1,7 +1,7 @@
 name: at_policy
 description: Policy management via atProtocol
 version: 1.0.0
-repository: https://github.com/atsign-foundation/noports
+repository: https://github.com/atsign-foundation/at_libraries/tree/trunk/packages/at_policy
 
 environment:
   sdk: ^3.5.0
@@ -11,12 +11,6 @@ dependencies:
   at_cli_commons: ^1.2.0
   at_utils: ^3.0.19
   json_annotation: ^4.9.0
-
-dependency_overrides:
-  args:
-    git:
-      ref: gkc/show-aliases-in-usage
-      url: https://github.com/gkc/args
 
 dev_dependencies:
   build_runner: ^2.4.12
