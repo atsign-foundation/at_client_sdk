@@ -30,6 +30,8 @@ void main() {
     var metadata = await atClient.getMeta(phoneKey);
     expect(metadata!.sharedKeyEnc, isNotEmpty);
     expect(metadata.pubKeyCS, isNotEmpty);
+    expect(metadata.pubKeyHash?.hash, isNotEmpty);
+    expect(metadata.pubKeyHash?.hashingAlgo, isNotEmpty);
   });
 
   test('sharedKey and checksum metadata sync to local storage', () async {
@@ -43,7 +45,7 @@ void main() {
         AtKeyEncryptionManager(atClient).get(phoneKey, currentAtSign);
     var encryptedValue = await encryptionService.encrypt(phoneKey, value);
     var result = await atClient.getRemoteSecondary()!.executeCommand(
-        'update:sharedKeyEnc:${phoneKey.metadata.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata.pubKeyCS}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
+        'update:sharedKeyEnc:${phoneKey.metadata.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata.pubKeyCS}:pubKeyHash:${phoneKey.metadata.pubKeyHash?.hash}:hashingAlgo:${phoneKey.metadata.pubKeyHash?.hashingAlgo}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
         auth: true);
     expect(result != null, true);
     await FunctionalTestSyncService.getInstance()
@@ -51,5 +53,7 @@ void main() {
     var metadata = await atClient.getMeta(phoneKey);
     expect(metadata?.sharedKeyEnc, isNotEmpty);
     expect(metadata?.pubKeyCS, isNotEmpty);
+    expect(metadata?.pubKeyHash?.hash, isNotEmpty);
+    expect(metadata?.pubKeyHash?.hashingAlgo, isNotEmpty);
   });
 }

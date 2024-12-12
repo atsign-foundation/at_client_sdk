@@ -45,7 +45,7 @@ void main() {
         atEncryptionKeyPair.atPublicKey.publicKey);
   });
 
-  tearDown(() {
+  tearDownAll(() {
     Directory('test/unit_test_storage').deleteSync(recursive: true);
   });
 
