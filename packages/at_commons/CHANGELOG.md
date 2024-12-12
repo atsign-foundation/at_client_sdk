@@ -1,3 +1,5 @@
+## 5.1.2
+- fix: set default value for isPaginated to true in SyncVerbBuilder
 ## 5.1.1
 - fix: Introduce IV params for apkam enrollment flow
 ## 5.1.0

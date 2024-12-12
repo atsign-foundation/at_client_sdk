@@ -13,7 +13,7 @@ class SyncVerbBuilder implements VerbBuilder {
 
   @Deprecated(
       'This field is not used anymore even though it is set in client. Remove this in next major release')
-  bool isPaginated = false;
+  bool isPaginated = true;
 
   /// if skipDeletesUntil is set, then delete commit entries whose commitId is <= skipDeletesUntil will not be synced from server to client
   int? skipDeletesUntil;

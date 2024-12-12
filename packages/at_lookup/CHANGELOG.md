@@ -1,7 +1,3 @@
-## 3.0.50
-- fix: sync:from verb - supply default values for deprecated params 
-- build[deps]: Upgraded the following packages:
-  - at_commons to v5.1.1
 ## 3.0.49
 - build[deps]: Upgraded the following packages:
   - at_commons to v5.0.0
