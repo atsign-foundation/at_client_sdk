@@ -1,3 +1,6 @@
+## 1.8.1
+- fix: Replace legacy IVs with random IVs for encrypting "defaultEncryptionPrivateKey" and "selfEncryptionKey" in APKAM flow
+- build[deps]: upgrade at_persistence_secondary_server to v3.1.0
 ## 1.8.0
 - feat: add `unrevoke` command to the activate CLI
 - feat: add `delete` command to the activate CLI

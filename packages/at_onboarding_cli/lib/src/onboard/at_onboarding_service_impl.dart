@@ -253,15 +253,28 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       logProgress: logProgress,
     );
 
-    var decryptedEncryptionPrivateKey = EncryptionUtil.decryptValue(
+    // Fetches encrypted "defaultEncryptionPrivateKey" from server. The first
+    // argument holds the "defaultEncryptionPrivateKey" and the second argument
+    // hold the Initialization Vector(IV) to decrypt the data.
+    // Defaults to null to support legacy IV for backward compatibility.
+    (String, String?) encryptedPrivateKey =
         await _getEncryptionPrivateKeyFromServer(
-            enrollmentResponse.enrollmentId, _atLookUp!),
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!);
+            enrollmentResponse.enrollmentId, _atLookUp!);
 
+    var decryptedEncryptionPrivateKey = EncryptionUtil.decryptValue(
+        encryptedPrivateKey.$1,
+        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!,
+        ivBase64: encryptedPrivateKey.$2);
+
+    // Fetches encrypted "selfEncryptionKey" from server. The first
+    // argument holds the "selfEncryptionKey" and the second argument
+    // hold the Initialization Vector(IV) to decrypt the data.
+    // Defaults to null to support legacy IV for backward compatibility.
+    (String, String?) selfEncryptionKey = await _getSelfEncryptionKeyFromServer(
+        enrollmentResponse.enrollmentId, _atLookUp!);
     var decryptedSelfEncryptionKey = EncryptionUtil.decryptValue(
-        await _getSelfEncryptionKeyFromServer(
-            enrollmentResponse.enrollmentId, _atLookUp!),
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!);
+        selfEncryptionKey.$1, enrollmentResponse.atAuthKeys!.apkamSymmetricKey!,
+        ivBase64: selfEncryptionKey.$2);
 
     enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
         decryptedEncryptionPrivateKey;
@@ -269,17 +282,38 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         decryptedSelfEncryptionKey;
   }
 
-  Future<String> _getEncryptionPrivateKeyFromServer(
+  /// Retrieves the encryption private key and its associated initialization vector (IV)
+  /// from the server for a given enrollment.
+  ///
+  /// The `privateKeyCommand` is constructed using the `enrollmentIdFromServer` and
+  /// `AtConstants.defaultEncryptionPrivateKey` with the format:
+  /// `'keys:get:keyName:<enrollmentId>.<defaultPrivateKey>.__manage$_atSign'`.
+  ///
+  /// This method sends a command to the `atLookUp` service to retrieve the private key data
+  /// from the server, then parses the JSON result to extract the private key (`value`) and
+  /// the IV (`iv`).
+  ///
+  /// Throws an [AtEnrollmentException] if:
+  /// - The private key returned from the server is `null` or empty.
+  /// - There is an exception during command execution.
+  ///
+  /// Returns:
+  /// - A tuple containing:
+  ///   - `encryptionPrivateKeyFromServer` - The encrypted private key string from the server.
+  ///   - `encryptionPrivateKeyIV` - The associated IV string, if present.
+  Future<(String, String?)> _getEncryptionPrivateKeyFromServer(
       String enrollmentIdFromServer, AtLookUp atLookUp) async {
     var privateKeyCommand =
         'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultEncryptionPrivateKey}.__manage$_atSign\n';
     String encryptionPrivateKeyFromServer;
+    String? encryptionPrivateKeyIV;
     try {
       var getPrivateKeyResult =
           await atLookUp.executeCommand(privateKeyCommand, auth: true);
       getPrivateKeyResult = getPrivateKeyResult?.replaceFirst('data:', '');
       var privateKeyResultJson = jsonDecode(getPrivateKeyResult!);
       encryptionPrivateKeyFromServer = privateKeyResultJson['value'];
+      encryptionPrivateKeyIV = privateKeyResultJson['iv'];
       if (encryptionPrivateKeyFromServer == null ||
           encryptionPrivateKeyFromServer.isEmpty) {
         throw AtEnrollmentException('$privateKeyCommand returned null/empty');
@@ -288,14 +322,38 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       throw AtEnrollmentException(
           'Exception while getting encrypted private key/self key from server: $e');
     }
-    return encryptionPrivateKeyFromServer;
+    return (encryptionPrivateKeyFromServer, encryptionPrivateKeyIV);
   }
 
-  Future<String> _getSelfEncryptionKeyFromServer(
+  /// Retrieves the self-encryption key and its associated initialization vector (IV)
+  /// from the server for a given enrollment.
+  ///
+  /// The `selfEncryptionKeyCommand` is constructed using the `enrollmentIdFromServer`
+  /// and `AtConstants.defaultSelfEncryptionKey` in the format:
+  /// `'keys:get:keyName:<enrollmentId>.<defaultSelfEncryptionKey>.__manage$_atSign'`.
+  ///
+  /// This method sends a command to the `atLookUp` service to retrieve the self-encryption key data
+  /// from the server, then parses the JSON result to extract the key (`value`) and
+  /// the IV (`iv`).
+  ///
+  /// Throws an [AtEnrollmentException] if:
+  /// - The self-encryption key returned from the server is `null` or empty.
+  /// - There is an exception during the command execution.
+  ///
+  /// Parameters:
+  /// - `enrollmentIdFromServer` - The enrollment ID used to request the self-encryption key.
+  /// - `atLookUp` - The [AtLookUp] instance to execute the server command.
+  ///
+  /// Returns:
+  /// - A tuple containing:
+  ///   - `selfEncryptionKeyFromServer` - The self-encryption key string retrieved from the server.
+  ///   - `selfEncryptionKeyIV` - The associated IV string, if present.
+  Future<(String, String?)> _getSelfEncryptionKeyFromServer(
       String enrollmentIdFromServer, AtLookUp atLookUp) async {
     var selfEncryptionKeyCommand =
         'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultSelfEncryptionKey}.__manage$_atSign\n';
     String selfEncryptionKeyFromServer;
+    String? selfEncryptionKeyIV;
     try {
       var getSelfEncryptionKeyResult =
           await atLookUp.executeCommand(selfEncryptionKeyCommand, auth: true);
@@ -303,6 +361,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           getSelfEncryptionKeyResult?.replaceFirst('data:', '');
       var selfEncryptionKeyResultJson = jsonDecode(getSelfEncryptionKeyResult!);
       selfEncryptionKeyFromServer = selfEncryptionKeyResultJson['value'];
+      selfEncryptionKeyIV = selfEncryptionKeyResultJson['iv'];
       if (selfEncryptionKeyFromServer == null ||
           selfEncryptionKeyFromServer.isEmpty) {
         throw AtEnrollmentException(
@@ -312,7 +371,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       throw AtEnrollmentException(
           'Exception while getting encrypted private key/self key from server: $e');
     }
-    return selfEncryptionKeyFromServer;
+    return (selfEncryptionKeyFromServer, selfEncryptionKeyIV);
   }
 
   /// Pkam auth will be retried until server approves/denies/expires the enrollment
