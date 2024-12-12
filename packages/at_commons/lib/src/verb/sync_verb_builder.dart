@@ -13,7 +13,7 @@ class SyncVerbBuilder implements VerbBuilder {
 
   @Deprecated(
       'This field is not used anymore even though it is set in client. Remove this in next major release')
-  bool isPaginated = true;
+  bool isPaginated = false;
 
   /// if skipDeletesUntil is set, then delete commit entries whose commitId is <= skipDeletesUntil will not be synced from server to client
   int? skipDeletesUntil;
@@ -21,13 +21,10 @@ class SyncVerbBuilder implements VerbBuilder {
   @override
   String buildCommand() {
     StringBuffer serverCommandBuffer = StringBuffer('sync:');
-    if (isPaginated) {
-      serverCommandBuffer.write('from:');
-    }
+    // removed isPaginated logic, since sync:from is the default sync verb on server
+    serverCommandBuffer.write('from:');
     serverCommandBuffer.write('$commitId');
-    if (isPaginated) {
-      serverCommandBuffer.write(':limit:$limit');
-    }
+    serverCommandBuffer.write(':limit:$limit');
     if (skipDeletesUntil != null) {
       serverCommandBuffer.write(':skipDeletesUntil:$skipDeletesUntil');
     }
