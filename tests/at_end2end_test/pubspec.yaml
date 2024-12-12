@@ -15,10 +15,10 @@ dependencies:
     path: ../../packages/at_client
 
 dependency_overrides:
-  at_lookup:
+  at_commons:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_lookup
+      path: packages/at_commons
       ref: atlookup_add_default_values_sync_builder
 
 dev_dependencies:
