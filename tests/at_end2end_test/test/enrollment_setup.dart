@@ -191,6 +191,7 @@ Future<String> getDefaultEncryptionPrivateKey(
   var privateKeyCommand =
       'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultEncryptionPrivateKey}.__manage$atSign';
   String encryptionPrivateKeyFromServer;
+  String encryptionPrivateKeyIV;
   try {
     var getPrivateKeyResult =
         await atLookUp.executeCommand('$privateKeyCommand\n', auth: true);
@@ -200,13 +201,15 @@ Future<String> getDefaultEncryptionPrivateKey(
     getPrivateKeyResult = getPrivateKeyResult.replaceFirst('data:', '');
     var privateKeyResultJson = jsonDecode(getPrivateKeyResult);
     encryptionPrivateKeyFromServer = privateKeyResultJson['value'];
+    encryptionPrivateKeyIV = privateKeyResultJson['iv'];
   } on Exception catch (e) {
     throw AtEnrollmentException(
         'Exception while getting encrypted private key/self key from server: $e');
   }
   AtEncryptionResult? atEncryptionResult = atLookUp.atChops?.decryptString(
       encryptionPrivateKeyFromServer, EncryptionKeyType.aes256,
-      keyName: 'apkamSymmetricKey', iv: AtChopsUtil.generateIVLegacy());
+      keyName: 'apkamSymmetricKey',
+      iv: AtChopsUtil.generateIVFromBase64String(encryptionPrivateKeyIV));
   return atEncryptionResult?.result;
 }
 
@@ -218,6 +221,7 @@ Future<String> getDefaultSelfEncryptionKey(
   var selfEncryptionKeyCommand =
       'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultSelfEncryptionKey}.__manage$atSign';
   String selfEncryptionKeyFromServer;
+  String selfEncryptionKeyIV;
   try {
     String? encryptedSelfEncryptionKey = await atLookUp
         .executeCommand('$selfEncryptionKeyCommand\n', auth: true);
@@ -230,12 +234,14 @@ Future<String> getDefaultSelfEncryptionKey(
         encryptedSelfEncryptionKey.replaceFirst('data:', '');
     var selfEncryptionKeyResultJson = jsonDecode(encryptedSelfEncryptionKey);
     selfEncryptionKeyFromServer = selfEncryptionKeyResultJson['value'];
+    selfEncryptionKeyIV = selfEncryptionKeyResultJson['iv'];
   } on Exception catch (e) {
     throw AtEnrollmentException(
         'Exception while getting encrypted private key/self key from server: $e');
   }
   AtEncryptionResult? atEncryptionResult = atLookUp.atChops?.decryptString(
       selfEncryptionKeyFromServer, EncryptionKeyType.aes256,
-      keyName: 'apkamSymmetricKey', iv: AtChopsUtil.generateIVLegacy());
+      keyName: 'apkamSymmetricKey',
+      iv: AtChopsUtil.generateIVFromBase64String(selfEncryptionKeyIV));
   return atEncryptionResult?.result;
 }
