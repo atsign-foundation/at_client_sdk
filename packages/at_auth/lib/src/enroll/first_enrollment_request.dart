@@ -23,13 +23,8 @@ import 'package:at_auth/src/enroll/base_enrollment_request.dart';
 /// encrypted with the APKAM symmetric key and stored into the server.
 
 class FirstEnrollmentRequest extends BaseEnrollmentRequest {
-  String encryptedDefaultEncryptionPrivateKey;
-  String encryptedDefaultSelfEncryptionKey;
-
   FirstEnrollmentRequest(
       {required super.appName,
       required super.deviceName,
-      required super.apkamPublicKey,
-      required this.encryptedDefaultEncryptionPrivateKey,
-      required this.encryptedDefaultSelfEncryptionKey});
+      required super.apkamPublicKey});
 }
