@@ -542,6 +542,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     // Sync verb syntax has to be changed before removing these deprecations
     var syncBuilder = SyncVerbBuilder()
       ..commitId = lastReceivedServerCommitId
+      ..limit = _atClient.getPreferences()!.syncPageLimit
       ..regex = _atClient.getPreferences()!.syncRegex;
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
