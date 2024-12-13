@@ -30,6 +30,7 @@ class AuthorisationService {
       throw Exception('Unexpected server response: $rawResponse');
     }
     final rawData = rawResponse.substring(rawResponse.indexOf('data:') + 5);
+    print(rawData);
     final data = jsonDecode(rawData) as Map<String, dynamic>;
     // TODO: Filter out `firstApp` enrolment
     final enrollmentRequests = data.entries.map(EnrollmentRequest.fromServer).toList();
@@ -40,25 +41,42 @@ class AuthorisationService {
   //   return true;
   // }
 
-  // Future<void> approve(String enrollmentId) async {
-  //   final keychainManager = KeyChainManager.getInstance();
-  //   final currentAtSign = (await keychainManager.getAtSign())!;
-  //   print(currentAtSign);
-  //   atAuthBase.atEnrollment('asdf').approve(
-  //         EnrollmentRequestDecision.approved(
-  //           ApprovedRequestDecisionBuilder(
-  //             enrollmentId: 'enrollmentId',
-  //             encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key',
-  //           ),
-  //         ),
-  //         AtLookupImpl(
-  //           currentAtSign,
-  //           'dummy-root-domain',
-  //           64,
-  //           privateKey: await keychainManager.getPkamPrivateKey(currentAtSign),
-  //         ),
-  //       );
-  // }
+  Future<void> approve(EnrollmentRequest enrollmentRequest, AtClient atClient) async {
+    // Get the lookup service from the secondary server.
+    final atLookup = atClient.getRemoteSecondary()!.atLookUp;
+    final keychainManager = KeyChainManager.getInstance();
+    final currentAtSign = (await keychainManager.getAtSign())!;
+    print(currentAtSign);
+    final enrollmentOutcome = await atAuthBase.atEnrollment(currentAtSign).approve(
+          EnrollmentRequestDecision.approved(
+            ApprovedRequestDecisionBuilder(
+              enrollmentId: enrollmentRequest.enrollmentId,
+              encryptedAPKAMSymmetricKey: enrollmentRequest.encryptedAPKAMSymmetricKey!,
+            ),
+          ),
+          atLookup,
+        );
+    print(enrollmentOutcome);
+  }
+}
+
+enum EnrollmentStatus {
+  pending,
+  approved,
+  rejected;
+
+  static EnrollmentStatus fromString(String status) {
+    switch (status) {
+      case 'pending':
+        return EnrollmentStatus.pending;
+      case 'approved':
+        return EnrollmentStatus.approved;
+      case 'rejected':
+        return EnrollmentStatus.rejected;
+      default:
+        throw Exception('Unknown status: $status');
+    }
+  }
 }
 
 /// {@template enrollment_request}
@@ -73,7 +91,9 @@ class EnrollmentRequest {
     required this.deviceName,
     required this.status,
     required this.namespacePermissions,
+    this.encryptedAPKAMSymmetricKey,
   });
+  // TODO: Add an asssert to confirm that if the status is pending there is an encryptedAPKAMSymmetricKey.
 
   /// The unique identifier for this enrollment request.
   final String enrollmentId;
@@ -85,7 +105,11 @@ class EnrollmentRequest {
   final String deviceName;
 
   /// The current status of the request.
-  final String status; // TODO: Make this an enum.
+  final EnrollmentStatus status;
+
+  /// The encrypted APKAM symmetric key.
+  /// Will only be present if the request is pending TODO: Check if this is correct.
+  final String? encryptedAPKAMSymmetricKey;
 
   /// List of permissions requested by the app and device.
   /// Empty list means no permissions.
@@ -98,9 +122,10 @@ class EnrollmentRequest {
     final enrollmentId = entry.key.split('.').first;
     return EnrollmentRequest(
       enrollmentId: enrollmentId,
-      appName: entry.value['appName'],
-      deviceName: entry.value['deviceName'],
-      status: entry.value['status'],
+      appName: entry.value['appName'] as String,
+      deviceName: entry.value['deviceName'] as String,
+      status: EnrollmentStatus.fromString(entry.value['status'] as String),
+      encryptedAPKAMSymmetricKey: entry.value['encryptedAPKAMSymmetricKey'] as String?,
       // Looks like: `namespace: {ns1: rw, ns2: r}`
       namespacePermissions: (entry.value['namespace'] as Map<String, dynamic>)
           .cast<String, String>()
@@ -123,16 +148,22 @@ class EnrollmentRequest {
         other.appName == appName &&
         other.deviceName == deviceName &&
         other.status == status &&
+        other.encryptedAPKAMSymmetricKey == encryptedAPKAMSymmetricKey &&
         other.namespacePermissions == namespacePermissions;
   }
 
   @override
   int get hashCode =>
-      enrollmentId.hashCode ^ appName.hashCode ^ deviceName.hashCode ^ status.hashCode ^ namespacePermissions.hashCode;
+      enrollmentId.hashCode ^
+      appName.hashCode ^
+      deviceName.hashCode ^
+      status.hashCode ^
+      namespacePermissions.hashCode ^
+      encryptedAPKAMSymmetricKey.hashCode;
 
   @override
   String toString() {
-    return 'EnrollmentRequest(enrollmentId: $enrollmentId, appName: $appName, deviceName: $deviceName, status: $status, namespaces: $namespacePermissions)';
+    return 'EnrollmentRequest(enrollmentId: $enrollmentId, appName: $appName, deviceName: $deviceName, status: $status, namespaces: $namespacePermissions, encryptedAPKAMSymmetricKey: $encryptedAPKAMSymmetricKey)';
   }
 }
 
