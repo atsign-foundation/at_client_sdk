@@ -1,5 +1,6 @@
 # 3.3.1
 - fix: isInSync bug fix for apkam connection
+- fix: remove deprecated isPaginated param from SyncVerbBuilder in SyncServiceImpl
 ## 3.3.0
 - feat: add the AtClientBindings mixin which was initially added to the 
   noports_core package but has broader applicability.
