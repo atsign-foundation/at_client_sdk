@@ -7,9 +7,8 @@ class SyncVerbBuilder implements VerbBuilder {
   /// if regex is set, then only keys matching the regex will be synced from server to client
   String? regex;
 
-  @Deprecated(
-      'This field is not used anymore even though it is set in client. Remove this in next major release')
-  int limit = 10;
+  /// Number of entries to be fetched from commit log on the server in one batch
+  int limit = 25;
 
   @Deprecated(
       'This field is not used anymore even though it is set in client. Remove this in next major release')
