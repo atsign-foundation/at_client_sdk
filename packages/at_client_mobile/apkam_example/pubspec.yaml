@@ -19,6 +19,7 @@ dependencies:
   at_auth: ^2.0.7
   at_lookup: ^3.0.49
   at_onboarding_cli: ^1.7.0
+  at_commons: ^5.0.1
 
 dev_dependencies:
   flutter_test:

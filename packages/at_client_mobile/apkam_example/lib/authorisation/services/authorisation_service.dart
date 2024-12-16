@@ -1,18 +1,74 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:flutter/foundation.dart';
 
 class AuthorisationService {
-  // I should create a stream controller for this and have a timer to periodically check for new requests.
-  // There should also be a method to manually check for new requests (which can be used on app open or foregrounded).
+  AuthorisationService(this.atClient);
 
-  //? Probably best as a stream of request objects.
-  // Empty list means no requests.
+  final AtClient atClient;
+
+  static const _kDefaultExpiry = Duration(minutes: 5);
+  static const String _kSppRegex = r'[A-Za-z0-9]{6,16}';
+
+  StreamController<EnrollmentRequest>? _enrollmentRequestsController;
+  StreamSubscription? _newRequestsSubscription;
+
+  /// Call this method before any other methods.
+  ///
+  /// Sets up the subscription to the server for new enrollment requests and
+  /// fetches all existing requests.
+  Future<void> init() async {
+    _enrollmentRequestsController ??= StreamController<EnrollmentRequest>.broadcast();
+    _enrollmentRequestsController!.onListen = () async {
+      final requests = await getAllEnrollmentRequests();
+      for (final request in requests) {
+        _enrollmentRequestsController!.add(request);
+      }
+      _listenForNewRequests();
+    };
+  }
+
+  void _listenForNewRequests() async {
+    assert(_enrollmentRequestsController != null, 'Call AuthorisationService.init() first');
+    // Set up a stream to listen for new enrollment requests.
+    final stream = atClient.notificationService.subscribe(
+      regex: r'.*\.new\.enrollments\.__manage',
+      shouldDecrypt: false,
+    );
+
+    // Add the new requests to the stream controller.
+    _newRequestsSubscription = stream.listen((AtNotification notification) {
+      try {
+        final enrollmentRequest = EnrollmentRequest.fromServer(
+          MapEntry(
+            notification.key,
+            notification.value,
+          ),
+        );
+        if (!_enrollmentRequestsController!.isClosed) {
+          _enrollmentRequestsController!.add(enrollmentRequest);
+        }
+      } catch (e, st) {
+        debugPrint(e.toString());
+        debugPrint(st.toString());
+        _enrollmentRequestsController!.addError(UnexpectedResponseException(e.toString()));
+      }
+    });
+  }
+
+  Future<void> dispose() async {
+    await _newRequestsSubscription?.cancel();
+    await _enrollmentRequestsController?.close();
+  }
+
+  Stream<EnrollmentRequest>? get enrollmentRequests => _enrollmentRequestsController?.stream;
+
   /// Get all enrollment requests. This includes all past and pending requests.
-  Future<List<EnrollmentRequest>> getAllEnrollmentRequests(AtClient atClient) async {
+  /// Empty list means no requests.
+  Future<List<EnrollmentRequest>> getAllEnrollmentRequests() async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
 
@@ -27,27 +83,76 @@ class AuthorisationService {
 
     // Parse the raw response.
     if (rawResponse == null || !rawResponse.startsWith('data:')) {
-      throw Exception('Unexpected server response: $rawResponse');
+      throw UnexpectedResponseException(rawResponse ?? 'No response from server');
     }
     final rawData = rawResponse.substring(rawResponse.indexOf('data:') + 5);
-    print(rawData);
     final data = jsonDecode(rawData) as Map<String, dynamic>;
     // TODO: Filter out `firstApp` enrolment
     final enrollmentRequests = data.entries.map(EnrollmentRequest.fromServer).toList();
     return enrollmentRequests;
   }
 
-  // Future<bool> isMasterKey() async {
-  //   return true;
-  // }
+  Future<bool> isMasterKey() async {
+    throw UnimplementedError();
+  }
 
-  Future<void> approve(EnrollmentRequest enrollmentRequest, AtClient atClient) async {
+  /// Check if the given spp is valid.
+  /// Must be alphanumeric and 6 to 16 characters long.
+  bool _isSppValid(String otp) {
+    final regex = RegExp('^$_kSppRegex\$');
+    return regex.hasMatch(otp);
+  }
+
+  /// Set a semi-permanent passcode/OTP.
+  ///
+  /// This is used to approve enrollments.
+  /// It can be useful to set an spp if enrolling many devices at once.
+  ///
+  /// The [spp] must be alphanumeric and 6 to 16 characters long.
+  ///
+  /// [sppExpiry] Defaults to 5 minutes.
+  Future<void> setSpp({
+    required String spp,
+    Duration sppExpiry = _kDefaultExpiry,
+  }) async {
+    if (!_isSppValid(spp)) {
+      throw InvalidSppException();
+    }
+
+    final command = 'otp:put:$spp:ttl:${sppExpiry.inMilliseconds}\n';
+
+    final atLookup = atClient.getRemoteSecondary()!.atLookUp;
+    final response = await atLookup.executeCommand(command, auth: true);
+    // TODO: Add error handling
+    debugPrint(response);
+  }
+
+  /// Get the OTP from the server.
+  ///
+  /// If an spp is set, the server will return the spp,
+  /// otherwise it will return a randomly generated OTP.
+  ///
+  /// [optExpiry] Defaults to 5 minutes.
+  Future<String> generateOtp({Duration optExpiry = _kDefaultExpiry}) async {
+    final command = 'otp:get:ttl:${optExpiry.inMilliseconds}\n';
+
+    final atLookup = atClient.getRemoteSecondary()!.atLookUp;
+    final response = await atLookup.executeCommand(command, auth: true);
+    if (response != null && response.startsWith('data:')) {
+      final otp = response.substring(response.indexOf('data:') + 5);
+      assert(otp.length >= 6, 'OTP should be 6 or more characters');
+      return otp;
+    } else {
+      throw OtpGenerationException(response ?? 'No response from server');
+    }
+  }
+
+  /// Approve the given [enrollmentRequest].
+  Future<void> approve(EnrollmentRequest enrollmentRequest) async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
-    final keychainManager = KeyChainManager.getInstance();
-    final currentAtSign = (await keychainManager.getAtSign())!;
-    print(currentAtSign);
-    final enrollmentOutcome = await atAuthBase.atEnrollment(currentAtSign).approve(
+    final atSign = atClient.getCurrentAtSign()!;
+    final enrollmentOutcome = await atAuthBase.atEnrollment(atSign).approve(
           EnrollmentRequestDecision.approved(
             ApprovedRequestDecisionBuilder(
               enrollmentId: enrollmentRequest.enrollmentId,
@@ -56,26 +161,27 @@ class AuthorisationService {
           ),
           atLookup,
         );
-    print(enrollmentOutcome);
-  }
-}
-
-enum EnrollmentStatus {
-  pending,
-  approved,
-  rejected;
-
-  static EnrollmentStatus fromString(String status) {
-    switch (status) {
-      case 'pending':
-        return EnrollmentStatus.pending;
-      case 'approved':
-        return EnrollmentStatus.approved;
-      case 'rejected':
-        return EnrollmentStatus.rejected;
-      default:
-        throw Exception('Unknown status: $status');
+    if (enrollmentOutcome.enrollStatus != EnrollmentStatus.approved) {
+      throw FailedToApproveException();
     }
+    return;
+  }
+
+  /// Deny the given [enrollmentRequest].
+  Future<void> deny(EnrollmentRequest enrollmentRequest) async {
+    // Get the lookup service from the secondary server.
+    final atLookup = atClient.getRemoteSecondary()!.atLookUp;
+    final atSign = atClient.getCurrentAtSign()!;
+    final enrollmentOutcome = await atAuthBase.atEnrollment(atSign).deny(
+          EnrollmentRequestDecision.denied(
+            enrollmentRequest.enrollmentId,
+          ),
+          atLookup,
+        );
+    if (enrollmentOutcome.enrollStatus != EnrollmentStatus.denied) {
+      throw FailedToDenyException();
+    }
+    return;
   }
 }
 
@@ -124,7 +230,7 @@ class EnrollmentRequest {
       enrollmentId: enrollmentId,
       appName: entry.value['appName'] as String,
       deviceName: entry.value['deviceName'] as String,
-      status: EnrollmentStatus.fromString(entry.value['status'] as String),
+      status: getEnrollStatusFromString(entry.value['status'] as String),
       encryptedAPKAMSymmetricKey: entry.value['encryptedAPKAMSymmetricKey'] as String?,
       // Looks like: `namespace: {ns1: rw, ns2: r}`
       namespacePermissions: (entry.value['namespace'] as Map<String, dynamic>)
@@ -163,12 +269,13 @@ class EnrollmentRequest {
 
   @override
   String toString() {
-    return 'EnrollmentRequest(enrollmentId: $enrollmentId, appName: $appName, deviceName: $deviceName, status: $status, namespaces: $namespacePermissions, encryptedAPKAMSymmetricKey: $encryptedAPKAMSymmetricKey)';
+    return 'EnrollmentRequest(enrollmentId: $enrollmentId, appName: $appName, deviceName: $deviceName, status: $status, namespaces: $namespacePermissions, encryptedAPKAMSymmetricKey: ${encryptedAPKAMSymmetricKey?.substring(0, 10)})';
   }
 }
 
 /// {@template namespace_permission}
 /// Model class representing a namespace permission.
+/// The string representation of the permission is `namespace: {ns1: rw, ns2: r}` where read is `r` and write is `w`.
 /// {@endtemplate}
 @immutable
 class NamespacePermission {
@@ -202,4 +309,35 @@ class NamespacePermission {
   String toString() {
     return 'NamespacePermission(namespace: $namespace, read: $read, write: $write)';
   }
+}
+
+class AuthorisationException implements Exception {
+  AuthorisationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() {
+    return 'AuthorisationException: $message';
+  }
+}
+
+final class InvalidSppException extends AuthorisationException {
+  InvalidSppException() : super('SPP must be alphanumeric and 6 to 16 characters long');
+}
+
+final class OtpGenerationException extends AuthorisationException {
+  OtpGenerationException(String serverMessage) : super('Failed to generate OTP: $serverMessage');
+}
+
+final class UnexpectedResponseException extends AuthorisationException {
+  UnexpectedResponseException(String response) : super('Unexpected server response: $response');
+}
+
+final class FailedToApproveException extends AuthorisationException {
+  FailedToApproveException() : super('Failed to approve enrollment request');
+}
+
+final class FailedToDenyException extends AuthorisationException {
+  FailedToDenyException() : super('Failed to deny enrollment request');
 }

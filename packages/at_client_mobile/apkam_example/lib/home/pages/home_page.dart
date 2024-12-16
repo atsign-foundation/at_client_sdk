@@ -43,7 +43,7 @@ class HomePageState extends State<HomePage> {
                 ],
               ),
               trailing: switch (request.status) {
-                authorisation_service.EnrollmentStatus.pending => Row(
+                EnrollmentStatus.pending => Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       ElevatedButton(
@@ -67,13 +67,21 @@ class HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-                authorisation_service.EnrollmentStatus.approved => RawChip(
+                EnrollmentStatus.approved => RawChip(
                     label: Text('Approved'),
                     color: WidgetStateProperty.all<Color>(Colors.green),
                   ),
-                authorisation_service.EnrollmentStatus.rejected => RawChip(
-                    label: Text('Rejected'),
+                EnrollmentStatus.denied => RawChip(
+                    label: Text('Denied'),
                     color: WidgetStateProperty.all<Color>(Colors.red),
+                  ),
+                EnrollmentStatus.revoked => RawChip(
+                    label: Text('Revoked'),
+                    color: WidgetStateProperty.all<Color>(Colors.orange),
+                  ),
+                EnrollmentStatus.expired => RawChip(
+                    label: Text('Expired'),
+                    color: WidgetStateProperty.all<Color>(Colors.grey),
                   ),
               },
             ),
