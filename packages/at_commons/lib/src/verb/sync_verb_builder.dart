@@ -20,7 +20,6 @@ class SyncVerbBuilder implements VerbBuilder {
   @override
   String buildCommand() {
     StringBuffer serverCommandBuffer = StringBuffer('sync:');
-    // removed isPaginated logic, since sync:from is the default sync verb on server
     serverCommandBuffer.write('from:');
     serverCommandBuffer.write('$commitId');
     serverCommandBuffer.write(':limit:$limit');
