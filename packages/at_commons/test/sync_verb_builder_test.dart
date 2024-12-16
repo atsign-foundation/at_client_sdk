@@ -5,8 +5,8 @@ void main() {
   test('build sync verb command with defaults values', () {
     var syncVerbBuilder = SyncVerbBuilder()..commitId = -1;
     var command = syncVerbBuilder.buildCommand();
-    expect(command, 'sync:-1\n');
-    var regex = RegExp(VerbSyntax.sync);
+    expect(command, 'sync:from:-1:limit:25\n');
+    var regex = RegExp(VerbSyntax.syncFrom);
     command = command.replaceAll('\n', '');
     assert(regex.hasMatch(command));
   });
@@ -16,8 +16,8 @@ void main() {
       ..regex = '.buzz'
       ..commitId = -1;
     var command = syncVerbBuilder.buildCommand();
-    expect(command, 'sync:-1:.buzz\n');
-    var regex = RegExp(VerbSyntax.sync);
+    expect(command, 'sync:from:-1:limit:25:.buzz\n');
+    var regex = RegExp(VerbSyntax.syncFrom);
     command = command.replaceAll('\n', '');
     assert(regex.hasMatch(command));
   });
@@ -27,8 +27,8 @@ void main() {
       ..commitId = 3
       ..regex = '.buzz';
     var command = syncVerbBuilder.buildCommand();
-    expect(command, 'sync:3:.buzz\n');
-    var regex = RegExp(VerbSyntax.sync);
+    expect(command, 'sync:from:3:limit:25:.buzz\n');
+    var regex = RegExp(VerbSyntax.syncFrom);
     command = command.replaceAll('\n', '');
     assert(regex.hasMatch(command));
   });

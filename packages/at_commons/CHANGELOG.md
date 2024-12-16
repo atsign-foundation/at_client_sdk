@@ -1,3 +1,6 @@
+## 5.1.2
+- fix: remove isPaginated check in SyncVerbBuilder and always set from: and limit: since sync:from verb
+  expects these params to be set.
 ## 5.1.1
 - fix: Introduce IV params for apkam enrollment flow
 ## 5.1.0
