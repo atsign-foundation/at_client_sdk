@@ -31,7 +31,7 @@ dependencies:
   async: ^2.9.0
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
-  at_commons: ^5.0.0
+  at_commons: ^5.1.2
   at_utils: ^3.0.19
   at_chops: ^2.0.1
   at_lookup: ^3.0.49
@@ -40,13 +40,6 @@ dependencies:
   at_persistence_secondary_server: ^3.0.64
   meta: ^1.8.0
   version: ^3.0.2
-
-dependency_overrides:
-  at_commons:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries.git
-      path: packages/at_commons
-      ref: atlookup_add_default_values_sync_builder
 
 dev_dependencies:
   lints: ^4.0.0
