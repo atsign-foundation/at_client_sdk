@@ -1,3 +1,5 @@
+## 3.0.0
+- feat: Faster AES encryption/decryption using better_crypto
 ## 2.2.0
 - feat: Implement "argon2id" hashing algorithm to generate hash from a given passphrase.
 - feat: Add generics to "AtEncryptionAlgorithm" and "AtHashingAlgorithm" to support multiple data types in their
