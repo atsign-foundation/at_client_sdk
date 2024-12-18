@@ -3,6 +3,7 @@
 - fix: remove deprecated isPaginated param from SyncVerbBuilder in SyncServiceImpl
 - build[deps]: Upgraded dependencies for the following packages:
   - at_commons to v5.1.2
+- feat: Introduce "publicKeyHash" which uses SHA hashing to verify change in the encryption public key
 ## 3.3.0
 - feat: add the AtClientBindings mixin which was initially added to the 
   noports_core package but has broader applicability.
