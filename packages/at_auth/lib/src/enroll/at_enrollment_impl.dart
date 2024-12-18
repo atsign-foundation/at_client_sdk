@@ -124,14 +124,14 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
             EncryptionKeyType.aes256,
             keyName: 'apkamSymmetricKey',
             iv: AtChopsUtil.generateIVLegacy())
-        ?.result;
+        .result;
 
     // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
     String encryptedDefaultSelfEncryptionKey = atLookUp.atChops
         ?.encryptString(atLookUp.atChops!.atChopsKeys.selfEncryptionKey!.key,
             EncryptionKeyType.aes256,
             keyName: 'apkamSymmetricKey', iv: AtChopsUtil.generateIVLegacy())
-        ?.result;
+        .result;
 
     String command = 'enroll:approve:${jsonEncode({
           'enrollmentId': enrollmentRequestDecision.enrollmentId,

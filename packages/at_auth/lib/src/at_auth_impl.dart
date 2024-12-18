@@ -51,7 +51,7 @@ class AtAuthImpl implements AtAuth {
     if (atAuthRequest.atKeysFilePath != null) {
       atAuthKeys = await _prepareAtAuthKeysFromFilePath(atAuthRequest);
     } else if (atAuthRequest.encryptedKeysMap != null) {
-      atAuthKeys = await _decryptAtKeysWithSelfEncKey(
+      atAuthKeys = _decryptAtKeysWithSelfEncKey(
           atAuthRequest.encryptedKeysMap!, PkamAuthMode.keysFile);
     } else {
       atAuthKeys = atAuthRequest.atAuthKeys;
