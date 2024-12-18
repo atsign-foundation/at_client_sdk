@@ -1,2 +1,2 @@
-const String appNamespace = 'apkam-flutter-test';
+const String appNamespace = 'apkamfluttertest';
 const String rootDomain = 'root.atsign.org';

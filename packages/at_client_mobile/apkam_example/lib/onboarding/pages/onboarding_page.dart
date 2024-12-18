@@ -1,9 +1,12 @@
+import 'package:apkam_example/constants.dart';
 import 'package:apkam_example/home/pages/home_page.dart';
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:flutter/material.dart';
 
 class OnboardingPage extends StatefulWidget {
-  const OnboardingPage({super.key});
+  const OnboardingPage({required this.atClientPreference, super.key});
+
+  final AtClientPreference atClientPreference;
 
   @override
   OnboardingPageState createState() => OnboardingPageState();
@@ -19,19 +22,24 @@ class OnboardingPageState extends State<OnboardingPage> {
             final result = await AtOnboarding.onboard(
               context: context,
               config: AtOnboardingConfig(
-                atClientPreference: AtClientPreference(),
+                atClientPreference: widget.atClientPreference,
                 rootEnvironment: RootEnvironment.Production,
                 hideQrScan: true,
               ),
             );
             switch (result.status) {
               case AtOnboardingResultStatus.success:
-                final atsign = result.atsign;
-                print(atsign);
+                final atSign = result.atsign;
+                print(atSign);
+                final _ = await AtClientManager.getInstance().setCurrentAtSign(
+                  atSign!,
+                  appNamespace,
+                  widget.atClientPreference,
+                );
                 if (context.mounted) {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => HomePage(),
+                      builder: (context) => const HomePage(),
                     ),
                   );
                 }

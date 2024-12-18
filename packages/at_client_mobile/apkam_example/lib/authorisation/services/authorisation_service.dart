@@ -3,12 +3,23 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:at_client/at_client_mixins.dart';
 
-class AuthorisationService {
+/// {@template authorisation_service}
+/// A service class for managing enrollment requests.
+/// {@endtemplate}
+class AuthorisationService with AtClientBindings {
+  /// {@macro authorisation_service}
   AuthorisationService(this.atClient);
 
+  @override
   final AtClient atClient;
+
+  @override
+  final AtSignLogger logger = AtSignLogger('AuthorisationService');
 
   static const _kDefaultExpiry = Duration(minutes: 5);
   static const String _kSppRegex = r'[A-Za-z0-9]{6,16}';
@@ -25,13 +36,15 @@ class AuthorisationService {
     _enrollmentRequestsController!.onListen = () async {
       final requests = await getAllEnrollmentRequests();
       for (final request in requests) {
+        // TODO: I don't like this
+        await Future<void>.delayed(const Duration(milliseconds: 100));
         _enrollmentRequestsController!.add(request);
       }
       _listenForNewRequests();
     };
   }
 
-  void _listenForNewRequests() async {
+  void _listenForNewRequests() {
     assert(_enrollmentRequestsController != null, 'Call AuthorisationService.init() first');
     // Set up a stream to listen for new enrollment requests.
     final stream = atClient.notificationService.subscribe(
@@ -40,31 +53,39 @@ class AuthorisationService {
     );
 
     // Add the new requests to the stream controller.
-    _newRequestsSubscription = stream.listen((AtNotification notification) {
+    _newRequestsSubscription = stream.listen((AtNotification notification) async {
       try {
         final enrollmentRequest = EnrollmentRequest.fromServer(
           MapEntry(
             notification.key,
-            notification.value,
+            jsonDecode(notification.value!),
           ),
         );
         if (!_enrollmentRequestsController!.isClosed) {
           _enrollmentRequestsController!.add(enrollmentRequest);
         }
-      } catch (e, st) {
-        debugPrint(e.toString());
-        debugPrint(st.toString());
+      } catch (e) {
         _enrollmentRequestsController!.addError(UnexpectedResponseException(e.toString()));
       }
     });
   }
 
+  /// Call this method when the service is no longer needed.
+  ///
+  /// Closes and cancels all streams and subscriptions.
   Future<void> dispose() async {
     await _newRequestsSubscription?.cancel();
     await _enrollmentRequestsController?.close();
   }
 
-  Stream<EnrollmentRequest>? get enrollmentRequests => _enrollmentRequestsController?.stream;
+  /// Stream of all enrollment requests.
+  /// Use this for getting real-time updates on new requests.
+  Stream<EnrollmentRequest> get enrollmentRequests {
+    if (_enrollmentRequestsController == null) {
+      throw StateError('init() must be called before accessing enrollmentRequests');
+    }
+    return _enrollmentRequestsController!.stream;
+  }
 
   /// Get all enrollment requests. This includes all past and pending requests.
   /// Empty list means no requests.
@@ -92,7 +113,7 @@ class AuthorisationService {
     return enrollmentRequests;
   }
 
-  Future<bool> isMasterKey() async {
+  Future<bool> isManagerKey() async {
     throw UnimplementedError();
   }
 
@@ -133,6 +154,8 @@ class AuthorisationService {
   /// otherwise it will return a randomly generated OTP.
   ///
   /// [optExpiry] Defaults to 5 minutes.
+  ///
+  /// Throws [OtpGenerationException] if the OTP could not be generated.
   Future<String> generateOtp({Duration optExpiry = _kDefaultExpiry}) async {
     final command = 'otp:get:ttl:${optExpiry.inMilliseconds}\n';
 
@@ -148,6 +171,8 @@ class AuthorisationService {
   }
 
   /// Approve the given [enrollmentRequest].
+  ///
+  /// Throws [FailedToApproveException] if the request was not approved.
   Future<void> approve(EnrollmentRequest enrollmentRequest) async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
@@ -168,8 +193,9 @@ class AuthorisationService {
   }
 
   /// Deny the given [enrollmentRequest].
+  ///
+  /// Throws [FailedToDenyException] if the request was not denied.
   Future<void> deny(EnrollmentRequest enrollmentRequest) async {
-    // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final atSign = atClient.getCurrentAtSign()!;
     final enrollmentOutcome = await atAuthBase.atEnrollment(atSign).deny(
@@ -180,6 +206,25 @@ class AuthorisationService {
         );
     if (enrollmentOutcome.enrollStatus != EnrollmentStatus.denied) {
       throw FailedToDenyException();
+    }
+    return;
+  }
+
+  /// Revoke the given [enrollmentRequest].
+  ///
+  /// This is for denying a previously approved request.
+  /// Throws [FailedToRevokeException] if the request was not revoked.
+  Future<void> revoke(EnrollmentRequest enrollmentRequest) async {
+    final atLookup = atClient.getRemoteSecondary()!.atLookUp;
+    final atSign = atClient.getCurrentAtSign()!;
+    final enrollmentOutcome = await atAuthBase.atEnrollment(atSign).revoke(
+          EnrollmentRequestDecision.revoked(
+            enrollmentRequest.enrollmentId,
+          ),
+          atLookup,
+        );
+    if (enrollmentOutcome.enrollStatus != EnrollmentStatus.revoked) {
+      throw FailedToRevokeException();
     }
     return;
   }
@@ -198,8 +243,10 @@ class EnrollmentRequest {
     required this.status,
     required this.namespacePermissions,
     this.encryptedAPKAMSymmetricKey,
-  });
-  // TODO: Add an asssert to confirm that if the status is pending there is an encryptedAPKAMSymmetricKey.
+  }) : assert(
+          status != EnrollmentStatus.pending || encryptedAPKAMSymmetricKey != null,
+          'Pending requests should have an encryptedAPKAMSymmetricKey',
+        );
 
   /// The unique identifier for this enrollment request.
   final String enrollmentId;
@@ -230,7 +277,10 @@ class EnrollmentRequest {
       enrollmentId: enrollmentId,
       appName: entry.value['appName'] as String,
       deviceName: entry.value['deviceName'] as String,
-      status: getEnrollStatusFromString(entry.value['status'] as String),
+      // Status can be null when received from a notification
+      status: entry.value['status'] != null
+          ? getEnrollStatusFromString(entry.value['status'] as String)
+          : EnrollmentStatus.pending,
       encryptedAPKAMSymmetricKey: entry.value['encryptedAPKAMSymmetricKey'] as String?,
       // Looks like: `namespace: {ns1: rw, ns2: r}`
       namespacePermissions: (entry.value['namespace'] as Map<String, dynamic>)
@@ -255,7 +305,7 @@ class EnrollmentRequest {
         other.deviceName == deviceName &&
         other.status == status &&
         other.encryptedAPKAMSymmetricKey == encryptedAPKAMSymmetricKey &&
-        other.namespacePermissions == namespacePermissions;
+        const DeepCollectionEquality().equals(other.namespacePermissions, namespacePermissions);
   }
 
   @override
@@ -340,4 +390,8 @@ final class FailedToApproveException extends AuthorisationException {
 
 final class FailedToDenyException extends AuthorisationException {
   FailedToDenyException() : super('Failed to deny enrollment request');
+}
+
+final class FailedToRevokeException extends AuthorisationException {
+  FailedToRevokeException() : super('Failed to revoke enrollment request');
 }
