@@ -14,7 +14,10 @@ dependencies:
 
 dependency_overrides:
   at_auth:
-    path: ../../packages/at_auth
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_auth
+      ref: at_auth_faster_aes_changes
   at_onboarding_cli:
     path: ../../packages/at_onboarding_cli
   at_commons:
