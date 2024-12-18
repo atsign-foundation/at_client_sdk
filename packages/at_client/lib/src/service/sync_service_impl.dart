@@ -740,6 +740,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.pubKeyCS != null) {
       metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
     }
+    if (metadata.pubKeyHash != null) {
+      metadataStr +=
+          ':${AtConstants.sharedWithPublicKeyHash}:${metadata.pubKeyHash?.hash}';
+      metadataStr +=
+          ':${AtConstants.sharedWithPublicKeyHashingAlgo}:${metadata.pubKeyHash?.hashingAlgo}';
+    }
+
     if (metadata.encoding != null) {
       metadataStr += ':encoding:${metadata.encoding}';
     }
@@ -962,6 +969,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         builder.atKey.metadata.pubKeyCS =
             metaData[AtConstants.sharedWithPublicKeyCheckSum];
       }
+      if (metaData[AtConstants.sharedWithPublicKeyHash] != null) {
+        Map pubKeyHash =
+            jsonDecode(metaData[AtConstants.sharedWithPublicKeyHash]);
+        builder.atKey.metadata.pubKeyHash =
+            PublicKeyHash(pubKeyHash['hash'], pubKeyHash['hashingAlgo']);
+      }
       if (metaData[AtConstants.encoding] != null) {
         builder.atKey.metadata.encoding = metaData[AtConstants.encoding];
       }
@@ -982,6 +995,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo] != null) {
         builder.atKey.metadata.skeEncAlgo =
             metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo];
+      }
+
+      if (metaData[AtConstants.sharedWithPublicKeyHash] != null &&
+          metaData[AtConstants.sharedWithPublicKeyHashingAlgo] != null) {
+        builder.atKey.metadata.pubKeyHash = PublicKeyHash(
+            metaData[AtConstants.sharedWithPublicKeyHash],
+            metaData[AtConstants.sharedWithPublicKeyHashingAlgo]);
       }
     }
   }
