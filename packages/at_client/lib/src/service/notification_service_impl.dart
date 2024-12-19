@@ -22,8 +22,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:version/version.dart';
 
-class NotificationServiceImpl
-    implements NotificationService, AtSignChangeListener {
+class NotificationServiceImpl implements NotificationService, AtSignChangeListener {
   final Map<NotificationConfig, StreamController> _streamListeners =
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
@@ -77,34 +76,24 @@ class NotificationServiceImpl
 
   static Future<NotificationService> create(AtClient atClient,
       {required AtClientManager atClientManager, Monitor? monitor}) async {
-    final notificationService =
-        NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
+    final notificationService = NotificationServiceImpl._(atClientManager, atClient, monitor: monitor);
     // We used to call _init() at this point which would start the monitor, but now we
     // call _init() from the [subscribe] method
     return notificationService;
   }
 
-  NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
-      {Monitor? monitor}) {
+  NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient, {Monitor? monitor}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
-    _logger = AtSignLogger(
-        'NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
+    _logger = AtSignLogger('NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
 
     _logger.finer('enrollmentId: ${atClient.enrollmentId}');
     _monitor = monitor ??
-        Monitor(
-            _internalNotificationCallback,
-            _onMonitorError,
-            _atClient.getCurrentAtSign()!,
-            _atClient.getPreferences()!,
-            MonitorPreference()..keepAlive = true,
-            monitorRetry,
-            atChops: atClient.atChops,
-            enrollmentId: atClient.enrollmentId);
+        Monitor(_internalNotificationCallback, _onMonitorError, _atClient.getCurrentAtSign()!,
+            _atClient.getPreferences()!, MonitorPreference()..keepAlive = true, monitorRetry,
+            atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     _atClientManager.listenToAtSignChange(this);
-    lastReceivedNotificationAtKey = AtKey.local(
-            lastReceivedNotificationKey, _atClient.getCurrentAtSign()!,
+    lastReceivedNotificationAtKey = AtKey.local(lastReceivedNotificationKey, _atClient.getCurrentAtSign()!,
             namespace: _atClient.getPreferences()!.namespace)
         .build();
     atKeyEncryptionManager = AtKeyEncryptionManager(_atClient);
@@ -123,11 +112,9 @@ class NotificationServiceImpl
     }
     try {
       _initializing = true;
-      _logger.finer(
-          '${_atClient.getCurrentAtSign()} notification service _init()');
+      _logger.finer('${_atClient.getCurrentAtSign()} notification service _init()');
       await _startMonitor();
-      _logger.finer(
-          '${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
+      _logger.finer('${_atClient.getCurrentAtSign()} monitor status: ${_monitor?.getStatus()}');
     } finally {
       _initializing = false;
     }
@@ -137,25 +124,23 @@ class NotificationServiceImpl
     monitorIsPaused = false;
 
     if (_monitor != null && _monitor!.status == MonitorStatus.started) {
-      _logger.finer(
-          'monitor is already started for ${_atClient.getCurrentAtSign()}');
+      _logger.finer('monitor is already started for ${_atClient.getCurrentAtSign()}');
       return;
     }
 
     int? lastNotificationTime;
     try {
       lastNotificationTime = await getLastNotificationTime();
-    } catch (e) {
-      _logger.warning(
-          '${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
+    } catch (e, st) {
+      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
+      print(st);
       return;
     }
 
     try {
       await _monitor!.start(lastNotificationTime: lastNotificationTime);
     } catch (e) {
-      _logger.warning(
-          '${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
+      _logger.warning('${_atClient.getCurrentAtSign()}: startMonitor(): Failed to start monitor : $e');
       return;
     }
   }
@@ -178,10 +163,7 @@ class NotificationServiceImpl
     // Check if the new key (local:lastNotificationReceived@alice) is available in the keystore.
     // If yes, fetch the value;
     AtValue? atValue;
-    if (_atClient
-        .getLocalSecondary()!
-        .keyStore!
-        .isKeyExists(lastReceivedNotificationAtKey.toString())) {
+    if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(lastReceivedNotificationAtKey.toString())) {
       atValue = await _atClient.get(lastReceivedNotificationAtKey);
     }
     // If new key does not exist or value is null, check for the old key (_latestNotificationIdv2@alice)
@@ -190,16 +172,12 @@ class NotificationServiceImpl
       var lastNotificationKeyStr =
           '$notificationIdKey.${_atClient.getPreferences()!.namespace}${_atClient.getCurrentAtSign()}';
       var atKey = AtKey.fromString(lastNotificationKeyStr);
-      if (_atClient
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(lastNotificationKeyStr)) {
+      if (_atClient.getLocalSecondary()!.keyStore!.isKeyExists(lastNotificationKeyStr)) {
         try {
           atValue = await _atClient.get(atKey);
           await _atClient.put(lastReceivedNotificationAtKey, atValue.value);
         } on Exception catch (e) {
-          _logger.severe(
-              'Exception in getting last notification id: ${e.toString}');
+          _logger.severe('Exception in getting last notification id: ${e.toString}');
         }
       }
     }
@@ -212,8 +190,7 @@ class NotificationServiceImpl
 
   @override
   void stopAllSubscriptions() {
-    _logger.finer(
-        'stopAllSubscriptions() called - setting monitorIsPaused to true');
+    _logger.finer('stopAllSubscriptions() called - setting monitorIsPaused to true');
     monitorIsPaused = true;
     _monitor?.stop();
     _streamListeners.forEach((regex, streamController) {
@@ -227,21 +204,17 @@ class NotificationServiceImpl
       _logger.finest('DEBUG: $notificationJSON');
 
       final notificationParser = NotificationResponseParser();
-      final atNotifications = await notificationParser
-          .getAtNotifications(notificationParser.parse(notificationJSON));
+      final atNotifications = await notificationParser.getAtNotifications(notificationParser.parse(notificationJSON));
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
-          await _atClient.put(lastReceivedNotificationAtKey,
-              jsonEncode(atNotification.toJson()));
+          await _atClient.put(lastReceivedNotificationAtKey, jsonEncode(atNotification.toJson()));
         }
         _streamListeners.forEach((notificationConfig, streamController) async {
           try {
-            var transformedNotification =
-                await NotificationResponseTransformer(_atClient)
-                    .transform(Tuple()
-                      ..one = atNotification
-                      ..two = notificationConfig);
+            var transformedNotification = await NotificationResponseTransformer(_atClient).transform(Tuple()
+              ..one = atNotification
+              ..two = notificationConfig);
 
             if (notificationConfig.regex != emptyRegex) {
               if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
@@ -255,9 +228,9 @@ class NotificationServiceImpl
           }
         });
       }
-    } on Exception catch (e) {
-      _logger.severe(
-          'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+    } on Exception catch (e, st) {
+      _logger.severe('exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+      print(st);
     }
   }
 
@@ -285,8 +258,7 @@ class NotificationServiceImpl
       return false;
     }
     if (monitorIsPaused) {
-      _logger.finer(
-          '${_atClient.getCurrentAtSign()} monitor is paused. not retrying');
+      _logger.finer('${_atClient.getCurrentAtSign()} monitor is paused. not retrying');
       return false;
     }
     monitorRestartQueued = true;
@@ -295,12 +267,10 @@ class NotificationServiceImpl
       monitorRestartQueued = false;
       if (monitorIsPaused) {
         // maybe it's been paused during the time since the retry was requested
-        _logger.warning(
-            "monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
+        _logger.warning("monitorRetry() will NOT call Monitor.start() because we've stopped all subscriptions");
       } else {
         monitorRetryCallsToMonitorStart++;
-        await _monitor!
-            .start(lastNotificationTime: await getLastNotificationTime());
+        await _monitor!.start(lastNotificationTime: await getLastNotificationTime());
         // Note we do not need to handle exceptions as Monitor.start handles all of them.
         // Additionally, we do not need to queue another monitor retry, since Monitor.start
         // will call this function (_monitorRetry) if required
@@ -315,12 +285,9 @@ class NotificationServiceImpl
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool encryptValue =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+      bool checkForFinalDeliveryStatus = true, // this was the behaviour before introducing this parameter
+      bool encryptValue = true, // this was the behaviour before introducing this parameter
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -339,22 +306,15 @@ class NotificationServiceImpl
         notificationParams.atKey.sharedBy = _atClient.getCurrentAtSign();
       }
       // Prepend '@' if not already set.
-      notificationParams.atKey.sharedBy =
-          AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
+      notificationParams.atKey.sharedBy = AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
       // validate notification request
-      await atClientValidation.validateNotificationRequest(
-          _atClientManager.secondaryAddressFinder!,
-          notificationParams,
-          _atClient.getPreferences()!,
-          _atClient.getCurrentAtSign()!);
+      await atClientValidation.validateNotificationRequest(_atClientManager.secondaryAddressFinder!, notificationParams,
+          _atClient.getPreferences()!, _atClient.getCurrentAtSign()!);
       // Get the EncryptionInstance to encrypt the data.
-      var atKeyEncryption = atKeyEncryptionManager.get(
-          notificationParams.atKey, _atClient.getCurrentAtSign()!);
+      var atKeyEncryption = atKeyEncryptionManager.get(notificationParams.atKey, _atClient.getCurrentAtSign()!);
       // Get the NotifyVerbBuilder from NotificationParams
       var builder = await NotificationRequestTransformer(
-              _atClient.getCurrentAtSign()!,
-              _atClient.getPreferences()!,
-              atKeyEncryption)
+              _atClient.getCurrentAtSign()!, _atClient.getPreferences()!, atKeyEncryption)
           .transform(notificationParams);
 
       notificationValueValidation(notificationParams, builder);
@@ -365,10 +325,8 @@ class NotificationServiceImpl
       }
     } on AtException catch (e) {
       // Setting notificationStatusEnum to errored
-      notificationResult.notificationStatusEnum =
-          NotificationStatusEnum.undelivered;
-      notificationResult.atClientException =
-          AtExceptionManager.createException(e);
+      notificationResult.notificationStatusEnum = NotificationStatusEnum.undelivered;
+      notificationResult.atClientException = AtExceptionManager.createException(e);
       // Invoke onErrorCallback
       if (onError != null) {
         onError(notificationResult);
@@ -379,13 +337,12 @@ class NotificationServiceImpl
       return notificationResult;
     } else {
       if (waitForFinalDeliveryStatus) {
-        await _waitForAndHandleFinalNotificationSendStatus(
-            notificationParams, notificationResult, onSuccess, onError);
+        await _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError);
         return notificationResult;
       } else {
         // no wait? no await
-        unawaited(_waitForAndHandleFinalNotificationSendStatus(
-            notificationParams, notificationResult, onSuccess, onError));
+        unawaited(
+            _waitForAndHandleFinalNotificationSendStatus(notificationParams, notificationResult, onSuccess, onError));
         return notificationResult;
       }
     }
@@ -395,15 +352,13 @@ class NotificationServiceImpl
   /// [BufferOverFlowException] is thrown.
   ///
   @visibleForTesting
-  void notificationValueValidation(
-      NotificationParams notificationParams, NotifyVerbBuilder builder) {
+  void notificationValueValidation(NotificationParams notificationParams, NotifyVerbBuilder builder) {
     // ignore: deprecated_member_use_from_same_package
     switch (notificationParams.messageType) {
       case MessageTypeEnum.key:
         // Since value is not mandatory in AtNotification, perform validation only if
         // value is not null.
-        if (builder.value != null &&
-            builder.value.length > _atClient.getPreferences()!.maxDataSize) {
+        if (builder.value != null && builder.value.length > _atClient.getPreferences()!.maxDataSize) {
           throw BufferOverFlowException(
               'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
         }
@@ -413,8 +368,7 @@ class NotificationServiceImpl
       case MessageTypeEnum.text:
         // When messageType is text, the "text" to notify is added to the key. Hence validating
         // the key length
-        if (builder.atKey.key.length >
-            _atClient.getPreferences()!.maxDataSize) {
+        if (builder.atKey.key.length > _atClient.getPreferences()!.maxDataSize) {
           throw BufferOverFlowException(
               'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
         }
@@ -422,30 +376,23 @@ class NotificationServiceImpl
     }
   }
 
-  Future<void> _waitForAndHandleFinalNotificationSendStatus(
-      NotificationParams notificationParams,
-      NotificationResult notificationResult,
-      Function? onSuccess,
-      Function? onError) async {
+  Future<void> _waitForAndHandleFinalNotificationSendStatus(NotificationParams notificationParams,
+      NotificationResult notificationResult, Function? onSuccess, Function? onError) async {
     var notificationParser = NotificationResponseParser();
     // Gets the notification status and parse the response.
-    var notificationStatus = notificationParser
-        .parse(await _getFinalNotificationStatus(notificationParams.id));
+    var notificationStatus = notificationParser.parse(await _getFinalNotificationStatus(notificationParams.id));
     switch (notificationStatus.response) {
       case 'delivered':
-        notificationResult.notificationStatusEnum =
-            NotificationStatusEnum.delivered;
+        notificationResult.notificationStatusEnum = NotificationStatusEnum.delivered;
         // If onSuccess callback is registered, invoke callback method.
         if (onSuccess != null) {
           onSuccess(notificationResult);
         }
         break;
       case 'undelivered':
-        notificationResult.notificationStatusEnum =
-            NotificationStatusEnum.undelivered;
-        notificationResult.atClientException = AtClientException(
-            error_codes['AtClientException'],
-            'Unable to connect to secondary server');
+        notificationResult.notificationStatusEnum = NotificationStatusEnum.undelivered;
+        notificationResult.atClientException =
+            AtClientException(error_codes['AtClientException'], 'Unable to connect to secondary server');
         // If onError callback is registered, invoke callback method.
         if (onError != null) {
           onError(notificationResult);
@@ -473,15 +420,14 @@ class NotificationServiceImpl
   }
 
   @override
-  Stream<AtNotification> subscribe(
-      {String? regex, bool shouldDecrypt = false}) {
+  Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt = false}) {
     _logger.finer('subscribe(regex: $regex, shouldDecrypt: $shouldDecrypt');
     regex ??= emptyRegex;
     var notificationConfig = NotificationConfig()
       ..regex = regex
       ..shouldDecrypt = shouldDecrypt;
-    var atNotificationStream = _streamListeners.putIfAbsent(
-        notificationConfig, () => StreamController<AtNotification>.broadcast());
+    var atNotificationStream =
+        _streamListeners.putIfAbsent(notificationConfig, () => StreamController<AtNotification>.broadcast());
 
     // Temporary fix for https://github.com/atsign-foundation/at_client_sdk/issues/770
     //     (Temporary because it's a bit of a kludge, but the proper fix requires the implementation
@@ -517,8 +463,8 @@ class NotificationServiceImpl
   /// Ensures that distinct [NotificationConfig.regex] exists in the key
   /// Compares the [NotificationConfig] object with [NotificationConfig.regex]
   /// If regex's are equals, returns true; else false.
-  static bool _compareNotificationConfig(NotificationConfig notificationConfig1,
-      NotificationConfig notificationConfig2) {
+  static bool _compareNotificationConfig(
+      NotificationConfig notificationConfig1, NotificationConfig notificationConfig2) {
     if (notificationConfig1.regex == notificationConfig2.regex) {
       return true;
     }
@@ -534,8 +480,7 @@ class NotificationServiceImpl
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
     _atClientManager.removeChangeListeners(this);
 
-    _logger.finer(
-        'stopping notification listeners for ${_atClient.getCurrentAtSign()}');
+    _logger.finer('stopping notification listeners for ${_atClient.getCurrentAtSign()}');
     stopAllSubscriptions();
   }
 
@@ -544,8 +489,7 @@ class NotificationServiceImpl
       _logger.severe('${_atClient.getCurrentAtSign()} monitor not initialised');
       return null;
     }
-    _logger.finer(
-        '${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
+    _logger.finer('${_atClient.getCurrentAtSign()} monitor status: ${_monitor!.getStatus()}');
     return _monitor!.getStatus();
   }
 
@@ -559,14 +503,12 @@ class NotificationServiceImpl
       return NotificationResult()
         ..notificationID = notificationId
         ..notificationStatusEnum = NotificationStatusEnum.undelivered
-        ..atClientException = AtClientException(
-            atResponse.errorCode, atResponse.errorDescription);
+        ..atClientException = AtClientException(atResponse.errorCode, atResponse.errorDescription);
     }
 
     notificationResult = NotificationResult()
       ..notificationID = notificationId
-      ..notificationStatusEnum =
-          _getNotificationStatusEnum(atResponse.response);
+      ..notificationStatusEnum = _getNotificationStatusEnum(atResponse.response);
     return notificationResult;
   }
 
@@ -590,20 +532,16 @@ class NotificationServiceImpl
 
   @override
   Future<AtNotification> fetch(String notificationId) async {
-    var notifyFetchVerbBuilder = NotifyFetchVerbBuilder()
-      ..notificationId = notificationId;
+    var notifyFetchVerbBuilder = NotifyFetchVerbBuilder()..notificationId = notificationId;
     String? atNotificationStr;
     try {
-      atNotificationStr = await _atClient
-          .getRemoteSecondary()
-          ?.executeVerb(notifyFetchVerbBuilder);
+      atNotificationStr = await _atClient.getRemoteSecondary()?.executeVerb(notifyFetchVerbBuilder);
     } on AtException catch (e) {
       throw AtExceptionManager.createException(e);
     }
     if (atNotificationStr == null) {
       throw AtClientException.message('Failed to fetch the notification id',
-          intent: Intent.remoteVerbExecution,
-          exceptionScenario: ExceptionScenario.remoteVerbExecutionFailed);
+          intent: Intent.remoteVerbExecution, exceptionScenario: ExceptionScenario.remoteVerbExecutionFailed);
     }
     AtResponse atResponse = DefaultResponseParser().parse(atNotificationStr);
     var atNotificationMap = jsonDecode(atResponse.response);
@@ -618,13 +556,11 @@ class NotificationServiceImpl
       ..key = atNotificationMap['notification']
       ..from = atNotificationMap['fromAtSign']
       ..to = atNotificationMap['toAtSign']
-      ..epochMillis = DateTime.parse(atNotificationMap['notificationDateTime'])
-          .millisecondsSinceEpoch
+      ..epochMillis = DateTime.parse(atNotificationMap['notificationDateTime']).millisecondsSinceEpoch
       ..status = atNotificationMap['notificationStatus']
       ..value = atNotificationMap['atValue']
       ..operation = atNotificationMap['opType']
       ..messageType = atNotificationMap['messageType']
-      ..expiresAtInEpochMillis =
-          DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
+      ..expiresAtInEpochMillis = DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
   }
 }

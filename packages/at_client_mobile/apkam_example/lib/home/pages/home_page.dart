@@ -17,6 +17,14 @@ class HomePageState extends State<HomePage> {
   List<authorisation_service.EnrollmentRequest> enrollmentRequests = [];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await service.isManagerKey();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

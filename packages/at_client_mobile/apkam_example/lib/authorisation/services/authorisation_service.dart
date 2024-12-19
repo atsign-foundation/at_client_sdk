@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
-import 'package:at_client/at_client_mixins.dart';
 
 /// {@template authorisation_service}
 /// A service class for managing enrollment requests.
@@ -32,6 +32,7 @@ class AuthorisationService with AtClientBindings {
   /// Sets up the subscription to the server for new enrollment requests and
   /// fetches all existing requests.
   Future<void> init() async {
+    logger.info('Initialising AuthorisationService');
     _enrollmentRequestsController ??= StreamController<EnrollmentRequest>.broadcast();
     _enrollmentRequestsController!.onListen = () async {
       final requests = await getAllEnrollmentRequests();
@@ -55,6 +56,7 @@ class AuthorisationService with AtClientBindings {
     // Add the new requests to the stream controller.
     _newRequestsSubscription = stream.listen((AtNotification notification) async {
       try {
+        logger.info('Enrollment request with id ${notification.key} received');
         final enrollmentRequest = EnrollmentRequest.fromServer(
           MapEntry(
             notification.key,
@@ -64,7 +66,8 @@ class AuthorisationService with AtClientBindings {
         if (!_enrollmentRequestsController!.isClosed) {
           _enrollmentRequestsController!.add(enrollmentRequest);
         }
-      } catch (e) {
+      } catch (e, st) {
+        logger.severe('Failed to process new enrollment request.', e, st);
         _enrollmentRequestsController!.addError(UnexpectedResponseException(e.toString()));
       }
     });
@@ -104,17 +107,33 @@ class AuthorisationService with AtClientBindings {
 
     // Parse the raw response.
     if (rawResponse == null || !rawResponse.startsWith('data:')) {
+      logger.severe(
+        'Invalid response from the server. Expected it to start with `data:`. Response: $rawResponse',
+        null,
+        StackTrace.current,
+      );
       throw UnexpectedResponseException(rawResponse ?? 'No response from server');
     }
     final rawData = rawResponse.substring(rawResponse.indexOf('data:') + 5);
     final data = jsonDecode(rawData) as Map<String, dynamic>;
     // TODO: Filter out `firstApp` enrolment
     final enrollmentRequests = data.entries.map(EnrollmentRequest.fromServer).toList();
+    logger.info('Found ${enrollmentRequests.length} enrollmentRequests');
+    logger.finer('Enrollment Requests: $enrollmentRequests');
     return enrollmentRequests;
   }
 
+  /// Check if the current atSign has manager permissions.
   Future<bool> isManagerKey() async {
-    throw UnimplementedError();
+    final enrollments = await getAllEnrollmentRequests();
+    // Check if one of the enrollments has read and write permissions for the __manage namespace.
+    final hasManagePermission = enrollments.any(
+      (e) =>
+          e.namespacePermissions.any((p) => p.namespace == '__manage' && p.write && p.read) &&
+          e.status == EnrollmentStatus.approved,
+    );
+    logger.info('Has manage permissions: $hasManagePermission');
+    return hasManagePermission;
   }
 
   /// Check if the given spp is valid.
@@ -136,6 +155,9 @@ class AuthorisationService with AtClientBindings {
     required String spp,
     Duration sppExpiry = _kDefaultExpiry,
   }) async {
+    logger.finer(
+      'Setting spp to $spp expiring in ${sppExpiry.inSeconds}s (${DateTime.now().add(sppExpiry).toIso8601String()})',
+    );
     if (!_isSppValid(spp)) {
       throw InvalidSppException();
     }
@@ -146,6 +168,7 @@ class AuthorisationService with AtClientBindings {
     final response = await atLookup.executeCommand(command, auth: true);
     // TODO: Add error handling
     debugPrint(response);
+    logger.info('SPP set successfully');
   }
 
   /// Get the OTP from the server.
@@ -164,8 +187,10 @@ class AuthorisationService with AtClientBindings {
     if (response != null && response.startsWith('data:')) {
       final otp = response.substring(response.indexOf('data:') + 5);
       assert(otp.length >= 6, 'OTP should be 6 or more characters');
+      logger.finer('OTP generated: $otp');
       return otp;
     } else {
+      logger.severe('Invalid response from the server. Expected it to start with `data:`. Response: $response');
       throw OtpGenerationException(response ?? 'No response from server');
     }
   }
@@ -187,8 +212,12 @@ class AuthorisationService with AtClientBindings {
           atLookup,
         );
     if (enrollmentOutcome.enrollStatus != EnrollmentStatus.approved) {
+      logger.severe(
+        'Failed to approve enrollment request with id ${enrollmentRequest.enrollmentId}. Status: ${enrollmentOutcome.enrollStatus}',
+      );
       throw FailedToApproveException();
     }
+    logger.info('Enrollment request with id ${enrollmentRequest.enrollmentId} approved');
     return;
   }
 
@@ -205,8 +234,12 @@ class AuthorisationService with AtClientBindings {
           atLookup,
         );
     if (enrollmentOutcome.enrollStatus != EnrollmentStatus.denied) {
+      logger.severe(
+        'Failed to deny enrollment request with id ${enrollmentRequest.enrollmentId}. Status: ${enrollmentOutcome.enrollStatus}',
+      );
       throw FailedToDenyException();
     }
+    logger.info('Enrollment request with id ${enrollmentRequest.enrollmentId} denied');
     return;
   }
 
@@ -224,8 +257,12 @@ class AuthorisationService with AtClientBindings {
           atLookup,
         );
     if (enrollmentOutcome.enrollStatus != EnrollmentStatus.revoked) {
+      logger.severe(
+        'Failed to revoke enrollment request with id ${enrollmentRequest.enrollmentId}. Status: ${enrollmentOutcome.enrollStatus}',
+      );
       throw FailedToRevokeException();
     }
+    logger.info('Enrollment request with id ${enrollmentRequest.enrollmentId} revoked');
     return;
   }
 }
@@ -325,7 +362,8 @@ class EnrollmentRequest {
 
 /// {@template namespace_permission}
 /// Model class representing a namespace permission.
-/// The string representation of the permission is `namespace: {ns1: rw, ns2: r}` where read is `r` and write is `w`.
+/// The string representation of the permission is `namespace: {ns1: rw, ns2: r}`
+/// where read is `r` and write is `w` and `ns1`/`ns2` are the namespaces.
 /// {@endtemplate}
 @immutable
 class NamespacePermission {

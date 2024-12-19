@@ -17,42 +17,86 @@ class OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: ElevatedButton(
-          onPressed: () async {
-            final result = await AtOnboarding.onboard(
-              context: context,
-              config: AtOnboardingConfig(
-                atClientPreference: widget.atClientPreference,
-                rootEnvironment: RootEnvironment.Production,
-                hideQrScan: true,
-              ),
-            );
-            switch (result.status) {
-              case AtOnboardingResultStatus.success:
-                final atSign = result.atsign;
-                print(atSign);
-                final _ = await AtClientManager.getInstance().setCurrentAtSign(
-                  atSign!,
-                  appNamespace,
-                  widget.atClientPreference,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () async {
+                final result = await AtOnboarding.onboard(
+                  context: context,
+                  config: AtOnboardingConfig(
+                    atClientPreference: widget.atClientPreference,
+                    rootEnvironment: RootEnvironment.Production,
+                    hideQrScan: true,
+                  ),
                 );
-                if (context.mounted) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const HomePage(),
-                    ),
-                  );
+                switch (result.status) {
+                  case AtOnboardingResultStatus.success:
+                    final atSign = result.atsign;
+                    print(atSign);
+                    final _ = await AtClientManager.getInstance().setCurrentAtSign(
+                      atSign!,
+                      appNamespace,
+                      widget.atClientPreference,
+                    );
+                    if (context.mounted) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const HomePage(),
+                        ),
+                      );
+                    }
+                    break;
+                  case AtOnboardingResultStatus.error:
+                    // TODO: handle onboard failure
+                    break;
+                  case AtOnboardingResultStatus.cancel:
+                    // TODO: handle user canceled onboard
+                    break;
                 }
-                break;
-              case AtOnboardingResultStatus.error:
-                // TODO: handle onboard failure
-                break;
-              case AtOnboardingResultStatus.cancel:
-                // TODO: handle user canceled onboard
-                break;
-            }
-          },
-          child: const Text('Onboarding'),
+              },
+              child: const Text('Onboarding'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final result = await AtOnboarding.onboard(
+                  context: context,
+                  config: AtOnboardingConfig(
+                    atClientPreference: widget.atClientPreference,
+                    rootEnvironment: RootEnvironment.Production,
+                    hideQrScan: true,
+                  ),
+                  isSwitchingAtsign: true,
+                  atsign: '39acidhouse',
+                );
+                switch (result.status) {
+                  case AtOnboardingResultStatus.success:
+                    final atSign = result.atsign;
+                    print(atSign);
+                    final _ = await AtClientManager.getInstance().setCurrentAtSign(
+                      atSign!,
+                      appNamespace,
+                      widget.atClientPreference,
+                    );
+                    if (context.mounted) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const HomePage(),
+                        ),
+                      );
+                    }
+                    break;
+                  case AtOnboardingResultStatus.error:
+                    // TODO: handle onboard failure
+                    break;
+                  case AtOnboardingResultStatus.cancel:
+                    // TODO: handle user canceled onboard
+                    break;
+                }
+              },
+              child: const Text('Switch'),
+            ),
+          ],
         ),
       ),
     );
