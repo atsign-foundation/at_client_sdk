@@ -59,7 +59,7 @@ class AtClientPreference {
   int syncBatchSize = 5;
 
   /// The number of keys to pull from cloud secondary to local secondary in a single call.
-  int syncPageLimit = 10;
+  int syncPageLimit = 25;
 
   // Default chunk size for file encryption and decryption
   int fileEncryptionChunkSize = 4096;

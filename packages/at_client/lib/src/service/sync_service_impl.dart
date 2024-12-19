@@ -539,11 +539,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// commit-id to sync into the local keystore.
   Future<List<dynamic>> _getEntriesToSyncFromServer(
       int lastReceivedServerCommitId) async {
+    // Sync verb syntax has to be changed before removing these deprecations
     var syncBuilder = SyncVerbBuilder()
       ..commitId = lastReceivedServerCommitId
-      ..regex = _atClient.getPreferences()!.syncRegex
       ..limit = _atClient.getPreferences()!.syncPageLimit
-      ..isPaginated = true;
+      ..regex = _atClient.getPreferences()!.syncRegex;
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
         'syncBuilder ${syncBuilder.buildCommand()}'));
@@ -740,6 +740,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.pubKeyCS != null) {
       metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
     }
+    if (metadata.pubKeyHash != null) {
+      metadataStr +=
+          ':${AtConstants.sharedWithPublicKeyHash}:${metadata.pubKeyHash?.hash}';
+      metadataStr +=
+          ':${AtConstants.sharedWithPublicKeyHashingAlgo}:${metadata.pubKeyHash?.hashingAlgo}';
+    }
+
     if (metadata.encoding != null) {
       metadataStr += ':encoding:${metadata.encoding}';
     }
@@ -767,13 +774,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Throws [AtClientException] if cloud secondary is not reachable
   @override
   Future<bool> isInSync() async {
-    late RemoteSecondary remoteSecondary;
     try {
-      remoteSecondary = RemoteSecondary(
-          _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
-          atChops: _atClient.atChops);
-      var serverCommitId =
-          await _getServerCommitId(remoteSecondary: remoteSecondary);
+      var serverCommitId = await _getServerCommitId();
 
       var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
 
@@ -794,8 +796,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
       _logger.severe('exception in isInSync $cause');
       throw AtClientException.message(e.toString());
-    } finally {
-      unawaited(remoteSecondary.atLookUp.close());
     }
   }
 
@@ -804,8 +804,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    var serverCommitId =
-        await _getServerCommitId(remoteSecondary: _remoteSecondary);
+    var serverCommitId = await _getServerCommitId();
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
@@ -823,11 +822,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
   ///Throws [AtLookUpException] if secondary is not reachable
-  Future<int> _getServerCommitId({RemoteSecondary? remoteSecondary}) async {
-    remoteSecondary ??= _remoteSecondary;
+  Future<int> _getServerCommitId() async {
     // ignore: no_leading_underscores_for_local_identifiers
     var _serverCommitId = await syncUtil.getLatestServerCommitId(
-        remoteSecondary, _atClient.getPreferences()!.syncRegex);
+        _remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
     _serverCommitId ??= -1;
     _logger.info(_logger.getLogMessageWithClientParticulars(
@@ -971,6 +969,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         builder.atKey.metadata.pubKeyCS =
             metaData[AtConstants.sharedWithPublicKeyCheckSum];
       }
+      if (metaData[AtConstants.sharedWithPublicKeyHash] != null) {
+        Map pubKeyHash =
+            jsonDecode(metaData[AtConstants.sharedWithPublicKeyHash]);
+        builder.atKey.metadata.pubKeyHash =
+            PublicKeyHash(pubKeyHash['hash'], pubKeyHash['hashingAlgo']);
+      }
       if (metaData[AtConstants.encoding] != null) {
         builder.atKey.metadata.encoding = metaData[AtConstants.encoding];
       }
@@ -991,6 +995,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo] != null) {
         builder.atKey.metadata.skeEncAlgo =
             metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo];
+      }
+
+      if (metaData[AtConstants.sharedWithPublicKeyHash] != null &&
+          metaData[AtConstants.sharedWithPublicKeyHashingAlgo] != null) {
+        builder.atKey.metadata.pubKeyHash = PublicKeyHash(
+            metaData[AtConstants.sharedWithPublicKeyHash],
+            metaData[AtConstants.sharedWithPublicKeyHashingAlgo]);
       }
     }
   }
