@@ -14,6 +14,13 @@ dependencies:
   at_client:
     path: ../../packages/at_client
 
+dependency_overrides:
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: 716-exception-handling-in-at_lookups-baseconnectionwrite
+
 dev_dependencies:
   test: ^1.25.8
   lints: ^2.0.0

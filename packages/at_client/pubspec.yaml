@@ -41,6 +41,13 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: 716-exception-handling-in-at_lookups-baseconnectionwrite
+
 dev_dependencies:
   lints: ^5.0.0
   test: ^1.25.8
