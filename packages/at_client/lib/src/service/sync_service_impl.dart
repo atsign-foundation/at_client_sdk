@@ -561,7 +561,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (_shouldSkipDeletes(skipDeletesUntil, serverCommitId)) {
       syncBuilder.skipDeletesUntil = skipDeletesUntil;
     }
-    
+
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
         'syncBuilder ${syncBuilder.buildCommand()}'));
