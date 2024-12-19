@@ -20,7 +20,7 @@ dependency_overrides:
       ref: at_auth_faster_aes_changes
   at_client:
     git:
-      url: https://github.com/atsign-foundation/at_client.git
+      url: https://github.com/atsign-foundation/at_client_sdk.git
       path: packages/at_client
       ref: uptake_atchops_better_crypto
   at_onboarding_cli:
