@@ -990,17 +990,24 @@ void main() {
   group(
       'Tests to validate how the client processes that uncommitted queue (while sending updates to server)'
       'e.g. how is the queue ordered, how is it de-duped, etc', () {
-    setUp(() async {
-      TestResources.atsign = '@santa';
-      await TestResources.setupLocalStorage(TestResources.atsign,
-          enableCommitId: false);
-    });
-
     AtClient mockAtClient = MockAtClient();
     AtClientManager mockAtClientManager = MockAtClientManager();
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    setUp(() async {
+      TestResources.atsign = '@santa';
+      await TestResources.setupLocalStorage(TestResources.atsign,
+          enableCommitId: false);
+      registerFallbackValue(FakeAtKey());
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+    });
 
     /// Preconditions:
     /// 1. The hive key store has 5 distinct keys with different key types - public key, shared key and self key
@@ -1160,7 +1167,6 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
-      registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(any()))
@@ -1170,13 +1176,7 @@ void main() {
           .thenAnswer((invocation) =>
               Future.value('data:[{"id":1,"response":{"data":"21"}},'
                   '{"id":2,"response":{"data":"22"}}]'));
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((invocation) =>
-              throw AtKeyNotFoundException('key is not found in keystore'));
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
+
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
               (_) => StreamController<at_notification.AtNotification>().stream);
@@ -1243,6 +1243,19 @@ void main() {
               (_) => StreamController<at_notification.AtNotification>().stream);
       when(() => mockAtClient.getPreferences())
           .thenAnswer((_) => AtClientPreference());
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
     });
 
     /// Preconditions:
@@ -1259,7 +1272,6 @@ void main() {
     /// 2. When fetching uncommitted entries only entries with hive_seq 6,7,8 should be returned.
     test('A test to verify batch requests does not sync entries with commitId',
         () async {
-      registerFallbackValue(FakeAtKey());
       //----------------------------------setup---------------------------------
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
@@ -1268,7 +1280,6 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
-      registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(any()))
@@ -1301,11 +1312,10 @@ void main() {
               '{"id":2,"response":{"data":"7"}},'
               '{"id":3,"response":{"data":"8"}}]'));
 
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
       when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
 
@@ -1545,7 +1555,6 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
-      registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeCommand(any(),
@@ -1556,10 +1565,6 @@ void main() {
                   '{"id":3,"response":{"data":"23"}},'
                   '{"id":4,"response":{"data":"24"}},'
                   '{"id":5,"response":{"data":"25"}}]'));
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((invocation) =>
-              throw AtKeyNotFoundException('key is not found in keystore'));
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -1797,17 +1802,23 @@ void main() {
   group(
       'A group of tests on fetching the local commit id and uncommitted entries',
       () {
-    setUp(() async {
-      TestResources.atsign = '@fuller';
-      await TestResources.setupLocalStorage(TestResources.atsign);
-      registerFallbackValue(FakeAtKey());
-    });
-
     AtClient mockAtClient = MockAtClient();
     AtClientManager mockAtClientManager = MockAtClientManager();
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
     RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    setUp(() async {
+      TestResources.atsign = '@fuller';
+      await TestResources.setupLocalStorage(TestResources.atsign);
+      registerFallbackValue(FakeAtKey());
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+    });
 
     ///Preconditions:
     /// 1. The local keystore contains following keys
@@ -2002,7 +2013,6 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
-      registerFallbackValue(FakeAtKey());
 
       mockAtClient.setPreferences(preference);
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
@@ -2014,13 +2024,7 @@ void main() {
               '{"id":3,"response":{"data":"103"}},'
               '{"id":4,"response":{"data":"104"}},'
               '{"id":5,"response":{"data":"105"}}]'));
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((invocation) =>
-              throw AtKeyNotFoundException('key is not found in keystore'));
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
+
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
               (_) => StreamController<at_notification.AtNotification>().stream);
@@ -2144,9 +2148,33 @@ void main() {
   group(
       'Tests to validate how the client processes updates from the server - can the client reject? under what conditions? what happens upon a rejection?',
       () {
+    AtClient mockAtClient = MockAtClient();
+    AtClientManager mockAtClientManager = MockAtClientManager();
+    NotificationServiceImpl mockNotificationService =
+        MockNotificationServiceImpl();
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     setUp(() async {
       TestResources.atsign = '@dexter';
       await TestResources.setupLocalStorage(TestResources.atsign);
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() =>
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
     });
 
     /// Preconditions:
@@ -2280,14 +2308,8 @@ void main() {
       /// Assertions:
       /// 1. At the end of sync, the local commit id should be updated to 3
       await TestResources.setupLocalStorage(TestResources.atsign);
-      AtClient mockAtClient = MockAtClient();
-      AtClientManager mockAtClientManager = MockAtClientManager();
-      NotificationServiceImpl mockNotificationService =
-          MockNotificationServiceImpl();
-      RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-      SyncUtil syncUtil = SyncUtil();
 
-      registerFallbackValue(FakeAtKey());
+      SyncUtil syncUtil = SyncUtil();
 
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2318,13 +2340,7 @@ void main() {
             '"commitId":3,"operation":"*"}'
             ']');
       });
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((invocation) =>
-              throw AtKeyNotFoundException('key is not found in keystore'));
+
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
               (_) => StreamController<at_notification.AtNotification>().stream);
@@ -2390,12 +2406,25 @@ void main() {
       mockNotificationService = MockNotificationServiceImpl();
       mockRemoteSecondary = MockRemoteSecondary();
       mockSyncUtil = MockSyncUtil();
+      registerFallbackValue(FakeAtKey());
 
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
               (_) => StreamController<at_notification.AtNotification>().stream);
       when(() => mockAtClient.getPreferences())
           .thenAnswer((_) => AtClientPreference());
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
     });
 
     /// The test should contain all types of keys - public key, shared key, self key
@@ -2411,7 +2440,6 @@ void main() {
     /// Server and local should be in sync and 5 entries from the server must be synced to local
     test('A test to verify server commit entries are synced to local',
         () async {
-      registerFallbackValue(FakeAtKey());
       //----------------------------------Setup---------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2449,11 +2477,11 @@ void main() {
               '"value":"dummy",'
               '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
               '"commitId":15,"operation":"*"}]'));
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
+
       when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
 
@@ -2615,7 +2643,6 @@ void main() {
     test(
         'A test to verify existing key is deleted when delete commit operation is received',
         () async {
-      registerFallbackValue(FakeAtKey());
       // --------------------- Setup ---------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2648,11 +2675,11 @@ void main() {
           any(
               that: SyncVerbBuilderMatcher()))).thenAnswer((_) => Future.value(
           'data:[{"atKey":"@alice:contact@gandalf","value":null,"metadata":null,"commitId":3,"operation":"-"},{"atKey":"cached:@gandalf:aboutme@bob","value":null,"metadata":null,"commitId":4,"operation":"-"}]'));
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
+
       when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
 
@@ -2716,6 +2743,14 @@ void main() {
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
               (_) => StreamController<at_notification.AtNotification>().stream);
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
     });
 
     group('A group of tests to validate shared key matcher regex', () {
@@ -2806,6 +2841,13 @@ void main() {
           .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
       when(() => mockAtClient.getPreferences())
           .thenAnswer((_) => AtClientPreference());
+      when(() =>
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+
       when(() => mockRemoteSecondary.executeVerb(
           any(that: SyncVerbBuilderMatcher()),
           sync: any(
@@ -2836,6 +2878,12 @@ void main() {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+
       when(() => mockAtClient.get(
               AtKey.fromString('public:conflict_key1${TestResources.atsign}')))
           .thenAnswer(
@@ -2903,7 +2951,6 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
-      registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary
@@ -2923,13 +2970,7 @@ void main() {
               auth: any(named: "auth")))
           .thenAnswer((invocation) =>
               Future.value('data:[{"id":1,"response":{"data":"3"}}]'));
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((invocation) =>
-              throw AtKeyNotFoundException('key is not found in keystore'));
+
       when(() => mockAtClient.get(AtKey.fromString(
               '@alice:conflict_phone_key.demo${TestResources.atsign}')))
           .thenAnswer((invocation) =>
@@ -2941,6 +2982,12 @@ void main() {
               any(that: ConflictKeyMatcher()), 'phone_key_remote_value'))
           .thenAnswer((_) => throw AtPublicKeyNotFoundException(
               'Encryption public key not found'));
+      when(() =>
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       await localSecondary.putValue(
           '@alice:conflict_phone_key.demo${TestResources.atsign}',
@@ -2979,7 +3026,6 @@ void main() {
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
-      registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary
@@ -2999,16 +3045,15 @@ void main() {
               auth: any(named: "auth")))
           .thenAnswer((invocation) =>
               Future.value('data:[{"id":1,"response":{"data":"3"}}]'));
-      when(() => mockAtClient.put(
-              any(that: LastReceivedServerCommitIdMatcher()), any()))
-          .thenAnswer((_) => Future.value(true));
-      when(() =>
-              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
-          .thenAnswer((invocation) =>
-              throw AtKeyNotFoundException('key is not found in keystore'));
       when(() => mockAtClient.get(any(that: ConflictKeyMatcher()))).thenAnswer(
           (invocation) =>
               throw KeyNotFoundException('key is not found in keystore'));
+      when(() =>
+              mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
 
       await localSecondary.executeVerb(DeleteVerbBuilder()
         ..atKey = (AtKey()
@@ -3121,6 +3166,20 @@ void main() {
                 mockNotificationService.subscribe(regex: 'statsNotification'))
             .thenAnswer((_) =>
                 StreamController<at_notification.AtNotification>().stream);
+        registerFallbackValue(FakeAtKey());
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient
+                .get(any(that: LastReceivedServerCommitIdMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
+        when(() =>
+                mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
       });
 
       ///***********************************
@@ -3178,7 +3237,6 @@ void main() {
 
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
@@ -3200,10 +3258,9 @@ void main() {
         });
 
         when(() => mockAtClient.put(
-                any(that: LastReceivedServerCommitIdMatcher()), any()))
+                any(that: InitialSyncDoneFlagMatcher()), any()))
             .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
+        when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
         when(() => mockAtClient.getPreferences())
@@ -3333,7 +3390,6 @@ void main() {
 
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary
@@ -3362,8 +3418,10 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"4"}},'
                     '{"id":2,"response":{"data":"5"}}]'));
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
+        when(() => mockAtClient.put(
+                any(that: InitialSyncDoneFlagMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
         when(() => mockAtClient.getPreferences())
@@ -3404,6 +3462,20 @@ void main() {
       setUp(() async {
         TestResources.atsign = '@levi';
         await TestResources.setupLocalStorage(TestResources.atsign);
+        registerFallbackValue(FakeAtKey());
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient
+                .get(any(that: LastReceivedServerCommitIdMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
+        when(() =>
+                mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
       });
 
       /// Preconditions:
@@ -3424,7 +3496,6 @@ void main() {
 
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary.executeVerb(any(),
@@ -3454,11 +3525,11 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":4,"operation":"*"}]'));
+
         when(() => mockAtClient.put(
-                any(that: LastReceivedServerCommitIdMatcher()), any()))
+                any(that: InitialSyncDoneFlagMatcher()), any()))
             .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
+        when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
         when(() =>
@@ -3583,6 +3654,20 @@ void main() {
                 StreamController<at_notification.AtNotification>().stream);
         when(() => mockAtClient.getPreferences())
             .thenAnswer((_) => AtClientPreference());
+        registerFallbackValue(FakeAtKey());
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient
+                .get(any(that: LastReceivedServerCommitIdMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
+        when(() =>
+                mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
       });
 
       /// Preconditions:
@@ -3614,7 +3699,6 @@ void main() {
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary
@@ -3653,11 +3737,11 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"3"}},'
                     '{"id":2,"response":{"data":"4"}}]'));
+
         when(() => mockAtClient.put(
-                any(that: LastReceivedServerCommitIdMatcher()), any()))
+                any(that: InitialSyncDoneFlagMatcher()), any()))
             .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
+        when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
 
@@ -3718,12 +3802,26 @@ void main() {
       setUp(() async {
         TestResources.atsign = '@poland';
         await TestResources.setupLocalStorage(TestResources.atsign);
+        registerFallbackValue(FakeAtKey());
         when(() =>
                 mockNotificationService.subscribe(regex: 'statsNotification'))
             .thenAnswer((_) =>
                 StreamController<at_notification.AtNotification>().stream);
         when(() => mockAtClient.getPreferences())
             .thenAnswer((_) => AtClientPreference());
+        when(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient
+                .get(any(that: LastReceivedServerCommitIdMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
+        when(() =>
+                mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
       });
 
       /// Preconditions:
@@ -3761,7 +3859,6 @@ void main() {
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary
@@ -3800,11 +3897,11 @@ void main() {
             .thenAnswer((invocation) =>
                 Future.value('data:[{"id":1,"response":{"data":"4"}},'
                     '{"id":2,"response":{"data":"5"}}]'));
+
         when(() => mockAtClient.put(
-                any(that: LastReceivedServerCommitIdMatcher()), any()))
+                any(that: InitialSyncDoneFlagMatcher()), any()))
             .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
+        when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
 
@@ -3864,7 +3961,6 @@ void main() {
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
         when(() => mockRemoteSecondary
@@ -3888,13 +3984,6 @@ void main() {
                 '"value":"dummy",'
                 '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
                 '"commitId":3,"operation":"*"}]'));
-        when(() => mockAtClient.put(
-                any(that: LastReceivedServerCommitIdMatcher()), any()))
-            .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
-            .thenAnswer((invocation) =>
-                throw AtKeyNotFoundException('key is not found in keystore'));
 
         // ----------------- preconditions setup and operation -----------------
         CustomSyncProgressListener progressListener =
@@ -3924,6 +4013,12 @@ void main() {
           'A test to verify a listener is removed from sync progress call back',
           () async {
         //-------------------Setup-------------------
+        when(() => mockAtClient.put(
+                any(that: InitialSyncDoneFlagMatcher()), any()))
+            .thenAnswer((_) => Future.value(true));
+        when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
+            .thenAnswer((invocation) =>
+                throw AtKeyNotFoundException('key is not found in keystore'));
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
             notificationService: mockNotificationService) as SyncServiceImpl;
@@ -3953,7 +4048,6 @@ void main() {
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeDeleteVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         LocalSecondary mockLocalSecondary = MockLocalSecondary();
         SyncUtil mockSyncUtil = MockSyncUtil();
@@ -3984,17 +4078,6 @@ void main() {
         when(() => mockLocalSecondary.executeVerb(
             any(that: UpdateDeleteVerbBuilderMatcher()),
             sync: false)).thenAnswer((_) => Future.value('data:5'));
-        when(() => mockAtClient.put(
-                any(that: LastReceivedServerCommitIdMatcher()), any()))
-            .thenAnswer((_) => Future.value(true));
-        when(() => mockLocalSecondary.keyStore?.isKeyExists(
-                any(that: startsWith('local:lastreceivedservercommitid'))))
-            .thenAnswer((invocation) => false);
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
-            .thenAnswer((invocation) =>
-                throw AtKeyNotFoundException('key is not found in keystore'));
-
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
             notificationService: mockNotificationService,
@@ -4033,7 +4116,6 @@ void main() {
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
         registerFallbackValue(FakeDeleteVerbBuilder());
-        registerFallbackValue(FakeAtKey());
 
         SecondaryKeyStore mockSecondaryKeyStore = MockSecondaryKeyStore();
         LocalSecondary mockLocalSecondary = MockLocalSecondary();
@@ -4079,16 +4161,9 @@ void main() {
             mockRemoteSecondary.executeCommand(any(),
                 auth: any(named: "auth"))).thenAnswer((_) => Future.value(
             'data:[{"id":1,"response":{"data":"21"}},{"id":2,"response":{"data":"22"}},{"id":3,"response":{"data":"23"}},{"id":4,"response":{"data":"24"}}]'));
-        when(() => mockAtClient.put(
-                any(that: LastReceivedServerCommitIdMatcher()), any()))
-            .thenAnswer((_) => Future.value(true));
         when(() => mockLocalSecondary.keyStore
                 ?.isKeyExists(any(that: startsWith('local:'))))
             .thenAnswer((invocation) => false);
-        when(() => mockAtClient
-                .get(any(that: LastReceivedServerCommitIdMatcher())))
-            .thenAnswer((invocation) =>
-                throw AtKeyNotFoundException('key is not found in keystore'));
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -4272,6 +4347,361 @@ void main() {
       syncServiceImpl.clearSyncEntities();
     });
   });
+
+  group('A group of tests to verify sync skip delete', () {
+    AtClient mockAtClient = MockAtClient();
+    AtClientManager mockAtClientManager = MockAtClientManager();
+    NotificationServiceImpl mockNotificationService =
+        MockNotificationServiceImpl();
+    RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    setUp(() async {
+      TestResources.atsign = '@nadia';
+      await TestResources.setupLocalStorage(TestResources.atsign);
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockAtClient.getPreferences())
+          .thenAnswer((_) => AtClientPreference());
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClient.put(
+              any(that: LastReceivedServerCommitIdMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+    });
+    test(
+        'A test to verify putSkipDeletes returns server commitID when localCommitId is -1',
+        () async {
+      SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
+          mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      int? skipDeletesUntil =
+          await syncServiceImpl.setAndGetSkipDeletesUntil(-1, 100);
+      expect(skipDeletesUntil, 100);
+    });
+    test(
+        'A test to verify putSkipDeletes returns stored skipDeletesUntil when localCommitId is greater than -1',
+        () async {
+      SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
+          mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '40'));
+      int? skipDeletesUntil =
+          await syncServiceImpl.setAndGetSkipDeletesUntil(25, 100);
+      expect(skipDeletesUntil, 40);
+    });
+    test(
+        'A test to verify putSkipDeletes returns null when localCommitId is greater than -1 and skipDeletesUntil is not stored in local secondary',
+        () async {
+      SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
+          mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+      int? skipDeletesUntil =
+          await syncServiceImpl.setAndGetSkipDeletesUntil(25, 100);
+      expect(skipDeletesUntil, null);
+    });
+    test('A test to verify skip deletes is passed when localCommitId is -1',
+        () async {
+      //----------------- setup-----------------
+      HiveKeystore? keystore =
+          TestResources.getHiveKeyStore(TestResources.atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: StatsVerbBuilderMatcher())))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"10"}]'));
+      var serverResponseWithAllCommits = 'data:['
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":5,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":7,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":8,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":9,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      var serverResponseDeleteCommitsSkipped = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(named: "sync"))).thenAnswer((invocation) {
+        final passedBuilder =
+            invocation.positionalArguments[0] as SyncVerbBuilder;
+        return passedBuilder.skipDeletesUntil != null
+            ? Future.value(serverResponseDeleteCommitsSkipped)
+            : Future.value(serverResponseWithAllCommits);
+      });
+
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth"))).thenAnswer(
+          (invocation) => Future.value('data:[{"id":1,"response":{"data":"3"}},'
+              '{"id":2,"response":{"data":"4"}}]'));
+
+      //---------------------------operation----------------------------------
+      var syncResult = await syncService.syncInternal(
+          10, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: -1);
+      print(syncResult.keyInfoList);
+      Map<String, CommitOp> commitResponseMap = {};
+      for (var keyInfo in syncResult.keyInfoList) {
+        commitResponseMap[keyInfo.key] = keyInfo.commitOp;
+      }
+      expect(commitResponseMap['public:self_key_1.wavi@bob'], null);
+      expect(
+          commitResponseMap['public:self_key_2.wavi@bob'], CommitOp.UPDATE_ALL);
+      expect(commitResponseMap['public:from_remote_key1.wavi@bob'], null);
+      expect(commitResponseMap['public:from_remote_key2.demo@bob'],
+          CommitOp.UPDATE_ALL);
+      //clearing sync objects
+      syncService.clearSyncEntities();
+    });
+    test(
+        'A test to verify skip deletes is passed when localCommitId is greater than -1',
+        () async {
+      //----------------- setup-----------------
+      HiveKeystore? keystore =
+          TestResources.getHiveKeyStore(TestResources.atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((invocation) =>
+              throw AtKeyNotFoundException('key is not found in keystore'));
+
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: StatsVerbBuilderMatcher())))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"10"}]'));
+      var serverResponseWithAllCommits = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":8,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":9,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      var serverResponseDeleteCommitsSkipped = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(named: "sync"))).thenAnswer((invocation) {
+        final passedBuilder =
+            invocation.positionalArguments[0] as SyncVerbBuilder;
+        return passedBuilder.skipDeletesUntil != null
+            ? Future.value(serverResponseDeleteCommitsSkipped)
+            : Future.value(serverResponseWithAllCommits);
+      });
+
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth"))).thenAnswer(
+          (invocation) => Future.value('data:[{"id":1,"response":{"data":"3"}},'
+              '{"id":2,"response":{"data":"4"}}]'));
+
+      //---------------------------operation----------------------------------
+      var syncResult = await syncService.syncInternal(
+          10, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: 5);
+      print(syncResult.keyInfoList);
+      Map<String, CommitOp> commitResponseMap = {};
+      for (var keyInfo in syncResult.keyInfoList) {
+        commitResponseMap[keyInfo.key] = keyInfo.commitOp;
+      }
+      expect(commitResponseMap['public:self_key_1.wavi@bob'], CommitOp.DELETE);
+      expect(
+          commitResponseMap['public:self_key_2.wavi@bob'], CommitOp.UPDATE_ALL);
+      expect(commitResponseMap['public:from_remote_key1.demo@bob'],
+          CommitOp.DELETE);
+      expect(commitResponseMap['public:from_remote_key2.demo@bob'],
+          CommitOp.UPDATE_ALL);
+      //clearing sync objects
+      syncService.clearSyncEntities();
+    });
+    test(
+        'A test to verify skip deletes is passed when localCommitId is greater than -1 and skipDeletesUntil is saved in local. This checks the scenario when initial sync terminated in between',
+        () async {
+      //----------------- setup-----------------
+      HiveKeystore? keystore =
+          TestResources.getHiveKeyStore(TestResources.atsign);
+      LocalSecondary? localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keystore);
+
+      SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          notificationService: mockNotificationService,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+      registerFallbackValue(FakeSyncVerbBuilder());
+      registerFallbackValue(FakeUpdateVerbBuilder());
+
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '10'));
+
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: StatsVerbBuilderMatcher())))
+          .thenAnswer((invocation) => Future.value('data:[{"value":"10"}]'));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '7'));
+      var serverResponseWithAllCommits = 'data:['
+          '{"atKey":"public:self_key_2.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":6,"operation":"*"}'
+          ','
+          '{"atKey":"public:self_key_1.wavi@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":8,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key1.demo@bob",'
+          '"value":"dummy",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":9,"operation":"-"}'
+          ','
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      var serverResponseDeleteCommitsSkipped = 'data:['
+          '{"atKey":"public:from_remote_key2.demo@bob",'
+          '"value":"dummy_val_new_1",'
+          '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
+          '"commitId":10,"operation":"*"}]';
+      when(() => mockRemoteSecondary.executeVerb(
+          any(that: SyncVerbBuilderMatcher()),
+          sync: any(named: "sync"))).thenAnswer((invocation) {
+        final passedBuilder =
+            invocation.positionalArguments[0] as SyncVerbBuilder;
+        return passedBuilder.skipDeletesUntil != null
+            ? Future.value(serverResponseDeleteCommitsSkipped)
+            : Future.value(serverResponseWithAllCommits);
+      });
+
+      when(() =>
+          mockRemoteSecondary.executeCommand(any(),
+              auth: any(named: "auth"))).thenAnswer(
+          (invocation) => Future.value('data:[{"id":1,"response":{"data":"3"}},'
+              '{"id":2,"response":{"data":"4"}}]'));
+
+      //---------------------------operation----------------------------------
+      var syncResult = await syncService.syncInternal(
+          10, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: 7);
+      print(syncResult.keyInfoList);
+      Map<String, CommitOp> commitResponseMap = {};
+      for (var keyInfo in syncResult.keyInfoList) {
+        commitResponseMap[keyInfo.key] = keyInfo.commitOp;
+      }
+      expect(commitResponseMap['public:from_remote_key2.demo@bob'],
+          CommitOp.UPDATE_ALL);
+      //clearing sync objects
+      syncService.clearSyncEntities();
+    });
+    tearDown(() async {
+      await TestResources.tearDownLocalStorage();
+      resetMocktailState();
+    });
+  });
 }
 
 class CustomSyncProgressListener extends SyncProgressListener {
@@ -4401,6 +4831,36 @@ class LastReceivedServerCommitIdMatcher extends Matcher {
   @override
   bool matches(item, Map matchState) {
     if (item is AtKey && item.key.startsWith('lastreceivedservercommitid')) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class SkipDeletesUntilMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key.startsWith('skipdeletesuntil')) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class InitialSyncDoneFlagMatcher extends Matcher {
+  @override
+  Description describe(Description description) {
+    return description;
+  }
+
+  @override
+  bool matches(item, Map matchState) {
+    if (item is AtKey && item.key.startsWith('isinitialsyncdone')) {
       return true;
     }
     return false;

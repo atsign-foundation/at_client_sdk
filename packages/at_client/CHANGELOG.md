@@ -1,4 +1,6 @@
-# 3.3.1
+## 3.4.0
+- feat: Allows clients to skip delete commits until a specific commitID during initial sync
+## 3.3.1
 - fix: isInSync bug fix for apkam connection
 - fix: remove deprecated isPaginated param from SyncVerbBuilder in SyncServiceImpl
 - build[deps]: Upgraded dependencies for the following packages:
