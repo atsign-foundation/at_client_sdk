@@ -48,8 +48,8 @@ void main() {
       var dataAfterRemovingPadding = paddingAlgo.removePadding(paddedData);
       expect(dataAfterRemovingPadding, unPaddedData);
     });
-    test('A test to verify invalid blocksize', () {
-      var paddingAlgo = PKCS7Padding(PaddingParams());
+    test('A test to verify invalid block size', () {
+      var paddingAlgo = PKCS7Padding(PaddingParams()..blockSize = -10);
       var dataString = 'Hello World1234';
       expect(
           () => paddingAlgo.addPadding(dataString.codeUnits),
