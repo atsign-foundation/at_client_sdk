@@ -1,6 +1,7 @@
 import 'package:apkam_example/authorisation/services/authorisation_service.dart' as authorisation_service;
 import 'package:apkam_example/authorisation/widgets/enrollment_request_card.dart';
 import 'package:apkam_example/home/pages/home_page_stream.dart';
+import 'package:apkam_example/home/pages/otp_page.dart';
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:flutter/material.dart';
 
@@ -33,6 +34,16 @@ class HomePageState extends State<HomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const OtpPage(),
+                  ),
+                );
+              },
+              child: const Text('OTP Page'),
+            ),
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).push(

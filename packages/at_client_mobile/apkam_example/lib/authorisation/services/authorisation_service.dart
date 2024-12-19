@@ -32,12 +32,14 @@ class AuthorisationService with AtClientBindings {
   /// Sets up the subscription to the server for new enrollment requests and
   /// fetches all existing requests.
   Future<void> init() async {
+    AtSignLogger.root_level = 'finer';
     logger.info('Initialising AuthorisationService');
     _enrollmentRequestsController ??= StreamController<EnrollmentRequest>.broadcast();
     _enrollmentRequestsController!.onListen = () async {
+      // TODO: Does it make sense to add previous requests here? Maybe just pending ones?
       final requests = await getAllEnrollmentRequests();
       for (final request in requests) {
-        // TODO: I don't like this
+        // TODO: I don't like this. Adding a delay because the listener will only receive the last one if they come in too quickly.
         await Future<void>.delayed(const Duration(milliseconds: 100));
         _enrollmentRequestsController!.add(request);
       }
@@ -92,6 +94,7 @@ class AuthorisationService with AtClientBindings {
 
   /// Get all enrollment requests. This includes all past and pending requests.
   /// Empty list means no requests.
+  // TODO: Will be good to add some sort of filtering.
   Future<List<EnrollmentRequest>> getAllEnrollmentRequests() async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
@@ -397,6 +400,18 @@ class NamespacePermission {
   String toString() {
     return 'NamespacePermission(namespace: $namespace, read: $read, write: $write)';
   }
+}
+
+@immutable
+class Otp {
+  Otp({
+    required this.otp,
+    required this.expiry,
+  })  : assert(otp.length >= 6, 'OTP should be 6 or more characters'),
+        assert(expiry.isAfter(DateTime.now()));
+
+  final String otp;
+  final DateTime expiry;
 }
 
 class AuthorisationException implements Exception {
