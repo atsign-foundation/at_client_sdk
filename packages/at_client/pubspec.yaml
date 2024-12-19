@@ -46,7 +46,7 @@ dependency_overrides:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
       path: packages/at_auth
-      ref: at_chops_faster_aes
+      ref: at_auth_faster_aes_changes
   at_chops:
     git:
       url: https://github.com/atsign-foundation/at_libraries.git
