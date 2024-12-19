@@ -7,15 +7,13 @@ class PKCS7Padding implements PaddingAlgorithm {
   PKCS7Padding(this._paddingParams);
   @override
   List<int> addPadding(List<int> data) {
-    if (_paddingParams.blockSize == null ||
-        _paddingParams.blockSize! <= 0 ||
-        _paddingParams.blockSize! > 255) {
+    if (_paddingParams.blockSize <= 0 || _paddingParams.blockSize > 255) {
       throw AtEncryptionException('Block size must be between 1 and 255.');
     }
 
     // Calculate the number of padding bytes needed
     int padding =
-        _paddingParams.blockSize! - (data.length % _paddingParams.blockSize!);
+        _paddingParams.blockSize - (data.length % _paddingParams.blockSize);
 
     // Add padding bytes to the data
     List<int> paddedData = List.from(data);
