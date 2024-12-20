@@ -5,7 +5,7 @@ import 'package:at_auth/at_auth.dart' as auth;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:flutter/foundation.dart';
+import 'package:biometric_storage/biometric_storage.dart';
 
 import '../models/models.dart';
 
@@ -23,7 +23,8 @@ class AuthorisationService with AtClientBindings {
   final AtSignLogger logger = AtSignLogger('AuthorisationService');
 
   static const _kDefaultExpiry = Duration(minutes: 5);
-  static const String _kSppRegex = r'[A-Za-z0-9]{6,16}';
+  static const _kSppRegex = r'[A-Za-z0-9]{6,16}';
+  static const _kSppStorageKey = 'spp';
 
   StreamController<EnrollmentRequest>? _enrollmentRequestsController;
   StreamSubscription? _newRequestsSubscription;
@@ -151,10 +152,9 @@ class AuthorisationService with AtClientBindings {
   ///
   /// This is used to approve enrollments.
   /// It can be useful to set an spp if enrolling many devices at once.
+  /// The SPP is saved to the keychain so it can be retrieved later.
   ///
   /// The [spp] must be alphanumeric and 6 to 16 characters long.
-  ///
-  /// The SPP is saved to the keychain so it can be retrieved later.
   ///
   /// [sppExpiry] Defaults to 5 minutes.
   Future<Otp> setSpp({
@@ -173,28 +173,58 @@ class AuthorisationService with AtClientBindings {
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final response = await atLookup.executeCommand(command, auth: true);
 
-    // TODO: Save to the keychain
+    // Expected response is `data:ok`
+    if (response == null || !response.contains('ok')) {
+      logger.severe('Invalid response from the server. Expected it to contain `ok`. Response: $response');
+      throw OtpGenerationException(response ?? 'No response from server');
+    }
+    logger.info('SPP set on the server');
 
-    // TODO: Add error handling
-    debugPrint(response);
-    logger.info('SPP set successfully');
+    final otp = Otp.fromDuration(otp: spp, duration: sppExpiry);
 
-    return Otp.fromDuration(otp: spp, duration: sppExpiry);
+    // Save the spp to the keychain so it can retrieved later if needed.
+    try {
+      final atSign = atClient.getCurrentAtSign()!;
+      final storage = await BiometricStorage().getStorage(
+        '$atSign:$_kSppStorageKey',
+        options: StorageFileInitOptions(authenticationRequired: false),
+      );
+      await storage.write(jsonEncode(otp.toJson()));
+      logger.info('SPP saved to keychain');
+    } catch (e, st) {
+      // Choosing to continue execution as at least the spp was set on the server.
+      logger.warning('Failed to save SPP to keychain', e, st);
+    }
+
+    return otp;
   }
 
-  /// Get the active SPP.
+  /// Get the active SPP from the keychain.
   ///
   /// Returns `null` if no SPP is set or the last SPP has expired.
   Future<Otp?> getActiveSpp() async {
-    throw UnimplementedError();
-  }
-
-  Future<String> _saveData(String data) async {
-    throw UnimplementedError();
-  }
-
-  Future<String> _getData(String key) async {
-    throw UnimplementedError();
+    try {
+      final atSign = atClient.getCurrentAtSign()!;
+      final storage = await BiometricStorage().getStorage(
+        '$atSign:$_kSppStorageKey',
+        options: StorageFileInitOptions(authenticationRequired: false),
+      );
+      final data = await storage.read();
+      if (data == null) {
+        logger.info('No SPP found in keychain');
+        return null;
+      }
+      final otp = Otp.fromJson(jsonDecode(data));
+      if (otp.isExpired) {
+        logger.info('SPP found in keychain but has expired. Deleting.');
+        await storage.delete();
+        return null;
+      }
+      return otp;
+    } catch (e, st) {
+      logger.severe('Failed to get SPP from keychain', e, st);
+      return null;
+    }
   }
 
   /// Get the OTP from the server.

@@ -25,6 +25,24 @@ class Otp {
   /// The expiry time of the OTP.
   final DateTime expiry;
 
+  /// Creates an [Otp] object from a JSON map.
+  factory Otp.fromJson(Map<String, dynamic> json) {
+    return Otp(
+      otp: json['otp'] as String,
+      expiry: DateTime.parse(json['expiry'] as String),
+    );
+  }
+
+  /// Converts the [Otp] object to a JSON map.
+  Map<String, dynamic> toJson() {
+    return {
+      'otp': otp,
+      'expiry': expiry.toIso8601String(),
+    };
+  }
+
+  bool get isExpired => DateTime.now().isAfter(expiry);
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
