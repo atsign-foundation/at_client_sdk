@@ -1,9 +1,11 @@
-import 'package:apkam_example/authorisation/services/authorisation_service.dart' as authorisation_service;
 import 'package:apkam_example/authorisation/widgets/enrollment_request_card.dart';
 import 'package:apkam_example/home/pages/home_page_stream.dart';
 import 'package:apkam_example/home/pages/otp_page.dart';
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:flutter/material.dart';
+
+import '../../authorisation/models/models.dart';
+import '../../authorisation/services/authorisation_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,9 +15,9 @@ class HomePage extends StatefulWidget {
 }
 
 class HomePageState extends State<HomePage> {
-  late final service = authorisation_service.AuthorisationService(AtClientManager.getInstance().atClient);
+  late final service = AuthorisationService(AtClientManager.getInstance().atClient);
 
-  List<authorisation_service.EnrollmentRequest> enrollmentRequests = [];
+  List<EnrollmentRequest> enrollmentRequests = [];
 
   @override
   void initState() {

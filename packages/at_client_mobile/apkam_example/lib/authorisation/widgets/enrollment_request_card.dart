@@ -1,6 +1,7 @@
-import 'package:apkam_example/authorisation/services/authorisation_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:flutter/material.dart';
+
+import '../models/models.dart';
 
 class EnrollmentRequestCard extends StatelessWidget {
   const EnrollmentRequestCard({

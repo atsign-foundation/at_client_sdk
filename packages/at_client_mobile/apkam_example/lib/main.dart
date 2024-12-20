@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:apkam_example/constants.dart';
 import 'package:apkam_example/onboarding/pages/onboarding_page.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
+// ignore: unused_import
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';

@@ -1,6 +1,8 @@
-import 'package:apkam_example/authorisation/services/authorisation_service.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
+
+import '../../authorisation/models/models.dart';
+import '../../authorisation/services/authorisation_service.dart';
 
 class OtpPage extends StatefulWidget {
   const OtpPage({super.key});
@@ -12,7 +14,7 @@ class OtpPageState extends State<OtpPage> {
   late final service = AuthorisationService(AtClientManager.getInstance().atClient);
   late final sppController = TextEditingController();
 
-  late Future<String> getOtp;
+  late Future<Otp> getOtp;
 
   @override
   void initState() {
@@ -35,7 +37,7 @@ class OtpPageState extends State<OtpPage> {
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          FutureBuilder<String>(
+          FutureBuilder<Otp>(
             future: getOtp,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
