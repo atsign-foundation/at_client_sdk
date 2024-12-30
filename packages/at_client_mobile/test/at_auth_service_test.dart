@@ -299,35 +299,40 @@ void main() {
       registerFallbackValue(FakeAtClientPreference());
       registerFallbackValue(FakeAtKey());
 
-      String encryptedDefaultEncryptionPrivateKey =
-          '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';
-      String encryptedDefaultSelfEncryptionKey =
-          'LYp38EsUNznPAi+yMTAnHdtyfmIORJF6Ck5oNelgcplm6TiJMRzeBOiJQ4zRI+OB';
-
-      String encryptionPublicKey =
-          'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtEVcUP9FaAYi3uK3YM2z/O0qvidBGkPk34ttDGMrr3891AxK/n6Ejs29VsVW0YeEypFSMxEWvFa9UBhLq9yWBaHU534CxvsKVRN09963wu5F7asBEpbfhBOUrv8Xqa2Je6yavAbWX5QjHbrqXTNCASyfjFrtDrsVNQLK3y3YkxSBxTbAj+EC+wv7pp7dg42Rq3lGLVsh3JwDOFMQNn/fyxeDYgrFmEBpwjfnaCzinPzFkbwSuC+qMu5AiSXf7IlTjb3vrREuWMoM1T2i5MYmvnQHDVasXcPWXNHQ+cg6iC93ZBLy/rqJhGiCyvhLdkMZrKMAUuxrzveQvEq7Pi8zVwIDAQAB';
-      String encryptionPrivateKey =
-          'MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC0RVxQ/0VoBiLe4rdgzbP87Sq+J0EaQ+Tfi20MYyuvfz3UDEr+foSOzb1WxVbRh4TKkVIzERa8Vr1QGEur3JYFodTnfgLG+wpVE3T33rfC7kXtqwESlt+EE5Su/xeprYl7rJq8BtZflCMduupdM0IBLJ+MWu0OuxU1AsrfLdiTFIHFNsCP4QL7C/umnt2DjZGreUYtWyHcnAM4UxA2f9/LF4NiCsWYQGnCN+doLOKc/MWRvBK4L6oy7kCJJd/siVONve+tES5YygzVPaLkxia+dAcNVqxdw9Zc0dD5yDqIL3dkEvL+uomEaILK+Et2QxmsowBS7GvO95C8Srs+LzNXAgMBAAECggEATSG0Sy+9+bFOcEFfJvs8vMaZWD0hfOR55DAa24b/JRrzUGxmFhf6DcP39E2BRSuP5MBjBFiWesU+QSv0DLfYNNa2asoe1BaLqDUoAfp4c95Ra0yUq+iEAFYEcw/QhxgqUBFdL4BZbxHKKKlWJ8SLxEbciUhKT9g6TbFBLlbGaL9N+Cx54pymRppiwTqouu3s9DLpIiF6rQsAA3l9NiQ08btTVSvssUKQpF2uYMRKU0SNLM6K7WPmSP/g3vefe3YDiYPK1ouFzWLo5tyjmcYOLrT6VSAORMBks+3bx3XE2BThp0EP0c5DEHX9j6KlbUiFhTPEAO3g7r7/PmXNJIXRWQKBgQD+v7QPgQoQUPoNinKCKkWBLWSawKe0qbEhS98zTU6KEp731cI2wwXK7wdfMtmuB2CNpiGmxzKf7Xj3zu9FTRpHTP6aLyxB2pNrIoK+2kUambt7N+XWUNWeJOn1sM1EriyS2krk/ZJlsFLwaUBRW0OjA3p7AUEDx0HZ7M3C868NbQKBgQC1KAQS/5H8GheKntJU0NgsqjtwhVFJTAbMyy4d0y/T5AQdu+QwiGI78bAxKeXeq7trQuSQjR0IZpQUO/dZzXp4B+UizUDrIjDXRae0nAyu8VIFjmjofBXNCQVImUKRvS7RLrVSAI2ylGV9u/Y2TlMJYiDU9VXBODJ6UJ2AoLqdUwKBgQD1NL0ytzhioC8wXXT/CYVBY9oUgyBp63SN4iQDk4PnryjI0T5Ry8KFpTJpVd7lfkBX1/NIPzDhc4kerlbtU9vZiaj/7Cwjbyq60ssavaoKgrNNVW6rrb8Qq+NvFDFgzG4nJGs2o0UJEIGk2wqHxNsDy9NXFsvnwSIHi8I6xqhWuQKBgQCyYkMQyiTgkHjaAWawKi6UXNTHCiBvArQ3eWNh7xFLn14GQXyD5eiFioqq/sziJU0aY/ZZ+Pq7yPbLrfj1rwaHp46UZHUmlLZvZKGtkXRT2EGiQwc+1uFI0zcms/P/OsEdLtdRdkYRsVr3It1hwGK3/K7DxQm6iDH8i+FsRdk9DQKBgEpW6lzyabAvgIsJH2uELap3+jL5glLLeHsOU+aCzIkgAIR6nANk1naLG1ZE7H9mW7Y8sy27CpNo0L2VW1xXKwTsTgcX8T6kMY7zdNMutIeAHUOEx96e7swFi6HsNqNRx6qjpVUcJDckPDVpMomEe5I69EJEA2jQvdmKUnTGx36j';
-      String pkamPrivateKey =
-          'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCLIk7PWdOT7MLIR0ktElNEe9vBLIWlC6PF9IXS61ZB12uavMuLAOKP0ZDIJKvBbOoqQC0mgIybDsOQIPjbBjQaj6LR3gS1KcvRaz0A0aB0ueX5XOV8jn1pnngAUtkOdnMUzDx92J38YkoSktBkpyNDV7ATNUTI69DmBOoVwEZP5Li9or1ef5BtynAqusrzMzt6kXxN2HaLPEhqmBtCZk7HqXQaFq3s4OqM1sQwED394FbgndnxjsjYD0HgrwJwDIZFz+0A50Od74FjWtqicmMlsYt+zG56tHVd8vRAH6sP32m0a9PPzttPmOLvqaLgFByh0V3lvwuMyP08X0c0sx+zAgMBAAECggEAUKd/thWlYAAE3iLs2ZLg8Dc4qd/MTWPU+YEJPr6rzxk4yIefGqJVs/dRDaSsaEFh8UIoqkQkvhIt7dQfTqBm/eq8ARrJ8dcbzvdycpISiPfmx8pBQhY7v0lc2RsttoOVrL3EZ1N2KgM0W1X+NgrplzUy3b+ocyy4eU7p/9fpKpBaTOuImCMh/6WObdmrsXmPqTMf+CJfw7QIKYwpn2uZfI01iNFDe7o+UoX75rDsjz50ogUDYoziRSVQ22aB96Tv26a97GrYJbxkbTu8FxHjMC6e7gir76sfTrt9FYeGe6QuGDqmQaa9fQxJVp2NulA0HwAGRssvSqOsDix9Hcd+gQKBgQDD7lIQL+rFakRoZK1ZyUCanby+lviIzczLouxCythpTPODtXmVg3yH9X2E6Md9ULzhrdDGtooA1d1SXS2SzumReaklggMsi5P8Ov+jYOeO+LZV/Zxf4zVdGQgzPhU8BvuacAMjikt8dU9gwJYm+sQb8cLkJXFyUFXnu7hoZA7UwQKBgQC1ykToX+bVJKOlMb0i7EFybERQozPxtxNmnQPH8nmx+D48oawITo+/I3PA2qQ7Y43+S6XomXFOFv4frNtg1K+tq1aGI3OyJyfJvnXue3IjLvT5pkB3HbuEvt0oMYyj9sru393OW0xuW/hLVWsmE25LuAbyZ3Xfp2wosBtjtWvNcwKBgAS0ppfo7rSLFtWDBX7QjJKqEyxop9NxTefeI9p+0K/Gv1p8c00Z+VWyma8lgBUMaVzqNcdv/uSCPmyJ/Fw4R/fMejmCY90gBQ/bwuQDocwXQRnTm3vaEyAHR+EjLpNgf453/jtOSP3WO2/RcEnDYA5jwhCErbLXJxkHsygerxSBAoGBAItWFarmls8X3jZoAUgbPa6uPU5xSQckA8LK5nMC7zPxygI/CNT1Ikimq7pN20OJ8vPOl8PImIf6J52vqBZ37o92nEMEOVF7oYuIaGv6QmmlPC99tjuWlnwQrwJ3uAyUxMaC4Eeiwtpzs8RKHG56xjdTPj/d/QMIGGa3VMb/7zjxAoGARlySlIcICZiCH7CKDImjtk+lN3PrZhCTq169/qLb9/a7wutKJHty0Fcu8B6C+2gH7bM9eik7wMxPhp3VuqB8ZTn9PwxO2BjNpGgcvnGgkXTM1IHZQY88vTHxIYZrTPvnpV2cirUgvI2TIcrqRTJsk0UG+yW12yP/sZLNApPXdvw=';
-      String pkamPublicKey =
-          'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiyJOz1nTk+zCyEdJLRJTRHvbwSyFpQujxfSF0utWQddrmrzLiwDij9GQyCSrwWzqKkAtJoCMmw7DkCD42wY0Go+i0d4EtSnL0Ws9ANGgdLnl+VzlfI59aZ54AFLZDnZzFMw8fdid/GJKEpLQZKcjQ1ewEzVEyOvQ5gTqFcBGT+S4vaK9Xn+QbcpwKrrK8zM7epF8Tdh2izxIapgbQmZOx6l0Ghat7ODqjNbEMBA9/eBW4J3Z8Y7I2A9B4K8CcAyGRc/tAOdDne+BY1raonJjJbGLfsxuerR1XfL0QB+rD99ptGvTz87bT5ji76mi4BQcodFd5b8LjMj9PF9HNLMfswIDAQAB';
-
       AtEncryptionKeyPair atEncryptionKeyPair =
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
-      AtPkamKeyPair atPkamKeyPair =
-          AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
+          AtChopsUtil.generateAtEncryptionKeyPair();
+      AtPkamKeyPair atPkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
       atChopsKeys.selfEncryptionKey =
-          AESKey('x1RB+Lbj9wDzpR23cx3FQiSCekQ1pFRSrNjouyGtrvk=');
+          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
       atChopsKeys.apkamSymmetricKey =
-          AESKey('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=');
+          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
 
       AtChops atChops = AtChopsImpl(atChopsKeys);
       AtServiceFactory mockAtServiceFactory = MockAtServiceFactor();
       AtClient mockAtClient = MockAtClient();
       LocalSecondary mockLocalSecondary = MockLocalSecondary();
+
+      InitialisationVector encryptionPrivateKeyIV =
+          AtChopsUtil.generateRandomIV(16);
+
+      String encryptedDefaultEncryptionPrivateKey = atChops
+          .encryptString(
+              atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
+              EncryptionKeyType.aes256,
+              keyName: 'apkamSymmetricKey',
+              iv: encryptionPrivateKeyIV)
+          .result;
+
+      InitialisationVector selfEncryptionKeyIV =
+          AtChopsUtil.generateRandomIV(16);
+      // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
+      String encryptedDefaultSelfEncryptionKey = atChops
+          .encryptString(atChops.atChopsKeys.selfEncryptionKey!.key,
+              EncryptionKeyType.aes256,
+              keyName: 'apkamSymmetricKey', iv: selfEncryptionKeyIV)
+          .result;
 
       when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo',
               options: any(named: 'options')))
@@ -359,9 +364,12 @@ void main() {
             await Future.value(jsonEncode(EnrollmentInfo(
                 '010ad3dc-02ee-41c6-b74b-c82f5122b181',
                 AtAuthKeys()
-                  ..apkamPublicKey = pkamPublicKey
-                  ..apkamPrivateKey = pkamPrivateKey
-                  ..defaultEncryptionPublicKey = encryptionPublicKey
+                  ..apkamPublicKey =
+                      atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey
+                  ..apkamPrivateKey =
+                      atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey
+                  ..defaultEncryptionPublicKey =
+                      atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey
                   ..apkamSymmetricKey = atChopsKeys.apkamSymmetricKey?.key
                   ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
                 DateTime.now().microsecondsSinceEpoch,
@@ -381,9 +389,12 @@ void main() {
               EnrollmentInfo(
                   '010ad3dc-02ee-41c6-b74b-c82f5122b181',
                   AtAuthKeys()
-                    ..apkamPublicKey = pkamPublicKey
-                    ..apkamPrivateKey = pkamPrivateKey
-                    ..defaultEncryptionPublicKey = encryptionPublicKey
+                    ..apkamPublicKey =
+                        atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey
+                    ..apkamPrivateKey =
+                        atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey
+                    ..defaultEncryptionPublicKey =
+                        atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey
                     ..apkamSymmetricKey = atChopsKeys.apkamSymmetricKey?.key
                     ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
                   DateTime.now().microsecondsSinceEpoch,
@@ -405,18 +416,21 @@ void main() {
 
       // Returns the encrypted defaultEncryptionPrivateKey from the server
       when(() => mockAtLookUp.executeCommand(
-          any(that: contains(AtConstants.defaultEncryptionPrivateKey)),
-          auth: true)).thenAnswer((invocation) => Future.value(
-              'data:${jsonEncode({
-                'value': encryptedDefaultEncryptionPrivateKey
-              })}'));
+              any(that: contains(AtConstants.defaultEncryptionPrivateKey)),
+              auth: true))
+          .thenAnswer((invocation) => Future.value('data:${jsonEncode({
+                    'value': encryptedDefaultEncryptionPrivateKey,
+                    'iv': base64Encode(encryptionPrivateKeyIV.ivBytes)
+                  })}'));
 
       // Returns the encrypted defaultSelfEncryptionKey from the server
-      when(() =>
-          mockAtLookUp.executeCommand(
+      when(() => mockAtLookUp.executeCommand(
               any(that: contains(AtConstants.defaultSelfEncryptionKey)),
-              auth: true)).thenAnswer((invocation) => Future.value(
-          'data:${jsonEncode({'value': encryptedDefaultSelfEncryptionKey})}'));
+              auth: true))
+          .thenAnswer((invocation) => Future.value('data:${jsonEncode({
+                    'value': encryptedDefaultSelfEncryptionKey,
+                    'iv': base64Encode(selfEncryptionKeyIV.ivBytes)
+                  })}'));
 
       when(() => mockAtServiceFactory.atClient(
               any(that: startsWith('@alice')),
