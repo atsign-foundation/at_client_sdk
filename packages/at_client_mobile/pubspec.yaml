@@ -26,8 +26,10 @@ dependencies:
   encrypt: ^5.0.3
   at_persistence_secondary_server: ^3.0.64
 
+# The meta package version is upgraded to 1.16.0 in at_commons. But the flutter SDK is pinned to meta : 1.15.0
+# To resolve the package dependencies, set version to meta: 1.16.0
 dependency_overrides:
-  meta: 1.16.0
+  meta: ^1.16.0
 
 dev_dependencies:
   lints: ^4.0.0
