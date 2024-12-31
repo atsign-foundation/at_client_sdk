@@ -1,3 +1,4 @@
+import 'package:apkam_example/authorisation/pages/otp_page.dart';
 import 'package:apkam_example/authorisation/services/authorisation_service.dart';
 import 'package:apkam_example/theme/theme_constants.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
@@ -5,23 +6,40 @@ import 'package:flutter/material.dart';
 
 import '../../theme/at_theme.dart';
 import '../models/models.dart';
+import '../widgets/authorisation_list_tile.dart';
+import '../widgets/manager_device_card.dart';
+import 'authorisation_page_section.dart';
 
 class AuthorisationHomePage extends StatefulWidget {
-  const AuthorisationHomePage({super.key});
+  const AuthorisationHomePage({
+    this.selectedSection = AuthorisationPageSection.otp,
+    super.key,
+  });
+
+  final AuthorisationPageSection selectedSection;
 
   @override
   AuthorisationHomePageState createState() => AuthorisationHomePageState();
 }
 
 class AuthorisationHomePageState extends State<AuthorisationHomePage> {
+  late AuthorisationPageSection selectedSection = widget.selectedSection;
   late final service = AuthorisationService(AtClientManager.getInstance().atClient);
 
   late Future<bool> isManagerKey;
+  late Future<Otp> getOtp;
 
   @override
   void initState() {
     super.initState();
     isManagerKey = service.isManagerKey();
+    getOtp = service.generateOtp();
+  }
+
+  void updateSelectedSection(AuthorisationPageSection section) {
+    setState(() {
+      selectedSection = section;
+    });
   }
 
   @override
@@ -46,7 +64,6 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
             if (!isManagerKey) {
               return Text('Your key is not a manager key');
             } else {
-              print(Theme.of(context).colorScheme.surface);
               return Padding(
                 padding: const EdgeInsets.all(64.0),
                 child: Container(
@@ -58,7 +75,7 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(
-                        width: 500,
+                        width: 400,
                         child: Container(
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.surface,
@@ -66,76 +83,31 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Card(
-                                  elevation: 0,
-                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.key,
-                                          color: Theme.of(context).colorScheme.primary,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Manager Device',
-                                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                                color: Theme.of(context).colorScheme.primary,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                child: const Text(
-                                  'The app on this device can be used as an authenticator for all future apps & devices.',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              const SizedBox(height: 18),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Card(
-                                  elevation: 0,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              'OTP',
-                                              style: Theme.of(context).textTheme.headlineSmall,
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Refresh OTP',
-                                              icon: Icon(
-                                                Icons.refresh,
-                                                color: Theme.of(context).colorScheme.primary,
-                                                size: 32,
-                                              ),
-                                              onPressed: () {},
-                                            ),
-                                          ],
-                                        ),
-                                        Text(
-                                          'Use this to enroll other apps and devices.',
-                                        ),
-                                        const SizedBox(height: 8),
-                                        FutureBuilder<Otp>(
-                                          future: service.generateOtp(),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    children: [
+                                      const ManageDeviceCard(),
+                                      const SizedBox(height: 24),
+                                      AuthorisationListTile(
+                                        leading: AuthorisationPageSection.requests.icon,
+                                        title: AuthorisationPageSection.requests.title(context),
+                                        onTap: () {
+                                          updateSelectedSection(AuthorisationPageSection.requests);
+                                        },
+                                        isSelected: selectedSection == AuthorisationPageSection.requests,
+                                        badgeCount: 4,
+                                      ),
+                                      AuthorisationListTile(
+                                        leading: AuthorisationPageSection.otp.icon,
+                                        title: AuthorisationPageSection.otp.title(context),
+                                        onTap: () {
+                                          updateSelectedSection(AuthorisationPageSection.otp);
+                                        },
+                                        isSelected: selectedSection == AuthorisationPageSection.otp,
+                                        trailing: FutureBuilder<Otp>(
+                                          future: getOtp,
                                           builder: (context, snapshot) {
                                             if (snapshot.connectionState == ConnectionState.waiting) {
                                               return const Center(
@@ -145,71 +117,70 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
                                             if (snapshot.hasError) {
                                               return Text('Error: ${snapshot.error}');
                                             }
-                                            // TODO: This needs to work with many characters so maybe using Wrap or scaling the
-                                            // text down if needed will be needed.
                                             return Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: snapshot.data!.otp.split('').map(
-                                                (e) {
-                                                  return Padding(
+                                              children: [
+                                                Container(
+                                                  decoration: BoxDecoration(
+                                                    color: selectedSection == AuthorisationPageSection.otp
+                                                        ? Theme.of(context).colorScheme.surfaceContainerHigh
+                                                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: Padding(
                                                     padding: const EdgeInsets.all(8.0),
-                                                    child: Container(
-                                                      decoration: BoxDecoration(
-                                                        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                                                        borderRadius: BorderRadius.circular(8),
-                                                      ),
-                                                      child: Padding(
-                                                        padding: const EdgeInsets.all(8.0),
-                                                        child: Text(
-                                                          e,
-                                                          style: Theme.of(context).textTheme.headlineMedium,
-                                                        ),
-                                                      ),
+                                                    child: Text(
+                                                      snapshot.data!.otp,
+                                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                                            color: selectedSection == AuthorisationPageSection.otp
+                                                                ? Theme.of(context).colorScheme.primary
+                                                                : Theme.of(context).colorScheme.onSurface,
+                                                          ),
                                                     ),
-                                                  );
-                                                },
-                                              ).toList(),
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Copy OTP',
+                                                  icon: Icon(
+                                                    Icons.copy,
+                                                    color: selectedSection == AuthorisationPageSection.otp
+                                                        ? Theme.of(context).colorScheme.primary
+                                                        : Theme.of(context).colorScheme.onSurface,
+                                                  ),
+                                                  onPressed: () {},
+                                                ),
+                                              ],
                                             );
                                           },
                                         ),
-                                        const SizedBox(height: 8),
-                                        TextButton.icon(
-                                          onPressed: () {},
-                                          icon: const Icon(Icons.copy),
-                                          label: const Text('Copy OTP'),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                      AuthorisationListTile(
+                                        leading: AuthorisationPageSection.setPin.icon,
+                                        title: AuthorisationPageSection.setPin.title(context),
+                                        onTap: () {
+                                          updateSelectedSection(AuthorisationPageSection.setPin);
+                                        },
+                                        isSelected: selectedSection == AuthorisationPageSection.setPin,
+                                      ),
+                                      AuthorisationListTile(
+                                        leading: AuthorisationPageSection.approvedEnrollments.icon,
+                                        title: AuthorisationPageSection.approvedEnrollments.title(context),
+                                        onTap: () {
+                                          updateSelectedSection(AuthorisationPageSection.approvedEnrollments);
+                                        },
+                                        isSelected: selectedSection == AuthorisationPageSection.approvedEnrollments,
+                                      ),
+                                      AuthorisationListTile(
+                                        leading: AuthorisationPageSection.history.icon,
+                                        title: AuthorisationPageSection.history.title(context),
+                                        onTap: () {
+                                          updateSelectedSection(AuthorisationPageSection.history);
+                                        },
+                                        isSelected: selectedSection == AuthorisationPageSection.history,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              AuthorisationListTile(
-                                leading: Icons.password,
-                                title: 'Set pin',
-                                onTap: () {},
-                                isSelected: false,
-                              ),
-                              AuthorisationListTile(
-                                leading: Icons.question_mark_outlined,
-                                title: 'Requests',
-                                onTap: () {},
-                                isSelected: true,
-                                badgeCount: 4,
-                              ),
-                              AuthorisationListTile(
-                                leading: Icons.check,
-                                title: 'Approved Enrollments',
-                                onTap: () {},
-                                isSelected: false,
-                              ),
-                              AuthorisationListTile(
-                                leading: Icons.history,
-                                title: 'History',
-                                onTap: () {},
-                                isSelected: false,
-                              ),
-                              const Spacer(),
                               Padding(
                                 padding: const EdgeInsets.all(16.0),
                                 child: OutlinedButton.icon(
@@ -223,8 +194,19 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
                         ),
                       ),
                       Expanded(
-                        child: Center(
-                          child: Text('Selected content here'),
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: switch (selectedSection) {
+                            AuthorisationPageSection.otp => OtpPage(getOtp: getOtp),
+                            // TODO: Handle this case.
+                            AuthorisationPageSection.setPin => throw UnimplementedError(),
+                            // TODO: Handle this case.
+                            AuthorisationPageSection.requests => throw UnimplementedError(),
+                            // TODO: Handle this case.
+                            AuthorisationPageSection.approvedEnrollments => throw UnimplementedError(),
+                            // TODO: Handle this case.
+                            AuthorisationPageSection.history => throw UnimplementedError(),
+                          },
                         ),
                       ),
                     ],
@@ -233,96 +215,6 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
               );
             }
           },
-        ),
-      ),
-    );
-  }
-}
-
-/// {@template authorisation_list_tile}
-/// A list tile for switching between different sections.
-///
-/// If [isSelected] is true, the tile will be highlighted.
-/// {@endtemplate}
-class AuthorisationListTile extends StatelessWidget {
-  /// {@macro authorisation_list_tile}
-  const AuthorisationListTile({
-    required this.isSelected,
-    required this.title,
-    required this.leading,
-    required this.onTap,
-    this.badgeCount,
-    super.key,
-  });
-
-  /// Whether the tile is selected.
-  /// Will highlight the tile if true.
-  final bool isSelected;
-
-  /// The text to display in the tile.
-  final String title;
-
-  /// The icon to display in the tile.
-  final IconData leading;
-
-  /// The function to call when the tile is tapped.
-  final VoidCallback onTap;
-
-  /// The number to display in the badge.
-  /// If null, the badge will not be displayed.
-  final int? badgeCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      child: InkWell(
-        onTap: onTap,
-        child: IntrinsicHeight(
-          child: Row(
-            children: [
-              Container(
-                color: isSelected ? Theme.of(context).colorScheme.primary : Colors.transparent,
-                width: 4,
-              ),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(8.0),
-                  color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Colors.transparent,
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 16),
-                      Icon(
-                        leading,
-                        color: isSelected
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              color: isSelected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                      ),
-                      const Spacer(),
-                      if (badgeCount != null)
-                        Badge(
-                          padding: const EdgeInsets.all(4),
-                          textColor: Theme.of(context).colorScheme.primary,
-                          textStyle: Theme.of(context).textTheme.bodyMedium,
-                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                          label: Text(
-                            badgeCount.toString(),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
