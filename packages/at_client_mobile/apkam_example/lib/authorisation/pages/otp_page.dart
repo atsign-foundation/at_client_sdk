@@ -3,12 +3,11 @@ import 'package:apkam_example/authorisation/widgets/authorisation_section_header
 import 'package:apkam_example/authorisation/widgets/tip_card.dart';
 import 'package:flutter/material.dart';
 
-import '../models/models.dart';
+import '../providers/otp_provider.dart';
+import '../providers/selected_section_provider.dart';
 
 class OtpPage extends StatefulWidget {
-  const OtpPage({required this.getOtp, super.key});
-
-  final Future<Otp> getOtp;
+  const OtpPage({super.key});
 
   @override
   OtpPageState createState() => OtpPageState();
@@ -17,6 +16,7 @@ class OtpPage extends StatefulWidget {
 class OtpPageState extends State<OtpPage> {
   @override
   Widget build(BuildContext context) {
+    final activeOtp = ActiveOtpProvider.of(context);
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -37,58 +37,54 @@ class OtpPageState extends State<OtpPage> {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 8),
-                  FutureBuilder<Otp>(
-                    future: widget.getOtp,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        return Text('Error: ${snapshot.error}');
-                      }
-                      return Wrap(
-                        alignment: WrapAlignment.center,
-                        runAlignment: WrapAlignment.center,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          ...snapshot.data!.otp.split('').map(
-                            (e) {
-                              return Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Container(
-                                  width: 50,
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Center(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Text(
-                                        e,
-                                        style: Theme.of(context).textTheme.headlineMedium,
-                                      ),
+                  // TODO: Create a nicer looking loading state
+                  if (activeOtp.isFetching)
+                    const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  if (activeOtp.error != null) Text('Error: ${activeOtp.error!}'),
+                  if (activeOtp.otp != null)
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      runAlignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        ...activeOtp.otp!.otp.split('').map(
+                          (e) {
+                            return Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Container(
+                                width: 50,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Text(
+                                      e,
+                                      style: Theme.of(context).textTheme.headlineMedium,
                                     ),
                                   ),
                                 ),
-                              );
-                            },
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'Refresh OTP',
+                          icon: Icon(
+                            Icons.refresh,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 32,
                           ),
-                          IconButton(
-                            tooltip: 'Refresh OTP',
-                            icon: Icon(
-                              Icons.refresh,
-                              color: Theme.of(context).colorScheme.primary,
-                              size: 32,
-                            ),
-                            onPressed: () {},
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                          onPressed: () async {
+                            await activeOtp.generateOtp(refresh: true);
+                          },
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 8),
                   TextButton.icon(
                     onPressed: () {},
@@ -100,8 +96,11 @@ class OtpPageState extends State<OtpPage> {
             ),
           ),
           const SizedBox(height: 32),
-          const TipCard(
+          TipCard(
             tip: 'Setting up multiple devices? Set up a PIN to avoid regenerating new OTPs',
+            onTap: () {
+              SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.setPin);
+            },
           ),
         ],
       ),
