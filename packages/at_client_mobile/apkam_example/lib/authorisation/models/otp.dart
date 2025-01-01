@@ -6,11 +6,10 @@ import 'package:flutter/foundation.dart';
 @immutable
 class Otp {
   /// {@macro otp}
-  Otp({
+  const Otp({
     required this.otp,
     required this.expiry,
-  })  : assert(otp.length >= 6, 'OTP should be 6 or more characters'),
-        assert(expiry.isAfter(DateTime.now()));
+  }) : assert(otp.length >= 6, 'OTP should be 6 or more characters');
 
   /// Creates an [Otp] object with a specified duration from now.
   Otp.fromDuration({

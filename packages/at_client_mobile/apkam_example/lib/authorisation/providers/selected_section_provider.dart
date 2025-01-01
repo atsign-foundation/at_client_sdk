@@ -1,28 +1,15 @@
 import 'package:flutter/widgets.dart';
 
-import '../pages/authorisation_page_section.dart';
+import '../notifiers/selected_section_notifier.dart';
 
-class SelectedSection extends ChangeNotifier {
-  SelectedSection({required AuthorisationPageSection initialSection}) : _selectedSection = initialSection;
-
-  AuthorisationPageSection _selectedSection;
-
-  AuthorisationPageSection get selectedSection => _selectedSection;
-
-  void updateSelectedSection(AuthorisationPageSection section) {
-    _selectedSection = section;
-    notifyListeners();
-  }
-}
-
-class SelectedSectionProvider extends InheritedNotifier<SelectedSection> {
+class SelectedSectionProvider extends InheritedNotifier<SelectedSectionNotifier> {
   const SelectedSectionProvider({
-    required SelectedSection super.notifier,
+    required SelectedSectionNotifier super.notifier,
     required super.child,
     super.key,
   });
 
-  static SelectedSection of(BuildContext context) {
+  static SelectedSectionNotifier of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<SelectedSectionProvider>()!.notifier!;
   }
 }

@@ -1,3 +1,4 @@
+import 'package:apkam_example/authorisation/widgets/spp_widget.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/authorisation_section_header.dart';
@@ -20,6 +21,25 @@ class SetPinPageState extends State<SetPinPage> {
           AuthorisationSectionHeader(
             title: AuthorisationPageSection.setPin.title(context),
             icon: AuthorisationPageSection.setPin.icon,
+          ),
+          Card(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surface,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Create a memorable PIN to use when onboarding your atSign in other apps and devices.',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const SppWidget(),
+                ],
+              ),
+            ),
           ),
         ],
       ),
