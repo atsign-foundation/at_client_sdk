@@ -1,3 +1,5 @@
+import 'package:apkam_example/authorisation/providers/pending_requests_provider.dart';
+import 'package:apkam_example/authorisation/widgets/enrollment_request_card.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/authorisation_section_header.dart';
@@ -13,6 +15,7 @@ class RequestsPage extends StatefulWidget {
 class RequestsPageState extends State<RequestsPage> {
   @override
   Widget build(BuildContext context) {
+    final pendingRequestsProvider = PendingRequestsProvider.of(context);
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -21,6 +24,33 @@ class RequestsPageState extends State<RequestsPage> {
             title: AuthorisationPageSection.requests.title(context),
             icon: AuthorisationPageSection.requests.icon,
           ),
+          if (pendingRequestsProvider.isLoading)
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+          if (pendingRequestsProvider.error != null)
+            Center(
+              child: Text(
+                pendingRequestsProvider.error!,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          if (pendingRequestsProvider.requests.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text('No pending requests'),
+            ),
+          if (pendingRequestsProvider.requests.isNotEmpty)
+            ...pendingRequestsProvider.requests.map(
+              (request) => EnrollmentRequestCard(
+                request: request,
+                onApprove: () {},
+                onReject: () {},
+              ),
+            ),
         ],
       ),
     );

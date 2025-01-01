@@ -1,3 +1,4 @@
+import 'package:apkam_example/authorisation/providers/pending_requests_provider.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/theme_constants.dart';
@@ -42,7 +43,7 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                         SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.requests);
                       },
                       isSelected: selectedSection == AuthorisationPageSection.requests,
-                      badgeCount: 4,
+                      badgeCount: PendingRequestsProvider.of(context).requests.length,
                     ),
                     AuthorisationListTile(
                       leading: AuthorisationPageSection.otp.icon,

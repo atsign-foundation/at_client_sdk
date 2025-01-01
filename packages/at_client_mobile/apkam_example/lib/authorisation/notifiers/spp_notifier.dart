@@ -25,10 +25,10 @@ class SppNotifier extends ChangeNotifier {
   /// Fetch the SPP from the server.
   Future<void> fetchSpp() async {
     try {
+      _error = null;
       _isLoading = true;
       notifyListeners();
       final currentSpp = await _service.getActiveSpp();
-      print('Current spp: $currentSpp');
       _spp = currentSpp;
     } catch (e) {
       _error = e.toString();
@@ -41,6 +41,7 @@ class SppNotifier extends ChangeNotifier {
   /// Set the SPP on the server.
   Future<void> setSpp(String spp) async {
     try {
+      _error = null;
       _isLoading = true;
       notifyListeners();
       final newSpp = await _service.setSpp(spp: spp);
