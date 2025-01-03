@@ -22,6 +22,6 @@ dependency_overrides:
       ref: ws_approach1
       
 dev_dependencies:
-  test: ^1.24.3
+  test: ^1.25.8
   lints: ^2.0.0
   coverage: ^1.5.0

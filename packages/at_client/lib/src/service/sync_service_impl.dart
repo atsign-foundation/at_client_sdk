@@ -66,6 +66,9 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// A local AtKey to persist the last received server commitId
   late final AtKey _lastReceivedServerCommitIdAtKey;
 
+  /// A local AtKey to store skipDeletesUntil value
+  late final AtKey _skipDeletesUntilCommitId;
+
   static Future<SyncService> create(AtClient atClient,
       {required AtClientManager atClientManager,
       required NotificationService notificationService,
@@ -92,6 +95,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     _statsNotificationListener = notificationService as NotificationServiceImpl;
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
+    _skipDeletesUntilCommitId =
+        AtKey.local('skipdeletesuntil', currentAtSign).build();
     atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
     _atClientManager.listenToAtSignChange(this);
   }
@@ -235,13 +240,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       final localCommitIdBeforeSync = await _getLocalCommitId();
 
       // Hint for the casual reader - main sync algorithm is in [syncInternal]
-      final syncResult = await syncInternal(serverCommitId, syncRequest);
+      final syncResult = await syncInternal(serverCommitId, syncRequest,
+          localCommitIdBeforeSync: localCommitIdBeforeSync);
 
       _syncComplete(syncRequest);
       syncProgress.syncStatus = syncResult.syncStatus;
       syncProgress.keyInfoList = syncResult.keyInfoList;
       serverCommitId = await _getServerCommitId();
       final localCommitId = await _getLocalCommitId();
+
       _informSyncProgress(syncProgress,
           localCommitIdBeforeSync: localCommitIdBeforeSync,
           localCommitId: localCommitId,
@@ -347,8 +354,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   @visibleForTesting
-  Future<SyncResult> syncInternal(
-      int serverCommitId, SyncRequest syncRequest) async {
+  Future<SyncResult> syncInternal(int serverCommitId, SyncRequest syncRequest,
+      {int? localCommitIdBeforeSync}) async {
     var syncResult = syncRequest.result!;
     _logger.finer('Sync in progress');
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
@@ -366,7 +373,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           'Pulling changes into local secondary | lastReceivedServerCommitId $lastReceivedServerCommitId | serverCommitId $serverCommitId'));
       // Hint to casual reader: This is where we sync new changes from the server to this client
       final keyInfoList = await _syncFromServer(
-          serverCommitId, lastReceivedServerCommitId, unCommittedEntries);
+          serverCommitId, lastReceivedServerCommitId, unCommittedEntries,
+          localCommitIdBeforeSync: localCommitIdBeforeSync);
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
@@ -379,7 +387,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     }
     syncResult.lastSyncedOn = DateTime.now().toUtc();
     syncResult.syncStatus = SyncStatus.success;
-
     return syncResult;
   }
 
@@ -429,23 +436,28 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Syncs the cloud secondary changes to local secondary.
-  Future<List<KeyInfo>> _syncFromServer(
-      int serverCommitId,
-      int lastReceivedServerCommitId,
-      List<CommitEntry> uncommittedEntries) async {
+  Future<List<KeyInfo>> _syncFromServer(int serverCommitId,
+      int lastReceivedServerCommitId, List<CommitEntry> uncommittedEntries,
+      {int? localCommitIdBeforeSync}) async {
     // Iterates until serverCommitId is greater than lastReceivedServerCommitId.
     // replacing localCommitId with lastReceivedServerCommitId fixes infinite loop issue
     // in certain scenarios e.g server has a commit entry that need not be synced on client side,
     // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
     try {
+      int? skipDeletesUntil = await setAndGetSkipDeletesUntil(
+          localCommitIdBeforeSync, serverCommitId);
+
       while (serverCommitId > lastReceivedServerCommitId) {
         _sendTelemetry('_syncFromServer.whileLoop', {
           "serverCommitId": serverCommitId,
           "lastReceivedServerCommitId": lastReceivedServerCommitId
         });
         List<dynamic> listOfCommitEntriesFromServer =
-            await _getEntriesToSyncFromServer(lastReceivedServerCommitId);
+            await _getEntriesToSyncFromServer(
+                lastReceivedServerCommitId, serverCommitId,
+                localCommitIdBeforeSync: localCommitIdBeforeSync,
+                skipDeletesUntil: skipDeletesUntil);
         if (listOfCommitEntriesFromServer.isEmpty) {
           _logger.finer(_logger.getLogMessageWithClientParticulars(
               _atClient.getPreferences()!.atClientParticulars,
@@ -536,15 +548,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   /// Takes the last received server commit id and fetches the entries that are above the given
-  /// commit-id to sync into the local keystore.
+  /// commit-id to sync into the local keystore. If [skipDeletesUntil] is set then delete commit entries
+  /// with commit-id greater than [skipDeletesUntil] will not be synced from server.
   Future<List<dynamic>> _getEntriesToSyncFromServer(
-      int lastReceivedServerCommitId) async {
+      int lastReceivedServerCommitId, int serverCommitId,
+      {int? localCommitIdBeforeSync, int? skipDeletesUntil}) async {
     // Sync verb syntax has to be changed before removing these deprecations
     var syncBuilder = SyncVerbBuilder()
       ..commitId = lastReceivedServerCommitId
-      ..regex = _atClient.getPreferences()!.syncRegex
       ..limit = _atClient.getPreferences()!.syncPageLimit
-      ..isPaginated = true;
+      ..regex = _atClient.getPreferences()!.syncRegex;
+    if (_shouldSkipDeletes(skipDeletesUntil, serverCommitId)) {
+      syncBuilder.skipDeletesUntil = skipDeletesUntil;
+    }
+
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
         'syncBuilder ${syncBuilder.buildCommand()}'));
@@ -564,6 +581,32 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _atClient.getPreferences()!.atClientParticulars,
         'syncResponse $syncResponseJson'));
     return syncResponseJson;
+  }
+
+  @visibleForTesting
+
+  /// When a new client is authenticated, set the [_skipDeletesUntilCommitId] to [serverCommitId] for initial sync
+  /// If initial sync is interrupted before client fully syncs from the server and client authenticates again, retrieve
+  /// [_skipDeletesUntilCommitId] from local secondary and return
+  Future<int?> setAndGetSkipDeletesUntil(
+      int? localCommitIdBeforeSync, int serverCommitId) async {
+    if (localCommitIdBeforeSync == -1) {
+      await _atClient.put(_skipDeletesUntilCommitId, serverCommitId.toString());
+      return serverCommitId;
+    }
+    try {
+      return int.parse((await _atClient.get(_skipDeletesUntilCommitId)).value);
+    } on AtKeyNotFoundException {
+      // do nothing
+    }
+    return null;
+  }
+
+  bool _shouldSkipDeletes(int? skipDeletesUntil, int serverCommitId) {
+    if (skipDeletesUntil == null) {
+      return false;
+    }
+    return serverCommitId >= skipDeletesUntil;
   }
 
   Future<ConflictInfo?> _setConflictInfo(final serverCommitEntry) async {
@@ -741,6 +784,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     if (metadata.pubKeyCS != null) {
       metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
     }
+    if (metadata.pubKeyHash != null) {
+      metadataStr +=
+          ':${AtConstants.sharedWithPublicKeyHash}:${metadata.pubKeyHash?.hash}';
+      metadataStr +=
+          ':${AtConstants.sharedWithPublicKeyHashingAlgo}:${metadata.pubKeyHash?.hashingAlgo}';
+    }
+
     if (metadata.encoding != null) {
       metadataStr += ':encoding:${metadata.encoding}';
     }
@@ -963,6 +1013,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         builder.atKey.metadata.pubKeyCS =
             metaData[AtConstants.sharedWithPublicKeyCheckSum];
       }
+      if (metaData[AtConstants.sharedWithPublicKeyHash] != null) {
+        Map pubKeyHash =
+            jsonDecode(metaData[AtConstants.sharedWithPublicKeyHash]);
+        builder.atKey.metadata.pubKeyHash =
+            PublicKeyHash(pubKeyHash['hash'], pubKeyHash['hashingAlgo']);
+      }
       if (metaData[AtConstants.encoding] != null) {
         builder.atKey.metadata.encoding = metaData[AtConstants.encoding];
       }
@@ -983,6 +1039,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo] != null) {
         builder.atKey.metadata.skeEncAlgo =
             metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo];
+      }
+
+      if (metaData[AtConstants.sharedWithPublicKeyHash] != null &&
+          metaData[AtConstants.sharedWithPublicKeyHashingAlgo] != null) {
+        builder.atKey.metadata.pubKeyHash = PublicKeyHash(
+            metaData[AtConstants.sharedWithPublicKeyHash],
+            metaData[AtConstants.sharedWithPublicKeyHashingAlgo]);
       }
     }
   }
