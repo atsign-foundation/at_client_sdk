@@ -27,10 +27,12 @@ class AtOnboardingAccountsScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<AtOnboardingAccountsScreen> createState() => _AtOnboardingAccountsScreenState();
+  State<AtOnboardingAccountsScreen> createState() =>
+      _AtOnboardingAccountsScreenState();
 }
 
-class _AtOnboardingAccountsScreenState extends State<AtOnboardingAccountsScreen> {
+class _AtOnboardingAccountsScreenState
+    extends State<AtOnboardingAccountsScreen> {
   List<String> pairedAtsignsList = [];
   Object? lastSelectedIndex;
   late int greyStartIndex;
@@ -66,80 +68,68 @@ class _AtOnboardingAccountsScreenState extends State<AtOnboardingAccountsScreen>
         ),
         body: Padding(
           padding: const EdgeInsets.all(16),
-          child: pairedAtsignsList.isEmpty
-              ? Center(
-                  child: Column(
-                    children: <Widget>[
-                      CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor)),
-                      Text(
-                        AtOnboardingLocalizations.current.loading_atSigns,
-                        style: const TextStyle(
-                          fontSize: AtOnboardingDimens.fontLarge,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
+          child: Column(
+            children: <Widget>[
+              Text(
+                widget.message ??
+                    AtOnboardingLocalizations.current.title_select_atSign,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: AtOnboardingDimens.fontNormal,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (widget.newAtsign != null) ...<Widget>[
+                const Divider(thickness: 0.8),
+                RadioListTile<Object>(
+                  controlAffinity: ListTileControlAffinity.trailing,
+                  groupValue: lastSelectedIndex,
+                  onChanged: (Object? value) {
+                    setState(() {
+                      lastSelectedIndex = value;
+                    });
+                    _showAlert(widget.newAtsign!, context);
+                  },
+                  value: 'new',
+                  activeColor: theme.primaryColor,
+                  title: Text('@${widget.newAtsign}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                 )
-              : Column(
-                  children: <Widget>[
-                    Text(
-                      widget.message ?? AtOnboardingLocalizations.current.title_select_atSign,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: AtOnboardingDimens.fontNormal,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (widget.newAtsign != null) ...<Widget>[
-                      const Divider(thickness: 0.8),
-                      RadioListTile<Object>(
+              ],
+              const Divider(thickness: 0.8),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: widget.atsigns.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    String currentItem = '@${widget.atsigns[index]}';
+                    bool isExist = pairedAtsignsList.contains(currentItem);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: RadioListTile<Object>(
                         controlAffinity: ListTileControlAffinity.trailing,
                         groupValue: lastSelectedIndex,
-                        onChanged: (Object? value) {
-                          setState(() {
-                            lastSelectedIndex = value;
-                          });
-                          _showAlert(widget.newAtsign!, context);
-                        },
-                        value: 'new',
+                        onChanged: isExist
+                            ? null
+                            : (Object? value) {
+                                setState(() {
+                                  lastSelectedIndex = value;
+                                });
+                                _showAlert(
+                                  widget.atsigns[
+                                      int.parse(lastSelectedIndex.toString())],
+                                  context,
+                                );
+                              },
+                        value: index,
                         activeColor: theme.primaryColor,
-                        title: Text('@${widget.newAtsign}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      )
-                    ],
-                    const Divider(thickness: 0.8),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: widget.atsigns.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          String currentItem = '@${widget.atsigns[index]}';
-                          bool isExist = pairedAtsignsList.contains(currentItem);
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2.0),
-                            child: RadioListTile<Object>(
-                              controlAffinity: ListTileControlAffinity.trailing,
-                              groupValue: lastSelectedIndex,
-                              onChanged: isExist
-                                  ? null
-                                  : (Object? value) {
-                                      setState(() {
-                                        lastSelectedIndex = value;
-                                      });
-                                      _showAlert(
-                                        widget.atsigns[int.parse(lastSelectedIndex.toString())],
-                                        context,
-                                      );
-                                    },
-                              value: index,
-                              activeColor: theme.primaryColor,
-                              title: Text(currentItem),
-                            ),
-                          );
-                        },
+                        title: Text(currentItem),
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -163,11 +153,15 @@ class _AtOnboardingAccountsScreenState extends State<AtOnboardingAccountsScreen>
               style: theme.textTheme.bodyLarge,
               children: <InlineSpan>[
                 TextSpan(
-                  text: AtOnboardingLocalizations.current.title_pair_atSign_prev,
+                  text:
+                      AtOnboardingLocalizations.current.title_pair_atSign_prev,
                 ),
-                TextSpan(text: ' $atsign ', style: const TextStyle(fontWeight: FontWeight.bold)),
                 TextSpan(
-                  text: AtOnboardingLocalizations.current.title_pair_atSign_next,
+                    text: ' $atsign ',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                TextSpan(
+                  text:
+                      AtOnboardingLocalizations.current.title_pair_atSign_next,
                 )
               ],
             ),

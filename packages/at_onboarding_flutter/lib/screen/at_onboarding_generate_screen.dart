@@ -455,7 +455,6 @@ class _AtOnboardingGenerateScreenState
     required String secret,
   }) async {
     dynamic authResponse;
-    String cramSecret = secret.split(':').last;
     String verifiedAtSign = atSign.startsWith('@') ? atSign : '@$atSign';
 
     try {
