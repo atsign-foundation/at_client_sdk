@@ -450,11 +450,10 @@ class _AtOnboardingGenerateScreenState
     );
   }
 
-  Future<dynamic> _processSharedSecret({
+  Future<void> _processSharedSecret({
     required String atSign,
     required String secret,
   }) async {
-    dynamic authResponse;
     String verifiedAtSign = atSign.startsWith('@') ? atSign : '@$atSign';
 
     try {
@@ -475,14 +474,15 @@ class _AtOnboardingGenerateScreenState
 
       String? previousAtsign = _onboardingService.currentAtsign;
       _onboardingService.setAtsign = verifiedAtSign;
-      authResponse = await _onboardingService.onboard(
+
+      final authResponse = await _onboardingService.onboard(
         cramSecret: secret,
       );
 
       _inprogressDialog.close();
-      if (authResponse == AtOnboardingResponseStatus.authSuccess) {
+      if (authResponse) {
         if (!mounted) return;
-        Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => AtOnboardingBackupScreen(
@@ -493,22 +493,13 @@ class _AtOnboardingGenerateScreenState
 
         if (!mounted) return;
         Navigator.pop(
-            context, AtOnboardingResult.success(atsign: verifiedAtSign));
+          context,
+          AtOnboardingResult.success(atsign: verifiedAtSign),
+        );
       } else {
         _onboardingService.setAtsign = previousAtsign;
-      }
-
-      if (authResponse == AtOnboardingResponseStatus.serverNotReached) {
-        await _showAlertDialog(
-          AtOnboardingLocalizations.current.msg_atSign_unreachable,
-        );
-      } else if (authResponse == AtOnboardingResponseStatus.authFailed) {
         await _showAlertDialog(
           AtOnboardingLocalizations.current.error_authenticated_failed,
-        );
-      } else if (authResponse != AtOnboardingResponseStatus.authSuccess) {
-        await showErrorDialog(
-          AtOnboardingLocalizations.current.msg_response_time_out,
         );
       }
     } catch (e) {
@@ -531,7 +522,6 @@ class _AtOnboardingGenerateScreenState
         );
       }
     }
-    return authResponse;
   }
 
   Future<void> _showAlertDialog(dynamic errorMessage, {String? title}) async {
