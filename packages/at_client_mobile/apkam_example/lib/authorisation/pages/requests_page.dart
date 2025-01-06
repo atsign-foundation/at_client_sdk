@@ -47,8 +47,12 @@ class RequestsPageState extends State<RequestsPage> {
             ...pendingRequestsProvider.requests.map(
               (request) => EnrollmentRequestCard(
                 request: request,
-                onApprove: () {},
-                onReject: () {},
+                onApprove: () async {
+                  await pendingRequestsProvider.approveRequest(request);
+                },
+                onReject: () async {
+                  await pendingRequestsProvider.denyRequest(request);
+                },
               ),
             ),
         ],

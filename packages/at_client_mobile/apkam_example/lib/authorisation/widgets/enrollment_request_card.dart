@@ -7,14 +7,16 @@ import 'namespace_chip.dart';
 class EnrollmentRequestCard extends StatefulWidget {
   const EnrollmentRequestCard({
     required this.request,
-    required this.onApprove,
-    required this.onReject,
+    this.onApprove,
+    this.onReject,
+    this.onRevoke,
     super.key,
   });
 
   final EnrollmentRequest request;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
+  final Future<void> Function()? onApprove;
+  final Future<void> Function()? onReject;
+  final Future<void> Function()? onRevoke;
 
   @override
   State<EnrollmentRequestCard> createState() => _EnrollmentRequestCardState();
@@ -66,7 +68,7 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                   textAlign: TextAlign.end,
-                )
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -151,38 +153,86 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                OutlinedButton(
-                  style: ButtonStyle(
-                    shape: WidgetStateProperty.all<OutlinedBorder>(
-                      RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24.0),
+                if (widget.onReject != null)
+                  OutlinedButton(
+                    style: ButtonStyle(
+                      shape: WidgetStateProperty.all<OutlinedBorder>(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24.0),
+                        ),
+                      ),
+                      foregroundColor: WidgetStateProperty.all<Color>(
+                        Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      side: WidgetStateProperty.all<BorderSide>(
+                        BorderSide(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      textStyle: WidgetStateProperty.all<TextStyle>(
+                        Theme.of(context).textTheme.labelLarge!.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                      padding: WidgetStateProperty.all<EdgeInsetsGeometry>(
+                        const EdgeInsets.symmetric(horizontal: 24),
                       ),
                     ),
-                    foregroundColor: WidgetStateProperty.all<Color>(
-                      Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    side: WidgetStateProperty.all<BorderSide>(
-                      BorderSide(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    textStyle: WidgetStateProperty.all<TextStyle>(
-                      Theme.of(context).textTheme.labelLarge!.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                    padding: WidgetStateProperty.all<EdgeInsetsGeometry>(
-                      const EdgeInsets.symmetric(horizontal: 24),
-                    ),
+                    onPressed: () async {
+                      await widget.onReject!();
+                    },
+                    child: const Text('Reject'),
                   ),
-                  onPressed: () {},
-                  child: const Text('Reject'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () {},
-                  child: const Text('Approve'),
-                ),
+                if (widget.onReject != null) const SizedBox(width: 8),
+                if (widget.onApprove != null)
+                  FilledButton(
+                    onPressed: () async {
+                      await widget.onApprove!();
+                    },
+                    child: const Text('Approve'),
+                  ),
+                if (widget.onApprove != null) const SizedBox(width: 8),
+                if (widget.onRevoke != null)
+                  FilledButton(
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.all<Color>(
+                        Theme.of(context).colorScheme.secondary,
+                      ),
+                    ),
+                    onPressed: () async {
+                      final result = await showGeneralDialog<bool>(
+                        context: context,
+                        pageBuilder: (dialogContext, animation1, animation2) {
+                          return Theme(
+                            data: Theme.of(context),
+                            child: AlertDialog(
+                              title: const Text('Revoke Enrollment'),
+                              content: const Text('Are you sure you want to revoke this enrollment?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(dialogContext).pop(false);
+                                  },
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(dialogContext).pop(true);
+                                  },
+                                  child: const Text('Revoke'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+
+                      if (result != null && result) {
+                        await widget.onRevoke!();
+                      }
+                    },
+                    child: const Text('Revoke'),
+                  ),
               ],
             ),
           ],

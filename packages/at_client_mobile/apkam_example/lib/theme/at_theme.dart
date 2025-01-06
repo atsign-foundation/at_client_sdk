@@ -40,6 +40,20 @@ class AtThemeState extends State<AtTheme> {
       onSurfaceVariant: kLightOnSurfaceVariant,
       dynamicSchemeVariant: DynamicSchemeVariant.content,
     ),
+    searchBarTheme: SearchBarThemeData(
+      backgroundColor: const WidgetStatePropertyAll<Color>(kLightSurface),
+      elevation: const WidgetStatePropertyAll<double>(0),
+      shape: WidgetStatePropertyAll<OutlinedBorder>(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(kBorderRadius),
+        ),
+      ),
+      hintStyle: const WidgetStatePropertyAll<TextStyle>(
+        TextStyle(
+          color: kLightOnSurfaceVariant,
+        ),
+      ),
+    ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: ButtonStyle(
         padding: WidgetStateProperty.all(

@@ -39,7 +39,7 @@ class AuthorisationService with AtClientBindings {
     _enrollmentRequestsController ??= StreamController<EnrollmentRequest>.broadcast();
     _enrollmentRequestsController!.onListen = () async {
       // TODO: Does it make sense to add previous requests here? Maybe just pending ones?
-      final requests = await getAllEnrollmentRequests();
+      final requests = await getEnrollmentRequests();
       for (final request in requests) {
         // TODO: I don't like this. Adding a delay because the listener will only receive the last one if they come in too quickly.
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -87,6 +87,7 @@ class AuthorisationService with AtClientBindings {
 
   /// Stream of all enrollment requests.
   /// Use this for getting real-time updates on new requests.
+  /// Will also include past pending requests.
   Stream<EnrollmentRequest> get enrollmentRequests {
     if (_enrollmentRequestsController == null) {
       throw StateError('init() must be called before accessing enrollmentRequests');
@@ -94,10 +95,11 @@ class AuthorisationService with AtClientBindings {
     return _enrollmentRequestsController!.stream;
   }
 
-  /// Get all enrollment requests. This includes all past and pending requests.
-  /// Empty list means no requests.
-  // TODO: Will be good to add some sort of filtering.
-  Future<List<EnrollmentRequest>> getAllEnrollmentRequests() async {
+  /// Get enrollment requests. This includes all past and pending requests.
+  /// An empty list means no requests could be found.
+  /// If passed a list of `EnrollmentStatus`s will only return requests with those statuses.
+  /// If [statusFilters] is `null`, will return all requests.
+  Future<List<EnrollmentRequest>> getEnrollmentRequests({List<EnrollmentStatus>? statusFilters}) async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
 
@@ -121,16 +123,24 @@ class AuthorisationService with AtClientBindings {
     }
     final rawData = rawResponse.substring(rawResponse.indexOf('data:') + 5);
     final data = jsonDecode(rawData) as Map<String, dynamic>;
-    // TODO: Filter out `firstApp` enrolment
+    //? TODO: Filter out `firstApp` enrolment
     final enrollmentRequests = data.entries.map(EnrollmentRequest.fromServer).toList();
     logger.info('Found ${enrollmentRequests.length} enrollmentRequests');
+
+    // Filter by status if needed.
+    if (statusFilters != null) {
+      logger.info('Filtering enrollment requests by status: $statusFilters');
+      enrollmentRequests.retainWhere((e) => statusFilters.contains(e.status));
+      logger.info('${enrollmentRequests.length} enrollment requests after filtering');
+    }
+
     logger.finer('Enrollment Requests: $enrollmentRequests');
     return enrollmentRequests;
   }
 
   /// Check if the current atSign has manager permissions.
   Future<bool> isManagerKey() async {
-    final enrollments = await getAllEnrollmentRequests();
+    final enrollments = await getEnrollmentRequests();
     // Check if one of the enrollments has read and write permissions for the __manage namespace.
     final hasManagePermission = enrollments.any(
       (e) =>

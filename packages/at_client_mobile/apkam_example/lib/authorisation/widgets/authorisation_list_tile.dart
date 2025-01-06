@@ -74,7 +74,7 @@ class AuthorisationListTile extends StatelessWidget {
                               ),
                         ),
                       ),
-                      if (badgeCount != null)
+                      if (badgeCount != null && badgeCount! > 0)
                         Badge(
                           padding: const EdgeInsets.all(4),
                           textColor: Theme.of(context).colorScheme.primary,

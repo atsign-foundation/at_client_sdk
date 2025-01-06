@@ -4,9 +4,9 @@ import 'package:flutter/widgets.dart';
 import '../models/models.dart';
 import '../services/authorisation_service.dart';
 
-class PendingRequestsNotifier extends ChangeNotifier {
-  PendingRequestsNotifier(this._service) {
-    fetchPendingRequests();
+class ApprovedRequestsNotifier extends ChangeNotifier {
+  ApprovedRequestsNotifier(this._service) {
+    fetchApprovedRequests();
   }
 
   final AuthorisationService _service;
@@ -19,14 +19,14 @@ class PendingRequestsNotifier extends ChangeNotifier {
   List<EnrollmentRequest> get requests => _requests;
   String? get error => _error;
 
-  Future<void> fetchPendingRequests() async {
+  Future<void> fetchApprovedRequests() async {
     try {
       _error = null;
       _isLoading = true;
       notifyListeners();
       final requests = await _service.getEnrollmentRequests(
         statusFilters: [
-          EnrollmentStatus.pending,
+          EnrollmentStatus.approved,
         ],
       );
       _requests = requests;
@@ -38,25 +38,11 @@ class PendingRequestsNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> approveRequest(EnrollmentRequest request) async {
+  Future<void> revokeRequest(EnrollmentRequest request) async {
     try {
       _error = null;
       _isLoading = true;
-      await _service.approve(request);
-      _requests.remove(request);
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> denyRequest(EnrollmentRequest request) async {
-    try {
-      _error = null;
-      _isLoading = true;
-      await _service.deny(request);
+      await _service.revoke(request);
       _requests.remove(request);
     } catch (e) {
       _error = e.toString();
