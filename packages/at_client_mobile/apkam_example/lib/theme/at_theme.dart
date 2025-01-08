@@ -80,6 +80,13 @@ class AtThemeState extends State<AtTheme> {
         ),
       ),
     ),
+    dropdownMenuTheme: const DropdownMenuThemeData(
+      inputDecorationTheme: InputDecorationTheme(
+        enabledBorder: InputBorder.none,
+        border: InputBorder.none,
+        focusedBorder: InputBorder.none,
+      ),
+    ),
   );
 
   static final _kDarkThemeData = ThemeData();

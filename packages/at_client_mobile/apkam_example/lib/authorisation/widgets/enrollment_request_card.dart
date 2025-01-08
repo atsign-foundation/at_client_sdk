@@ -62,13 +62,14 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                     ),
                   ),
                 ),
-                Text(
-                  '48 H left',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                  textAlign: TextAlign.end,
-                ),
+                // Duration is not available at the moment
+                // Text(
+                //   '48 H left',
+                //   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                //         color: Theme.of(context).colorScheme.onSurfaceVariant,
+                //       ),
+                //   textAlign: TextAlign.end,
+                // ),
               ],
             ),
             const SizedBox(height: 8),

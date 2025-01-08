@@ -1,3 +1,5 @@
+import 'package:apkam_example/authorisation/widgets/spp_expiration.dart';
+import 'package:duration/duration.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
@@ -26,12 +28,19 @@ class SppWidgetState extends State<SppWidget> {
   late final formKey = GlobalKey<FormState>();
   // Controller is automatically disposed by PinCodeTextField
   late final _controller = TextEditingController();
+  late final _durationOptions = const [
+    Duration(minutes: 2),
+    Duration(minutes: 5),
+    Duration(minutes: 10),
+    Duration(minutes: 30),
+    Duration(hours: 1),
+  ];
+  late var _selectedDuration = _durationOptions.first;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final sppNotifer = SppProvider.of(context);
-    // TODO: Create a timer to update the expiry time every second. Could do this here or in the notifier.
     if (sppNotifer.spp != null) {
       _controller.text = sppNotifer.spp!.otp;
     }
@@ -54,14 +63,58 @@ class SppWidgetState extends State<SppWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (sppNotifer.spp?.expiry != null) ...[
-                  Text(
-                    'Expires in ${sppNotifer.spp!.expiry.difference(DateTime.now()).inMinutes} minutes',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                    textAlign: TextAlign.center,
-                  ),
+                if (sppNotifer.spp?.expiry != null && sppNotifer.spp!.expiry.isAfter(DateTime.now())) ...[
+                  SppExpiration(
+                      expiryTime: sppNotifer.spp!.expiry,
+                      onExpiry: () {
+                        _controller.clear();
+                        setState(() {});
+                      }),
                   const SizedBox(height: 16),
                 ],
+                Row(
+                  children: [
+                    Tooltip(
+                      message: 'Duration before the pin expires',
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.timer_outlined,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            'Duration:',
+                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: DropdownButton<Duration>(
+                        underline: const SizedBox.shrink(),
+                        value: _selectedDuration,
+                        onChanged: (Duration? value) {
+                          // This is called when the user selects an item.
+                          if (value != null) {
+                            setState(() {
+                              _selectedDuration = value;
+                            });
+                          }
+                        },
+                        items: _durationOptions.map<DropdownMenuItem<Duration>>((e) {
+                          return DropdownMenuItem<Duration>(
+                            value: e,
+                            child: Text(e.pretty()),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 PinCodeTextField(
                   appContext: context,
                   controller: _controller,
@@ -98,7 +151,10 @@ class SppWidgetState extends State<SppWidget> {
                 OutlinedButton(
                   onPressed: saveEnabled
                       ? () async {
-                          await sppNotifer.setSpp(_controller.text);
+                          await sppNotifer.setSpp(
+                            _controller.text,
+                            _selectedDuration,
+                          );
                         }
                       : null,
                   child: sppNotifer.isLoading

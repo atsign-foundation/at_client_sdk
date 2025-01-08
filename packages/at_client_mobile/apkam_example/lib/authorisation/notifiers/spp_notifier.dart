@@ -39,12 +39,16 @@ class SppNotifier extends ChangeNotifier {
   }
 
   /// Set the SPP on the server.
-  Future<void> setSpp(String spp) async {
+  /// Optionally, you can provide a duration for how long the SPP should be active.
+  Future<void> setSpp(String spp, Duration duration) async {
     try {
       _error = null;
       _isLoading = true;
       notifyListeners();
-      final newSpp = await _service.setSpp(spp: spp);
+      final newSpp = await _service.setSpp(
+        spp: spp,
+        sppExpiry: duration,
+      );
       _spp = newSpp;
     } catch (e) {
       _error = e.toString();
