@@ -21,6 +21,20 @@ void main() {
       var decryptedData = defaultEncryptionAlgo.decrypt(encryptedData);
       expect(utf8.decode(decryptedData), dataToEncrypt);
     });
+    test('Test asymmetric encryption/decryption using rsa 4096', () {
+      var defaultEncryptionAlgo = RsaEncryptionAlgo();
+      var rsa2048KeyPair =
+          AtChopsUtil.generateAtEncryptionKeyPair(keySize: 4096);
+      var rsaPublicKey = rsa2048KeyPair.atPublicKey;
+      var dataToEncrypt = 'Hello World12!@';
+      defaultEncryptionAlgo.atPublicKey = rsaPublicKey;
+      var encryptedData =
+          defaultEncryptionAlgo.encrypt(utf8.encode(dataToEncrypt));
+      var rsaPrivateKey = rsa2048KeyPair.atPrivateKey;
+      defaultEncryptionAlgo.atPrivateKey = rsaPrivateKey;
+      var decryptedData = defaultEncryptionAlgo.decrypt(encryptedData);
+      expect(utf8.decode(decryptedData), dataToEncrypt);
+    });
     test('Test encrypt throws exception when passed public key is null', () {
       var defaultEncryptionAlgo = RsaEncryptionAlgo();
       var dataToEncrypt = 'Hello World12!@';
@@ -50,6 +64,16 @@ void main() {
       () {
     test('Test asymmetric encryption/decryption using rsa 2048 key pair', () {
       var rsa2048KeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+      var defaultEncryptionAlgo = RsaEncryptionAlgo.fromKeyPair(rsa2048KeyPair);
+      var dataToEncrypt = 'Hello World12!@';
+      var encryptedData =
+          defaultEncryptionAlgo.encrypt(utf8.encode(dataToEncrypt));
+      var decryptedData = defaultEncryptionAlgo.decrypt(encryptedData);
+      expect(utf8.decode(decryptedData), dataToEncrypt);
+    });
+    test('Test asymmetric encryption/decryption using rsa 4096 key pair', () {
+      var rsa2048KeyPair =
+          AtChopsUtil.generateAtEncryptionKeyPair(keySize: 4096);
       var defaultEncryptionAlgo = RsaEncryptionAlgo.fromKeyPair(rsa2048KeyPair);
       var dataToEncrypt = 'Hello World12!@';
       var encryptedData =

@@ -168,7 +168,8 @@ class AtChopsImpl extends AtChops {
       ..atSigningMetaData = atSigningMetadata
       ..atSigningResultType = AtSigningResultType.bytes;
     try {
-      atSigningResult.result = base64Encode(signingAlgorithm.sign(data));
+      atSigningResult.result =
+          base64Encode(signingAlgorithm.sign(data) as List<int>);
     } on AtSigningException {
       rethrow;
     }
@@ -210,9 +211,8 @@ class AtChopsImpl extends AtChops {
       EncryptionKeyType encryptionKeyType, String? keyName) {
     switch (encryptionKeyType) {
       case EncryptionKeyType.rsa2048:
-        return RsaEncryptionAlgo.fromKeyPair(_getEncryptionKeyPair(keyName)!);
       case EncryptionKeyType.rsa4096:
-        throw AtEncryptionException('EncryptionKeyType.rsa4096 not supported');
+        return RsaEncryptionAlgo.fromKeyPair(_getEncryptionKeyPair(keyName)!);
       case EncryptionKeyType.ecc:
         throw AtEncryptionException('EncryptionKeyType.ecc not supported');
       case EncryptionKeyType.aes128:

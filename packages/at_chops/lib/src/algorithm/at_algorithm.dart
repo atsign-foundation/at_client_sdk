@@ -45,11 +45,12 @@ abstract class ASymmetricEncryptionAlgorithm
 /// Interface for data signing. Data is signed using private key from a key pair
 /// Signed data signature is verified with public key of the key pair.
 abstract class AtSigningAlgorithm {
-  /// Signs the data using [AtPrivateKey] of [AsymmetricKeyPair]
-  Uint8List sign(Uint8List data);
+  /// Signs the data using private key of asymmetric key pair
+  FutureOr<Uint8List> sign(Uint8List data);
 
-  /// Verifies the data signature using [AtPublicKey] of [AsymmetricKeyPair] or the passed [publicKey]
-  bool verify(Uint8List signedData, Uint8List signature, {String? publicKey});
+  /// Verifies the data signature using public key of asymmetric key pair or the passed [publicKey]
+  FutureOr<bool> verify(Uint8List signedData, Uint8List signature,
+      {String? publicKey});
 }
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.
