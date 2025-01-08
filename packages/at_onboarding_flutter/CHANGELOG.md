@@ -1,3 +1,7 @@
+## 6.1.10
+
+- **FIX**: Fixed an issue preventing a new atSign from being activated
+
 ## 6.1.9
 - build[deps]: Upgraded dependencies for the following packages:
   - at_client: 3.2.2
