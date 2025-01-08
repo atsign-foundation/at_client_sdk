@@ -5,7 +5,6 @@ import 'package:at_chops/src/key/at_key_pair.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_pkam_key_pair.dart';
-import 'package:at_chops/src/key/impl/at_signing_key_pair.dart';
 import 'package:at_chops/src/key/key_type.dart';
 import 'package:better_cryptography/better_cryptography.dart';
 import 'package:crypton/crypton.dart';
