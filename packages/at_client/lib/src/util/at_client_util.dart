@@ -105,6 +105,8 @@ class AtClientUtil {
         metadataMap[AtConstants.sharedKeyEncryptedEncryptingAlgo];
     metadata.isPublic = isPublic;
     metadata.isCached = isCached;
+    metadata.pubKeyHash = PublicKeyHash.fromJson(
+        metadataMap[AtConstants.sharedWithPublicKeyHash]);
 
     return metadata;
   }
