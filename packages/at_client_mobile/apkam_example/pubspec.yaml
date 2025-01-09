@@ -38,6 +38,7 @@ dependency_overrides:
     path: ../../at_client
   at_client_mobile:
     path: ../../at_client_mobile
+  meta: ^1.16.0
 
 flutter:
 

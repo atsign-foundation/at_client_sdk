@@ -113,26 +113,26 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                       },
                       isSelected: selectedSection == AuthorisationPageSection.approvedEnrollments,
                     ),
-                    AuthorisationListTile(
-                      leading: AuthorisationPageSection.history.icon,
-                      title: AuthorisationPageSection.history.title(context),
-                      onTap: () {
-                        SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.history);
-                      },
-                      isSelected: selectedSection == AuthorisationPageSection.history,
-                    ),
+                    // AuthorisationListTile(
+                    //   leading: AuthorisationPageSection.history.icon,
+                    //   title: AuthorisationPageSection.history.title(context),
+                    //   onTap: () {
+                    //     SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.history);
+                    //   },
+                    //   isSelected: selectedSection == AuthorisationPageSection.history,
+                    // ),
                   ],
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: OutlinedButton.icon(
-                label: const Text('Backup atSign'),
-                icon: const Icon(Icons.backup_outlined),
-                onPressed: () {},
-              ),
-            ),
+            // Padding(
+            //   padding: const EdgeInsets.all(16.0),
+            //   child: OutlinedButton.icon(
+            //     label: const Text('Backup atSign'),
+            //     icon: const Icon(Icons.backup_outlined),
+            //     onPressed: () {},
+            //   ),
+            // ),
           ],
         ),
       ),
