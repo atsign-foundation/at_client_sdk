@@ -90,6 +90,7 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                                             ? Theme.of(context).colorScheme.primary
                                             : Theme.of(context).colorScheme.onSurface,
                                       ),
+                                      // TODO: Add in functionality to copy OTP
                                       onPressed: () {},
                                     ),
                                   ],

@@ -20,6 +20,12 @@ class HomePageState extends State<HomePage> {
   }
 
   @override
+  void dispose() {
+    service.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -36,7 +42,23 @@ class HomePageState extends State<HomePage> {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => AuthorisationHomePage(service: service),
+                          builder: (context) => Scaffold(
+                            appBar: AppBar(
+                              title: const Text('Authorisation Home Page'),
+                            ),
+                            body: Padding(
+                              padding: const EdgeInsets.all(64.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: AuthorisationHub(
+                                  service: service,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       );
                     },
