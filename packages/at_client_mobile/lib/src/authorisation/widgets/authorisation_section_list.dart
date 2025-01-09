@@ -1,10 +1,8 @@
-import 'package:apkam_example/authorisation/providers/pending_requests_provider.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/theme_constants.dart';
 import '../pages/authorisation_page_section.dart';
-import '../providers/otp_provider.dart';
-import '../providers/selected_section_provider.dart';
+import '../providers/authorisation_providers.dart';
 import 'authorisation_list_tile.dart';
 import 'manager_device_card.dart';
 

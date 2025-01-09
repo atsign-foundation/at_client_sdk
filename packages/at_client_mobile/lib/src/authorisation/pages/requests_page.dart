@@ -1,8 +1,8 @@
-import 'package:apkam_example/authorisation/providers/pending_requests_provider.dart';
-import 'package:apkam_example/authorisation/widgets/enrollment_request_card.dart';
 import 'package:flutter/material.dart';
 
+import '../providers/authorisation_providers.dart';
 import '../widgets/authorisation_section_header.dart';
+import '../widgets/enrollment_request_card.dart';
 import 'authorisation_page_section.dart';
 
 class RequestsPage extends StatefulWidget {

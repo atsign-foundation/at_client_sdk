@@ -1,5 +1,6 @@
-import 'package:apkam_example/authorisation/models/models.dart';
 import 'package:flutter/material.dart';
+
+import '../models/models.dart';
 
 class NamespaceChip extends StatelessWidget {
   const NamespaceChip({

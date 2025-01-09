@@ -1,6 +1,7 @@
-import 'package:apkam_example/authorisation/models/models.dart';
-import 'package:apkam_example/authorisation/services/authorisation_service.dart';
 import 'package:flutter/cupertino.dart';
+
+import '../models/models.dart';
+import '../services/authorisation_service.dart';
 
 class SppNotifier extends ChangeNotifier {
   SppNotifier(this._service) {

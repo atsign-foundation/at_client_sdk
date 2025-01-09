@@ -1,15 +1,16 @@
-import 'package:apkam_example/authorisation/models/namespace_permission.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+
+import 'models.dart';
 
 /// {@template enrollment_request}
 /// A model representing an enrollment request.
 /// {@endtemplate}
 @immutable
-class EnrollmentRequest {
+class ServerEnrollmentRequest {
   /// {@macro enrollment_request}
-  const EnrollmentRequest({
+  const ServerEnrollmentRequest({
     required this.enrollmentId,
     required this.appName,
     required this.deviceName,
@@ -41,12 +42,12 @@ class EnrollmentRequest {
   /// Empty list means no permissions.
   final List<NamespacePermission> namespacePermissions;
 
-  /// Creates an [EnrollmentRequest] object from a server response.
-  factory EnrollmentRequest.fromServer(MapEntry<String, dynamic> entry) {
+  /// Creates an [ServerEnrollmentRequest] object from a server response.
+  factory ServerEnrollmentRequest.fromServer(MapEntry<String, dynamic> entry) {
     // Example id: a7d6a9.....40a15.new.enrollments.__manage@alice
     // Only interested in the first part.
     final enrollmentId = entry.key.split('.').first;
-    return EnrollmentRequest(
+    return ServerEnrollmentRequest(
       enrollmentId: enrollmentId,
       appName: entry.value['appName'] as String,
       deviceName: entry.value['deviceName'] as String,
@@ -72,7 +73,7 @@ class EnrollmentRequest {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
 
-    return other is EnrollmentRequest &&
+    return other is ServerEnrollmentRequest &&
         other.enrollmentId == enrollmentId &&
         other.appName == appName &&
         other.deviceName == deviceName &&
@@ -92,6 +93,6 @@ class EnrollmentRequest {
 
   @override
   String toString() {
-    return 'EnrollmentRequest(enrollmentId: $enrollmentId, appName: $appName, deviceName: $deviceName, status: $status, namespaces: $namespacePermissions, encryptedAPKAMSymmetricKey: ${encryptedAPKAMSymmetricKey?.substring(0, 10)})';
+    return 'ServerEnrollmentRequest(enrollmentId: $enrollmentId, appName: $appName, deviceName: $deviceName, status: $status, namespaces: $namespacePermissions, encryptedAPKAMSymmetricKey: ${encryptedAPKAMSymmetricKey?.substring(0, 10)})';
   }
 }

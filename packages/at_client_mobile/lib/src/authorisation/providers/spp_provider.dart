@@ -1,5 +1,6 @@
-import 'package:apkam_example/authorisation/notifiers/spp_notifier.dart';
 import 'package:flutter/widgets.dart';
+
+import '../notifiers/spp_notifier.dart';
 
 class SppProvider extends InheritedNotifier<SppNotifier> {
   const SppProvider({

@@ -1,7 +1,7 @@
-import 'package:apkam_example/authorisation/widgets/spp_widget.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/authorisation_section_header.dart';
+import '../widgets/spp_widget.dart';
 import 'authorisation_page_section.dart';
 
 class SetPinPage extends StatefulWidget {

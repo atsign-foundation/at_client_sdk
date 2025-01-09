@@ -1,5 +1,6 @@
-import 'package:apkam_example/authorisation/notifiers/pending_requests_notifier.dart';
 import 'package:flutter/widgets.dart';
+
+import '../notifiers/pending_requests_notifier.dart';
 
 class PendingRequestsProvider extends InheritedNotifier<PendingRequestsNotifier> {
   const PendingRequestsProvider({

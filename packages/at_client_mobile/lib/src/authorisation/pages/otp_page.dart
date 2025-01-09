@@ -1,10 +1,10 @@
-import 'package:apkam_example/authorisation/pages/authorisation_page_section.dart';
-import 'package:apkam_example/authorisation/widgets/authorisation_section_header.dart';
-import 'package:apkam_example/authorisation/widgets/tip_card.dart';
 import 'package:flutter/material.dart';
 
 import '../providers/otp_provider.dart';
 import '../providers/selected_section_provider.dart';
+import '../widgets/authorisation_section_header.dart';
+import '../widgets/tip_card.dart';
+import 'authorisation_page_section.dart';
 
 class OtpPage extends StatefulWidget {
   const OtpPage({super.key});

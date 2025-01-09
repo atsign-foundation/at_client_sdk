@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
+import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/models.dart';
@@ -12,14 +12,14 @@ class PendingRequestsNotifier extends ChangeNotifier {
   }
 
   final AuthorisationService _service;
-  StreamSubscription<EnrollmentRequest>? _subscription;
+  StreamSubscription<ServerEnrollmentRequest>? _subscription;
 
   bool _isLoading = false;
-  final List<EnrollmentRequest> _requests = [];
+  final List<ServerEnrollmentRequest> _requests = [];
   String? _error;
 
   bool get isLoading => _isLoading;
-  List<EnrollmentRequest> get requests => _requests;
+  List<ServerEnrollmentRequest> get requests => _requests;
   String? get error => _error;
 
   Future<void> fetchPendingRequests() async {
@@ -72,7 +72,7 @@ class PendingRequestsNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> approveRequest(EnrollmentRequest request) async {
+  Future<void> approveRequest(ServerEnrollmentRequest request) async {
     try {
       _error = null;
       _isLoading = true;
@@ -86,7 +86,7 @@ class PendingRequestsNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> denyRequest(EnrollmentRequest request) async {
+  Future<void> denyRequest(ServerEnrollmentRequest request) async {
     try {
       _error = null;
       _isLoading = true;

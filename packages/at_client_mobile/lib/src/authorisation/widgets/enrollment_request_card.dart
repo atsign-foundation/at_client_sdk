@@ -1,4 +1,3 @@
-import 'package:at_commons/at_commons.dart';
 import 'package:flutter/material.dart';
 
 import '../models/models.dart';
@@ -13,7 +12,7 @@ class EnrollmentRequestCard extends StatefulWidget {
     super.key,
   });
 
-  final EnrollmentRequest request;
+  final ServerEnrollmentRequest request;
   final Future<void> Function()? onApprove;
   final Future<void> Function()? onReject;
   final Future<void> Function()? onRevoke;
@@ -240,61 +239,5 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
         ),
       ),
     );
-    // return ListTile(
-    //   title: Text(widget.request.appName),
-    //   subtitle: Column(
-    //     crossAxisAlignment: CrossAxisAlignment.start,
-    //     mainAxisSize: MainAxisSize.min,
-    //     children: [
-    //       Text(widget.request.deviceName),
-    //       Text(widget.request.namespacePermissions.map((permission) => permission.prettyPrint()).join(', ')),
-    //     ],
-    //   ),
-    //   trailing: switch (widget.request.status) {
-    //     EnrollmentStatus.pending => Row(
-    //         mainAxisSize: MainAxisSize.min,
-    //         children: [
-    //           ElevatedButton(
-    //             onPressed: widget.onApprove,
-    //             child: Text('Approve'),
-    //           ),
-    //           ElevatedButton(
-    //             onPressed: widget.onReject,
-    //             child: Text('Reject'),
-    //           ),
-    //         ],
-    //       ),
-    //     EnrollmentStatus.approved => RawChip(
-    //         label: Text('Approved'),
-    //         color: WidgetStateProperty.all<Color>(Colors.green),
-    //       ),
-    //     EnrollmentStatus.denied => RawChip(
-    //         label: Text('Denied'),
-    //         color: WidgetStateProperty.all<Color>(Colors.red),
-    //       ),
-    //     EnrollmentStatus.revoked => RawChip(
-    //         label: Text('Revoked'),
-    //         color: WidgetStateProperty.all<Color>(Colors.orange),
-    //       ),
-    //     EnrollmentStatus.expired => RawChip(
-    //         label: Text('Expired'),
-    //         color: WidgetStateProperty.all<Color>(Colors.grey),
-    //       ),
-    //   },
-    // );
-  }
-}
-
-extension on NamespacePermission {
-  String prettyPrint() {
-    final buffer = StringBuffer();
-    buffer.append(namespace);
-    if (read) {
-      buffer.append(' (read)');
-    }
-    if (write) {
-      buffer.append(' (write)');
-    }
-    return buffer.getData()!;
   }
 }

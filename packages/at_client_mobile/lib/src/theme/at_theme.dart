@@ -1,5 +1,6 @@
-import 'package:apkam_example/theme/theme_constants.dart';
 import 'package:flutter/material.dart';
+
+import 'theme_constants.dart';
 
 class AtTheme extends StatefulWidget {
   const AtTheme({
@@ -24,7 +25,7 @@ class AtThemeState extends State<AtTheme> {
     brightness = Theme.of(context).brightness;
   }
 
-  static final _lightThemeData = ThemeData(
+  static final lightThemeData = ThemeData(
     fontFamily: 'Poppins',
     scaffoldBackgroundColor: kLightBackground,
     colorScheme: ColorScheme.fromSeed(
@@ -89,12 +90,12 @@ class AtThemeState extends State<AtTheme> {
     ),
   );
 
-  static final _kDarkThemeData = ThemeData();
+  static final darkThemeData = ThemeData();
 
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: widget.themeData ?? (brightness == Brightness.light ? _lightThemeData : _kDarkThemeData),
+      data: widget.themeData ?? (brightness == Brightness.light ? lightThemeData : darkThemeData),
       child: Builder(
         builder: (context) {
           return widget.child;

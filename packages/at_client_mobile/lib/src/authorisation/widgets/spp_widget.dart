@@ -1,10 +1,10 @@
-import 'package:apkam_example/authorisation/widgets/spp_expiration.dart';
 import 'package:duration/duration.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 
 import '../providers/spp_provider.dart';
+import 'spp_expiration.dart';
 
 class SppWidget extends StatefulWidget {
   const SppWidget({

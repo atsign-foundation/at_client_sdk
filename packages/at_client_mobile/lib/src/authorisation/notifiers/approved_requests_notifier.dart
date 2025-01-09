@@ -1,4 +1,4 @@
-import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
+import 'package:at_client/at_client.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/models.dart';
@@ -12,11 +12,11 @@ class ApprovedRequestsNotifier extends ChangeNotifier {
   final AuthorisationService _service;
 
   bool _isLoading = false;
-  List<EnrollmentRequest> _requests = [];
+  List<ServerEnrollmentRequest> _requests = [];
   String? _error;
 
   bool get isLoading => _isLoading;
-  List<EnrollmentRequest> get requests => _requests;
+  List<ServerEnrollmentRequest> get requests => _requests;
   String? get error => _error;
 
   Future<void> fetchApprovedRequests() async {
@@ -38,7 +38,7 @@ class ApprovedRequestsNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> revokeRequest(EnrollmentRequest request) async {
+  Future<void> revokeRequest(ServerEnrollmentRequest request) async {
     try {
       _error = null;
       _isLoading = true;

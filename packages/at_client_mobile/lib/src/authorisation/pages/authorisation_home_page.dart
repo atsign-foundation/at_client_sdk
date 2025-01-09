@@ -1,27 +1,17 @@
-import 'package:apkam_example/authorisation/pages/approved_enrollments_page.dart';
-import 'package:apkam_example/authorisation/pages/enrollment_history_page.dart';
-import 'package:apkam_example/authorisation/pages/otp_page.dart';
-import 'package:apkam_example/authorisation/pages/set_pin_page.dart';
-import 'package:apkam_example/authorisation/providers/otp_provider.dart';
-import 'package:apkam_example/authorisation/services/authorisation_service.dart';
-import 'package:apkam_example/authorisation/widgets/authorisation_section_list.dart';
-import 'package:apkam_example/theme/theme_constants.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/at_theme.dart';
-import '../notifiers/active_otp_notifier.dart';
-import '../notifiers/approved_requests_notifier.dart';
-import '../notifiers/pending_requests_notifier.dart';
-import '../notifiers/selected_section_notifier.dart';
-import '../notifiers/spp_notifier.dart';
-import '../providers/approved_requests_provider.dart';
-import '../providers/authorisation_service_provider.dart';
-import '../providers/pending_requests_provider.dart';
-import '../providers/selected_section_provider.dart';
-import '../providers/spp_provider.dart';
+import '../../theme/theme_constants.dart';
+import '../notifiers/authorisation_notifiers.dart';
+import '../providers/authorisation_providers.dart';
+import '../widgets/authorisation_section_list.dart';
+import 'approved_enrollments_page.dart';
 import 'authorisation_page_section.dart';
+import 'enrollment_history_page.dart';
+import 'otp_page.dart';
 import 'requests_page.dart';
+import 'set_pin_page.dart';
 
 class AuthorisationHomePage extends StatefulWidget {
   const AuthorisationHomePage({
@@ -141,19 +131,30 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
                                   Expanded(
                                     child: Padding(
                                       padding: const EdgeInsets.all(32.0),
-                                      child: switch (selectedSection) {
-                                        AuthorisationPageSection.requests => const RequestsPage(),
-                                        AuthorisationPageSection.otp => const OtpPage(),
-                                        AuthorisationPageSection.setPin => SppProvider(
-                                            notifier: SppNotifier(service),
-                                            child: const SetPinPage(),
-                                          ),
-                                        AuthorisationPageSection.approvedEnrollments => ApprovedRequestsProvider(
-                                            notifier: ApprovedRequestsNotifier(service),
-                                            child: const ApprovedEnrollmentsPage(),
-                                          ),
-                                        AuthorisationPageSection.history => const EnrollmentHistoryPage(),
-                                      },
+                                      child: Builder(
+                                        builder: (context) {
+                                          switch (selectedSection) {
+                                            case AuthorisationPageSection.requests:
+                                              return const RequestsPage();
+                                            case AuthorisationPageSection.otp:
+                                              return const OtpPage();
+                                            case AuthorisationPageSection.setPin:
+                                              return SppProvider(
+                                                notifier: SppNotifier(service),
+                                                child: const SetPinPage(),
+                                              );
+                                            case AuthorisationPageSection.approvedEnrollments:
+                                              return ApprovedRequestsProvider(
+                                                notifier: ApprovedRequestsNotifier(service),
+                                                child: const ApprovedEnrollmentsPage(),
+                                              );
+                                            case AuthorisationPageSection.history:
+                                              return const EnrollmentHistoryPage();
+                                            default:
+                                              return const SizedBox.shrink();
+                                          }
+                                        },
+                                      ),
                                     ),
                                   ),
                                 ],

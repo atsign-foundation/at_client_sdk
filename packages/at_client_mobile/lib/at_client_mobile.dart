@@ -20,3 +20,5 @@ export 'src/auth_constants.dart' show BackupKeyConstants;
 export 'src/enrollment/enrollment_info.dart';
 export 'src/keychain_manager.dart';
 export 'src/onboarding_status.dart';
+export 'src/authorisation/authorisation.dart';
+export 'src/theme/at_theme.dart';

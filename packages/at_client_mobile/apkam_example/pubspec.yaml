@@ -25,8 +25,6 @@ dependencies:
   collection: ^1.18.0
   at_utils: ^3.0.19
   biometric_storage: ^5.0.1
-  pin_code_fields: ^8.0.1
-  duration: ^4.0.3
 
 dev_dependencies:
   flutter_test:

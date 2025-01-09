@@ -26,7 +26,7 @@ class AuthorisationService with AtClientBindings {
   static const _kSppRegex = r'[A-Za-z0-9]{6,16}';
   static const _kSppStorageKey = 'spp';
 
-  StreamController<EnrollmentRequest>? _enrollmentRequestsController;
+  StreamController<ServerEnrollmentRequest>? _enrollmentRequestsController;
   StreamSubscription? _newRequestsSubscription;
 
   /// Call this method before any other methods.
@@ -35,7 +35,7 @@ class AuthorisationService with AtClientBindings {
   /// fetches all existing requests.
   Future<void> init() async {
     logger.info('Initialising AuthorisationService');
-    _enrollmentRequestsController ??= StreamController<EnrollmentRequest>.broadcast();
+    _enrollmentRequestsController ??= StreamController<ServerEnrollmentRequest>.broadcast();
     _enrollmentRequestsController!.onListen = _listenForNewRequests;
   }
 
@@ -51,7 +51,7 @@ class AuthorisationService with AtClientBindings {
     _newRequestsSubscription = stream.listen((AtNotification notification) async {
       try {
         logger.info('Enrollment request with id ${notification.key} received');
-        final enrollmentRequest = EnrollmentRequest.fromServer(
+        final enrollmentRequest = ServerEnrollmentRequest.fromServer(
           MapEntry(
             notification.key,
             jsonDecode(notification.value!),
@@ -78,7 +78,7 @@ class AuthorisationService with AtClientBindings {
   /// Stream of all enrollment requests.
   /// Use this for getting real-time updates on new requests.
   /// Will also include past pending requests.
-  Stream<EnrollmentRequest> enrollmentRequests({List<EnrollmentStatus>? statusFilters}) {
+  Stream<ServerEnrollmentRequest> enrollmentRequests({List<EnrollmentStatus>? statusFilters}) {
     if (_enrollmentRequestsController == null) {
       throw StateError('init() must be called before accessing enrollmentRequests');
     }
@@ -94,7 +94,7 @@ class AuthorisationService with AtClientBindings {
   /// An empty list means no requests could be found.
   /// If passed a list of `EnrollmentStatus`s will only return requests with those statuses.
   /// If [statusFilters] is `null`, will return all requests.
-  Future<List<EnrollmentRequest>> getEnrollmentRequests({List<EnrollmentStatus>? statusFilters}) async {
+  Future<List<ServerEnrollmentRequest>> getEnrollmentRequests({List<EnrollmentStatus>? statusFilters}) async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
 
@@ -119,7 +119,7 @@ class AuthorisationService with AtClientBindings {
     final rawData = rawResponse.substring(rawResponse.indexOf('data:') + 5);
     final data = jsonDecode(rawData) as Map<String, dynamic>;
     //? TODO: Filter out `firstApp` enrolment
-    final enrollmentRequests = data.entries.map(EnrollmentRequest.fromServer).toList();
+    final enrollmentRequests = data.entries.map(ServerEnrollmentRequest.fromServer).toList();
     logger.info('Found ${enrollmentRequests.length} enrollmentRequests');
 
     // Filter by status if needed.
@@ -259,7 +259,7 @@ class AuthorisationService with AtClientBindings {
   /// Approve the given [enrollmentRequest].
   ///
   /// Throws [FailedToApproveException] if the request was not approved.
-  Future<void> approve(EnrollmentRequest enrollmentRequest) async {
+  Future<void> approve(ServerEnrollmentRequest enrollmentRequest) async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final atSign = atClient.getCurrentAtSign()!;
@@ -285,7 +285,7 @@ class AuthorisationService with AtClientBindings {
   /// Deny the given [enrollmentRequest].
   ///
   /// Throws [FailedToDenyException] if the request was not denied.
-  Future<void> deny(EnrollmentRequest enrollmentRequest) async {
+  Future<void> deny(ServerEnrollmentRequest enrollmentRequest) async {
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final atSign = atClient.getCurrentAtSign()!;
     final enrollmentOutcome = await auth.atAuthBase.atEnrollment(atSign).deny(
@@ -308,7 +308,7 @@ class AuthorisationService with AtClientBindings {
   ///
   /// This is for denying a previously approved request.
   /// Throws [FailedToRevokeException] if the request was not revoked.
-  Future<void> revoke(EnrollmentRequest enrollmentRequest) async {
+  Future<void> revoke(ServerEnrollmentRequest enrollmentRequest) async {
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final atSign = atClient.getCurrentAtSign()!;
     final enrollmentOutcome = await auth.atAuthBase.atEnrollment(atSign).revoke(
