@@ -25,10 +25,12 @@ import 'requests_page.dart';
 
 class AuthorisationHomePage extends StatefulWidget {
   const AuthorisationHomePage({
+    required this.service,
     this.initialSelectedSection = AuthorisationPageSection.requests,
     super.key,
   });
 
+  final AuthorisationService service;
   final AuthorisationPageSection initialSelectedSection;
 
   @override
@@ -36,8 +38,9 @@ class AuthorisationHomePage extends StatefulWidget {
 }
 
 class AuthorisationHomePageState extends State<AuthorisationHomePage> {
-  late final service =
-      AuthorisationService(AtClientManager.getInstance().atClient);
+  AuthorisationService get service => widget.service;
+
+  late final pendingRequestsNotifier = PendingRequestsNotifier(service);
 
   late Future<bool> isManagerKey;
 
@@ -45,6 +48,12 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
   void initState() {
     super.initState();
     isManagerKey = service.isManagerKey();
+  }
+
+  @override
+  void dispose() {
+    pendingRequestsNotifier.dispose();
+    super.dispose();
   }
 
   @override
@@ -62,22 +71,18 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
             notifier: ActiveOtpNotifier(service),
             // Needed for showing the number of requests in the section list
             child: PendingRequestsProvider(
-              notifier: PendingRequestsNotifier(service),
+              notifier: pendingRequestsNotifier,
               child: Builder(
                 builder: (context) {
-                  final selectedSection =
-                      SelectedSectionProvider.of(context).selectedSection;
+                  final selectedSection = SelectedSectionProvider.of(context).selectedSection;
                   return Scaffold(
                     appBar: AppBar(
-                      title: Text(AtClientManager.getInstance()
-                          .atClient
-                          .getCurrentAtSign()!),
+                      title: Text(AtClientManager.getInstance().atClient.getCurrentAtSign()!),
                     ),
                     body: FutureBuilder<bool>(
                       future: isManagerKey,
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
@@ -126,11 +131,8 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
                             padding: const EdgeInsets.all(64.0),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest,
-                                borderRadius:
-                                    BorderRadius.circular(kBorderRadius),
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(kBorderRadius),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,25 +142,17 @@ class AuthorisationHomePageState extends State<AuthorisationHomePage> {
                                     child: Padding(
                                       padding: const EdgeInsets.all(32.0),
                                       child: switch (selectedSection) {
-                                        AuthorisationPageSection.requests =>
-                                          const RequestsPage(),
-                                        AuthorisationPageSection.otp =>
-                                          const OtpPage(),
-                                        AuthorisationPageSection.setPin =>
-                                          SppProvider(
+                                        AuthorisationPageSection.requests => const RequestsPage(),
+                                        AuthorisationPageSection.otp => const OtpPage(),
+                                        AuthorisationPageSection.setPin => SppProvider(
                                             notifier: SppNotifier(service),
                                             child: const SetPinPage(),
                                           ),
-                                        AuthorisationPageSection
-                                              .approvedEnrollments =>
-                                          ApprovedRequestsProvider(
-                                            notifier: ApprovedRequestsNotifier(
-                                                service),
-                                            child:
-                                                const ApprovedEnrollmentsPage(),
+                                        AuthorisationPageSection.approvedEnrollments => ApprovedRequestsProvider(
+                                            notifier: ApprovedRequestsNotifier(service),
+                                            child: const ApprovedEnrollmentsPage(),
                                           ),
-                                        AuthorisationPageSection.history =>
-                                          const EnrollmentHistoryPage(),
+                                        AuthorisationPageSection.history => const EnrollmentHistoryPage(),
                                       },
                                     ),
                                   ),

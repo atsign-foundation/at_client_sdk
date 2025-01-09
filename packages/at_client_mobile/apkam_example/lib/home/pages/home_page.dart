@@ -2,7 +2,6 @@ import 'package:apkam_example/authorisation/pages/authorisation_home_page.dart';
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:flutter/material.dart';
 
-import '../../authorisation/models/models.dart';
 import '../../authorisation/services/authorisation_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -15,14 +14,12 @@ class HomePage extends StatefulWidget {
 class HomePageState extends State<HomePage> {
   late final service = AuthorisationService(AtClientManager.getInstance().atClient);
 
-  List<EnrollmentRequest> enrollmentRequests = [];
+  late Future<void> serviceInit;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await service.isManagerKey();
-    });
+    serviceInit = service.init();
   }
 
   @override
@@ -34,15 +31,26 @@ class HomePageState extends State<HomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const AuthorisationHomePage(),
-                  ),
-                );
+            FutureBuilder(
+              future: serviceInit,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => AuthorisationHomePage(service: service),
+                        ),
+                      );
+                    },
+                    child: const Text('Authorisation Home Page'),
+                  );
+                } else {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
               },
-              child: const Text('Authorisation Home Page'),
             ),
           ],
         ),

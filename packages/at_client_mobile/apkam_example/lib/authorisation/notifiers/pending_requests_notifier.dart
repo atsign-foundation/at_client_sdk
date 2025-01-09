@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:flutter/widgets.dart';
 
@@ -10,9 +12,10 @@ class PendingRequestsNotifier extends ChangeNotifier {
   }
 
   final AuthorisationService _service;
+  StreamSubscription<EnrollmentRequest>? _subscription;
 
   bool _isLoading = false;
-  List<EnrollmentRequest> _requests = [];
+  final List<EnrollmentRequest> _requests = [];
   String? _error;
 
   bool get isLoading => _isLoading;
@@ -20,6 +23,33 @@ class PendingRequestsNotifier extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> fetchPendingRequests() async {
+    await _pendingRequests();
+    _subscription = _service.enrollmentRequests(
+      statusFilters: [
+        EnrollmentStatus.pending,
+      ],
+    ).listen(
+      (request) {
+        _error = null;
+        _isLoading = false;
+        if (!_requests.contains(request)) {
+          _requests.add(request);
+        }
+        notifyListeners();
+      },
+      onError: (e) {
+        _isLoading = false;
+        _error = e.toString();
+        notifyListeners();
+      },
+      onDone: () {
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> _pendingRequests() async {
     try {
       _error = null;
       _isLoading = true;
@@ -29,7 +59,11 @@ class PendingRequestsNotifier extends ChangeNotifier {
           EnrollmentStatus.pending,
         ],
       );
-      _requests = requests;
+      for (final request in requests) {
+        if (!_requests.contains(request)) {
+          _requests.add(request);
+        }
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -64,5 +98,11 @@ class PendingRequestsNotifier extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 }

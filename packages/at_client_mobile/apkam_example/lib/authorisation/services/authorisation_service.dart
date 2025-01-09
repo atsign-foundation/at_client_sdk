@@ -34,19 +34,9 @@ class AuthorisationService with AtClientBindings {
   /// Sets up the subscription to the server for new enrollment requests and
   /// fetches all existing requests.
   Future<void> init() async {
-    AtSignLogger.root_level = 'finer';
     logger.info('Initialising AuthorisationService');
     _enrollmentRequestsController ??= StreamController<EnrollmentRequest>.broadcast();
-    _enrollmentRequestsController!.onListen = () async {
-      // TODO: Does it make sense to add previous requests here? Maybe just pending ones?
-      final requests = await getEnrollmentRequests();
-      for (final request in requests) {
-        // TODO: I don't like this. Adding a delay because the listener will only receive the last one if they come in too quickly.
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        _enrollmentRequestsController!.add(request);
-      }
-      _listenForNewRequests();
-    };
+    _enrollmentRequestsController!.onListen = _listenForNewRequests;
   }
 
   void _listenForNewRequests() {
@@ -88,11 +78,16 @@ class AuthorisationService with AtClientBindings {
   /// Stream of all enrollment requests.
   /// Use this for getting real-time updates on new requests.
   /// Will also include past pending requests.
-  Stream<EnrollmentRequest> get enrollmentRequests {
+  Stream<EnrollmentRequest> enrollmentRequests({List<EnrollmentStatus>? statusFilters}) {
     if (_enrollmentRequestsController == null) {
       throw StateError('init() must be called before accessing enrollmentRequests');
     }
-    return _enrollmentRequestsController!.stream;
+    return _enrollmentRequestsController!.stream.map((event) => event).where((event) {
+      if (statusFilters == null) {
+        return true;
+      }
+      return statusFilters.contains(event.status);
+    });
   }
 
   /// Get enrollment requests. This includes all past and pending requests.
