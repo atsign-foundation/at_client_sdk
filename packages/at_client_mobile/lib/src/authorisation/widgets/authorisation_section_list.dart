@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../theme/theme_constants.dart';
 import '../pages/authorisation_page_section.dart';
@@ -73,7 +74,7 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                                       child: Padding(
                                         padding: const EdgeInsets.all(8.0),
                                         child: Text(
-                                          activeOtp.otp!.otp,
+                                          activeOtp.otp!.value,
                                           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                                 color: selectedSection == AuthorisationPageSection.otp
                                                     ? Theme.of(context).colorScheme.primary
@@ -90,8 +91,16 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                                             ? Theme.of(context).colorScheme.primary
                                             : Theme.of(context).colorScheme.onSurface,
                                       ),
-                                      // TODO: Add in functionality to copy OTP
-                                      onPressed: () {},
+                                      onPressed: activeOtp.otp != null
+                                          ? () async {
+                                              await Clipboard.setData(ClipboardData(text: activeOtp.otp!.toString()));
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('OTP copied to clipboard'),
+                                                ),
+                                              );
+                                            }
+                                          : null,
                                     ),
                                   ],
                                 ),

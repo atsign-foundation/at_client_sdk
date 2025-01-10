@@ -7,19 +7,19 @@ import 'package:flutter/foundation.dart';
 class Otp {
   /// {@macro otp}
   const Otp({
-    required this.otp,
+    required this.value,
     required this.expiry,
-  }) : assert(otp.length >= 6, 'OTP should be 6 or more characters');
+  }) : assert(value.length >= 6, 'OTP should be 6 or more characters');
 
   /// Creates an [Otp] object with a specified duration from now.
   Otp.fromDuration({
-    required this.otp,
+    required this.value,
     required Duration duration,
   })  : expiry = DateTime.now().add(duration),
-        assert(otp.length >= 6, 'OTP should be 6 or more characters');
+        assert(value.length >= 6, 'OTP should be 6 or more characters');
 
   /// The one-time passcode.
-  final String otp;
+  final String value;
 
   /// The expiry time of the OTP.
   final DateTime expiry;
@@ -27,7 +27,7 @@ class Otp {
   /// Creates an [Otp] object from a JSON map.
   factory Otp.fromJson(Map<String, dynamic> json) {
     return Otp(
-      otp: json['otp'] as String,
+      value: json['otp'] as String,
       expiry: DateTime.parse(json['expiry'] as String),
     );
   }
@@ -35,7 +35,7 @@ class Otp {
   /// Converts the [Otp] object to a JSON map.
   Map<String, dynamic> toJson() {
     return {
-      'otp': otp,
+      'otp': value,
       'expiry': expiry.toIso8601String(),
     };
   }
@@ -46,14 +46,14 @@ class Otp {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
 
-    return other is Otp && other.otp == otp && other.expiry == expiry;
+    return other is Otp && other.value == value && other.expiry == expiry;
   }
 
   @override
-  int get hashCode => otp.hashCode ^ expiry.hashCode;
+  int get hashCode => value.hashCode ^ expiry.hashCode;
 
   @override
   String toString() {
-    return otp;
+    return value;
   }
 }

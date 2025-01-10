@@ -42,7 +42,7 @@ class SppWidgetState extends State<SppWidget> {
     super.didChangeDependencies();
     final sppNotifer = SppProvider.of(context);
     if (sppNotifer.spp != null) {
-      _controller.text = sppNotifer.spp!.otp;
+      _controller.text = sppNotifer.spp!.value;
     }
   }
 

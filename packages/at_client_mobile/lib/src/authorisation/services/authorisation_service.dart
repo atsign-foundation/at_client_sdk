@@ -185,7 +185,7 @@ class AuthorisationService with AtClientBindings {
     }
     logger.info('SPP set on the server');
 
-    final otp = Otp.fromDuration(otp: spp, duration: sppExpiry);
+    final otp = Otp.fromDuration(value: spp, duration: sppExpiry);
 
     // Save the spp to the keychain so it can retrieved later if needed.
     try {
@@ -249,7 +249,7 @@ class AuthorisationService with AtClientBindings {
       final otp = response.substring(response.indexOf('data:') + 5);
       assert(otp.length >= 6, 'OTP should be 6 or more characters');
       logger.finer('OTP generated: $otp');
-      return Otp.fromDuration(otp: otp, duration: optExpiry);
+      return Otp.fromDuration(value: otp, duration: optExpiry);
     } else {
       logger.severe('Invalid response from the server. Expected it to start with `data:`. Response: $response');
       throw OtpGenerationException(response ?? 'No response from server');

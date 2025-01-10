@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../providers/otp_provider.dart';
 import '../providers/selected_section_provider.dart';
@@ -49,7 +50,7 @@ class OtpPageState extends State<OtpPage> {
                       runAlignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        ...activeOtp.otp!.otp.split('').map(
+                        ...activeOtp.otp!.toString().split('').map(
                           (e) {
                             return Padding(
                               padding: const EdgeInsets.all(8.0),
@@ -87,7 +88,16 @@ class OtpPageState extends State<OtpPage> {
                     ),
                   const SizedBox(height: 8),
                   TextButton.icon(
-                    onPressed: () {},
+                    onPressed: activeOtp.otp != null
+                        ? () async {
+                            await Clipboard.setData(ClipboardData(text: activeOtp.otp!.toString()));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('OTP copied to clipboard'),
+                              ),
+                            );
+                          }
+                        : null,
                     icon: const Icon(Icons.copy),
                     label: const Text('Copy OTP'),
                   ),
