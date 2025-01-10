@@ -45,11 +45,11 @@ extension AuthorisationPageSectionX on AuthorisationPageSection {
       case AuthorisationPageSection.otp:
         return Icons.numbers;
       case AuthorisationPageSection.setPin:
-        return Icons.password;
+        return Icons.dialpad;
       case AuthorisationPageSection.requests:
         return Icons.question_mark_outlined;
       case AuthorisationPageSection.approvedEnrollments:
-        return Icons.check;
+        return Icons.done_all;
       case AuthorisationPageSection.history:
         return Icons.history;
     }
