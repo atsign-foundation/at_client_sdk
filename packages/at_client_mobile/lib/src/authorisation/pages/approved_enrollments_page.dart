@@ -43,17 +43,18 @@ class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
               padding: EdgeInsets.all(16.0),
               child: Text('No pending requests'),
             ),
-          if (approvedRequestsProvider.requests.isNotEmpty && !approvedRequestsProvider.isLoading)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16.0),
-              child: SearchBar(
-                leading: Icon(
-                  Icons.search,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                hintText: 'Search',
-              ),
-            ),
+          // Commenting out for now
+          // if (approvedRequestsProvider.requests.isNotEmpty && !approvedRequestsProvider.isLoading)
+          //   Padding(
+          //     padding: const EdgeInsets.only(bottom: 16.0),
+          //     child: SearchBar(
+          //       leading: Icon(
+          //         Icons.search,
+          //         color: Theme.of(context).colorScheme.onSurfaceVariant,
+          //       ),
+          //       hintText: 'Search',
+          //     ),
+          //   ),
           if (approvedRequestsProvider.requests.isNotEmpty && !approvedRequestsProvider.isLoading)
             ...approvedRequestsProvider.requests.map(
               (request) => EnrollmentRequestCard(
