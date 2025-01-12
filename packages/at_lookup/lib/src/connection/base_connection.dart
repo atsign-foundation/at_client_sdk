@@ -59,9 +59,11 @@ abstract class BaseConnection extends AtConnection {
     }
     try {
       getSocket().write(data);
+      await getSocket().flush();
       getMetaData()!.lastAccessed = DateTime.now().toUtc();
     } on Exception {
       getMetaData()!.isStale = true;
+      rethrow;
     }
   }
 }

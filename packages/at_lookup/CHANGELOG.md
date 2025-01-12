@@ -1,3 +1,5 @@
+## 3.0.50
+- fix: Flush socket after write and rethrow any exceptions occurred 
 ## 3.0.49
 - build[deps]: Upgraded the following packages:
   - at_commons to v5.0.0

@@ -23,6 +23,8 @@ dependency_overrides:
     path: ../../packages/at_chops
   at_cli_commons:
     path: ../../packages/at_cli_commons
+  at_lookup:
+    path: ../../packages/at_lookup
 
 dev_dependencies:
   lints: ^1.0.0
