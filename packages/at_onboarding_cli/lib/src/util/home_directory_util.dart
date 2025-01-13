@@ -72,7 +72,7 @@ class HomeDirectoryUtil {
         .replaceAll('/', Platform.pathSeparator));
   }
 
-  Directory standardWindowsAtClientStorageDir({
+  static Directory standardWindowsAtClientStorageDir({
     required String atSign,
     required String progName, // e.g. npt, sshnp, sshnpd, srvd etc
     required String uniqueID,
@@ -97,7 +97,7 @@ class HomeDirectoryUtil {
     required String uniqueID,
   }) {
     if (Platform.isWindows) {
-      return standardAtClientStorageDir(
+      return standardWindowsAtClientStorageDir(
         atSign: atSign,
         progName: progName,
         uniqueID: uniqueID,
