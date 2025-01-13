@@ -1,3 +1,7 @@
+## 6.1.11
+
+- **FIX**: Fixed an issue preventing an already acquired atSign from being activated
+
 ## 6.1.10
 
 - **FIX**: Fixed an issue preventing a new atSign from being activated
