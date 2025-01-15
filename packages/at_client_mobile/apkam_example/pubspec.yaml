@@ -25,6 +25,9 @@ dependencies:
   collection: ^1.18.0
   at_utils: ^3.0.19
   biometric_storage: ^5.0.1
+  flutter_localizations:
+    sdk: flutter
+  intl: any
 
 dev_dependencies:
   flutter_test:

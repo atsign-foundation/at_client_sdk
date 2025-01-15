@@ -1,0 +1,8 @@
+arb-dir: lib/l10n
+output-dir: lib/l10n
+template-arb-file: app_en.arb
+output-class: AtClientMobileLocalizations
+output-localization-file: at_client_mobile_localizations.dart
+nullable-getter: false
+use-escaping: true
+synthetic-package: false # required as this is a package

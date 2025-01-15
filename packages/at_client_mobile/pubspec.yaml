@@ -27,8 +27,14 @@ dependencies:
   encrypt: ^5.0.3
   at_persistence_secondary_server: ^3.0.64
   pin_code_fields: ^8.0.1
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.25.2
   mocktail: ^1.0.4
+  build_runner: ^2.4.14
+
+flutter:
+  generate: true

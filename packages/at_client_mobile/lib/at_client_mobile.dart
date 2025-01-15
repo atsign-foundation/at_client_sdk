@@ -22,3 +22,4 @@ export 'src/keychain_manager.dart';
 export 'src/onboarding_status.dart';
 export 'src/authorisation/authorisation.dart';
 export 'src/theme/at_theme.dart';
+export 'l10n/at_client_mobile_localizations.dart';
