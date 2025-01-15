@@ -12,7 +12,7 @@ void main() {
       final ed25519KeyPair = await AtChopsUtil.generateEd25519KeyPair();
       final dataToSign = 'Hello World@123!';
       final signingAlgo = Ed25519SigningAlgo();
-      signingAlgo.edd25519KeyPair = ed25519KeyPair;
+      signingAlgo.ed25519KeyPair = ed25519KeyPair;
       final signature =
           await signingAlgo.sign(Uint8List.fromList(dataToSign.codeUnits));
       final publicKeyBytes = (await ed25519KeyPair.extractPublicKey()).bytes;
@@ -27,7 +27,7 @@ void main() {
       final ed25519KeyPair = await AtChopsUtil.generateEd25519KeyPair();
       final dataToSign = 'Hello World@123!';
       final signingAlgo = Ed25519SigningAlgo();
-      signingAlgo.edd25519KeyPair = ed25519KeyPair;
+      signingAlgo.ed25519KeyPair = ed25519KeyPair;
       final signature =
           await signingAlgo.sign(Uint8List.fromList(dataToSign.codeUnits));
       final publicKeyBytes = (await ed25519KeyPair.extractPublicKey()).bytes;
