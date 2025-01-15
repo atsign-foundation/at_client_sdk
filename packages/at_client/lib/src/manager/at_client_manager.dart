@@ -156,13 +156,17 @@ class AtClientManager {
 abstract class AtServiceFactory {
   Future<AtClient> atClient(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops, String? enrollmentId, AtConnectionFactory? atConnectionFactory});
+      {AtChops? atChops,
+      String? enrollmentId,
+      AtConnectionFactory? atConnectionFactory});
 
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager, {AtConnectionFactory? atConnectionFactory});
+      AtClient atClient, AtClientManager atClientManager,
+      {AtConnectionFactory? atConnectionFactory});
 
   Future<SyncService> syncService(AtClient atClient,
-      AtClientManager atClientManager, NotificationService notificationService, {AtConnectionFactory? atConnectionFactory});
+      AtClientManager atClientManager, NotificationService notificationService,
+      {AtConnectionFactory? atConnectionFactory});
 
   EnrollmentService enrollmentService(AtClient atClient);
 }
@@ -171,7 +175,9 @@ class DefaultAtServiceFactory implements AtServiceFactory {
   @override
   Future<AtClient> atClient(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops, String? enrollmentId, AtConnectionFactory? atConnectionFactory}) async {
+      {AtChops? atChops,
+      String? enrollmentId,
+      AtConnectionFactory? atConnectionFactory}) async {
     return await AtClientImpl.create(atSign, namespace, preference,
         atClientManager: atClientManager,
         atChops: atChops,
@@ -180,16 +186,16 @@ class DefaultAtServiceFactory implements AtServiceFactory {
 
   @override
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager, {AtConnectionFactory? atConnectionFactory}) async {
+      AtClient atClient, AtClientManager atClientManager,
+      {AtConnectionFactory? atConnectionFactory}) async {
     return await NotificationServiceImpl.create(atClient,
         atClientManager: atClientManager);
   }
 
   @override
-  Future<SyncService> syncService(
-      AtClient atClient,
-      AtClientManager atClientManager,
-      NotificationService notificationService, {AtConnectionFactory? atConnectionFactory}) async {
+  Future<SyncService> syncService(AtClient atClient,
+      AtClientManager atClientManager, NotificationService notificationService,
+      {AtConnectionFactory? atConnectionFactory}) async {
     return await SyncServiceImpl.create(atClient,
         atClientManager: atClientManager,
         notificationService: notificationService);

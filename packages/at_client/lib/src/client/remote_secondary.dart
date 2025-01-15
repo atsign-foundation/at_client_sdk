@@ -47,7 +47,7 @@ class RemoteSecondary implements Secondary {
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
         clientConfig: _getClientConfig(),
-        atConnectionFactory: atConnectionFactory );
+        atConnectionFactory: atConnectionFactory);
     atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');

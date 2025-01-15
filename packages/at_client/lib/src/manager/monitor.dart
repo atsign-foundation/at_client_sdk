@@ -148,8 +148,8 @@ class Monitor {
             enrollmentId: enrollmentId,
             atConnectionFactory: _atConnectionFactory);
     _retryCallBack = retryCallBack;
-    _monitorOutboundConnectionFactory =
-        monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory(_atConnectionFactory!);
+    _monitorOutboundConnectionFactory = monitorOutboundConnectionFactory ??
+        MonitorOutboundConnectionFactory(_atConnectionFactory!);
     _heartbeatInterval =
         monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
   }
@@ -460,9 +460,7 @@ class MonitorOutboundConnectionFactory {
 
   MonitorOutboundConnectionFactory(this._atConnectionFactory);
   Future<AtConnection> createConnection(String secondaryUrl,
-      {decryptPackets,
-      pathToCerts,
-      tlsKeysSavePath}) async {
+      {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
@@ -473,8 +471,8 @@ class MonitorOutboundConnectionFactory {
     secureSocketConfig.tlsKeysSavePath = tlsKeysSavePath;
 
     // Create the socket connection using the factory
-    final underlying = await _atConnectionFactory
-        .createUnderlying(host, port, secureSocketConfig);
+    final underlying = await _atConnectionFactory.createUnderlying(
+        host, port, secureSocketConfig);
 
     // Create at connection
     AtConnection atConnection =

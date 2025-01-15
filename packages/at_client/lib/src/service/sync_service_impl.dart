@@ -75,11 +75,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       required NotificationService notificationService,
       RemoteSecondary? remoteSecondary,
       AtConnectionFactory? atConnectionFactory}) async {
-       // Default to AtLookupSecureSocketFactory if atConnectionFactory is not provided
+    // Default to AtLookupSecureSocketFactory if atConnectionFactory is not provided
     atConnectionFactory ??= AtLookupSecureSocketFactory();
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-        atChops: atClient.atChops, enrollmentId: atClient.enrollmentId,
+        atChops: atClient.atChops,
+        enrollmentId: atClient.enrollmentId,
         atConnectionFactory: atConnectionFactory);
     final syncService = SyncServiceImpl._(
       atClientManager,
@@ -93,11 +94,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return syncService;
   }
 
-  SyncServiceImpl._(
-      AtClientManager atClientManager,
-      AtClient atClient,
-      NotificationService notificationService,
-      RemoteSecondary remoteSecondary,
+  SyncServiceImpl._(AtClientManager atClientManager, AtClient atClient,
+      NotificationService notificationService, RemoteSecondary remoteSecondary,
       {AtConnectionFactory? atConnectionFactory}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
@@ -110,7 +108,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         AtKey.local('skipdeletesuntil', currentAtSign).build();
     atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
     _atClientManager.listenToAtSignChange(this);
-   atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
+    atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
   }
 
   void _scheduleSyncRun() {

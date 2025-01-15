@@ -145,8 +145,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     atClientManager ??= AtClientManager.getInstance();
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
     // Assign AtConnectionFactory or initialize a default one
-    atConnectionFactory =
-        atConnectionFactory ?? AtLookupSecureSocketFactory();
+    atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
 
     // Fetch cached AtClientImpl for re-use, or create a new one and init it
     AtClientImpl? atClientImpl;
@@ -196,8 +195,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     _remoteSecondary = remoteSecondary;
     // Assign AtConnectionFactory or initialize a default one
-    _atConnectionFactory =
-        atConnectionFactory ?? AtLookupSecureSocketFactory();
+    _atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
