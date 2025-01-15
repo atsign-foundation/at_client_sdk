@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -48,6 +47,8 @@ class Monitor {
   AtConnection? _monitorConnection;
 
   late RemoteSecondary _remoteSecondary;
+
+  late AtConnectionFactory? _atConnectionFactory;
 
   final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
 
@@ -125,6 +126,7 @@ class Monitor {
       MonitorPreference monitorPreference,
       Function retryCallBack,
       {RemoteSecondary? remoteSecondary,
+      AtConnectionFactory? atConnectionFactory,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
       Duration? monitorHeartbeatInterval,
       this.atChops,
@@ -139,12 +141,15 @@ class Monitor {
     _lastNotificationTime = monitorPreference.lastNotificationTime;
     _enrollmentId = enrollmentId;
     _logger.finer('enrollmentId: $_enrollmentId');
+    _atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
     _remoteSecondary = remoteSecondary ??
         RemoteSecondary(atSign, preference,
-            atChops: atChops, enrollmentId: enrollmentId);
+            atChops: atChops,
+            enrollmentId: enrollmentId,
+            atConnectionFactory: _atConnectionFactory);
     _retryCallBack = retryCallBack;
     _monitorOutboundConnectionFactory =
-        monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
+        monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory(_atConnectionFactory!);
     _heartbeatInterval =
         monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
   }
@@ -451,8 +456,13 @@ class Monitor {
 enum MonitorStatus { notStarted, started, stopped, errored }
 
 class MonitorOutboundConnectionFactory {
+  final AtConnectionFactory _atConnectionFactory;
+
+  MonitorOutboundConnectionFactory(this._atConnectionFactory);
   Future<AtConnection> createConnection(String secondaryUrl,
-      {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
+      {decryptPackets,
+      pathToCerts,
+      tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
     var port = secondaryInfo[1];
@@ -462,9 +472,15 @@ class MonitorOutboundConnectionFactory {
     secureSocketConfig.pathToCerts = pathToCerts;
     secureSocketConfig.tlsKeysSavePath = tlsKeysSavePath;
 
-    SecureSocket secureSocket = await SecureSocketUtil.createSecureSocket(
-        host, port, secureSocketConfig);
-    return AtSocketConnection(secureSocket);
+    // Create the socket connection using the factory
+    final underlying = await _atConnectionFactory
+        .createUnderlying(host, port, secureSocketConfig);
+
+    // Create at connection
+    AtConnection atConnection =
+        _atConnectionFactory.createConnection(underlying);
+
+    return atConnection;
   }
 
   List<String> _getSecondaryInfo(String url) {

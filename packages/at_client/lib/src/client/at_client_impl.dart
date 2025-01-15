@@ -52,6 +52,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
+  AtConnectionFactory? _atConnectionFactory;
   static final upperCaseRegex = RegExp(r'[A-Z]');
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
@@ -139,9 +140,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig,
+      AtConnectionFactory? atConnectionFactory,
       String? enrollmentId}) async {
     atClientManager ??= AtClientManager.getInstance();
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
+    // Assign AtConnectionFactory or initialize a default one
+    atConnectionFactory =
+        atConnectionFactory ?? AtLookupSecureSocketFactory();
 
     // Fetch cached AtClientImpl for re-use, or create a new one and init it
     AtClientImpl? atClientImpl;
@@ -176,6 +181,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       AtChops? atChops,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig,
+      AtConnectionFactory? atConnectionFactory,
       this.enrollmentId}) {
     _atSign = AtUtils.fixAtSign(theAtSign);
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
@@ -189,6 +195,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           'A SecondaryKeyStore was injected, but preference.isLocalStoreRequired is false');
     }
     _remoteSecondary = remoteSecondary;
+    // Assign AtConnectionFactory or initialize a default one
+    _atConnectionFactory =
+        atConnectionFactory ?? AtLookupSecureSocketFactory();
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
@@ -209,7 +218,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops,
         privateKey: _preference!.privateKey,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        atConnectionFactory: _atConnectionFactory);
 
     // Now using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);

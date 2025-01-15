@@ -1,17 +1,19 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_lookup/at_lookup.dart';
 
 class ServiceFactoryWithNoOpServices extends DefaultAtServiceFactory {
   @override
   Future<SyncService> syncService(
       AtClient atClient,
       AtClientManager atClientManager,
-      NotificationService notificationService) async {
+      NotificationService notificationService,
+      {AtConnectionFactory? atConnectionFactory}) async {
     return NoOpSyncService();
   }
 
   @override
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager) async {
+      AtClient atClient, AtClientManager atClientManager, {AtConnectionFactory? atConnectionFactory}) async {
     return NoOpNotificationService();
   }
 }
