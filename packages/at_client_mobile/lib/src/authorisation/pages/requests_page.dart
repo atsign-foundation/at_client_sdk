@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/models.dart';
 import '../providers/authorisation_providers.dart';
 import '../widgets/authorisation_section_header.dart';
 import '../widgets/enrollment_request_card.dart';
@@ -13,8 +14,38 @@ class RequestsPage extends StatefulWidget {
 }
 
 class RequestsPageState extends State<RequestsPage> {
+  OverlayEntry? overlayEntry;
+
+  void showHighlightOverlay({required ServerEnrollmentRequest request}) {
+    removeHighlightOverlay();
+
+    // overlayEntry = OverlayEntry(
+    //   builder: (context) {
+    //     return Positioned(
+    //       top: 30,
+    //       right: 30,
+    //       child: AuthorisationFeedback(request: request, onTap: () {}),
+    //     );
+    //   },
+    // );
+    // Overlay.of(context).insert(overlayEntry!);
+  }
+
+  void removeHighlightOverlay() {
+    overlayEntry?.remove();
+    overlayEntry?.dispose();
+    overlayEntry = null;
+  }
+
+  @override
+  void dispose() {
+    removeHighlightOverlay();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // TODO: Listen for errors and show an overlay
     final pendingRequestsProvider = PendingRequestsProvider.of(context);
     return SingleChildScrollView(
       child: Column(

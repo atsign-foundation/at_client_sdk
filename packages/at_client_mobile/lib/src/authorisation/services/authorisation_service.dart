@@ -7,17 +7,15 @@ import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 
-import '../models/models.dart';
-
 /// {@template authorisation_service}
 /// A service class for managing enrollment requests.
 /// {@endtemplate}
 class AuthorisationService with AtClientBindings {
   /// {@macro authorisation_service}
-  AuthorisationService(this.atClient);
+  AuthorisationService();
 
   @override
-  final AtClient atClient;
+  AtClient get atClient => AtClientManager.getInstance().atClient;
 
   @override
   final AtSignLogger logger = AtSignLogger('AuthorisationService');
@@ -31,9 +29,8 @@ class AuthorisationService with AtClientBindings {
 
   /// Call this method before any other methods.
   ///
-  /// Sets up the subscription to the server for new enrollment requests and
-  /// fetches all existing requests.
-  Future<void> init() async {
+  /// Sets up the subscription to the server for new enrollment requests.
+  void init() async {
     logger.info('Initialising AuthorisationService');
     _enrollmentRequestsController ??= StreamController<ServerEnrollmentRequest>.broadcast();
     _enrollmentRequestsController!.onListen = _listenForNewRequests;
@@ -72,12 +69,13 @@ class AuthorisationService with AtClientBindings {
   /// Closes and cancels all streams and subscriptions.
   Future<void> dispose() async {
     await _newRequestsSubscription?.cancel();
+    _newRequestsSubscription = null;
     await _enrollmentRequestsController?.close();
+    _enrollmentRequestsController = null;
   }
 
   /// Stream of all enrollment requests.
   /// Use this for getting real-time updates on new requests.
-  /// Will also include past pending requests.
   Stream<ServerEnrollmentRequest> enrollmentRequests({List<EnrollmentStatus>? statusFilters}) {
     if (_enrollmentRequestsController == null) {
       throw StateError('init() must be called before accessing enrollmentRequests');

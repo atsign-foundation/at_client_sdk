@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/models.dart';
 import '../providers/authorisation_providers.dart';
 import '../widgets/authorisation_section_header.dart';
 import '../widgets/enrollment_request_card.dart';
@@ -13,6 +14,40 @@ class ApprovedEnrollmentsPage extends StatefulWidget {
 }
 
 class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
+  OverlayEntry? overlayEntry;
+
+  void showHighlightOverlay({required ServerEnrollmentRequest request}) {
+    removeHighlightOverlay();
+
+    // overlayEntry = OverlayEntry(
+    //   builder: (context) {
+    //     return Positioned(
+    //       top: 30,
+    //       right: 30,
+    //       child: AuthorisationFeedback(
+    //         request: request,
+    //         onTap: () {
+    //           removeHighlightOverlay();
+    //         },
+    //       ),
+    //     );
+    //   },
+    // );
+    // Overlay.of(context).insert(overlayEntry!);
+  }
+
+  void removeHighlightOverlay() {
+    overlayEntry?.remove();
+    overlayEntry?.dispose();
+    overlayEntry = null;
+  }
+
+  @override
+  void dispose() {
+    removeHighlightOverlay();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final approvedRequestsProvider = ApprovedRequestsProvider.of(context);
@@ -43,7 +78,7 @@ class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
               padding: EdgeInsets.all(16.0),
               child: Text('No pending requests'),
             ),
-          // Commenting out for now
+          // Commenting out search bar for now
           // if (approvedRequestsProvider.requests.isNotEmpty && !approvedRequestsProvider.isLoading)
           //   Padding(
           //     padding: const EdgeInsets.only(bottom: 16.0),
@@ -57,12 +92,20 @@ class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
           //   ),
           if (approvedRequestsProvider.requests.isNotEmpty && !approvedRequestsProvider.isLoading)
             ...approvedRequestsProvider.requests.map(
-              (request) => EnrollmentRequestCard(
-                request: request,
-                onRevoke: () async {
-                  await approvedRequestsProvider.revokeRequest(request);
-                },
-              ),
+              (request) {
+                // Filter out manager requests as we don't show this
+                final isManagerRequest = request.namespacePermissions.any((element) => element.namespace == '__manage');
+                if (isManagerRequest) {
+                  return SizedBox.shrink();
+                }
+                return EnrollmentRequestCard(
+                  request: request,
+                  onRevoke: () async {
+                    await approvedRequestsProvider.revokeRequest(request);
+                    // showHighlightOverlay(request: request);
+                  },
+                );
+              },
             ),
         ],
       ),
