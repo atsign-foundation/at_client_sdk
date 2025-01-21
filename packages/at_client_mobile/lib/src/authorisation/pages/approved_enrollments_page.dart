@@ -1,6 +1,7 @@
+import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_mobile/src/authorisation/widgets/authorisation_feedback_overlay.dart';
 import 'package:flutter/material.dart';
 
-import '../models/models.dart';
 import '../providers/authorisation_providers.dart';
 import '../widgets/authorisation_section_header.dart';
 import '../widgets/enrollment_request_card.dart';
@@ -19,21 +20,25 @@ class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
   void showHighlightOverlay({required ServerEnrollmentRequest request}) {
     removeHighlightOverlay();
 
-    // overlayEntry = OverlayEntry(
-    //   builder: (context) {
-    //     return Positioned(
-    //       top: 30,
-    //       right: 30,
-    //       child: AuthorisationFeedback(
-    //         request: request,
-    //         onTap: () {
-    //           removeHighlightOverlay();
-    //         },
-    //       ),
-    //     );
-    //   },
-    // );
-    // Overlay.of(context).insert(overlayEntry!);
+    overlayEntry = OverlayEntry(
+      builder: (overlayContext) {
+        return Theme(
+          data: Theme.of(context),
+          child: Positioned(
+            top: 30,
+            right: 30,
+            child: AuthorisationFeedbackOverlay(
+              request: request,
+              newStatus: EnrollmentStatus.revoked,
+              onTap: () {
+                removeHighlightOverlay();
+              },
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context).insert(overlayEntry!);
   }
 
   void removeHighlightOverlay() {
@@ -102,7 +107,9 @@ class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
                   request: request,
                   onRevoke: () async {
                     await approvedRequestsProvider.revokeRequest(request);
-                    // showHighlightOverlay(request: request);
+                    if (approvedRequestsProvider.error == null) {
+                      showHighlightOverlay(request: request);
+                    }
                   },
                 );
               },

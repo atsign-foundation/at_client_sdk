@@ -40,7 +40,7 @@ class ManageDeviceCard extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: const Text(
-          'The app on this device can be used as an authenticator for all future apps & devices.',
+          'The keys on this device can be used as an authenticator for apps & devices.',
           textAlign: TextAlign.center,
         ),
       ),

@@ -1,6 +1,7 @@
+import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_mobile/src/authorisation/widgets/authorisation_feedback_overlay.dart';
 import 'package:flutter/material.dart';
 
-import '../models/models.dart';
 import '../providers/authorisation_providers.dart';
 import '../widgets/authorisation_section_header.dart';
 import '../widgets/enrollment_request_card.dart';
@@ -16,19 +17,28 @@ class RequestsPage extends StatefulWidget {
 class RequestsPageState extends State<RequestsPage> {
   OverlayEntry? overlayEntry;
 
-  void showHighlightOverlay({required ServerEnrollmentRequest request}) {
+  void showHighlightOverlay({required ServerEnrollmentRequest request, required EnrollmentStatus newStatus}) {
     removeHighlightOverlay();
 
-    // overlayEntry = OverlayEntry(
-    //   builder: (context) {
-    //     return Positioned(
-    //       top: 30,
-    //       right: 30,
-    //       child: AuthorisationFeedback(request: request, onTap: () {}),
-    //     );
-    //   },
-    // );
-    // Overlay.of(context).insert(overlayEntry!);
+    overlayEntry = OverlayEntry(
+      builder: (overlayContext) {
+        return Theme(
+          data: Theme.of(context),
+          child: Positioned(
+            top: 30,
+            right: 30,
+            child: AuthorisationFeedbackOverlay(
+              request: request,
+              newStatus: newStatus,
+              onTap: () {
+                removeHighlightOverlay();
+              },
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context).insert(overlayEntry!);
   }
 
   void removeHighlightOverlay() {
@@ -80,9 +90,15 @@ class RequestsPageState extends State<RequestsPage> {
                 request: request,
                 onApprove: () async {
                   await pendingRequestsProvider.approveRequest(request);
+                  if (pendingRequestsProvider.error == null) {
+                    showHighlightOverlay(request: request, newStatus: EnrollmentStatus.approved);
+                  }
                 },
                 onReject: () async {
                   await pendingRequestsProvider.denyRequest(request);
+                  if (pendingRequestsProvider.error == null) {
+                    showHighlightOverlay(request: request, newStatus: EnrollmentStatus.denied);
+                  }
                 },
               ),
             ),
