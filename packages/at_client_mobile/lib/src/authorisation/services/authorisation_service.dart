@@ -116,7 +116,6 @@ class AuthorisationService with AtClientBindings {
     }
     final rawData = rawResponse.substring(rawResponse.indexOf('data:') + 5);
     final data = jsonDecode(rawData) as Map<String, dynamic>;
-    //? TODO: Filter out `firstApp` enrolment
     final enrollmentRequests = data.entries.map(ServerEnrollmentRequest.fromServer).toList();
     logger.info('Found ${enrollmentRequests.length} enrollmentRequests');
 

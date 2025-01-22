@@ -38,12 +38,11 @@ class OtpPageState extends State<OtpPage> {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 8),
-                  // TODO: Create a nicer looking loading state
                   if (activeOtp.isFetching)
                     const Center(
                       child: CircularProgressIndicator(),
                     ),
-                  if (activeOtp.error != null) Text('Error: ${activeOtp.error!}'),
+                  if (activeOtp.error != null) Text(activeOtp.error!),
                   if (activeOtp.otp != null)
                     Wrap(
                       alignment: WrapAlignment.center,

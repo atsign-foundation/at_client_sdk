@@ -35,7 +35,6 @@ class ServerEnrollmentRequest {
   final EnrollmentStatus status;
 
   /// The encrypted APKAM symmetric key.
-  /// Will only be present if the request is pending TODO: Check if this is correct.
   final String? encryptedAPKAMSymmetricKey;
 
   /// List of permissions requested by the app and device.

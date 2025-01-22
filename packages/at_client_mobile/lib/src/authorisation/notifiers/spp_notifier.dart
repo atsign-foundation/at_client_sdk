@@ -11,14 +11,18 @@ class SppNotifier extends ChangeNotifier {
   final AuthorisationService _service;
 
   bool _isLoading = false;
-  String? _error;
+  String? _fetchError;
+  String? _saveError;
   Otp? _spp;
 
   /// If the notifier is currently loading data.
   bool get isLoading => _isLoading;
 
-  /// Current error message, if any.
-  String? get error => _error;
+  /// Current error message when fetching, if any.
+  String? get fetchError => _fetchError;
+
+  /// Current error message when saving, if any.
+  String? get saveError => _saveError;
 
   /// If the user has not set an SPP, this will be null.
   Otp? get spp => _spp;
@@ -26,13 +30,13 @@ class SppNotifier extends ChangeNotifier {
   /// Fetch the SPP from the server.
   Future<void> fetchSpp() async {
     try {
-      _error = null;
+      _fetchError = null;
       _isLoading = true;
       notifyListeners();
       final currentSpp = await _service.getActiveSpp();
       _spp = currentSpp;
     } catch (e) {
-      _error = e.toString();
+      _fetchError = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -43,7 +47,7 @@ class SppNotifier extends ChangeNotifier {
   /// Optionally, you can provide a duration for how long the SPP should be active.
   Future<void> setSpp(String spp, Duration duration) async {
     try {
-      _error = null;
+      _saveError = null;
       _isLoading = true;
       notifyListeners();
       final newSpp = await _service.setSpp(
@@ -52,7 +56,7 @@ class SppNotifier extends ChangeNotifier {
       );
       _spp = newSpp;
     } catch (e) {
-      _error = e.toString();
+      _saveError = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();

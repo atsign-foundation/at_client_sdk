@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../providers/spp_provider.dart';
 import '../widgets/authorisation_section_header.dart';
 import '../widgets/spp_widget.dart';
 import 'authorisation_page_section.dart';
@@ -14,6 +15,8 @@ class SetPinPage extends StatefulWidget {
 class SetPinPageState extends State<SetPinPage> {
   @override
   Widget build(BuildContext context) {
+    final sppNotifier = SppProvider.of(context);
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -35,7 +38,14 @@ class SetPinPageState extends State<SetPinPage> {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 16),
-                  const SppWidget(),
+                  if (sppNotifier.fetchError != null)
+                    Text(
+                      sppNotifier.fetchError!,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                    ),
+                  if (sppNotifier.fetchError == null) const SppWidget(),
                 ],
               ),
             ),

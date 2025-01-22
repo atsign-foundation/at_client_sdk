@@ -33,12 +33,12 @@ class AuthorisationHubState extends State<AuthorisationHub> {
 
   late final pendingRequestsNotifier = PendingRequestsNotifier(service);
 
-  late Future<bool> isManagerKey;
+  late Future<bool> isManagerKeyFuture;
 
   @override
   void initState() {
     super.initState();
-    isManagerKey = service.isManagerKey();
+    isManagerKeyFuture = service.isManagerKey();
   }
 
   @override
@@ -67,7 +67,7 @@ class AuthorisationHubState extends State<AuthorisationHub> {
                 builder: (context) {
                   final selectedSection = SelectedSectionProvider.of(context).selectedSection;
                   return FutureBuilder<bool>(
-                    future: isManagerKey,
+                    future: isManagerKeyFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(
@@ -90,7 +90,17 @@ class AuthorisationHubState extends State<AuthorisationHub> {
                               style: Theme.of(context).textTheme.bodyLarge,
                               textAlign: TextAlign.center,
                             ),
-                            // TODO: Add a retry mechanism
+                            const SizedBox(height: 8),
+                            Center(
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    isManagerKeyFuture = service.isManagerKey();
+                                  });
+                                },
+                                child: const Text('Retry'),
+                              ),
+                            ),
                           ],
                         );
                       }

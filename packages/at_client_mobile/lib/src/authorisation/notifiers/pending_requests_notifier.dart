@@ -3,9 +3,6 @@ import 'dart:async';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/widgets.dart';
 
-import '../models/models.dart';
-import '../services/authorisation_service.dart';
-
 class PendingRequestsNotifier extends ChangeNotifier {
   PendingRequestsNotifier(this._service) {
     fetchPendingRequests();

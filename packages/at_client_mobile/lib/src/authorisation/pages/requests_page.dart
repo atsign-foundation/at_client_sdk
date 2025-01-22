@@ -55,7 +55,6 @@ class RequestsPageState extends State<RequestsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // TODO: Listen for errors and show an overlay
     final pendingRequestsProvider = PendingRequestsProvider.of(context);
     return SingleChildScrollView(
       child: Column(
@@ -79,12 +78,12 @@ class RequestsPageState extends State<RequestsPage> {
                 textAlign: TextAlign.center,
               ),
             ),
-          if (pendingRequestsProvider.requests.isEmpty)
+          if (pendingRequestsProvider.requests.isEmpty && pendingRequestsProvider.error == null)
             const Padding(
               padding: EdgeInsets.all(16.0),
               child: Text('No pending requests'),
             ),
-          if (pendingRequestsProvider.requests.isNotEmpty)
+          if (pendingRequestsProvider.requests.isNotEmpty && pendingRequestsProvider.error == null)
             ...pendingRequestsProvider.requests.map(
               (request) => EnrollmentRequestCard(
                 request: request,

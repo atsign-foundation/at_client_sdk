@@ -51,7 +51,6 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                         SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.otp);
                       },
                       isSelected: selectedSection == AuthorisationPageSection.otp,
-                      // TODO: Create a nicer loading state
                       trailing: activeOtp.isFetching
                           ? const SizedBox(
                               height: 30,
@@ -61,7 +60,10 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                               ),
                             )
                           : activeOtp.error != null
-                              ? Text('Error: ${activeOtp.error!}')
+                              ? Icon(
+                                  Icons.error_outline,
+                                  color: Theme.of(context).colorScheme.error,
+                                )
                               : Row(
                                   children: [
                                     Container(

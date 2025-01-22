@@ -48,7 +48,7 @@ class SppWidgetState extends State<SppWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final sppNotifer = SppProvider.of(context);
+    final sppNotifier = SppProvider.of(context);
 
     return SizedBox(
       width: widget.characterCount * (_fieldWidth + _fieldPadding) + _fieldPadding * 2,
@@ -63,9 +63,9 @@ class SppWidgetState extends State<SppWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (sppNotifer.spp?.expiry != null && sppNotifer.spp!.expiry.isAfter(DateTime.now())) ...[
+                if (sppNotifier.spp?.expiry != null && sppNotifier.spp!.expiry.isAfter(DateTime.now())) ...[
                   SppExpiration(
-                      expiryTime: sppNotifer.spp!.expiry,
+                      expiryTime: sppNotifier.spp!.expiry,
                       onExpiry: () {
                         _controller.clear();
                         setState(() {});
@@ -151,23 +151,23 @@ class SppWidgetState extends State<SppWidget> {
                 OutlinedButton(
                   onPressed: saveEnabled
                       ? () async {
-                          await sppNotifer.setSpp(
+                          await sppNotifier.setSpp(
                             _controller.text,
                             _selectedDuration,
                           );
                         }
                       : null,
-                  child: sppNotifer.isLoading
+                  child: sppNotifier.isLoading
                       ? const Center(
                           child: CircularProgressIndicator(),
                         )
                       : const Text('Save'),
                 ),
-                if (sppNotifer.error != null)
+                if (sppNotifier.saveError != null)
                   Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: Text(
-                      sppNotifer.error!,
+                      sppNotifier.saveError!,
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: Theme.of(context).colorScheme.error,
                           ),
