@@ -467,7 +467,9 @@ class AtAuthServiceImpl implements AtAuthService {
     AtEncryptionResult? atEncryptionResult = atChops.decryptString(
         encryptionPrivateKeyFromServer, EncryptionKeyType.aes256,
         keyName: 'apkamSymmetricKey',
-        iv: InitialisationVector(base64Decode(encryptionPrivateKeyIV!)));
+        iv: encryptionPrivateKeyIV != null
+            ? InitialisationVector(base64Decode(encryptionPrivateKeyIV))
+            : AtChopsUtil.generateIVLegacy());
     return atEncryptionResult.result;
   }
 
@@ -500,7 +502,9 @@ class AtAuthServiceImpl implements AtAuthService {
     AtEncryptionResult? atEncryptionResult = atChops.decryptString(
         selfEncryptionKeyFromServer, EncryptionKeyType.aes256,
         keyName: 'apkamSymmetricKey',
-        iv: InitialisationVector(base64Decode(selfEncryptionKeyIV!)));
+        iv: selfEncryptionKeyIV != null
+            ? InitialisationVector(base64Decode(selfEncryptionKeyIV))
+            : AtChopsUtil.generateIVLegacy());
     return atEncryptionResult.result;
   }
 
