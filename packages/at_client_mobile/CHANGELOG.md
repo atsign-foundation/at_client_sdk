@@ -1,3 +1,6 @@
+## 3.2.20
+- fix: Authenticating now saves keys to local secondary store
+
 ## 3.2.19
 - build[deps]: Upgraded dependencies for the following packages:
     - at_client: 3.2.2
@@ -29,7 +32,7 @@
     - getSentEnrollmentRequest
 ## 3.2.15
 - build[deps]: Upgraded dependencies for the following packages:
-  - at_chops to v2.0.0 
+  - at_chops to v2.0.0
   - at_lookup to v3.0.46
   - at_commons to v4.0.1
   - at_client to v3.0.75
@@ -46,8 +49,8 @@
 ## 3.2.12
 - fix: Fixed the issue biometric_storage dependency not working on Windows when using Dart 3
 ## 3.2.11
-- chore: Upgraded biometric_storage dependency to 5.0.0 
-- chore: Upgraded package_info_plus dependency to 4.0.2 
+- chore: Upgraded biometric_storage dependency to 5.0.0
+- chore: Upgraded package_info_plus dependency to 4.0.2
 ## 3.2.10
 - fix: Fixed incorrect import statements in at_client_mobile/example which are
   causing analysis errors in dart 3
@@ -118,10 +121,10 @@ Changes:
 ## 3.1.10
 - at_client version upgrade for chunk based encryption
 ## 3.1.9
-- at_client version change for sync deletion of cached keys to cloud secondary 
+- at_client version change for sync deletion of cached keys to cloud secondary
 - at_lookup version change for increase in outbound connection timeout
 ## 3.1.8
-- at_client version change for automatic sync trigger 
+- at_client version change for automatic sync trigger
 ## 3.1.7
 - at_client and at_lookup version change for outbound listener bug fix
 ## 3.1.6
