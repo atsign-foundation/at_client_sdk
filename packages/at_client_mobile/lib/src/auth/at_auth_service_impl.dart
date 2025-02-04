@@ -102,6 +102,7 @@ class AtAuthServiceImpl implements AtAuthService {
     AtsignKey? atSignKey = await keyChainManager.readAtsign(name: _atSign);
     if (atSignKey == null) {
       await _storeToKeyChainManager(_atSign, atAuthResponse.atAuthKeys);
+      await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys);
     }
     return atAuthResponse;
   }
