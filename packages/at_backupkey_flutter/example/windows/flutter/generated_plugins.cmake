@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  at_backupkey_flutter
   at_file_saver
   permission_handler_windows
   share_plus

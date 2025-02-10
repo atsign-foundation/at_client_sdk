@@ -1,4 +1,6 @@
 PODS:
+  - at_backupkey_flutter (0.0.1):
+    - FlutterMacOS
   - at_file_saver (0.0.1):
     - FlutterMacOS
   - biometric_storage (0.0.1):
@@ -6,6 +8,8 @@ PODS:
   - device_info_plus (0.0.1):
     - FlutterMacOS
   - emoji_picker_flutter (0.0.1):
+    - FlutterMacOS
+  - file_selector_macos (0.0.1):
     - FlutterMacOS
   - flutter_image_compress_macos (1.0.0):
     - FlutterMacOS
@@ -27,10 +31,12 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
+  - at_backupkey_flutter (from `Flutter/ephemeral/.symlinks/plugins/at_backupkey_flutter/macos`)
   - at_file_saver (from `Flutter/ephemeral/.symlinks/plugins/at_file_saver/macos`)
   - biometric_storage (from `Flutter/ephemeral/.symlinks/plugins/biometric_storage/macos`)
   - device_info_plus (from `Flutter/ephemeral/.symlinks/plugins/device_info_plus/macos`)
   - emoji_picker_flutter (from `Flutter/ephemeral/.symlinks/plugins/emoji_picker_flutter/macos`)
+  - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
   - flutter_image_compress_macos (from `Flutter/ephemeral/.symlinks/plugins/flutter_image_compress_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - package_info_plus (from `Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos`)
@@ -41,6 +47,8 @@ DEPENDENCIES:
   - webview_flutter_wkwebview (from `Flutter/ephemeral/.symlinks/plugins/webview_flutter_wkwebview/darwin`)
 
 EXTERNAL SOURCES:
+  at_backupkey_flutter:
+    :path: Flutter/ephemeral/.symlinks/plugins/at_backupkey_flutter/macos
   at_file_saver:
     :path: Flutter/ephemeral/.symlinks/plugins/at_file_saver/macos
   biometric_storage:
@@ -49,6 +57,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/device_info_plus/macos
   emoji_picker_flutter:
     :path: Flutter/ephemeral/.symlinks/plugins/emoji_picker_flutter/macos
+  file_selector_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos
   flutter_image_compress_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_image_compress_macos/macos
   FlutterMacOS:
@@ -67,10 +77,12 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/webview_flutter_wkwebview/darwin
 
 SPEC CHECKSUMS:
+  at_backupkey_flutter: c3d63b24954c3f98b251b0470ba6969af5497457
   at_file_saver: 1fc6ed722f17c7a20ce79cce168d1100fcad4b95
   biometric_storage: 43caa6e7ef00e8e19c074216e7e1786dacda9e76
   device_info_plus: ce1b7762849d3ec103d0e0517299f2db7ad60720
   emoji_picker_flutter: 533634326b1c5de9a181ba14b9758e6dfe967a20
+  file_selector_macos: cc3858c981fe6889f364731200d6232dac1d812d
   flutter_image_compress_macos: c26c3c13ea0f28ae6dea4e139b3292e7729f99f1
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   package_info_plus: fa739dd842b393193c5ca93c26798dff6e3d0e0c
@@ -82,4 +94,4 @@ SPEC CHECKSUMS:
 
 PODFILE CHECKSUM: 0d3963a09fc94f580682bd88480486da345dc3f0
 
-COCOAPODS: 1.14.3
+COCOAPODS: 1.16.2
