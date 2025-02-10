@@ -21,7 +21,7 @@ dependencies:
   at_client_mobile: ^3.2.19
   showcaseview: ^3.0.0
   device_info_plus: ^10.1.1
-  file_picker: ^8.1.2
+  file_picker: ^8.3.3
 
 
 dev_dependencies:
