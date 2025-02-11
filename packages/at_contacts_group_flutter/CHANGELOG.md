@@ -1,10 +1,17 @@
+## 4.0.18
+
+- **FIX**: file_picker replaces file_selector package
+- **CHORE**: flutter_slidable updated to 3.12
+
 ## 4.0.17
+
 - build[deps]: Upgraded dependencies for the following packages:
-    - at_client_mobile: 3.2.19
-    - at_commons: 5.0.0
-    - at_contact: 3.0.9
-    - at_contacts_flutter: 4.0.16
-    - at_utils: 3.0.19
+  - at_client_mobile: 3.2.19
+  - at_commons: 5.0.0
+  - at_contact: 3.0.9
+  - at_contacts_flutter: 4.0.16
+  - at_utils: 3.0.19
+
 ## 4.0.16
 
 - **CHORE**: Kotlin version updated from ^1.7.10 to 1.8.20
