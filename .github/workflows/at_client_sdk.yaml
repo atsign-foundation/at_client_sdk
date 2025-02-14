@@ -62,9 +62,9 @@ jobs:
 
       # Adding flutter to path
       - name: Installing Flutter
-        uses: britannio/action-install-flutter@a486b7e3148e54a76390d849100b9dee819ff810 # v1.1
+        uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
         with:
-          version: stable
+          channel: stable
 
       # Install dependencies of at_client_mobile
       - name: Installing dependencies
