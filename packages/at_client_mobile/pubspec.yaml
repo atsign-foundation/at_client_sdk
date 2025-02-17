@@ -29,6 +29,8 @@ dependencies:
   pin_code_fields: ^8.0.1
   flutter_localizations:
     sdk: flutter
+  at_server_status: ^1.0.5
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   lints: ^4.0.0
