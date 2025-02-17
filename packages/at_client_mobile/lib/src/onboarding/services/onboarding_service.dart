@@ -4,7 +4,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_client_mobile/src/onboarding/models/environment.dart';
-import 'package:at_client_mobile/src/onboarding/services/registrar_service.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_utils.dart';
 
@@ -27,7 +26,6 @@ class OnboardingService with AtClientBindings {
   final _keyChainManager = KeyChainManager.getInstance();
 
   // ----- Internal State -----
-
   AtServerStatus? _atStatus;
 
   void _setAtStatus(String rootDomain, int rootPort) {
@@ -145,7 +143,6 @@ class OnboardingService with AtClientBindings {
   }) async {
     _atClientPreference = atClientPreference;
     _setAtStatus(atClientPreference.rootDomain, atClientPreference.rootPort);
-    final registrarService = RegistrarService(rootEnvironment);
   }
 
   Future<void> onboarding() async {

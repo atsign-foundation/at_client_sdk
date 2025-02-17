@@ -7,11 +7,16 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 class RegistrarException implements Exception {
-  RegistrarException(this.message);
+  RegistrarException({required this.error, required this.message});
+
+  /// Error message. Internal use only.
+  final String error;
+
+  /// Helpful message to display to end-user.
   final String message;
 
   @override
-  String toString() => 'RegistrarException: $message';
+  String toString() => 'RegistrarException - Error: $error, Message: $message';
 }
 
 /// {@template registrar_service}
@@ -28,7 +33,7 @@ class RegistrarService {
   static const int _maxRetries = 3;
   static const int _retryDelayMs = 2000;
 
-  /// Creates an `HttpClient` with optional certificate bypass in non-production.
+  /// Creates an `HttpClient` with a certificate bypass in non-production environments.
   static HttpClient _createHttpClient(RootEnvironment env) {
     final client = HttpClient();
     if (env != RootEnvironment.prod) {
@@ -46,7 +51,10 @@ class RegistrarService {
     }[_rootEnvironment];
 
     if (apiKey == null) {
-      throw RegistrarException('API key not found for environment: $_rootEnvironment');
+      throw RegistrarException(
+        error: 'API key not found for environment: $_rootEnvironment',
+        message: "API key not found",
+      );
     }
     return apiKey;
   }
@@ -69,7 +77,10 @@ class RegistrarService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return response;
       }
-      throw RegistrarException('Request failed: ${response.statusCode} - ${response.body}');
+      throw RegistrarException(
+        error: 'Request failed: ${response.statusCode} - ${response.body}',
+        message: 'Request failed with status code ${response.statusCode}',
+      );
     });
   }
 
@@ -89,7 +100,10 @@ class RegistrarService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return response;
       }
-      throw RegistrarException('${response.statusCode} - ${response.body}');
+      throw RegistrarException(
+        error: '${response.statusCode} - ${response.body}',
+        message: 'Request failed with status code ${response.statusCode}',
+      );
     });
   }
 
@@ -103,7 +117,10 @@ class RegistrarService {
         // keeping this logic so that the error can be reported in exception.
         if (attempt == _maxRetries - 1) {
           final message = e is RegistrarException ? e.message : e.toString();
-          throw RegistrarException('Request failed after $_maxRetries attempts: $message');
+          throw RegistrarException(
+            error: 'Request failed after $_maxRetries attempts: $message',
+            message: message,
+          );
         }
         await Future.delayed(Duration(milliseconds: _retryDelayMs));
       }
@@ -122,7 +139,10 @@ class RegistrarService {
         return data['atsign'] as String;
       }
     }
-    throw RegistrarException('Invalid response format: $body');
+    throw RegistrarException(
+      error: 'Invalid response format: $body',
+      message: 'Invalid response format',
+    );
   }
 
   /// This request is used to register an atSign by assigning it to an email address.
@@ -139,9 +159,145 @@ class RegistrarService {
       if (body['message'] == 'Sent Successfully') {
         return;
       } else {
-        throw RegistrarException(body['message']);
+        throw RegistrarException(
+          error: body['message'],
+          message: body['message'],
+        );
       }
     }
-    throw RegistrarException('Invalid response format: $body');
+    throw RegistrarException(
+      error: 'Invalid response format: $body',
+      message: 'Invalid response format',
+    );
   }
+
+  /// This request is used to validate the person registering for an atSign by verifying the one-time password that was
+  /// sent to the email address provided. The one-time password is valid for 15 minutes.
+  Future<ValidatePersonResponse> validatePerson({
+    required String atSign,
+    required String email,
+    required String otp,
+  }) async {
+    final response = await _postRequest('validate-person/', {
+      'atsign': atSign,
+      'email': email,
+      'otp': otp,
+    });
+
+    final body = jsonDecode(response.body);
+
+    if (body is Map<String, dynamic>) {
+      return ValidatePersonResponse.fromJson(body);
+    }
+
+    throw RegistrarException(
+      error: 'Invalid response format: $body',
+      message: 'Invalid response format',
+    );
+  }
+
+  /// This request is used to check whether the person attempting to activate an atSign is its rightful owner.
+  /// The request takes an atSign and sends a one-time password to the email address and/or phone number associated
+  /// with that atSign.
+  Future<void> authenticateAtSign({required String atSign}) async {
+    final response = await _postRequest('authenticate/atsign', {
+      'atsign': atSign,
+    });
+
+    final body = jsonDecode(response.body);
+
+    if (body is Map<String, dynamic>) {
+      final message = body['message'];
+      if (message == 'Sent Successfully') {
+        return;
+      } else {
+        throw RegistrarException(
+          error: 'authenticate/atsign failed: $message',
+          message: message,
+        );
+      }
+    }
+
+    throw RegistrarException(
+      error: 'Invalid response format: $body',
+      message: 'Invalid response format',
+    );
+  }
+
+  /// This request is used to check whether the person attempting to activate an atSign is its rightful owner.
+  /// The request takes an atSign and a one-time password then provides the cramkey once verified.
+  Future<String> authenticateAtSignAndActivate({required String atSign, required String otp}) async {
+    final response = await _postRequest('authenticate/atsign/activate', {
+      'atsign': atSign,
+      'otp': otp,
+    });
+
+    final body = jsonDecode(response.body);
+
+    if (body is Map<String, dynamic>) {
+      final cramKey = (body['cramKey'] as String?)?.split(':')[1];
+      if (cramKey != null) {
+        return cramKey;
+      } else {
+        final message = body['message'] as String;
+        throw RegistrarException(
+          error: 'authenticate/atsign/activate failed: $message',
+          message: message,
+        );
+      }
+    }
+
+    throw RegistrarException(
+      error: 'Invalid response format: $body',
+      message: 'Invalid response format',
+    );
+  }
+}
+
+class ValidatePersonResponse {
+  const ValidatePersonResponse({
+    this.existingAtSigns = const [],
+    this.errorMessage,
+    this.cramKey,
+    this.newAtSign,
+  });
+
+  final List<String> existingAtSigns;
+  final String? errorMessage;
+  final String? cramKey;
+  final String? newAtSign;
+
+  factory ValidatePersonResponse.fromJson(Map<String, dynamic> json) {
+    if (json.containsKey('success') && json['success'] == true) {
+      // Remove the atsign identifier from the beginning of the cramKey.
+      final cramKey = (json['cramKey'] as String?)?.split(':')[1];
+      return ValidatePersonResponse(
+        cramKey: cramKey,
+      );
+    }
+
+    if (json.containsKey('data')) {
+      final data = json['data'] as Map<String, dynamic>;
+      final atSigns = (data['atsigns'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [];
+      final newAtSign = data['newAtsign'] as String?;
+
+      return ValidatePersonResponse(
+        existingAtSigns: atSigns,
+        newAtSign: newAtSign,
+      );
+    }
+
+    if (json.containsKey('status') && json['status'] == "error") {
+      return ValidatePersonResponse(
+        errorMessage: json['message'] as String?,
+      );
+    }
+
+    throw RegistrarException(
+      error: 'Invalid response format',
+      message: 'Unexpected response structure: $json',
+    );
+  }
+
+  bool get success => newAtSign != null || cramKey != null;
 }

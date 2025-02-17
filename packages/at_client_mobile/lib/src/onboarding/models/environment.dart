@@ -1,4 +1,5 @@
-/// Secondaries are shared between Dev and Staging. Dev and Staging are unstable environments
+/// Secondaries are shared between Dev and Staging.
+/// Dev and Staging are unstable environments.
 enum RootEnvironment {
   dev,
   staging,
@@ -23,10 +24,10 @@ extension Value on RootEnvironment {
     switch (this) {
       case RootEnvironment.dev:
         return 'https://atsign.wtf';
-      case RootEnvironment.prod:
-        return 'https://atsign.com';
       case RootEnvironment.staging:
         return 'https://atsign.wtf';
+      case RootEnvironment.prod:
+        return 'https://atsign.com';
       default:
         return 'https://atsign.wtf';
     }
@@ -36,10 +37,10 @@ extension Value on RootEnvironment {
     switch (this) {
       case RootEnvironment.dev:
         return 'https://directory.atsign.wtf/';
-      case RootEnvironment.prod:
-        return 'https://wavi.ng/';
       case RootEnvironment.staging:
         return 'https://directory.atsign.wtf/';
+      case RootEnvironment.prod:
+        return 'https://wavi.ng/';
       default:
         return 'https://directory.atsign.wtf/';
     }
