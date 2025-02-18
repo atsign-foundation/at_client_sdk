@@ -1,5 +1,6 @@
 import 'package:at_chops/src/key/at_key_pair.dart';
 import 'package:encrypt/encrypt.dart';
+import 'dart:convert';
 
 /// Represents an AES key for symmetric encryption.
 class AESKey extends SymmetricKey {
@@ -13,6 +14,14 @@ class AESKey extends SymmetricKey {
   static AESKey generate(int length) {
     var aesKey = AES(Key.fromSecureRandom(length));
     return AESKey(aesKey.key.base64);
+  }
+
+  /// Returns the key length in bytes.
+  /// e.g for 128 bit key length will be 16
+  /// for 192 bit key length will be 24
+  /// for 256 bit key length will be 32
+  int getLength() {
+    return base64.decode(_aesKey).length;
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -37,7 +38,7 @@ abstract class AtChops {
   /// If [encryptionKeyType] is [EncryptionKeyType.rsa2048] then [encryptionAlgorithm] will be set to [RsaEncryptionAlgo]
   /// [keyName] specifies which key pair to use if user has multiple key pairs configured.
   /// If [keyName] is not passed default encryption/decryption keypair from .atKeys file will be used.
-  AtEncryptionResult encryptBytes(
+  FutureOr<AtEncryptionResult> encryptBytes(
       Uint8List data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,
@@ -47,7 +48,7 @@ abstract class AtChops {
   /// If [encryptionKeyType] is [EncryptionKeyType.rsa2048] then [encryptionAlgorithm] will be set to [RsaEncryptionAlgo]
   /// [keyName] specifies which key pair to use if user has multiple key pairs configured.
   /// If [keyName] is not passed default encryption/decryption keypair from .atKeys file will be used.
-  AtEncryptionResult encryptString(
+  FutureOr<AtEncryptionResult> encryptString(
       String data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,
@@ -57,7 +58,7 @@ abstract class AtChops {
   /// If [encryptionKeyType] is [EncryptionKeyType.rsa2048] then [encryptionAlgorithm] will be set to [RsaEncryptionAlgo]
   /// [keyName] specifies which key pair to use if user has multiple key pairs configured.
   /// If [keyName] is not passed default encryption/decryption keypair from .atKeys file will be used.
-  AtEncryptionResult decryptBytes(
+  FutureOr<AtEncryptionResult> decryptBytes(
       Uint8List data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,
@@ -67,7 +68,7 @@ abstract class AtChops {
   /// If [encryptionKeyType] is [EncryptionKeyType.rsa2048] then [encryptionAlgorithm] will be set to [RsaEncryptionAlgo]
   /// [keyName] specifies which key pair to use if user has multiple key pairs configured.
   /// If [keyName] is not passed default encryption/decryption keypair from .atKeys file will be used.
-  AtEncryptionResult decryptString(
+  FutureOr<AtEncryptionResult> decryptString(
       String data, EncryptionKeyType encryptionKeyType,
       {AtEncryptionAlgorithm? encryptionAlgorithm,
       String? keyName,

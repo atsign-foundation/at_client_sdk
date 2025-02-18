@@ -10,20 +10,20 @@ import 'package:at_chops/src/model/hash_params.dart';
 /// Interface for encrypting and decrypting data. Check [DefaultEncryptionAlgo] for sample implementation.
 abstract class AtEncryptionAlgorithm<T, V> {
   /// Encrypts the passed bytes. Bytes are passed as [Uint8List]. Encode String data type to [Uint8List] using [utf8.encode].
-  V encrypt(T plainData);
+  FutureOr<V> encrypt(T plainData);
 
   /// Decrypts the passed encrypted bytes.
-  V decrypt(T encryptedData);
+  FutureOr<V> decrypt(T encryptedData);
 }
 
 /// Interface for symmetric encryption algorithms. Check [AESEncryptionAlgo] for sample implementation.
 abstract class SymmetricEncryptionAlgorithm<T, V>
     extends AtEncryptionAlgorithm<T, V> {
   @override
-  V encrypt(T plainData, {InitialisationVector iv});
+  FutureOr<V> encrypt(T plainData, {InitialisationVector iv});
 
   @override
-  V decrypt(T encryptedData, {InitialisationVector iv});
+  FutureOr<V> decrypt(T encryptedData, {InitialisationVector iv});
 }
 
 /// Interface for asymmetric encryption algorithms. Check [DefaultEncryptionAlgo] for sample implementation.

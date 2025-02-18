@@ -14,13 +14,24 @@ dependencies:
 
 dependency_overrides:
   at_auth:
-    path: ../../packages/at_auth
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_auth
+      ref: at_auth_faster_aes_changes
+  at_client:
+    git:
+      url: https://github.com/atsign-foundation/at_client_sdk.git
+      path: packages/at_client
+      ref: uptake_atchops_better_crypto
   at_onboarding_cli:
     path: ../../packages/at_onboarding_cli
   at_commons:
     path: ../../packages/at_commons
   at_chops:
-    path: ../../packages/at_chops
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_chops
+      ref: at_chops_faster_aes
   at_cli_commons:
     path: ../../packages/at_cli_commons
   at_lookup:
