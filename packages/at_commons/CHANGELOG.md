@@ -1,3 +1,5 @@
+## 5.3.0
+- feat: add AtServerEvent interface and AtSignPKChangedEvent class
 ## 5.2.0
 - feat: add Atsign string extensions
 ## 5.1.2
