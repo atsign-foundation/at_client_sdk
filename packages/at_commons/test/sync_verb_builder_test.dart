@@ -37,7 +37,6 @@ void main() {
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = 3
       ..regex = '.buzz'
-      ..isPaginated = true
       ..limit = 10;
     var command = syncVerbBuilder.buildCommand();
     expect(command, 'sync:from:3:limit:10:.buzz\n');
@@ -49,7 +48,6 @@ void main() {
   test('build sync stream verb command', () {
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = 3
-      ..isPaginated = true
       ..limit = 10;
     var command = syncVerbBuilder.buildCommand();
     expect(command, 'sync:from:3:limit:10\n');
@@ -61,7 +59,6 @@ void main() {
   test('build sync stream verb command', () {
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = -1
-      ..isPaginated = true
       ..limit = 5;
     var command = syncVerbBuilder.buildCommand();
     expect(command, 'sync:from:-1:limit:5\n');
@@ -73,7 +70,6 @@ void main() {
   test('build sync stream verb command with skipDeletes', () {
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = -1
-      ..isPaginated = true
       ..limit = 5
       ..skipDeletesUntil = 20;
     var command = syncVerbBuilder.buildCommand();

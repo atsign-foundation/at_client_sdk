@@ -1,4 +1,4 @@
-library at_commons;
+library;
 
 import 'package:meta/meta.dart';
 

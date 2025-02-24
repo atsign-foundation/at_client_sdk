@@ -45,6 +45,7 @@ extension AtMessageExtension on AtMessage {
         return noAtSign;
       case AtMessage.controlCharacter:
         return controlCharacter;
+      // ignore: unreachable_switch_default
       default:
         return notFoundMsg;
     }

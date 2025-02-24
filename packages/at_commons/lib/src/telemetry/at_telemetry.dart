@@ -61,14 +61,12 @@ abstract class AtTelemetryItem {
 
 /// Concrete [AtTelemetryItem] subclass for Events - e.g. SyncStarted, NetworkUnavailable, MonitorUnavailable
 class AtTelemetryEvent extends AtTelemetryItem {
-  AtTelemetryEvent(String name, value, {DateTime? time})
-      : super(name, value, time: time);
+  AtTelemetryEvent(super.name, super.value, {super.time});
 }
 
 @experimental
 
 /// Concrete [AtTelemetryItem] subclass for Samples - e.g. KeyStoreSize, DataReceived, DataTransmitted
 class AtTelemetrySample extends AtTelemetryItem {
-  AtTelemetrySample(String name, value, {DateTime? time})
-      : super(name, value, time: time);
+  AtTelemetrySample(super.name, super.value, {super.time});
 }

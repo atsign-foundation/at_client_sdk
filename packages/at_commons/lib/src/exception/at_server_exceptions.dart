@@ -1,3 +1,5 @@
+// ignore_for_file: use_super_parameters
+
 import 'package:at_commons/src/exception/at_exceptions.dart';
 
 class AtServerException extends AtException {
