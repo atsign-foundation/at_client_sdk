@@ -1,3 +1,5 @@
+## 5.2.0
+- feat: add Atsign string extensions
 ## 5.1.2
 - fix: remove isPaginated check in SyncVerbBuilder and always set from: and limit: since sync:from verb
   expects these params to be set.

@@ -2,6 +2,7 @@ library at_commons;
 
 import 'package:meta/meta.dart';
 
+export 'package:at_commons/atsign.dart';
 export 'package:at_commons/src/at_constants.dart';
 export 'package:at_commons/src/at_message.dart';
 export 'package:at_commons/src/buffer/at_buffer.dart';
