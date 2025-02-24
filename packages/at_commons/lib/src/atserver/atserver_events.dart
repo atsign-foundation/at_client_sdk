@@ -21,10 +21,10 @@ abstract interface class AtServerEvent {
   Map<String, dynamic> get data;
 
   Map<String, dynamic> toJson() => {
-    'category': category,
-    'name': name,
-    'data': data,
-  };
+        'category': category,
+        'name': name,
+        'data': data,
+      };
 }
 
 /// This event is specific to when the 'public:publickey@alice' key changes.
@@ -42,8 +42,8 @@ class AtSignPKChangedEvent extends AtServerEvent {
 
   @override
   Map<String, dynamic> get data => {
-    'atSign': atSign,
-  };
+        'atSign': atSign,
+      };
 
   static AtSignPKChangedEvent fromJson(Map<String, dynamic> json) =>
       AtSignPKChangedEvent(json['data']['atSign']);
