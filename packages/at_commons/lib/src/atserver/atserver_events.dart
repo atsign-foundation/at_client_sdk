@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:at_commons/atsign.dart';
+
 const JsonEncoder jsonPrettyPrinter = JsonEncoder.withIndent('    ');
 
 abstract interface class AtServerEvent {
@@ -34,10 +36,9 @@ class AtSignPKChangedEvent extends AtServerEvent {
   final String name = AtServerEvent.atSignPKChangedEventName;
 
   /// The atSign whose PK has changed
-  final String atSign;
+  final Atsign atSign;
 
-  AtSignPKChangedEvent(this.atSign) {
-  }
+  AtSignPKChangedEvent(String atSign) : atSign = atSign.toAtsign();
 
   @override
   Map<String, dynamic> get data => {
