@@ -509,7 +509,7 @@ class Metadata {
   /// * When multiple asymmetric keypairs are in use, @bob will need to know which of them was used to
   /// encrypt [sharedKeyEnc]. [skeEncKeyName] will only be null when the legacy default public key
   /// was used; conversely if the legacy default public key was used then [skeEncKeyName] must be
-  /// null. Non-null values _must_ look like this "&lt;keyName&gt;.__public_keys.&lt;namespace&gt;" - i.e. must not include
+  /// null. Non-null values _must_ look like this: `<keyName>.__public_keys.<namespace>` - i.e. must not include
   /// either the visibility prefix, which is always `public:`, nor the ownership suffix, which is always
   /// the receiving atSign (in this case `@bob`)
   String? skeEncKeyName;
