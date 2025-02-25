@@ -41,6 +41,13 @@ dependencies:
   meta: ^1.8.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_auth:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      ref: 5c3cc935d4032c578124d35b4f3e2419f0412628
+      path: packages/at_auth
+
 dev_dependencies:
   lints: ^5.0.0
   test: ^1.25.8

@@ -73,6 +73,34 @@ class AtThemeState extends State<AtTheme> {
             borderRadius: BorderRadius.circular(kBorderRadius),
           ),
         ),
+        iconSize: WidgetStateProperty.all<double>(24),
+        side: WidgetStateProperty.all(
+          const BorderSide(
+            color: kLightPrimary,
+            width: 2,
+          ),
+        ),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(
+            vertical: 18,
+            horizontal: 24,
+          ),
+        ),
+        textStyle: WidgetStateProperty.all(
+          const TextStyle(
+            fontSize: 24,
+          ),
+        ),
+        shape: WidgetStateProperty.all(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(kBorderRadius),
+          ),
+        ),
+        iconSize: WidgetStateProperty.all<double>(24),
         side: WidgetStateProperty.all(
           const BorderSide(
             color: kLightPrimary,
