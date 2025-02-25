@@ -13,7 +13,11 @@ class SubmitRegistrarOtpNotifier extends ChangeNotifier {
   bool get isFetching => _isFetching;
   String? get error => _error;
 
-  Future<void> submitOtp(String otp) async {
+  Future<void> submitOtp({
+    required String otp,
+    required String atSign,
+    required String email,
+  }) async {
     try {
       _isFetching = true;
       notifyListeners();

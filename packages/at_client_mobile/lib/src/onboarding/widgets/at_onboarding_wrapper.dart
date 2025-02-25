@@ -26,19 +26,38 @@ class AtOnboardingWrapper extends StatefulWidget {
 }
 
 class AtOnboardingWrapperState extends State<AtOnboardingWrapper> {
+  late final FreeAtsignNotifier _freeAtsignNotifier;
+  late final RegisterPersonNotifier _registerPersonNotifier;
+  late final SubmitRegistrarOtpNotifier _submitRegistrarOtpNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _freeAtsignNotifier = FreeAtsignNotifier();
+    _registerPersonNotifier = RegisterPersonNotifier();
+    _submitRegistrarOtpNotifier = SubmitRegistrarOtpNotifier();
+  }
+
+  @override
+  void dispose() {
+    _freeAtsignNotifier.dispose();
+    _registerPersonNotifier.dispose();
+    _submitRegistrarOtpNotifier.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AtTheme(
       themeData: widget.themeData,
       child: AtClientPreferenceProvider(
         preferences: widget.atClientPreference,
-        // TODO: Consider merging registrar related providers into one.
         child: FreeAtsignNotifierProvider(
-          notifier: FreeAtsignNotifier(),
+          notifier: _freeAtsignNotifier,
           child: RegisterPersonNotifierProvider(
-            notifier: RegisterPersonNotifier(),
+            notifier: _registerPersonNotifier,
             child: SubmitRegistrarOtpNotifierProvider(
-              notifier: SubmitRegistrarOtpNotifier(),
+              notifier: _submitRegistrarOtpNotifier,
               child: OnboardingPage(),
             ),
           ),

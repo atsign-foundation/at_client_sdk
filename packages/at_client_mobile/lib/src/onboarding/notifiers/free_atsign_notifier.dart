@@ -21,7 +21,6 @@ class FreeAtsignNotifier extends ChangeNotifier {
     try {
       _isFetching = true;
       notifyListeners();
-      // final atSign = await _atAuthService.fetchFreeAtsign();
       await Future.delayed(const Duration(seconds: 2));
       final atSign = await Future.value(_fakeAtsigns[Random().nextInt(_fakeAtsigns.length)]);
       _atSign = atSign;

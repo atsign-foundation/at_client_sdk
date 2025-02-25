@@ -45,7 +45,16 @@ class OnboardingPageState extends State<OnboardingPage> {
       case _OnboardingPageType.login:
         return Text('Login Page');
       case _OnboardingPageType.register:
-        return RegisterPage();
+        return RegisterPage(
+          onCramKeyReceived: (cramKey) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Cram Key Received: $cramKey')),
+            );
+            setState(() {
+              _type = _OnboardingPageType.login;
+            });
+          },
+        );
     }
   }
 }

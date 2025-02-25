@@ -101,12 +101,6 @@ class AtThemeState extends State<AtTheme> {
           ),
         ),
         iconSize: WidgetStateProperty.all<double>(24),
-        side: WidgetStateProperty.all(
-          const BorderSide(
-            color: kLightPrimary,
-            width: 2,
-          ),
-        ),
       ),
     ),
     dropdownMenuTheme: const DropdownMenuThemeData(

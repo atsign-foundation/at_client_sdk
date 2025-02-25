@@ -31,6 +31,7 @@ dependencies:
     sdk: flutter
   at_server_status: ^1.0.5
   flutter_dotenv: ^5.2.1
+  email_validator: ^3.0.0
 
 dev_dependencies:
   lints: ^4.0.0
