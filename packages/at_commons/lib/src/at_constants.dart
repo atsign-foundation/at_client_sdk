@@ -116,4 +116,5 @@ class AtConstants {
   static const String defaultEncryptionPrivateKey = 'default_enc_private_key';
   static const String defaultSelfEncryptionKey = 'default_self_enc_key';
   static const String enrollParams = 'enrollParams';
+  static const String atServerReservedNamespace = '__atserver';
 }

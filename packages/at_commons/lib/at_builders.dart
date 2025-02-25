@@ -1,4 +1,4 @@
-library at_builders;
+library;
 
 export 'package:at_commons/src/verb/config_verb_builder.dart';
 export 'package:at_commons/src/verb/delete_verb_builder.dart';

@@ -1,3 +1,5 @@
+// ignore_for_file: use_super_parameters
+
 import 'package:at_commons/at_commons.dart';
 
 /// The class [AtException] and its subclasses represents various exceptions that can arise
