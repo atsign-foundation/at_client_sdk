@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 import '../providers/free_atsign_notifier_provider.dart';
 import '../providers/register_person_notifier_provider.dart';
 
-class RegisterPersonPage extends StatefulWidget {
-  const RegisterPersonPage({required this.onRegisterSuccess, super.key});
+class RegisterPersonSection extends StatefulWidget {
+  const RegisterPersonSection({required this.onRegisterSuccess, super.key});
 
   final VoidCallback onRegisterSuccess;
 
   @override
-  RegisterPersonPageState createState() => RegisterPersonPageState();
+  RegisterPersonSectionState createState() => RegisterPersonSectionState();
 }
 
-class RegisterPersonPageState extends State<RegisterPersonPage> {
+class RegisterPersonSectionState extends State<RegisterPersonSection> {
   late final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _emailController;
@@ -30,10 +30,23 @@ class RegisterPersonPageState extends State<RegisterPersonPage> {
     _emailController.dispose();
   }
 
+  Future<void> _submit() async {
+    final registerPersonNotifier = RegisterPersonNotifierProvider.of(context);
+    final freeAtSignNotifier = FreeAtsignNotifierProvider.of(context);
+    if (_formKey.currentState!.validate()) {
+      await registerPersonNotifier.registerPerson(
+        _emailController.text.trim(),
+        freeAtSignNotifier.freeAtsign!,
+      );
+      if (registerPersonNotifier.error == null) {
+        widget.onRegisterSuccess();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final registerPersonNotifier = RegisterPersonNotifierProvider.of(context);
-    final freeAtSignNotifier = FreeAtsignNotifierProvider.of(context);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -50,6 +63,9 @@ class RegisterPersonPageState extends State<RegisterPersonPage> {
             controller: _emailController,
             autofocus: true,
             keyboardType: TextInputType.emailAddress,
+            onFieldSubmitted: (_) async {
+              await _submit();
+            },
             validator: (value) {
               final trimmedValue = value?.trim();
               if (trimmedValue == null || trimmedValue.isEmpty) {
@@ -74,19 +90,7 @@ class RegisterPersonPageState extends State<RegisterPersonPage> {
         Text('Note: We do not share your personal information or use it for financial gain.'),
         SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: registerPersonNotifier.isFetching
-              ? null
-              : () async {
-                  if (_formKey.currentState!.validate()) {
-                    await registerPersonNotifier.registerPerson(
-                      _emailController.text.trim(),
-                      freeAtSignNotifier.freeAtsign!,
-                    );
-                    if (registerPersonNotifier.error == null) {
-                      widget.onRegisterSuccess();
-                    }
-                  }
-                },
+          onPressed: registerPersonNotifier.isFetching ? null : _submit,
           iconAlignment: IconAlignment.end,
           icon: Icon(Icons.arrow_forward),
           label: Text('Send Code'),

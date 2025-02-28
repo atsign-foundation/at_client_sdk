@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-class SubmitRegistrarOtpNotifier extends ChangeNotifier {
-  SubmitRegistrarOtpNotifier();
+class AuthenticateAtsignNotifier extends ChangeNotifier {
+  AuthenticateAtsignNotifier();
 
   // TODO: Pass in RegistrarService.
 
@@ -16,12 +16,11 @@ class SubmitRegistrarOtpNotifier extends ChangeNotifier {
   Future<void> submitOtp({
     required String otp,
     required String atSign,
-    required String email,
   }) async {
     try {
       _isFetching = true;
       notifyListeners();
-      // TODO: Call registrar service to submit OTP.
+      // TODO: Call registrar service to authenticateAtSignAndActivate.
       await Future.delayed(const Duration(seconds: 2));
       _cramSecret = await Future.value('cram:abcd1234');
     } catch (e) {

@@ -28,13 +28,23 @@ class AtOnboarding {
       return await showModalBottomSheet<AtOnboardingResult>(
         context: context,
         routeSettings: RouteSettings(name: 'at-onboarding-bottom-sheet'),
+        isScrollControlled: true,
         useRootNavigator: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16.0),
+        ),
         builder: (_) {
           return Material(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Builder(
-                builder: wrapperBuilder,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: AnimatedSize(
+                  duration: Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  child: Builder(
+                    builder: wrapperBuilder,
+                  ),
+                ),
               ),
             ),
           );
@@ -58,13 +68,15 @@ class AtOnboarding {
                 child: Dialog(
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   surfaceTintColor: null,
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: Builder(
-                        builder: wrapperBuilder,
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        child: Builder(
+                          builder: wrapperBuilder,
+                        ),
                       ),
                     ),
                   ),

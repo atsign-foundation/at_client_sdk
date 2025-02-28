@@ -5,16 +5,16 @@ import 'package:pin_code_fields/pin_code_fields.dart';
 import '../providers/register_person_notifier_provider.dart';
 import '../providers/submit_registrar_otp_notifier_provider.dart';
 
-class RegisterOtpPage extends StatefulWidget {
-  const RegisterOtpPage({required this.onCramKeyReceived, super.key});
+class RegisterOtpSection extends StatefulWidget {
+  const RegisterOtpSection({required this.onCramKeyReceived, super.key});
 
-  final ValueChanged<String> onCramKeyReceived;
+  final void Function(String cramSecret, String atSign) onCramKeyReceived;
 
   @override
-  RegisterOtpPageState createState() => RegisterOtpPageState();
+  RegisterOtpSectionState createState() => RegisterOtpSectionState();
 }
 
-class RegisterOtpPageState extends State<RegisterOtpPage> {
+class RegisterOtpSectionState extends State<RegisterOtpSection> {
   late final TextEditingController _controller;
 
   static const _pinCodeLength = 4;
@@ -84,7 +84,10 @@ class RegisterOtpPageState extends State<RegisterOtpPage> {
                         atSign: freeAtSignNotifier.freeAtsign!,
                       );
                       if (subRegistrarOtpNotifier.error == null) {
-                        widget.onCramKeyReceived(subRegistrarOtpNotifier.cramSecret!);
+                        widget.onCramKeyReceived(
+                          subRegistrarOtpNotifier.cramSecret!,
+                          freeAtSignNotifier.freeAtsign!,
+                        );
                       }
                     }
                   : null,

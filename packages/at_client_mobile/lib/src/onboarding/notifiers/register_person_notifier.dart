@@ -17,6 +17,7 @@ class RegisterPersonNotifier extends ChangeNotifier {
     try {
       _isFetching = true;
       notifyListeners();
+      // TODO: Call registrar service to register person.
       await Future.delayed(const Duration(seconds: 2));
       _email = email;
       _error = null;

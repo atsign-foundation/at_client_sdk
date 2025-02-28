@@ -3,16 +3,21 @@ import 'dart:async';
 import 'package:at_client_mobile/src/onboarding/providers/free_atsign_notifier_provider.dart';
 import 'package:flutter/material.dart';
 
-class FreeAtsignPage extends StatefulWidget {
-  const FreeAtsignPage({required this.onSubmit, super.key});
+class RegisterFreeAtsignSection extends StatefulWidget {
+  const RegisterFreeAtsignSection({
+    required this.onFreeAtsignSelect,
+    required this.onBack,
+    super.key,
+  });
 
-  final VoidCallback onSubmit;
+  final VoidCallback onFreeAtsignSelect;
+  final VoidCallback onBack;
 
   @override
-  FreeAtsignPageState createState() => FreeAtsignPageState();
+  RegisterFreeAtsignSectionState createState() => RegisterFreeAtsignSectionState();
 }
 
-class FreeAtsignPageState extends State<FreeAtsignPage> {
+class RegisterFreeAtsignSectionState extends State<RegisterFreeAtsignSection> {
   @override
   void initState() {
     super.initState();
@@ -92,7 +97,7 @@ class FreeAtsignPageState extends State<FreeAtsignPage> {
           onPressed: freeAtSignNotifier.isFetching
               ? null
               : () async {
-                  widget.onSubmit();
+                  widget.onFreeAtsignSelect();
                 },
           icon: Icon(Icons.arrow_forward),
           iconAlignment: IconAlignment.end,
@@ -100,9 +105,7 @@ class FreeAtsignPageState extends State<FreeAtsignPage> {
         ),
         SizedBox(height: 24),
         InkWell(
-          onTap: () {
-            // TODO: Go back.
-          },
+          onTap: widget.onBack,
           child: Text(
             'Already have an atSign?',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(

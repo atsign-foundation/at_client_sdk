@@ -1,31 +1,36 @@
-import 'package:at_client_mobile/src/onboarding/pages/register_free_atsign_page.dart';
-import 'package:at_client_mobile/src/onboarding/pages/register_otp_page.dart';
 import 'package:flutter/material.dart';
 
-import 'register_person_page.dart';
+import '../widgets/register_free_atsign_section.dart';
+import '../widgets/register_otp_section.dart';
+import '../widgets/register_person_section.dart';
 
-enum _RegisterPages {
+enum RegisterPageSections {
   freeAtsign,
   registerPerson,
   otpRequired,
 }
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({required this.onCramKeyReceived, super.key});
+  const RegisterPage({
+    required this.onCramKeyReceived,
+    required this.onBack,
+    super.key,
+  });
 
-  final ValueChanged<String> onCramKeyReceived;
+  final void Function(String cramSecret, String atSign) onCramKeyReceived;
+  final VoidCallback onBack;
 
   @override
   RegisterPageState createState() => RegisterPageState();
 }
 
 class RegisterPageState extends State<RegisterPage> {
-  late _RegisterPages _currentPage;
+  late RegisterPageSections _currentPage;
 
   @override
   void initState() {
     super.initState();
-    _currentPage = _RegisterPages.freeAtsign;
+    _currentPage = RegisterPageSections.freeAtsign;
   }
 
   @override
@@ -33,26 +38,28 @@ class RegisterPageState extends State<RegisterPage> {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
       child: Builder(
+        key: ValueKey(_currentPage),
         builder: (context) {
           switch (_currentPage) {
-            case _RegisterPages.freeAtsign:
-              return FreeAtsignPage(
-                onSubmit: () {
+            case RegisterPageSections.freeAtsign:
+              return RegisterFreeAtsignSection(
+                onFreeAtsignSelect: () {
                   setState(() {
-                    _currentPage = _RegisterPages.registerPerson;
+                    _currentPage = RegisterPageSections.registerPerson;
                   });
                 },
+                onBack: widget.onBack,
               );
-            case _RegisterPages.registerPerson:
-              return RegisterPersonPage(
+            case RegisterPageSections.registerPerson:
+              return RegisterPersonSection(
                 onRegisterSuccess: () {
                   setState(() {
-                    _currentPage = _RegisterPages.otpRequired;
+                    _currentPage = RegisterPageSections.otpRequired;
                   });
                 },
               );
-            case _RegisterPages.otpRequired:
-              return RegisterOtpPage(
+            case RegisterPageSections.otpRequired:
+              return RegisterOtpSection(
                 onCramKeyReceived: widget.onCramKeyReceived,
               );
           }
