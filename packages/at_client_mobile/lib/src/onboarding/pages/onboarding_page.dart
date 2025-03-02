@@ -2,8 +2,12 @@ import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
 
 import '../notifiers/authenticate_atsign_notifier.dart';
+import '../notifiers/enrollment_notifier.dart';
+import '../notifiers/keys_upload_notifier.dart';
 import '../notifiers/login_notifier.dart';
 import '../providers/authenticate_atsign_notifier_provider.dart';
+import '../providers/enrollment_notifier_provider.dart';
+import '../providers/keys_upload_notifier_provider.dart';
 import '../providers/login_notifier_provider.dart';
 import '../providers/selected_atsign_notifier_provider.dart';
 import '../widgets/onboarding_init_form.dart';
@@ -36,61 +40,84 @@ class OnboardingPage extends StatefulWidget {
 
 class OnboardingPageState extends State<OnboardingPage> {
   late _OnboardingPageType _type;
-  late final LoginNotifier loginNotifier;
+  late final LoginNotifier _loginNotifier;
+  late final AuthenticateAtsignNotifier _authenticateAtsignNotifier;
+  late final EnrollmentNotifier _enrollmentNotifier;
+  late final KeysUploadNotifier _keysUploadNotifier;
 
   @override
   void initState() {
     super.initState();
     _type = _OnboardingPageType.init;
+    _authenticateAtsignNotifier = AuthenticateAtsignNotifier();
+    _enrollmentNotifier = EnrollmentNotifier();
+    _keysUploadNotifier = KeysUploadNotifier();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      loginNotifier = LoginNotifierProvider.of(context);
-      loginNotifier.addListener(loginNotifierListener);
+      _loginNotifier = LoginNotifierProvider.of(context);
+      _loginNotifier.addListener(loginNotifierListener);
     });
   }
 
   @override
   void dispose() {
-    loginNotifier.removeListener(loginNotifierListener);
+    _loginNotifier.removeListener(loginNotifierListener);
+    // Login notifier is created and disposed of higher up the tree.
+    _authenticateAtsignNotifier.dispose();
+    _enrollmentNotifier.dispose();
+    _keysUploadNotifier.dispose();
     super.dispose();
   }
 
   void loginNotifierListener() {
-    print(loginNotifier.status);
-    switch (loginNotifier.status) {
-      case LoginStatus.contactingServer:
-        setState(() {
-          _type = _OnboardingPageType.authenticating;
-        });
-        break;
-      case LoginStatus.fetchingKeys:
-        setState(() {
-          _type = _OnboardingPageType.authenticating;
-        });
-        break;
-      case LoginStatus.authenticating:
-        setState(() {
-          _type = _OnboardingPageType.authenticating;
-        });
-        break;
-      case LoginStatus.authenticated:
-        Navigator.of(context).pop(AtOnboardingResult.success(atsign: ''));
-        break;
-      case LoginStatus.cramAuthenticating:
-        setState(() {
-          _type = _OnboardingPageType.authenticating;
-        });
-        break;
-      case LoginStatus.otpRequired:
-        // TODO: Change this
-        setState(() {
-          _type = _OnboardingPageType.authenticating;
-        });
-        break;
-      case LoginStatus.enrollmentRequired:
-        setState(() {
-          _type = _OnboardingPageType.enrollment;
-        });
-        break;
+    print(_loginNotifier.status);
+    if (_loginNotifier.error != null) {
+      // TODO: Pass in error code
+      Navigator.of(context).pop(
+        AtOnboardingResult.error(
+          errorMessage: _loginNotifier.error.toString(),
+          errorCode: '',
+        ),
+      );
+    } else {
+      switch (_loginNotifier.status) {
+        case LoginStatus.contactingServer:
+          setState(() {
+            _type = _OnboardingPageType.authenticating;
+          });
+          break;
+        case LoginStatus.fetchingKeys:
+          setState(() {
+            _type = _OnboardingPageType.authenticating;
+          });
+          break;
+        case LoginStatus.authenticating:
+          setState(() {
+            _type = _OnboardingPageType.authenticating;
+          });
+          break;
+        case LoginStatus.authenticated:
+          Navigator.of(context).pop(
+            AtOnboardingResult.success(
+              atsign: SelectedAtsignNotifierProvider.of(context).value,
+            ),
+          );
+          break;
+        case LoginStatus.cramAuthenticating:
+          setState(() {
+            _type = _OnboardingPageType.authenticating;
+          });
+          break;
+        case LoginStatus.otpRequired:
+          setState(() {
+            _type = _OnboardingPageType.authenticating;
+          });
+          break;
+        case LoginStatus.enrollmentRequired:
+          setState(() {
+            _type = _OnboardingPageType.enrollment;
+          });
+          break;
+      }
     }
   }
 
@@ -112,11 +139,8 @@ class OnboardingPageState extends State<OnboardingPage> {
           } else if (_type == _OnboardingPageType.register) {
             return RegisterPage(
               onCramKeyReceived: (cramKey, atSign) async {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Cram Key Received: $cramKey for $atSign')),
-                );
                 SelectedAtsignNotifierProvider.of(context).value = atSign;
-                await loginNotifier.cramAuthenticate(cramKey, atSign);
+                await _loginNotifier.cramAuthenticate(cramKey, atSign);
               },
               onBack: () {
                 setState(() {
@@ -125,16 +149,23 @@ class OnboardingPageState extends State<OnboardingPage> {
               },
             );
           } else if (_type == _OnboardingPageType.enrollment) {
-            return EnrollmentPage();
+            return KeysUploadNotifierProvider(
+              notifier: _keysUploadNotifier,
+              child: EnrollmentNotifierProvider(
+                notifier: _enrollmentNotifier,
+                child: EnrollmentPage(
+                  onKeysUpload: (keysFile) async {
+                    await _loginNotifier.keysAuthenticate(keysFile);
+                  },
+                ),
+              ),
+            );
           } else if (_type == _OnboardingPageType.authenticating) {
             return AuthenticateAtsignNotifierProvider(
-              notifier: AuthenticateAtsignNotifier(),
+              notifier: _authenticateAtsignNotifier,
               child: AuthenticatingPage(
                 onCramKeyReceived: (cramKey, atSign) async {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Cram Key Received: $cramKey for $atSign')),
-                  );
-                  await loginNotifier.cramAuthenticate(cramKey, atSign);
+                  await _loginNotifier.cramAuthenticate(cramKey, atSign);
                 },
               ),
             );

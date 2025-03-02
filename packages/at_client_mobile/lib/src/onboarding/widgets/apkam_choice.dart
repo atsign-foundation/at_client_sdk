@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
-enum APKAMFlow {
-  atKeys,
-  apkam,
-}
+import '../providers/keys_upload_notifier_provider.dart';
 
 class ApkamChoice extends StatefulWidget {
-  const ApkamChoice({super.key});
+  const ApkamChoice({
+    required this.onKeysUpload,
+    required this.onApkamChosen,
+    super.key,
+  });
+
+  final void Function(String keysFile) onKeysUpload;
+  final VoidCallback onApkamChosen;
 
   @override
   ApkamChoiceState createState() => ApkamChoiceState();
@@ -17,6 +21,7 @@ class ApkamChoiceState extends State<ApkamChoice> {
 
   @override
   Widget build(BuildContext context) {
+    final keysUploadNotifier = KeysUploadNotifierProvider.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -71,10 +76,26 @@ class ApkamChoiceState extends State<ApkamChoice> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  onPressed: () {
-                    Navigator.of(context).pop(APKAMFlow.atKeys);
+                  onPressed: () async {
+                    if (!keysUploadNotifier.isLoading) {
+                      await keysUploadNotifier.filesUpload();
+                      if (keysUploadNotifier.error == null) {
+                        widget.onKeysUpload(keysUploadNotifier.keysFile!);
+                      }
+                    }
                   },
-                  child: Text('Select atKey'),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: keysUploadNotifier.isLoading
+                        ? SizedBox(
+                            width: 21,
+                            height: 21,
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text('Select atKey'),
+                  ),
                 ),
               )
             ],
@@ -119,9 +140,7 @@ class ApkamChoiceState extends State<ApkamChoice> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  onPressed: () {
-                    Navigator.of(context).pop(APKAMFlow.apkam);
-                  },
+                  onPressed: widget.onApkamChosen,
                   child: Text('Enroll'),
                 ),
               )

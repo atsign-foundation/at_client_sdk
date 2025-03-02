@@ -101,9 +101,11 @@ class AuthenticatingPageState extends State<AuthenticatingPage> {
               return FilledButton.icon(
                 onPressed: enoughChars && !authenticateAtsignNotifier.isFetching
                     ? () async {
+                        final atSign = SelectedAtsignNotifierProvider.of(context).value!;
+                        print(atSign);
                         await authenticateAtsignNotifier.submitOtp(
                           otp: _controller.text,
-                          atSign: SelectedAtsignNotifierProvider.of(context).value!,
+                          atSign: atSign,
                         );
                         if (authenticateAtsignNotifier.error == null) {
                           widget.onCramKeyReceived(

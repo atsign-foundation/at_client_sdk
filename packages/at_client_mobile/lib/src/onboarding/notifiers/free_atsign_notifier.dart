@@ -28,7 +28,6 @@ class FreeAtsignNotifier extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
     } finally {
       _isFetching = false;
       notifyListeners();

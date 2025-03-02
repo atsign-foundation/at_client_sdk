@@ -58,6 +58,17 @@ class OnboardingInitFormState extends State<OnboardingInitForm> {
           // TODO: Add some validation logic.
           TextFormField(
             controller: _atSignController,
+            validator: (value) {
+              value = value?.trim();
+              if (value == null || value.isEmpty) {
+                return 'Please enter an atSign';
+              }
+              if (value.contains(' ')) {
+                return 'atSign cannot contain spaces';
+              }
+              // etc.
+              return null;
+            },
             decoration: InputDecoration(
               labelText: 'atSign',
               prefix: Text('@'),
@@ -82,7 +93,7 @@ class OnboardingInitFormState extends State<OnboardingInitForm> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             childrenPadding: EdgeInsets.all(16),
             expandedAlignment: Alignment.centerLeft,
             expandedCrossAxisAlignment: CrossAxisAlignment.start,
@@ -151,13 +162,14 @@ class OnboardingInitFormState extends State<OnboardingInitForm> {
               ),
               FilledButton(
                 onPressed: () async {
-                  await loginNotifier.login(
-                    atSign: _atSignController.text,
-                    rootDomain: _directoryDomainController.text,
-                    cramSecret: _cramSecretController.text,
-                  );
-                  if (loginNotifier.error == null) {
-                    SelectedAtsignNotifierProvider.of(context).value = _atSignController.text;
+                  if (_formKey.currentState!.validate()) {
+                    final atSign = _atSignController.text.trim();
+                    SelectedAtsignNotifierProvider.of(context).value = atSign;
+                    await loginNotifier.login(
+                      atSign: atSign,
+                      rootDomain: _directoryDomainController.text.trim(),
+                      cramSecret: _cramSecretController.text,
+                    );
                   }
                 },
                 child: Text('Login'),

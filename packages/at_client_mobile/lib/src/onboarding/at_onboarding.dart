@@ -36,13 +36,16 @@ class AtOnboarding {
         builder: (_) {
           return Material(
             child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: AnimatedSize(
-                  duration: Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: Builder(
-                    builder: wrapperBuilder,
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: AnimatedSize(
+                    duration: Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: Builder(
+                      builder: wrapperBuilder,
+                    ),
                   ),
                 ),
               ),

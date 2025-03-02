@@ -106,6 +106,25 @@ class LoginNotifier extends ChangeNotifier {
       notifyListeners();
       // TODO: Will probably need a retry mechanism while the atServer spins up.
       await _cramAuthenticate(cramSecret, atSign);
+      _status = LoginStatus.authenticating;
+      notifyListeners();
+      await _authenticate();
+      _status = LoginStatus.authenticated;
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  // Instead of a String to a file it should be an Atsign defined format (probs in AtChops).
+  Future<void> keysAuthenticate(String keysFile) async {
+    try {
+      _status = LoginStatus.authenticating;
+      _error = null;
+      notifyListeners();
+      // TODO: Extract info from keys file and use that information to authenticate.
+      await _authenticate();
       _status = LoginStatus.authenticated;
     } catch (e) {
       _error = e.toString();
@@ -129,7 +148,7 @@ class LoginNotifier extends ChangeNotifier {
   // TODO: Call AtUtils to check server status.
   Future<AtSignStatus> _checkServerStatus() async {
     await Future.delayed(const Duration(milliseconds: 2000));
-    return AtSignStatus.teapot;
+    return AtSignStatus.activated;
   }
 
   // TODO: Call registrar service to send command to authenticateAtSign.
