@@ -8,9 +8,6 @@ import 'widgets/at_onboarding_wrapper.dart';
 
 class AtOnboarding {
   /// Onboards and authenticates the user with their atServer.
-  ///
-  /// If an [atSign] is provided, will attempt to authenticate the user with their atServer.
-  /// If no [atSign] is provided, will prompt the user to select their atSign.
   static Future<AtOnboardingResult> onboard({
     required BuildContext context,
     required AtClientPreference atClientPreference,
