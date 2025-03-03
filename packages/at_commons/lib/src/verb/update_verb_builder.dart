@@ -162,6 +162,10 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
           verbParams[AtConstants.sharedWithPublicKeyHashingAlgo]!);
     }
 
+    if (verbParams[AtConstants.immutable] != null) {
+      builder.atKey.metadata.immutable =
+          _getBoolVerbParams(verbParams[AtConstants.immutable]!);
+    }
     builder.value = verbParams[AtConstants.value];
 
     return builder;

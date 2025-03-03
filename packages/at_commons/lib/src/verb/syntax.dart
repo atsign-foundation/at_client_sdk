@@ -47,7 +47,8 @@ class VerbSyntax {
       r'(:encAlgo:(?<encAlgo>[^:@\s]+))?'
       r'(:ivNonce:(?<ivNonce>[^:@\s]+))?'
       r'(:skeEncKeyName:(?<skeEncKeyName>[^:@\s]+))?'
-      r'(:skeEncAlgo:(?<skeEncAlgo>[^:@\s]+))?';
+      r'(:skeEncAlgo:(?<skeEncAlgo>[^:@\s]+))?'
+      r'(:immutable:(?<immutable>true|false))?';
 
   static const update = r'^update:json:(?<json>.+)$'
       r'|'
@@ -67,6 +68,7 @@ class VerbSyntax {
       '$metadataFragment'
       r'$';
   static const delete = r'^delete'
+      r'(:(?<force>force))?'
       r'(:priority:(?<priority>low|medium|high))?'
       r'(:cached)?'
       r'(:((?<publicScope>public)|(@(?<forAtSign>[^:@\s]+))))?'

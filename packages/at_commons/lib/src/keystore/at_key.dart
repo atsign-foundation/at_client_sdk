@@ -4,7 +4,6 @@ import 'package:at_commons/src/keystore/at_key_builder_impl.dart';
 import 'package:at_commons/src/keystore/public_key_hash.dart';
 import 'package:at_commons/src/utils/at_key_regex_utils.dart';
 import 'package:at_commons/src/utils/string_utils.dart';
-import 'package:meta/meta.dart';
 
 import '../at_constants.dart';
 import '../exception/at_exceptions.dart';
@@ -382,10 +381,6 @@ class LocalKey extends AtKey {
 }
 
 class Metadata {
-  /// When set to `false`, the Map produced by toJson will not include fields whose values are null
-  @visibleForTesting
-  bool fullJson = true;
-
   /// Time in milliseconds after which the [AtKey] expires.
   int? ttl;
 
@@ -521,6 +516,11 @@ class Metadata {
   /// * The default algorithm is `RSA`
   String? skeEncAlgo;
 
+  /// Immutable records may not be changed. They can be deleted, however
+  /// deleting an immutable record will require the `force:` flag to be set
+  /// when executing the `delete` verb.
+  bool immutable = false;
+
   @override
   String toString() {
     return 'Metadata{${jsonEncode(toJson())}}';
@@ -589,88 +589,42 @@ class Metadata {
     if (skeEncAlgo.isNotNullOrEmpty) {
       sb.write(':${AtConstants.sharedKeyEncryptedEncryptingAlgo}:$skeEncAlgo');
     }
+    if (immutable) {
+      sb.write(':${AtConstants.immutable}:$immutable');
+    }
     return sb.toString();
   }
 
   Map toJson() {
     var map = {};
-    if (fullJson || availableAt != null) {
-      map['availableAt'] = availableAt?.toUtc().toString();
-    }
-    if (fullJson || expiresAt != null) {
-      map['expiresAt'] = expiresAt?.toUtc().toString();
-    }
-    if (fullJson || refreshAt != null) {
-      map['refreshAt'] = refreshAt?.toUtc().toString();
-    }
-    if (fullJson || createdAt != null) {
-      map[AtConstants.createdAt] = createdAt?.toUtc().toString();
-    }
-    if (fullJson || updatedAt != null) {
-      map[AtConstants.updatedAt] = updatedAt?.toUtc().toString();
-    }
-    if (fullJson || isPublic) {
-      map['isPublic'] = isPublic;
-    }
-    if (fullJson || ttl != null) {
-      map[AtConstants.ttl] = ttl;
-    }
-    if (fullJson || ttb != null) {
-      map[AtConstants.ttb] = ttb;
-    }
-    if (fullJson || ttr != null) {
-      map[AtConstants.ttr] = ttr;
-    }
-    if (fullJson || ccd != null) {
-      map[AtConstants.ccd] = ccd;
-    }
-    if (fullJson || isBinary) {
-      map[AtConstants.isBinary] = isBinary;
-    }
-    if (fullJson || isEncrypted) {
-      map[AtConstants.isEncrypted] = isEncrypted;
-    }
-    if (fullJson || dataSignature != null) {
-      map[AtConstants.publicDataSignature] = dataSignature;
-    }
-    if (fullJson || sharedKeyStatus != null) {
-      map[AtConstants.sharedKeyStatus] = sharedKeyStatus;
-    }
-    if (fullJson || sharedKeyEnc != null) {
-      map[AtConstants.sharedKeyEncrypted] = sharedKeyEnc;
-    }
+    map['availableAt'] = availableAt?.toUtc().toString();
+    map['expiresAt'] = expiresAt?.toUtc().toString();
+    map['refreshAt'] = refreshAt?.toUtc().toString();
+    map[AtConstants.createdAt] = createdAt?.toUtc().toString();
+    map[AtConstants.updatedAt] = updatedAt?.toUtc().toString();
+    map['isPublic'] = isPublic;
+    map[AtConstants.ttl] = ttl;
+    map[AtConstants.ttb] = ttb;
+    map[AtConstants.ttr] = ttr;
+    map[AtConstants.ccd] = ccd;
+    map[AtConstants.isBinary] = isBinary;
+    map[AtConstants.isEncrypted] = isEncrypted;
+    map[AtConstants.publicDataSignature] = dataSignature;
+    map[AtConstants.sharedKeyStatus] = sharedKeyStatus;
+    map[AtConstants.sharedKeyEncrypted] = sharedKeyEnc;
     // ignore: deprecated_member_use_from_same_package
-    if (fullJson || pubKeyCS != null) {
-      // ignore: deprecated_member_use_from_same_package
-      map[AtConstants.sharedWithPublicKeyCheckSum] = pubKeyCS;
-    }
-    if (fullJson || pubKeyHash != null) {
-      map[AtConstants.sharedWithPublicKeyHash] = pubKeyHash?.toJson();
-    }
-    if (fullJson || encoding != null) {
-      map[AtConstants.encoding] = encoding;
-    }
-    if (fullJson || encKeyName != null) {
-      map[AtConstants.encryptingKeyName] = encKeyName;
-    }
-    if (fullJson || encAlgo != null) {
-      map[AtConstants.encryptingAlgo] = encAlgo;
-    }
-    if (fullJson || ivNonce != null) {
-      map[AtConstants.ivOrNonce] = ivNonce;
-    }
-    if (fullJson || skeEncKeyName != null) {
-      map[AtConstants.sharedKeyEncryptedEncryptingKeyName] = skeEncKeyName;
-    }
-    if (fullJson || skeEncAlgo != null) {
-      map[AtConstants.sharedKeyEncryptedEncryptingAlgo] = skeEncAlgo;
-    }
-    if (fullJson || namespaceAware) {
-      map['namespaceAware'] = namespaceAware;
-    }
-    if (fullJson || isCached) {
-      map['isCached'] = isCached;
-    }
+    map[AtConstants.sharedWithPublicKeyCheckSum] = pubKeyCS;
+    map[AtConstants.sharedWithPublicKeyHash] = pubKeyHash?.toJson();
+    map[AtConstants.encoding] = encoding;
+    map[AtConstants.encryptingKeyName] = encKeyName;
+    map[AtConstants.encryptingAlgo] = encAlgo;
+    map[AtConstants.ivOrNonce] = ivNonce;
+    map[AtConstants.sharedKeyEncryptedEncryptingKeyName] = skeEncKeyName;
+    map[AtConstants.sharedKeyEncryptedEncryptingAlgo] = skeEncAlgo;
+    map[AtConstants.immutable] = immutable;
+    map['namespaceAware'] = namespaceAware;
+    map['isCached'] = isCached;
+
     return map;
   }
 
@@ -730,6 +684,8 @@ class Metadata {
     metaData.skeEncKeyName =
         json[AtConstants.sharedKeyEncryptedEncryptingKeyName];
     metaData.skeEncAlgo = json[AtConstants.sharedKeyEncryptedEncryptingAlgo];
+    metaData.namespaceAware = json['namespaceAware'] ?? false;
+    metaData.immutable = json[AtConstants.immutable] ?? false;
 
     return metaData;
   }
@@ -765,7 +721,8 @@ class Metadata {
           encAlgo == other.encAlgo &&
           ivNonce == other.ivNonce &&
           skeEncKeyName == other.skeEncKeyName &&
-          skeEncAlgo == other.skeEncAlgo;
+          skeEncAlgo == other.skeEncAlgo &&
+          immutable == other.immutable;
 
   @override
   int get hashCode =>
@@ -795,7 +752,8 @@ class Metadata {
       encAlgo.hashCode ^
       ivNonce.hashCode ^
       skeEncKeyName.hashCode ^
-      skeEncAlgo.hashCode;
+      skeEncAlgo.hashCode ^
+      immutable.hashCode;
 }
 
 class AtValue {

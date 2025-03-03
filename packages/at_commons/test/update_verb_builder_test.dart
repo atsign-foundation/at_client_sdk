@@ -387,7 +387,10 @@ void main() {
       expect(updateVerbBuilder.buildKey(), 'public:phone@alice');
     });
 
-    UpdateVerbBuilder createBuilderWithAllMetadata({String? sharedWith}) {
+    UpdateVerbBuilder createBuilderWithAllMetadata({
+      String? sharedWithOrPublic,
+      required bool immutable,
+    }) {
       var ttl = 12345;
       var ttb = 54321;
       var ccd = false;
@@ -407,8 +410,9 @@ void main() {
       return UpdateVerbBuilder()
         ..atKey.key = 'phone.details.wavi'
         ..atKey.sharedBy = '@alice'
-        ..atKey.sharedWith = sharedWith
-        ..atKey.metadata.isPublic = (sharedWith == null)
+        ..atKey.sharedWith =
+            sharedWithOrPublic == 'public' ? null : sharedWithOrPublic
+        ..atKey.metadata.isPublic = (sharedWithOrPublic == 'public')
         ..atKey.metadata.ttl = ttl
         ..atKey.metadata.ttb = ttb
         ..atKey.metadata.ccd = ccd
@@ -426,50 +430,21 @@ void main() {
         ..atKey.metadata.ivNonce = ivNonce
         ..atKey.metadata.skeEncKeyName = skeEncKeyName
         ..atKey.metadata.skeEncAlgo = skeEncAlgo
+        ..atKey.metadata.immutable = immutable
         ..value = 'HELLO_WORLD';
     }
-
-    /*test(
-        'verify metadata is fully passed from builder to the atKeyObj which is built by buildKey',
-        () {
-      var updateVerbBuilder = createBuilderWithAllMetadata(sharedWith: '@bob');
-      expect(updateVerbBuilder.buildKey(), '@bob:phone.details.wavi@alice');
-      expect(updateVerbBuilder.atKeyObj.metadata!.ttl, updateVerbBuilder.ttl);
-      expect(updateVerbBuilder.atKeyObj.metadata!.ttb, updateVerbBuilder.ttb);
-      expect(updateVerbBuilder.atKeyObj.metadata!.ccd, updateVerbBuilder.ccd);
-      expect(updateVerbBuilder.atKeyObj.metadata!.ttr, updateVerbBuilder.ttr);
-      expect(updateVerbBuilder.atKeyObj.metadata!.dataSignature,
-          updateVerbBuilder.dataSignature);
-      expect(updateVerbBuilder.atKeyObj.metadata!.sharedKeyStatus,
-          updateVerbBuilder.sharedKeyStatus);
-      expect(updateVerbBuilder.atKeyObj.metadata!.isBinary,
-          updateVerbBuilder.atKeyObj.metadata!.isBinary);
-      expect(updateVerbBuilder.atKeyObj.metadata!.isEncrypted,
-          updateVerbBuilder.atKeyObj.metadata!.isEncrypted);
-      expect(updateVerbBuilder.atKeyObj.metadata!.sharedKeyEnc,
-          updateVerbBuilder.atKeyObj.metadata!.sharedKeyEnc);
-      expect(updateVerbBuilder.atKeyObj.metadata!.pubKeyCS,
-          updateVerbBuilder.atKeyObj.metadata!.pubKeyCS);
-      expect(updateVerbBuilder.atKeyObj.metadata!.encoding,
-          updateVerbBuilder.atKeyObj.metadata!.encoding);
-      expect(updateVerbBuilder.atKeyObj.metadata!.encKeyName,
-          updateVerbBuilder.atKeyObj.metadata!.encKeyName);
-      expect(updateVerbBuilder.atKeyObj.metadata!.encAlgo,
-          updateVerbBuilder.atKeyObj.metadata!.encAlgo);
-      expect(updateVerbBuilder.atKeyObj.metadata!.ivNonce,
-          updateVerbBuilder.atKeyObj.metadata!.ivNonce);
-      expect(updateVerbBuilder.atKeyObj.metadata!.skeEncKeyName,
-          updateVerbBuilder.atKeyObj.metadata!.skeEncKeyName);
-      expect(updateVerbBuilder.atKeyObj.metadata!.skeEncAlgo,
-          updateVerbBuilder.atKeyObj.metadata!.skeEncAlgo);
-    });*/
 
     group(
         'A group of tests to verify round-tripping of update commands from buildCommand and getBuilder',
         () {
-      UpdateVerbBuilder roundTripUpdateTest({String? sharedWith}) {
-        var initialBuilder =
-            createBuilderWithAllMetadata(sharedWith: sharedWith);
+      UpdateVerbBuilder roundTripUpdateTest({
+        required String? sharedWithOrPublic,
+        required bool immutable,
+      }) {
+        var initialBuilder = createBuilderWithAllMetadata(
+          sharedWithOrPublic: sharedWithOrPublic,
+          immutable: immutable,
+        );
         var command = initialBuilder.buildCommand();
         var roundTrippedBuilder = UpdateVerbBuilder.getBuilder(command.trim());
         expect(initialBuilder == roundTrippedBuilder, true);
@@ -479,20 +454,62 @@ void main() {
       test(
           'verify round trip from builder, to command for update, back to builder, for public key',
           () {
-        var roundTrippedBuilder = roundTripUpdateTest(sharedWith: null);
+        var roundTrippedBuilder = roundTripUpdateTest(
+          sharedWithOrPublic: 'public',
+          immutable: false,
+        );
         expect(roundTrippedBuilder.atKey.metadata.isPublic, true);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, false);
+        roundTrippedBuilder = roundTripUpdateTest(
+          sharedWithOrPublic: 'public',
+          immutable: true,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, true);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, true);
       });
 
       test(
           'verify round trip from builder, to command for update, back to builder, for shared key',
           () {
-        var roundTrippedBuilder = roundTripUpdateTest(sharedWith: '@bob');
+        var roundTrippedBuilder = roundTripUpdateTest(
+          sharedWithOrPublic: '@bob',
+          immutable: false,
+        );
         expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, false);
+        roundTrippedBuilder = roundTripUpdateTest(
+          sharedWithOrPublic: '@bob',
+          immutable: true,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, true);
       });
 
-      UpdateVerbBuilder roundTripUpdateMetaTest({String? sharedWith}) {
-        var initialBuilder =
-            createBuilderWithAllMetadata(sharedWith: sharedWith);
+      test(
+          'verify round trip from builder, to command for update, back to builder, for self key',
+          () {
+        var roundTrippedBuilder = roundTripUpdateTest(
+          sharedWithOrPublic: null,
+          immutable: false,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, false);
+        roundTrippedBuilder = roundTripUpdateTest(
+          sharedWithOrPublic: null,
+          immutable: true,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, true);
+      });
+
+      UpdateVerbBuilder roundTripUpdateMetaTest({
+        required String? sharedWithOrPublic,
+        required bool immutable,
+      }) {
+        var initialBuilder = createBuilderWithAllMetadata(
+          sharedWithOrPublic: sharedWithOrPublic,
+          immutable: immutable,
+        );
         initialBuilder.operation = AtConstants.updateMeta;
 
         // When the update:meta command is built, it will NOT include the value, so
@@ -513,14 +530,51 @@ void main() {
       test(
           'verify round trip from builder, to command for update meta, back to builder, for public key',
           () {
-        var roundTrippedBuilder = roundTripUpdateMetaTest(sharedWith: null);
+        var roundTrippedBuilder = roundTripUpdateMetaTest(
+          sharedWithOrPublic: 'public',
+          immutable: false,
+        );
         expect(roundTrippedBuilder.atKey.metadata.isPublic, true);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, false);
+
+        roundTrippedBuilder = roundTripUpdateMetaTest(
+          sharedWithOrPublic: 'public',
+          immutable: true,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, true);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, true);
       });
       test(
           'verify round trip from builder, to command for update meta, back to builder, for shared key',
           () {
-        var roundTrippedBuilder = roundTripUpdateMetaTest(sharedWith: '@bob');
+        var roundTrippedBuilder = roundTripUpdateMetaTest(
+          sharedWithOrPublic: '@bob',
+          immutable: false,
+        );
         expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, false);
+        roundTrippedBuilder = roundTripUpdateMetaTest(
+          sharedWithOrPublic: '@bob',
+          immutable: true,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, true);
+      });
+      test(
+          'verify round trip from builder, to command for update meta, back to builder, for self key',
+          () {
+        var roundTrippedBuilder = roundTripUpdateMetaTest(
+          sharedWithOrPublic: null,
+          immutable: false,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, false);
+        roundTrippedBuilder = roundTripUpdateMetaTest(
+          sharedWithOrPublic: null,
+          immutable: true,
+        );
+        expect(roundTrippedBuilder.atKey.metadata.isPublic, false);
+        expect(roundTrippedBuilder.atKey.metadata.immutable, true);
       });
     });
   });

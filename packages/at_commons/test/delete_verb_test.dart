@@ -30,6 +30,63 @@ void main() {
 
       expect(deleteVerbBuilder.buildCommand(), 'delete:public:phone@bob\n');
     });
+
+    test('test buildCommand with the force flag', () {
+      var deleteVerbBuilder = DeleteVerbBuilder()
+        ..atKey.metadata.isPublic = true
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@bob'
+        ..force = true;
+
+      expect(
+          deleteVerbBuilder.buildCommand(), 'delete:force:public:phone@bob\n');
+    });
+
+    test('test getBuilder with the force flag on a public key', () {
+      String command = 'delete:force:public:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
+    test('test getBuilder with the force flag on a self key without sharedWith',
+        () {
+      String command = 'delete:force:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
+    test('test getBuilder with the force flag on a self key with sharedWith',
+        () {
+      String command = 'delete:force:@bob:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
+    test('test getBuilder with the force flag on a shared key', () {
+      String command = 'delete:force:@alice:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
+    test('test getBuilder without the force flag on a public key', () {
+      String command = 'delete:public:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
+    test(
+        'test getBuilder without the force flag on a self key without sharedWith',
+        () {
+      String command = 'delete:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
+    test('test getBuilder without the force flag on a self key with sharedWith',
+        () {
+      String command = 'delete:@bob:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
+    test('test getBuilder without the force flag on a shared key', () {
+      String command = 'delete:@alice:phone.wavi@bob\n';
+      var deleteVerbBuilder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(deleteVerbBuilder.buildCommand(), command);
+    });
   });
 
   group('A group of tests to validate the exceptions', () {

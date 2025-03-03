@@ -69,6 +69,8 @@ class AtConstants {
   static const String sharedWithPublicKeyHashingAlgo = 'hashingAlgo';
   static const String sharedKeyEncryptedEncryptingKeyName = 'skeEncKeyName';
   static const String sharedKeyEncryptedEncryptingAlgo = 'skeEncAlgo';
+  static const String immutable = 'immutable';
+  static const String force = 'force';
   static const String firstByte = '#';
   static const String createdAt = 'createdAt';
   static const String updatedAt = 'updatedAt';
