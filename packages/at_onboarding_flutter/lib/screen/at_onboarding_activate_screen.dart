@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_onboarding_flutter/at_onboarding_result.dart';
 import 'package:at_onboarding_flutter/localizations/generated/l10n.dart';
 import 'package:at_onboarding_flutter/screen/at_onboarding_backup_screen.dart';
@@ -103,7 +102,8 @@ class _AtOnboardingActivateScreenState
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      AtOnboardingLocalizations.current.msg_wait_fetching_atSign,
+                      AtOnboardingLocalizations
+                          .current.msg_wait_fetching_atSign,
                     ),
                   ],
                 ),
@@ -146,7 +146,7 @@ class _AtOnboardingActivateScreenState
       data = jsonDecode(data);
 
       AtOnboardingOTPResult? result;
-      if(context.mounted) {
+      if (context.mounted) {
         result = await AtOnboardingOTPScreen.push(
           context: context,
           atSign: atsign ?? (widget.atSign ?? ''),
@@ -198,11 +198,10 @@ class _AtOnboardingActivateScreenState
     }
   }
 
-  Future<dynamic> _processSharedSecret({
+  Future<void> _processSharedSecret({
     required String atsign,
     required String secret,
   }) async {
-    dynamic authResponse;
     try {
       atsign = atsign.startsWith('@') ? atsign : '@$atsign';
 
@@ -219,11 +218,15 @@ class _AtOnboardingActivateScreenState
       _onboardingService.setAtClientPreference =
           widget.config.atClientPreference;
 
-      authResponse = await _onboardingService.authenticate(atsign,
-          cramSecret: secret, status: OnboardingStatus.ACTIVATE);
+      String? previousAtsign = _onboardingService.currentAtsign;
+      _onboardingService.setAtsign = atsign;
+      final authResponse = await _onboardingService.onboard(
+        cramSecret: secret,
+      );
 
       int round = 1;
-      atSignStatus = await _onboardingService.checkAtSignServerStatus(atsign);
+      var atSignStatus =
+          await _onboardingService.checkAtSignServerStatus(atsign);
       while (atSignStatus != ServerStatus.activated) {
         if (round > 10) {
           break;
@@ -235,7 +238,11 @@ class _AtOnboardingActivateScreenState
         debugPrint("currentAtSignStatus: $atSignStatus");
       }
 
-      if (authResponse == AtOnboardingResponseStatus.authSuccess) {
+      if (!authResponse || atSignStatus == ServerStatus.teapot) {
+        _onboardingService.setAtsign = previousAtsign;
+      }
+
+      if (authResponse) {
         if (atSignStatus == ServerStatus.teapot) {
           await _showAlertDialog(
             AtOnboardingLocalizations.current.msg_atSign_unreachable,
@@ -255,14 +262,6 @@ class _AtOnboardingActivateScreenState
 
         if (!mounted) return;
         Navigator.pop(context, AtOnboardingResult.success(atsign: atsign));
-      } else if (authResponse == AtOnboardingResponseStatus.serverNotReached) {
-        await _showAlertDialog(
-          AtOnboardingLocalizations.current.msg_atSign_unreachable,
-        );
-      } else if (authResponse == AtOnboardingResponseStatus.authFailed) {
-        await _showAlertDialog(
-          AtOnboardingLocalizations.current.error_authenticated_failed,
-        );
       } else {
         await showErrorDialog(
           AtOnboardingLocalizations.current.title_session_expired,
@@ -286,7 +285,6 @@ class _AtOnboardingActivateScreenState
         );
       }
     }
-    return authResponse;
   }
 
   Future<void> _showAlertDialog(dynamic errorMessage, {String? title}) async {

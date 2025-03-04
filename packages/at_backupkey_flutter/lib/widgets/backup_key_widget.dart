@@ -7,7 +7,7 @@ import 'package:at_backupkey_flutter/utils/size_config.dart';
 import 'package:at_backupkey_flutter/utils/strings.dart';
 import 'package:at_file_saver/at_file_saver.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:file_selector/file_selector.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:path_provider/path_provider.dart';
@@ -331,10 +331,12 @@ class BackupKeyWidget extends StatelessWidget {
           });
         }
       } else {
-        final path = await getSaveLocation(suggestedName: '$atsign${Strings.backupKeyName}');
+        final path = await FilePicker.platform.saveFile(
+          fileName: '$atsign${Strings.backupKeyName}',
+        );
         if (path == null) return;
         final file = XFile(tempFilePath);
-        await file.saveTo(path.path);
+        await file.saveTo(path);
         if (context.mounted) {
           showSnackBar(
             context: context,
