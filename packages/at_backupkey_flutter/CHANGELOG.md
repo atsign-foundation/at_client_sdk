@@ -1,4 +1,12 @@
+## 4.0.18
+
+- **CHORE**: Build[deps] Upgraded dependencies in the following packages
+  - package_info_plus: 11.3.3
+  - file_picker: 9.0.2
+  - showcaseview: 4.0.1
+
 ## 4.0.17
+
 - **FIX**: Replaced the use of file_selector with file_picker
 - **CHORE**: Updated dependencies in the example app
 
