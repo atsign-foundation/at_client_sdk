@@ -1,3 +1,13 @@
+## 4.0.19
+
+- **FIX**: `withOpacity` replaced with `withValues`
+- build[deps]: Upgraded dependencies for the following packages:
+  - file_picker: 9.0.2
+  - flutter_slidable: 4.0.0
+  - emoji_picker_flutter: 4.3.0
+  - flutter_lints: 5.0.0
+  - flutter_slidable: 4.0.0
+
 ## 4.0.18
 
 - **FIX**: file_picker replaces file_selector package
