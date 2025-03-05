@@ -1,11 +1,20 @@
-## 4.0.16
+## 4.0.17
+
+- **FIX**: `withOpacity` replaced with `withValue()`
 - build[deps]: Upgraded dependencies for the following packages:
-    - at_client: 3.2.2
-    - at_client_mobile: 3.2.19
-    - at_commons: 5.0.0
-    - at_contact: 3.0.9
-    - at_lookup: 3.0.49
-    - at_utils: 3.0.19
+- flutter_slidable: 4.0.0
+- flutter_lints: 5.0.0
+
+## 4.0.16
+
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_client: 3.2.2
+  - at_client_mobile: 3.2.19
+  - at_commons: 5.0.0
+  - at_contact: 3.0.9
+  - at_lookup: 3.0.49
+  - at_utils: 3.0.19
+
 ## 4.0.15
 
 - **FIX**: Dangling_library_doc_comment moved
