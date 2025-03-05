@@ -1,7 +1,8 @@
-
 ## 6.1.12
 
 - **FIX** Replace depreciated `withOpacity` method with `withValues`.
+- build[deps]: Upgraded dependencies for the following packages:
+  - file_picker: 9.0.2
 
 ## 6.1.11
 
