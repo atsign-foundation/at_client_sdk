@@ -21,7 +21,7 @@ const Map error_codes = {
   'IllegalArgumentException': 'AT0022',
   'AtTimeoutException': 'AT0023',
   'ServerIsPausedException': 'AT0024',
-  'AtThrottleLimitException': 'AT0028',
+  'AtThrottleLimitExceeded': 'AT0028',
   'AtInvalidEnrollmentException': 'AT0029',
   'AtEnrollmentRevokeException': 'AT0031',
   'IllegalStateException': 'AT0032'
