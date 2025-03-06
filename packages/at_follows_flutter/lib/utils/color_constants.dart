@@ -33,7 +33,7 @@ class ColorConstants {
   static set appColor(Color? color) {
     buttonHighLightColor = color ?? Color.fromARGB(255, 240, 94, 62);
     activeColor = buttonHighLightColor;
-    activeTrackColor = buttonHighLightColor!.withOpacity(0.2);
+    activeTrackColor = buttonHighLightColor!.withValues(alpha: 0.2);
   }
 
   // static Color _lightBackgroundColor = Colors.grey[400];
