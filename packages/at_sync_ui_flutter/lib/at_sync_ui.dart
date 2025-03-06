@@ -1,7 +1,9 @@
 import 'dart:collection';
+
+import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_sync_ui_flutter/services/at_sync_ui_services.dart';
 import 'package:flutter/material.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
+
 import 'at_sync_cupertino.dart' as cupertino;
 import 'at_sync_material.dart' as material;
 
@@ -118,8 +120,7 @@ class AtSyncUI {
     String? message,
     bool showRemoveAtsignOption = false,
   }) {
-    assert(
-        _appNavigatorKey != null, "Must set appNavigator before show dialog");
+    assert(_appNavigatorKey != null, "Must set appNavigator before show dialog");
     if (dialogOverlayEntry != null) {
       hideDialog();
     }
@@ -142,8 +143,7 @@ class AtSyncUI {
 
   /// Show SnackBar UI
   void showSnackBar({String? message}) {
-    assert(
-        _appNavigatorKey != null, "Must set appNavigator before show dialog");
+    assert(_appNavigatorKey != null, "Must set appNavigator before show dialog");
 
     if (snackBarOverlayEntry != null) {
       hideSnackBar();
@@ -180,7 +180,7 @@ class AtSyncUI {
       // to be displayed on the Overlay
       return Positioned.fill(
         child: Container(
-          color: Colors.black.withOpacity(0.5),
+          color: Colors.black.withValues(alpha: 0.5),
           child: Center(
             child: Container(
               padding: const EdgeInsets.all(20),
@@ -254,8 +254,7 @@ class AtSyncUI {
   _removeAtSignFromKeychain() async {
     AtSyncUIService().cancelTimer();
 
-    var _currentAtsign =
-        AtClientManager.getInstance().atClient.getCurrentAtSign()!;
+    var _currentAtsign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
     var res = await KeyChainManager.getInstance().deleteAtSignFromKeychain(
       _currentAtsign,
     );
@@ -265,17 +264,12 @@ class AtSyncUI {
       hideDialog();
       hideSnackBar();
 
-      ScaffoldMessenger.of(appNavigatorKey!.currentContext!)
-          .showSnackBar(SnackBar(
+      ScaffoldMessenger.of(appNavigatorKey!.currentContext!).showSnackBar(SnackBar(
         duration: const Duration(seconds: 2),
         backgroundColor: const Color(0xFFe34040),
         content: Text(
           '$_currentAtsign removed',
-          style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              letterSpacing: 0.1,
-              fontWeight: FontWeight.normal),
+          style: const TextStyle(color: Colors.white, fontSize: 16, letterSpacing: 0.1, fontWeight: FontWeight.normal),
         ),
       ));
 
@@ -283,17 +277,12 @@ class AtSyncUI {
         AtSyncUIService().onAtSignRemoved!();
       }
     } else {
-      ScaffoldMessenger.of(appNavigatorKey!.currentContext!)
-          .showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(appNavigatorKey!.currentContext!).showSnackBar(const SnackBar(
         duration: Duration(seconds: 2),
         backgroundColor: Color(0xFFe34040),
         content: Text(
           'Failed to remove atSign',
-          style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              letterSpacing: 0.1,
-              fontWeight: FontWeight.normal),
+          style: TextStyle(color: Colors.white, fontSize: 16, letterSpacing: 0.1, fontWeight: FontWeight.normal),
         ),
       ));
     }
@@ -344,9 +333,7 @@ Widget _snackbarUI(
   return Container(
     padding: const EdgeInsets.all(8),
     margin: EdgeInsets.only(
-      bottom: MediaQuery.of(context).padding.bottom > 0
-          ? MediaQuery.of(context).padding.bottom
-          : 20,
+      bottom: MediaQuery.of(context).padding.bottom > 0 ? MediaQuery.of(context).padding.bottom : 20,
     ),
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(20),
@@ -369,8 +356,7 @@ Widget _snackbarUI(
         if ((message ?? '').isNotEmpty)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width - 68),
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 68),
             child: Material(
               type: MaterialType.transparency,
               child: Text(

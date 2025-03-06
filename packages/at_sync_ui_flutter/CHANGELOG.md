@@ -1,7 +1,14 @@
-## 1.0.13:
+## 1.0.14
+
+- **FIX** Replace depreciated `withOpacity` method with `withValues`.
 - build[deps]: Upgraded dependencies for the following packages:
-    - at_client: 3.2.2
-    - at_client_mobile: 3.2.19
+  - flutter_lints: 5.0.0
+
+## 1.0.13:
+
+- build[deps]: Upgraded dependencies for the following packages:
+  - at_client: 3.2.2
+  - at_client_mobile: 3.2.19
 
 ## 1.0.12:
 
