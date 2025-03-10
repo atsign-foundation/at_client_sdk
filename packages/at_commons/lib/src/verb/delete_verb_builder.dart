@@ -13,9 +13,15 @@ import 'package:at_commons/src/verb/verb_util.dart';
 ///    var deleteBuilder = DeleteVerbBuilder()..key = '@alice:phone@bob';
 /// ```
 class DeleteVerbBuilder extends AbstractVerbBuilder {
+  bool force = false;
+
   @override
   String buildCommand() {
-    StringBuffer serverCommandBuffer = StringBuffer('delete:${buildKey()}\n');
+    StringBuffer serverCommandBuffer = StringBuffer('delete:');
+    if (force) {
+      serverCommandBuffer.write('force:');
+    }
+    serverCommandBuffer.write('${buildKey()}\n');
     return serverCommandBuffer.toString();
   }
 
@@ -23,10 +29,21 @@ class DeleteVerbBuilder extends AbstractVerbBuilder {
   static DeleteVerbBuilder getBuilder(String command) {
     var builder = DeleteVerbBuilder();
     var verbParams = VerbUtil.getVerbParam(VerbSyntax.delete, command)!;
+
+    builder.atKey.metadata.isPublic =
+        verbParams[AtConstants.publicScopeParam] == 'public';
+    builder.force = verbParams[AtConstants.force] == AtConstants.force;
+    builder.atKey.sharedWith =
+        VerbUtil.formatAtSign(verbParams[AtConstants.forAtSign]);
+    builder.atKey.sharedBy =
+        VerbUtil.formatAtSign(verbParams[AtConstants.atSign]);
     if (verbParams[AtConstants.atKey] == null) {
       throw AtKeyException('Key cannot be null or empty');
     }
     builder.atKey.key = verbParams[AtConstants.atKey]!;
+
+    builder.validateKey();
+
     return builder;
   }
 

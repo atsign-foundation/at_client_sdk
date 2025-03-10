@@ -101,6 +101,11 @@ class InvalidSyntaxException extends AtException {
   InvalidSyntaxException(message) : super(message);
 }
 
+/// Exception thrown when a verb fails due to some state being not as expected
+class IllegalStateException extends AtException {
+  IllegalStateException(message) : super(message);
+}
+
 /// Exception thrown when an atsign name provided is invalid.
 class InvalidAtSignException extends AtException {
   InvalidAtSignException(message) : super(message);

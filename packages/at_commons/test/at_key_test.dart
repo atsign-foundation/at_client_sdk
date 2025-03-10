@@ -999,11 +999,15 @@ void main() {
       expect(metadataMap['ivNonce'], null);
       expect(metadataMap['skeEncKeyName'], null);
       expect(metadataMap['skeEncAlgo'], null);
+      expect(metadataMap['immutable'], false);
       expect(metadataMap['pubKeyHash'], null);
     });
 
-    test('A test to verify toJson when metadata is populated', () {
-      Metadata metadata = Metadata()
+    Metadata createMetadata({
+      required bool immutable,
+      bool namespaceAware = false,
+    }) {
+      return Metadata()
         ..ttl = 100
         ..ttb = 100
         ..ttr = 1
@@ -1016,7 +1020,7 @@ void main() {
         ..dataSignature = 'dummy_data_signature'
         ..sharedKeyStatus = 'delivered'
         ..isPublic = true
-        ..namespaceAware = false
+        ..namespaceAware = namespaceAware
         ..isBinary = true
         ..isEncrypted = true
         ..isCached = false
@@ -1027,7 +1031,12 @@ void main() {
         ..encAlgo = 'RSA'
         ..ivNonce = '16'
         ..skeEncKeyName = 'dummy_enc_key_name'
-        ..skeEncAlgo = 'RSA';
+        ..skeEncAlgo = 'RSA'
+        ..immutable = immutable;
+    }
+
+    verifyToJson({required bool immutable}) {
+      Metadata metadata = createMetadata(immutable: immutable);
       Map metadataMap = metadata.toJson();
       expect(metadataMap['ttl'], 100);
       expect(metadataMap['ttb'], 100);
@@ -1058,6 +1067,47 @@ void main() {
       expect(metadataMap['ivNonce'], '16');
       expect(metadataMap['skeEncKeyName'], 'dummy_enc_key_name');
       expect(metadataMap['skeEncAlgo'], 'RSA');
+      expect(metadataMap['immutable'], immutable);
+    }
+
+    test('verify toJson when immutable is false', () {
+      verifyToJson(immutable: false);
+    });
+    test('verify toJson when immutable is true', () {
+      verifyToJson(immutable: true);
+    });
+
+    test('verify json roundtrip with immutable false namespaceAware false', () {
+      Metadata metadata = createMetadata(
+        immutable: false,
+        namespaceAware: false,
+      );
+      Metadata roundTripped = Metadata.fromJson(metadata.toJson());
+      expect(roundTripped.toJson(), metadata.toJson());
+    });
+    test('verify json roundtrip with immutable true namespaceAware false', () {
+      Metadata metadata = createMetadata(
+        immutable: true,
+        namespaceAware: false,
+      );
+      Metadata roundTripped = Metadata.fromJson(metadata.toJson());
+      expect(metadata.toJson(), roundTripped.toJson());
+    });
+    test('verify json roundtrip with immutable false namespaceAware true', () {
+      Metadata metadata = createMetadata(
+        immutable: false,
+        namespaceAware: true,
+      );
+      Metadata roundTripped = Metadata.fromJson(metadata.toJson());
+      expect(roundTripped.toJson(), metadata.toJson());
+    });
+    test('verify json roundtrip with immutable true namespaceAware true', () {
+      Metadata metadata = createMetadata(
+        immutable: true,
+        namespaceAware: true,
+      );
+      Metadata roundTripped = Metadata.fromJson(metadata.toJson());
+      expect(metadata.toJson(), roundTripped.toJson());
     });
   });
   group('A group of tests to verify key length validation', () {

@@ -38,6 +38,14 @@ class AtExceptionUtils {
         return AtTimeoutException(errorDescription);
       case 'AT0024':
         return ServerIsPausedException(errorDescription);
+      case 'AT0028':
+        return AtThrottleLimitExceeded(errorDescription);
+      case 'AT0029':
+        return AtInvalidEnrollmentException(errorDescription);
+      case 'AT0031':
+        return AtEnrollmentRevokeException(errorDescription);
+      case 'AT0032':
+        return IllegalStateException(errorDescription);
       case 'AT0401':
         return UnAuthenticatedException(errorDescription);
       default:
