@@ -1,3 +1,8 @@
+## 5.3.0
+- feat: add `immutable` flag to `Metadata` and `force` flag to the 
+  DeleteVerbBuilder. Immutable records may not be updated once the immutable 
+  flag has been set, and may not be deleted unless the `force` flag has been 
+  set in the delete command.
 ## 5.2.0
 - feat: add Atsign string extensions
 - feat: add AtServerEvent interface and AtSignPKChangedEvent class
