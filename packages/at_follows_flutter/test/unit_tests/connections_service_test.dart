@@ -5,7 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_mobile/at_client_mobile.dart' hide Atsign;
 import 'package:at_follows_flutter/domain/atsign.dart';
 import 'package:at_follows_flutter/domain/connection_model.dart';
 import 'package:at_follows_flutter/services/connections_service.dart';
