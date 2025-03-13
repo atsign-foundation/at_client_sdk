@@ -340,7 +340,7 @@ class LocalSecondary implements Secondary {
             'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
       }
       enrollmentInfoFromServer =
-          enrollmentInfoFromServer?.replaceAll('data:', '');
+          enrollmentInfoFromServer?.replaceFirst(RegExp('^data:'), '');
       Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
       _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
       enrollment = Enrollment()

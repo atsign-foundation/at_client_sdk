@@ -4,7 +4,7 @@ import 'package:at_client/src/client/request_options.dart';
 
 /// Class responsible for Transforming the data.
 abstract class Transformer<T, V> {
-  /// Accepts the data of type <T> transform's to type <V>
+  /// Accepts the data of type `<T>` transform's to type `<V>`
   FutureOr<V> transform(T value);
 }
 

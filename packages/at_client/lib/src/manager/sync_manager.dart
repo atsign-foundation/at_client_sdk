@@ -143,7 +143,7 @@ class SyncManager {
                 'Exception occurred in processing sync command ${e.message}');
           }
           if (syncResponse.isNotEmpty && syncResponse != 'data:null') {
-            syncResponse = syncResponse.replaceFirst('data:', '');
+            syncResponse = syncResponse.replaceFirst(RegExp('^data:'), '');
             var syncResponseJson = JsonUtils.decodeJson(syncResponse);
             // Iterates over each commit
             await Future.forEach(syncResponseJson,
@@ -326,7 +326,7 @@ class SyncManager {
         await _remoteSecondary!.executeCommand(command, auth: true);
     logger.finer('batch result:$verbResult');
     if (verbResult != null) {
-      verbResult = verbResult.replaceFirst('data:', '');
+      verbResult = verbResult.replaceFirst(RegExp('^data:'), '');
     }
     return jsonDecode(verbResult!);
   }

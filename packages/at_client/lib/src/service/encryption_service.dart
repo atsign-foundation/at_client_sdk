@@ -64,7 +64,7 @@ class EncryptionService {
       logger.finer('Generated a new AES Key for $sharedWith');
       sharedKey = EncryptionUtil.generateAESKey();
     } else {
-      sharedKey = sharedKey.replaceFirst('data:', '');
+      sharedKey = sharedKey.replaceFirst(RegExp('^data:'), '');
       var currentAtSignPrivateKey =
           await localSecondary!.getEncryptionPrivateKey();
       sharedKey =
@@ -107,7 +107,7 @@ class EncryptionService {
     }
     if (sharedWithPublicKey != null && sharedWithPublicKey != 'data:null') {
       sharedWithPublicKey =
-          sharedWithPublicKey.toString().replaceAll('data:', '');
+          sharedWithPublicKey.toString().replaceFirst(RegExp('^data:'), '');
       return sharedWithPublicKey;
     }
 
@@ -257,7 +257,8 @@ class EncryptionService {
           DefaultResponseParser().parse(encryptedSharedKey).response;
     }
     if (encryptedSharedKey.isNotEmpty) {
-      encryptedSharedKey = encryptedSharedKey.replaceFirst('data:', '');
+      encryptedSharedKey =
+          encryptedSharedKey.replaceFirst(RegExp('^data:'), '');
     }
     if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
       throw KeyNotFoundException('encrypted Shared key not found');

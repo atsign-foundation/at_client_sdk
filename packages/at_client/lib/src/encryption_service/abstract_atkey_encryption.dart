@@ -317,7 +317,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       myCopy = null;
     }
     if (myCopy != null && myCopy.startsWith('data:')) {
-      myCopy = myCopy.replaceFirst('data:', '');
+      myCopy = myCopy.replaceFirst(RegExp('^data:'), '');
     }
     return myCopy;
   }
@@ -341,7 +341,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       theirCopy = null;
     }
     if (theirCopy != null && theirCopy.startsWith('data:')) {
-      theirCopy = theirCopy.replaceFirst('data:', '');
+      theirCopy = theirCopy.replaceFirst(RegExp('^data:'), '');
     }
     return theirCopy;
   }

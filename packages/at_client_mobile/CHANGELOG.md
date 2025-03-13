@@ -1,3 +1,6 @@
+## 3.2.21
+- fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
+
 ## 3.2.20
 - fix: Authenticating now saves keys to local secondary store
 

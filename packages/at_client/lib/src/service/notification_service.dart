@@ -82,7 +82,7 @@ abstract class NotificationService {
   ///```
   ///4. To notify a text message to @bob
   ///   forText notifications are case sensitive
-  ///   await notificationService.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));
+  ///   `await notificationService.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));`
   ///
   ///```dart
   ///   var notificationService = AtClientManager.getInstance().notificationService;
