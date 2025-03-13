@@ -1,3 +1,6 @@
+## 3.4.2
+- build[deps]: update dependencies (at_commons, at_lookup, at_auth)
+
 ## 3.4.1
 - fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
 
