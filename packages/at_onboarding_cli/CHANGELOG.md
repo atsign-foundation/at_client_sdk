@@ -1,3 +1,6 @@
+## 1.8.3
+- fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
+
 ## 1.8.2
 - fix: path resolution for temporary directory on Windows
 ## 1.8.1
