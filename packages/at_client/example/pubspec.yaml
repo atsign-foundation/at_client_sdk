@@ -6,16 +6,6 @@ environment:
   sdk: '>=2.15.0 <4.0.0'
 
 dependency_overrides:
-  at_persistence_spec:
-    git:
-      url: https://github.com/atsign-foundation/at_server
-      path: packages/at_persistence_spec
-      ref: feat-immutability
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server
-      path: packages/at_persistence_secondary_server
-      ref: feat-immutability
   at_client:
     path: ../../at_client
 
