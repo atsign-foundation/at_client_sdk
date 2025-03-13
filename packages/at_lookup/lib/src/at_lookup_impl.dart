@@ -155,7 +155,7 @@ class AtLookupImpl implements AtLookUp {
         ..auth = false
         ..operation = 'all';
       String? lookupResult = await executeVerb(builder);
-      lookupResult = lookupResult.replaceFirst('data:', '');
+      lookupResult = lookupResult.replaceFirst(RegExp(r'^data:'), '');
       var resultJson = json.decode(lookupResult);
       logger.finer(resultJson);
 
@@ -169,7 +169,7 @@ class AtLookupImpl implements AtLookUp {
             ..sharedBy = sharedBy);
         publicKeyResult = await executeVerb(publicKeyLookUpBuilder);
       }
-      publicKeyResult = publicKeyResult.replaceFirst('data:', '');
+      publicKeyResult = publicKeyResult.replaceFirst(RegExp(r'^data:'), '');
       logger.finer('public key of $sharedBy :$publicKeyResult');
 
       var publicKey = RSAPublicKey.fromString(publicKeyResult);
@@ -214,7 +214,7 @@ class AtLookupImpl implements AtLookUp {
       ..showHiddenKeys = showHiddenKeys;
     var scanResult = await executeVerb(builder);
     if (scanResult.isNotEmpty) {
-      scanResult = scanResult.replaceFirst('data:', '');
+      scanResult = scanResult.replaceFirst(RegExp(r'^data:'), '');
     }
     return (scanResult.isNotEmpty) ? List.from(jsonDecode(scanResult)) : [];
   }
@@ -231,7 +231,7 @@ class AtLookupImpl implements AtLookUp {
     if (metadata != null) {
       builder.atKey.metadata = metadata;
       if (metadata.isHidden) {
-        builder.atKey.key = '_' + key;
+        builder.atKey.key = '_$key';
       }
     }
     var putResult = await executeVerb(builder);
@@ -326,7 +326,7 @@ class AtLookupImpl implements AtLookUp {
   }
 
   void _errorResponseHandler(String verbResult) {
-    verbResult = verbResult.replaceAll('error:', '');
+    verbResult = verbResult.replaceFirst(RegExp('^error:'), '');
     // Setting the errorCode and errorDescription to default values.
     var errorCode = 'AT0014';
     var errorDescription = 'Unknown server error';
@@ -446,7 +446,7 @@ class AtLookupImpl implements AtLookUp {
         if (fromResponse.isEmpty) {
           return false;
         }
-        fromResponse = fromResponse.trim().replaceAll('data:', '');
+        fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         logger.finer('fromResponse $fromResponse');
         var key = RSAPrivateKey.fromString(privateKey);
         var sha256signature =
@@ -485,7 +485,7 @@ class AtLookupImpl implements AtLookUp {
         if (fromResponse.isEmpty) {
           return false;
         }
-        fromResponse = fromResponse.trim().replaceAll('data:', '');
+        fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         logger.finer('fromResponse $fromResponse');
         logger.finer(
             'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
@@ -535,7 +535,7 @@ class AtLookupImpl implements AtLookUp {
         if (fromResponse.isEmpty) {
           return false;
         }
-        fromResponse = fromResponse.trim().replaceAll('data:', '');
+        fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         var digestInput = '$secret$fromResponse';
         var bytes = utf8.encode(digestInput);
         var digest = sha512.convert(bytes);

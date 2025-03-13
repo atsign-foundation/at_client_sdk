@@ -1,4 +1,4 @@
-library at_chops;
+library;
 
 export 'src/algorithm/aes_encryption_algo.dart';
 export 'src/algorithm/algo_type.dart';

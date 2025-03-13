@@ -21,14 +21,14 @@ class MonitorClient {
   }
 
   ///Monitor Verb
-  Future<OutboundConnection> executeMonitorVerb(String _command, String _atSign,
-      String _rootDomain, int _rootPort, Function notificationCallBack,
+  Future<OutboundConnection> executeMonitorVerb(String command, String atSign,
+      String rootDomain, int rootPort, Function notificationCallBack,
       {bool auth = true, Function? restartCallBack}) async {
     //1. Get a new outbound connection dedicated to monitor verb.
-    var _monitorConnection =
-        await _createNewConnection(_atSign, _rootDomain, _rootPort);
+    var monitorConnection =
+        await _createNewConnection(atSign, rootDomain, rootPort);
     //2. Listener on _monitorConnection.
-    _monitorConnection.getSocket().listen((event) {
+    monitorConnection.getSocket().listen((event) {
       response = utf8.decode(event);
       // If response contains data to be notified, invoke callback function.
       if (response.toString().startsWith('notification')) {
@@ -37,15 +37,15 @@ class MonitorClient {
         _monitorVerbResponseQueue.add(response);
       }
     }, onError: (error) {
-      _errorHandler(error, _monitorConnection);
+      _errorHandler(error, monitorConnection);
     }, onDone: () {
-      _finishedHandler(_monitorConnection);
-      restartCallBack!(_command, notificationCallBack, _privateKey);
+      _finishedHandler(monitorConnection);
+      restartCallBack!(command, notificationCallBack, _privateKey);
     });
-    await _authenticateConnection(_atSign, _monitorConnection);
+    await _authenticateConnection(atSign, monitorConnection);
     //3. Write monitor verb to connection
-    await _monitorConnection.write(_command);
-    return _monitorConnection;
+    await monitorConnection.write(command);
+    return monitorConnection;
   }
 
   /// Create a new connection for monitor verb.
@@ -61,18 +61,17 @@ class MonitorClient {
 
     //2. create a connection to secondary server
     var secureSocket = await SecureSocket.connect(host, int.parse(port));
-    OutboundConnection _monitorConnection =
-        OutboundConnectionImpl(secureSocket);
-    return _monitorConnection;
+    OutboundConnection monitorConnection = OutboundConnectionImpl(secureSocket);
+    return monitorConnection;
   }
 
   /// To authenticate connection via PKAM verb.
   Future<OutboundConnection> _authenticateConnection(
-      String _atSign, OutboundConnection _monitorConnection) async {
-    await _monitorConnection.write('from:$_atSign\n');
+      String atSign, OutboundConnection monitorConnection) async {
+    await monitorConnection.write('from:$atSign\n');
     var fromResponse = await _getQueueResponse();
     logger.info('from result:$fromResponse');
-    fromResponse = fromResponse.trim().replaceAll('data:', '');
+    fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
     logger.info('fromResponse $fromResponse');
     var key = RSAPrivateKey.fromString(_privateKey);
     var sha256signature =
@@ -80,13 +79,13 @@ class MonitorClient {
         key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
     var signature = base64Encode(sha256signature);
     logger.info('Sending command pkam:$signature');
-    await _monitorConnection.write('pkam:$signature\n');
+    await monitorConnection.write('pkam:$signature\n');
     var pkamResponse = await _getQueueResponse();
     if (!pkamResponse.contains('success')) {
       throw UnAuthenticatedException('Auth failed');
     }
     logger.info('auth success');
-    return _monitorConnection;
+    return monitorConnection;
   }
 
   ///Returns the response of the monitor verb queue.
@@ -123,18 +122,18 @@ class MonitorClient {
   }
 
   /// Logs the error and closes the [OutboundConnection]
-  Future<void> _errorHandler(error, OutboundConnection _connection) async {
-    await _closeConnection(_connection);
+  Future<void> _errorHandler(error, OutboundConnection connection) async {
+    await _closeConnection(connection);
   }
 
   /// Closes the [OutboundConnection]
-  void _finishedHandler(OutboundConnection _connection) async {
-    await _closeConnection(_connection);
+  void _finishedHandler(OutboundConnection connection) async {
+    await _closeConnection(connection);
   }
 
-  Future<void> _closeConnection(OutboundConnection _connection) async {
-    if (!_connection.isInValid()) {
-      await _connection.close();
+  Future<void> _closeConnection(OutboundConnection connection) async {
+    if (!connection.isInValid()) {
+      await connection.close();
     }
   }
 }

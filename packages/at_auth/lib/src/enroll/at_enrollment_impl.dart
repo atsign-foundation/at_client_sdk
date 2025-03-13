@@ -146,7 +146,7 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
 
     String? enrollResponse =
         await atLookUp.executeCommand('$command\n', auth: true);
-    enrollResponse = enrollResponse?.replaceAll('data:', '');
+    enrollResponse = enrollResponse?.replaceFirst(RegExp(r'^data:'), '');
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
@@ -165,7 +165,7 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
     String? enrollResponse = await atLookUp
         .executeCommand(denyEnrollmentBuilder.buildCommand(), auth: true);
 
-    enrollResponse = enrollResponse?.replaceAll('data:', '');
+    enrollResponse = enrollResponse?.replaceFirst(RegExp(r'^data:'), '');
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
@@ -185,7 +185,8 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
     String? enrollmentResponseStr = await atLookUp
         .executeCommand(revokeEnrollVerbBuilder.buildCommand(), auth: true);
 
-    enrollmentResponseStr = enrollmentResponseStr?.replaceAll('data:', '');
+    enrollmentResponseStr =
+        enrollmentResponseStr?.replaceFirst(RegExp(r'^data:'), '');
     var enrollmentJsonMap = jsonDecode(enrollmentResponseStr!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
@@ -203,7 +204,8 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
       throw AtEnrollmentException(
           'Unable to lookup encryption public key. Server response is null/empty');
     }
-    var defaultEncryptionPublicKey = lookupResult.replaceFirst('data:', '');
+    var defaultEncryptionPublicKey =
+        lookupResult.replaceFirst(RegExp(r'^data:'), '');
     return defaultEncryptionPublicKey;
   }
 
@@ -235,6 +237,6 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
       throw AtEnrollmentException(
           'Enrollment response from server: $enrollResult');
     }
-    return enrollResult.replaceFirst('data:', '');
+    return enrollResult.replaceFirst(RegExp(r'^data:'), '');
   }
 }

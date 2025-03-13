@@ -29,7 +29,7 @@ Future<void> main(List<String> args) async {
     var scanResult = (await atClient
             .getRemoteSecondary()!
             .executeCommand('scan $example\n'))!
-        .replaceFirst('data:', '');
+        .replaceFirst(RegExp(r'^data:'), '');
     print("Stored to: $scanResult");
 
     print('Fetching $id');
@@ -37,7 +37,7 @@ Future<void> main(List<String> args) async {
     // Fetch it direct from remote
     var asStored =
         (await atClient.getRemoteSecondary()!.executeCommand('llookup:$id\n'))!
-            .replaceFirst('data:', '');
+            .replaceFirst(RegExp(r'^data:'), '');
     print('As stored: $asStored');
 
     // Fetch it from local

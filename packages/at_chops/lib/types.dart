@@ -1,4 +1,4 @@
-library at_chops_types;
+library;
 
 /// library at_chops/types.dart provides all of the types for implementing
 /// your own algorithms for use with at_chops.

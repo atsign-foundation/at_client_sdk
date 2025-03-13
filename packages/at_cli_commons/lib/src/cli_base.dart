@@ -24,8 +24,6 @@ class CLIBase {
         abbr: 'k',
         mandatory: false,
         help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
-    ..addOption('cram-secret',
-        abbr: 'c', mandatory: false, help: 'atSign\'s cram secret')
     ..addOption('home-dir', abbr: 'h', mandatory: false, help: 'home directory')
     ..addOption('storage-dir',
         abbr: 's',
@@ -79,7 +77,6 @@ class CLIBase {
         homeDir: getHomeDirectory(),
         storageDir: parsedArgs['storage-dir'],
         verbose: parsedArgs['verbose'],
-        cramSecret: parsedArgs['cram-secret'],
         syncDisabled: parsedArgs['never-sync'],
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
         passPhrase: parsedArgs['passPhrase']);
@@ -93,10 +90,10 @@ class CLIBase {
   final String nameSpace;
   final String rootDomain;
   final String? homeDir;
+
   final String? atKeysFilePath;
   final String? storageDir;
   final String? downloadDir;
-  final String? cramSecret;
   final String? passPhrase;
   final bool syncDisabled;
   final int maxConnectAttempts;
@@ -135,7 +132,6 @@ class CLIBase {
       this.atKeysFilePath,
       this.storageDir,
       this.downloadDir,
-      this.cramSecret,
       this.syncDisabled = false,
       this.maxConnectAttempts = defaultMaxConnectAttempts,
       this.passPhrase}) {
@@ -201,7 +197,6 @@ class CLIBase {
       ..rootDomain = rootDomain
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
-      ..cramSecret = cramSecret
       ..atProtocolEmitted = Version(2, 0, 0)
       ..passPhrase = passPhrase;
 
@@ -210,7 +205,14 @@ class CLIBase {
         atServiceFactory: atServiceFactory);
 
     if (!File(atKeysFilePathToUse).existsSync()) {
-      await onboardingService.onboard();
+      // no atKeys file
+      var msg = 'No atKeys file found at $atKeysFilePathToUse';
+      stderr.writeln(chalk.brightRed(msg));
+      stderr.writeln(''
+          '    => If you do not have an atKeys file,'
+          ' this package will help you get started:'
+          ' https://pub.dev/packages/at_onboarding_cli');
+      throw ArgumentError(msg);
     }
 
     bool authenticated = false;

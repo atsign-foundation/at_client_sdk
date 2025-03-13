@@ -1,3 +1,6 @@
+## 3.0.51
+- fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
+
 ## 3.0.50
 - fix: Flush socket after write and rethrow any exceptions occurred 
 ## 3.0.49

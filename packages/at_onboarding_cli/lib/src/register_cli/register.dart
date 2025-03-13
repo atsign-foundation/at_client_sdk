@@ -15,7 +15,7 @@ import '../util/registrar_api_constants.dart';
 
 ///Class containing logic to register a free atsign to email provided
 ///through [args] by utilizing methods defined in [RegisterUtil]
-///Requires List<String> args containing the following arguments: email
+///Requires `List<String> args` containing the following arguments: email
 class Register {
   Future<void> main(List<String> args) async {
     Map<String, String> params = HashMap<String, String>();

@@ -10,7 +10,7 @@ import 'package:encrypt/encrypt.dart';
 /// 1. CRAM authentication
 /// 2. PKAM authentication with privilege to approve/deny future enrollment requests
 /// 3. Generate .atKeys file in the path passed as arg
-/// Usage: dart onboard.dart -a <atsign> -c <cram_secret> -k <path_to_save_atkeys_file> -r <root_server_domain>
+/// Usage: `dart onboard.dart -a <atsign> -c <cram_secret> -k <path_to_save_atkeys_file> -r <root_server_domain>`
 void main(List<String> args) async {
   try {
     final parser = ArgParser()

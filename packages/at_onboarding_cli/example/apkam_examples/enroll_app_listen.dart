@@ -11,7 +11,7 @@ import '../util/atsign_preference.dart';
 import '../util/custom_arg_parser.dart';
 
 /// Please run the following command to execute this file properly
-/// dart enroll_app_listen.dart -a <atsign> -k <path_to_key_file>
+/// `dart enroll_app_listen.dart -a <atsign> -k <path_to_key_file>`
 void main(List<String> args) async {
   final argResults = CustomArgParser(getArgParser()).parse(args);
 

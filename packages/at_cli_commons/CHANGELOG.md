@@ -1,3 +1,7 @@
+## 2.0.0
+- feat!: (breaking) : remove onboarding capability from CLIBase. (Use 
+  the at_onboarding_cli package instead.)
+
 ## 1.3.0
 - feat: Add passPhrase as optional argument to "CLIBase" to support password protected atKeys file.
 - build: Upgraded the following dependencies

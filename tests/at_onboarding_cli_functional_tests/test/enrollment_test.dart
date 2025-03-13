@@ -78,7 +78,7 @@ void main() {
       totp = (await onboardingService_1.atClient!
           .getRemoteSecondary()!
           .executeCommand('otp:get\n', auth: true))!;
-      totp = totp.replaceFirst('data:', '');
+      totp = totp.replaceFirst(RegExp(r'^data:'), '');
       totp = totp.trim();
       logger.info('Got new otp: $totp');
 
@@ -224,7 +224,7 @@ void main() {
       String? totp = await onboardingService_1.atClient!
           .getRemoteSecondary()!
           .executeCommand('otp:get\n', auth: true);
-      totp = totp!.replaceFirst('data:', '');
+      totp = totp!.replaceFirst(RegExp(r'^data:'), '');
       totp = totp.trim();
       logger.finer('otp: $totp');
       Map<String, String> namespaces = {"buzz": "rw"};
@@ -542,7 +542,7 @@ Future<void> _notificationCallback(
       .executeCommand(enrollRequest, auth: true);
   logger.info('enroll Response from server: $enrollResponse');
   expect(enrollResponse, isNotEmpty);
-  enrollResponse = enrollResponse!.replaceFirst('data:', '');
+  enrollResponse = enrollResponse!.replaceFirst(RegExp(r'^data:'), '');
   var enrollResponseJson = jsonDecode(enrollResponse);
   if (response == 'approve') {
     expect(enrollResponseJson['status'], 'approved');
