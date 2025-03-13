@@ -927,7 +927,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _atClient.getPreferences()!.atClientParticulars,
         'batch result:$verbResult'));
     if (verbResult != null) {
-      verbResult = verbResult.replaceFirst('data:', '');
+      verbResult = verbResult.replaceFirst(RegExp('^data:'), '');
     }
     return jsonDecode(verbResult!);
   }

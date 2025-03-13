@@ -1777,8 +1777,9 @@ void main() {
           .toString();
       var atData = AtData();
       atData.data = '11122';
+      atData.metaData = AtMetaData()..ttb = 10000;
       //----------------------------------operation---------------------------------
-      int putCommitId = await keystore!.put(atKey, atData, time_to_born: 10000);
+      int putCommitId = await keystore!.put(atKey, atData);
       // key should not be available before 10 seconds
       // Assertion is not possible as the key will be available in the keystore level
       // expect(() async => await keystore.get(atKey),

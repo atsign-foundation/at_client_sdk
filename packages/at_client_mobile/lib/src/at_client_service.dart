@@ -416,14 +416,14 @@ class AtClientService {
         return null;
       }
     }
-    return result!.replaceFirst('data:', '');
+    return result!.replaceFirst(RegExp('^data:'), '');
   }
 
   bool _isNullOrEmpty(String? key) {
     if (key == null) {
       return true;
     }
-    key = key.replaceFirst('data:', '');
+    key = key.replaceFirst(RegExp('^data:'), '');
     if (key == 'null' || key.isEmpty) {
       return true;
     }

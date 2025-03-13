@@ -642,7 +642,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   String _formatResult(String? commandResult) {
     var result = commandResult;
     if (result != null) {
-      result = result.replaceFirst('data:', '');
+      result = result.replaceFirst(RegExp('^data:'), '');
     }
     return result ??= '';
   }
@@ -708,7 +708,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         streamResponse.status = AtStreamStatus.complete;
       }
     } else if (result != null && result.startsWith('error:')) {
-      result = result.replaceAll('error:', '');
+      result = result.replaceFirst(RegExp('^error:'), '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
       streamResponse.status = AtStreamStatus.error;
@@ -929,7 +929,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     } on AtException catch (e) {
       throw AtClientException.message(e.message);
     }
-    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    otpVerbResponse = otpVerbResponse?.replaceFirst(RegExp('^data:'), '');
     return AtResponse()..response = otpVerbResponse!;
   }
 
@@ -944,7 +944,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     } on AtException catch (e) {
       throw AtClientException.message(e.message);
     }
-    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    otpVerbResponse = otpVerbResponse?.replaceFirst(RegExp('^data:'), '');
     return AtResponse()..response = otpVerbResponse!;
   }
 

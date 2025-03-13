@@ -457,7 +457,7 @@ class AtAuthServiceImpl implements AtAuthService {
       if (getPrivateKeyResult == null || getPrivateKeyResult.isEmpty) {
         throw AtEnrollmentException('$privateKeyCommand returned null/empty');
       }
-      getPrivateKeyResult = getPrivateKeyResult.replaceFirst('data:', '');
+      getPrivateKeyResult = getPrivateKeyResult.replaceFirst(RegExp('^data:'), '');
       var privateKeyResultJson = jsonDecode(getPrivateKeyResult);
       encryptionPrivateKeyFromServer = privateKeyResultJson['value'];
       encryptionPrivateKeyIV = privateKeyResultJson['iv'];
@@ -492,7 +492,7 @@ class AtAuthServiceImpl implements AtAuthService {
             '$selfEncryptionKeyCommand returned null/empty');
       }
       encryptedSelfEncryptionKey =
-          encryptedSelfEncryptionKey.replaceFirst('data:', '');
+          encryptedSelfEncryptionKey.replaceFirst(RegExp('^data:'), '');
       var selfEncryptionKeyResultJson = jsonDecode(encryptedSelfEncryptionKey);
       selfEncryptionKeyFromServer = selfEncryptionKeyResultJson['value'];
       selfEncryptionKeyIV = selfEncryptionKeyResultJson['iv'];

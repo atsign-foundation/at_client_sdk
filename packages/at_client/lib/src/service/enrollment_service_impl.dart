@@ -31,7 +31,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
   }
 
   List<Enrollment> _formatEnrollListResponse(response) {
-    response = response?.replaceFirst('data:', '');
+    response = response?.replaceFirst(RegExp('^data:'), '');
     Map<String, dynamic> enrollRequests = jsonDecode(response!);
     List<Enrollment> enrollRequestsFormatted = [];
     for (MapEntry enrollmentRequest in enrollRequests.entries) {

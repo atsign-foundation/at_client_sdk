@@ -108,7 +108,7 @@ class RemoteSecondary implements Secondary {
     var verbResult;
     try {
       verbResult = await executeVerb(builder);
-      verbResult = verbResult.replaceFirst('data:', '');
+      verbResult = verbResult.replaceFirst(RegExp('^data:'), '');
     } on AtException catch (e) {
       throw e
         ..stack(AtChainedException(Intent.fetchData,

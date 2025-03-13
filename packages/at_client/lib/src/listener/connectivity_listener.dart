@@ -4,7 +4,7 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 
 /// @Deprecated Will be removed in a future release. Please use a connectivity checker of your own choice in your application code
 ///
-/// Listener class that returns a Stream<True> if internet connection is on in the running device, Stream<False> if internet gets disconnected.
+/// Listener class that returns a `Stream<True>` if internet connection is on in the running device, `Stream<False>` if internet gets disconnected.
 /// Sample usage
 /// ```
 /// ConnectivityListener({hostname:'google.com', port:80}).subscribe().listen((isConnected) {
@@ -36,8 +36,8 @@ class ConnectivityListener {
     }
   }
 
-  /// Listen to [InternetConnectionChecker.onStatusChange] and returns Stream<True> whenever
-  /// internet connection is online. Returns Stream<False> if internet connection is lost.
+  /// Listen to [InternetConnectionChecker.onStatusChange] and returns `Stream<True>` whenever
+  /// internet connection is online. Returns `Stream<False>` if internet connection is lost.
   Stream<bool> subscribe() {
     late final InternetConnectionChecker icc;
     if (hostname != null && port != null) {

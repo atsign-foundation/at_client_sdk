@@ -102,7 +102,7 @@ class SyncUtil {
       throw AtClientException.message(
           'Unable to fetch latest server commit id: ${e.toString()}');
     }
-    result = result.replaceAll('data:', '');
+    result = result.replaceFirst(RegExp('^data:'), '');
     var statsJson = JsonUtils.decodeJson(result);
     if (statsJson[0]['value'] != 'null') {
       commitId = int.parse(statsJson[0]['value']);

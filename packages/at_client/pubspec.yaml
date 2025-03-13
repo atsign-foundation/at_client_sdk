@@ -14,6 +14,22 @@ homepage: https://docs.atsign.com/
 environment:
   sdk: ">=2.15.0 <4.0.0"
 
+dependency_overrides:
+  at_persistence_spec:
+    git:
+      url: https://github.com/atsign-foundation/at_server
+      path: packages/at_persistence_spec
+      ref: feat-immutability
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server
+      path: packages/at_persistence_secondary_server
+      ref: feat-immutability
+  at_commons:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries
+      path: packages/at_commons
+      ref: feat-immutability
 dependencies:
   path: ^1.8.2
   hive: ^2.2.3
@@ -36,8 +52,8 @@ dependencies:
   at_chops: ^2.2.0
   at_lookup: ^3.0.49
   at_auth: ^2.0.10
-  at_persistence_spec: ^2.0.14
-  at_persistence_secondary_server: ^3.1.0
+  at_persistence_spec: ^3.0.0
+  at_persistence_secondary_server: ^4.0.0
   meta: ^1.8.0
   version: ^3.0.2
 

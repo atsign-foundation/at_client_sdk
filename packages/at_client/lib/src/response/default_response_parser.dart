@@ -27,7 +27,7 @@ class DefaultResponseParser implements ResponseParser {
   /// @param response - Response object from parse method
   /// @returns void
   void parseSuccessResponse(String responseString, AtResponse response) {
-    response.response = responseString.replaceFirst('data:', '');
+    response.response = responseString.replaceFirst(RegExp('^data:'), '');
   }
 
   /// Remove error: in responseString and extract Error code and error response if any
@@ -38,7 +38,7 @@ class DefaultResponseParser implements ResponseParser {
   /// @returns void
   void parseFailureResponse(String responseString, AtResponse response) {
     // Remove error: from responseString
-    responseString = responseString.replaceFirst('error:', '');
+    responseString = responseString.replaceFirst(RegExp('^error:'), '');
     // Set isError to true
     response.isError = true;
     // Find out whether error code exists or not
