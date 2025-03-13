@@ -24,8 +24,6 @@ class CLIBase {
         abbr: 'k',
         mandatory: false,
         help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
-    ..addOption('cram-secret',
-        abbr: 'c', mandatory: false, help: 'atSign\'s cram secret')
     ..addOption('home-dir', abbr: 'h', mandatory: false, help: 'home directory')
     ..addOption('storage-dir',
         abbr: 's',
@@ -79,7 +77,6 @@ class CLIBase {
         homeDir: getHomeDirectory(),
         storageDir: parsedArgs['storage-dir'],
         verbose: parsedArgs['verbose'],
-        cramSecret: parsedArgs['cram-secret'],
         syncDisabled: parsedArgs['never-sync'],
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
         passPhrase: parsedArgs['passPhrase']);
@@ -94,16 +91,10 @@ class CLIBase {
   final String rootDomain;
   final String? homeDir;
 
-  /// if an atKeys file path is provided, use that
   final String? atKeysFilePath;
   final String? storageDir;
   final String? downloadDir;
-  /// if no atKeys found, use the cram secret if provided
-  final String? cramSecret;
   final String? passPhrase;
-  /// if neither atKeys found nor cram secret provided, talk to the registrar
-  /// - but only if this is set to true
-  bool useRegistrar = false;
   final bool syncDisabled;
   final int maxConnectAttempts;
 
@@ -141,8 +132,6 @@ class CLIBase {
       this.atKeysFilePath,
       this.storageDir,
       this.downloadDir,
-      this.cramSecret,
-      this.useRegistrar = false,
       this.syncDisabled = false,
       this.maxConnectAttempts = defaultMaxConnectAttempts,
       this.passPhrase}) {
@@ -208,7 +197,6 @@ class CLIBase {
       ..rootDomain = rootDomain
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
-      ..cramSecret = cramSecret
       ..atProtocolEmitted = Version(2, 0, 0)
       ..passPhrase = passPhrase;
 
@@ -218,19 +206,13 @@ class CLIBase {
 
     if (!File(atKeysFilePathToUse).existsSync()) {
       // no atKeys file
-      // if we have a cram key then let's try to onboard with it
-      if ((cramSecret ?? '').trim().isNotEmpty) {
-        await onboardingService.onboard();
-      } else {
-        // If neither cram key nor atKeys file then log and throw exception
-        var msg = 'No atKeys file found at $atKeysFilePathToUse';
-        stderr.writeln(chalk.brightRed(msg));
-        stderr.writeln(''
-            '    => If you do not have an atKeys file,'
-            ' this package will help you get started:'
-            ' https://pub.dev/packages/at_onboarding_cli');
-        throw ArgumentError(msg);
-      }
+      var msg = 'No atKeys file found at $atKeysFilePathToUse';
+      stderr.writeln(chalk.brightRed(msg));
+      stderr.writeln(''
+          '    => If you do not have an atKeys file,'
+          ' this package will help you get started:'
+          ' https://pub.dev/packages/at_onboarding_cli');
+      throw ArgumentError(msg);
     }
 
     bool authenticated = false;
