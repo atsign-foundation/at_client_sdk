@@ -1,3 +1,6 @@
+## 3.5.0
+- fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
+- build[deps]: upgrade dependencies
 ## 3.4.0
 - feat: Allows clients to skip delete commits until a specific commitID during initial sync
 ## 3.3.1
