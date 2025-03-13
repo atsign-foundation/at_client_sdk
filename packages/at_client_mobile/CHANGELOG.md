@@ -1,3 +1,6 @@
+## 3.2.22
+- build[deps]: update dependencies
+
 ## 3.2.21
 - fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
 
