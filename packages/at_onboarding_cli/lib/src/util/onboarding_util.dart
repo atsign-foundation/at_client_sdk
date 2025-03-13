@@ -18,7 +18,7 @@ class OnboardingUtil {
     _ioClient = IOClient(ioc);
   }
 
-  /// Returns a Future<List<String>> containing free available atSigns of count provided as input.
+  /// Returns a `Future<List<String>>` containing free available atSigns of count provided as input.
   Future<List<String>> getFreeAtSigns(
       {int amount = 1,
       String authority = RegistrarApiConstants.apiHostProd}) async {

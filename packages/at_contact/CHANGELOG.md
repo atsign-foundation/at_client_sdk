@@ -1,3 +1,6 @@
+## 3.0.10
+- fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
+
 ## 3.0.9
 - build[deps]: Upgraded dependencies for the following packages:
     - at_client: 3.2.2

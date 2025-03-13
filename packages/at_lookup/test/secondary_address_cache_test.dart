@@ -26,7 +26,7 @@ void main() async {
 
     SecondaryUrlFinder mockSecondaryFinder = MockSecondaryUrlFinder();
 
-    String _addressFromAtSign(String atSign) {
+    String addressFromAtSign(String atSign) {
       if (atSign.startsWith('@')) {
         atSign = atSign.replaceFirst('@', '');
       }
@@ -40,11 +40,11 @@ void main() async {
       when(() => mockSecondaryFinder
               .findSecondaryUrl(any(that: startsWith('registered'))))
           .thenAnswer((invocation) async =>
-              _addressFromAtSign(invocation.positionalArguments.first));
+              addressFromAtSign(invocation.positionalArguments.first));
       when(() => mockSecondaryFinder
               .findSecondaryUrl(any(that: startsWith('notCached'))))
           .thenAnswer((invocation) async =>
-              _addressFromAtSign(invocation.positionalArguments.first));
+              addressFromAtSign(invocation.positionalArguments.first));
       when(() => mockSecondaryFinder
               .findSecondaryUrl(any(that: startsWith('notRegistered'))))
           .thenAnswer((invocation) async {
@@ -69,7 +69,7 @@ void main() async {
       var secondaryAddress = await cache.findSecondary(atSign);
       expect(secondaryAddress.port, isNotNull);
       expect(secondaryAddress.host, isNotNull);
-      expect(secondaryAddress.toString(), _addressFromAtSign(atSign));
+      expect(secondaryAddress.toString(), addressFromAtSign(atSign));
     });
 
     test('test simple lookup for registeredAtSign1', () async {
@@ -77,7 +77,7 @@ void main() async {
       var secondaryAddress = await cache.findSecondary(atSign);
       expect(secondaryAddress.port, isNotNull);
       expect(secondaryAddress.host, isNotNull);
-      expect(secondaryAddress.toString(), _addressFromAtSign(atSign));
+      expect(secondaryAddress.toString(), addressFromAtSign(atSign));
     });
 
     test('test simple lookup for notRegisteredAtSign1', () async {
@@ -258,7 +258,7 @@ void main() async {
     String rootDomain = 'proxy:$proxyHost';
     int rootPort = 8443;
 
-    String _addressFromAtSign(String atSign) {
+    String addressFromAtSign(String atSign) {
       return '$proxyHost:$rootPort';
     }
 
@@ -273,14 +273,14 @@ void main() async {
       var secondaryAddress = await csaf.findSecondary(atSign);
       expect(secondaryAddress.port, isNotNull);
       expect(secondaryAddress.host, isNotNull);
-      expect(secondaryAddress.toString(), _addressFromAtSign(atSign));
+      expect(secondaryAddress.toString(), addressFromAtSign(atSign));
     });
     test('test simple lookup for registeredAtSign1', () async {
       var atSign = 'registeredAtSign1';
       var secondaryAddress = await csaf.findSecondary(atSign);
       expect(secondaryAddress.port, isNotNull);
       expect(secondaryAddress.host, isNotNull);
-      expect(secondaryAddress.toString(), _addressFromAtSign(atSign));
+      expect(secondaryAddress.toString(), addressFromAtSign(atSign));
     });
     test('test isCached for registeredAtSign1', () async {
       var atSign = 'registeredAtSign1';

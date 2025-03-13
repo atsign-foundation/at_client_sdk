@@ -91,7 +91,7 @@ class AtContactsImpl implements AtContactsLibrary {
     }
     if (atValue?.value != null) {
       var value = atValue?.value;
-      value = value?.replaceAll('data:', '');
+      value = value?.replaceFirst(RegExp(r'^data:'), '');
       if (value != null && value != 'null') {
         dynamic json;
         try {
@@ -391,7 +391,7 @@ class AtContactsImpl implements AtContactsLibrary {
     AtGroup? group;
     if (atValue?.value != null) {
       var value = atValue?.value;
-      value = value?.replaceAll('data:', '');
+      value = value?.replaceFirst(RegExp(r'^data:'), '');
       if (value != null && value != 'null') {
         var json = jsonDecode(value);
         if (json != null) {

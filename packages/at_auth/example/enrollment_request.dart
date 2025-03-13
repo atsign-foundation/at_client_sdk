@@ -10,7 +10,7 @@ import 'package:at_lookup/at_lookup.dart';
 /// To get the otp, run otp:get from authenticated privileged client using openssl terminal
 /// A privileged at_onboarding_cli client will get the enrollment notification. Check [https://github.com/atsign-foundation/at_libraries/blob/trunk/packages/at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart]
 /// Approve or deny the enrollment request from at_onboarding_cli client
-/// Usage: dart enrollment_request.dart -a <atsign> -o <otp> -r <root_server_domain>
+/// Usage: `dart enrollment_request.dart -a <atsign> -o <otp> -r <root_server_domain>`
 void main(List<String> args) async {
   try {
     final parser = ArgParser()

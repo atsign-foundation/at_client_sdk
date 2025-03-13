@@ -6,7 +6,7 @@ import 'package:at_auth/src/at_auth_impl.dart';
 /// 1. Read the PKAM private key from atKeys file saved after running onboard.dart
 /// 2. Perform PKAM authentication
 /// 3. Listening to new enrollment notifications
-/// Usage: dart authenticate.dart -a <atsign> -k <path_to_atkeys_file>
+/// Usage: `dart authenticate.dart -a <atsign> -k <path_to_atkeys_file>`
 void main(List<String> args) async {
   try {
     final parser = ArgParser()

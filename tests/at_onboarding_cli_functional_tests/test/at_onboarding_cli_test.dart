@@ -153,7 +153,7 @@ void main() {
       var encryptionPublicKey =
           await atLookup.executeCommand('lookup:all:publickey$atSign\n');
       expect(encryptionPublicKey, isNotNull);
-      encryptionPublicKey = encryptionPublicKey?.replaceFirst('data:', '');
+      encryptionPublicKey = encryptionPublicKey?.replaceFirst(RegExp(r'^data:'), '');
       expect(jsonDecode(encryptionPublicKey!)['metaData'], isNotNull);
       expect(jsonDecode(encryptionPublicKey)['metaData']['ttr'], -1);
       print('encryptionPublicKey: $encryptionPublicKey');

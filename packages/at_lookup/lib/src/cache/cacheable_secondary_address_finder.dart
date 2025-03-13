@@ -237,17 +237,13 @@ class SecondaryUrlFinder {
       throw RootServerConnectivityException(
           'Could not connect to Root Server at $_rootDomain:$_rootPort');
     } on Exception catch (exception) {
-      _logger.severe('AtLookup.findSecondary connection to ' +
-          _rootDomain +
-          ' exception: ' +
-          exception.toString());
+      var msg = 'AtLookup.findSecondary connection to $_rootDomain'
+          ' exception: $exception';
+      _logger.severe(msg);
       if (socket != null) {
         socket.destroy();
       }
-      throw AtConnectException('AtLookup.findSecondary connection to ' +
-          _rootDomain +
-          ' exception: ' +
-          exception.toString());
+      throw AtConnectException(msg);
     } catch (error, stackTrace) {
       _logger.severe(
           'findSecondaryUrl: connection to root server failed with error: $error');

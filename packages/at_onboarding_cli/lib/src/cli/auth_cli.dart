@@ -300,8 +300,8 @@ Future<int> wrappedMain(List<String> arguments) async {
 ///  - 4 if the atDirectory cannot be reached
 ///  - 3 if atDirectory is reachable but the atSign does not exist
 ///  - 2 if the atSign exists but the atServer cannot be reached
-///  - 1 if the atServer is reachable but there is no public:publickey@<atsign>
-///  - 0 if the atServer is reachable and public:publickey@<atsign> exists
+///  - 1 if the atServer is reachable but there is no `public:publickey@<atsign>`
+///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
@@ -383,7 +383,7 @@ Future<void> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
 
 String parseServerResponse(String? response) {
   if (response != null && response.startsWith('data:')) {
-    return response.replaceFirst('data:', '');
+    return response.replaceFirst(RegExp(r'^data:'), '');
   } else {
     throw ('Unexpected server response: $response');
   }

@@ -14,11 +14,14 @@ export 'src/enroll/at_enrollment_base.dart';
 export 'src/enroll/at_enrollment_response.dart';
 // The abstract class contains fields related to enrollment request
 export 'src/enroll/base_enrollment_request.dart';
+
 /// The class contains fields to submit enrollment request for APKAM keys which generate keys for
 /// an application with restricted access to the namespaces.
 export 'src/enroll/enrollment_request.dart';
+
 /// This class serves as the entity responsible for either approving or denying an enrollment request
 export 'src/enroll/enrollment_request_decision.dart';
+
 /// The class stores enrollment request details. It notifies the approving app upon receiving a
 /// request from the requesting app, for approval or denial.
 export 'src/enroll/enrollment_server_response.dart';

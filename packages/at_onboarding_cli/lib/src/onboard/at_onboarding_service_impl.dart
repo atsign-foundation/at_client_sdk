@@ -310,7 +310,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     try {
       var getPrivateKeyResult =
           await atLookUp.executeCommand(privateKeyCommand, auth: true);
-      getPrivateKeyResult = getPrivateKeyResult?.replaceFirst('data:', '');
+      getPrivateKeyResult =
+          getPrivateKeyResult?.replaceFirst(RegExp(r'^data:'), '');
       var privateKeyResultJson = jsonDecode(getPrivateKeyResult!);
       encryptionPrivateKeyFromServer = privateKeyResultJson['value'];
       encryptionPrivateKeyIV = privateKeyResultJson['iv'];
@@ -358,7 +359,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       var getSelfEncryptionKeyResult =
           await atLookUp.executeCommand(selfEncryptionKeyCommand, auth: true);
       getSelfEncryptionKeyResult =
-          getSelfEncryptionKeyResult?.replaceFirst('data:', '');
+          getSelfEncryptionKeyResult?.replaceFirst(RegExp(r'^data:'), '');
       var selfEncryptionKeyResultJson = jsonDecode(getSelfEncryptionKeyResult!);
       selfEncryptionKeyFromServer = selfEncryptionKeyResultJson['value'];
       selfEncryptionKeyIV = selfEncryptionKeyResultJson['iv'];

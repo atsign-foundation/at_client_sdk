@@ -23,7 +23,7 @@ class EnrollmentOperations {
         ?.getRemoteSecondary()
         ?.executeCommand('otp:get\n', auth: true);
     stdout.writeln('[Test | EnrollmentOps] Fetch OTP response: $response');
-    response = response?.replaceFirst('data:', '');
+    response = response?.replaceFirst(RegExp(r'^data:'), '');
     await onboardingService.close();
     onboardingService = null;
     AtClientManager.getInstance().reset();
