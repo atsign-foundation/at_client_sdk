@@ -257,7 +257,8 @@ class EncryptionService {
           DefaultResponseParser().parse(encryptedSharedKey).response;
     }
     if (encryptedSharedKey.isNotEmpty) {
-      encryptedSharedKey = encryptedSharedKey.replaceFirst(RegExp('^data:'), '');
+      encryptedSharedKey =
+          encryptedSharedKey.replaceFirst(RegExp('^data:'), '');
     }
     if (encryptedSharedKey == 'null' || encryptedSharedKey.isEmpty) {
       throw KeyNotFoundException('encrypted Shared key not found');
