@@ -9,7 +9,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/util/at_onboarding_exceptions.dart';
 import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
 import 'package:at_onboarding_cli/src/util/print_full_parser_usage.dart';
 import 'package:at_utils/at_utils.dart';

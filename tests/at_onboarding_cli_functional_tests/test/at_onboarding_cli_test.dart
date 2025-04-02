@@ -13,6 +13,7 @@ import 'utils/onboarding_service_impl_override.dart';
 
 final String atKeysFilePath = '${Platform.environment['HOME']}/.atsign/keys';
 Map<String, bool> keysCreatedMap = {};
+
 void main() {
   AtSignLogger.root_level = 'WARNING';
 
@@ -137,33 +138,46 @@ void main() {
   });
 
   group('A group of tests to verify onboard functionality', () {
-    String atSign = '@egcovidlab🛠';
-    AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
+    test('Onboard and verify failure modes', () async {
+      String atSign = '@egcovidlab🛠';
+      AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
 
-    test(
-        'A test to verify atSign is onboarded and .atKeys file is generated successfully',
-        () async {
-      AtOnboardingService atOnboardingService =
-          AtOnboardingServiceImpl(atSign, atOnboardingPreference);
-      bool status = await atOnboardingService.onboard();
-      expect(status, true);
-      // verify whether ttr is set in public encryption key
-      final atLookup = AtLookupImpl(atSign, atOnboardingPreference.rootDomain,
-          atOnboardingPreference.rootPort);
-      var encryptionPublicKey =
-          await atLookup.executeCommand('lookup:all:publickey$atSign\n');
-      expect(encryptionPublicKey, isNotNull);
-      encryptionPublicKey = encryptionPublicKey?.replaceFirst(RegExp(r'^data:'), '');
-      expect(jsonDecode(encryptionPublicKey!)['metaData'], isNotNull);
-      expect(jsonDecode(encryptionPublicKey)['metaData']['ttr'], -1);
-      print('encryptionPublicKey: $encryptionPublicKey');
-      bool status2 = await atOnboardingService.authenticate();
-      expect(status2, true);
-      expect(await atOnboardingService.isOnboarded(), true);
+      Future<void> onboard(bool autoCompleteActivation) async {
+        AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
+          atSign,
+          atOnboardingPreference,
+        );
+        bool status = await atOnboardingService.onboard(
+          autoCompleteActivation: autoCompleteActivation,
+        );
+        expect(status, true);
+        expect(await atOnboardingService.isOnboarded(), autoCompleteActivation);
 
-      /// Assert .atKeys file is generated for the atSign
-      expect(await File(atOnboardingPreference.atKeysFilePath!).exists(), true);
-      await atLookup.close();
+        File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
+
+        /// Assert .atKeys file is generated for the atSign
+        expect(await atKeysFile.exists(), true);
+      }
+
+      // onboard without removing cram secret
+      await onboard(false);
+
+      // do it again, but remove the cram secret (should succeed)
+      await onboard(true);
+
+      // try to do it again (should fail)
+      await expectLater(() async {
+        try {
+          await onboard(true);
+        } catch (e) {
+          print('Caught an ${e.runtimeType} as expected ($e)');
+          rethrow;
+        }
+      },
+          throwsA(predicate((dynamic e) =>
+              e is AtActivateException &&
+              e.message ==
+                  'atsign $atSign is already activated')));
     });
 
     tearDown(() async {

@@ -1,6 +1,6 @@
 name: at_auth
 description: Package that implements common logic for onboarding/authenticating an atsign to a secondary server
-version: 2.1.0
+version: 2.2.0
 homepage: https://atsign.com/
 repository: https://github.com/atsign-foundation/at_libraries
 

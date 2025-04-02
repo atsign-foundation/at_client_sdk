@@ -14,12 +14,23 @@ abstract class AtAuth {
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest);
 
   /// Onboard method is invoked when an atsign is activated for the first time from a client app.
-  /// Step 1. Perform cram auth
-  /// Step 2. Generate pkam, encryption keypairs and apkam symmetric key
-  /// Step 3. Update pkam public key to secondary
-  /// Step 4. Perform pkam auth
-  /// Step 5. Update encryption public key to server and delete cram secret from server
+  /// - Connect, and perform cram auth
+  /// - Generate pkam, encryption keypairs and apkam symmetric key
+  /// - Update pkam public key to secondary
+  /// - Close connection
+  /// - Reconnect, and perform pkam auth
+  /// - If required (legacy behaviour, but not recommended), then call
+  /// [completeActivation]
+  /// <p/>
+  ///
   /// Set [atOnboardingRequest.publicKeyId] if pkam auth mode is [PkamAuthMode.sim]
   Future<AtOnboardingResponse> onboard(
-      AtOnboardingRequest atOnboardingRequest, String cramSecret);
+    AtOnboardingRequest atOnboardingRequest,
+    String cramSecret, {
+    bool autoCompleteActivation = true,
+  });
+
+  /// - Update encryption public key to server
+  /// - Delete cram secret from server
+  Future<void> completeActivation();
 }
