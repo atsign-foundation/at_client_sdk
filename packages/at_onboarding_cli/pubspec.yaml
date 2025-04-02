@@ -12,9 +12,6 @@ executables:
   at_register: register_cli
   at_activate: activate_cli
 
-dependency_overrides:
-  at_auth:
-    path: ../at_auth
 dependencies:
    args: ^2.5.0
    crypton: ^2.2.1
