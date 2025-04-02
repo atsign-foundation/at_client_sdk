@@ -11,7 +11,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
-import 'package:at_onboarding_cli/src/util/at_onboarding_exceptions.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_utils.dart';
@@ -83,7 +82,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   @override
-  Future<bool> onboard() async {
+  Future<bool> onboard({bool autoCompleteActivation = true}) async {
     // cram auth doesn't use at_chops. So create at_lookup here.
     AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
@@ -117,8 +116,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atOnboardingRequest.publicKeyId = atOnboardingPreference.publicKeyId;
     atOnboardingRequest.authMode = atOnboardingPreference.authMode;
 
-    AtOnboardingResponse atOnboardingResponse = await atAuth!
-        .onboard(atOnboardingRequest, atOnboardingPreference.cramSecret!);
+    AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
+      atOnboardingRequest,
+      atOnboardingPreference.cramSecret!,
+      autoCompleteActivation: false, // we want to control this here
+    );
+
     logger.finer('Onboarding Response: $atOnboardingResponse');
     if (atOnboardingResponse.isSuccessful) {
       logger.finer(
@@ -127,9 +130,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atOnboardingResponse.atAuthKeys!,
         enrollmentId: atOnboardingResponse.enrollmentId,
       );
+
+      if (autoCompleteActivation) {
+        await completeActivation();
+      }
     }
     _isAtsignOnboarded = atOnboardingResponse.isSuccessful;
     return _isAtsignOnboarded;
+  }
+
+  @override
+  Future<void> completeActivation() async {
+    await atAuth!.completeActivation();
   }
 
   @override

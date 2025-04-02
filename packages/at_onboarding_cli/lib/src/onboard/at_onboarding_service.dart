@@ -8,9 +8,16 @@ import 'package:at_lookup/at_lookup.dart';
 abstract class AtOnboardingService {
   static const Duration defaultApkamRetryInterval = Duration(seconds: 10);
 
-  /// Perform initial one_time authentication to activate the atsign
-  /// returns true if successfully onboarded
-  Future<bool> onboard();
+  /// Perform initial one_time authentication to activate the atsign. Returns
+  /// true if successfully onboarded.
+  ///
+  /// When [autoCompleteActivation] is false, callers are responsible for
+  /// calling [completeActivation]
+  Future<bool> onboard({bool autoCompleteActivation = true});
+
+  /// - Update encryption public key to server
+  /// - Delete cram secret from server
+  Future<void> completeActivation();
 
   /// Authenticate into secondary server using PKAM privateKey for legacy clients
   ///

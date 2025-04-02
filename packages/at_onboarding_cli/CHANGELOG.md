@@ -1,3 +1,8 @@
+## 1.9.0
+
+- fix: have `onboard` only perform post-auth activation completion once the 
+  atKeys file has been successfully saved.
+
 ## 1.8.3
 - fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
 
