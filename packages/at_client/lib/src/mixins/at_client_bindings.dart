@@ -6,25 +6,44 @@ mixin AtClientBindings {
 
   AtSignLogger get logger;
 
-  Future<void> notify(
+  Future<NotificationResult> notify(
     AtKey atKey,
     String value, {
     required bool checkForFinalDeliveryStatus,
     required bool waitForFinalDeliveryStatus,
     required Duration ttln,
+
+    /// maxTries must be a non-zero positive integer
+    int maxTries = 3,
   }) async {
-    await atClient.notificationService.notify(
-      NotificationParams.forUpdate(atKey,
-          value: value, notificationExpiry: ttln),
-      checkForFinalDeliveryStatus: checkForFinalDeliveryStatus,
-      waitForFinalDeliveryStatus: waitForFinalDeliveryStatus,
-      onSuccess: (NotificationResult notification) {
-        logger.info('SUCCESS:$notification with key: ${atKey.toString()}');
-      },
-      onError: (notification) {
-        logger.info('ERROR:$notification');
-      },
+    var params = NotificationParams.forUpdate(
+      atKey,
+      value: value,
+      notificationExpiry: ttln,
     );
+
+    NotificationResult result;
+
+    int attempts = 0;
+    do {
+      attempts++;
+      result = await atClient.notificationService.notify(
+        params,
+        checkForFinalDeliveryStatus: checkForFinalDeliveryStatus,
+        waitForFinalDeliveryStatus: waitForFinalDeliveryStatus,
+        onSuccess: (NotificationResult notification) {
+          logger.info('SUCCESS:$notification with key: ${atKey.toString()}');
+        },
+        onError: (notification) {
+          logger.info('ERROR:$notification');
+        },
+      );
+    } while (result.atClientException != null && attempts < maxTries);
+    if (result.atClientException != null) {
+      logger.warning(
+          'Failed to send ${atKey.toString()} notification within $maxTries attempts.');
+    }
+    return result;
   }
 
   Stream<AtNotification> subscribe(
