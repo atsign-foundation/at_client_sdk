@@ -170,14 +170,14 @@ void main() {
         try {
           await onboard(true);
         } catch (e) {
-          print('Caught an ${e.runtimeType} as expected');
+          print('Caught an ${e.runtimeType} as expected ($e)');
           rethrow;
         }
       },
           throwsA(predicate((dynamic e) =>
               e is AtActivateException &&
               e.message ==
-                  'atsign @local_onboarding_test is already activated')));
+                  'atsign $atSign is already activated')));
     });
 
     tearDown(() async {
