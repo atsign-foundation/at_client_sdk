@@ -98,9 +98,17 @@ class AtAuthImpl implements AtAuth {
       ..atAuthKeys = atAuthKeys;
   }
 
+  /// Keep some state so callers can call [completeActivation] later
+  late AtAuthKeys _atAuthKeys;
+  late AtOnboardingRequest _atOnboardingRequest;
+
   @override
   Future<AtOnboardingResponse> onboard(
-      AtOnboardingRequest atOnboardingRequest, String cramSecret) async {
+    AtOnboardingRequest atOnboardingRequest,
+    String cramSecret, {
+    bool autoCompleteActivation = true,
+  }) async {
+    _atOnboardingRequest = atOnboardingRequest;
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
     atEnrollmentBase = AtEnrollmentImpl(atOnboardingRequest.atSign);
     atLookUp ??= AtLookupImpl(atOnboardingRequest.atSign,
@@ -116,10 +124,10 @@ class AtAuthImpl implements AtAuth {
           ' and try again (or) contact support@atsign.com');
     }
     //2. generate key pairs
-    var atAuthKeys = _generateKeyPairs(atOnboardingRequest.authMode,
+    _atAuthKeys = _generateKeyPairs(atOnboardingRequest.authMode,
         publicKeyId: atOnboardingRequest.publicKeyId);
 
-    atChops ??= _createAtChops(atAuthKeys);
+    atChops ??= _createAtChops(_atAuthKeys);
     atLookUp!.atChops = atChops;
 
     //3. send onboarding enrollment
@@ -127,8 +135,8 @@ class AtAuthImpl implements AtAuth {
     // server will update the apkam public key during enrollment.
     // So don't have to manually update apkam public key in this scenario.
     enrollmentIdFromServer = await _sendOnboardingEnrollment(
-        atOnboardingRequest, atAuthKeys, atLookUp!);
-    atAuthKeys.enrollmentId = enrollmentIdFromServer;
+        atOnboardingRequest, _atAuthKeys, atLookUp!);
+    _atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
     //4. Close connection to server
     try {
@@ -157,13 +165,27 @@ class AtAuthImpl implements AtAuth {
       throw AtAuthenticationException('Pkam auth returned false');
     }
 
-    //7. If Pkam auth is success, update encryption public key to secondary
-    // and delete cram key from server
-    final encryptionPublicKey = atAuthKeys.defaultEncryptionPublicKey;
+    //7. If so specified (default behaviour) then
+    // - set the public encryption key
+    // - delete the cram secret from the keystore
+    if (autoCompleteActivation) {
+      await completeActivation();
+    }
+
+    atOnboardingResponse.isSuccessful = true;
+    atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
+    atOnboardingResponse.atAuthKeys = _atAuthKeys;
+
+    return atOnboardingResponse;
+  }
+
+  @override
+  Future<void> completeActivation() async {
+    final encryptionPublicKey = _atAuthKeys.defaultEncryptionPublicKey;
     UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'publickey'
-        ..sharedBy = atOnboardingRequest.atSign
+        ..sharedBy = _atOnboardingRequest.atSign
         ..metadata = (Metadata()
           ..isPublic = true
           ..ttr = -1))
@@ -171,15 +193,10 @@ class AtAuthImpl implements AtAuth {
     String? encryptKeyUpdateResult = await atLookUp!.executeVerb(updateBuilder);
     _logger.info('Encryption public key update result $encryptKeyUpdateResult');
 
-    //8.  Delete cram secret from the keystore as cram auth is complete
     DeleteVerbBuilder deleteBuilder = DeleteVerbBuilder()
       ..atKey = (AtKey()..key = AtConstants.atCramSecret);
     String? deleteResponse = await atLookUp!.executeVerb(deleteBuilder);
     _logger.info('Cram secret delete response : $deleteResponse');
-    atOnboardingResponse.isSuccessful = true;
-    atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
-    atOnboardingResponse.atAuthKeys = atAuthKeys;
-    return atOnboardingResponse;
   }
 
   AtChops _createAtChops(AtAuthKeys atKeysFile) {

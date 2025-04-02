@@ -1,3 +1,9 @@
+## 2.2.0
+
+- feat: enable callers of `AtAuth.onboard` to control post-auth activation
+  completion (set the encryption public key on the server, delete the "cram"
+  secret)
+
 ## 2.1.0
 - fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
 
