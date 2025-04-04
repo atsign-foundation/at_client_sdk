@@ -7,7 +7,7 @@ class PseudoServerSocket implements ServerSocket {
   final AtSignLogger logger = AtSignLogger(' AtServerSocket ');
   final SecureServerSocket _serverSocket;
   final StreamController<Socket> sc =
-  StreamController<Socket>.broadcast(sync: true);
+      StreamController<Socket>.broadcast(sync: true);
 
   PseudoServerSocket(this._serverSocket);
 
@@ -42,7 +42,7 @@ class PseudoServerSocket implements ServerSocket {
   @override
   Stream<Socket> asBroadcastStream(
       {void Function(StreamSubscription<Socket> subscription)? onListen,
-        void Function(StreamSubscription<Socket> subscription)? onCancel}) {
+      void Function(StreamSubscription<Socket> subscription)? onCancel}) {
     return sc.stream.asBroadcastStream(onListen: onListen, onCancel: onCancel);
   }
 
