@@ -1,3 +1,5 @@
+## 3.1.0
+- feat: Add PseudoServerSocket as a generic helper for ALPN
 ## 3.0.19
 - build[deps]: Upgraded the following packages:
   - at_commons to v5.0.0
