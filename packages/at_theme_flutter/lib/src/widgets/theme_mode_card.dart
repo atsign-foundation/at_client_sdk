@@ -1,6 +1,6 @@
+import 'package:at_common_flutter/services/size_config.dart';
 import 'package:at_theme_flutter/at_theme_flutter.dart';
 import 'package:flutter/material.dart';
-import 'package:at_common_flutter/services/size_config.dart';
 
 class ThemeModeCard extends StatelessWidget {
   final Color primaryColor;
@@ -30,8 +30,7 @@ class ThemeModeCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(10.0),
           ),
         ),
-        backgroundColor:
-            WidgetStateProperty.all<Color>(theme.backgroundColor),
+        backgroundColor: WidgetStateProperty.all<Color>(theme.backgroundColor),
         padding: WidgetStateProperty.all(EdgeInsets.zero),
       ),
       child: SizedBox(
@@ -45,13 +44,13 @@ class ThemeModeCard extends StatelessWidget {
                 SizedBox(height: 10.toHeight),
                 Container(
                   height: 40.toHeight,
-                  color: primaryColor.withOpacity(0.2),
+                  color: primaryColor.withValues(alpha: 0.2),
                   margin: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 const SizedBox(height: 10),
                 Container(
                   height: 40.toHeight,
-                  color: primaryColor.withOpacity(0.2),
+                  color: primaryColor.withValues(alpha: 0.2),
                   margin: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 SizedBox(height: 10.toHeight),
@@ -65,8 +64,7 @@ class ThemeModeCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16.0),
                         ),
                       ),
-                      backgroundColor:
-                          WidgetStateProperty.all<Color>(primaryColor),
+                      backgroundColor: WidgetStateProperty.all<Color>(primaryColor),
                       padding: WidgetStateProperty.all(EdgeInsets.zero),
                     ),
                     child: Container(),
@@ -82,8 +80,7 @@ class ThemeModeCard extends StatelessWidget {
                   width: 30.toHeight,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius:
-                        BorderRadius.all(Radius.circular(15.toHeight)),
+                    borderRadius: BorderRadius.all(Radius.circular(15.toHeight)),
                   ),
                   child: Icon(Icons.check_rounded, color: primaryColor),
                 ),

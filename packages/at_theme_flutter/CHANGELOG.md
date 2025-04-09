@@ -1,8 +1,15 @@
+## 1.0.10
+
+- **FIX**: Replace deprecated `withOpacity` method with `withValues`
+- **FIX**: Deprecated `Color.value` replaced with `Color.ARGB32`.
+
 ## 1.0.9:
+
 - build[deps]: Upgraded dependencies for the following packages:
-    - at_client_mobile: 3.2.19
-    - at_commons: 5.0.0
-    - at_utils: 3.0.19
+  - at_client_mobile: 3.2.19
+  - at_commons: 5.0.0
+  - at_utils: 3.0.19
+
 ## 1.0.8:
 
 - **CHORE**: Updated dependencies
