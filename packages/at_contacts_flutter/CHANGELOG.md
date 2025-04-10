@@ -4,6 +4,7 @@
 - build[deps]: Upgraded dependencies for the following packages:
 - flutter_slidable: 4.0.0
 - flutter_lints: 5.0.0
+- at_onboarding_flutter: 6.1.12
 
 ## 4.0.16
 
