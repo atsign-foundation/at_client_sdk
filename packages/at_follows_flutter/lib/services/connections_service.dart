@@ -7,8 +7,6 @@ import 'package:at_follows_flutter/services/sdk_service.dart';
 import 'package:at_follows_flutter/utils/app_constants.dart';
 import 'package:at_follows_flutter/utils/strings.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:at_client_mobile/at_client_mobile.dart' hide Atsign;
-import 'package:at_client/at_client.dart' hide Atsign;
 
 import 'notification_service.dart' as follows_notification_service;
 
