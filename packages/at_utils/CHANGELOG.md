@@ -1,3 +1,5 @@
+## 3.2.0
+- feat: add ProgressListener interface
 ## 3.1.0
 - feat: Add PseudoServerSocket as a generic helper for ALPN
 ## 3.0.19
