@@ -4,8 +4,9 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_progress.dart';
 
-abstract class AtOnboardingService {
+abstract class AtOnboardingService implements ProgressListener {
   static const Duration defaultApkamRetryInterval = Duration(seconds: 10);
 
   /// Perform initial one_time authentication to activate the atsign. Returns

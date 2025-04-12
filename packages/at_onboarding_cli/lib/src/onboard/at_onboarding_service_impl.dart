@@ -13,6 +13,7 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_server_status/at_server_status.dart';
+import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart';
@@ -84,8 +85,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @override
   Future<bool> onboard({bool autoCompleteActivation = true}) async {
     // cram auth doesn't use at_chops. So create at_lookup here.
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    AtLookupImpl atLookUpImpl = AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
 
     // get cram_secret from either from AtOnboardingPreference
     // or fetch from the registrar using verification code sent to email
@@ -655,51 +659,70 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     int retryCount = 1;
     SecondaryAddress? secondaryAddress;
     SecureSocket? secureSocket;
-    bool connectionFlag = false;
 
     while (retryCount <= maxRetries && secondaryAddress == null) {
-      await Future.delayed(Duration(seconds: 2));
+      if (retryCount > 1) {
+        await Future.delayed(Duration(seconds: 2));
+      }
+      _addProgress(
+        'findAtServer',
+        'looking up (#[$retryCount/$maxRetries])atDirectory for $_atSign',
+        false,
+      );
       logger.finer(
-          'retrying find secondary for $_atSign... #[$retryCount/$maxRetries]');
+          'retrying findAtServer for $_atSign... #[$retryCount/$maxRetries]');
       try {
         secondaryAddress =
             await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
-      } on Exception catch (e, trace) {
-        logger.finer(e);
-        logger.finer(trace);
-      } on Error catch (e, trace) {
+      } catch (e, trace) {
+        _addProgress('findAtServer', e.toString(), true);
         logger.finer(e);
         logger.finer(trace);
       }
       retryCount++;
     }
     if (secondaryAddress == null) {
-      throw SecondaryNotFoundException('Could not find secondary address for '
-          '$_atSign after $retryCount retries. Please retry the process');
+      String msg = 'Could not find atServer address for'
+          ' $_atSign after $retryCount retries.'
+          ' Please rerun your command or contact your support';
+      throw SecondaryNotFoundException(msg);
     }
-    //resetting retry counter to be used for different operation
-    retryCount = 1;
+    _addProgress(
+      'findAtServer',
+      'Found atServer address for $_atSign in atDirectory - $secondaryAddress',
+      true,
+    );
 
-    while (!connectionFlag && retryCount <= maxRetries) {
-      await Future.delayed(Duration(seconds: 2));
-      stdout.writeln(
-          'Connecting to secondary for $_atSign... #[$retryCount/$maxRetries]');
+    retryCount = 1;
+    bool connected = false;
+    while (!connected && retryCount <= maxRetries) {
+      if (retryCount > 1) {
+        await Future.delayed(Duration(seconds: 2));
+      }
+      var msg = 'Connecting to atServer for $_atSign... #[$retryCount/$maxRetries]';
+      _addProgress('connect', msg, false);
       try {
         secureSocket = await SecureSocket.connect(
             secondaryAddress.host, secondaryAddress.port,
             timeout: Duration(
                 seconds:
                     30)); // 30-second timeout should be enough even for slow networks
-        connectionFlag = secureSocket.remoteAddress != null &&
+        connected = secureSocket.remoteAddress != null &&
             secureSocket.remotePort != null;
-      } on Exception catch (e, trace) {
-        logger.finer(e);
-        logger.finer(trace);
-      } on Error catch (e, trace) {
+      } catch (e, trace) {
+        _addProgress('connect', e.toString(), true);
         logger.finer(e);
         logger.finer(trace);
       }
       retryCount++;
+    }
+    if (!connected) {
+      if (secondaryAddress == null) {
+        String msg = 'Could not connect to atServer for'
+            ' $_atSign at $secondaryAddress after $retryCount attempts.'
+            ' Please rerun your command or contact your support';
+        throw SecondaryConnectException(msg);
+      }
     }
   }
 
@@ -744,6 +767,22 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   @override
   at_auth.AtAuth? atAuth;
+
+  final StreamController<ProgressEvent> _psc = StreamController.broadcast();
+
+  @override
+  Stream<ProgressEvent> subscribeProgress() {
+    return _psc.stream;
+  }
+
+  @override
+  addProgress(ProgressEvent pe) {
+    _psc.add(pe);
+  }
+
+  _addProgress(String type, String msg, bool isError) {
+    addProgress(ProgressEvent(DateTime.now(), type, msg, isError));
+  }
 }
 
 class EnrollmentDetails {
