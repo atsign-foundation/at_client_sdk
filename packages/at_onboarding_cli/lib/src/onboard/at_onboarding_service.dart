@@ -11,7 +11,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
   static const int defaultMaxApkamRetries = 5;
 
   static const Duration defaultActivationCheckInterval = Duration(seconds: 2);
-  static const int defaultMaxActivationCheckRetries = 5;
+  static const int defaultMaxActivationCheckRetries = 60;
 
   /// Perform initial one_time authentication to activate the atsign. Returns
   /// true if successfully onboarded.
