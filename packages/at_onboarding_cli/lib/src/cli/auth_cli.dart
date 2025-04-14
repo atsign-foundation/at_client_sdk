@@ -15,6 +15,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:duration/duration.dart';
 import 'package:meta/meta.dart';
 
+import '../util/onboarding_util.dart';
 import 'auth_cli_arg_validation.dart';
 import 'auth_cli_args.dart';
 
@@ -72,7 +73,15 @@ Future<int> wrappedMain(List<String> arguments) async {
     arguments = ['onboard', ...arguments];
   }
 
-  final ArgResults topLevelResults = aca.parser.parse(arguments);
+  final ArgResults topLevelResults;
+  try {
+    topLevelResults = aca.parser.parse(arguments);
+  } catch (e) {
+    stderr.writeln('\n$e');
+    stderr.writeln();
+    aca.parser.printAllCommandsUsage();
+    return 1;
+  }
 
   if (topLevelResults.wasParsed(AuthCliArgs.argNameHelp)) {
     aca.sharedArgsParser
@@ -111,7 +120,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   }
 
   // Parse the log levels and act accordingly
-  AtSignLogger.root_level = 'warning';
+  AtSignLogger.root_level = 'shout';
 
   if (commandArgResults.wasParsed(AuthCliArgs.argNameVerbose)) {
     AtSignLogger.root_level = 'info';
@@ -282,13 +291,11 @@ Future<int> wrappedMain(List<String> arguments) async {
     );
     aca.sharedArgsParser.printAllCommandsUsage();
     return 1;
-  } catch (e, st) {
-    stderr.writeln('Error for command ${cliCommand.name}: $e');
-    stderr.writeln(st);
-    commandParser.printAllCommandsUsage(
-      header: 'Usage: ${cliCommand.name}',
-    );
-    aca.sharedArgsParser.printAllCommandsUsage();
+  } catch (e) {
+    await Future.delayed(Duration(milliseconds: 10));
+    stderr.writeln();
+    stderr.writeln('${cliCommand.name} : $e');
+    stderr.writeln('Please try again or contact support@atsign.com');
     return 1;
   }
 
@@ -360,23 +367,25 @@ Future<void> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
   logger.info(
       'Registrar url provided is ${argResults[AuthCliArgs.argNameRegistrarFqdn]}');
 
-  stderr.writeln(
+  stdout.writeln(
       '[Information] Onboarding your atSign. This may take up to 2 minutes.');
   try {
-    await svc.onboard();
+    if (argResults[AuthCliArgs.argNameAllowBadRegistrarCerts]) {
+      logger.shout('*************');
+      logger.shout('************* Will ignore bad (expired, invalid, etc)'
+          ' registrar certificates');
+      logger.shout('*************');
+      OnboardingUtil.allowBadCertificates = true;
+    }
+    await svc.onboard(
+      maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
+      retryInterval: AtOnboardingService.defaultActivationCheckInterval,
+    );
+    stderr.writeln();
     return;
-  } on InvalidDataException catch (e) {
-    throw AtEnrollmentException(
-        'Onboarding failed. Please try again. Cause: ${e.message}');
-  } on InvalidRequestException catch (e) {
-    throw AtEnrollmentException(
-        'Onboarding failed. Please try again. Cause: ${e.message}');
-  } on AtActivateException {
-    rethrow;
   } catch (e) {
-    throw ('Onboarding failed.'
-        ' It looks like something went wrong on our side.'
-        ' Please try again or contact support@atsign.com\nCause: $e');
+    await Future.delayed(Duration(milliseconds: 10));
+    throw ('Onboarding failed : $e');
   }
 }
 
@@ -430,7 +439,6 @@ Future<void> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     namespaces[namespace] = permission;
   }
   try {
-    stderr.writeln('Submitting enrollment request');
     // If apkam Keys expiry is not set, then APKAM keys should lives forever.
     // Therefore set to 0ms (0 milliseconds) and TTL will not be set.
     String apkamKeysExpiry = argResults[AuthCliArgs.argNameExpiry] ?? '0ms';
@@ -443,11 +451,10 @@ Future<void> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     stdout.writeln('Enrollment ID: ${er.enrollmentId}');
 
     stderr.writeln('Waiting for approval; will check every 10 seconds');
-    await svc.awaitApproval(
-      er,
-      retryInterval: Duration(seconds: 10),
-      logProgress: true,
-    );
+    await svc.awaitApproval(er,
+        retryInterval: AtOnboardingService.defaultApkamRetryInterval,
+        logProgress: true,
+        maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]));
 
     stderr.writeln('Creating atKeys file');
     await svc.createAtKeysFile(er, allowOverwrite: false);
@@ -1043,5 +1050,19 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     ..hashingAlgoType =
         HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 
-  return AtOnboardingServiceImpl(atSign, atOnboardingPreference);
+  final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
+  String lastProgressEventType = '';
+  impl.subscribeProgress().listen((pe) {
+    if (pe.type.isNotEmpty && pe.type != lastProgressEventType) {
+      stderr.writeln();
+    }
+    lastProgressEventType = pe.type;
+    String output = '${pe.type} : ${pe.msg}';
+    if (stdout.hasTerminal && output.length > stdout.terminalColumns - 3) {
+      output = '${output.substring(0, stdout.terminalColumns - 3)}...';
+    }
+    stderr.write('\r\x1b[K$output');
+  });
+
+  return impl;
 }

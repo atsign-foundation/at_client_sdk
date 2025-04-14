@@ -31,7 +31,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
   AtLookUp? _atLookUp;
-  final _maxActivationRetries = 5;
 
   /// The object which controls what types of AtClients, NotificationServices
   /// and SyncServices get created when we call [AtClientManager.setCurrentAtSign].
@@ -83,7 +82,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   @override
-  Future<bool> onboard({bool autoCompleteActivation = true}) async {
+  Future<bool> onboard({
+    bool autoCompleteActivation = true,
+    Duration retryInterval = AtOnboardingService.defaultActivationCheckInterval,
+    int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
+  }) async {
     // cram auth doesn't use at_chops. So create at_lookup here.
     AtLookupImpl atLookUpImpl = AtLookupImpl(
       _atSign,
@@ -93,8 +96,21 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     // get cram_secret from either from AtOnboardingPreference
     // or fetch from the registrar using verification code sent to email
-    atOnboardingPreference.cramSecret ??= await OnboardingUtil()
-        .getCramUsingOtp(_atSign, atOnboardingPreference.registrarUrl);
+    if (atOnboardingPreference.cramSecret == null) {
+      final util = OnboardingUtil();
+      await util.requestAuthenticationOtp(
+        _atSign,
+        authority: atOnboardingPreference.registrarUrl,
+      );
+
+      String otp = util.getVerificationCodeFromUser();
+
+      atOnboardingPreference.cramSecret = await util.getCramKey(
+        _atSign,
+        otp,
+        authority: atOnboardingPreference.registrarUrl,
+      );
+    }
     if (atOnboardingPreference.cramSecret == null) {
       logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
           '${atOnboardingPreference.rootPort}');
@@ -105,7 +121,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
 
     // check and wait till secondary exists
-    await _waitUntilSecondaryCreated(atLookUpImpl);
+    await _waitUntilSecondaryCreated(
+      atLookUpImpl,
+      retryInterval: retryInterval,
+      maxRetries: maxRetries,
+    );
 
     if (await isOnboarded()) {
       throw AtActivateException('atsign $_atSign is already activated');
@@ -130,6 +150,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     if (atOnboardingResponse.isSuccessful) {
       logger.finer(
           'Onboarding successful.Generating keyfile in path: ${atOnboardingPreference.atKeysFilePath}');
+      stderr.writeln();
       await _generateAtKeysFile(
         atOnboardingResponse.atAuthKeys!,
         enrollmentId: atOnboardingResponse.enrollmentId,
@@ -155,6 +176,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     String otp,
     Map<String, String> namespaces, {
     Duration retryInterval = AtOnboardingService.defaultApkamRetryInterval,
+    int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
     File? atKeysFile,
     bool allowOverwrite = false,
   }) async {
@@ -231,9 +253,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     logger.finer('sendEnrollRequest: submitting enrollment request');
+    _addProgress('send enroll request', 'submitting enrollment request', false);
+    stderr.writeln('Submitting enrollment request');
+
     AtEnrollmentResponse response =
         await _atEnrollment!.submit(newClientEnrollmentRequest, atLookUpImpl);
     logger.finer('sendEnrollRequest: received server response: $response');
+    _addProgress('send enroll request', 'submitted OK', false);
 
     return response;
   }
@@ -243,6 +269,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtEnrollmentResponse enrollmentResponse, {
     Duration retryInterval = AtOnboardingService.defaultApkamRetryInterval,
     bool logProgress = true,
+    int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
         AtEncryptionKeyPair.create(
@@ -267,6 +294,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       enrollmentResponse.enrollmentId,
       retryInterval,
       logProgress: logProgress,
+      maxRetries: maxRetries,
     );
 
     // Fetches encrypted "defaultEncryptionPrivateKey" from server. The first
@@ -397,12 +425,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     String enrollmentIdFromServer,
     Duration retryInterval, {
     bool logProgress = true,
+    required int maxRetries,
   }) async {
-    int retryAttempt = 1;
+    int retryAttempt = 0;
     while (true) {
+      retryAttempt++;
       logger.info('Attempting pkam auth');
       if (logProgress) {
-        stderr.write('Checking ... ');
+        _addProgress('PKAM auth', 'attempting PKAM auth', false);
       }
       bool pkamAuthSucceeded = false;
       try {
@@ -427,25 +457,30 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       } catch (e) {
         String message =
             'Exception occurred when authenticating the atSign: $_atSign caused by ${e.toString()}';
-        if (retryAttempt > _maxActivationRetries) {
-          message += ' Activation failed after $_maxActivationRetries attempts';
+        if (retryAttempt > maxRetries) {
+          message += ' Activation failed after $maxRetries attempts';
           logger.severe(message);
           rethrow;
         }
-        logger
-            .severe('$message. Attempting to retry for $retryAttempt attempt');
-        retryAttempt++;
+        logger.severe(message);
       }
       if (pkamAuthSucceeded) {
         if (logProgress) {
-          stderr.writeln(' approved.');
+          _addProgress(
+              'PKAM auth',
+              'Enrollment has been approved'
+                  ' (PKAM authentication succeeded)',
+              false);
         }
         logger.info('Authentication succeeded - request was approved');
         return;
       } else {
         if (logProgress) {
-          stderr.writeln(' not approved. Will retry'
-              ' in ${retryInterval.inSeconds} seconds');
+          _addProgress(
+              'PKAM auth',
+              'Auth failed, not yet approved.'
+                  ' Will retry in ${retryInterval.inSeconds} seconds',
+              false);
         }
         logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
         await Future.delayed(retryInterval); // Delay and retry
@@ -654,53 +689,58 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// Method to check if secondary belonging to [_atSign] has been created
   /// If not, wait until secondary is created. Makes 50 retry attempts, 2 sec apart
-  Future<void> _waitUntilSecondaryCreated(AtLookupImpl atLookupImpl) async {
-    final maxRetries = 50;
-    int retryCount = 1;
+  Future<void> _waitUntilSecondaryCreated(
+    AtLookupImpl atLookupImpl, {
+    required int maxRetries,
+    required Duration retryInterval,
+  }) async {
+    int retryAttempt = 0;
     SecondaryAddress? secondaryAddress;
     SecureSocket? secureSocket;
 
-    while (retryCount <= maxRetries && secondaryAddress == null) {
-      if (retryCount > 1) {
-        await Future.delayed(Duration(seconds: 2));
+    while (retryAttempt < maxRetries && secondaryAddress == null) {
+      retryAttempt++;
+      if (retryAttempt > 1) {
+        await Future.delayed(retryInterval);
       }
       _addProgress(
-        'findAtServer',
-        'looking up (#[$retryCount/$maxRetries])atDirectory for $_atSign',
+        'find atServer',
+        '#[$retryAttempt/$maxRetries] : looking up $_atSign in atDirectory',
         false,
       );
       logger.finer(
-          'retrying findAtServer for $_atSign... #[$retryCount/$maxRetries]');
+          'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
       try {
         secondaryAddress =
             await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
       } catch (e, trace) {
-        _addProgress('findAtServer', e.toString(), true);
+        _addProgress('find atServer',
+            '#[$retryAttempt/$maxRetries] : Failed : $e', true);
         logger.finer(e);
         logger.finer(trace);
       }
-      retryCount++;
     }
     if (secondaryAddress == null) {
       String msg = 'Could not find atServer address for'
-          ' $_atSign after $retryCount retries.'
-          ' Please rerun your command or contact your support';
+          ' $_atSign after $maxRetries attempts.';
       throw SecondaryNotFoundException(msg);
     }
     _addProgress(
-      'findAtServer',
-      'Found atServer address for $_atSign in atDirectory - $secondaryAddress',
-      true,
+      'find atServer',
+      '#[$retryAttempt/$maxRetries] : Found atServer address for $_atSign in atDirectory - $secondaryAddress',
+      false,
     );
 
-    retryCount = 1;
+    retryAttempt = 0;
     bool connected = false;
-    while (!connected && retryCount <= maxRetries) {
-      if (retryCount > 1) {
-        await Future.delayed(Duration(seconds: 2));
+    while (!connected && retryAttempt < maxRetries) {
+      retryAttempt++;
+      if (retryAttempt > 1) {
+        await Future.delayed(retryInterval);
       }
-      var msg = 'Connecting to atServer for $_atSign... #[$retryCount/$maxRetries]';
-      _addProgress('connect', msg, false);
+      var msg =
+          '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer';
+      _addProgress('connect to atServer', msg, false);
       try {
         secureSocket = await SecureSocket.connect(
             secondaryAddress.host, secondaryAddress.port,
@@ -710,19 +750,16 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         connected = secureSocket.remoteAddress != null &&
             secureSocket.remotePort != null;
       } catch (e, trace) {
-        _addProgress('connect', e.toString(), true);
+        _addProgress(
+            'connect to atServer', '#[$retryAttempt/$maxRetries] : $e', true);
         logger.finer(e);
         logger.finer(trace);
       }
-      retryCount++;
     }
     if (!connected) {
-      if (secondaryAddress == null) {
-        String msg = 'Could not connect to atServer for'
-            ' $_atSign at $secondaryAddress after $retryCount attempts.'
-            ' Please rerun your command or contact your support';
-        throw SecondaryConnectException(msg);
-      }
+      String msg = 'Could not connect to atServer for'
+          ' $_atSign at $secondaryAddress after $maxRetries attempts.';
+      throw SecondaryConnectException(msg);
     }
   }
 
@@ -781,7 +818,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   _addProgress(String type, String msg, bool isError) {
-    addProgress(ProgressEvent(DateTime.now(), type, msg, isError));
+    addProgress(ProgressEvent(type: type, msg: msg, isError: isError));
   }
 }
 
