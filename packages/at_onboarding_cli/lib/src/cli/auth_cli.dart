@@ -12,6 +12,7 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
 import 'package:at_onboarding_cli/src/util/print_full_parser_usage.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:chalkdart/chalk.dart';
 import 'package:duration/duration.dart';
 import 'package:meta/meta.dart';
 
@@ -295,7 +296,10 @@ Future<int> wrappedMain(List<String> arguments) async {
     await Future.delayed(Duration(milliseconds: 10));
     stderr.writeln();
     stderr.writeln();
-    stderr.writeln('${cliCommand.name} : $e');
+    final bolded = chalk.bold(chalk.brightRed('ERROR: ${cliCommand.name}'));
+
+    stderr.writeln('$bolded : $e');
+    stderr.writeln();
     stderr.writeln('Please try again or contact support@atsign.com');
     return 1;
   }
