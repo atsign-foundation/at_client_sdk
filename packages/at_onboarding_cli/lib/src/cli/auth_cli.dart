@@ -1057,7 +1057,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
       stderr.writeln();
     }
     lastProgressEventType = pe.type;
-    String output = '${pe.type} : ${pe.msg}';
+    String output = '${pe.type} : ${pe.msg}'.replaceAll('\n', '\\n');
     if (stdout.hasTerminal && output.length > stdout.terminalColumns - 3) {
       output = '${output.substring(0, stdout.terminalColumns - 3)}...';
     }

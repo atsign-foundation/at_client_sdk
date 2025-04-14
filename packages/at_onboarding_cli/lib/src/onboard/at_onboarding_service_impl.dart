@@ -733,6 +733,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     retryAttempt = 0;
     bool connected = false;
+    dynamic lastException = '';
     while (!connected && retryAttempt < maxRetries) {
       retryAttempt++;
       if (retryAttempt > 1) {
@@ -750,6 +751,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         connected = secureSocket.remoteAddress != null &&
             secureSocket.remotePort != null;
       } catch (e, trace) {
+        lastException = e;
         _addProgress(
             'connect to atServer', '#[$retryAttempt/$maxRetries] : $e', true);
         logger.finer(e);
@@ -758,7 +760,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
     if (!connected) {
       String msg = 'Could not connect to atServer for'
-          ' $_atSign at $secondaryAddress after $maxRetries attempts.';
+          ' $_atSign at $secondaryAddress after $maxRetries attempts.'
+          ' Apparent cause: $lastException';
       throw SecondaryConnectException(msg);
     }
   }
