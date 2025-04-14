@@ -294,6 +294,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     stderr.writeln();
+    stderr.writeln();
     stderr.writeln('${cliCommand.name} : $e');
     stderr.writeln('Please try again or contact support@atsign.com');
     return 1;
