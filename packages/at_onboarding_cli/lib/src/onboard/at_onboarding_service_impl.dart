@@ -770,7 +770,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _addProgress(
           'Connect',
           '#[$retryAttempt/$maxRetries] : Connected to $_atSign atServer',
-          ProgressEventType.info);
+          ProgressEventType.success);
     } else {
       String msg = 'Could not connect to atServer for'
           ' $_atSign at $secondaryAddress after $maxRetries attempts.'
