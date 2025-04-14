@@ -1052,13 +1052,17 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';
+  int pad = 10;
   impl.subscribeProgress().listen((pe) {
     if (pe.type.isNotEmpty && pe.type != lastProgressEventType) {
       stderr.writeln();
     }
+    if (pe.type.length > pad) {
+      pad = pe.type.length;
+    }
     lastProgressEventType = pe.type;
     String output =
-        '${pe.type} : ${pe.msg}'.replaceAll('\n', '\\n').replaceAll('\t', ' ');
+        '${pe.type.padLeft(pad)} : ${pe.msg}'.replaceAll('\n', '\\n').replaceAll('\t', ' ');
     if (stdout.hasTerminal && output.length > stdout.terminalColumns - 3) {
       output = '${output.substring(0, stdout.terminalColumns - 3)}...';
     }

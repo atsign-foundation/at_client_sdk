@@ -253,13 +253,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     logger.finer('sendEnrollRequest: submitting enrollment request');
-    _addProgress('send enroll request', 'submitting enrollment request', false);
+    _addProgress('Enroll', 'submitting enrollment request', false);
     stderr.writeln('Submitting enrollment request');
 
     AtEnrollmentResponse response =
         await _atEnrollment!.submit(newClientEnrollmentRequest, atLookUpImpl);
     logger.finer('sendEnrollRequest: received server response: $response');
-    _addProgress('send enroll request', 'submitted OK', false);
+    _addProgress('Enroll', 'submitted OK', false);
 
     return response;
   }
@@ -432,7 +432,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       retryAttempt++;
       logger.info('Attempting pkam auth');
       if (logProgress) {
-        _addProgress('PKAM auth', 'attempting PKAM auth', false);
+        _addProgress('PKAM', 'attempting PKAM auth', false);
       }
       bool pkamAuthSucceeded = false;
       try {
@@ -467,9 +467,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       if (pkamAuthSucceeded) {
         if (logProgress) {
           _addProgress(
-              'PKAM auth',
+              'PKAM',
               'Enrollment has been approved'
-                  ' (PKAM authentication succeeded)',
+                  ' (PKAM auth success)',
               false);
         }
         logger.info('Authentication succeeded - request was approved');
@@ -477,7 +477,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       } else {
         if (logProgress) {
           _addProgress(
-              'PKAM auth',
+              'PKAM',
               'Auth failed, not yet approved.'
                   ' Will retry in ${retryInterval.inSeconds} seconds',
               false);
@@ -704,20 +704,19 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         await Future.delayed(retryInterval);
       }
       _addProgress(
-        'find atServer',
-        '#[$retryAttempt/$maxRetries] : looking up $_atSign in atDirectory',
-        false,
-      );
+          'Find',
+          '#[$retryAttempt/$maxRetries] : looking up $_atSign in atDirectory',
+          false);
       logger.finer(
           'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
       try {
         secondaryAddress =
         await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
       } on SecondaryNotFoundException catch (e) {
-        _addProgress('find atServer',
+        _addProgress('Find',
             '#[$retryAttempt/$maxRetries] : Failed : $e', true);
       } catch (e, trace) {
-        _addProgress('find atServer',
+        _addProgress('Find',
             '#[$retryAttempt/$maxRetries] : Failed : $e', true);
         logger.finer(e);
         logger.finer(trace);
@@ -729,7 +728,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       throw SecondaryNotFoundException(msg);
     }
     _addProgress(
-      'find atServer',
+      'Find',
       '#[$retryAttempt/$maxRetries] : Found atServer address for $_atSign in atDirectory - $secondaryAddress',
       false,
     );
@@ -744,7 +743,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       }
       var msg =
           '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer';
-      _addProgress('connect to atServer', msg, false);
+      _addProgress('Connect', msg, false);
       try {
         secureSocket = await SecureSocket.connect(
             secondaryAddress.host, secondaryAddress.port,
@@ -756,7 +755,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       } catch (e, trace) {
         lastException = e;
         _addProgress(
-            'connect to atServer', '#[$retryAttempt/$maxRetries] : $e', true);
+            'Connect', '#[$retryAttempt/$maxRetries] : $e', true);
         logger.finer(e);
         logger.finer(trace);
       }
