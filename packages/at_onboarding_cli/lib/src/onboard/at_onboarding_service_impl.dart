@@ -700,7 +700,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }) async {
     int retryAttempt = 0;
     SecondaryAddress? secondaryAddress;
-    SecureSocket? secureSocket;
 
     while (retryAttempt < maxRetries && secondaryAddress == null) {
       retryAttempt++;
@@ -752,13 +751,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           false);
       await waitBriefly();
       try {
-        secureSocket = await SecureSocket.connect(
+        final secureSocket = await SecureSocket.connect(
             secondaryAddress.host, secondaryAddress.port,
-            timeout: Duration(
-                seconds:
-                    30)); // 30-second timeout should be enough even for slow networks
+            timeout: Duration(seconds: 5));
         connected = secureSocket.remoteAddress != null &&
             secureSocket.remotePort != null;
+        secureSocket.destroy();
       } catch (e, trace) {
         lastException = e;
         _addProgress(
