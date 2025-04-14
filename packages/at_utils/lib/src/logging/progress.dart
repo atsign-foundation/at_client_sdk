@@ -1,10 +1,14 @@
 class ProgressEvent {
-  DateTime time;
-  String type;
-  String msg;
-  bool isError;
+  final DateTime time = DateTime.now();
+  final String type;
+  final String msg;
+  final bool isError;
 
-  ProgressEvent(this.time, this.type, this.msg, this.isError);
+  ProgressEvent({
+    required this.type,
+    required this.msg,
+    this.isError = false,
+  });
 
   @override
   String toString() => '${time.toIso8601String()}'
@@ -12,7 +16,7 @@ class ProgressEvent {
       ' ${isError ? ' | ERROR' : ''}'
       ' | $msg';
 }
-abstract interface class ProgressListener {
+abstract interface class ProgressPublisher {
   Stream<ProgressEvent> subscribeProgress();
   addProgress(ProgressEvent pe);
 }
