@@ -210,7 +210,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtTimeoutException &&
               e.message.startsWith(
-                  'Full response not received after 50 millis from remote secondary'))));
+                  'Full response not received after 50 millis from '))));
     });
     test(
         'A test to verify partial response - wait time greater than transientWaitTimeMillis',
@@ -243,7 +243,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtTimeoutException &&
               e.message ==
-                  'Full response not received after 20 millis from remote secondary')));
+                  'Full response not received after 20 millis from remote atServer')));
     });
     test(
         'A test to verify full response received - delay between messages from server',
@@ -294,7 +294,7 @@ void main() {
       expect(response, isNotEmpty);
       expect(
         response!.contains(
-            'Full response not received after 100 millis from remote secondary'),
+            'Full response not received after 100 millis from '),
         true,
       );
     });

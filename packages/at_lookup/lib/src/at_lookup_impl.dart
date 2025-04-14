@@ -640,7 +640,7 @@ class AtLookupImpl implements AtLookUp {
       }
     } on SocketException {
       throw SecondaryConnectException(
-          'unable to connect to secondary $toAtSign on $host:$port');
+          'unable to connect to atServer for $toAtSign on $host:$port');
     }
     return true;
   }

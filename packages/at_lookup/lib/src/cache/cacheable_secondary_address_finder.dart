@@ -11,7 +11,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   static const Duration defaultCacheDuration = Duration(hours: 1);
 
   final Map<String, SecondaryAddressCacheEntry> _map = {};
-  final _logger = AtSignLogger('SecondaryAddressCacheImpl');
+  final _logger = AtSignLogger('AtServerAddressCacheImpl');
 
   final String _rootDomain;
   final int _rootPort;
@@ -51,7 +51,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
     } else {
       // but just in case, we'll throw an exception if it's not
       throw Exception(
-          "Failed to find secondary, in a theoretically impossible way");
+          "Failed to find atServer address for $atSign in atDirectory, in a theoretically impossible way");
     }
   }
 
@@ -79,7 +79,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   }
 
   static String getNotFoundExceptionMessage(String atSign) {
-    return 'Unable to find secondary address for atSign:$atSign';
+    return 'Unable to find atServer address for atSign:$atSign';
   }
 
   Future<void> _updateCache(String atSign, Duration cacheFor) async {
@@ -135,7 +135,7 @@ class SecondaryUrlFinder {
     _socketFactory = socketFactory ?? AtLookupSecureSocketFactory();
   }
 
-  final _logger = AtSignLogger('SecondaryUrlFinder');
+  final _logger = AtSignLogger('AtServerUrlFinder');
 
   /// Controls
   /// (a) how many retries are done, and
@@ -158,21 +158,21 @@ class SecondaryUrlFinder {
         return address;
       } catch (e) {
         if (i < retryDelaysMillis.length) {
-          _logger.info('AtLookup.findSecondary for $atSign failed with $e'
+          _logger.info('AtLookup.findAtServer for $atSign failed with $e'
               ' : will retry in ${retryDelaysMillis[i]} milliseconds');
           await Future.delayed(Duration(milliseconds: retryDelaysMillis[i]));
           continue;
         }
-        _logger.severe('AtLookup.findSecondary for $atSign failed with $e'
+        _logger.severe('AtLookup.findAtServer for $atSign failed with $e'
             ' : ${retryDelaysMillis.length + 1} failures, giving up');
         if (e is RootServerConnectivityException) {
           throw RootServerConnectivityException(
-              'Unable to establish connection with root server.'
+              'Unable to establish connection with atDirectory.'
               ' Please check your internet connection and try again');
         }
       }
     }
-    throw AtConnectException('Could not fetch secondary address for $atSign :'
+    throw AtConnectException('Could not fetch atServer address for $atSign :'
         ' ${retryDelaysMillis.length + 1} failures, giving up');
   }
 
@@ -180,7 +180,7 @@ class SecondaryUrlFinder {
     String? response;
     SecureSocket? socket;
     try {
-      _logger.finer('findSecondaryUrl: received atsign: $atsign');
+      _logger.finer('findAtServerUrl: received atsign: $atsign');
       if (atsign.startsWith('@')) atsign = atsign.replaceFirst('@', '');
       var answer = '';
       String? secondary;
@@ -190,10 +190,10 @@ class SecondaryUrlFinder {
 
       socket = await _socketFactory.createSocket(
           _rootDomain, '$_rootPort', SecureSocketConfig());
-      _logger.finer('findSecondaryUrl: connection to root server established');
+      _logger.finer('findAtServerUrl: connection to atDirectory established');
       // listen to the received data event stream
       socket.listen((List<int> event) async {
-        _logger.finest('root socket listener received: $event');
+        _logger.finest('atDirectory socket listener received: $event');
         answer = utf8.decode(event);
 
         if (answer.endsWith('@') && prompt == false && once == true) {
@@ -223,22 +223,24 @@ class SecondaryUrlFinder {
           await socket.flush();
           socket.destroy();
           _logger.finer(
-              'findSecondaryUrl got answer: $secondary and closing connection');
+              'findAtServerUrl got answer: $secondary and closing connection');
           return response;
         }
       }
       // .. and close the socket
       await socket.flush();
       socket.destroy();
-      throw AtTimeoutException('AtLookup.findSecondary timed out');
+      throw AtTimeoutException('AtLookup.findAtServer timed out');
     } on SocketException catch (se) {
       _logger.severe(
-          '_findSecondary caught exception [$se] while connecting to root server url');
+          '_findAtServer caught exception [$se] while connecting'
+              ' to atDirectory at $_rootDomain:$_rootPort');
       throw RootServerConnectivityException(
-          'Could not connect to Root Server at $_rootDomain:$_rootPort');
+          'Could not connect to atDirectory at $_rootDomain:$_rootPort');
     } on Exception catch (exception) {
-      var msg = 'AtLookup.findSecondary connection to $_rootDomain'
-          ' exception: $exception';
+      var msg = 'AtLookup.findAtServer connection'
+          ' to atDirectory at $_rootDomain:$_rootPort'
+          ' failed : $exception';
       _logger.severe(msg);
       if (socket != null) {
         socket.destroy();
@@ -246,13 +248,15 @@ class SecondaryUrlFinder {
       throw AtConnectException(msg);
     } catch (error, stackTrace) {
       _logger.severe(
-          'findSecondaryUrl: connection to root server failed with error: $error');
+          'findAtServerUrl: connection'
+              ' to atDirectory at $_rootDomain:$_rootPort'
+              ' failed with error: $error');
       _logger.severe(stackTrace);
       if (socket != null) {
         socket.destroy();
       }
       throw AtConnectException(
-          'AtLookup.findSecondary connection to root server failed with error: $error');
+          'AtLookup.findAtServer connection to root server failed with error: $error');
     }
   }
 }
