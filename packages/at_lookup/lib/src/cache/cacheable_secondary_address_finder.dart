@@ -167,8 +167,7 @@ class SecondaryUrlFinder {
             ' : ${retryDelaysMillis.length + 1} failures, giving up');
         if (e is RootServerConnectivityException) {
           throw RootServerConnectivityException(
-              'Unable to establish connection with atDirectory.'
-              ' Please check your internet connection and try again');
+              'Unable to establish connection with atDirectory.');
         }
       }
     }
