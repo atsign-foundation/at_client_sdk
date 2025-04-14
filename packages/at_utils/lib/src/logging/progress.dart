@@ -16,6 +16,7 @@ class ProgressEvent {
       ' ${isError ? ' | ERROR' : ''}'
       ' | $msg';
 }
+
 abstract interface class ProgressPublisher {
   Stream<ProgressEvent> subscribeProgress();
   addProgress(ProgressEvent pe);
