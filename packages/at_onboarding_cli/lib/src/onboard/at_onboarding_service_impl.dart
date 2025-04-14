@@ -712,7 +712,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
       try {
         secondaryAddress =
-            await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
+        await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
+      } on SecondaryNotFoundException catch (e) {
+        _addProgress('find atServer',
+            '#[$retryAttempt/$maxRetries] : Failed : $e', true);
       } catch (e, trace) {
         _addProgress('find atServer',
             '#[$retryAttempt/$maxRetries] : Failed : $e', true);

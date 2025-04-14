@@ -79,7 +79,11 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   }
 
   static String getNotFoundExceptionMessage(String atSign) {
-    return 'Unable to find atServer address for atSign:$atSign';
+    return 'No entry in atDirectory for $atSign';
+  }
+
+  static String getFailedToLookUpExceptionMessage(String atSign) {
+    return 'Failed attempt to lookup atServer address for $atSign';
   }
 
   Future<void> _updateCache(String atSign, Duration cacheFor) async {
@@ -101,7 +105,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
       rethrow;
     } on Exception catch (e) {
       _logger
-          .severe('${getNotFoundExceptionMessage(atSign)} - ${e.toString()}');
+          .severe('${getFailedToLookUpExceptionMessage(atSign)} - ${e.toString()}');
       throw AtException(e.toString());
     }
   }
