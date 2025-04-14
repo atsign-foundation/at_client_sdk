@@ -741,9 +741,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       if (retryAttempt > 1) {
         await Future.delayed(retryInterval);
       }
-      var msg =
-          '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer';
-      _addProgress('Connect', msg, false);
+      _addProgress(
+          'Connect',
+          '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer',
+          false);
       try {
         secureSocket = await SecureSocket.connect(
             secondaryAddress.host, secondaryAddress.port,
@@ -760,7 +761,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         logger.finer(trace);
       }
     }
-    if (!connected) {
+    if (connected) {
+      _addProgress(
+          'Connect',
+          '#[$retryAttempt/$maxRetries] : Connected to $_atSign atServer',
+          false);
+    } else {
       String msg = 'Could not connect to atServer for'
           ' $_atSign at $secondaryAddress after $maxRetries attempts.'
           ' Apparent cause: $lastException';
