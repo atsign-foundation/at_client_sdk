@@ -15,6 +15,7 @@ dependencies:
   crypto: ^3.0.1
   at_commons: ^5.0.0
   collection: ^1.15.0
+  chalkdart: ^2.0.9
 
 dev_dependencies:
   lints: ^2.1.1

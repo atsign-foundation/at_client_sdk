@@ -11,6 +11,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
 import 'package:at_onboarding_cli/src/util/print_full_parser_usage.dart';
+import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 import 'package:duration/duration.dart';
@@ -365,15 +366,15 @@ Future<int> status(ArgResults ar) async {
 /// to send an OTP to the user and then use that OTP to obtain the cram
 /// secret from the registrar.
 @visibleForTesting
-Future<void> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
+Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
   svc ??= createOnboardingService(argResults);
   logger
       .info('Root server is ${argResults[AuthCliArgs.argNameAtDirectoryFqdn]}');
   logger.info(
       'Registrar url provided is ${argResults[AuthCliArgs.argNameRegistrarFqdn]}');
 
-  stdout.writeln(
-      '[Information] Onboarding your atSign. This may take up to 2 minutes.');
+  stderr.writeln(
+      '${chalk.blue('[Information]')} Onboarding your atSign. This may take up to 2 minutes.');
   try {
     if (argResults[AuthCliArgs.argNameAllowBadRegistrarCerts]) {
       logger.shout('*************');
@@ -387,7 +388,7 @@ Future<void> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
       retryInterval: AtOnboardingService.defaultActivationCheckInterval,
     );
     stderr.writeln();
-    return;
+    return true;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     throw ('Onboarding failed : $e');
@@ -407,7 +408,7 @@ String parseServerResponse(String? response) {
 ///     If it does exist, then the enrollment request has been made and we need
 ///         to try to auth, and act appropriately on the atServer response
 @visibleForTesting
-Future<void> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
+Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
   if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');
@@ -416,20 +417,11 @@ Future<void> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
   File f = File(argResults[AuthCliArgs.argNameAtKeys]);
 
   if (f.existsSync()) {
-    stderr.writeln('Error: atKeys file ${f.path} already exists');
-    return;
+    throw StateError('Error: atKeys file ${f.path} already exists');
   }
 
-  // "canCreateFile" attempts to create the directories for the given [file] if they do not exist,
-  // and then tries to open the file in write mode to verify write permissions.
-  //
-  // If the file can be opened for writing, it is immediately closed and deleted.
-  // In [AtOnboardingServiceImpl._generateAtKeysFile] method, there is a check which returns error
-  // if the file already exists. Therefore, delete the file here after checking for write permissions.
-  //
-  // Incase of any exceptions, the error is logged and returned.
-  if (canCreateFile(f) == false) {
-    return;
+  if (!canCreateFile(f)) {
+    throw StateError('Error: Unable to open $f for writing');
   }
 
   svc ??= createOnboardingService(argResults);
@@ -443,44 +435,28 @@ Future<void> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     String permission = l[1].replaceAll('"', '').trim();
     namespaces[namespace] = permission;
   }
-  try {
-    // If apkam Keys expiry is not set, then APKAM keys should lives forever.
-    // Therefore set to 0ms (0 milliseconds) and TTL will not be set.
-    String apkamKeysExpiry = argResults[AuthCliArgs.argNameExpiry] ?? '0ms';
-    AtEnrollmentResponse er = await svc.sendEnrollRequest(
-        argResults[AuthCliArgs.argNameAppName],
-        argResults[AuthCliArgs.argNameDeviceName],
-        argResults[AuthCliArgs.argNamePasscode],
-        namespaces,
-        apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry));
-    stdout.writeln('Enrollment ID: ${er.enrollmentId}');
 
-    stderr.writeln('Waiting for approval; will check every 10 seconds');
-    await svc.awaitApproval(er,
-        retryInterval: AtOnboardingService.defaultApkamRetryInterval,
-        logProgress: true,
-        maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]));
+  // If apkam Keys expiry is not set, then APKAM keys should lives forever.
+  // Therefore set to 0ms (0 milliseconds) and TTL will not be set.
+  String apkamKeysExpiry = argResults[AuthCliArgs.argNameExpiry] ?? '0ms';
+  AtEnrollmentResponse er = await svc.sendEnrollRequest(
+      argResults[AuthCliArgs.argNameAppName],
+      argResults[AuthCliArgs.argNameDeviceName],
+      argResults[AuthCliArgs.argNamePasscode],
+      namespaces,
+      apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry));
+  stdout.writeln('Enrollment ID: ${er.enrollmentId}');
 
-    stderr.writeln('Creating atKeys file');
-    await svc.createAtKeysFile(er, allowOverwrite: false);
-  } on InvalidDataException catch (e) {
-    stderr.writeln(
-        '[Error] Enrollment failed. Invalid data provided by user. Please try again\nCause: ${e.message}');
-  } on InvalidRequestException catch (e) {
-    stderr.writeln(
-        '[Error] Enrollment failed. Invalid data provided by user. Please try again\nCause: ${e.message}');
-  } on AtActivateException catch (e) {
-    stderr.writeln('[Error] ${e.message}');
-  } on AtEnrollmentException catch (e) {
-    stderr.writeln('[Fatal] ${e.message}');
-  } on AtAuthenticationException catch (e) {
-    stderr.writeln('[Error] ${e.message}');
-  } on Exception catch (e) {
-    stderr.writeln('[Error] $e');
-    stderr.writeln('[Error] Enrollment failed.\n'
-        '  Cause: $e\n'
-        '  Please try again or contact support@atsign.com');
-  }
+  stderr.writeln('Waiting for approval; will check every 10 seconds');
+  await svc.awaitApproval(er,
+      retryInterval: AtOnboardingService.defaultApkamRetryInterval,
+      logProgress: true,
+      maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]));
+
+  stderr.writeln('Creating atKeys file');
+  await svc.createAtKeysFile(er, allowOverwrite: false);
+
+  return true;
 }
 
 /// Checks if the specified [file] is writable.
@@ -1059,15 +1035,15 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
   String lastProgressEventType = '';
   int pad = 10;
   impl.subscribeProgress().listen((pe) {
-    if (pe.type.isNotEmpty && pe.type != lastProgressEventType) {
+    if (pe.group.isNotEmpty && pe.group != lastProgressEventType) {
       stderr.writeln();
     }
-    if (pe.type.length > pad) {
-      pad = pe.type.length;
+    if (pe.group.length > pad) {
+      pad = pe.group.length;
     }
-    lastProgressEventType = pe.type;
+    lastProgressEventType = pe.group;
     String output =
-        '${pe.type.padLeft(pad)} : ${pe.msg}'.replaceAll('\n', '\\n').replaceAll('\t', ' ');
+        '${pe.type.chalkFn(pe.group.padLeft(pad))} : ${pe.msg}'.replaceAll('\n', '\\n').replaceAll('\t', ' ');
     if (stdout.hasTerminal && output.length > stdout.terminalColumns - 3) {
       output = '${output.substring(0, stdout.terminalColumns - 3)}...';
     }

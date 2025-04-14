@@ -15,6 +15,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:chalkdart/chalk.dart';
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:image/image.dart';
@@ -256,13 +257,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     logger.finer('sendEnrollRequest: submitting enrollment request');
-    _addProgress('Enroll', 'submitting enrollment request', false);
+    _addProgress('Enroll', 'submitting enrollment request', ProgressEventType.info);
     await waitBriefly();
 
     AtEnrollmentResponse response =
         await _atEnrollment!.submit(newClientEnrollmentRequest, atLookUpImpl);
     logger.finer('sendEnrollRequest: received server response: $response');
-    _addProgress('Enroll', 'submitted OK', false);
+    _addProgress('Enroll', 'submitted OK', ProgressEventType.success);
 
     return response;
   }
@@ -435,7 +436,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       retryAttempt++;
       logger.info('Attempting pkam auth');
       if (logProgress) {
-        _addProgress('PKAM', 'attempting PKAM auth', false);
+        _addProgress('PKAM', 'attempting PKAM auth', ProgressEventType.info);
         await waitBriefly();
       }
       bool pkamAuthSucceeded = false;
@@ -474,7 +475,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
               'PKAM',
               'Enrollment has been approved'
                   ' (PKAM auth success)',
-              false);
+              ProgressEventType.success);
         }
         logger.info('Authentication succeeded - request was approved');
         return;
@@ -484,7 +485,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
               'PKAM',
               'Auth failed, not yet approved.'
                   ' Will retry in ${retryInterval.inSeconds} seconds',
-              false);
+              ProgressEventType.info);
         }
         logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
         await Future.delayed(retryInterval); // Delay and retry
@@ -551,14 +552,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           .encrypt(encodedAtKeysString, atOnboardingPreference.passPhrase!);
       encodedAtKeysString = atEncrypted.toString();
       stdout.writeln(
-          '[Information] Encrypted atKeys file with the given pass phrase');
+          '${chalk.blue('[Information]')} Encrypted atKeys file with the given pass phrase');
     }
     //generating .atKeys file at path provided in onboardingConfig
     fileWriter.write(encodedAtKeysString);
     await fileWriter.flush();
     await fileWriter.close();
     stdout.writeln(
-        '[Success] Your .atKeys file saved at ${atOnboardingPreference.atKeysFilePath}\n');
+        '${chalk.green('[Success]')} Your .atKeys file saved at ${atOnboardingPreference.atKeysFilePath}\n');
 
     return atKeysFile;
   }
@@ -657,7 +658,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     try {
       secondaryStatus = await getServerStatus();
     } catch (e) {
-      stderr.writeln('[Error] $e');
+      stderr.writeln('${chalk.brightRed('[Error]')} $e');
     }
     if (secondaryStatus.status() == AtSignStatus.activated) {
       _isAtsignOnboarded = true;
@@ -666,7 +667,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       return false;
     }
     stderr.writeln(
-        '[Error] atsign($_atSign) status is \'${secondaryStatus.status()!.name}\'');
+        '${chalk.brightRed('[Error]')} atsign($_atSign) status is \'${secondaryStatus.status()!.name}\'');
     throw AtActivateException('Could not determine atsign activation status',
         intent: Intent.fetchData);
   }
@@ -709,7 +710,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _addProgress(
           'Find',
           '#[$retryAttempt/$maxRetries] : looking up $_atSign in atDirectory',
-          false);
+          ProgressEventType.info);
       await waitBriefly();
       logger.finer(
           'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
@@ -718,10 +719,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
       } on SecondaryNotFoundException catch (e) {
         _addProgress('Find',
-            '#[$retryAttempt/$maxRetries] : Failed : $e', true);
+            '#[$retryAttempt/$maxRetries] : Failed : $e', ProgressEventType.failure);
       } catch (e, trace) {
         _addProgress('Find',
-            '#[$retryAttempt/$maxRetries] : Failed : $e', true);
+            '#[$retryAttempt/$maxRetries] : Failed : $e', ProgressEventType.failure);
         logger.finer(e);
         logger.finer(trace);
       }
@@ -734,7 +735,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     _addProgress(
       'Find',
       '#[$retryAttempt/$maxRetries] : Found atServer address for $_atSign in atDirectory - $secondaryAddress',
-      false,
+      ProgressEventType.success,
     );
 
     retryAttempt = 0;
@@ -748,7 +749,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _addProgress(
           'Connect',
           '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer',
-          false);
+          ProgressEventType.info);
       await waitBriefly();
       try {
         final secureSocket = await SecureSocket.connect(
@@ -760,7 +761,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       } catch (e, trace) {
         lastException = e;
         _addProgress(
-            'Connect', '#[$retryAttempt/$maxRetries] : $e', true);
+            'Connect', '#[$retryAttempt/$maxRetries] : $e', ProgressEventType.failure);
         logger.finer(e);
         logger.finer(trace);
       }
@@ -769,7 +770,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _addProgress(
           'Connect',
           '#[$retryAttempt/$maxRetries] : Connected to $_atSign atServer',
-          false);
+          ProgressEventType.info);
     } else {
       String msg = 'Could not connect to atServer for'
           ' $_atSign at $secondaryAddress after $maxRetries attempts.'
@@ -832,8 +833,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     _psc.add(pe);
   }
 
-  _addProgress(String type, String msg, bool isError) {
-    addProgress(ProgressEvent(type: type, msg: msg, isError: isError));
+  _addProgress(String group, String msg, ProgressEventType type) {
+    addProgress(ProgressEvent(group: group, msg: msg, type: type));
   }
 }
 

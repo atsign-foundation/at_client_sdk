@@ -123,7 +123,7 @@ class OnboardingUtil {
           (jsonDecoded['message'] ==
               'Oops! You already have the maximum number of free atSigns. Please select one of your existing atSigns.')) {
         stdout.writeln(
-            '[Unable to proceed] This email address already has 10 free atSigns associated with it.\n'
+            '${chalk.brightRed('[Unable to proceed]')} This email address already has 10 free atSigns associated with it.\n'
             'To register a new atSign to this email address, please log into the dashboard \'my.atsign.com/login\'.\n'
             'Remove at least 1 atSign from your account and then try again.\n'
             'Alternatively, you can retry this process with a different email address.');
@@ -145,7 +145,7 @@ class OnboardingUtil {
   /// 2) Invalid atsign
   Future<void> requestAuthenticationOtp(String atsign,
       {String authority = RegistrarApiConstants.apiHostProd}) async {
-    stdout.writeln('[Information]'
+    stdout.writeln('${chalk.blue('[Information]')}'
         ' Requesting $authority to send a verification code');
 
     Response response = await postRequest(authority,
@@ -172,7 +172,8 @@ class OnboardingUtil {
   /// 1) HTTP 400 BAD_REQUEST
   Future<String> getCramKey(String atsign, String verificationCode,
       {String authority = RegistrarApiConstants.apiHostProd}) async {
-    stdout.writeln('[Information] Fetching CRAM Key from $authority');
+    stdout.writeln(
+        '${chalk.blue('[Information]')} Fetching CRAM Key from $authority');
     Response response = await postRequest(
         authority,
         RegistrarApiConstants.getCramKeyWithOtpPath,
@@ -249,14 +250,16 @@ class OnboardingUtil {
   /// Returns only when the user has provided a 4-length String only containing numbers and alphabets
   String getVerificationCodeFromUser() {
     String? otp;
-    stdout.write('[Action Required] Enter your verification code: ');
+    stdout.write(
+        '${chalk.blue('[Action Required]')} Enter your verification code: ');
     otp = stdin.readLineSync()!.toUpperCase();
     while (!validateVerificationCode(otp!)) {
       stderr.writeln(
-          '[Unable to proceed] The verification code you entered is invalid.\n'
+          '${chalk.red('[Unable to proceed]')} The verification code you entered is invalid.\n'
           'Please check your email for a 4-character verification code.\n'
           'If you cannot see the code in your inbox, please check your spam/junk/promotions folders.\n'
-          '[Action Required] Enter your verification code:');
+          '\n'
+          '${chalk.blue('[Action Required]')} Enter your verification code:');
       otp = stdin.readLineSync()!.toUpperCase();
     }
     return otp;

@@ -1,19 +1,42 @@
+import 'package:chalkdart/chalk.dart';
+
+enum ProgressEventType {
+  info,
+  success,
+  warning,
+  failure
+}
+
+extension ChalkFunction on ProgressEventType {
+  Function get chalkFn {
+    switch (this) {
+      case ProgressEventType.info:
+        return chalk.blue;
+      case ProgressEventType.success:
+        return chalk.green;
+      case ProgressEventType.warning:
+        return chalk.orange;
+      case ProgressEventType.failure:
+        return chalk.red;
+    }
+  }
+}
+
 class ProgressEvent {
   final DateTime time = DateTime.now();
-  final String type;
+  final String group;
   final String msg;
-  final bool isError;
+  final ProgressEventType type;
 
   ProgressEvent({
-    required this.type,
+    required this.group,
     required this.msg,
-    this.isError = false,
+    required this.type,
   });
 
   @override
   String toString() => '${time.toIso8601String()}'
-      ' | $type'
-      ' ${isError ? ' | ERROR' : ''}'
+      ' | ${type.chalkFn('$type | $group')}'
       ' | $msg';
 }
 
