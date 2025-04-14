@@ -232,6 +232,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     );
   }
 
+  Future<void> waitBriefly({int millis = 500}) async {
+    await Future.delayed(Duration(milliseconds: millis));  }
+
   @override
   Future<at_auth.AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
@@ -254,7 +257,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     logger.finer('sendEnrollRequest: submitting enrollment request');
     _addProgress('Enroll', 'submitting enrollment request', false);
-    stderr.writeln('Submitting enrollment request');
+    await waitBriefly();
 
     AtEnrollmentResponse response =
         await _atEnrollment!.submit(newClientEnrollmentRequest, atLookUpImpl);
@@ -433,6 +436,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       logger.info('Attempting pkam auth');
       if (logProgress) {
         _addProgress('PKAM', 'attempting PKAM auth', false);
+        await waitBriefly();
       }
       bool pkamAuthSucceeded = false;
       try {
@@ -707,6 +711,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'Find',
           '#[$retryAttempt/$maxRetries] : looking up $_atSign in atDirectory',
           false);
+      await waitBriefly();
       logger.finer(
           'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
       try {
@@ -745,6 +750,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'Connect',
           '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer',
           false);
+      await waitBriefly();
       try {
         secureSocket = await SecureSocket.connect(
             secondaryAddress.host, secondaryAddress.port,
