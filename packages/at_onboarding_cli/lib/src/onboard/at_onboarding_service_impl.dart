@@ -720,18 +720,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       try {
         secondaryAddress =
             await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
-      } on SecondaryNotFoundException catch (e) {
+      } catch (e) {
+        lastException = e.toString();
         _addProgress('Find', '#[$retryAttempt/$maxRetries] : $e',
             ProgressEventType.error);
-      } catch (e, trace) {
-        _addProgress('Find', '#[$retryAttempt/$maxRetries] : $e',
-            ProgressEventType.error);
-        logger.finer(e);
-        logger.finer(trace);
       }
     }
     if (secondaryAddress == null) {
-      String msg = 'Could not connect to atServer for $_atSign'
+      String msg = 'Find atServer for $_atSign failed'
           ' : Apparent cause: $lastException';
       throw SecondaryNotFoundException(msg);
     }
@@ -775,7 +771,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           '#[$retryAttempt/$maxRetries] : Connected to $_atSign atServer',
           ProgressEventType.success);
     } else {
-      String msg = 'Could not connect to atServer for $_atSign'
+      String msg = 'Connect to atServer for $_atSign failed'
           ' : Apparent cause: $lastException';
       throw SecondaryConnectException(msg);
     }
