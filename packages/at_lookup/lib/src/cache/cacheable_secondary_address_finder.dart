@@ -156,27 +156,26 @@ class SecondaryUrlFinder {
       return '${_rootDomain.substring("proxy:".length)}:$_rootPort';
     }
     String? address;
+    String lastExceptionMsg = '';
     for (int i = 0; i <= retryDelaysMillis.length; i++) {
       try {
         address = await _findSecondary(atSign);
         return address;
       } catch (e) {
+        lastExceptionMsg = e.toString();
         if (i < retryDelaysMillis.length) {
           _logger.info('AtLookup.findAtServer for $atSign failed with $e'
               ' : will retry in ${retryDelaysMillis[i]} milliseconds');
           await Future.delayed(Duration(milliseconds: retryDelaysMillis[i]));
           continue;
         }
-        _logger.severe('AtLookup.findAtServer for $atSign failed with $e'
-            ' : ${retryDelaysMillis.length + 1} failures, giving up');
+        _logger.severe('findAtServer for $atSign : $e');
         if (e is RootServerConnectivityException) {
-          throw RootServerConnectivityException(
-              'Unable to establish connection with atDirectory.');
+          rethrow;
         }
       }
     }
-    throw AtConnectException('Could not fetch atServer address for $atSign :'
-        ' ${retryDelaysMillis.length + 1} failures, giving up');
+    throw AtConnectException('findAtServer for $atSign : $lastExceptionMsg');
   }
 
   Future<String?> _findSecondary(String atsign) async {
