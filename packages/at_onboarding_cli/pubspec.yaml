@@ -12,11 +12,6 @@ executables:
   at_register: register_cli
   at_activate: activate_cli
 
-dependency_overrides:
-  at_utils:
-    path: ../at_utils
-  at_lookup:
-    path: ../at_lookup
 dependencies:
    args: ^2.5.0
    alfred: ^1.1.2+1
@@ -31,9 +26,9 @@ dependencies:
    at_chops: ^2.2.0
    at_client: ^3.3.0
    at_commons: ^5.0.2
-   at_lookup: ^3.0.49
+   at_lookup: ^3.0.52
    at_server_status: ^1.0.5
-   at_utils: ^3.0.19
+   at_utils: ^3.2.0
    at_persistence_secondary_server: ^3.1.0
    duration: ^4.0.3
    crypto: ^3.0.5
