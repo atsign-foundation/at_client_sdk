@@ -721,10 +721,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
             await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
       } on SecondaryNotFoundException catch (e) {
         _addProgress('Find', '#[$retryAttempt/$maxRetries] : Failed : $e',
-            ProgressEventType.failure);
+            ProgressEventType.error);
       } catch (e, trace) {
         _addProgress('Find', '#[$retryAttempt/$maxRetries] : Failed : $e',
-            ProgressEventType.failure);
+            ProgressEventType.error);
         logger.finer(e);
         logger.finer(trace);
       }
@@ -763,7 +763,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       } catch (e, trace) {
         lastException = e;
         _addProgress('Connect', '#[$retryAttempt/$maxRetries] : $e',
-            ProgressEventType.failure);
+            ProgressEventType.error);
         logger.finer(e);
         logger.finer(trace);
       }
@@ -830,13 +830,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return _psc.stream;
   }
 
-  @override
-  addProgress(ProgressEvent pe) {
-    _psc.add(pe);
-  }
-
   _addProgress(String group, String msg, ProgressEventType type) {
-    addProgress(ProgressEvent(group: group, msg: msg, type: type));
+    _psc.add(ProgressEvent(group: group, msg: msg, type: type));
   }
 }
 
