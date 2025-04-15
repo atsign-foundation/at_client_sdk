@@ -1045,7 +1045,10 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     String output = '${pe.type.chalkFn(pe.group.padLeft(pad))} : ${pe.msg}'
         .replaceAll('\n', '\\n')
         .replaceAll('\t', ' ');
-    if (stdout.hasTerminal && output.length > stdout.terminalColumns - 3) {
+    int viewableLength = '${pe.group.padLeft(pad)} : ${pe.msg}'
+        .replaceAll('\n', '\\n')
+        .replaceAll('\t', ' ').length;
+    if (stdout.hasTerminal && viewableLength > (stdout.terminalColumns - 3)) {
       output = '${output.substring(0, stdout.terminalColumns - 3)}...';
     }
     stderr.write('\r\x1b[K$output');
