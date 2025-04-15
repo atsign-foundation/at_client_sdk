@@ -234,30 +234,23 @@ class SecondaryUrlFinder {
       await socket.flush();
       socket.destroy();
       throw AtTimeoutException('AtLookup.findAtServer timed out');
-    } on SocketException catch (se) {
-      _logger.shout('_findAtServer caught exception [$se] while connecting'
-          ' to atDirectory at $_rootDomain:$_rootPort');
-      throw RootServerConnectivityException(
-          'Could not connect to atDirectory at $_rootDomain:$_rootPort');
     } on Exception catch (exception) {
-      var msg = 'AtLookup.findAtServer connection'
-          ' to atDirectory at $_rootDomain:$_rootPort'
-          ' failed : $exception';
-      _logger.shout(msg);
+      var msg = 'Exception [$exception] while connecting'
+          ' to atDirectory at $_rootDomain:$_rootPort';
+      _logger.severe(msg);
       if (socket != null) {
         socket.destroy();
       }
-      throw AtConnectException(msg);
-    } catch (error, stackTrace) {
-      _logger.shout('findAtServerUrl: connection'
-          ' to atDirectory at $_rootDomain:$_rootPort'
-          ' failed with error: $error');
+      throw RootServerConnectivityException(msg);
+    } catch (exception, stackTrace) {
+      var msg = 'Exception [$exception] while connecting'
+          ' to atDirectory at $_rootDomain:$_rootPort';
+      _logger.severe(msg);
       _logger.severe(stackTrace);
       if (socket != null) {
         socket.destroy();
       }
-      throw AtConnectException(
-          'AtLookup.findAtServer connection to root server failed with error: $error');
+      throw RootServerConnectivityException(msg);
     }
   }
 }
