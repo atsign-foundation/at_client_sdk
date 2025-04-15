@@ -1,3 +1,7 @@
+## 1.10.0
+
+- feat: better user feedback during onboarding / enrollment / etc
+
 ## 1.9.0
 
 - fix: have `onboard` only perform post-auth activation completion once the 

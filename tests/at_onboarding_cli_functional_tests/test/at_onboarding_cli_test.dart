@@ -176,8 +176,7 @@ void main() {
       },
           throwsA(predicate((dynamic e) =>
               e is AtActivateException &&
-              e.message ==
-                  'atsign $atSign is already activated')));
+              e.message == 'atsign $atSign is already activated')));
     });
 
     tearDown(() async {

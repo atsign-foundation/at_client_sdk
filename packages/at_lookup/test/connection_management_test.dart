@@ -245,7 +245,7 @@ void main() {
       expect(false, true, reason: 'Test should not have reached this point');
     } on AtTimeoutException catch (expected) {
       expect(expected.message,
-          'Full response not received after $maxWaitMilliSeconds millis from remote secondary');
+          'Full response not received after $maxWaitMilliSeconds millis from remote atServer');
       expect(connection.isInValid(), true);
     }
   }
@@ -274,7 +274,7 @@ void main() {
       expect(false, true, reason: 'Test should not have reached this point');
     } on AtTimeoutException catch (expected) {
       expect(expected.message,
-          'Full response not received after $maxWaitMilliSeconds millis from remote secondary');
+          'Full response not received after $maxWaitMilliSeconds millis from remote atServer');
       expect(() async => await connection.write("hello\n"),
           throwsA(predicate((dynamic e) => e is ConnectionInvalidException)));
     }

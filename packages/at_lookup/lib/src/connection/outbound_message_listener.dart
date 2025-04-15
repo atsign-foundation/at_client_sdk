@@ -157,7 +157,7 @@ class OutboundMessageListener {
         _buffer.clear();
         await closeConnection();
         throw AtTimeoutException(
-            'Full response not received after $maxWaitMilliSeconds millis from remote secondary');
+            'Full response not received after $maxWaitMilliSeconds millis from remote atServer');
       }
       // if no data is received from server and if currentTime - _lastReceivedTime is greater than
       // transientWaitTimeMillis throw AtTimeoutException

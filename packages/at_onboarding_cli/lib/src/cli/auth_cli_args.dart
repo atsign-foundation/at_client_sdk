@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:meta/meta.dart';
 
 enum AuthCliCommand {
@@ -113,6 +114,8 @@ class AuthCliArgs {
   static const argNameAutoApproveExisting = 'approve-existing';
   static const argNamePassPhrase = 'passPhrase';
   static const argNameHashingAlgoType = 'hashingAlgoType';
+  static const argNameMaxRetries = 'max-retries';
+  static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
 
   ArgParser get parser {
     return _aap;
@@ -294,6 +297,21 @@ class AuthCliArgs {
   @visibleForTesting
   ArgParser createOnboardCommandParser() {
     ArgParser p = createSharedArgParser(hide: true, forOnboard: true);
+    p.addOption(
+      argNameMaxRetries,
+      help:
+          'Maximum number of attempts to check if atServer has been activated',
+      defaultsTo: '${AtOnboardingService.defaultMaxActivationCheckRetries}',
+      mandatory: false,
+      hide: false,
+    );
+    p.addFlag(
+      argNameAllowBadRegistrarCerts,
+      help: 'Allow invalid (expired, wrong domain name, etc) registrar certs',
+      defaultsTo: false,
+      negatable: false,
+      hide: true,
+    );
 
     return p;
   }
@@ -377,6 +395,13 @@ class AuthCliArgs {
         help:
             'The duration for which the APKAM keys remains active. The time duration can be passed as "2d,1h,10m,20s,999ms" for 2 days 1 hour 10 minutes 20 seconds 999 milliseconds',
         mandatory: false);
+    p.addOption(
+      argNameMaxRetries,
+      help: 'Number of times to check for approval before giving up',
+      defaultsTo: '${AtOnboardingService.defaultMaxApkamRetries}',
+      mandatory: false,
+      hide: false,
+    );
     return p;
   }
 

@@ -17,6 +17,10 @@ dependency_overrides:
     path: "../../packages/at_onboarding_cli"
   at_auth:
     path: "../../packages/at_auth"
+  at_utils:
+    path: "../../packages/at_utils"
+  at_lookup:
+    path: "../../packages/at_lookup"
 
 dev_dependencies:
   lints: ^5.1.1

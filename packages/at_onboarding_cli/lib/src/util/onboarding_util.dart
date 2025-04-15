@@ -4,17 +4,28 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart' as at_client;
 import 'package:at_onboarding_cli/src/util/registrar_api_constants.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:chalkdart/chalk.dart';
 import 'package:http/http.dart';
 import 'package:http/io_client.dart';
 
 ///class containing utilities to perform registration of a free atsign
 class OnboardingUtil {
+  static bool allowBadCertificates = false;
+  final logger = AtSignLogger(' OnboardingUtil ');
   IOClient? _ioClient;
 
   void _createClient() {
     HttpClient ioc = HttpClient();
-    ioc.badCertificateCallback =
-        (X509Certificate cert, String host, int port) => true;
+    ioc.badCertificateCallback = (X509Certificate cert, String host, int port) {
+      if (allowBadCertificates) {
+        logger.shout('*************');
+        logger.shout('************* Ignoring bad certificate from $host:$port');
+        logger.shout('*************');
+        return true;
+      }
+      return false;
+    };
     _ioClient = IOClient(ioc);
   }
 
@@ -112,7 +123,7 @@ class OnboardingUtil {
           (jsonDecoded['message'] ==
               'Oops! You already have the maximum number of free atSigns. Please select one of your existing atSigns.')) {
         stdout.writeln(
-            '[Unable to proceed] This email address already has 10 free atSigns associated with it.\n'
+            '${chalk.brightRed('[Unable to proceed]')} This email address already has 10 free atSigns associated with it.\n'
             'To register a new atSign to this email address, please log into the dashboard \'my.atsign.com/login\'.\n'
             'Remove at least 1 atSign from your account and then try again.\n'
             'Alternatively, you can retry this process with a different email address.');
@@ -134,13 +145,18 @@ class OnboardingUtil {
   /// 2) Invalid atsign
   Future<void> requestAuthenticationOtp(String atsign,
       {String authority = RegistrarApiConstants.apiHostProd}) async {
+    stdout.writeln('${chalk.blue('[Information]')}'
+        ' Requesting $authority to send a verification code');
+
     Response response = await postRequest(authority,
         RegistrarApiConstants.requestAuthenticationOtpPath, {'atsign': atsign});
-    String apiResponseMessage = jsonDecode(response.body)['message'];
+    String apiResponseMessage =
+        jsonDecode(response.body)['message'] ?? '[Empty Response]';
     if (response.statusCode == 200) {
       if (apiResponseMessage.contains('Sent Successfully')) {
-        stdout.writeln(
-            '[Information] Successfully sent verification code to your registered e-mail');
+        stdout.writeln('${chalk.green('[Information]')}'
+            ' Successfully sent verification code'
+            ' to your registered e-mail or phone');
         return;
       }
       throw at_client.InternalServerError(
@@ -156,31 +172,31 @@ class OnboardingUtil {
   /// 1) HTTP 400 BAD_REQUEST
   Future<String> getCramKey(String atsign, String verificationCode,
       {String authority = RegistrarApiConstants.apiHostProd}) async {
+    stdout.writeln(
+        '${chalk.blue('[Information]')} Fetching CRAM Key from $authority');
     Response response = await postRequest(
         authority,
         RegistrarApiConstants.getCramKeyWithOtpPath,
         {'atsign': atsign, 'otp': verificationCode});
-    Map<String, dynamic> jsonDecodedBody = jsonDecode(response.body);
+    Map<String, dynamic> jsonDecodedBody;
+    try {
+      jsonDecodedBody = jsonDecode(response.body);
+    } catch (e) {
+      throw at_client.InvalidDataException(
+          'Unexpected response from registrar: ${response.body}');
+    }
     if (response.statusCode == 200) {
       if (jsonDecodedBody['message'] == 'Verified') {
         String cram = jsonDecodedBody['cramkey'];
         cram = cram.split(':')[1];
-        stdout.writeln('[Information] CRAM Key fetched successfully');
+        stdout.writeln('${chalk.green('[Information]')}'
+            ' CRAM Key fetched successfully');
         return cram;
       }
       throw at_client.InvalidDataException(
           'Invalid verification code. Please enter a valid verification code');
     }
     throw at_client.InvalidDataException(jsonDecodedBody['message']);
-  }
-
-  /// calls utility methods from [OnboardingUtil] that
-  /// 1) send verification code to the registered email
-  /// 2) fetch the CRAM key from registrar using the verification code
-  Future<String> getCramUsingOtp(String atsign, String registrarUrl) async {
-    await requestAuthenticationOtp(atsign, authority: registrarUrl);
-    return await getCramKey(atsign, getVerificationCodeFromUser(),
-        authority: registrarUrl);
   }
 
   /// generic GET request
@@ -197,14 +213,13 @@ class OnboardingUtil {
   /// generic POST request
   Future<Response> postRequest(
       String authority, String path, Map<String, String?> data) async {
+    _ioClient = null;
     if (_ioClient == null) _createClient();
 
     Uri uri = Uri.https(authority, path);
 
     String body = json.encode(data);
-    if (RegistrarApiConstants.isDebugMode) {
-      stdout.writeln('Sending request to url: $uri\nRequest Body: $body');
-    }
+    logger.finer('Sending request to url: $uri\nRequest Body: $body');
     Response response = await _ioClient!.post(
       uri,
       body: body,
@@ -213,15 +228,13 @@ class OnboardingUtil {
         'Content-Type': RegistrarApiConstants.contentType,
       },
     );
-    if (RegistrarApiConstants.isDebugMode) {
-      print('Got Response: ${response.body}');
-    }
+    logger.finer('Got Response: ${response.body}');
     return response;
   }
 
   bool validateEmail(String email) {
     return RegExp(
-            r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+")
+            r"^[a-zA-Z0-9.a-zA-Z0-9!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+")
         .hasMatch(email);
   }
 
@@ -237,15 +250,16 @@ class OnboardingUtil {
   /// Returns only when the user has provided a 4-length String only containing numbers and alphabets
   String getVerificationCodeFromUser() {
     String? otp;
-    stdout.writeln(
-        '[Action Required] Enter your verification code: (verification code is not case-sensitive)');
+    stdout.write(
+        '${chalk.blue('[Action Required]')} Enter your verification code: ');
     otp = stdin.readLineSync()!.toUpperCase();
     while (!validateVerificationCode(otp!)) {
       stderr.writeln(
-          '[Unable to proceed] The verification code you entered is invalid.\n'
+          '${chalk.red('[Unable to proceed]')} The verification code you entered is invalid.\n'
           'Please check your email for a 4-character verification code.\n'
           'If you cannot see the code in your inbox, please check your spam/junk/promotions folders.\n'
-          '[Action Required] Enter your verification code:');
+          '\n'
+          '${chalk.blue('[Action Required]')} Enter your verification code:');
       otp = stdin.readLineSync()!.toUpperCase();
     }
     return otp;

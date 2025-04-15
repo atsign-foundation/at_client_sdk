@@ -79,6 +79,7 @@ class Register {
 ///[add] method can be used to add tasks[RegisterApiTask] to the [processFlow]
 ///[start] needs to be called after all required tasks are added to the [processFlow]
 class RegistrationFlow {
+  final logger = AtSignLogger(' RegistrationFlow ');
   List<RegisterApiTask> processFlow = [];
   RegisterApiResult result = RegisterApiResult();
   late OnboardingUtil registerUtil;
@@ -94,9 +95,7 @@ class RegistrationFlow {
   Future<void> start() async {
     for (RegisterApiTask task in processFlow) {
       task.init(params, registerUtil);
-      if (RegistrarApiConstants.isDebugMode) {
-        print('Current Task: $task  [params=$params]\n');
-      }
+      logger.finer('Current Task: $task  [params=$params]\n');
       result = await task.run();
       if (result.apiCallStatus == ApiCallStatus.retry) {
         while (

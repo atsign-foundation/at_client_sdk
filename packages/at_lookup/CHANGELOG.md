@@ -1,3 +1,8 @@
+## 3.0.52
+- fix: update exception and log messages to use standard terminology 
+  ('atServer' instead of 'secondary server', 'atDirectory' instead of 'root 
+  server')
+
 ## 3.0.51
 - fix: potential bug handling atSigns which end in `data` e.g. `@foo_data`
 

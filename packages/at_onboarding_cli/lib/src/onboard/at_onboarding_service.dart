@@ -4,16 +4,25 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_progress.dart';
 
-abstract class AtOnboardingService {
+abstract class AtOnboardingService implements ProgressPublisher {
   static const Duration defaultApkamRetryInterval = Duration(seconds: 10);
+  static const int defaultMaxApkamRetries = 5;
+
+  static const Duration defaultActivationCheckInterval = Duration(seconds: 2);
+  static const int defaultMaxActivationCheckRetries = 50;
 
   /// Perform initial one_time authentication to activate the atsign. Returns
   /// true if successfully onboarded.
   ///
   /// When [autoCompleteActivation] is false, callers are responsible for
   /// calling [completeActivation]
-  Future<bool> onboard({bool autoCompleteActivation = true});
+  Future<bool> onboard({
+    bool autoCompleteActivation = true,
+    Duration retryInterval = defaultActivationCheckInterval,
+    int maxRetries = defaultMaxActivationCheckRetries,
+  });
 
   /// - Update encryption public key to server
   /// - Delete cram secret from server
@@ -47,6 +56,7 @@ abstract class AtOnboardingService {
     String otp,
     Map<String, String> namespaces, {
     Duration retryInterval = defaultApkamRetryInterval,
+    int maxRetries = defaultMaxApkamRetries,
   });
 
   /// Sends enrollment request. Application code may subsequently call
@@ -64,6 +74,7 @@ abstract class AtOnboardingService {
     AtEnrollmentResponse enrollmentResponse, {
     Duration retryInterval = defaultApkamRetryInterval,
     bool logProgress = true,
+    int maxRetries = defaultMaxApkamRetries,
   });
 
   /// Create a file in the standardized format which apps may use to
