@@ -1048,13 +1048,9 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     int viewableLength = '${pe.group.padLeft(pad)} : ${pe.msg}'
         .replaceAll('\n', '\\n')
         .replaceAll('\t', ' ').length;
-    stderr.writeln('\n    ****'
-        ' Columns: ${stdout.terminalColumns}'
-        ' Output len: ${output.length}'
-        ' Viewable len: $viewableLength'
-        ' Truncating to ${stdout.terminalColumns} - 3');
+    int diff = output.length - viewableLength;
     if (stdout.hasTerminal && viewableLength > (stdout.terminalColumns - 3)) {
-      output = '${output.substring(0, stdout.terminalColumns - 3)}...';
+      output = '${output.substring(0, stdout.terminalColumns - 3 + diff)}...';
     }
     stderr.write('\r\x1b[K$output');
   });
