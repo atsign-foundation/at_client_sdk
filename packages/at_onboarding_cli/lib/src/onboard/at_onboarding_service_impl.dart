@@ -704,6 +704,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     int retryAttempt = 0;
     SecondaryAddress? secondaryAddress;
 
+    String lastException = '';
     while (retryAttempt < maxRetries && secondaryAddress == null) {
       retryAttempt++;
       if (retryAttempt > 1) {
@@ -720,18 +721,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         secondaryAddress =
             await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
       } on SecondaryNotFoundException catch (e) {
-        _addProgress('Find', '#[$retryAttempt/$maxRetries] : Failed : $e',
+        _addProgress('Find', '#[$retryAttempt/$maxRetries] : $e',
             ProgressEventType.error);
       } catch (e, trace) {
-        _addProgress('Find', '#[$retryAttempt/$maxRetries] : Failed : $e',
+        _addProgress('Find', '#[$retryAttempt/$maxRetries] : $e',
             ProgressEventType.error);
         logger.finer(e);
         logger.finer(trace);
       }
     }
     if (secondaryAddress == null) {
-      String msg = 'Could not find atServer address for'
-          ' $_atSign after $maxRetries attempts.';
+      String msg = 'Could not connect to atServer for $_atSign'
+          ' : Apparent cause: $lastException';
       throw SecondaryNotFoundException(msg);
     }
     _addProgress(
@@ -742,7 +743,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     retryAttempt = 0;
     bool connected = false;
-    dynamic lastException = '';
+    lastException = '';
     while (!connected && retryAttempt < maxRetries) {
       retryAttempt++;
       if (retryAttempt > 1) {
@@ -761,7 +762,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
             secureSocket.remotePort != null;
         secureSocket.destroy();
       } catch (e, trace) {
-        lastException = e;
+        lastException = e.toString();
         _addProgress('Connect', '#[$retryAttempt/$maxRetries] : $e',
             ProgressEventType.error);
         logger.finer(e);
@@ -774,9 +775,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           '#[$retryAttempt/$maxRetries] : Connected to $_atSign atServer',
           ProgressEventType.success);
     } else {
-      String msg = 'Could not connect to atServer for'
-          ' $_atSign at $secondaryAddress after $maxRetries attempts.'
-          ' Apparent cause: $lastException';
+      String msg = 'Could not connect to atServer for $_atSign'
+          ' : Apparent cause: $lastException';
       throw SecondaryConnectException(msg);
     }
   }
