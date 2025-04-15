@@ -1,11 +1,6 @@
 import 'package:chalkdart/chalk.dart';
 
-enum ProgressEventType {
-  info,
-  success,
-  warning,
-  failure
-}
+enum ProgressEventType { info, success, warning, failure }
 
 extension ChalkFunction on ProgressEventType {
   Function get chalkFn {

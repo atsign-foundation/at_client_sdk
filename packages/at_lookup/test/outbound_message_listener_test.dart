@@ -293,8 +293,7 @@ void main() {
       await Future.delayed(Duration(milliseconds: 50));
       expect(response, isNotEmpty);
       expect(
-        response!.contains(
-            'Full response not received after 100 millis from '),
+        response!.contains('Full response not received after 100 millis from '),
         true,
       );
     });

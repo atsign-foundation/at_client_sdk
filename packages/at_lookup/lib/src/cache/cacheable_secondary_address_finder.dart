@@ -104,8 +104,8 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
     } on AtException {
       rethrow;
     } on Exception catch (e) {
-      _logger
-          .severe('${getFailedToLookUpExceptionMessage(atSign)} - ${e.toString()}');
+      _logger.severe(
+          '${getFailedToLookUpExceptionMessage(atSign)} - ${e.toString()}');
       throw AtException(e.toString());
     }
   }

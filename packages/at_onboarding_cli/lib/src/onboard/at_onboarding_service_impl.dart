@@ -234,7 +234,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   Future<void> waitBriefly({int millis = 500}) async {
-    await Future.delayed(Duration(milliseconds: millis));  }
+    await Future.delayed(Duration(milliseconds: millis));
+  }
 
   @override
   Future<at_auth.AtEnrollmentResponse> sendEnrollRequest(String appName,
@@ -257,7 +258,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     logger.finer('sendEnrollRequest: submitting enrollment request');
-    _addProgress('Enroll', 'submitting enrollment request', ProgressEventType.info);
+    _addProgress(
+        'Enroll', 'submitting enrollment request', ProgressEventType.info);
     await waitBriefly();
 
     AtEnrollmentResponse response =
@@ -716,13 +718,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
       try {
         secondaryAddress =
-        await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
+            await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
       } on SecondaryNotFoundException catch (e) {
-        _addProgress('Find',
-            '#[$retryAttempt/$maxRetries] : Failed : $e', ProgressEventType.failure);
+        _addProgress('Find', '#[$retryAttempt/$maxRetries] : Failed : $e',
+            ProgressEventType.failure);
       } catch (e, trace) {
-        _addProgress('Find',
-            '#[$retryAttempt/$maxRetries] : Failed : $e', ProgressEventType.failure);
+        _addProgress('Find', '#[$retryAttempt/$maxRetries] : Failed : $e',
+            ProgressEventType.failure);
         logger.finer(e);
         logger.finer(trace);
       }
@@ -760,8 +762,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         secureSocket.destroy();
       } catch (e, trace) {
         lastException = e;
-        _addProgress(
-            'Connect', '#[$retryAttempt/$maxRetries] : $e', ProgressEventType.failure);
+        _addProgress('Connect', '#[$retryAttempt/$maxRetries] : $e',
+            ProgressEventType.failure);
         logger.finer(e);
         logger.finer(trace);
       }
