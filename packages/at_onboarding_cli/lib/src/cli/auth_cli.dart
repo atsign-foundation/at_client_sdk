@@ -1051,7 +1051,8 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     stderr.writeln('\n    ****'
         ' Columns: ${stdout.terminalColumns}'
         ' Output len: ${output.length}'
-        ' Viewable len: $viewableLength');
+        ' Viewable len: $viewableLength'
+        ' Truncating to ${stdout.terminalColumns} - 3');
     if (stdout.hasTerminal && viewableLength > (stdout.terminalColumns - 3)) {
       output = '${output.substring(0, stdout.terminalColumns - 3)}...';
     }
