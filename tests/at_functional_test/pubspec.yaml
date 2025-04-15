@@ -17,11 +17,6 @@ dependency_overrides:
       url: https://github.com/atsign-foundation/at_libraries
       ref: feat-better-activate-cli-feedback
       path: packages/at_utils
-  at_onboarding_cli:
-    git:
-      url: https://github.com/atsign-foundation/at_libraries
-      ref: feat-better-activate-cli-feedback
-      path: packages/at_onboarding_cli
 
 dependencies:
   uuid: 3.0.7
