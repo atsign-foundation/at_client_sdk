@@ -153,7 +153,7 @@ class CLIBase {
         verbose: parsedArgs['verbose'],
         syncDisabled: parsedArgs['never-sync'],
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
-        passPhrase: parsedArgs['passPhrase']);
+        passPhrase: parsedArgs['pass-phrase']);
 
     await cliBase.init();
 
