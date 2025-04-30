@@ -50,69 +50,57 @@ class CLIBase {
   static ArgParser createArgsParser({
     String? namespace,
     Set<String> hide = const {},
-  }) =>
-      ArgParser()
-        ..addFlag('help', negatable: false, help: 'Usage instructions')
-        ..addOption('atsign',
-            abbr: 'a', mandatory: true, help: 'The atSign to use')
-        ..addOption('namespace',
-            abbr: 'n',
-            mandatory: namespace == null,
-            defaultsTo: namespace,
-            hide: namespace != null,
-            help: 'Namespace')
-        ..addOption(
-          'key-file',
+  }) {
+    int? usageLineLength = stdout.hasTerminal ? stdout.terminalColumns : null;
+    return ArgParser(usageLineLength: usageLineLength)
+      ..addFlag('help', negatable: false, help: 'Usage instructions')
+      ..addOption('atsign',
+          abbr: 'a', mandatory: true, help: 'The atSign to use')
+      ..addOption('namespace',
+          abbr: 'n',
+          mandatory: namespace == null,
+          defaultsTo: namespace,
+          hide: namespace != null,
+          help: 'Namespace')
+      ..addOption('key-file',
           abbr: 'k',
           mandatory: false,
           help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/',
-          hide: hide.contains('key-file'),
-        )
-        ..addOption(
-          'home-dir',
+          hide: hide.contains('key-file'))
+      ..addOption('home-dir',
           abbr: 'h',
           mandatory: false,
           help: 'home directory',
-          hide: hide.contains('home-dir'),
-        )
-        ..addOption(
-          'storage-dir',
+          hide: hide.contains('home-dir'))
+      ..addOption('storage-dir',
           abbr: 's',
           mandatory: false,
           help: 'directory for this client\'s local storage files',
-          hide: hide.contains('storage-dir'),
-        )
-        ..addOption(
-          'root-domain',
+          hide: hide.contains('storage-dir'))
+      ..addOption('root-domain',
           abbr: 'd',
           mandatory: false,
           help: 'Root Domain',
           defaultsTo: 'root.atsign.org',
-          hide: hide.contains('root-domain'),
-        )
-        ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
-        ..addFlag(
-          'never-sync',
+          hide: hide.contains('root-domain'))
+      ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
+      ..addFlag('never-sync',
           negatable: false,
           help: 'Do not run sync',
-          hide: hide.contains('never-sync'),
-        )
-        ..addOption(
-          'max-connect-attempts',
+          hide: hide.contains('never-sync'))
+      ..addOption('max-connect-attempts',
           help: 'Number of times to attempt to initially connect to atServer.'
               ' Note: there is a 3-second delay between connection attempts.',
           defaultsTo: defaultMaxConnectAttempts.toString(),
-          hide: hide.contains('max-connect-attempts'),
-        )
-        ..addOption(
-          'passPhrase',
-          aliases: ['pass-phrase'],
+          hide: hide.contains('max-connect-attempts'))
+      ..addOption('pass-phrase',
+          aliases: ['passPhrase'],
           abbr: 'P',
           help:
               'Pass Phrase to encrypt/decrypt the password protected atKeys file',
           mandatory: false,
-          hide: hide.contains('passPhrase') && hide.contains('pass-phrase'),
-        );
+          hide: hide.contains('pass-phrase'));
+  }
 
   /// An ArgParser which has all of the options and flags required by [CLIBase]
   /// Used by [fromCommandLineArgs] if the `parser` parameter isn't supplied.
