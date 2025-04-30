@@ -1,6 +1,7 @@
 ## 2.1.0
-- feat: Add `CLIBase.createArgsParser` and add some parameters to
-  `CLIBase.fromCommandLineArgs`
+- feat: Improve usability for args management, including the ability to hide 
+  some args which, while they are very helpful for dev purposes, are not so 
+  friendly for end-users.
 
 ## 2.0.0
 - feat!: (breaking) : remove onboarding capability from CLIBase. (Use 
