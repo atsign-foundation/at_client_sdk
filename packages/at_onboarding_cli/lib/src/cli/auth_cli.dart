@@ -1047,7 +1047,8 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
         .replaceAll('\t', ' ');
     int viewableLength = '${pe.group.padLeft(pad)} : ${pe.msg}'
         .replaceAll('\n', '\\n')
-        .replaceAll('\t', ' ').length;
+        .replaceAll('\t', ' ')
+        .length;
     int diff = output.length - viewableLength;
     if (stdout.hasTerminal && viewableLength > (stdout.terminalColumns - 3)) {
       output = '${output.substring(0, stdout.terminalColumns - 3 + diff)}...';

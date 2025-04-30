@@ -1,9 +1,15 @@
+## 2.1.0
+- feat: Improve usability for args management, including the ability to hide 
+  some args which, while they are very helpful for dev purposes, are not so 
+  friendly for end-users.
+
 ## 2.0.0
 - feat!: (breaking) : remove onboarding capability from CLIBase. (Use 
   the at_onboarding_cli package instead.)
 
 ## 1.3.0
-- feat: Add passPhrase as optional argument to "CLIBase" to support password protected atKeys file.
+- feat: Add passPhrase as optional argument to "CLIBase" to support
+  password-protected atKeys file.
 - build: Upgraded the following dependencies
   - args to v2.6.0
   - at_client to v3.3.0
