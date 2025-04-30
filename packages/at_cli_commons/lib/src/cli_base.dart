@@ -79,7 +79,7 @@ class CLIBase {
   /// and calls [init] on it.
   /// <br/>
   /// <br/>
-  /// If [parser] is not supplied then uses [createArgsParser](namespace:namespace)
+  /// If [parser] is not supplied then uses `createArgsParser(namespace:namespace)`
   /// <br/>
   /// <br/>
   /// Allowing [parser] to be supplied enables callers to do something like this:
