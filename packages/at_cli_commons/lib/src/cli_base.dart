@@ -13,55 +13,85 @@ import 'package:version/version.dart';
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
 
+  /// Create an ArgParser which has all of the options and flags required by
+  /// [CLIBase]
+  ///
+  /// If [namespace] is not supplied then the ArgParser will have a mandatory
+  /// `namespace` argument.
+  ///
+  /// If [namespace] **is** supplied then the ArgParser will have a `namespace`
+  /// argument which is optional, defaulting to [namespace], and will also be
+  /// hidden.
+  static ArgParser createArgsParser({String? namespace}) {
+    return ArgParser()
+      ..addFlag('help', negatable: false, help: 'Usage instructions')
+      ..addOption('atsign',
+          abbr: 'a', mandatory: true, help: 'This client\'s atSign')
+      ..addOption('namespace',
+          abbr: 'n',
+          mandatory: namespace == null,
+          defaultsTo: namespace,
+          hide: namespace != null,
+          help: 'Namespace')
+      ..addOption('key-file',
+          abbr: 'k',
+          mandatory: false,
+          help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
+      ..addOption('home-dir',
+          abbr: 'h', mandatory: false, help: 'home directory')
+      ..addOption('storage-dir',
+          abbr: 's',
+          mandatory: false,
+          help: 'directory for this client\'s local storage files')
+      ..addOption('root-domain',
+          abbr: 'd',
+          mandatory: false,
+          help: 'Root Domain',
+          defaultsTo: 'root.atsign.org')
+      ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
+      ..addFlag('never-sync', negatable: false, help: 'Do not run sync')
+      ..addOption('max-connect-attempts',
+          help: 'Number of times to attempt to initially connect to atServer.'
+              ' Note: there is a 3-second delay between connection attempts.',
+          defaultsTo: defaultMaxConnectAttempts.toString())
+      ..addOption('passPhrase',
+          abbr: 'P',
+          help:
+              'Pass Phrase to encrypt/decrypt the password protected atKeys file',
+          mandatory: false);
+  }
+
   /// An ArgParser which has all of the options and flags required by [CLIBase]
   /// Used by [fromCommandLineArgs] if the `parser` parameter isn't supplied.
-  static final ArgParser argsParser = ArgParser()
-    ..addFlag('help', negatable: false, help: 'Usage instructions')
-    ..addOption('atsign',
-        abbr: 'a', mandatory: true, help: 'This client\'s atSign')
-    ..addOption('namespace', abbr: 'n', mandatory: true, help: 'Namespace')
-    ..addOption('key-file',
-        abbr: 'k',
-        mandatory: false,
-        help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
-    ..addOption('home-dir', abbr: 'h', mandatory: false, help: 'home directory')
-    ..addOption('storage-dir',
-        abbr: 's',
-        mandatory: false,
-        help: 'directory for this client\'s local storage files')
-    ..addOption('root-domain',
-        abbr: 'd',
-        mandatory: false,
-        help: 'Root Domain',
-        defaultsTo: 'root.atsign.org')
-    ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
-    ..addFlag('never-sync', negatable: false, help: 'Do not run sync')
-    ..addOption('max-connect-attempts',
-        help: 'Number of times to attempt to initially connect to atServer.'
-            ' Note: there is a 3-second delay between connection attempts.',
-        defaultsTo: defaultMaxConnectAttempts.toString())
-    ..addOption('passPhrase',
-        abbr: 'P',
-        help:
-            'Pass Phrase to encrypt/decrypt the password protected atKeys file',
-        mandatory: false);
+  ///
+  ///
+  /// This ArgParser by default will have a mandatory `namespace` argument.
+  ///
+  ///
+  /// If your application has a fixed namespace, then use [createArgsParser]
+  /// like this, for example:
+  /// ```
+  /// CLIBase.createArgsParser(namespace: 'my_app');
+  /// ```
+  static final ArgParser argsParser = createArgsParser();
 
   /// Constructs a CLIBase from a list of command-line arguments
   /// and calls [init] on it.
   /// <br/>
   /// <br/>
-  /// If [parser] is not supplied then uses CLIBase's [argsParser] static var.
+  /// If [parser] is not supplied then uses [createArgsParser](namespace:namespace)
+  /// <br/>
+  /// <br/>
   /// Allowing [parser] to be supplied enables callers to do something like this:
   /// ```
-  ///     ArgParser argsParser = CLIBase.argsParser
-  ///       ..addOption('my-cli-option',
-  ///          help: "an option which configures my cli's unique feature");
+  /// ArgParser argsParser = CLIBase.createArgsParser(namespace: 'my_app')
+  ///   ..addOption('my-cli-option', help: "my cli option help");
   ///
-  ///     CLIBase cliBase = await CLIBase.fromCommandLineArgs(args, parser: argsParser);
+  /// CLIBase cliBase = await CLIBase.fromCommandLineArgs(args, parser: argsParser);
   /// ```
   static Future<CLIBase> fromCommandLineArgs(List<String> args,
-      {ArgParser? parser}) async {
-    parser ??= argsParser;
+      {ArgParser? parser, String? namespace}) async {
+    parser ??= createArgsParser(namespace: namespace);
     ArgResults parsedArgs = parser.parse(args);
 
     if (parsedArgs['help'] == true) {
