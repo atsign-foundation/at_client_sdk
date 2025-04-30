@@ -1,5 +1,6 @@
 ## 2.1.0
-- feat: Add `CLIBase.createArgsParser({String? namespace})`
+- feat: Add `CLIBase.createArgsParser` and add some parameters to
+  `CLIBase.fromCommandLineArgs`
 
 ## 2.0.0
 - feat!: (breaking) : remove onboarding capability from CLIBase. (Use 

@@ -13,6 +13,16 @@ import 'package:version/version.dart';
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
 
+  static const Set<String> hideableArgs = {
+    'key-file',
+    'home-dir',
+    'storage-dir',
+    'root-domain',
+    'never-sync',
+    'max-connect-attempts',
+    'pass-phrase',
+  };
+
   /// Create an ArgParser which has all of the options and flags required by
   /// [CLIBase]
   ///
@@ -22,41 +32,87 @@ class CLIBase {
   /// If [namespace] **is** supplied then the ArgParser will have a `namespace`
   /// argument which is optional, defaulting to [namespace], and will also be
   /// hidden.
-  static ArgParser createArgsParser({String? namespace}) => ArgParser()
-    ..addFlag('help', negatable: false, help: 'Usage instructions')
-    ..addOption('atsign',
-        abbr: 'a', mandatory: true, help: 'This client\'s atSign')
-    ..addOption('namespace',
-        abbr: 'n',
-        mandatory: namespace == null,
-        defaultsTo: namespace,
-        hide: namespace != null,
-        help: 'Namespace')
-    ..addOption('key-file',
-        abbr: 'k',
-        mandatory: false,
-        help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
-    ..addOption('home-dir', abbr: 'h', mandatory: false, help: 'home directory')
-    ..addOption('storage-dir',
-        abbr: 's',
-        mandatory: false,
-        help: 'directory for this client\'s local storage files')
-    ..addOption('root-domain',
-        abbr: 'd',
-        mandatory: false,
-        help: 'Root Domain',
-        defaultsTo: 'root.atsign.org')
-    ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
-    ..addFlag('never-sync', negatable: false, help: 'Do not run sync')
-    ..addOption('max-connect-attempts',
-        help: 'Number of times to attempt to initially connect to atServer.'
-            ' Note: there is a 3-second delay between connection attempts.',
-        defaultsTo: defaultMaxConnectAttempts.toString())
-    ..addOption('passPhrase',
-        abbr: 'P',
-        help:
-            'Pass Phrase to encrypt/decrypt the password protected atKeys file',
-        mandatory: false);
+  ///
+  /// You may wish many of the arguments here to be hidden, since, while they
+  /// are very helpful for dev purposes, they are not so friendly for
+  /// end-users.
+  ///
+  /// For convenience, [hideableArgs] contains a list of arguments which you
+  /// will most likely wish to hide. So, for example:
+  /// ```
+  /// ArgParser argsParser = CLIBase.createArgsParser(namespace: 'my_app', hide: CLIBase.hideableArgs)
+  ///   ..addOption('my-cli-option', help: "something specific to my cli");
+  ///
+  /// CLIBase cliBase = await CLIBase.fromCommandLineArgs(args, parser: argsParser);
+  /// ```
+  ///
+  ///
+  static ArgParser createArgsParser({
+    String? namespace,
+    Set<String> hide = const {},
+  }) =>
+      ArgParser()
+        ..addFlag('help', negatable: false, help: 'Usage instructions')
+        ..addOption('atsign',
+            abbr: 'a', mandatory: true, help: 'The atSign to use')
+        ..addOption('namespace',
+            abbr: 'n',
+            mandatory: namespace == null,
+            defaultsTo: namespace,
+            hide: namespace != null,
+            help: 'Namespace')
+        ..addOption(
+          'key-file',
+          abbr: 'k',
+          mandatory: false,
+          help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/',
+          hide: hide.contains('key-file'),
+        )
+        ..addOption(
+          'home-dir',
+          abbr: 'h',
+          mandatory: false,
+          help: 'home directory',
+          hide: hide.contains('home-dir'),
+        )
+        ..addOption(
+          'storage-dir',
+          abbr: 's',
+          mandatory: false,
+          help: 'directory for this client\'s local storage files',
+          hide: hide.contains('storage-dir'),
+        )
+        ..addOption(
+          'root-domain',
+          abbr: 'd',
+          mandatory: false,
+          help: 'Root Domain',
+          defaultsTo: 'root.atsign.org',
+          hide: hide.contains('root-domain'),
+        )
+        ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
+        ..addFlag(
+          'never-sync',
+          negatable: false,
+          help: 'Do not run sync',
+          hide: hide.contains('never-sync'),
+        )
+        ..addOption(
+          'max-connect-attempts',
+          help: 'Number of times to attempt to initially connect to atServer.'
+              ' Note: there is a 3-second delay between connection attempts.',
+          defaultsTo: defaultMaxConnectAttempts.toString(),
+          hide: hide.contains('max-connect-attempts'),
+        )
+        ..addOption(
+          'passPhrase',
+          aliases: ['pass-phrase'],
+          abbr: 'P',
+          help:
+              'Pass Phrase to encrypt/decrypt the password protected atKeys file',
+          mandatory: false,
+          hide: hide.contains('passPhrase') && hide.contains('pass-phrase'),
+        );
 
   /// An ArgParser which has all of the options and flags required by [CLIBase]
   /// Used by [fromCommandLineArgs] if the `parser` parameter isn't supplied.
@@ -74,11 +130,7 @@ class CLIBase {
 
   /// Constructs a CLIBase from a list of command-line arguments
   /// and calls [init] on it.
-  /// <br/>
-  /// <br/>
-  /// If [parser] is not supplied then uses `createArgsParser(namespace:namespace)`
-  /// <br/>
-  /// <br/>
+  ///
   /// Allowing [parser] to be supplied enables callers to do something like this:
   /// ```
   /// ArgParser argsParser = CLIBase.createArgsParser(namespace: 'my_app')
@@ -86,9 +138,16 @@ class CLIBase {
   ///
   /// CLIBase cliBase = await CLIBase.fromCommandLineArgs(args, parser: argsParser);
   /// ```
-  static Future<CLIBase> fromCommandLineArgs(List<String> args,
-      {ArgParser? parser, String? namespace}) async {
-    parser ??= createArgsParser(namespace: namespace);
+  ///
+  /// If [parser] is not supplied then we will call [createArgsParser] with
+  /// the [namespace] and [hide] parameters
+  static Future<CLIBase> fromCommandLineArgs(
+    List<String> args, {
+    ArgParser? parser,
+    String? namespace,
+    Set<String> hide = const {},
+  }) async {
+    parser ??= createArgsParser(namespace: namespace, hide: hide);
     ArgResults parsedArgs = parser.parse(args);
 
     if (parsedArgs['help'] == true) {
