@@ -22,44 +22,41 @@ class CLIBase {
   /// If [namespace] **is** supplied then the ArgParser will have a `namespace`
   /// argument which is optional, defaulting to [namespace], and will also be
   /// hidden.
-  static ArgParser createArgsParser({String? namespace}) {
-    return ArgParser()
-      ..addFlag('help', negatable: false, help: 'Usage instructions')
-      ..addOption('atsign',
-          abbr: 'a', mandatory: true, help: 'This client\'s atSign')
-      ..addOption('namespace',
-          abbr: 'n',
-          mandatory: namespace == null,
-          defaultsTo: namespace,
-          hide: namespace != null,
-          help: 'Namespace')
-      ..addOption('key-file',
-          abbr: 'k',
-          mandatory: false,
-          help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
-      ..addOption('home-dir',
-          abbr: 'h', mandatory: false, help: 'home directory')
-      ..addOption('storage-dir',
-          abbr: 's',
-          mandatory: false,
-          help: 'directory for this client\'s local storage files')
-      ..addOption('root-domain',
-          abbr: 'd',
-          mandatory: false,
-          help: 'Root Domain',
-          defaultsTo: 'root.atsign.org')
-      ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
-      ..addFlag('never-sync', negatable: false, help: 'Do not run sync')
-      ..addOption('max-connect-attempts',
-          help: 'Number of times to attempt to initially connect to atServer.'
-              ' Note: there is a 3-second delay between connection attempts.',
-          defaultsTo: defaultMaxConnectAttempts.toString())
-      ..addOption('passPhrase',
-          abbr: 'P',
-          help:
-              'Pass Phrase to encrypt/decrypt the password protected atKeys file',
-          mandatory: false);
-  }
+  static ArgParser createArgsParser({String? namespace}) => ArgParser()
+    ..addFlag('help', negatable: false, help: 'Usage instructions')
+    ..addOption('atsign',
+        abbr: 'a', mandatory: true, help: 'This client\'s atSign')
+    ..addOption('namespace',
+        abbr: 'n',
+        mandatory: namespace == null,
+        defaultsTo: namespace,
+        hide: namespace != null,
+        help: 'Namespace')
+    ..addOption('key-file',
+        abbr: 'k',
+        mandatory: false,
+        help: 'Your atSign\'s atKeys file if not in ~/.atsign/keys/')
+    ..addOption('home-dir', abbr: 'h', mandatory: false, help: 'home directory')
+    ..addOption('storage-dir',
+        abbr: 's',
+        mandatory: false,
+        help: 'directory for this client\'s local storage files')
+    ..addOption('root-domain',
+        abbr: 'd',
+        mandatory: false,
+        help: 'Root Domain',
+        defaultsTo: 'root.atsign.org')
+    ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
+    ..addFlag('never-sync', negatable: false, help: 'Do not run sync')
+    ..addOption('max-connect-attempts',
+        help: 'Number of times to attempt to initially connect to atServer.'
+            ' Note: there is a 3-second delay between connection attempts.',
+        defaultsTo: defaultMaxConnectAttempts.toString())
+    ..addOption('passPhrase',
+        abbr: 'P',
+        help:
+            'Pass Phrase to encrypt/decrypt the password protected atKeys file',
+        mandatory: false);
 
   /// An ArgParser which has all of the options and flags required by [CLIBase]
   /// Used by [fromCommandLineArgs] if the `parser` parameter isn't supplied.
