@@ -19,7 +19,16 @@ class E2ESyncService {
     return _singleton;
   }
 
+  void forceLogInfo(String s) {
+    final saved = _logger.level;
+    _logger.level = 'info';
+    _logger.info(s);
+    _logger.level = saved;
+  }
   Future<void> syncData(SyncService syncSvc, {SyncOptions? syncOptions}) async {
+    final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign();
+    forceLogInfo('syncData starting for $atSign with $syncOptions');
+
     SyncServiceImpl.queueSize = 1;
     SyncServiceImpl.syncRequestThreshold = 1;
     SyncServiceImpl.syncRequestTriggerInSeconds = 1;
@@ -57,7 +66,7 @@ class E2ESyncService {
         }
         for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
           if (syncOptions.key.isNotNull && (keyInfo.key == syncOptions.key)) {
-            _logger.info(
+            forceLogInfo(
                 'Found ${syncOptions.key} in key list info | ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
             isSyncInProgress = false;
           }
@@ -94,6 +103,7 @@ class E2ESyncService {
       syncService.sync();
       await Future.delayed(Duration(milliseconds: 100));
     }
+    forceLogInfo('syncData complete for $atSign');
   }
 }
 
@@ -104,6 +114,11 @@ class SyncOptions {
 
   /// When set to true, wait until the client and server are in sync, irrespective of the sync time-out conditions
   bool waitForFullSyncToComplete = false;
+
+  @override
+  String toString() {
+    return 'SyncOptions{key: $key, waitForFullSyncToComplete: $waitForFullSyncToComplete}';
+  }
 }
 
 class E2ETestSyncProgressListener extends SyncProgressListener {
