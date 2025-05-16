@@ -8,7 +8,6 @@ import 'package:at_client/src/key_stream/key_stream_iterable_base.dart';
 import 'package:at_client/src/key_stream/key_stream_map_base.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 import 'package:at_end2end_test/config/config_util.dart';
-import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
@@ -26,10 +25,12 @@ void main() async {
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        currentAtSign, namespace, authType,
+        enableInitialSync: false);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        enableInitialSync: false);
   });
 
   group('KeyStreamMixin group', () {
@@ -86,13 +87,11 @@ void main() async {
           currentAtSign,
           namespace,
           TestPreferences.getInstance().getPreference(currentAtSign));
+      final pro = PutRequestOptions()..useRemoteAtServer = true;
       await Future.wait([
-        atClientManager.atClient.put(key, randomValue),
-        atClientManager.atClient.put(key2, randomValue2)
+        atClientManager.atClient.put(key, randomValue, putRequestOptions: pro),
+        atClientManager.atClient.put(key2, randomValue2, putRequestOptions: pro)
       ]);
-
-      await E2ESyncService.getInstance()
-          .syncData(atClientManager.atClient.syncService);
 
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
