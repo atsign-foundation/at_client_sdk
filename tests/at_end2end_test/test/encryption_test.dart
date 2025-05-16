@@ -66,7 +66,7 @@ void main() {
 
       var getResult = await atClient_2.get(atKey);
       expect(getResult.value, clearText);
-    }, timeout: Timeout(Duration(minutes: 5)));
+    }, timeout: Timeout(Duration(minutes: 1)));
 
     test('Test put shared, then get, no IV, 1.5 to 2.0', () async {
       AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
@@ -153,7 +153,7 @@ void main() {
       var getResult = await atClient_2.get(atKey,
           getRequestOptions: GetRequestOptions()..bypassCache = true);
       expect(getResult.value, clearText);
-    }, timeout: Timeout(Duration(minutes: 5)));
+    }, timeout: Timeout(Duration(minutes: 1)));
 
     test('Test put shared, then get, no IV, 1.5 to 2.0', () async {
       AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));

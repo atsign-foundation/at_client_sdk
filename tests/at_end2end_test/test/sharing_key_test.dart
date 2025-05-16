@@ -69,7 +69,7 @@ void main() async {
     expect(getResult.metadata?.pubKeyCS != null, true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 5)));
+  }, timeout: Timeout(Duration(minutes: 1)));
 
   /// The purpose of this test verify the following:
   /// 1. Put method with caching of key
@@ -124,7 +124,7 @@ void main() async {
     expect(getCachedKeyResponse.metadata!.isCached, true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 5)));
+  }, timeout: Timeout(Duration(minutes: 1)));
 
   /// The purpose of this test verify the following:
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
