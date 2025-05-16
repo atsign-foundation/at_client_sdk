@@ -18,7 +18,7 @@ class E2ESyncService {
     return _singleton;
   }
 
-  Future<void> syncData(SyncService syncService,
+  Future<void> syncData(SyncService abstract,
       {SyncOptions? syncOptions}) async {
     SyncServiceImpl.queueSize = 1;
     SyncServiceImpl.syncRequestThreshold = 1;
@@ -31,8 +31,11 @@ class E2ESyncService {
     int totalWaitTimeInMills = Duration(minutes: 2).inMilliseconds;
     int transientWaitTimeInMills = Duration(seconds: 30).inMilliseconds;
 
+    SyncServiceImpl syncService = abstract as SyncServiceImpl;
     // Call to syncService.sync to expedite the sync progress
-    syncService.sync();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await syncService.processSyncRequests(
+        respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
 
     E2ETestSyncProgressListener e2eTestSyncProgressListener =
         E2ETestSyncProgressListener();
@@ -51,7 +54,9 @@ class E2ESyncService {
         // Hence call sync method to expedite the sync progress
         if (syncProgress.keyInfoList == null ||
             syncProgress.keyInfoList!.isEmpty) {
-          syncService.sync();
+          // ignore: invalid_use_of_visible_for_testing_member
+          await syncService.processSyncRequests(
+              respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
           return;
         }
         for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
@@ -88,7 +93,9 @@ class E2ESyncService {
                     .inMilliseconds <
                 transientWaitTimeInMills) &&
             (isSyncInProgress == true)) {
-      syncService.sync();
+      // ignore: invalid_use_of_visible_for_testing_member
+      await syncService.processSyncRequests(
+          respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
       await Future.delayed(Duration(milliseconds: 100));
     }
   }
