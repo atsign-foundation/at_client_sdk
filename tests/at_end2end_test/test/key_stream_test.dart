@@ -306,7 +306,7 @@ void main() async {
       );
     });
 
-    test('', () async {
+    test('switch atsigns test', () async {
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
           sharedWithAtSign);
       expect(keyStream, isA<KeyStreamMixin<String?>>());
@@ -350,6 +350,6 @@ void main() async {
           key3, AtValue()..value = randomValue3, 'update');
       expect(keyStream3, emitsInOrder([randomValue3]));
       await keyStream3.dispose();
-    }, timeout: Timeout(Duration(minutes: 7)));
+    });
   });
 }
