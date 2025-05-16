@@ -19,91 +19,109 @@ class E2ESyncService {
     return _singleton;
   }
 
-  void forceLogInfo(String s) {
-    final saved = _logger.level;
-    _logger.level = 'info';
-    _logger.info(s);
-    _logger.level = saved;
-  }
   Future<void> syncData(SyncService syncSvc, {SyncOptions? syncOptions}) async {
-    final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign();
-    forceLogInfo('syncData starting for $atSign with $syncOptions');
+    final saved = _logger.level ?? AtSignLogger.root_level;
+    _logger.level = 'info';
+    try {
+      final atSign = AtClientManager
+          .getInstance()
+          .atClient
+          .getCurrentAtSign();
+      _logger.info('syncData starting for $atSign with $syncOptions');
 
-    SyncServiceImpl.queueSize = 1;
-    SyncServiceImpl.syncRequestThreshold = 1;
-    SyncServiceImpl.syncRequestTriggerInSeconds = 1;
-    SyncServiceImpl.syncRunIntervalSeconds = 1;
-    bool isSyncInProgress = true;
+      SyncServiceImpl.queueSize = 1;
+      SyncServiceImpl.syncRequestThreshold = 1;
+      SyncServiceImpl.syncRequestTriggerInSeconds = 1;
+      SyncServiceImpl.syncRunIntervalSeconds = 1;
+      bool isSyncInProgress = true;
 
-    DateTime startTime = DateTime.now().toUtc();
-    DateTime lastReceivedDateTime = DateTime.now().toUtc();
-    int totalWaitTimeInMills = Duration(minutes: 2).inMilliseconds;
-    int transientWaitTimeInMills = Duration(seconds: 30).inMilliseconds;
+      DateTime startTime = DateTime.now().toUtc();
+      DateTime lastReceivedDateTime = DateTime.now().toUtc();
+      int totalWaitTimeInMills = Duration(minutes: 2).inMilliseconds;
+      int transientWaitTimeInMills = Duration(seconds: 30).inMilliseconds;
 
-    SyncServiceImpl syncService = syncSvc as SyncServiceImpl;
-    // Call to syncService.sync to expedite the sync progress
-    syncService.sync();
+      SyncServiceImpl syncService = syncSvc as SyncServiceImpl;
+      // Call to syncService.sync to expedite the sync progress
+      syncService.sync();
 
-    E2ETestSyncProgressListener e2eTestSyncProgressListener =
-        E2ETestSyncProgressListener();
-    syncService.addProgressListener(e2eTestSyncProgressListener);
+      E2ETestSyncProgressListener e2eTestSyncProgressListener =
+      E2ETestSyncProgressListener();
+      syncService.addProgressListener(e2eTestSyncProgressListener);
 
-    e2eTestSyncProgressListener.streamController.stream
-        .listen((SyncProgress syncProgress) async {
-      lastReceivedDateTime = DateTime.now().toUtc();
-      // Exit the sync process when either of the conditions are met,
-      // 1. If SyncOptions.key is set, wait until the key is synced.
-      // 2. else, wait until sync is completed
-      if (syncOptions != null && syncOptions.key.isNotNull) {
-        _logger.info(
-            'Found SyncOptions...Waiting until the ${syncOptions.key} is synced');
-        // Since the KeyInfoList is empty, wait until the required key is synced.
-        // Hence call sync method to expedite the sync progress
-        if (syncProgress.keyInfoList == null ||
-            syncProgress.keyInfoList!.isEmpty) {
-          syncService.sync();
-          return;
-        }
-        for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
-          if (syncOptions.key.isNotNull && (keyInfo.key == syncOptions.key)) {
-            forceLogInfo(
-                'Found ${syncOptions.key} in key list info | ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId}');
+      e2eTestSyncProgressListener.streamController.stream
+          .listen((SyncProgress syncProgress) async {
+        lastReceivedDateTime = DateTime.now().toUtc();
+        // Exit the sync process when either of the conditions are met,
+        // 1. If SyncOptions.key is set, wait until the key is synced.
+        // 2. else, wait until sync is completed
+        if (syncOptions != null && syncOptions.key.isNotNull) {
+          _logger.info(
+              'Found SyncOptions...Waiting until the ${syncOptions
+                  .key} is synced');
+          // Since the KeyInfoList is empty, wait until the required key is synced.
+          // Hence call sync method to expedite the sync progress
+          if (syncProgress.keyInfoList == null ||
+              syncProgress.keyInfoList!.isEmpty) {
+            syncService.sync();
+            return;
+          }
+          for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
+            if (syncOptions.key.isNotNull && (keyInfo.key == syncOptions.key)) {
+              _logger.info(
+                  'Found ${syncOptions.key} in key list info | ${syncProgress
+                      .syncStatus} | localCommitId: ${syncProgress
+                      .localCommitId} | ServerCommitId: ${syncProgress
+                      .serverCommitId}');
+              isSyncInProgress = false;
+            }
+          }
+        } else {
+          if (((syncProgress.syncStatus == SyncStatus.success) &&
+              (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
+              (syncProgress.syncStatus == SyncStatus.failure)) {
             isSyncInProgress = false;
           }
         }
-      } else {
-        if (((syncProgress.syncStatus == SyncStatus.success) &&
-                (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
-            (syncProgress.syncStatus == SyncStatus.failure)) {
-          isSyncInProgress = false;
+        if (!isSyncInProgress) {
+          _logger.info(
+              'Completed sync for ${syncProgress.atSign}| ${syncProgress
+                  .syncStatus} | localCommitId: ${syncProgress
+                  .localCommitId} | ServerCommitId: ${syncProgress
+                  .serverCommitId} | Processing time: ${syncProgress
+                  .completedAt!
+                  .difference(syncProgress.startedAt!)
+                  .inMilliseconds} millis');
         }
-      }
-      if (!isSyncInProgress) {
-        _logger.info(
-            'Completed sync for ${syncProgress.atSign}| ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId} | Processing time: ${syncProgress.completedAt!.difference(syncProgress.startedAt!).inMilliseconds} millis');
-      }
-    });
+      });
 
-    /// If SyncOptions.waitForFullSyncToComplete is true, wait until full sync is completed (OR)
-    /// else, wait until
-    ///   a. When totalWaitTime is less than 2 minutes
-    ///   b. When transientWaitTime is less than 30 seconds
-    ///   c. When isSyncInProgress is set to true
-    while ((syncOptions != null &&
-            syncOptions.waitForFullSyncToComplete &&
-            isSyncInProgress) ||
-        (DateTime.now().toUtc().difference(startTime).inMilliseconds <
-                totalWaitTimeInMills) &&
-            (DateTime.now()
-                    .toUtc()
-                    .difference(lastReceivedDateTime)
-                    .inMilliseconds <
-                transientWaitTimeInMills) &&
-            (isSyncInProgress == true)) {
-      syncService.sync();
-      await Future.delayed(Duration(milliseconds: 100));
+      /// If SyncOptions.waitForFullSyncToComplete is true, wait until full sync is completed (OR)
+      /// else, wait until
+      ///   a. When totalWaitTime is less than 2 minutes
+      ///   b. When transientWaitTime is less than 30 seconds
+      ///   c. When isSyncInProgress is set to true
+      while ((syncOptions != null &&
+          syncOptions.waitForFullSyncToComplete &&
+          isSyncInProgress) ||
+          (DateTime
+              .now()
+              .toUtc()
+              .difference(startTime)
+              .inMilliseconds <
+              totalWaitTimeInMills) &&
+              (DateTime
+                  .now()
+                  .toUtc()
+                  .difference(lastReceivedDateTime)
+                  .inMilliseconds <
+                  transientWaitTimeInMills) &&
+              (isSyncInProgress == true)) {
+        syncService.sync();
+        await Future.delayed(Duration(milliseconds: 100));
+      }
+      _logger.info('syncData complete for $atSign');
+    } finally {
+      _logger.level = saved;
     }
-    forceLogInfo('syncData complete for $atSign');
   }
 }
 

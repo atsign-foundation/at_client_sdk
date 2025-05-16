@@ -122,8 +122,6 @@ void main() async {
         .get(AtKey.fromString(getResult.first));
     expect(getCachedKeyResponse.value, '0873');
     expect(getCachedKeyResponse.metadata!.isCached, true);
-    //Setting the timeout to prevent termination of test, since we have Future.delayed
-    // for 30 Seconds.
   }, timeout: Timeout(Duration(minutes: 1)));
 
   /// The purpose of this test verify the following:
