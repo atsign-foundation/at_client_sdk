@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+
 // ignore: implementation_imports
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_utils/at_logger.dart';
@@ -18,7 +19,7 @@ class E2ESyncService {
     return _singleton;
   }
 
-  Future<void> syncData(SyncService abstract,
+  Future<void> syncData(SyncService syncSvc,
       {SyncOptions? syncOptions}) async {
     SyncServiceImpl.queueSize = 1;
     SyncServiceImpl.syncRequestThreshold = 1;
@@ -31,11 +32,9 @@ class E2ESyncService {
     int totalWaitTimeInMills = Duration(minutes: 2).inMilliseconds;
     int transientWaitTimeInMills = Duration(seconds: 30).inMilliseconds;
 
-    SyncServiceImpl syncService = abstract as SyncServiceImpl;
+    SyncServiceImpl syncService = syncSvc as SyncServiceImpl;
     // Call to syncService.sync to expedite the sync progress
-    // ignore: invalid_use_of_visible_for_testing_member
-    await syncService.processSyncRequests(
-        respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+    syncService.sync();
 
     E2ETestSyncProgressListener e2eTestSyncProgressListener =
         E2ETestSyncProgressListener();
@@ -54,6 +53,7 @@ class E2ESyncService {
         // Hence call sync method to expedite the sync progress
         if (syncProgress.keyInfoList == null ||
             syncProgress.keyInfoList!.isEmpty) {
+          syncService.sync();
           // ignore: invalid_use_of_visible_for_testing_member
           await syncService.processSyncRequests(
               respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
@@ -93,6 +93,7 @@ class E2ESyncService {
                     .inMilliseconds <
                 transientWaitTimeInMills) &&
             (isSyncInProgress == true)) {
+      syncService.sync();
       // ignore: invalid_use_of_visible_for_testing_member
       await syncService.processSyncRequests(
           respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
