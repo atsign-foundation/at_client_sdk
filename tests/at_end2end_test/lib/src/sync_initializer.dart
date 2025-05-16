@@ -19,13 +19,12 @@ class E2ESyncService {
     return _singleton;
   }
 
-  Future<void> syncData(SyncService syncSvc,
-      {SyncOptions? syncOptions}) async {
+  Future<void> syncData(SyncService syncSvc, {SyncOptions? syncOptions}) async {
     SyncServiceImpl.queueSize = 1;
     SyncServiceImpl.syncRequestThreshold = 1;
     SyncServiceImpl.syncRequestTriggerInSeconds = 1;
     SyncServiceImpl.syncRunIntervalSeconds = 1;
-    var isSyncInProgress = true;
+    bool isSyncInProgress = true;
 
     DateTime startTime = DateTime.now().toUtc();
     DateTime lastReceivedDateTime = DateTime.now().toUtc();
@@ -54,9 +53,6 @@ class E2ESyncService {
         if (syncProgress.keyInfoList == null ||
             syncProgress.keyInfoList!.isEmpty) {
           syncService.sync();
-          // ignore: invalid_use_of_visible_for_testing_member
-          await syncService.processSyncRequests(
-              respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
           return;
         }
         for (KeyInfo keyInfo in syncProgress.keyInfoList!) {
@@ -73,8 +69,10 @@ class E2ESyncService {
           isSyncInProgress = false;
         }
       }
-      _logger.info(
-          'Completed sync for ${syncProgress.atSign}| ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId} | Processing time: ${syncProgress.completedAt!.difference(syncProgress.startedAt!).inMilliseconds} millis');
+      if (!isSyncInProgress) {
+        _logger.info(
+            'Completed sync for ${syncProgress.atSign}| ${syncProgress.syncStatus} | localCommitId: ${syncProgress.localCommitId} | ServerCommitId: ${syncProgress.serverCommitId} | Processing time: ${syncProgress.completedAt!.difference(syncProgress.startedAt!).inMilliseconds} millis');
+      }
     });
 
     /// If SyncOptions.waitForFullSyncToComplete is true, wait until full sync is completed (OR)
@@ -83,8 +81,8 @@ class E2ESyncService {
     ///   b. When transientWaitTime is less than 30 seconds
     ///   c. When isSyncInProgress is set to true
     while ((syncOptions != null &&
-            syncOptions.waitForFullSyncToComplete == true &&
-            isSyncInProgress == true) ||
+            syncOptions.waitForFullSyncToComplete &&
+            isSyncInProgress) ||
         (DateTime.now().toUtc().difference(startTime).inMilliseconds <
                 totalWaitTimeInMills) &&
             (DateTime.now()
@@ -94,9 +92,6 @@ class E2ESyncService {
                 transientWaitTimeInMills) &&
             (isSyncInProgress == true)) {
       syncService.sync();
-      // ignore: invalid_use_of_visible_for_testing_member
-      await syncService.processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
       await Future.delayed(Duration(milliseconds: 100));
     }
   }
@@ -104,7 +99,7 @@ class E2ESyncService {
 
 /// Additional options for client to wait on sync
 class SyncOptions {
-  /// Waits until the key is sync'ed to the client
+  /// Waits until the key is synced to the client
   String? key;
 
   /// When set to true, wait until the client and server are in sync, irrespective of the sync time-out conditions

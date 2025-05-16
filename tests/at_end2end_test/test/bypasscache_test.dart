@@ -12,7 +12,6 @@ void main() async {
   late String sharedWithAtSign;
   final namespace = TestConstants.namespace;
   var uuid = Uuid();
-
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];

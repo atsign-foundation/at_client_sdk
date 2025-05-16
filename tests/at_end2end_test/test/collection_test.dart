@@ -289,10 +289,8 @@ void main() async {
 
     List<String> keys =
         await sharedWithAtClientManager.atClient.getKeys(regex: regex);
-    print('Keys sync to $secondAtSign: $keys');
     expect(keys.length, 1,
-        reason:
-            'On the recipient side expecting a single keys with the regex supplied');
+        reason: 'Should only be one key matching this regex: $regex');
 
     AtValue atValue =
         await sharedWithAtClientManager.atClient.get(AtKey.fromString(keys[0]));
@@ -318,10 +316,13 @@ void main() async {
     var shareRes = await phone.share([secondAtSign]);
     expect(shareRes, true);
     await E2ESyncService.getInstance().syncData(
-        currentAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()
-          ..key =
-              '$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
+      currentAtClientManager.atClient.syncService,
+      syncOptions: SyncOptions()
+        ..key = '$secondAtSign:personal-phone-$randomId'
+            '.phone.atcollectionmodel.${TestConstants.namespace}'
+            '$firstAtSign'
+        ..waitForFullSyncToComplete = true,
+    );
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -331,8 +332,8 @@ void main() async {
       TestPreferences.getInstance().getPreference(secondAtSign),
     );
     await E2ESyncService.getInstance().syncData(
-      sharedWithAtClientManager.atClient.syncService,
-    );
+        sharedWithAtClientManager.atClient.syncService,
+        syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone-$randomId',
         collectionName: 'phone',
@@ -383,6 +384,11 @@ void main() async {
         true);
     atSignsList.clear();
 
+    // Let's wait for a sync, and then unshare
+    await E2ESyncService.getInstance().syncData(
+        AtClientManager.getInstance().atClient.syncService,
+        syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
+
     // Unshare now
     await fourthPhone.unshare(atSigns: [thirdAtSign, fourthAtSign]);
     expect(await fourthPhone.sharedWith(),
@@ -395,7 +401,7 @@ void main() async {
           id: 'fourth phone',
           namespace: TestConstants.namespace,
           collectionName: 'phone'),
-      throwsA(isA<Exception>()),
+      throwsA(isA<KeyNotFoundException>()),
     );
   });
 

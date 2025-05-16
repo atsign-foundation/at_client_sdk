@@ -636,6 +636,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         localAtValue = await _atClient.get(atKey);
       } on KeyNotFoundException {
         return null;
+      } on AtKeyNotFoundException {
+        return null;
       }
       if (atKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
@@ -697,8 +699,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       try {
         command = await _getCommand(entry);
       } on KeyNotFoundException {
-        _logger.severe(
-            '${entry.atKey} is not found in keystore. Skipping to entry to sync');
+        _logger.info(
+            '${entry.atKey} is no longer in keystore. Skipping sync for it.');
         removeUncommittedEntriesList.add(entry);
         continue;
       }

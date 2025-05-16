@@ -62,7 +62,6 @@ void main() async {
     expect(notificationListResult, isNotEmpty);
     notificationListResult = notificationListResult.replaceFirst('data:', '');
     final notificationListJson = jsonDecode(notificationListResult);
-    print(notificationListJson);
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
     expect(notificationListJson[0]['value'], isNotEmpty);
@@ -105,7 +104,6 @@ void main() async {
     expect(notificationListResult, isNotEmpty);
     notificationListResult = notificationListResult.replaceFirst('data:', '');
     final notificationListJson = jsonDecode(notificationListResult);
-    print(notificationListJson);
     expect(notificationListJson[0]['from'], currentAtSign);
     expect(notificationListJson[0]['to'], sharedWithAtSign);
     expect(notificationListJson[0]['isEncrypted'], false);

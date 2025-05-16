@@ -11,10 +11,11 @@ String currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
 String sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 String authType = ConfigUtil.getYaml()['authType'];
 
+const String constValue = '+91 9868123123';
+
 void main() {
   String notifyKey =
       '$sharedWithAtSign:phone.${TestConstants.namespace}$currentAtSign';
-  String value = '+91 9868123123';
 
   test('A test to send and receive notification with isolate', () async {
     ReceivePort mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
@@ -24,7 +25,7 @@ void main() {
         await Isolate.spawn(initSharedAtSign, mainIsolateReceivePort.sendPort);
     // Listen for messages from isolate
     mainIsolateReceivePort.listen(expectAsync1((data) {
-      expect(data.value, value);
+      expect(data.value, constValue);
       expect(data.key, notifyKey);
       expect(data.from, currentAtSign);
       expect(data.to, sharedWithAtSign);
@@ -41,7 +42,7 @@ void main() {
         .atClient
         .notificationService
         .notify(NotificationParams.forUpdate(AtKey.fromString(notifyKey),
-            value: value));
+            value: constValue));
 
     expect(notificationResult.notificationStatusEnum,
         NotificationStatusEnum.delivered);
@@ -66,7 +67,7 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
       .subscribe(shouldDecrypt: true)
       .listen((onData) {
     // Ignore stats notifications
-    if (onData.id == '-1') {
+    if (onData.value != constValue) {
       return;
     }
     mainIsolateSendPort.send(onData);

@@ -6,6 +6,7 @@ import 'package:at_end2end_test/src/at_encryption_key_initializers.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
+import 'package:at_utils/at_logger.dart';
 
 import 'at_credentials.dart';
 
@@ -13,7 +14,10 @@ class TestSuiteInitializer {
   static final TestSuiteInitializer _singleton =
       TestSuiteInitializer._internal();
 
-  TestSuiteInitializer._internal();
+  TestSuiteInitializer._internal() {
+    AtSignLogger.root_level = 'WARNING';
+    AtSignLogger.defaultLoggingHandler = AtSignLogger.consoleLoggingHandler;
+  }
 
   factory TestSuiteInitializer.getInstance() {
     return _singleton;
@@ -26,13 +30,26 @@ class TestSuiteInitializer {
       late AtChops atChops;
       AtAuthResponse? atAuthResponse;
 
-      if (authType.toLowerCase() == 'apkam') {
+      bool apkam = authType.toLowerCase() == 'apkam';
+
+      if (apkam) {
         AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
         atAuthRequest.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
         atAuthRequest.atKeysFilePath =
             '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys';
         atAuthResponse = await authenticate(atAuthRequest);
         atChops = createAtChopsFromAtAuthKeys(atAuthResponse.atAuthKeys!);
+
+        AtCredentials.credentialsMap[atSign] = {
+          'pkamPublicKey': atAuthResponse.atAuthKeys!.apkamPublicKey,
+          'pkamPrivateKey': atAuthResponse.atAuthKeys!.apkamPrivateKey,
+          'encryptionPublicKey':
+              atAuthResponse.atAuthKeys!.defaultEncryptionPublicKey,
+          'encryptionPrivateKey':
+              atAuthResponse.atAuthKeys!.defaultEncryptionPrivateKey,
+          'selfEncryptionKey':
+              atAuthResponse.atAuthKeys!.defaultSelfEncryptionKey
+        };
       } else {
         atChops = createAtChopsFromDemoKeys(atSign);
       }

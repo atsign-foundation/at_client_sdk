@@ -4,7 +4,6 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -41,7 +40,6 @@ void main() {
   test(
       'A test to verify cached key is deleted in sharedWith secondary when CCD is set to true',
       () async {
-    AtSignLogger.root_level = 'finer';
     // Create a key with TTR set
     var key = 'deletecachedkey-${Uuid().v4().hashCode}';
     var atKey =

@@ -86,9 +86,10 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
       _populateModel(model, jsonDecode(atValue.value), atKey);
       return model;
     } catch (e) {
-      _logger.severe('failed to get value of ${atKey.key} $e');
-      throw Exception(
-          'AtCollectionModel is not found for the given id:$id , namespace:$namespace and collectionName: $collectionName');
+      throw KeyNotFoundException(
+          'AtCollectionModel not found for the given id:$id,'
+          ' namespace:$namespace'
+          ' and collectionName: $collectionName');
     }
   }
 

@@ -109,7 +109,7 @@ void main() async {
     });
   });
 
-  group('KeyStream', () {
+  group('KeyStream group', () {
     late KeyStreamImpl<String> keyStream;
     var uuid;
     var randomValue;
@@ -145,8 +145,9 @@ void main() async {
     test('handleNotification', () async {
       keyStream.handleNotification(
           key, AtValue()..value = randomValue, 'update');
-      await Future.delayed(Duration(milliseconds: 500));
+      await Future.delayed(Duration(milliseconds: 100));
       keyStream.handleNotification(key, AtValue(), 'delete');
+      await Future.delayed(Duration(milliseconds: 100));
       expect(keyStream, emitsInOrder([randomValue, null]));
     });
 
