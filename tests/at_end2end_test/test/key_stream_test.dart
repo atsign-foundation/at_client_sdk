@@ -55,7 +55,7 @@ void main() async {
         ..namespace = namespace
         ..sharedBy = currentAtSign;
       keyStream = KeyStreamImpl<String>(
-        regex: keySuffix + '.' + namespace + '@',
+        regex: '$keySuffix.$namespace@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
