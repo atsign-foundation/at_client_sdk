@@ -18,7 +18,10 @@ class SyncProgress {
 
   @override
   String toString() {
-    return 'SyncProgress{atSign: $atSign, syncStatus: $syncStatus, isInitialSync: $isInitialSync, startedAt: $startedAt, completedAt: $completedAt, message: $message, '
-        'keyInfoList:$keyInfoList, localCommitIdBeforeSync:$localCommitIdBeforeSync, localCommitId:$localCommitId, serverCommitId:$serverCommitId}';
+    return 'SyncProgress{atSign: $atSign, syncStatus: $syncStatus,'
+        '\n\t isInitialSync: $isInitialSync, startedAt: $startedAt,'
+        ' completedAt: $completedAt, message: $message, '
+        '\n\t keyInfoList:$keyInfoList,'
+        '\n\t localCommitIdBeforeSync:$localCommitIdBeforeSync, localCommitId:$localCommitId, serverCommitId:$serverCommitId}';
   }
 }

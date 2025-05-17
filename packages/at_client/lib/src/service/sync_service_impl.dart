@@ -279,6 +279,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
     syncProgress.localCommitId = localCommitId;
     syncProgress.serverCommitId = serverCommitId;
+    print(syncProgress.toString());
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(syncProgress);
