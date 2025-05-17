@@ -118,6 +118,7 @@ class E2ESyncService {
         syncService.sync();
         await Future.delayed(Duration(milliseconds: 100));
       }
+      syncSvc.removeProgressListener(e2eTestSyncProgressListener);
       _logger.info('syncData complete for $atSign');
     } finally {
       _logger.level = saved;
