@@ -3,7 +3,11 @@ library at_client;
 import 'package:meta/meta.dart';
 
 @experimental
+export 'package:at_client/src/at_collection/collections.dart';
+@experimental
 export 'package:at_client/src/at_collection/at_collection_model.dart';
+@experimental
+export 'package:at_client/src/at_collection/at_json_collection_model.dart';
 @experimental
 export 'package:at_client/src/at_collection/at_collection_model_factory.dart';
 export 'package:at_client/src/client/at_client_impl.dart';

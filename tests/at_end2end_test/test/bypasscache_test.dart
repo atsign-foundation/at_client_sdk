@@ -58,7 +58,7 @@ void main() async {
       ..sharedBy = sharedByAtSign
       ..metadata = (Metadata()
         ..ttr = 1000
-        ..ttl = TestConstants.oneMinute);
+        ..ttl = TestConstants.oneMinuteMillis);
 
     // Ensure autoNotify is set to true to begin with
     await setAtSignOneAutoNotify(true);

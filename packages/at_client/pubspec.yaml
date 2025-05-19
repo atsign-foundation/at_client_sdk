@@ -18,12 +18,12 @@ dependencies:
   path: ^1.8.2
   hive: ^2.2.3
   asn1lib: ^1.5.3
+  crypto: ^3.0.3
   crypton: ^2.2.1
   encrypt: ^5.0.3
   cron: ^0.5.1
   convert: ^3.0.2
   uuid: ^3.0.7
-  crypto: ^3.0.3
   collection: ^1.16.0
   archive: ^3.6.1
   http: ">=0.13.5 <2.0.0"

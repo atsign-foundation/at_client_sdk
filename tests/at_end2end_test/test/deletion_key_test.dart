@@ -46,7 +46,7 @@ void main() {
         (AtKey.shared(key, namespace: namespace, sharedBy: sharedByAtSign)
               ..sharedWith(sharedWithAtSign)
               ..cache(-1, true)
-              ..timeToLive(TestConstants.oneMinute))
+              ..timeToLive(TestConstants.oneMinuteMillis))
             .build();
     sharedByAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
             sharedByAtSign,
@@ -107,7 +107,7 @@ void main() {
         (AtKey.shared(key, namespace: namespace, sharedBy: sharedByAtSign)
               ..sharedWith(sharedWithAtSign)
               ..cache(-1, true)
-              ..timeToLive(TestConstants.oneMinute))
+              ..timeToLive(TestConstants.oneMinuteMillis))
             .build();
     var value = 'test_cached_value';
 

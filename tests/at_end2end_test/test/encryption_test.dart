@@ -56,7 +56,7 @@ void main() {
 
       var atKey = (AtKey.shared('test_share.1_5.to.1_5', sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
       expect(atKey.metadata.ivNonce, isNull);
@@ -72,7 +72,7 @@ void main() {
 
       var atKey = (AtKey.shared('test_share.1_5.to.2_0', sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
       expect(atKey.metadata.ivNonce, isNull);
@@ -88,7 +88,7 @@ void main() {
 
       var atKey = (AtKey.shared('test_share.2_0.to.2_0', sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
       expect(atKey.metadata.ivNonce, isNotNull);
@@ -104,7 +104,7 @@ void main() {
 
       var atKey = (AtKey.shared('test_share.2_0.to.1_5', sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
       expect(atKey.metadata.ivNonce, isNotNull);
@@ -132,7 +132,7 @@ void main() {
       var atKey = (AtKey.shared('test_share.1_5.to.1_5.no_inlined_key',
               sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
       expect(atKey.metadata.ivNonce, isNull);
@@ -152,7 +152,7 @@ void main() {
       var atKey = (AtKey.shared('test_share.1_5.to.2_0.no_inlined_key',
               sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
       expect(atKey.metadata.ivNonce, isNull);
@@ -172,7 +172,7 @@ void main() {
       var atKey = (AtKey.shared('test_share.2_0.to.2_0.no_inlined_key',
               sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
       expect(atKey.metadata.ivNonce, isNotNull);
@@ -192,7 +192,7 @@ void main() {
       var atKey = (AtKey.shared('test_share.2_0.to.1_5.no_inlined_key',
               sharedBy: atSign_1)
             ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinute))
+            ..timeToLive(TestConstants.oneMinuteMillis))
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
       expect(atKey.metadata.ivNonce, isNotNull);

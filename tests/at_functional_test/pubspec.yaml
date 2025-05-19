@@ -9,6 +9,8 @@ environment:
 dependencies:
   uuid: 3.0.7
   at_demo_data: ^1.0.3
+  crypto: ^3.0.3
+  crypton: ^2.2.1
   at_client:
     path: ../../packages/at_client
   at_auth: ^2.0.7
