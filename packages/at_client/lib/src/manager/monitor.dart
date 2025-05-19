@@ -406,13 +406,19 @@ class Monitor {
       // If it's a '\n' then complete data has been received. process it.
       if (data[element] == newLineCodeUnit) {
         String result;
+        String doing = '';
         try {
+          doing = '_messageHandler:utf8.decode data';
           result = utf8.decode(_buffer.getData().toList());
+
+          doing = '_messageHandler:_stripPrompt';
           result = _stripPrompt(result);
           _logger.finer('RECEIVED $result');
+
+          doing = '_messageHandler:_handleResponse';
           _handleResponse(result, _onResponse);
         } catch (e) {
-          _logger.shout('ERROR: Failed to utf8.decode data'
+          _logger.shout('ERROR: Failed to $doing'
               ': ${_buffer.getData().toList()}');
         } finally {
           _buffer.clear();

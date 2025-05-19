@@ -726,7 +726,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     for (CommitEntry commitEntry in removeUncommittedEntriesList) {
       uncommittedEntries.remove(commitEntry);
       // Removing the entry from the commit log keystore to prevent stale entries
-      await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
+      try {
+        await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
+      } catch (e) {
+        _logger.shout('Exception $e - commitEntry is ${commitEntry.toString()}');
+      }
     }
     removeUncommittedEntriesList.clear();
     return batchRequests;
