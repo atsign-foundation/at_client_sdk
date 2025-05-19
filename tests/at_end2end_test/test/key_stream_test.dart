@@ -101,6 +101,8 @@ void main() async {
           sharedWithAtSign);
       await keyStream.getKeys();
       expect(keyStream, emitsInAnyOrder([randomValue, randomValue2]));
+
+      await Future.delayed(Duration(milliseconds: 100));
     });
 
     test('dispose', () async {
@@ -143,12 +145,12 @@ void main() async {
     });
 
     test('handleNotification', () async {
+      AtValue atValue = AtValue()..value = randomValue;
       keyStream.handleNotification(
-          key, AtValue()..value = randomValue, 'update');
-      await Future.delayed(Duration(milliseconds: 100));
-      keyStream.handleNotification(key, AtValue(), 'delete');
-      await Future.delayed(Duration(milliseconds: 100));
+          key, atValue, 'update');
+      keyStream.handleNotification(key, atValue, 'delete');
       expect(keyStream, emitsInOrder([randomValue, null]));
+      await Future.delayed(Duration(milliseconds: 100));
     });
 
     tearDownAll(() async {

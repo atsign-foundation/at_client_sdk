@@ -265,10 +265,7 @@ void main() async {
     expect(saveStatus, true);
 
     await E2ESyncService.getInstance().syncData(
-        currentAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()
-          ..key =
-              '$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
+        currentAtClientManager.atClient.syncService);
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -278,10 +275,7 @@ void main() async {
       TestPreferences.getInstance().getPreference(secondAtSign),
     );
     await E2ESyncService.getInstance().syncData(
-        sharedWithAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()
-          ..key =
-              'cached:$secondAtSign:personal-phone-$randomId.phone.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
+        sharedWithAtClientManager.atClient.syncService);
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone-$randomId',
         collectionName: 'phone',
@@ -315,14 +309,8 @@ void main() async {
       ..phoneNumber = '12345';
     var shareRes = await phone.share([secondAtSign]);
     expect(shareRes, true);
-    await E2ESyncService.getInstance().syncData(
-      currentAtClientManager.atClient.syncService,
-      syncOptions: SyncOptions()
-        ..key = '$secondAtSign:personal-phone-$randomId'
-            '.phone.atcollectionmodel.${TestConstants.namespace}'
-            '$firstAtSign'
-        ..waitForFullSyncToComplete = true,
-    );
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
 
     // Receiver's end - Verify that the phone has been shared
     sharedWithAtClientManager =
@@ -332,8 +320,7 @@ void main() async {
       TestPreferences.getInstance().getPreference(secondAtSign),
     );
     await E2ESyncService.getInstance().syncData(
-        sharedWithAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
+        sharedWithAtClientManager.atClient.syncService);
     var regex = CollectionUtil.makeRegex(
         formattedId: 'personal-phone-$randomId',
         collectionName: 'phone',
@@ -386,8 +373,7 @@ void main() async {
 
     // Let's wait for a sync, and then unshare
     await E2ESyncService.getInstance().syncData(
-        AtClientManager.getInstance().atClient.syncService,
-        syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
+        AtClientManager.getInstance().atClient.syncService);
 
     // Unshare now
     await fourthPhone.unshare(atSigns: [thirdAtSign, fourthAtSign]);
@@ -426,10 +412,7 @@ void main() async {
         .register(BFactory.getInstance());
 
     await E2ESyncService.getInstance().syncData(
-        currentAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()
-          ..key =
-              '$secondAtSign:b1.b.atcollectionmodel.${TestConstants.namespace}$firstAtSign');
+        currentAtClientManager.atClient.syncService);
 
     var res = await AtCollectionModel.getModelsSharedWith(secondAtSign);
     expect(res.isEmpty, false,

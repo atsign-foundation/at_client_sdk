@@ -54,8 +54,7 @@ void main() {
         .atClient;
     var putResult = await sharedByAtClient.put(atKey, 'dummy_cached_value');
     assert(putResult == true);
-    await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService,
-        syncOptions: SyncOptions()..key = atKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
     // Switch to sharedWith AtSign and fetch the cached key
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
@@ -69,8 +68,7 @@ void main() {
       ..sharedBy = sharedByAtSign
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService,
-        syncOptions: SyncOptions()..key = cachedAtKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
     var getResponse = await sharedWithAtClient.get(cachedAtKey);
     expect(getResponse.value, 'dummy_cached_value');
 
@@ -81,8 +79,7 @@ void main() {
             TestPreferences.getInstance().getPreference(sharedByAtSign)))
         .atClient;
     await sharedByAtClient.delete(atKey);
-    await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService,
-        syncOptions: SyncOptions()..key = atKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
     // Switch to sharedWith AtSign and let the deleted cached key sync to local Secondary
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
@@ -90,8 +87,7 @@ void main() {
             namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign)))
         .atClient;
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService,
-        syncOptions: SyncOptions()..key = cachedAtKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
     expect(
         sharedWithAtClient
             .getLocalSecondary()
@@ -120,8 +116,7 @@ void main() {
         .atClient;
     // notifying a key with ttr to shared with atSign
     await currentAtClient.put(atKey, value);
-    await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService,
-        syncOptions: SyncOptions()..key = atKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
     var sharedWithAtClient = (await AtClientManager.getInstance()
             .setCurrentAtSign(sharedWithAtSign, namespace,
@@ -133,8 +128,7 @@ void main() {
       ..sharedBy = sharedByAtSign
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService,
-        syncOptions: SyncOptions()..key = cachedAtKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
 
     // Assert cached key is present in the local storage of the sharedWith atSign
     var getResponse = await sharedWithAtClient.get(cachedAtKey);
@@ -149,8 +143,7 @@ void main() {
     expect(deleteResult, true);
 
     // Sync the deleted cached key commit entry to secondary of sharedWith atSign
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService,
-        syncOptions: SyncOptions()..key = cachedAtKey.toString());
+    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
     // Asserts cached key is deleted from the local storage in the sharedWith atSign
     expect(
         sharedWithAtClient

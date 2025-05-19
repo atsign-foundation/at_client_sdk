@@ -16,6 +16,7 @@ class TestSuiteInitializer {
 
   TestSuiteInitializer._internal() {
     AtSignLogger.root_level = 'warning';
+    // AtSignLogger.root_level = 'finest';
     AtSignLogger.defaultLoggingHandler = AtSignLogger.consoleLoggingHandler;
   }
 
@@ -65,9 +66,7 @@ class TestSuiteInitializer {
           .setEncryptionKeys(atClientManager.atClient, atSign);
 
       if (enableInitialSync) {
-        await E2ESyncService.getInstance().syncData(
-            atClientManager.atClient.syncService,
-            syncOptions: SyncOptions()..waitForFullSyncToComplete = true);
+        await E2ESyncService.getInstance().syncData(atClientManager.atClient.syncService);
       }
 
       // verify if the public key is in the local secondary

@@ -53,9 +53,8 @@ void main() async {
     var putResult =
         await currentAtClientManager.atClient.put(phoneNumberKey, value);
     expect(putResult, true);
-    await E2ESyncService.getInstance().syncData(
-        currentAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()..key = phoneNumberKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
@@ -96,9 +95,8 @@ void main() async {
     var putResult =
         await currentAtClientManager.atClient.put(verificationKey, value);
     expect(putResult, true);
-    await E2ESyncService.getInstance().syncData(
-        currentAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()..key = verificationKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
@@ -110,9 +108,8 @@ void main() async {
       ..sharedBy = currentAtSign
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(
-        sharedWithAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()..key = cachedVerificationKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(sharedWithAtClientManager.atClient.syncService);
 
     var getResult = await sharedWithAtClientManager.atClient
         .getKeys(regex: cachedVerificationKey.toString());
@@ -128,7 +125,7 @@ void main() async {
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
   /// The encrypted value does not have new metadata but decrypt value successfully.
   test(
-      'verify backward compatibility for sharedKey and checksum in metadata for sharedkey',
+      'verify backward compatibility for sharedKey and checksum in metadata for shared key',
       () async {
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
