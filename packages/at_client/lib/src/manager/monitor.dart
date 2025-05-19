@@ -405,12 +405,18 @@ class Monitor {
     for (int element = 0; element < data.length; element++) {
       // If it's a '\n' then complete data has been received. process it.
       if (data[element] == newLineCodeUnit) {
-        String result = utf8.decode(_buffer.getData().toList());
-        result = _stripPrompt(result);
-        _logger.finer('RECEIVED $result');
-        _handleResponse(result, _onResponse);
-
-        _buffer.clear();
+        String result;
+        try {
+          result = utf8.decode(_buffer.getData().toList());
+          result = _stripPrompt(result);
+          _logger.finer('RECEIVED $result');
+          _handleResponse(result, _onResponse);
+        } catch (e) {
+          _logger.shout('ERROR: Failed to utf8.decode data'
+              ': ${_buffer.getData().toList()}');
+        } finally {
+          _buffer.clear();
+        }
       } else {
         _buffer.addByte(data[element]);
       }

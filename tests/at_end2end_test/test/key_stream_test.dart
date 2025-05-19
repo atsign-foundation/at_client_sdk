@@ -49,12 +49,14 @@ void main() async {
         ..key = randomValue + keySuffix
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
-        ..sharedBy = currentAtSign;
+        ..sharedBy = currentAtSign
+        ..metadata = (Metadata()..ttl = TestConstants.oneMinute);
       key2 = AtKey()
         ..key = randomValue2 + keySuffix
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
-        ..sharedBy = currentAtSign;
+        ..sharedBy = currentAtSign
+        ..metadata = (Metadata()..ttl = TestConstants.oneMinute);
       keyStream = KeyStreamImpl<String>(
         regex: '$keySuffix.$namespace@',
         convert: (key, value) => value.value ?? '',

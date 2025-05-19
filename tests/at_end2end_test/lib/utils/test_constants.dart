@@ -6,4 +6,5 @@ class TestConstants {
   static const String ENCRYPTION_PUBLIC_KEY = 'encryptionPublicKey';
   static const String SELF_ENCRYPTION_KEY = 'selfEncryptionKey';
   static const namespace = 'e2e_test';
+  static const oneMinute = 60 * 1000;
 }

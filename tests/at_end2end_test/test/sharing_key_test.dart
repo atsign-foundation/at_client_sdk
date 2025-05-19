@@ -45,7 +45,7 @@ void main() async {
       ..key = 'phoneNumber-$uniqueId'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign
-      ..metadata = (Metadata()..ttl = 120000);
+      ..metadata = (Metadata()..ttl = TestConstants.oneMinute);
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
@@ -90,7 +90,7 @@ void main() async {
       ..metadata = (Metadata()
         ..ttr = 1000
         ..ccd = true
-        ..ttl = 300000);
+        ..ttl = TestConstants.oneMinute);
     var value = '0873';
     var putResult =
         await currentAtClientManager.atClient.put(verificationKey, value);

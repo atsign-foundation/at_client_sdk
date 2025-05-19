@@ -42,17 +42,18 @@ void main() {
       () async {
     // Create a key with TTR set
     var key = 'deletecachedkey-${Uuid().v4().hashCode}';
-    var atKey =
+    final atKey =
         (AtKey.shared(key, namespace: namespace, sharedBy: sharedByAtSign)
               ..sharedWith(sharedWithAtSign)
-              ..cache(-1, true))
+              ..cache(-1, true)
+              ..timeToLive(TestConstants.oneMinute))
             .build();
     sharedByAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
             sharedByAtSign,
             namespace,
             TestPreferences.getInstance().getPreference(sharedByAtSign)))
         .atClient;
-    var putResult = await sharedByAtClient.put(atKey, 'dummy_cached_value');
+    final putResult = await sharedByAtClient.put(atKey, 'dummy_cached_value');
     assert(putResult == true);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
@@ -102,10 +103,11 @@ void main() {
       'A test to verify cached key is deleted when receiver deletes the cached key in the local',
       () async {
     var key = 'testcachedkey-${Uuid().v4().hashCode}';
-    var atKey =
+    final atKey =
         (AtKey.shared(key, namespace: namespace, sharedBy: sharedByAtSign)
               ..sharedWith(sharedWithAtSign)
-              ..cache(-1, true))
+              ..cache(-1, true)
+              ..timeToLive(TestConstants.oneMinute))
             .build();
     var value = 'test_cached_value';
 

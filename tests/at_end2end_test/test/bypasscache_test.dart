@@ -51,14 +51,14 @@ void main() async {
     String initialValue = 'initial_value-$uniqueId';
     String updatedValue = 'updated_value-$uniqueId';
 
-    AtKey testByPassCacheAtKey = AtKey()
+    final AtKey testByPassCacheAtKey = AtKey()
       ..key = keyEntity
       ..sharedWith = sharedWithAtSign
       ..namespace = namespace
       ..sharedBy = sharedByAtSign
       ..metadata = (Metadata()
         ..ttr = 1000
-        ..ttl = 900000);
+        ..ttl = TestConstants.oneMinute);
 
     // Ensure autoNotify is set to true to begin with
     await setAtSignOneAutoNotify(true);
