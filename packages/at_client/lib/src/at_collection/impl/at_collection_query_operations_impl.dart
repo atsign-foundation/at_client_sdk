@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/at_collection/collection_util.dart';
-import 'package:at_client/src/at_collection/collections.dart';
 import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -54,8 +53,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         T model = collectionModelFactory.create();
         _populateModel(model, atValueJson, atKey);
         modelList.add(model);
-      } catch (e) {
-        _logger.severe('failed to get value of ${atKey.key}');
+      } catch (e, st) {
+        _logger.severe(
+            'failed to get value of ${atKey.key} with $e. StackTrace:\n$st');
       }
     }
 
@@ -180,8 +180,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         _populateModel(model, atValueJson, atKey);
         model.sharedByAtSign = atKey.sharedBy!;
         modelList.add(model);
-      } catch (e) {
-        _logger.severe('failed to get value of ${atKey.key}');
+      } catch (e, st) {
+        _logger.severe(
+            'failed to get value of ${atKey.key} with $e. StackTrace:\n$st');
       }
     }
 

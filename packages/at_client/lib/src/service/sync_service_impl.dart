@@ -729,7 +729,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       try {
         await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
       } catch (e) {
-        _logger.shout('Exception $e - commitEntry is ${commitEntry.toString()}');
+        _logger.shout('Exception $e - commitEntry is $commitEntry');
       }
     }
     removeUncommittedEntriesList.clear();
