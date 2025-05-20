@@ -40,6 +40,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
     for (var atKey in collectionAtKeys) {
       try {
         var atValue = await getAtClient().get(atKey);
+        if (atValue.value == null) {
+          continue;
+        }
         var atValueJson = jsonDecode(atValue.value);
 
         /// Given that id and collectionName attributes are not present, it is not a atcollectionmodel. Ignore it.
@@ -53,9 +56,8 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         T model = collectionModelFactory.create();
         _populateModel(model, atValueJson, atKey);
         modelList.add(model);
-      } catch (e, st) {
-        _logger.severe(
-            'failed to get value of ${atKey.key} with $e. StackTrace:\n$st');
+      } catch (e) {
+        _logger.severe('$e while getting value of ${atKey.key}');
       }
     }
 
@@ -82,14 +84,16 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
 
     try {
       AtValue atValue = await getAtClient().get(atKey);
+      if (atValue.value == null) {
+        throw AtKeyNotFoundException ('Key has expired');
+      }
       T model = collectionModelFactory.create();
       _populateModel(model, jsonDecode(atValue.value), atKey);
       return model;
+    } on AtKeyNotFoundException {
+      rethrow;
     } catch (e) {
-      throw KeyNotFoundException(
-          'AtCollectionModel not found for the given id:$id,'
-          ' namespace:$namespace'
-          ' and collectionName: $collectionName');
+      throw AtKeyNotFoundException('$e while getting $atKey');
     }
   }
 
@@ -159,6 +163,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
       try {
         _logger.finest('Converting atKey: $atKey to the collection model');
         var atValue = await getAtClient().get(atKey);
+        if (atValue.value == null) {
+          continue;
+        }
         var atValueJson = jsonDecode(atValue.value);
 
         /// Given that id and collectionName attributes are not present, it is not a atcollectionmodel. Ignore it.
@@ -180,9 +187,8 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         _populateModel(model, atValueJson, atKey);
         model.sharedByAtSign = atKey.sharedBy!;
         modelList.add(model);
-      } catch (e, st) {
-        _logger.severe(
-            'failed to get value of ${atKey.key} with $e. StackTrace:\n$st');
+      } catch (e) {
+        _logger.severe('$e while getting value of ${atKey.key}');
       }
     }
 
