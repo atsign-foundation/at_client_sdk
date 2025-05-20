@@ -405,7 +405,7 @@ class Monitor {
     for (int element = 0; element < data.length; element++) {
       // If it's a '\n' then complete data has been received. process it.
       if (data[element] == newLineCodeUnit) {
-        String result;
+        String result = '';
         String doing = '';
         try {
           doing = '_messageHandler:utf8.decode data';
@@ -418,8 +418,7 @@ class Monitor {
           doing = '_messageHandler:_handleResponse';
           _handleResponse(result, _onResponse);
         } catch (e) {
-          _logger.shout('ERROR: Failed to $doing'
-              ': ${_buffer.getData().toList()}');
+          _logger.shout('$e from $doing while handling $result');
         } finally {
           _buffer.clear();
         }
