@@ -3,7 +3,6 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';

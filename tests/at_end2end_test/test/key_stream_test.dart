@@ -148,8 +148,7 @@ void main() async {
 
     test('handleNotification', () async {
       AtValue atValue = AtValue()..value = randomValue;
-      keyStream.handleNotification(
-          key, atValue, 'update');
+      keyStream.handleNotification(key, atValue, 'update');
       keyStream.handleNotification(key, atValue, 'delete');
       expect(keyStream, emitsInOrder([randomValue, null]));
       await Future.delayed(Duration(milliseconds: 100));

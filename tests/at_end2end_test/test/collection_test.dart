@@ -253,7 +253,10 @@ void main() async {
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
-    var shareRes = await phone.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    var shareRes = await phone.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(shareRes, true);
 
     // Have the phone number changed
@@ -308,7 +311,10 @@ void main() async {
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
-    var shareRes = await phone.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    var shareRes = await phone.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(shareRes, true);
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);
@@ -346,11 +352,17 @@ void main() async {
       ..collectionName = 'phone'
       ..phoneNumber = '4444';
     await fourthPhone.save(options: TestConstants.optionsTtlOneMinute);
-    await fourthPhone.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await fourthPhone.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(await fourthPhone.sharedWith(),
         [ConfigUtil.getYaml()['atSign']['secondAtSign']]);
 
-    var shareResponse = await fourthPhone.share([thirdAtSign], options: TestConstants.optionsTtlOneMinute,);
+    var shareResponse = await fourthPhone.share(
+      [thirdAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(shareResponse, true);
     List<String> atSignsList = await fourthPhone.sharedWith();
     expect(atSignsList.length, 2);
@@ -360,7 +372,10 @@ void main() async {
         true);
     atSignsList.clear();
 
-    shareResponse = await fourthPhone.share([fourthAtSign], options: TestConstants.optionsTtlOneMinute,);
+    shareResponse = await fourthPhone.share(
+      [fourthAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(shareResponse, true);
     atSignsList = await fourthPhone.sharedWith();
     expect(atSignsList.length, 3);
@@ -383,12 +398,12 @@ void main() async {
     await fourthPhone.unshare(atSigns: [secondAtSign]);
     await fourthPhone.delete();
     expect(await fourthPhone.sharedWith(), []);
-    expect(
-      () async => await AtCollectionModel.getModel(
+    await expectLater(
+      AtCollectionModel.getModel(
           id: 'fourth phone',
           namespace: TestConstants.namespace,
           collectionName: 'phone'),
-      throwsA(isA<KeyNotFoundException>()),
+      throwsA(isA<AtKeyNotFoundException>()),
     );
   });
 
@@ -402,10 +417,16 @@ void main() async {
     );
 
     var a = A.from('a1', a: 'a1 value');
-    var shareRes = await a.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    var shareRes = await a.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(shareRes, true);
     var b = B.from('b1', b: 'b1 value');
-    await b.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await b.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
 
     AtCollectionModelFactoryManager.getInstance()
         .register(AFactory.getInstance());
@@ -434,10 +455,16 @@ void main() async {
     );
 
     var a = A.from('a1', a: 'a1 value');
-    var shareRes = await a.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    var shareRes = await a.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(shareRes, true);
     var b = B.from('b1', b: 'b1 value');
-    shareRes = await b.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    shareRes = await b.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     expect(shareRes, true);
 
     // Receiver's end
@@ -475,9 +502,15 @@ void main() async {
     );
     // Share at Collections models from first atSign to second atSign
     var a = A.from('a11', a: 'a11 value');
-    await a.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await a.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     var b = B.from('b11', b: 'b11 value');
-    await b.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await b.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     // Share at Collections models from third atSign to second atSign
     sharedWithAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -489,9 +522,15 @@ void main() async {
       sharedWithAtClientManager.atClient.syncService,
     );
     a = A.from('a22', a: 'a22 value');
-    await a.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await a.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     b = B.from('b22', b: 'b22 value');
-    await b.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await b.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
     // Switch to second atSign and get AtCollectionModels shared by any atSign
     sharedWithAtClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
@@ -536,9 +575,14 @@ void main() async {
       ..namespace = TestConstants.namespace
       ..collectionName = 'preference'
       ..preference = pizzaPreferences;
-    await preference.save(options: TestConstants.optionsTtlOneMinute,);
+    await preference.save(
+      options: TestConstants.optionsTtlOneMinute,
+    );
 
-    await preference.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await preference.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
 
     var contact = Contact()
       ..id = 'jagan'
@@ -546,14 +590,20 @@ void main() async {
       ..collectionName = 'contact'
       ..atSign = '@jagan'
       ..nickname = 'jagan';
-    await contact.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await contact.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
 
     Phone phone = Phone()
       ..id = 'my another phone'
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '1122';
-    await phone.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await phone.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
 
     /// receiver's end
     sharedWithAtClientManager =
@@ -634,18 +684,30 @@ void main() async {
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
-    await p1.save(options: TestConstants.optionsTtlOneMinute,);
+    await p1.save(
+      options: TestConstants.optionsTtlOneMinute,
+    );
     var p2 = Phone()
       ..id = 'p2$randomId'
       ..namespace = TestConstants.namespace
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
-    await p2.save(options: TestConstants.optionsTtlOneMinute,);
-    await p2.share([secondAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await p2.save(
+      options: TestConstants.optionsTtlOneMinute,
+    );
+    await p2.share(
+      [secondAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
 
     var a = A.from('aId$randomId', a: 'aId$randomId');
-    await a.save(options: TestConstants.optionsTtlOneMinute,);
-    await a.share([secondAtSign, thirdAtSign], options: TestConstants.optionsTtlOneMinute,);
+    await a.save(
+      options: TestConstants.optionsTtlOneMinute,
+    );
+    await a.share(
+      [secondAtSign, thirdAtSign],
+      options: TestConstants.optionsTtlOneMinute,
+    );
 
     await E2ESyncService.getInstance()
         .syncData(currentAtClientManager.atClient.syncService);

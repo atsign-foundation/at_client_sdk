@@ -84,8 +84,8 @@ void main() async {
         namespace,
         TestPreferences.getInstance().getPreference(sharedWithAtSign));
 
-    await E2ESyncService.getInstance().syncData(
-        AtClientManager.getInstance().atClient.syncService);
+    await E2ESyncService.getInstance()
+        .syncData(AtClientManager.getInstance().atClient.syncService);
 
     var getKey = AtKey()
       ..key = keyEntity
@@ -110,8 +110,8 @@ void main() async {
           .put(testByPassCacheAtKey, updatedValue);
       expect(newPutResult, true);
       // Sync the data to the remote secondary
-      await E2ESyncService.getInstance().syncData(
-          AtClientManager.getInstance().atClient.syncService);
+      await E2ESyncService.getInstance()
+          .syncData(AtClientManager.getInstance().atClient.syncService);
 
       // As atSignTwo
       await AtClientManager.getInstance().setCurrentAtSign(
@@ -145,8 +145,8 @@ void main() async {
       expect(getResult.value, updatedValue);
       expect(getResult.metadata!.isCached, false);
       // Sync - after this we should now have the new value
-      await E2ESyncService.getInstance().syncData(
-          AtClientManager.getInstance().atClient.syncService);
+      await E2ESyncService.getInstance()
+          .syncData(AtClientManager.getInstance().atClient.syncService);
 
       // Get Result with byPassCache set to false again
       // should also now return the new value, since cached value will have been updated with the

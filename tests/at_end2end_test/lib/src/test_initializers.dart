@@ -66,7 +66,8 @@ class TestSuiteInitializer {
           .setEncryptionKeys(atClientManager.atClient, atSign);
 
       if (enableInitialSync) {
-        await E2ESyncService.getInstance().syncData(atClientManager.atClient.syncService);
+        await E2ESyncService.getInstance()
+            .syncData(atClientManager.atClient.syncService);
       }
 
       // verify if the public key is in the local secondary

@@ -85,7 +85,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
     try {
       AtValue atValue = await getAtClient().get(atKey);
       if (atValue.value == null) {
-        throw AtKeyNotFoundException ('Key has expired');
+        throw AtKeyNotFoundException('Key has expired');
       }
       T model = collectionModelFactory.create();
       _populateModel(model, jsonDecode(atValue.value), atKey);

@@ -5,6 +5,7 @@ import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
+// ignore_for_file: deprecated_member_use
 void main() {
   late AtClientManager atClientManager;
   late String currentAtSign;

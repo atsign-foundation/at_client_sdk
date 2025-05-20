@@ -18,7 +18,6 @@ void main() async {
   });
 
   group('A group of tests related to deletion of a key', () {
-
     test(
         'A test to verify deletion of key when overriding the namespace in atKey',
         () async {
@@ -44,7 +43,7 @@ void main() async {
               .isKeyExists(atKey.toString()),
           false);
     });
-    
+
     test(
         'A test to verify the deletion of a local key - create a local key using a static factory method',
         () async {

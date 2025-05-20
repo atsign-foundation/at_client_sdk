@@ -130,4 +130,3 @@ void main() {
         .unregister(PhoneFactory.getInstance());
   });
 }
-

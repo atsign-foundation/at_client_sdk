@@ -11,7 +11,7 @@ void main() {
   late String atSign;
   late String atSign2;
   late AtClientManager atClientManager;
-   String namespace = 'wavi';
+  String namespace = 'wavi';
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
