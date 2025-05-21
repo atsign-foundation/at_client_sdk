@@ -292,7 +292,7 @@ void main() {
       atClientManager = await TestUtils.initAtClient(atSign, namespace);
       // Load encryption public key into remote secondary
       await atClientManager.atClient.getRemoteSecondary()!.executeCommand(
-          'update:public:publickey${atSign} ${encryptionPublicKeyMap[atSign]}\n',
+          'update:public:publickey$atSign ${encryptionPublicKeyMap[atSign]}\n',
           auth: true);
       AtResponse atResponse = await atClientManager.atClient.setSPP('ABC123');
       expect(atResponse.response, 'ok');
@@ -572,7 +572,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
               e.message.contains(
-                  'Cannot perform update on phone.wavi${atSign} due to insufficient privilege'))));
+                  'Cannot perform update on phone.wavi$atSign due to insufficient privilege'))));
 
       // Get the key which does not have access to namespace and should throw an exception.
       AtKey getBuzzKey = atKey =
@@ -584,7 +584,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
               e.message.contains(
-                  'Cannot perform llookup on mobile.buzz${atSign} due to insufficient privilege'))));
+                  'Cannot perform llookup on mobile.buzz$atSign due to insufficient privilege'))));
 
       // Get the key which has access to namespace
       AtKey getWaviKey = atKey =

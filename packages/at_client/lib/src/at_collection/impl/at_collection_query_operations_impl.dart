@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/at_collection/collection_util.dart';
-import 'package:at_client/src/at_collection/collections.dart';
 import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -41,6 +40,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
     for (var atKey in collectionAtKeys) {
       try {
         var atValue = await getAtClient().get(atKey);
+        if (atValue.value == null) {
+          continue;
+        }
         var atValueJson = jsonDecode(atValue.value);
 
         /// Given that id and collectionName attributes are not present, it is not a atcollectionmodel. Ignore it.
@@ -55,7 +57,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         _populateModel(model, atValueJson, atKey);
         modelList.add(model);
       } catch (e) {
-        _logger.severe('failed to get value of ${atKey.key}');
+        _logger.severe('$e while getting value of ${atKey.key}');
       }
     }
 
@@ -82,13 +84,16 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
 
     try {
       AtValue atValue = await getAtClient().get(atKey);
+      if (atValue.value == null) {
+        throw AtKeyNotFoundException('Key has expired');
+      }
       T model = collectionModelFactory.create();
       _populateModel(model, jsonDecode(atValue.value), atKey);
       return model;
+    } on AtKeyNotFoundException {
+      rethrow;
     } catch (e) {
-      _logger.severe('failed to get value of ${atKey.key} $e');
-      throw Exception(
-          'AtCollectionModel is not found for the given id:$id , namespace:$namespace and collectionName: $collectionName');
+      throw AtKeyNotFoundException('$e while getting $atKey');
     }
   }
 
@@ -158,6 +163,9 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
       try {
         _logger.finest('Converting atKey: $atKey to the collection model');
         var atValue = await getAtClient().get(atKey);
+        if (atValue.value == null) {
+          continue;
+        }
         var atValueJson = jsonDecode(atValue.value);
 
         /// Given that id and collectionName attributes are not present, it is not a atcollectionmodel. Ignore it.
@@ -180,7 +188,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         model.sharedByAtSign = atKey.sharedBy!;
         modelList.add(model);
       } catch (e) {
-        _logger.severe('failed to get value of ${atKey.key}');
+        _logger.severe('$e while getting value of ${atKey.key}');
       }
     }
 

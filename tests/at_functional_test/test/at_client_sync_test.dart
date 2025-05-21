@@ -298,7 +298,6 @@ void main() {
     var syncVerbBuilder = SyncVerbBuilder()
       ..skipDeletesUntil = (serverCommitId! + 25)
       ..commitId = serverCommitId
-      ..isPaginated = true
       ..limit = 15;
     var syncResponse =
         await atClient.getRemoteSecondary()!.executeVerb(syncVerbBuilder);
@@ -380,7 +379,6 @@ void main() {
       ..skipDeletesUntil = (serverCommitId! + 25)
       ..regex = '.wavi'
       ..commitId = serverCommitId
-      ..isPaginated = true
       ..limit = 15;
     var syncResponse =
         await atClient.getRemoteSecondary()!.executeVerb(syncVerbBuilder);

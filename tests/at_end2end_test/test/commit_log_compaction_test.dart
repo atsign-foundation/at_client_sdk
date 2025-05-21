@@ -74,7 +74,7 @@ void main() {
       expect(
           secondAtClient.atClientCommitLogCompaction?.isCompactionJobRunning(),
           false);
-    }, timeout: Timeout(Duration(minutes: 5)));
+    }, timeout: Timeout(Duration(minutes: 1)));
   } catch (e, s) {
     print(s);
   }

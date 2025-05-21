@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+// ignore: implementation_imports
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -89,7 +90,7 @@ class FunctionalTestSyncService {
 
 /// Additional options for client to wait on sync
 class SyncOptions {
-  /// Waits until the key is sync'ed to the client
+  /// Waits until the key is synced to the client
   String? key;
 }
 

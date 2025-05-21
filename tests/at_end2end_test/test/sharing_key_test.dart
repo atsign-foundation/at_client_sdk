@@ -45,7 +45,7 @@ void main() async {
       ..key = 'phoneNumber-$uniqueId'
       ..sharedWith = sharedWithAtSign
       ..sharedBy = currentAtSign
-      ..metadata = (Metadata()..ttl = 120000);
+      ..metadata = (Metadata()..ttl = TestConstants.oneMinuteMillis);
 
     // Appending a random number as a last number to generate a new phone number
     // for each run.
@@ -53,9 +53,8 @@ void main() async {
     var putResult =
         await currentAtClientManager.atClient.put(phoneNumberKey, value);
     expect(putResult, true);
-    await E2ESyncService.getInstance().syncData(
-        currentAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()..key = phoneNumberKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
@@ -69,7 +68,7 @@ void main() async {
     expect(getResult.metadata?.pubKeyCS != null, true);
     //Setting the timeout to prevent termination of test, since we have Future.delayed
     // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 5)));
+  }, timeout: Timeout(Duration(minutes: 1)));
 
   /// The purpose of this test verify the following:
   /// 1. Put method with caching of key
@@ -91,14 +90,13 @@ void main() async {
       ..metadata = (Metadata()
         ..ttr = 1000
         ..ccd = true
-        ..ttl = 300000);
+        ..ttl = TestConstants.oneMinuteMillis);
     var value = '0873';
     var putResult =
         await currentAtClientManager.atClient.put(verificationKey, value);
     expect(putResult, true);
-    await E2ESyncService.getInstance().syncData(
-        currentAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()..key = verificationKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(currentAtClientManager.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
     sharedWithAtClientManager = await AtClientManager.getInstance()
@@ -110,9 +108,8 @@ void main() async {
       ..sharedBy = currentAtSign
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(
-        sharedWithAtClientManager.atClient.syncService,
-        syncOptions: SyncOptions()..key = cachedVerificationKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(sharedWithAtClientManager.atClient.syncService);
 
     var getResult = await sharedWithAtClientManager.atClient
         .getKeys(regex: cachedVerificationKey.toString());
@@ -122,15 +119,13 @@ void main() async {
         .get(AtKey.fromString(getResult.first));
     expect(getCachedKeyResponse.value, '0873');
     expect(getCachedKeyResponse.metadata!.isCached, true);
-    //Setting the timeout to prevent termination of test, since we have Future.delayed
-    // for 30 Seconds.
-  }, timeout: Timeout(Duration(minutes: 5)));
+  }, timeout: Timeout(Duration(minutes: 1)));
 
   /// The purpose of this test verify the following:
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
   /// The encrypted value does not have new metadata but decrypt value successfully.
   test(
-      'verify backward compatibility for sharedKey and checksum in metadata for sharedkey',
+      'verify backward compatibility for sharedKey and checksum in metadata for shared key',
       () async {
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,

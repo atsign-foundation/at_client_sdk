@@ -1,7 +1,7 @@
-import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
-import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_demo_data/at_demo_data.dart';
+import 'package:at_utils/at_logger.dart';
 
 /// The class is responsible for loading all the encryption of the atSign to the
 /// local secondary keystore.

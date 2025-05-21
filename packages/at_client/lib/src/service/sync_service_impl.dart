@@ -198,13 +198,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<void> processSyncRequests(
       {bool respectSyncRequestQueueSizeAndRequestTriggerDuration =
           true}) async {
-    final syncProgress = SyncProgress()..syncStatus = SyncStatus.started;
-    syncProgress.startedAt = DateTime.now().toUtc();
     _logger.finest('in _processSyncRequests');
     if (_syncInProgress) {
       _logger.finer('**** another sync in progress');
-      syncProgress.message = 'another sync in progress';
-      _informSyncProgress(syncProgress);
+      _informSyncProgress(SyncProgress()
+        ..syncStatus = SyncStatus.started
+        ..startedAt = DateTime.now().toUtc()
+        ..message = 'another sync in progress');
       return;
     }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
@@ -230,8 +230,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ..dataChange = false;
         _syncComplete(syncRequest);
         _syncInProgress = false;
-        syncProgress.syncStatus = SyncStatus.success;
-        _informSyncProgress(syncProgress);
+        _informSyncProgress(SyncProgress()
+          ..syncStatus = SyncStatus.success
+          ..startedAt = DateTime.now().toUtc()
+          ..message = 'server and local are in sync');
         return;
       }
 
@@ -244,12 +246,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           localCommitIdBeforeSync: localCommitIdBeforeSync);
 
       _syncComplete(syncRequest);
-      syncProgress.syncStatus = syncResult.syncStatus;
-      syncProgress.keyInfoList = syncResult.keyInfoList;
       serverCommitId = await _getServerCommitId();
       final localCommitId = await _getLocalCommitId();
 
-      _informSyncProgress(syncProgress,
+      _informSyncProgress(
+          SyncProgress()
+            ..syncStatus = syncResult.syncStatus
+            ..startedAt = DateTime.now().toUtc()
+            ..message = 'Sync complete (${syncResult.syncStatus})'
+            ..keyInfoList = syncResult.keyInfoList,
           localCommitIdBeforeSync: localCommitIdBeforeSync,
           localCommitId: localCommitId,
           serverCommitId: serverCommitId);
@@ -263,8 +268,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           AtExceptionManager.createException(e);
       _syncError(syncRequest);
       _syncInProgress = false;
-      syncProgress.syncStatus = SyncStatus.failure;
-      _informSyncProgress(syncProgress);
+      _informSyncProgress(SyncProgress()
+        ..syncStatus = SyncStatus.failure
+        ..startedAt = DateTime.now().toUtc()
+        ..message = 'Exception: $e');
     }
     return;
   }
@@ -636,6 +643,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         localAtValue = await _atClient.get(atKey);
       } on KeyNotFoundException {
         return null;
+      } on AtKeyNotFoundException {
+        return null;
       }
       if (atKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
@@ -697,8 +706,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       try {
         command = await _getCommand(entry);
       } on KeyNotFoundException {
-        _logger.severe(
-            '${entry.atKey} is not found in keystore. Skipping to entry to sync');
+        _logger.info(
+            '${entry.atKey} is no longer in keystore. Skipping sync for it.');
         removeUncommittedEntriesList.add(entry);
         continue;
       }
@@ -717,7 +726,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     for (CommitEntry commitEntry in removeUncommittedEntriesList) {
       uncommittedEntries.remove(commitEntry);
       // Removing the entry from the commit log keystore to prevent stale entries
-      await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
+      try {
+        await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
+      } catch (e) {
+        _logger.shout('Exception $e - commitEntry is $commitEntry');
+      }
     }
     removeUncommittedEntriesList.clear();
     return batchRequests;

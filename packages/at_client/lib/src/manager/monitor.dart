@@ -405,12 +405,23 @@ class Monitor {
     for (int element = 0; element < data.length; element++) {
       // If it's a '\n' then complete data has been received. process it.
       if (data[element] == newLineCodeUnit) {
-        String result = utf8.decode(_buffer.getData().toList());
-        result = _stripPrompt(result);
-        _logger.finer('RECEIVED $result');
-        _handleResponse(result, _onResponse);
+        String result = '';
+        String doing = '';
+        try {
+          doing = '_messageHandler:utf8.decode data';
+          result = utf8.decode(_buffer.getData().toList());
 
-        _buffer.clear();
+          doing = '_messageHandler:_stripPrompt';
+          result = _stripPrompt(result);
+          _logger.finer('RECEIVED $result');
+
+          doing = '_messageHandler:_handleResponse';
+          _handleResponse(result, _onResponse);
+        } catch (e) {
+          _logger.shout('$e from $doing while handling $result');
+        } finally {
+          _buffer.clear();
+        }
       } else {
         _buffer.addByte(data[element]);
       }
