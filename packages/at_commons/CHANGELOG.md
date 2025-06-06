@@ -1,3 +1,6 @@
+## 5.4.0
+- feat: add `EnrollmentConstants`. Contains various patterns and regular 
+  expressions for enrollment-related data
 ## 5.3.0
 - feat: add `immutable` flag to `Metadata` and `force` flag to the 
   DeleteVerbBuilder. Immutable records may not be updated once the immutable 
