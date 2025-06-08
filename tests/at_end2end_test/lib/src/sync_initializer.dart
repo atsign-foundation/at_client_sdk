@@ -22,15 +22,12 @@ class E2ESyncService {
   bool isSyncInProgress = false;
   Future<void> syncData(SyncService syncSvc) async {
     if (isSyncInProgress) {
-      throw StateError ('Sync already in progress');
+      throw StateError('Sync already in progress');
     }
 
     isSyncInProgress = true;
     try {
-      final atSign = AtClientManager
-          .getInstance()
-          .atClient
-          .getCurrentAtSign();
+      final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign();
       _logger.info('syncData starting for $atSign');
 
       SyncServiceImpl.queueSize = 1;
@@ -46,17 +43,17 @@ class E2ESyncService {
       int maxTransientWaitTimeMillis = maxTransientWaitTime.inMilliseconds;
 
       E2ETestSyncProgressListener e2eTestSyncProgressListener =
-      E2ETestSyncProgressListener();
+          E2ETestSyncProgressListener();
       syncSvc.addProgressListener(e2eTestSyncProgressListener);
 
       e2eTestSyncProgressListener.streamController.stream
           .listen((SyncProgress syncProgress) async {
-            for (final KeyInfo ki in syncProgress.keyInfoList ?? []) {
-              _logger.finer('${ki.syncDirection} ${ki.key}');
-            }
+        for (final KeyInfo ki in syncProgress.keyInfoList ?? []) {
+          _logger.finer('${ki.syncDirection} ${ki.key}');
+        }
         lastReceivedDateTime = DateTime.now().toUtc();
         if (((syncProgress.syncStatus == SyncStatus.success) &&
-            (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
+                (syncProgress.localCommitId == syncProgress.serverCommitId)) ||
             (syncProgress.syncStatus == SyncStatus.failure)) {
           isSyncInProgress = false;
         }
@@ -72,16 +69,12 @@ class E2ESyncService {
 
       while (isSyncInProgress) {
         final now = DateTime.now().toUtc();
-        if (now
-            .difference(lastReceivedDateTime)
-            .inMilliseconds >
+        if (now.difference(lastReceivedDateTime).inMilliseconds >
             maxTransientWaitTimeMillis) {
           throw StateError(
               'Sync duration exceeded maxTransientWaitTime ($maxTransientWaitTime)');
         }
-        if (now
-            .difference(startTime)
-            .inMilliseconds > maxTotalWaitTimeMillis) {
+        if (now.difference(startTime).inMilliseconds > maxTotalWaitTimeMillis) {
           throw StateError(
               'Sync duration exceeded maxTotalWaitTime ($maxTotalWaitTime)');
         }

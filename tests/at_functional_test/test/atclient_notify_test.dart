@@ -291,9 +291,9 @@ void main() {
   });
 }
 
-void onSuccessCallback(notificationResult) {
+void onSuccessCallback(NotificationResult notificationResult) {
   expect(notificationResult.notificationStatusEnum.toString(),
       'NotificationStatusEnum.delivered');
-  expect(notificationResult.atKey.key, 'phone');
-  expect(notificationResult.atKey.sharedWith, '@bob🛠');
+  expect(notificationResult.atKey?.key, 'phone');
+  expect(notificationResult.atKey?.sharedWith, '@bob🛠');
 }
