@@ -5,7 +5,7 @@ import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
 import 'package:at_utils/at_logger.dart';
 
-class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
+class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
   final _logger = AtSignLogger('AtCollectionQueryOperationsImpl');
   AtClientManager? atClientManager;
   final KeyMaker _keyMaker = DefaultKeyMaker();
@@ -39,7 +39,12 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
 
     for (var atKey in collectionAtKeys) {
       try {
-        var atValue = await getAtClient().get(atKey);
+        AtValue atValue;
+        try {
+          atValue = await getAtClient().get(atKey);
+        } on AtKeyNotFoundException {
+          continue;
+        }
         if (atValue.value == null) {
           continue;
         }
@@ -57,7 +62,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         _populateModel(model, atValueJson, atKey);
         modelList.add(model);
       } catch (e) {
-        _logger.severe('$e while getting value of ${atKey.key}');
+        _logger.severe('$e while getting value of $atKey');
       }
     }
 
@@ -162,7 +167,12 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
     for (var atKey in collectionAtKeys) {
       try {
         _logger.finest('Converting atKey: $atKey to the collection model');
-        var atValue = await getAtClient().get(atKey);
+        AtValue atValue;
+        try {
+          atValue = await getAtClient().get(atKey);
+        } on AtKeyNotFoundException {
+          continue;
+        }
         if (atValue.value == null) {
           continue;
         }
@@ -188,7 +198,7 @@ class AtCollectionQueryOperationsImpl extends AtCollectionQueryOperations {
         model.sharedByAtSign = atKey.sharedBy!;
         modelList.add(model);
       } catch (e) {
-        _logger.severe('$e while getting value of ${atKey.key}');
+        _logger.severe('$e while getting value of $atKey');
       }
     }
 

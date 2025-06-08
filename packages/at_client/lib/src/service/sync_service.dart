@@ -58,5 +58,5 @@ abstract class SyncService {
 
 @experimental
 class SyncTelemetryEvent extends AtTelemetryEvent {
-  SyncTelemetryEvent(String name, value) : super(name, value);
+  SyncTelemetryEvent(super.name, super.value);
 }

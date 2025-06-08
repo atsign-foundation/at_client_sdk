@@ -152,12 +152,7 @@ class Tuple<T1, T2> {
 
 /// Extending the String class to check null and empty.
 extension NullCheck on String? {
-  _isNull() {
-    if (this == null || this!.isEmpty) {
-      return true;
-    }
-    return false;
-  }
+  bool _isNull() => this == null || this!.isEmpty;
 
   bool get isNull => _isNull();
 

@@ -77,15 +77,19 @@ class LocalSecondary implements Secondary {
       }
       switch (builder.operation) {
         case AtConstants.updateMeta:
-          var atMetadata =
-              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
+          var atMetadata = AtMetaData.fromCommonsMetadata(
+            builder.atKey.metadata,
+            _atClient.getCurrentAtSign()!,
+          );
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          var atMetadata =
-              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
+          var atMetadata = AtMetaData.fromCommonsMetadata(
+            builder.atKey.metadata,
+            _atClient.getCurrentAtSign()!,
+          );
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }

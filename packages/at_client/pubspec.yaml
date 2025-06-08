@@ -12,7 +12,7 @@ repository: https://github.com/atsign-foundation/at_client_sdk
 homepage: https://docs.atsign.com/
 
 environment:
-  sdk: ">=2.15.0 <4.0.0"
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   path: ^1.8.2
@@ -32,18 +32,18 @@ dependencies:
   at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
   at_commons: ^5.3.0
-  at_utils: ^3.0.19
+  at_utils: ^3.2.0
   at_chops: ^2.2.0
-  at_lookup: ^3.0.51
-  at_auth: ^2.1.0
-  at_persistence_spec: ^2.0.14
-  at_persistence_secondary_server: ^3.1.0
-  meta: ^1.8.0
+  at_lookup: ^3.0.52
+  at_auth: ^2.2.0
+  at_persistence_spec: ^3.0.0
+  at_persistence_secondary_server: ^4.0.0
+  meta: ^1.17.0
   version: ^3.0.2
 
 dev_dependencies:
-  lints: ^5.1.1
-  test: ^1.25.8
-  at_demo_data: ^1.0.1
-  coverage: ^1.5.0
-  mocktail: ^1.0.3
+  lints: ^6.0.0
+  test: ^1.26.2
+  at_demo_data: ^1.2.0
+  coverage: ^1.14.0
+  mocktail: ^1.0.4

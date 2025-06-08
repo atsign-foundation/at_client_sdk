@@ -1,7 +1,7 @@
 import 'package:at_client/at_client.dart';
 
 /// Contains CRUD operations that can be performed on [AtCollectionModel]
-abstract class AtCollectionModelOperations {
+abstract interface class AtCollectionModelOperations<T> {
   /// Saves the json representation of [AtCollectionModel] to the secondary server of a atSign.
   /// [save] calls [toJson] method to get the json representation of a [AtCollectionModel].
   ///
@@ -118,11 +118,11 @@ abstract class AtCollectionModelOperations {
   /// ```
   ///
   /// [fromJson] will be internally used by [getById], [getAll] methods
-  fromJson(Map<String, dynamic> jsonObject);
+  T fromJson(Map<String, dynamic> jsonObject);
 }
 
 /// Contains query methods on [AtCollectionModel]
-abstract class AtCollectionQueryOperations {
+abstract interface class AtCollectionQueryOperations {
   /// Returns list of AtCollectionModels that are shared by the given [atSign]
   /// Returns an empty list when nothing has been shared
   ///

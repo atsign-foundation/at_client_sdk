@@ -30,11 +30,3 @@ void main() async {
     print(trace);
   }
 }
-
-void onDone(var sync) {
-  print('sync done');
-}
-
-void onError(var sync, var error) {
-  print('sync done');
-}

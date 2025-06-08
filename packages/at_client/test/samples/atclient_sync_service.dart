@@ -48,7 +48,3 @@ void main() {
     await Future.delayed(Duration(seconds: 10));
   });
 }
-
-void onError(syncResult) {
-  print(syncResult);
-}

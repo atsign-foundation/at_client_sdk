@@ -483,7 +483,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @visibleForTesting
-  ensureLowerCase(AtKey atKey) {
+  dynamic ensureLowerCase(AtKey atKey) {
     if (upperCaseRegex.hasMatch(atKey.key) ||
         (atKey.namespace != null &&
             upperCaseRegex.hasMatch(atKey.namespace!))) {
@@ -557,6 +557,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     // DO NOT sync local keys to server
     bool shouldSync = atKey.isLocal ? false : SyncUtil.shouldSync(atKey.key);
+
     var putResponse =
         await secondary.executeVerb(verbBuilder, sync: shouldSync);
     // If putResponse is null or empty, return AtResponse with isError set to true
@@ -913,8 +914,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (spp.length != 6) {
       throw InvalidPinException.message("$spp should be 6 characters");
     }
-    // Validate the SPP. The SPP should contain only alpha-numeric characters.
-    // Any special characters or any characters other than aplha-numeric characters
+    // Validate the SPP. The SPP should contain only alphanumeric characters.
+    // Any special characters or any characters other than alphanumeric characters
     // are not allowed. Throw an exception
     bool hasMatch = RegExp(r'[\W-]+').hasMatch(spp);
     if (hasMatch) {

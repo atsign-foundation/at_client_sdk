@@ -1,3 +1,5 @@
+// ignore_for_file: use_super_parameters
+
 import 'dart:async';
 
 import 'package:at_client/src/key_stream/key_stream_map_base.dart';

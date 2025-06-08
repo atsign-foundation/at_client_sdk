@@ -1204,7 +1204,7 @@ void main() {
           await syncService.syncUtil.getCommitEntry(0, TestResources.atsign);
       //updating the commitId so that the key above is not an uncommitted entry no more
       await syncService.syncUtil
-          .updateCommitEntry(commitEntry, 1, TestResources.atsign);
+          .updateCommitEntry(commitEntry!, 1, TestResources.atsign);
 
       await keystore?.remove(key);
       await keystore?.put(key, AtData()..data = '+445-446-4847');
@@ -1775,10 +1775,9 @@ void main() {
               namespace: 'wavi', sharedBy: TestResources.atsign)
           .build()
           .toString();
-      var atData = AtData();
-      atData.data = '11122';
+      var atData = AtData()..data='11122'..metaData=(AtMetaData()..ttb=10000);
       //----------------------------------operation---------------------------------
-      int putCommitId = await keystore!.put(atKey, atData, time_to_born: 10000);
+      int putCommitId = await keystore!.put(atKey, atData);
       // key should not be available before 10 seconds
       // Assertion is not possible as the key will be available in the keystore level
       // expect(() async => await keystore.get(atKey),
@@ -2498,7 +2497,7 @@ void main() {
       CommitEntry? commitEntry =
           await syncService.syncUtil.getCommitEntry(0, TestResources.atsign);
       await syncService.syncUtil
-          .updateCommitEntry(commitEntry, 10, TestResources.atsign);
+          .updateCommitEntry(commitEntry!, 10, TestResources.atsign);
       //capture seq_num before sync
       int? preSyncSeqNum = (await syncService.syncUtil
               .getLastSyncedEntry('', atSign: TestResources.atsign))
@@ -3762,7 +3761,7 @@ void main() {
           //this equation has been specifically set so that the commitId of the
           //lastSyncedEntry is set to 5. Which is vital for sync to be completed
           await syncService.syncUtil
-              .updateCommitEntry(commitEntry, i + 3, TestResources.atsign);
+              .updateCommitEntry(commitEntry!, i + 3, TestResources.atsign);
         }
         //asset that the lastSyncedEntry has commitId of 5
         commitEntry = await syncService.syncUtil
@@ -3802,6 +3801,7 @@ void main() {
       setUp(() async {
         TestResources.atsign = '@poland';
         await TestResources.setupLocalStorage(TestResources.atsign);
+        registerFallbackValue(CommitEntry('foo@alice', CommitOp.UPDATE, DateTime.now()));
         registerFallbackValue(FakeAtKey());
         when(() =>
                 mockNotificationService.subscribe(regex: 'statsNotification'))
@@ -3911,7 +3911,7 @@ void main() {
         var commitEntry =
             await syncService.syncUtil.getCommitEntry(0, TestResources.atsign);
         await syncService.syncUtil
-            .updateCommitEntry(commitEntry, 10, TestResources.atsign);
+            .updateCommitEntry(commitEntry!, 10, TestResources.atsign);
         CustomSyncProgressListener progressListener =
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
@@ -4756,11 +4756,11 @@ class TestResources {
         ?.getSecondaryKeyStore();
   }
 
-  static setCommitEntry(int commitId, String atsign) async {
+  static Future<void> setCommitEntry(int commitId, String atsign) async {
     CommitEntry? entry = await SyncUtil(atCommitLog: commitLog)
         .getCommitEntry(commitId, TestResources.atsign);
     await SyncUtil(atCommitLog: commitLog)
-        .updateCommitEntry(entry, commitId, TestResources.atsign);
+        .updateCommitEntry(entry!, commitId, TestResources.atsign);
   }
 }
 

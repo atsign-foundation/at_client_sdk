@@ -80,7 +80,7 @@ class SyncManager {
   @Deprecated("Use SyncService.sync")
   Future<void> sync({bool appInit = false, String? regex}) async {
     //initially isSyncInProgress and pendingSyncExists are false.
-    //If a new sync triggered while previous sync isInprogress,then pendingSyncExists set to true and returns.
+    //If a new sync triggered while previous sync isInProgress,then pendingSyncExists set to true and returns.
     if (isSyncInProgress) {
       pendingSyncExists = true;
       return;
@@ -297,12 +297,12 @@ class SyncManager {
             // 3.2 Update/delete verb commit id response from server. Update server commit id in local commit log.
             var serverCommitId = message['operation_commit_id'];
             dynamic entryKey = message['entry_key'];
-            var entry = SyncUtil.getEntry(entryKey, _atSign!);
+            var entry = await SyncUtil.getEntry(entryKey, _atSign!);
             logger.info(
                 // ignore: unawaited_futures
                 'received remote push result: $entryKey $entry $entryKey');
             await syncUtil.updateCommitEntry(
-                entry, int.parse(serverCommitId), _atSign!);
+                entry!, int.parse(serverCommitId), _atSign!);
             pushedCount--;
             if (pushedCount == 0) syncDone = true;
             break;
@@ -331,7 +331,7 @@ class SyncManager {
     return jsonDecode(verbResult!);
   }
 
-  Future<void> _syncLocal(serverCommitEntry) async {
+  Future<void> _syncLocal(Map serverCommitEntry) async {
     switch (serverCommitEntry['operation']) {
       case '+':
       case '#':
@@ -419,9 +419,12 @@ class SyncManager {
   }
 
   Future<String> _getCommand(CommitEntry entry) async {
+    if (entry.operation == null) {
+      throw StateError('CommitEntry operation is null');
+    }
     late String command;
     // ignore: missing_enum_constant_in_switch
-    switch (entry.operation) {
+    switch (entry.operation!) {
       case CommitOp.UPDATE:
         var key = entry.atKey;
         var value = await _localSecondary!.keyStore!.get(key);
