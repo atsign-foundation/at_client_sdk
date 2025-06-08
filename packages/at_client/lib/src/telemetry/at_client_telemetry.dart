@@ -22,8 +22,7 @@ import '../../at_client.dart';
 class AtClientTelemetryService extends AtTelemetryService {
   final AtClient atClient;
 
-  AtClientTelemetryService(this.atClient,
-      {super.controller}) {
+  AtClientTelemetryService(this.atClient, {super.controller}) {
     atClient.telemetry = this;
   }
 

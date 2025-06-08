@@ -1775,7 +1775,9 @@ void main() {
               namespace: 'wavi', sharedBy: TestResources.atsign)
           .build()
           .toString();
-      var atData = AtData()..data='11122'..metaData=(AtMetaData()..ttb=10000);
+      var atData = AtData()
+        ..data = '11122'
+        ..metaData = (AtMetaData()..ttb = 10000);
       //----------------------------------operation---------------------------------
       int putCommitId = await keystore!.put(atKey, atData);
       // key should not be available before 10 seconds
@@ -3801,7 +3803,8 @@ void main() {
       setUp(() async {
         TestResources.atsign = '@poland';
         await TestResources.setupLocalStorage(TestResources.atsign);
-        registerFallbackValue(CommitEntry('foo@alice', CommitOp.UPDATE, DateTime.now()));
+        registerFallbackValue(
+            CommitEntry('foo@alice', CommitOp.UPDATE, DateTime.now()));
         registerFallbackValue(FakeAtKey());
         when(() =>
                 mockNotificationService.subscribe(regex: 'statsNotification'))

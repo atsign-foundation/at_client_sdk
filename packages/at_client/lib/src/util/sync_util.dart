@@ -72,7 +72,8 @@ class SyncUtil {
         _checkCommitIdsEqual(lastReceivedServerCommitId, serverCommitId);
   }
 
-  static bool _checkCommitIdsEqual(int? lastSyncedCommitId, int? serverCommitId) {
+  static bool _checkCommitIdsEqual(
+      int? lastSyncedCommitId, int? serverCommitId) {
     return (lastSyncedCommitId != null &&
             serverCommitId != null &&
             lastSyncedCommitId == serverCommitId) ||
