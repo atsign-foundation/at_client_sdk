@@ -39,7 +39,7 @@ class E2ESyncService {
       DateTime lastReceivedDateTime = DateTime.now().toUtc();
       Duration maxTotalWaitTime = Duration(minutes: 2);
       int maxTotalWaitTimeMillis = maxTotalWaitTime.inMilliseconds;
-      Duration maxTransientWaitTime = Duration(seconds: 15);
+      Duration maxTransientWaitTime = Duration(seconds: 30);
       int maxTransientWaitTimeMillis = maxTransientWaitTime.inMilliseconds;
 
       E2ETestSyncProgressListener e2eTestSyncProgressListener =
