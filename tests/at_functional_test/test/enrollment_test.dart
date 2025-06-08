@@ -188,7 +188,7 @@ void main() {
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
-              e.errorCode == 'AT0011' &&
+              e.errorCode == 'AT0022' &&
               e.errorMessage!
                   .contains('invalid otp. Cannot process enroll request'))));
     });
@@ -217,7 +217,7 @@ void main() {
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
-              e.errorCode == 'AT0011' &&
+              e.errorCode == 'AT0022' &&
               e.errorMessage!
                   .contains('invalid otp. Cannot process enroll request'))));
     });
