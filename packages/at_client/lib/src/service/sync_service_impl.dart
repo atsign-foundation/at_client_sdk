@@ -527,7 +527,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return keyInfoList;
   }
 
-  Future<void> _processServerCommitEntry(serverCommitEntry,
+  Future<void> _processServerCommitEntry(Map serverCommitEntry,
       List<CommitEntry> uncommittedEntries, List<KeyInfo> keyInfoList) async {
     try {
       final keyInfo = KeyInfo(
@@ -616,7 +616,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return serverCommitId >= skipDeletesUntil;
   }
 
-  Future<ConflictInfo?> _setConflictInfo(final serverCommitEntry) async {
+  Future<ConflictInfo?> _setConflictInfo(final Map serverCommitEntry) async {
     String key = serverCommitEntry['atKey'];
     // publickey.<atsign>@<currentatsign> is used to store the public key of
     // other atsign. The value is not encrypted.
@@ -737,9 +737,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   }
 
   Future<String> _getCommand(CommitEntry entry) async {
+    if (entry.operation == null) {
+      throw StateError('CommitEntry operation is null : $entry');
+    }
     late String command;
     // ignore: missing_enum_constant_in_switch
-    switch (entry.operation) {
+    switch (entry.operation!) {
       case CommitOp.UPDATE:
         var key = entry.atKey;
         var value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
@@ -945,7 +948,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return jsonDecode(verbResult!);
   }
 
-  Future<void> _syncLocal(serverCommitEntry) async {
+  Future<void> _syncLocal(Map serverCommitEntry) async {
     switch (serverCommitEntry['operation']) {
       case '+':
       case '#':

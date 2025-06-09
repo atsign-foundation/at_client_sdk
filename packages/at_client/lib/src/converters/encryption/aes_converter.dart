@@ -91,7 +91,7 @@ class AESEncryptionSink extends ByteConversionSink {
   }
 }
 
-class AESDecryptionSink extends ChunkedConversionSink<List<int>> {
+class AESDecryptionSink implements ChunkedConversionSink<List<int>> {
   final Converter _converter;
   final Sink<List<int>> _outSink;
 

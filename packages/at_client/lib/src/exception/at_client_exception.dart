@@ -15,5 +15,5 @@ class AtClientException implements Exception {
 @Deprecated(
     'Moved AtKeyException to at_commons package [at_commons/src/exception/at_exceptions.dart]')
 class AtKeyException extends AtClientException {
-  AtKeyException(message) : super('AT0023', message);
+  AtKeyException(String message) : super('AT0023', message);
 }

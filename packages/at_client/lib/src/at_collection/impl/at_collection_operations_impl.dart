@@ -6,7 +6,7 @@ import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'collection_methods_impl.dart';
 
-class AtCollectionModelOperationsImpl extends AtCollectionModelOperations {
+class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
   final _logger = AtSignLogger('AtCollectionModelOperationsImpl');
   late AtCollectionModel atCollectionModel;
   late AtCollectionMethodImpl collectionMethodImpl;

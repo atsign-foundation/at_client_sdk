@@ -74,7 +74,10 @@ class AtCollectionMethodImpl {
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
-      _logger.finest('Update shared key $sharedKey');
+      AtValue v = await _getAtClient().get(sharedKey);
+      if (v.metadata != null) {
+        sharedKey.metadata = v.metadata!;
+      }
       var atOperationItemStatus = AtOperationItemStatus(
           atSign: sharedKey.sharedWith ?? '',
           key: sharedKey.key,

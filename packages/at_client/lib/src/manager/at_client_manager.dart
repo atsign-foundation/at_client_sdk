@@ -46,7 +46,7 @@ class AtClientManager {
   }
 
   // ignore: no_leading_underscores_for_local_identifiers
-  AtClientManager(_atSign);
+  AtClientManager(this._atSign);
 
   void setSecondaryAddressFinder(
       {SecondaryAddressFinder? secondaryAddressFinder}) {
@@ -142,7 +142,7 @@ class AtClientManager {
 
   /// NOT A PART of API. Added for unit tests
   @visibleForTesting
-  removeAllChangeListeners() {
+  void removeAllChangeListeners() {
     _changeListeners.clear();
   }
 

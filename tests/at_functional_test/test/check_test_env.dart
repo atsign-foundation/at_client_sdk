@@ -31,7 +31,7 @@ void main() {
   }, timeout: Timeout(Duration(minutes: 5)));
 }
 
-Future<SecureSocket> secureSocketConnection(host, port) async {
+Future<SecureSocket> secureSocketConnection(String host, int port) async {
   dynamic socket;
   while (true) {
     try {
@@ -53,7 +53,7 @@ void socketListener(SecureSocket secureSocket) {
   secureSocket.listen(_messageHandler);
 }
 
-void _messageHandler(data) {
+void _messageHandler(dynamic data) {
   if (data.length == 1 && data.first == 64) {
     return;
   }

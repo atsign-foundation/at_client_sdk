@@ -1,5 +1,3 @@
-library at_client;
-
 import 'package:meta/meta.dart';
 
 @experimental
