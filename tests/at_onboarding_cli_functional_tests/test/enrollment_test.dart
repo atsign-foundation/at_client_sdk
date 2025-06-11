@@ -69,7 +69,7 @@ void main() {
           onboardingService_2.enroll('buzz', 'iphone', totp, namespaces),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
-              e.errorCode == 'AT0011' &&
+              e.errorCode == 'AT0022' &&
               e.errorMessage!
                   .contains('invalid otp. Cannot process enroll request'))));
 
