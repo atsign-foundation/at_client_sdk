@@ -272,6 +272,10 @@ class LocalSecondary implements Secondary {
 
   Future<bool> isEnrollmentAuthorizedForOperation(
       String key, VerbBuilder verbBuilder) async {
+    // Do whatever you want with "local" keys
+    if (key.startsWith('local:')) {
+      return true;
+    }
     // if there is no enrollment, return true
     enrollment ??= await _getEnrollmentDetails();
     if (_atClient.enrollmentId == null ||
