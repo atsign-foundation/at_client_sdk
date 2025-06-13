@@ -86,22 +86,27 @@ class FakeStatsVerbBuilder extends Fake implements StatsVerbBuilder {}
 class FakeAtKey extends Fake implements AtKey {}
 
 void main() async {
-  AtClient mockAtClient = MockAtClient();
-  AtClientManager mockAtClientManager = MockAtClientManager();
-  NotificationServiceImpl mockNotificationService =
-      MockNotificationServiceImpl();
-  AtCommitLog mockAtCommitLog = MockAtCommitLog();
-  RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
-  LocalSecondary mockLocalSecondary = MockLocalSecondary();
+  late AtClient mockAtClient;
+  late AtClientManager mockAtClientManager;
+  late NotificationServiceImpl mockNotificationService;
+  late AtCommitLog mockAtCommitLog;
+  late RemoteSecondary mockRemoteSecondary;
+  late LocalSecondary mockLocalSecondary;
+  late SyncServiceImpl syncServiceImpl;
 
-  var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
-      atClientManager: mockAtClientManager,
-      notificationService: mockNotificationService,
-      remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-  syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
+  setUp(() async {
+    mockAtClient = MockAtClient();
+    mockAtClientManager = MockAtClientManager();
+    mockNotificationService = MockNotificationServiceImpl();
+    mockAtCommitLog = MockAtCommitLog();
+    mockRemoteSecondary = MockRemoteSecondary();
+    mockLocalSecondary = MockLocalSecondary();
 
-  setUp(() {
-    reset(mockRemoteSecondary);
+    syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+        atClientManager: mockAtClientManager,
+        notificationService: mockNotificationService,
+        remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+    syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
   });
 
   group('A group of positive tests on sync service', () {
@@ -300,6 +305,10 @@ void main() async {
                 ..commitId = localCommitId));
       when(() =>
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((invocation) {
+        throw AtKeyNotFoundException('key is not found in keystore');
+      });
+      when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
       when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
