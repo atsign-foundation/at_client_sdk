@@ -541,17 +541,12 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         'syncDirection': keyInfo.syncDirection,
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
-    } on Exception catch (e, stacktrace) {
+    } catch (e) {
       _sendTelemetry(
-          '_syncFromServer.forEachEntry.exception', {"e": e, "st": stacktrace});
+          '_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
-          'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
-    } on Error catch (e, stacktrace) {
-      _sendTelemetry(
-          '_syncFromServer.forEachEntry.error', {"e": e, "st": stacktrace});
-      _logger.severe(
-          'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
-    }
+          'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
+      }
   }
 
   /// Takes the last received server commit id and fetches the entries that are above the given
