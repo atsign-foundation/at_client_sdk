@@ -195,7 +195,8 @@ class AtRpc {
 
     // If we're a server, listen for request notifications
     if (isServer) {
-      final String requestsRegex = 'request.\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
+      final String requestsRegex =
+          'request.\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
       logger.info('Subscribing to $requestsRegex');
 
       _requestStream = atClient.notificationService
@@ -209,7 +210,7 @@ class AtRpc {
     // If we're a client, listen for response notifications
     if (isClient) {
       final String responsesRegex =
-      '(success|error|ack|nack).\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
+          '(success|error|ack|nack).\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
       logger.info('Subscribing to $responsesRegex');
 
       _responseStream = atClient.notificationService

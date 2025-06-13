@@ -542,11 +542,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
     } catch (e) {
-      _sendTelemetry(
-          '_syncFromServer.forEachEntry.exception', {"e": e});
+      _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
           'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
-      }
+    }
   }
 
   /// Takes the last received server commit id and fetches the entries that are above the given
