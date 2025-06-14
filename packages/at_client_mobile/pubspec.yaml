@@ -27,6 +27,7 @@ dependencies:
   at_persistence_secondary_server: ^4.1.0
 
 dependency_overrides:
+  # Very annoyingly have to add this here because latest stable flutter is pinned to meta 1.16.0
   meta: ^1.16.0
 dev_dependencies:
   lints: ^4.0.0
