@@ -24,7 +24,7 @@ dependencies:
    zxing2: ^0.2.0
    at_auth: ^2.2.0
    at_chops: ^2.2.0
-   at_client: ^3.3.0
+   at_client: ^3.4.3
    at_commons: ^5.0.2
    at_lookup: ^3.0.52
    at_server_status: ^1.0.5
@@ -32,13 +32,6 @@ dependencies:
    duration: ^4.0.3
    crypto: ^3.0.5
    chalkdart: ^2.0.9
-
-dependency_overrides:
-  at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk
-      ref: at-rpc-enable-same-atsign
-      path: packages/at_client
 
 dev_dependencies:
   lints: ^5.0.0
