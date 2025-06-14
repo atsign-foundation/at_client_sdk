@@ -262,7 +262,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     } on AtException catch (e) {
       e.stack(AtChainedException(Intent.syncData,
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
-      _logger.severe(
+      _logger.warning(
           'Exception in sync ${syncRequest.id}. Reason: ${e.getTraceMessage()}');
       syncRequest.result!.atClientException =
           AtExceptionManager.createException(e);
