@@ -72,7 +72,7 @@ jobs:
         run: flutter pub get
 
       # Install dependencies of at_client_mobile/apkam_example
-      - name: Installing dependencies
+      - name: Installing dependencies of at_client_mobile/apkam_example
         working-directory: packages/at_client_mobile/apkam_example
         run: flutter pub get
 
@@ -97,6 +97,10 @@ jobs:
           flags: at_client_mobile_unit_tests
 
       # Check formatting
+      - name: format generated code
+        working-directory: packages
+        run: dart format at_client_mobile/lib/l10n/at_client_mobile_localizations.dart
+
       - name: Check that code in packages is correctly formatted
         working-directory: packages
         run: dart format . -o none --set-exit-if-changed
