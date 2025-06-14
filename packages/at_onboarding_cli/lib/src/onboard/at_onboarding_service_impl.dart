@@ -198,7 +198,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       ..isLocal = true
       ..key = enrollmentResponse.enrollmentId
       ..sharedBy = atClient!.getCurrentAtSign();
-    await atClient!.put(localEnrollmentKey, jsonEncode(enrollmentDetails));
+    await atClient!.getLocalSecondary()!.putValue(
+          localEnrollmentKey.toString(),
+          jsonEncode(enrollmentDetails.toJson()),
+        );
 
     await createAtKeysFile(
       enrollmentResponse,
