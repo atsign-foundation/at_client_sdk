@@ -21,14 +21,18 @@ dependencies:
   at_utils: ^3.0.19
   at_chops: ^2.2.0
   at_lookup: ^3.0.51
-  at_client: ^3.4.1
+  at_client: ^3.4.3
   at_auth: ^2.1.0
   at_file_saver: ^0.1.2
   encrypt: ^5.0.3
-  at_persistence_secondary_server: ^3.0.64
+  at_persistence_secondary_server: ^4.1.0
   pin_code_fields: ^8.0.1
   flutter_localizations:
     sdk: flutter
+
+dependency_overrides:
+  # Very annoyingly have to add this here because latest stable flutter is pinned to meta 1.16.0
+  meta: ^1.16.0
 
 dev_dependencies:
   lints: ^4.0.0

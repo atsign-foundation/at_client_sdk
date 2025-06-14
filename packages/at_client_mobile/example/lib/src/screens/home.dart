@@ -126,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 setState(() => _isUpdateLoading = true);
                                 if (_key != null && _value != null) {
                                   AtKey pair = AtKey()
-                                    ..key = _key
+                                    ..key = _key!
                                     ..sharedWith = atSign;
                                   bool _put = await _clientSdkService.put(
                                       pair, _value!);
@@ -314,7 +314,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   );
                                 } else {
                                   AtKey lookup = AtKey();
-                                  lookup.key = _lookupKey;
+                                  lookup.key = _lookupKey!;
                                   lookup.sharedWith = atSign;
                                   String? response =
                                       await _clientSdkService.get(lookup);
@@ -374,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 setState(() => _isDeleteLoading = true);
                                 if (_deleteKey != null) {
                                   AtKey pair = AtKey()
-                                    ..key = _deleteKey
+                                    ..key = _deleteKey!
                                     ..sharedWith = atSign;
                                   bool _delete =
                                       await _clientSdkService.delete(pair);

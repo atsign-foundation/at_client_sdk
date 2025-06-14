@@ -42,6 +42,8 @@ dependency_overrides:
   at_client_mobile:
     path: ../../at_client_mobile
   meta: ^1.16.0
+  intl: ^0.19.0
+
 
 flutter:
 

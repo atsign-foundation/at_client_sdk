@@ -62,15 +62,18 @@ import 'at_client_mobile_localizations_es.dart';
 /// be consistent with the languages listed in the AtClientMobileLocalizations.supportedLocales
 /// property.
 abstract class AtClientMobileLocalizations {
-  AtClientMobileLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AtClientMobileLocalizations(String locale)
+      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
   static AtClientMobileLocalizations of(BuildContext context) {
-    return Localizations.of<AtClientMobileLocalizations>(context, AtClientMobileLocalizations)!;
+    return Localizations.of<AtClientMobileLocalizations>(
+        context, AtClientMobileLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AtClientMobileLocalizations> delegate = _AtClientMobileLocalizationsDelegate();
+  static const LocalizationsDelegate<AtClientMobileLocalizations> delegate =
+      _AtClientMobileLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -82,7 +85,8 @@ abstract class AtClientMobileLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
     delegate,
     GlobalMaterialLocalizations.delegate,
     GlobalCupertinoLocalizations.delegate,
@@ -102,34 +106,36 @@ abstract class AtClientMobileLocalizations {
   String get helloWorld;
 }
 
-class _AtClientMobileLocalizationsDelegate extends LocalizationsDelegate<AtClientMobileLocalizations> {
+class _AtClientMobileLocalizationsDelegate
+    extends LocalizationsDelegate<AtClientMobileLocalizations> {
   const _AtClientMobileLocalizationsDelegate();
 
   @override
   Future<AtClientMobileLocalizations> load(Locale locale) {
-    return SynchronousFuture<AtClientMobileLocalizations>(lookupAtClientMobileLocalizations(locale));
+    return SynchronousFuture<AtClientMobileLocalizations>(
+        lookupAtClientMobileLocalizations(locale));
   }
 
   @override
-  bool isSupported(Locale locale) => <String>['en', 'es'].contains(locale.languageCode);
+  bool isSupported(Locale locale) =>
+      <String>['en', 'es'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AtClientMobileLocalizationsDelegate old) => false;
 }
 
 AtClientMobileLocalizations lookupAtClientMobileLocalizations(Locale locale) {
-
-
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'en': return AtClientMobileLocalizationsEn();
-    case 'es': return AtClientMobileLocalizationsEs();
+    case 'en':
+      return AtClientMobileLocalizationsEn();
+    case 'es':
+      return AtClientMobileLocalizationsEs();
   }
 
   throw FlutterError(
-    'AtClientMobileLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.'
-  );
+      'AtClientMobileLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }
