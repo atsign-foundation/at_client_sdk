@@ -37,12 +37,6 @@ dependencies:
   at_app_flutter: ^5.2.0
   at_client: ^3.2.2
 
-dependency_overrides:
-  at_commons: ^5.0.0
-  at_utils: ^3.0.19
-  path: ^1.8.3
-  async: ^2.10.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

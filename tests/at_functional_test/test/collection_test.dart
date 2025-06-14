@@ -59,7 +59,7 @@ void main() {
       ..namespace = 'buzz'
       ..collectionName = 'phone'
       ..phoneNumber = '12345';
-    var shareRes = await phone.save();
+    var shareRes = await phone.save(options: TestUtils.optionsTtlOneMinute);
     expect(shareRes, true);
   });
 
@@ -75,8 +75,8 @@ void main() {
       ..namespace = 'buzz.bz'
       ..collectionName = 'phone'
       ..phoneNumber = '9999';
-    await personalPhone.save();
-    await officePhone.save();
+    await personalPhone.save(options: TestUtils.optionsTtlOneMinute);
+    await officePhone.save(options: TestUtils.optionsTtlOneMinute);
 
     AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
     var personalPhoneLoaded = await AtCollectionModel.getModel(
@@ -113,8 +113,8 @@ void main() {
       ..namespace = 'buzz'
       ..collectionName = 'phone'
       ..phoneNumber = '9999';
-    await personalPhone.save();
-    await officePhone.save();
+    await personalPhone.save(options: TestUtils.optionsTtlOneMinute);
+    await officePhone.save(options: TestUtils.optionsTtlOneMinute);
 
     AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
     // Get models with existing collectionName
@@ -130,4 +130,3 @@ void main() {
         .unregister(PhoneFactory.getInstance());
   });
 }
-

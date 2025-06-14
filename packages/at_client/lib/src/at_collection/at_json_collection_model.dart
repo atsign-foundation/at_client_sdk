@@ -1,7 +1,7 @@
 import 'at_collection_model.dart';
 import 'at_collection_model_factory.dart';
 
-// Represens a generic JSON model of a atCollection model
+// Represents a generic JSON model of a atCollection model
 class AtJsonCollectionModel extends AtCollectionModel {
   late Map<String, dynamic> jsonModel;
 

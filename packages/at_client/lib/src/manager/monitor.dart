@@ -58,12 +58,12 @@ class Monitor {
   /// The time (milliseconds since epoch) that the last heartbeat message was sent
   int _lastHeartbeatSentTime = 0;
 
-  get lastHeartbeatSentTime => _lastHeartbeatSentTime;
+  int get lastHeartbeatSentTime => _lastHeartbeatSentTime;
 
   /// The time (milliseconds since epoch) that the last heartbeat response was received
   int _lastHeartbeatResponseTime = 0;
 
-  get lastHeartbeatResponseTime => _lastHeartbeatResponseTime;
+  int get lastHeartbeatResponseTime => _lastHeartbeatResponseTime;
 
   /// Monitor will send heartbeat 'no-op' messages periodically.
   /// First heartbeat will be sent [_heartbeatInterval] after monitor has entered
@@ -75,7 +75,7 @@ class Monitor {
   /// retryCallback
   late Duration _heartbeatInterval;
 
-  get heartbeatInterval => _heartbeatInterval;
+  Duration get heartbeatInterval => _heartbeatInterval;
 
   final AtChops? atChops;
 
@@ -244,7 +244,7 @@ class Monitor {
     });
   }
 
-  _callCloseStopAndRetry() {
+  void _callCloseStopAndRetry() {
     if (_closeOpInProgress) {
       _logger.info('Another closeStopAndRetry operation is in progress');
       return;
@@ -377,7 +377,7 @@ class Monitor {
     }
   }
 
-  void _handleError(e) {
+  void _handleError(dynamic e) {
     _monitorConnection?.close();
     status = MonitorStatus.errored;
     // Pass monitor and error
@@ -394,7 +394,7 @@ class Monitor {
   /// Handles messages on the inbound client's connection.
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
-  Future<void> _messageHandler(data) async {
+  Future<void> _messageHandler(dynamic data) async {
     // check buffer overflow
     _checkBufferOverFlow(data);
 
@@ -405,19 +405,30 @@ class Monitor {
     for (int element = 0; element < data.length; element++) {
       // If it's a '\n' then complete data has been received. process it.
       if (data[element] == newLineCodeUnit) {
-        String result = utf8.decode(_buffer.getData().toList());
-        result = _stripPrompt(result);
-        _logger.finer('RECEIVED $result');
-        _handleResponse(result, _onResponse);
+        String result = '';
+        String doing = '';
+        try {
+          doing = '_messageHandler:utf8.decode data';
+          result = utf8.decode(_buffer.getData().toList());
 
-        _buffer.clear();
+          doing = '_messageHandler:_stripPrompt';
+          result = _stripPrompt(result);
+          _logger.finer('RECEIVED $result');
+
+          doing = '_messageHandler:_handleResponse';
+          _handleResponse(result, _onResponse);
+        } catch (e) {
+          _logger.shout('$e from $doing while handling $result');
+        } finally {
+          _buffer.clear();
+        }
       } else {
         _buffer.addByte(data[element]);
       }
     }
   }
 
-  _checkBufferOverFlow(data) {
+  void _checkBufferOverFlow(dynamic data) {
     if (_buffer.isOverFlow(data)) {
       int bufferLength = (_buffer.length() + data.length) as int;
       _buffer.clear();

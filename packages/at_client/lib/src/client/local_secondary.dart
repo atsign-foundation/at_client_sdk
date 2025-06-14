@@ -77,15 +77,19 @@ class LocalSecondary implements Secondary {
       }
       switch (builder.operation) {
         case AtConstants.updateMeta:
-          var atMetadata =
-              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
+          var atMetadata = AtMetaData.fromCommonsMetadata(
+            builder.atKey.metadata,
+            _atClient.getCurrentAtSign()!,
+          );
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
           atData.data = builder.value;
-          var atMetadata =
-              AtMetaData.fromCommonsMetadata(builder.atKey.metadata);
+          var atMetadata = AtMetaData.fromCommonsMetadata(
+            builder.atKey.metadata,
+            _atClient.getCurrentAtSign()!,
+          );
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
@@ -268,6 +272,10 @@ class LocalSecondary implements Secondary {
 
   Future<bool> isEnrollmentAuthorizedForOperation(
       String key, VerbBuilder verbBuilder) async {
+    // Do whatever you want with "local" keys
+    if (key.startsWith('local:')) {
+      return true;
+    }
     // if there is no enrollment, return true
     enrollment ??= await _getEnrollmentDetails();
     if (_atClient.enrollmentId == null ||
@@ -340,7 +348,7 @@ class LocalSecondary implements Secondary {
             'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
       }
       enrollmentInfoFromServer =
-          enrollmentInfoFromServer?.replaceAll('data:', '');
+          enrollmentInfoFromServer?.replaceFirst(RegExp('^data:'), '');
       Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
       _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
       enrollment = Enrollment()

@@ -42,7 +42,7 @@ class SplitterSink extends ByteConversionSinkBase {
   }
 }
 
-class ListSink extends Sink<List<int>> {
+class ListSink implements Sink<List<int>> {
   final List<List<int>> list = <List<int>>[];
 
   @override

@@ -19,20 +19,20 @@ class EnrollmentServiceImpl implements EnrollmentService {
       ..deviceName = enrollmentListParams?.deviceName
       ..enrollmentStatusFilter = enrollmentListParams?.enrollmentListFilter;
 
-    var response = await _atClient
-        .getRemoteSecondary()
-        ?.executeCommand(enrollBuilder.buildCommand(), auth: true);
+    String? response = await _atClient
+        .getRemoteSecondary()!
+        .executeCommand(enrollBuilder.buildCommand(), auth: true);
 
-    return _formatEnrollListResponse(response);
+    return _formatEnrollListResponse(response!);
   }
 
   String extractEnrollmentId(String enrollmentKey) {
     return enrollmentKey.split('.')[0];
   }
 
-  List<Enrollment> _formatEnrollListResponse(response) {
-    response = response?.replaceFirst('data:', '');
-    Map<String, dynamic> enrollRequests = jsonDecode(response!);
+  List<Enrollment> _formatEnrollListResponse(String response) {
+    response = response.replaceFirst(RegExp('^data:'), '');
+    Map<String, dynamic> enrollRequests = jsonDecode(response);
     List<Enrollment> enrollRequestsFormatted = [];
     for (MapEntry enrollmentRequest in enrollRequests.entries) {
       Enrollment enrollmentRequestResponse =

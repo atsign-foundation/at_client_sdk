@@ -6,7 +6,7 @@ abstract class AtKeyEncryption {
   ///
   /// Returns a String for a text value.
   ///
-  /// Returns List<int> for a stream data.
+  /// Returns `List<int>` for a stream data.
   ///
   /// Throws [KeyNotFoundException] if any of the encryption keys are not found.
   ///

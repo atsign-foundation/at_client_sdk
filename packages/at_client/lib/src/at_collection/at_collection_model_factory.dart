@@ -29,13 +29,13 @@ class AtCollectionModelFactoryManager {
 
   List<AtCollectionModelFactory> collectionFactories = [];
 
-  register(AtCollectionModelFactory factory) {
+  void register(AtCollectionModelFactory factory) {
     if (!collectionFactories.contains(factory)) {
       collectionFactories.add(factory);
     }
   }
 
-  unregister(AtCollectionModelFactory factory) {
+  void unregister(AtCollectionModelFactory factory) {
     if (collectionFactories.contains(factory)) {
       collectionFactories.remove(factory);
     }

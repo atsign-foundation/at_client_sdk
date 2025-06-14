@@ -17,11 +17,3 @@ void main() async {
     print(trace);
   }
 }
-
-void onDone(syncResult) {
-  print(syncResult);
-}
-
-void onError(syncResult) {
-  print('${syncResult.syncStatus} ${syncResult.atClientException}');
-}

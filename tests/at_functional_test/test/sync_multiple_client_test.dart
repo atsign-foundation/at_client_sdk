@@ -204,7 +204,7 @@ Future<dynamic> readFromIsolateQueue() async {
 }
 
 /// Main Isolate listener
-void mainIsolateMessageListener(data) {
+void mainIsolateMessageListener(dynamic data) {
   if (data is IsolateAtClientResponse) {
     _mainIsolateLogger
         .info('RCVD message: ${data.message} from ${data.clientId}');

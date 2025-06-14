@@ -108,7 +108,7 @@ class RemoteSecondary implements Secondary {
     var verbResult;
     try {
       verbResult = await executeVerb(builder);
-      verbResult = verbResult.replaceFirst('data:', '');
+      verbResult = verbResult.replaceFirst(RegExp('^data:'), '');
     } on AtException catch (e) {
       throw e
         ..stack(AtChainedException(Intent.fetchData,
@@ -144,14 +144,14 @@ class RemoteSecondary implements Secondary {
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
   /// secondary server. This method is executed for all verbs that requires authentication.
-  Future<bool> authenticate(var privateKey) async {
+  Future<bool> authenticate(String? privateKey) async {
     var authResult = await atLookUp.authenticate(privateKey);
     return authResult;
   }
 
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to
   /// secondary server
-  Future<bool> authenticateCram(var secret) async {
+  Future<bool> authenticateCram(String? secret) async {
     if (secret == null) {
       throw UnAuthenticatedException('Cram secret cannot be null');
     }

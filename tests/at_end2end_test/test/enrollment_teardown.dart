@@ -14,8 +14,9 @@ void main() {
   for (var currentAtSign in atSignList) {
     test('A test to tear down the enrollment setup for $currentAtSign',
         () async {
-      await TestSuiteInitializer.getInstance()
-          .testInitializer(currentAtSign, namespace, 'pkam');
+      await TestSuiteInitializer.getInstance().testInitializer(
+          currentAtSign, namespace, 'pkam',
+          enableInitialSync: false);
 
       List<Enrollment>? pendingEnrollments = await AtClientManager.getInstance()
           .atClient

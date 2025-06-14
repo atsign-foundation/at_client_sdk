@@ -526,7 +526,7 @@ class NotificationServiceImpl implements NotificationService, AtSignChangeListen
 
   ///Not a part of API. Exposed for unit test
   @visibleForTesting
-  getStreamListenersCount() {
+  int getStreamListenersCount() {
     return _streamListeners.length;
   }
 

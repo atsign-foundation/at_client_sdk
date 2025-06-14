@@ -48,7 +48,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
 
   /// Registers list of AtCollectionModelFactory instances.
   /// These factories will be used while creating specific sub classes of [AtCollectionModel] for a given collection
-  static registerFactories(List<AtCollectionModelFactory> factories) {
+  static void registerFactories(List<AtCollectionModelFactory> factories) {
     for (var atCollectionModelFactory in factories) {
       AtCollectionModelFactoryManager.getInstance()
           .register(atCollectionModelFactory);

@@ -24,7 +24,7 @@ class SyncUtil {
   }
 
   Future<void> updateCommitEntry(
-      var commitEntry, int commitId, String atSign) async {
+      CommitEntry commitEntry, int commitId, String atSign) async {
     atCommitLog ??=
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
     await atCommitLog?.update(commitEntry, commitId);
@@ -59,7 +59,9 @@ class SyncUtil {
     if (atCommitLog == null) {
       return [];
     }
-    return atCommitLog!.getChanges(seqNum, regex);
+    return (await atCommitLog!.getChanges(seqNum, regex))
+        .where((commitEntry) => !commitEntry.atKey!.startsWith('local:'))
+        .toList();
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
@@ -72,7 +74,8 @@ class SyncUtil {
         _checkCommitIdsEqual(lastReceivedServerCommitId, serverCommitId);
   }
 
-  static bool _checkCommitIdsEqual(lastSyncedCommitId, serverCommitId) {
+  static bool _checkCommitIdsEqual(
+      int? lastSyncedCommitId, int? serverCommitId) {
     return (lastSyncedCommitId != null &&
             serverCommitId != null &&
             lastSyncedCommitId == serverCommitId) ||
@@ -102,7 +105,7 @@ class SyncUtil {
       throw AtClientException.message(
           'Unable to fetch latest server commit id: ${e.toString()}');
     }
-    result = result.replaceAll('data:', '');
+    result = result.replaceFirst(RegExp('^data:'), '');
     var statsJson = JsonUtils.decodeJson(result);
     if (statsJson[0]['value'] != 'null') {
       commitId = int.parse(statsJson[0]['value']);
@@ -110,10 +113,10 @@ class SyncUtil {
     return commitId;
   }
 
-  /// Returns true for the keys that has to be sync'ed to the server
+  /// Returns true for the keys that has to be synced to the server
   /// Else returns false.
   ///
-  /// The PKAM keys and Encryption Private key should not be sync'ed to remote secondary
+  /// The PKAM keys and Encryption Private key should not be synced to remote secondary
   static bool shouldSync(String key) {
     if (key.startsWith(AtConstants.atPkamPrivateKey) ||
         key.startsWith(AtConstants.atPkamPublicKey) ||
@@ -148,7 +151,7 @@ class SyncUtil {
   /// Sorts the commit entries in descending order.
   ///
   /// The CommitEntries with commitId 'null' comes before the commit entries with commitId
-  int _compareCommitId(commitEntry1, commitEntry2) {
+  int _compareCommitId(CommitEntry commitEntry1, CommitEntry commitEntry2) {
     if (commitEntry1.commitId == null && commitEntry2.commitId == null) {
       return 0;
     }

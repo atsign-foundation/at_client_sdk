@@ -49,10 +49,10 @@ Future<void> _notificationCallBack(AtNotification atNotification) async {
   }
 }
 
-void _streamReceiveCallBack(var bytesReceived) {
+void _streamReceiveCallBack(int bytesReceived) {
   print('Receive callback bytes received: $bytesReceived');
 }
 
-void _streamCompletionCallBack(var streamId) {
+void _streamCompletionCallBack(int streamId) {
   print('Transfer done for stream: $streamId');
 }

@@ -1,7 +1,7 @@
 import 'package:at_client/at_client.dart';
 
 /// Contains CRUD operations that can be performed on [AtCollectionModel]
-abstract class AtCollectionModelOperations {
+abstract interface class AtCollectionModelOperations<T> {
   /// Saves the json representation of [AtCollectionModel] to the secondary server of a atSign.
   /// [save] calls [toJson] method to get the json representation of a [AtCollectionModel].
   ///
@@ -29,7 +29,7 @@ abstract class AtCollectionModelOperations {
   /// ```
   /// Phone temporaryPhone = await Phone('temporary phone').save(options : ObjectLifeCycleOptions(timeToLive : Duration(hours : 24)));
   /// ```
-  /// By default the value shared is cached on the recipient, if this has to changed then set objectLifeCycleOptions [cacheValueOnRecipient] to fasle.
+  /// By default the value shared is cached on the recipient, if this has to changed then set objectLifeCycleOptions [cacheValueOnRecipient] to false.
   /// By default when the object is deleted then the cached values on the recipients are deleted. if this needs to be changed set [objectLifeCycleOptions.cascadeDelete] to false.
   ///
   /// Returns a true if save is successful else returns a false.
@@ -47,13 +47,13 @@ abstract class AtCollectionModelOperations {
   /// If fine grained information on individual operations that happens within [share] is desired then use [streams.share]
   Future<bool> share(List<String> atSigns, {ObjectLifeCycleOptions? options});
 
-  /// [unshare] unshares the AtCollectionModel object with the atSigns in [atSigns] list.
+  /// [unshare] un-shares the AtCollectionModel object with the atSigns in [atSigns] list.
   ///
   /// If [atSigns] is not passed then AtCollectionModel object is unshared with every @sign it was previously shared.
   ///
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share(['@kevin', '@colin']);
+  /// var shareRes = await personalPhone.share(['@kevin', '@colin']);
   /// var unshareRes = await personalPhone.unshare(['@kevin']);
   /// ```
   ///
@@ -66,17 +66,17 @@ abstract class AtCollectionModelOperations {
   ///
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share(['@kevin', '@colin']);
+  /// var shareRes = await personalPhone.share(['@kevin', '@colin']);
   /// var sharedList = await personalPhone.getSharedWith();
   /// ```
   ///
   /// Returns an empty list when object is not shared.
   Future<List<String>> sharedWith();
 
-  /// Deletes the object and unshares with every @sign it was shared with previously
+  /// Deletes the object and un-shares with every @sign it was shared with previously
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share(['@kevin', '@colin']);
+  /// var shareRes = await personalPhone.share(['@kevin', '@colin']);
   /// var sharedList = await personalPhone.delete();
   /// ```
   Future<bool> delete();
@@ -118,11 +118,11 @@ abstract class AtCollectionModelOperations {
   /// ```
   ///
   /// [fromJson] will be internally used by [getById], [getAll] methods
-  fromJson(Map<String, dynamic> jsonObject);
+  T fromJson(Map<String, dynamic> jsonObject);
 }
 
 /// Contains query methods on [AtCollectionModel]
-abstract class AtCollectionQueryOperations {
+abstract interface class AtCollectionQueryOperations {
   /// Returns list of AtCollectionModels that are shared by the given [atSign]
   /// Returns an empty list when nothing has been shared
   ///
@@ -179,7 +179,7 @@ abstract class AtCollectionQueryOperations {
 /// ```
 ///
 abstract class AtCollectionModelStreamOperations {
-  /// Saves the json representaion of the object to the secondary server of the @sign.
+  /// Saves the json representation of the object to the secondary server of the @sign.
   /// [save] calls [toJson] method to get the json representation.
   ///
   /// If [share] is set to true, then the Object will not only be saved but also be shared with the @signs with whom it was previously shared.
@@ -219,10 +219,10 @@ abstract class AtCollectionModelStreamOperations {
   ///   },
   /// );
   /// ```
-  /// By default the value shared is cached on the recipient, if this has to changed then set objectLifeCycleOptions [cacheValueOnRecipient] to fasle.
+  /// By default the value shared is cached on the recipient, if this has to changed then set objectLifeCycleOptions [cacheValueOnRecipient] to false.
   /// By default when the object is deleted then the cached values on the recipients are deleted. if this needs to be changed set [objectLifeCycleOptions.cascadeDelete] to false.
   ///
-  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
+  /// Returns `Stream<AtOperationItemStatus>`, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> save(
       {bool share = true, ObjectLifeCycleOptions? options});
 
@@ -237,17 +237,17 @@ abstract class AtCollectionModelStreamOperations {
   /// );
   /// ```
   ///
-  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
+  /// Returns `Stream<AtOperationItemStatus>`, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> share(List<String> atSigns,
       {ObjectLifeCycleOptions? options});
 
-  /// [unshare] unshares the AtCollectionModel object with the @signs in [atSigns] list.
+  /// [unshare] un-shares the AtCollectionModel object with the @signs in [atSigns] list.
   ///
   /// If [atSigns] is not passed then AtCollectionModel object is unshared with every @sign it was previously shared.
   ///
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share([@kevin, @colin]);
+  /// var shareRes = await personalPhone.share([@kevin, @colin]);
   /// personalPhone.streams.unshare([@kevin]).forEach(
   ///   (AtOperationItemStatus element) {
   ///     ///
@@ -255,20 +255,20 @@ abstract class AtCollectionModelStreamOperations {
   /// );
   /// ```
   ///
-  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
+  /// Returns `Stream<AtOperationItemStatus>`, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> unshare({List<String>? atSigns});
 
-  /// Deletes the object and unshares with every @sign it was shared with previously
+  /// Deletes the object and un-shares with every @sign it was shared with previously
   /// ```
   /// Phone personalPhone = await Phone('personal phone').save();
-  /// var sahreRes = await personalPhone.share([@kevin, @colin]);
+  /// var shareRes = await personalPhone.share([@kevin, @colin]);
   /// personalPhone.streams.delete().forEach(
   ///   (AtOperationItemStatus element) {
   ///    ///
   ///   },
   /// );
   /// ```
-  /// Returns Stream<AtOperationItemStatus>, where [AtOperationItemStatus] represents status of individual operations.
+  /// Returns `Stream<AtOperationItemStatus>`, where [AtOperationItemStatus] represents status of individual operations.
   Stream<AtOperationItemStatus> delete();
 }
 

@@ -12,7 +12,6 @@ void main() async {
   late String sharedWithAtSign;
   final namespace = TestConstants.namespace;
   var uuid = Uuid();
-
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
@@ -52,14 +51,14 @@ void main() async {
     String initialValue = 'initial_value-$uniqueId';
     String updatedValue = 'updated_value-$uniqueId';
 
-    AtKey testByPassCacheAtKey = AtKey()
+    final AtKey testByPassCacheAtKey = AtKey()
       ..key = keyEntity
       ..sharedWith = sharedWithAtSign
       ..namespace = namespace
       ..sharedBy = sharedByAtSign
       ..metadata = (Metadata()
         ..ttr = 1000
-        ..ttl = 900000);
+        ..ttl = TestConstants.oneMinuteMillis);
 
     // Ensure autoNotify is set to true to begin with
     await setAtSignOneAutoNotify(true);
@@ -73,9 +72,8 @@ void main() async {
         .put(testByPassCacheAtKey, initialValue);
     expect(putResult, true);
     // Sync the data to the remote secondary
-    await E2ESyncService.getInstance().syncData(
-        AtClientManager.getInstance().atClient.syncService,
-        syncOptions: SyncOptions()..key = testByPassCacheAtKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(AtClientManager.getInstance().atClient.syncService);
 
     // Give it a couple of seconds to propagate from one atServer to the other
     await Future.delayed(Duration(seconds: 2));
@@ -86,16 +84,8 @@ void main() async {
         namespace,
         TestPreferences.getInstance().getPreference(sharedWithAtSign));
 
-    var cachedTestByPassCacheAtKey = AtKey()
-      ..key = keyEntity
-      ..sharedWith = sharedWithAtSign
-      ..namespace = namespace
-      ..sharedBy = sharedByAtSign
-      ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(
-        AtClientManager.getInstance().atClient.syncService,
-        syncOptions: SyncOptions()
-          ..key = cachedTestByPassCacheAtKey.toString());
+    await E2ESyncService.getInstance()
+        .syncData(AtClientManager.getInstance().atClient.syncService);
 
     var getKey = AtKey()
       ..key = keyEntity
@@ -120,9 +110,8 @@ void main() async {
           .put(testByPassCacheAtKey, updatedValue);
       expect(newPutResult, true);
       // Sync the data to the remote secondary
-      await E2ESyncService.getInstance().syncData(
-          AtClientManager.getInstance().atClient.syncService,
-          syncOptions: SyncOptions()..key = testByPassCacheAtKey.toString());
+      await E2ESyncService.getInstance()
+          .syncData(AtClientManager.getInstance().atClient.syncService);
 
       // As atSignTwo
       await AtClientManager.getInstance().setCurrentAtSign(
@@ -156,10 +145,8 @@ void main() async {
       expect(getResult.value, updatedValue);
       expect(getResult.metadata!.isCached, false);
       // Sync - after this we should now have the new value
-      await E2ESyncService.getInstance().syncData(
-          AtClientManager.getInstance().atClient.syncService,
-          syncOptions: SyncOptions()
-            ..key = cachedTestByPassCacheAtKey.toString());
+      await E2ESyncService.getInstance()
+          .syncData(AtClientManager.getInstance().atClient.syncService);
 
       // Get Result with byPassCache set to false again
       // should also now return the new value, since cached value will have been updated with the

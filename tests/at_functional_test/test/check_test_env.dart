@@ -13,25 +13,25 @@ void main() {
   var atsignPort = 25017;
   var rootServer = 'vip.ve.atsign.zone';
 
-  SecureSocket _secureSocket;
+  SecureSocket secureSocket;
 
   test('checking for test environment readiness', () async {
     await Future.delayed(Duration(seconds: 10));
-    _secureSocket = await secureSocketConnection(rootServer, atsignPort);
+    secureSocket = await secureSocketConnection(rootServer, atsignPort);
     print('connection established');
-    socketListener(_secureSocket);
+    socketListener(secureSocket);
     String response = '';
     while (response.isEmpty || response == 'data:null\n') {
-      _secureSocket.write('lookup:publickey$atsign\n');
+      secureSocket.write('lookup:publickey$atsign\n');
       response = await read();
       print('waiting for signing public key response : $response');
       await Future.delayed(Duration(seconds: 5));
     }
-    await _secureSocket.close();
+    await secureSocket.close();
   }, timeout: Timeout(Duration(minutes: 5)));
 }
 
-Future<SecureSocket> secureSocketConnection(host, port) async {
+Future<SecureSocket> secureSocketConnection(String host, int port) async {
   dynamic socket;
   while (true) {
     try {
@@ -53,7 +53,7 @@ void socketListener(SecureSocket secureSocket) {
   secureSocket.listen(_messageHandler);
 }
 
-void _messageHandler(data) {
+void _messageHandler(dynamic data) {
   if (data.length == 1 && data.first == 64) {
     return;
   }

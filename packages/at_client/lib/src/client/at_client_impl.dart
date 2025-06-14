@@ -483,7 +483,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @visibleForTesting
-  ensureLowerCase(AtKey atKey) {
+  dynamic ensureLowerCase(AtKey atKey) {
     if (upperCaseRegex.hasMatch(atKey.key) ||
         (atKey.namespace != null &&
             upperCaseRegex.hasMatch(atKey.namespace!))) {
@@ -516,6 +516,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     bool enforceNamespace = true;
     // ignore: deprecated_member_use_from_same_package
     if (preference != null && preference!.enforceNamespace == false) {
+      enforceNamespace = false;
+    }
+    // Clients should be able to store any local keys they want
+    if (atKey.isLocal) {
       enforceNamespace = false;
     }
     var validationResult = AtKeyValidators.get().validate(
@@ -557,6 +561,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     }
     // DO NOT sync local keys to server
     bool shouldSync = atKey.isLocal ? false : SyncUtil.shouldSync(atKey.key);
+
     var putResponse =
         await secondary.executeVerb(verbBuilder, sync: shouldSync);
     // If putResponse is null or empty, return AtResponse with isError set to true
@@ -642,7 +647,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   String _formatResult(String? commandResult) {
     var result = commandResult;
     if (result != null) {
-      result = result.replaceFirst('data:', '');
+      result = result.replaceFirst(RegExp('^data:'), '');
     }
     return result ??= '';
   }
@@ -708,7 +713,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         streamResponse.status = AtStreamStatus.complete;
       }
     } else if (result != null && result.startsWith('error:')) {
-      result = result.replaceAll('error:', '');
+      result = result.replaceFirst(RegExp('^error:'), '');
       streamResponse.errorCode = result.split('-')[0];
       streamResponse.errorMessage = result.split('-')[1];
       streamResponse.status = AtStreamStatus.error;
@@ -913,8 +918,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (spp.length != 6) {
       throw InvalidPinException.message("$spp should be 6 characters");
     }
-    // Validate the SPP. The SPP should contain only alpha-numeric characters.
-    // Any special characters or any characters other than aplha-numeric characters
+    // Validate the SPP. The SPP should contain only alphanumeric characters.
+    // Any special characters or any characters other than alphanumeric characters
     // are not allowed. Throw an exception
     bool hasMatch = RegExp(r'[\W-]+').hasMatch(spp);
     if (hasMatch) {
@@ -929,7 +934,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     } on AtException catch (e) {
       throw AtClientException.message(e.message);
     }
-    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    otpVerbResponse = otpVerbResponse?.replaceFirst(RegExp('^data:'), '');
     return AtResponse()..response = otpVerbResponse!;
   }
 
@@ -944,7 +949,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     } on AtException catch (e) {
       throw AtClientException.message(e.message);
     }
-    otpVerbResponse = otpVerbResponse?.replaceAll('data:', '');
+    otpVerbResponse = otpVerbResponse?.replaceFirst(RegExp('^data:'), '');
     return AtResponse()..response = otpVerbResponse!;
   }
 

@@ -164,6 +164,9 @@ class AtRpc {
   ///
   final bool allowAll;
 
+  final bool isClient;
+  final bool isServer;
+
   AtRpc({
     required this.atClient,
     required this.baseNameSpace,
@@ -172,32 +175,51 @@ class AtRpc {
     required this.callbacks,
     required this.allowList,
     this.allowAll = false,
-  });
+    this.isClient = true,
+    this.isServer = true,
+  }) {
+    if (!isClient && !isServer) {
+      throw IllegalArgumentException('isClient or isServer must be true');
+    }
+    if (isClient && isServer) {
+      logger.warning('isClient and isServer both true.'
+          ' This will cause problems if the same atSign is being used'
+          ' for both requests and responses');
+    }
+  }
 
   /// Starts listening for notifications of the requests and responses
   /// in the `$domainNameSpace.$rpcsNameSpace.$baseNameSpace` namespace
   void start() {
     logger.info('allowList is $allowList; allowAll is $allowAll');
-    var regex = 'request.\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
-    logger.info('Subscribing to $regex');
 
-    _requestStream = atClient.notificationService
-        .subscribe(regex: regex, shouldDecrypt: true);
+    // If we're a server, listen for request notifications
+    if (isServer) {
+      final String requestsRegex =
+          'request.\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
+      logger.info('Subscribing to $requestsRegex');
 
-    _requestStream!.listen(handleRequestNotification,
-        onError: (e) => logger.severe('Notification Failed: $e'),
-        onDone: () => logger.info('RPC request listener stopped'));
+      _requestStream = atClient.notificationService
+          .subscribe(regex: requestsRegex, shouldDecrypt: true);
 
-    regex =
-        '(success|error|ack|nack).\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
-    logger.info('Subscribing to $regex');
+      _requestStream!.listen(handleRequestNotification,
+          onError: (e) => logger.severe('Notification Failed: $e'),
+          onDone: () => logger.info('RPC request listener stopped'));
+    }
 
-    _responseStream = atClient.notificationService
-        .subscribe(regex: regex, shouldDecrypt: true);
+    // If we're a client, listen for response notifications
+    if (isClient) {
+      final String responsesRegex =
+          '(success|error|ack|nack).\\d+.$domainNameSpace.$rpcsNameSpace.$baseNameSpace@';
+      logger.info('Subscribing to $responsesRegex');
 
-    _responseStream!.listen(handleResponseNotification,
-        onError: (e) => logger.severe('Notification Failed: $e'),
-        onDone: () => logger.info('RPC response listener stopped'));
+      _responseStream = atClient.notificationService
+          .subscribe(regex: responsesRegex, shouldDecrypt: true);
+
+      _responseStream!.listen(handleResponseNotification,
+          onError: (e) => logger.severe('Notification Failed: $e'),
+          onDone: () => logger.info('RPC response listener stopped'));
+    }
   }
 
   /// Sends a request by sending a notification with 'key' of

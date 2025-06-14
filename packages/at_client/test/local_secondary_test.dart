@@ -777,7 +777,7 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
   persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
 }
 
-Future<void> tearDownLocalStorage(storageDir) async {
+Future<void> tearDownLocalStorage(String storageDir) async {
   try {
     var isExists = await Directory(storageDir).exists();
     if (isExists) {

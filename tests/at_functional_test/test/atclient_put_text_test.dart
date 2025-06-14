@@ -1,4 +1,3 @@
-
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
@@ -7,7 +6,7 @@ import 'test_utils.dart';
 /// The tests verify the put and get functionality where key is created using AtKey
 /// static factory methods
 void main() {
- late AtClientManager atClientManager;
+  late AtClientManager atClientManager;
   late String atSign;
   final namespace = 'wavi';
 

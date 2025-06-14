@@ -1,7 +1,5 @@
 import 'package:at_client/at_client.dart';
 
-import '../collections.dart';
-
 class DefaultKeyMaker implements KeyMaker {
   AtClient _getAtClient() {
     return AtClientManager.getInstance().atClient;

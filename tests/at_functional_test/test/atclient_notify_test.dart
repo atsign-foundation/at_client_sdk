@@ -5,6 +5,7 @@ import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'test_utils.dart';
 
+// ignore_for_file: deprecated_member_use
 void main() {
   late AtClientManager atClientManager;
   late String currentAtSign;
@@ -290,9 +291,9 @@ void main() {
   });
 }
 
-void onSuccessCallback(notificationResult) {
+void onSuccessCallback(NotificationResult notificationResult) {
   expect(notificationResult.notificationStatusEnum.toString(),
       'NotificationStatusEnum.delivered');
-  expect(notificationResult.atKey.key, 'phone');
-  expect(notificationResult.atKey.sharedWith, '@bob🛠');
+  expect(notificationResult.atKey?.key, 'phone');
+  expect(notificationResult.atKey?.sharedWith, '@bob🛠');
 }

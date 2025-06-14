@@ -8,7 +8,6 @@ import 'package:at_client/src/key_stream/key_stream_iterable_base.dart';
 import 'package:at_client/src/key_stream/key_stream_map_base.dart';
 import 'package:at_client/src/key_stream/key_stream_mixin.dart';
 import 'package:at_end2end_test/config/config_util.dart';
-import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
@@ -26,10 +25,12 @@ void main() async {
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        currentAtSign, namespace, authType,
+        enableInitialSync: false);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        enableInitialSync: false);
   });
 
   group('KeyStreamMixin group', () {
@@ -48,14 +49,16 @@ void main() async {
         ..key = randomValue + keySuffix
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
-        ..sharedBy = currentAtSign;
+        ..sharedBy = currentAtSign
+        ..metadata = (Metadata()..ttl = TestConstants.oneMinuteMillis);
       key2 = AtKey()
         ..key = randomValue2 + keySuffix
         ..sharedWith = sharedWithAtSign
         ..namespace = namespace
-        ..sharedBy = currentAtSign;
+        ..sharedBy = currentAtSign
+        ..metadata = (Metadata()..ttl = TestConstants.oneMinuteMillis);
       keyStream = KeyStreamImpl<String>(
-        regex: keySuffix + '.' + namespace + '@',
+        regex: '$keySuffix.$namespace@',
         convert: (key, value) => value.value ?? '',
         sharedBy: currentAtSign,
         sharedWith: sharedWithAtSign,
@@ -86,13 +89,11 @@ void main() async {
           currentAtSign,
           namespace,
           TestPreferences.getInstance().getPreference(currentAtSign));
+      final pro = PutRequestOptions()..useRemoteAtServer = true;
       await Future.wait([
-        atClientManager.atClient.put(key, randomValue),
-        atClientManager.atClient.put(key2, randomValue2)
+        atClientManager.atClient.put(key, randomValue, putRequestOptions: pro),
+        atClientManager.atClient.put(key2, randomValue2, putRequestOptions: pro)
       ]);
-
-      await E2ESyncService.getInstance()
-          .syncData(atClientManager.atClient.syncService);
 
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
@@ -102,6 +103,8 @@ void main() async {
           sharedWithAtSign);
       await keyStream.getKeys();
       expect(keyStream, emitsInAnyOrder([randomValue, randomValue2]));
+
+      await Future.delayed(Duration(milliseconds: 100));
     });
 
     test('dispose', () async {
@@ -110,7 +113,7 @@ void main() async {
     });
   });
 
-  group('KeyStream', () {
+  group('KeyStream group', () {
     late KeyStreamImpl<String> keyStream;
     var uuid;
     var randomValue;
@@ -144,11 +147,11 @@ void main() async {
     });
 
     test('handleNotification', () async {
-      keyStream.handleNotification(
-          key, AtValue()..value = randomValue, 'update');
-      await Future.delayed(Duration(milliseconds: 500));
-      keyStream.handleNotification(key, AtValue(), 'delete');
+      AtValue atValue = AtValue()..value = randomValue;
+      keyStream.handleNotification(key, atValue, 'update');
+      keyStream.handleNotification(key, atValue, 'delete');
       expect(keyStream, emitsInOrder([randomValue, null]));
+      await Future.delayed(Duration(milliseconds: 100));
     });
 
     tearDownAll(() async {
@@ -306,7 +309,7 @@ void main() async {
       );
     });
 
-    test('', () async {
+    test('switch atsigns test', () async {
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
           sharedWithAtSign);
       expect(keyStream, isA<KeyStreamMixin<String?>>());
@@ -350,6 +353,6 @@ void main() async {
           key3, AtValue()..value = randomValue3, 'update');
       expect(keyStream3, emitsInOrder([randomValue3]));
       await keyStream3.dispose();
-    }, timeout: Timeout(Duration(minutes: 7)));
+    });
   });
 }

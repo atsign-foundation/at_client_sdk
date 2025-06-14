@@ -7,8 +7,10 @@ import 'package:at_client/at_client.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
 
-
 class TestUtils {
+  static final ObjectLifeCycleOptions optionsTtlOneMinute =
+      ObjectLifeCycleOptions(timeToLive: Duration(minutes: 1));
+
   static AtClientPreference getPreference(String atsign) {
     var preference = AtClientPreference();
     preference.hiveStoragePath = 'test/hive/client';
@@ -53,14 +55,16 @@ class TestUtils {
     return atClientManager;
   }
 
-  static String formatCommand(String command){
-    if(!command.contains('\n')) return '$command\n';
+  static String formatCommand(String command) {
+    if (!command.contains('\n')) return '$command\n';
     return command;
   }
 
-  static Future<String?> executeCommandAndParse(AtClient? client, command, {bool auth = false, RemoteSecondary? remoteSecondary}) async {
+  static Future<String?> executeCommandAndParse(AtClient? client, command,
+      {bool auth = false, RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= client?.getRemoteSecondary();
-    String? response = await remoteSecondary?.executeCommand(formatCommand(command), auth: auth);
+    String? response = await remoteSecondary
+        ?.executeCommand(formatCommand(command), auth: auth);
     print('Command: $command -> Response: $response');
     return response?.replaceFirst('data:', '');
   }

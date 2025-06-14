@@ -29,7 +29,7 @@ void main() {
   setUpAll(() async {
     for (var atSign in atSignList) {
       await TestSuiteInitializer.getInstance()
-          .testInitializer(atSign, namespace, 'pkam');
+          .testInitializer(atSign, namespace, 'pkam', enableInitialSync: false);
     }
   });
 
@@ -37,8 +37,9 @@ void main() {
     test('A test to submit and approve an enrollment for $currentAtSign',
         () async {
       // Set SPP at the start of enrollment tests to pass as OTP.
-      await TestSuiteInitializer.getInstance()
-          .testInitializer(currentAtSign, namespace, 'pkam');
+      await TestSuiteInitializer.getInstance().testInitializer(
+          currentAtSign, namespace, 'pkam',
+          enableInitialSync: false);
       // Set SPP into the Remote Secondary
       var atResponse =
           await AtClientManager.getInstance().atClient.setSPP('ABC123');

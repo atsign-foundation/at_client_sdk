@@ -89,7 +89,7 @@ Feature: Atclient enrollment test
             Then server rejects the enrollment
             And server response should contain
                   | Field        | Value    |
-                  | errorCode | AT0011 |
+                  | errorCode | AT0022 |
                   | errorMessage       | invalid otp. Cannot process enroll request  |
 
       Scenario: Already used OTP cannot be used again
@@ -98,5 +98,5 @@ Feature: Atclient enrollment test
             Then server reject the enrollment
             And server response should contain
                   | Field        | Value    |
-                  | errorCode | AT0011 |
+                  | errorCode | AT0022 |
                   | errorMessage       | invalid otp. Cannot process enroll request  |

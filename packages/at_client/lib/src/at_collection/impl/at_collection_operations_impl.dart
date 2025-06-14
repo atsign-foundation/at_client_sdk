@@ -3,11 +3,10 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/at_collection/collection_util.dart';
-import 'package:at_client/src/at_collection/collections.dart';
 import 'package:at_utils/at_logger.dart';
 import 'collection_methods_impl.dart';
 
-class AtCollectionModelOperationsImpl extends AtCollectionModelOperations {
+class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
   final _logger = AtSignLogger('AtCollectionModelOperationsImpl');
   late AtCollectionModel atCollectionModel;
   late AtCollectionMethodImpl collectionMethodImpl;
@@ -96,14 +95,14 @@ class AtCollectionModelOperationsImpl extends AtCollectionModelOperations {
       allSharedKeyStatus.add(element);
     });
 
-    bool allOpeartionSuccessful = true;
+    bool allOperationsSuccessful = true;
     for (var sharedKeyStatus in allSharedKeyStatus) {
       if (sharedKeyStatus.complete == false) {
-        allOpeartionSuccessful = false;
+        allOperationsSuccessful = false;
         break;
       }
     }
-    return allOpeartionSuccessful;
+    return allOperationsSuccessful;
   }
 
   @override
