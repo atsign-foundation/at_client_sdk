@@ -59,7 +59,9 @@ class SyncUtil {
     if (atCommitLog == null) {
       return [];
     }
-    return atCommitLog!.getChanges(seqNum, regex);
+    return (await atCommitLog!.getChanges(seqNum, regex))
+        .where((commitEntry) => !commitEntry.atKey!.startsWith('local:'))
+        .toList();
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead

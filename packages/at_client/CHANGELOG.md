@@ -1,3 +1,13 @@
+## 3.4.3
+- build[deps]: update dependencies including at_persistence major version 
+  changes
+- fix: tightened up code for handling `AtKeyNotFoundException`s in 
+  `AtCollectionQueryOperationsImpl`
+- fix: Enable the same atSign to be used on both sides (client and server) 
+  of an AtRpc interaction
+- fix: LocalSecondary.isEnrollmentAuthorizedForOperation now checks if the 
+  key in question is a `local` key, in which case the answer is always yes.
+
 ## 3.4.2
 - build[deps]: update dependencies (at_commons, at_lookup, at_auth)
 

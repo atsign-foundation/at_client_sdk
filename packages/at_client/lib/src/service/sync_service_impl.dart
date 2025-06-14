@@ -262,7 +262,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     } on AtException catch (e) {
       e.stack(AtChainedException(Intent.syncData,
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
-      _logger.severe(
+      _logger.warning(
           'Exception in sync ${syncRequest.id}. Reason: ${e.getTraceMessage()}');
       syncRequest.result!.atClientException =
           AtExceptionManager.createException(e);
@@ -541,16 +541,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         'syncDirection': keyInfo.syncDirection,
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
-    } on Exception catch (e, stacktrace) {
-      _sendTelemetry(
-          '_syncFromServer.forEachEntry.exception', {"e": e, "st": stacktrace});
+    } catch (e) {
+      _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
-          'exception syncing entry to local $serverCommitEntry Exception: ${e.toString()} - stacktrace: $stacktrace');
-    } on Error catch (e, stacktrace) {
-      _sendTelemetry(
-          '_syncFromServer.forEachEntry.error', {"e": e, "st": stacktrace});
-      _logger.severe(
-          'error syncing entry to local $serverCommitEntry - Exception: ${e.toString()} - stacktrace: $stacktrace');
+          'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
     }
   }
 

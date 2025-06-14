@@ -518,6 +518,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     if (preference != null && preference!.enforceNamespace == false) {
       enforceNamespace = false;
     }
+    // Clients should be able to store any local keys they want
+    if (atKey.isLocal) {
+      enforceNamespace = false;
+    }
     var validationResult = AtKeyValidators.get().validate(
         atKey.toString(),
         ValidationContext()
