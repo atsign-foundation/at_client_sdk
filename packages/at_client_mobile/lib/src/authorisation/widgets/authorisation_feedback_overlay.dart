@@ -86,7 +86,8 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                         TextSpan(
                           text: ' | ',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.normal,
                           ),
                         ),

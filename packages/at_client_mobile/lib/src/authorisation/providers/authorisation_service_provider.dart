@@ -12,7 +12,9 @@ class AuthorisationServiceProvider extends InheritedWidget {
   final AuthorisationService service;
 
   static AuthorisationService of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<AuthorisationServiceProvider>()!.service;
+    return context
+        .dependOnInheritedWidgetOfExactType<AuthorisationServiceProvider>()!
+        .service;
   }
 
   @override

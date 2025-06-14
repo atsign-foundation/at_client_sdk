@@ -32,7 +32,9 @@ class HomePageState extends State<HomePage> {
                         padding: const EdgeInsets.all(64.0),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: AuthorisationHub(

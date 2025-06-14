@@ -27,7 +27,10 @@ class NamespacePermission {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
 
-    return other is NamespacePermission && other.namespace == namespace && other.read == read && other.write == write;
+    return other is NamespacePermission &&
+        other.namespace == namespace &&
+        other.read == read &&
+        other.write == write;
   }
 
   @override

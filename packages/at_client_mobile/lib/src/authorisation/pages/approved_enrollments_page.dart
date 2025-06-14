@@ -78,7 +78,8 @@ class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
                 textAlign: TextAlign.center,
               ),
             ),
-          if (approvedRequestsProvider.requests.isEmpty && !approvedRequestsProvider.isLoading)
+          if (approvedRequestsProvider.requests.isEmpty &&
+              !approvedRequestsProvider.isLoading)
             const Padding(
               padding: EdgeInsets.all(16.0),
               child: Text('No pending requests'),
@@ -95,11 +96,13 @@ class ApprovedEnrollmentsPageState extends State<ApprovedEnrollmentsPage> {
           //       hintText: 'Search',
           //     ),
           //   ),
-          if (approvedRequestsProvider.requests.isNotEmpty && !approvedRequestsProvider.isLoading)
+          if (approvedRequestsProvider.requests.isNotEmpty &&
+              !approvedRequestsProvider.isLoading)
             ...approvedRequestsProvider.requests.map(
               (request) {
                 // Filter out manager requests as we don't show this
-                final isManagerRequest = request.namespacePermissions.any((element) => element.namespace == '__manage');
+                final isManagerRequest = request.namespacePermissions
+                    .any((element) => element.namespace == '__manage');
                 if (isManagerRequest) {
                   return SizedBox.shrink();
                 }

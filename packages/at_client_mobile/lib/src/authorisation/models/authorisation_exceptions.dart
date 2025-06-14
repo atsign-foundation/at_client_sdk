@@ -10,15 +10,18 @@ class AuthorisationException implements Exception {
 }
 
 class InvalidSppException extends AuthorisationException {
-  InvalidSppException() : super('SPP must be alphanumeric and 6 to 16 characters long');
+  InvalidSppException()
+      : super('SPP must be alphanumeric and 6 to 16 characters long');
 }
 
 class OtpGenerationException extends AuthorisationException {
-  OtpGenerationException(String serverMessage) : super('Failed to generate OTP: $serverMessage');
+  OtpGenerationException(String serverMessage)
+      : super('Failed to generate OTP: $serverMessage');
 }
 
 class UnexpectedResponseException extends AuthorisationException {
-  UnexpectedResponseException(String response) : super('Unexpected server response: $response');
+  UnexpectedResponseException(String response)
+      : super('Unexpected server response: $response');
 }
 
 class FailedToApproveException extends AuthorisationException {

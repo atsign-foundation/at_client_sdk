@@ -48,7 +48,8 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                         TextSpan(
                           text: ' | ',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                         TextSpan(
@@ -77,7 +78,8 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                 Expanded(
                   child: Card(
                     elevation: 0,
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -86,7 +88,8 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                           Row(
                             children: [
                               Expanded(
-                                child: Text('${widget.request.namespacePermissions.length} Namespaces Affected'),
+                                child: Text(
+                                    '${widget.request.namespacePermissions.length} Namespaces Affected'),
                               ),
                               const SizedBox(width: 8),
                               InkWell(
@@ -97,8 +100,13 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                                 },
                                 child: Text(
                                   isExpanded ? 'Show less' : 'More details',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: Theme.of(context).colorScheme.primary,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
                                       ),
                                 ),
                               ),
@@ -113,7 +121,9 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                               firstCurve: Curves.easeInOut,
                               secondCurve: Curves.easeInOut,
                               sizeCurve: Curves.easeInOut,
-                              crossFadeState: isExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                              crossFadeState: isExpanded
+                                  ? CrossFadeState.showFirst
+                                  : CrossFadeState.showSecond,
                               firstChild: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
@@ -123,23 +133,30 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                                     child: Wrap(
                                       alignment: WrapAlignment.start,
                                       runAlignment: WrapAlignment.start,
-                                      crossAxisAlignment: WrapCrossAlignment.start,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.start,
                                       spacing: 8,
                                       runSpacing: 8,
-                                      children: widget.request.namespacePermissions
-                                          .map(
-                                            (permission) => NamespaceChip(
-                                              permission: permission,
-                                            ),
-                                          )
-                                          .toList(),
+                                      children:
+                                          widget.request.namespacePermissions
+                                              .map(
+                                                (permission) => NamespaceChip(
+                                                  permission: permission,
+                                                ),
+                                              )
+                                              .toList(),
                                     ),
                                   ),
                                   const SizedBox(height: 16),
                                   SelectableText(
                                     'ID ${widget.request.enrollmentId}',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                         ),
                                   )
                                 ],
@@ -171,7 +188,9 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                       ),
                       textStyle: WidgetStateProperty.all<TextStyle>(
                         Theme.of(context).textTheme.labelLarge!.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                       ),
                       padding: WidgetStateProperty.all<EdgeInsetsGeometry>(
@@ -207,7 +226,8 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                             data: Theme.of(context),
                             child: AlertDialog(
                               title: const Text('Revoke Enrollment'),
-                              content: const Text('Are you sure you want to revoke this enrollment?'),
+                              content: const Text(
+                                  'Are you sure you want to revoke this enrollment?'),
                               actions: [
                                 TextButton(
                                   onPressed: () {

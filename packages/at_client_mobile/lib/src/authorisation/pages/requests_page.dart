@@ -17,7 +17,9 @@ class RequestsPage extends StatefulWidget {
 class RequestsPageState extends State<RequestsPage> {
   OverlayEntry? overlayEntry;
 
-  void showHighlightOverlay({required ServerEnrollmentRequest request, required EnrollmentStatus newStatus}) {
+  void showHighlightOverlay(
+      {required ServerEnrollmentRequest request,
+      required EnrollmentStatus newStatus}) {
     removeHighlightOverlay();
 
     overlayEntry = OverlayEntry(
@@ -78,25 +80,29 @@ class RequestsPageState extends State<RequestsPage> {
                 textAlign: TextAlign.center,
               ),
             ),
-          if (pendingRequestsProvider.requests.isEmpty && pendingRequestsProvider.error == null)
+          if (pendingRequestsProvider.requests.isEmpty &&
+              pendingRequestsProvider.error == null)
             const Padding(
               padding: EdgeInsets.all(16.0),
               child: Text('No pending requests'),
             ),
-          if (pendingRequestsProvider.requests.isNotEmpty && pendingRequestsProvider.error == null)
+          if (pendingRequestsProvider.requests.isNotEmpty &&
+              pendingRequestsProvider.error == null)
             ...pendingRequestsProvider.requests.map(
               (request) => EnrollmentRequestCard(
                 request: request,
                 onApprove: () async {
                   await pendingRequestsProvider.approveRequest(request);
                   if (pendingRequestsProvider.error == null) {
-                    showHighlightOverlay(request: request, newStatus: EnrollmentStatus.approved);
+                    showHighlightOverlay(
+                        request: request, newStatus: EnrollmentStatus.approved);
                   }
                 },
                 onReject: () async {
                   await pendingRequestsProvider.denyRequest(request);
                   if (pendingRequestsProvider.error == null) {
-                    showHighlightOverlay(request: request, newStatus: EnrollmentStatus.denied);
+                    showHighlightOverlay(
+                        request: request, newStatus: EnrollmentStatus.denied);
                   }
                 },
               ),

@@ -95,7 +95,8 @@ class AtThemeState extends State<AtTheme> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: widget.themeData ?? (brightness == Brightness.light ? lightThemeData : darkThemeData),
+      data: widget.themeData ??
+          (brightness == Brightness.light ? lightThemeData : darkThemeData),
       child: Builder(
         builder: (context) {
           return widget.child;

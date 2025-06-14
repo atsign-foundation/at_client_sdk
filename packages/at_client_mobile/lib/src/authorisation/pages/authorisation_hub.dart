@@ -65,7 +65,8 @@ class AuthorisationHubState extends State<AuthorisationHub> {
               notifier: pendingRequestsNotifier,
               child: Builder(
                 builder: (context) {
-                  final selectedSection = SelectedSectionProvider.of(context).selectedSection;
+                  final selectedSection =
+                      SelectedSectionProvider.of(context).selectedSection;
                   return FutureBuilder<bool>(
                     future: isManagerKeyFuture,
                     builder: (context, snapshot) {
@@ -126,7 +127,9 @@ class AuthorisationHubState extends State<AuthorisationHub> {
                       } else {
                         return Container(
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(kBorderRadius),
                           ),
                           child: Row(
@@ -148,10 +151,13 @@ class AuthorisationHubState extends State<AuthorisationHub> {
                                             notifier: SppNotifier(service),
                                             child: const SetPinPage(),
                                           );
-                                        case AuthorisationPageSection.approvedEnrollments:
+                                        case AuthorisationPageSection
+                                            .approvedEnrollments:
                                           return ApprovedRequestsProvider(
-                                            notifier: ApprovedRequestsNotifier(service),
-                                            child: const ApprovedEnrollmentsPage(),
+                                            notifier: ApprovedRequestsNotifier(
+                                                service),
+                                            child:
+                                                const ApprovedEnrollmentsPage(),
                                           );
                                         case AuthorisationPageSection.history:
                                           return const EnrollmentHistoryPage();

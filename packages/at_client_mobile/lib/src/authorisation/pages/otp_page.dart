@@ -56,7 +56,9 @@ class OtpPageState extends State<OtpPage> {
                               child: Container(
                                 width: 50,
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Center(
@@ -64,7 +66,9 @@ class OtpPageState extends State<OtpPage> {
                                     padding: const EdgeInsets.all(8.0),
                                     child: Text(
                                       e,
-                                      style: Theme.of(context).textTheme.headlineMedium,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .headlineMedium,
                                     ),
                                   ),
                                 ),
@@ -89,7 +93,8 @@ class OtpPageState extends State<OtpPage> {
                   TextButton.icon(
                     onPressed: activeOtp.otp != null
                         ? () async {
-                            await Clipboard.setData(ClipboardData(text: activeOtp.otp!.toString()));
+                            await Clipboard.setData(
+                                ClipboardData(text: activeOtp.otp!.toString()));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('OTP copied to clipboard'),
@@ -106,9 +111,11 @@ class OtpPageState extends State<OtpPage> {
           ),
           const SizedBox(height: 32),
           TipCard(
-            tip: 'Setting up multiple devices? Set up a PIN to avoid regenerating new OTPs',
+            tip:
+                'Setting up multiple devices? Set up a PIN to avoid regenerating new OTPs',
             onTap: () {
-              SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.setPin);
+              SelectedSectionProvider.of(context)
+                  .updateSelectedSection(AuthorisationPageSection.setPin);
             },
           ),
         ],

@@ -18,7 +18,8 @@ class ServerEnrollmentRequest {
     required this.namespacePermissions,
     this.encryptedAPKAMSymmetricKey,
   }) : assert(
-          status != EnrollmentStatus.pending || encryptedAPKAMSymmetricKey != null,
+          status != EnrollmentStatus.pending ||
+              encryptedAPKAMSymmetricKey != null,
           'Pending requests should have an encryptedAPKAMSymmetricKey',
         );
 
@@ -54,7 +55,8 @@ class ServerEnrollmentRequest {
       status: entry.value['status'] != null
           ? getEnrollStatusFromString(entry.value['status'] as String)
           : EnrollmentStatus.pending,
-      encryptedAPKAMSymmetricKey: entry.value['encryptedAPKAMSymmetricKey'] as String?,
+      encryptedAPKAMSymmetricKey:
+          entry.value['encryptedAPKAMSymmetricKey'] as String?,
       // Looks like: `namespace: {ns1: rw, ns2: r}`
       namespacePermissions: (entry.value['namespace'] as Map<String, dynamic>)
           .cast<String, String>()
@@ -78,7 +80,8 @@ class ServerEnrollmentRequest {
         other.deviceName == deviceName &&
         other.status == status &&
         other.encryptedAPKAMSymmetricKey == encryptedAPKAMSymmetricKey &&
-        const DeepCollectionEquality().equals(other.namespacePermissions, namespacePermissions);
+        const DeepCollectionEquality()
+            .equals(other.namespacePermissions, namespacePermissions);
   }
 
   @override

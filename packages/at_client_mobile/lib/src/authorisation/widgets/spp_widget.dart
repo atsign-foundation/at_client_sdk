@@ -51,7 +51,8 @@ class SppWidgetState extends State<SppWidget> {
     final sppNotifier = SppProvider.of(context);
 
     return SizedBox(
-      width: widget.characterCount * (_fieldWidth + _fieldPadding) + _fieldPadding * 2,
+      width: widget.characterCount * (_fieldWidth + _fieldPadding) +
+          _fieldPadding * 2,
       child: Card(
         elevation: 0,
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -63,7 +64,8 @@ class SppWidgetState extends State<SppWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (sppNotifier.spp?.expiry != null && sppNotifier.spp!.expiry.isAfter(DateTime.now())) ...[
+                if (sppNotifier.spp?.expiry != null &&
+                    sppNotifier.spp!.expiry.isAfter(DateTime.now())) ...[
                   SppExpiration(
                       expiryTime: sppNotifier.spp!.expiry,
                       onExpiry: () {
@@ -81,12 +83,16 @@ class SppWidgetState extends State<SppWidget> {
                         children: [
                           Icon(
                             Icons.timer_outlined,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 2),
                           Text(
                             'Duration:',
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(),
                           ),
                           const SizedBox(width: 8),
                         ],
@@ -104,7 +110,8 @@ class SppWidgetState extends State<SppWidget> {
                             });
                           }
                         },
-                        items: _durationOptions.map<DropdownMenuItem<Duration>>((e) {
+                        items: _durationOptions
+                            .map<DropdownMenuItem<Duration>>((e) {
                           return DropdownMenuItem<Duration>(
                             value: e,
                             child: Text(e.pretty()),

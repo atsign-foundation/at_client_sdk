@@ -10,6 +10,8 @@ class ActiveOtpProvider extends InheritedNotifier<ActiveOtpNotifier> {
   });
 
   static ActiveOtpNotifier of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<ActiveOtpProvider>()!.notifier!;
+    return context
+        .dependOnInheritedWidgetOfExactType<ActiveOtpProvider>()!
+        .notifier!;
   }
 }

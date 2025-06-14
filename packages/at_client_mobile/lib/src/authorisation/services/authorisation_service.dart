@@ -32,12 +32,14 @@ class AuthorisationService with AtClientBindings {
   /// Sets up the subscription to the server for new enrollment requests.
   void init() async {
     logger.info('Initialising AuthorisationService');
-    _enrollmentRequestsController ??= StreamController<ServerEnrollmentRequest>.broadcast();
+    _enrollmentRequestsController ??=
+        StreamController<ServerEnrollmentRequest>.broadcast();
     _enrollmentRequestsController!.onListen = _listenForNewRequests;
   }
 
   void _listenForNewRequests() {
-    assert(_enrollmentRequestsController != null, 'Call AuthorisationService.init() first');
+    assert(_enrollmentRequestsController != null,
+        'Call AuthorisationService.init() first');
     // Set up a stream to listen for new enrollment requests.
     final stream = atClient.notificationService.subscribe(
       regex: r'.*\.new\.enrollments\.__manage',
@@ -45,7 +47,8 @@ class AuthorisationService with AtClientBindings {
     );
 
     // Add the new requests to the stream controller.
-    _newRequestsSubscription = stream.listen((AtNotification notification) async {
+    _newRequestsSubscription =
+        stream.listen((AtNotification notification) async {
       try {
         logger.info('Enrollment request with id ${notification.key} received');
         final enrollmentRequest = ServerEnrollmentRequest.fromServer(
@@ -59,7 +62,8 @@ class AuthorisationService with AtClientBindings {
         }
       } catch (e, st) {
         logger.severe('Failed to process new enrollment request.', e, st);
-        _enrollmentRequestsController!.addError(UnexpectedResponseException(e.toString()));
+        _enrollmentRequestsController!
+            .addError(UnexpectedResponseException(e.toString()));
       }
     });
   }
@@ -76,11 +80,15 @@ class AuthorisationService with AtClientBindings {
 
   /// Stream of all enrollment requests.
   /// Use this for getting real-time updates on new requests.
-  Stream<ServerEnrollmentRequest> enrollmentRequests({List<EnrollmentStatus>? statusFilters}) {
+  Stream<ServerEnrollmentRequest> enrollmentRequests(
+      {List<EnrollmentStatus>? statusFilters}) {
     if (_enrollmentRequestsController == null) {
-      throw StateError('init() must be called before accessing enrollmentRequests');
+      throw StateError(
+          'init() must be called before accessing enrollmentRequests');
     }
-    return _enrollmentRequestsController!.stream.map((event) => event).where((event) {
+    return _enrollmentRequestsController!.stream
+        .map((event) => event)
+        .where((event) {
       if (statusFilters == null) {
         return true;
       }
@@ -92,7 +100,8 @@ class AuthorisationService with AtClientBindings {
   /// An empty list means no requests could be found.
   /// If passed a list of `EnrollmentStatus`s will only return requests with those statuses.
   /// If [statusFilters] is `null`, will return all requests.
-  Future<List<ServerEnrollmentRequest>> getEnrollmentRequests({List<EnrollmentStatus>? statusFilters}) async {
+  Future<List<ServerEnrollmentRequest>> getEnrollmentRequests(
+      {List<EnrollmentStatus>? statusFilters}) async {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
 
@@ -112,18 +121,21 @@ class AuthorisationService with AtClientBindings {
         null,
         StackTrace.current,
       );
-      throw UnexpectedResponseException(rawResponse ?? 'No response from server');
+      throw UnexpectedResponseException(
+          rawResponse ?? 'No response from server');
     }
     final rawData = rawResponse.substring(rawResponse.indexOf('data:') + 5);
     final data = jsonDecode(rawData) as Map<String, dynamic>;
-    final enrollmentRequests = data.entries.map(ServerEnrollmentRequest.fromServer).toList();
+    final enrollmentRequests =
+        data.entries.map(ServerEnrollmentRequest.fromServer).toList();
     logger.info('Found ${enrollmentRequests.length} enrollmentRequests');
 
     // Filter by status if needed.
     if (statusFilters != null) {
       logger.info('Filtering enrollment requests by status: $statusFilters');
       enrollmentRequests.retainWhere((e) => statusFilters.contains(e.status));
-      logger.info('${enrollmentRequests.length} enrollment requests after filtering');
+      logger.info(
+          '${enrollmentRequests.length} enrollment requests after filtering');
     }
 
     logger.finer('Enrollment Requests: $enrollmentRequests');
@@ -136,7 +148,8 @@ class AuthorisationService with AtClientBindings {
     // Check if one of the enrollments has read and write permissions for the __manage namespace.
     final hasManagePermission = enrollments.any(
       (e) =>
-          e.namespacePermissions.any((p) => p.namespace == '__manage' && p.write && p.read) &&
+          e.namespacePermissions
+              .any((p) => p.namespace == '__manage' && p.write && p.read) &&
           e.status == EnrollmentStatus.approved,
     );
     logger.info('Has manage permissions: $hasManagePermission');
@@ -177,7 +190,8 @@ class AuthorisationService with AtClientBindings {
 
     // Expected response is `data:ok`
     if (response == null || !response.contains('ok')) {
-      logger.severe('Invalid response from the server. Expected it to contain `ok`. Response: $response');
+      logger.severe(
+          'Invalid response from the server. Expected it to contain `ok`. Response: $response');
       throw OtpGenerationException(response ?? 'No response from server');
     }
     logger.info('SPP set on the server');
@@ -248,7 +262,8 @@ class AuthorisationService with AtClientBindings {
       logger.finer('OTP generated: $otp');
       return Otp.fromDuration(value: otp, duration: optExpiry);
     } else {
-      logger.severe('Invalid response from the server. Expected it to start with `data:`. Response: $response');
+      logger.severe(
+          'Invalid response from the server. Expected it to start with `data:`. Response: $response');
       throw OtpGenerationException(response ?? 'No response from server');
     }
   }
@@ -260,22 +275,25 @@ class AuthorisationService with AtClientBindings {
     // Get the lookup service from the secondary server.
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final atSign = atClient.getCurrentAtSign()!;
-    final enrollmentOutcome = await auth.atAuthBase.atEnrollment(atSign).approve(
-          auth.EnrollmentRequestDecision.approved(
-            auth.ApprovedRequestDecisionBuilder(
-              enrollmentId: enrollmentRequest.enrollmentId,
-              encryptedAPKAMSymmetricKey: enrollmentRequest.encryptedAPKAMSymmetricKey!,
-            ),
-          ),
-          atLookup,
-        );
+    final enrollmentOutcome =
+        await auth.atAuthBase.atEnrollment(atSign).approve(
+              auth.EnrollmentRequestDecision.approved(
+                auth.ApprovedRequestDecisionBuilder(
+                  enrollmentId: enrollmentRequest.enrollmentId,
+                  encryptedAPKAMSymmetricKey:
+                      enrollmentRequest.encryptedAPKAMSymmetricKey!,
+                ),
+              ),
+              atLookup,
+            );
     if (enrollmentOutcome.enrollStatus != EnrollmentStatus.approved) {
       logger.severe(
         'Failed to approve enrollment request with id ${enrollmentRequest.enrollmentId}. Status: ${enrollmentOutcome.enrollStatus}',
       );
       throw FailedToApproveException();
     }
-    logger.info('Enrollment request with id ${enrollmentRequest.enrollmentId} approved');
+    logger.info(
+        'Enrollment request with id ${enrollmentRequest.enrollmentId} approved');
     return;
   }
 
@@ -297,7 +315,8 @@ class AuthorisationService with AtClientBindings {
       );
       throw FailedToDenyException();
     }
-    logger.info('Enrollment request with id ${enrollmentRequest.enrollmentId} denied');
+    logger.info(
+        'Enrollment request with id ${enrollmentRequest.enrollmentId} denied');
     return;
   }
 
@@ -320,7 +339,8 @@ class AuthorisationService with AtClientBindings {
       );
       throw FailedToRevokeException();
     }
-    logger.info('Enrollment request with id ${enrollmentRequest.enrollmentId} revoked');
+    logger.info(
+        'Enrollment request with id ${enrollmentRequest.enrollmentId} revoked');
     return;
   }
 }

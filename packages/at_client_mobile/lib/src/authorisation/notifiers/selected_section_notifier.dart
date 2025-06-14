@@ -3,7 +3,8 @@ import 'package:flutter/widgets.dart';
 import '../pages/authorisation_page_section.dart';
 
 class SelectedSectionNotifier extends ChangeNotifier {
-  SelectedSectionNotifier({required AuthorisationPageSection initialSection}) : _selectedSection = initialSection;
+  SelectedSectionNotifier({required AuthorisationPageSection initialSection})
+      : _selectedSection = initialSection;
 
   AuthorisationPageSection _selectedSection;
 

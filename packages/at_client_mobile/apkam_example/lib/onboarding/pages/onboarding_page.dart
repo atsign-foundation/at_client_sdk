@@ -34,7 +34,8 @@ class OnboardingPageState extends State<OnboardingPage> {
                   case AtOnboardingResultStatus.success:
                     final atSign = result.atsign;
                     print(atSign);
-                    final _ = await AtClientManager.getInstance().setCurrentAtSign(
+                    final _ =
+                        await AtClientManager.getInstance().setCurrentAtSign(
                       atSign!,
                       appNamespace,
                       widget.atClientPreference,
@@ -73,7 +74,8 @@ class OnboardingPageState extends State<OnboardingPage> {
                   case AtOnboardingResultStatus.success:
                     final atSign = result.atsign;
                     print(atSign);
-                    final _ = await AtClientManager.getInstance().setCurrentAtSign(
+                    final _ =
+                        await AtClientManager.getInstance().setCurrentAtSign(
                       atSign!,
                       appNamespace,
                       widget.atClientPreference,

@@ -46,13 +46,17 @@ class AuthorisationListTile extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                color: isSelected ? Theme.of(context).colorScheme.primary : Colors.transparent,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.transparent,
                 width: 4,
               ),
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(8.0),
-                  color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Colors.transparent,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                      : Colors.transparent,
                   child: Row(
                     children: [
                       const SizedBox(width: 16),
@@ -67,10 +71,15 @@ class AuthorisationListTile extends StatelessWidget {
                         child: Text(
                           title,
                           maxLines: 2,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
                                 color: isSelected
                                     ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.onSurfaceVariant,
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                               ),
                         ),
                       ),
@@ -79,7 +88,10 @@ class AuthorisationListTile extends StatelessWidget {
                           padding: const EdgeInsets.all(4),
                           textColor: Theme.of(context).colorScheme.primary,
                           textStyle: Theme.of(context).textTheme.bodyMedium,
-                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.3),
                           label: Text(
                             badgeCount.toString(),
                           ),

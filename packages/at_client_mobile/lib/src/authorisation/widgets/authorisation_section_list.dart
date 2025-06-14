@@ -11,7 +11,8 @@ class AuthorisationSectionList extends StatefulWidget {
   const AuthorisationSectionList({super.key});
 
   @override
-  AuthorisationSectionListState createState() => AuthorisationSectionListState();
+  AuthorisationSectionListState createState() =>
+      AuthorisationSectionListState();
 }
 
 class AuthorisationSectionListState extends State<AuthorisationSectionList> {
@@ -39,18 +40,25 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                       leading: AuthorisationPageSection.requests.icon,
                       title: AuthorisationPageSection.requests.title(context),
                       onTap: () {
-                        SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.requests);
+                        SelectedSectionProvider.of(context)
+                            .updateSelectedSection(
+                                AuthorisationPageSection.requests);
                       },
-                      isSelected: selectedSection == AuthorisationPageSection.requests,
-                      badgeCount: PendingRequestsProvider.of(context).requests.length,
+                      isSelected:
+                          selectedSection == AuthorisationPageSection.requests,
+                      badgeCount:
+                          PendingRequestsProvider.of(context).requests.length,
                     ),
                     AuthorisationListTile(
                       leading: AuthorisationPageSection.otp.icon,
                       title: AuthorisationPageSection.otp.title(context),
                       onTap: () {
-                        SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.otp);
+                        SelectedSectionProvider.of(context)
+                            .updateSelectedSection(
+                                AuthorisationPageSection.otp);
                       },
-                      isSelected: selectedSection == AuthorisationPageSection.otp,
+                      isSelected:
+                          selectedSection == AuthorisationPageSection.otp,
                       trailing: activeOtp.isFetching
                           ? const SizedBox(
                               height: 30,
@@ -68,19 +76,34 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                                   children: [
                                     Container(
                                       decoration: BoxDecoration(
-                                        color: selectedSection == AuthorisationPageSection.otp
-                                            ? Theme.of(context).colorScheme.surfaceContainerHigh
-                                            : Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
+                                        color: selectedSection ==
+                                                AuthorisationPageSection.otp
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .surfaceContainerHigh
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Padding(
                                         padding: const EdgeInsets.all(8.0),
                                         child: Text(
                                           activeOtp.otp!.value,
-                                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                                color: selectedSection == AuthorisationPageSection.otp
-                                                    ? Theme.of(context).colorScheme.primary
-                                                    : Theme.of(context).colorScheme.onSurface,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyLarge
+                                              ?.copyWith(
+                                                color: selectedSection ==
+                                                        AuthorisationPageSection
+                                                            .otp
+                                                    ? Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                    : Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurface,
                                               ),
                                         ),
                                       ),
@@ -89,16 +112,26 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                                       tooltip: 'Copy OTP',
                                       icon: Icon(
                                         Icons.copy,
-                                        color: selectedSection == AuthorisationPageSection.otp
-                                            ? Theme.of(context).colorScheme.primary
-                                            : Theme.of(context).colorScheme.onSurface,
+                                        color: selectedSection ==
+                                                AuthorisationPageSection.otp
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
                                       ),
                                       onPressed: activeOtp.otp != null
                                           ? () async {
-                                              await Clipboard.setData(ClipboardData(text: activeOtp.otp!.toString()));
-                                              ScaffoldMessenger.of(context).showSnackBar(
+                                              await Clipboard.setData(
+                                                  ClipboardData(
+                                                      text: activeOtp.otp!
+                                                          .toString()));
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
                                                 const SnackBar(
-                                                  content: Text('OTP copied to clipboard'),
+                                                  content: Text(
+                                                      'OTP copied to clipboard'),
                                                 ),
                                               );
                                             }
@@ -111,18 +144,25 @@ class AuthorisationSectionListState extends State<AuthorisationSectionList> {
                       leading: AuthorisationPageSection.setPin.icon,
                       title: AuthorisationPageSection.setPin.title(context),
                       onTap: () {
-                        SelectedSectionProvider.of(context).updateSelectedSection(AuthorisationPageSection.setPin);
+                        SelectedSectionProvider.of(context)
+                            .updateSelectedSection(
+                                AuthorisationPageSection.setPin);
                       },
-                      isSelected: selectedSection == AuthorisationPageSection.setPin,
+                      isSelected:
+                          selectedSection == AuthorisationPageSection.setPin,
                     ),
                     AuthorisationListTile(
-                      leading: AuthorisationPageSection.approvedEnrollments.icon,
-                      title: AuthorisationPageSection.approvedEnrollments.title(context),
+                      leading:
+                          AuthorisationPageSection.approvedEnrollments.icon,
+                      title: AuthorisationPageSection.approvedEnrollments
+                          .title(context),
                       onTap: () {
                         SelectedSectionProvider.of(context)
-                            .updateSelectedSection(AuthorisationPageSection.approvedEnrollments);
+                            .updateSelectedSection(
+                                AuthorisationPageSection.approvedEnrollments);
                       },
-                      isSelected: selectedSection == AuthorisationPageSection.approvedEnrollments,
+                      isSelected: selectedSection ==
+                          AuthorisationPageSection.approvedEnrollments,
                     ),
                     // AuthorisationListTile(
                     //   leading: AuthorisationPageSection.history.icon,
