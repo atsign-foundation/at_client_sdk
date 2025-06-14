@@ -1,3 +1,6 @@
+## 1.10.1
+- feat: remove unnecessary dependency on at_persistence_secondary_server
+
 ## 1.10.0
 
 - feat: better user feedback during onboarding / enrollment / etc
