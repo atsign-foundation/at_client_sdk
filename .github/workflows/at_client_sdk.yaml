@@ -71,6 +71,11 @@ jobs:
         working-directory: packages/at_client_mobile
         run: flutter pub get
 
+      # Install dependencies of at_client_mobile/apkam_example
+      - name: Installing dependencies
+        working-directory: packages/at_client_mobile/apkam_example
+        run: flutter pub get
+
       # Analyze at_client_mobile package
       - name: flutter analyze
         working-directory: packages/at_client_mobile
