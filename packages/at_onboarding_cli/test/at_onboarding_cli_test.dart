@@ -7,6 +7,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+
+// ignore: depend_on_referenced_packages
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
@@ -112,8 +114,11 @@ void main() {
           LocalSecondary(mockAtClient, keyStore: keyStore);
 
       // mocking OnboardingServiceImpl
+      AtOnboardingPreference atOnboardingPreference = getOnboardingPreference()
+        ..atKeysFilePath =
+            '${Directory.current.path}/test/storage/keys/${atsign}_key.atKeys';
       AtOnboardingServiceImpl onboardingService =
-          AtOnboardingServiceImpl(atsign, getOnboardingPreference());
+          AtOnboardingServiceImpl(atsign, atOnboardingPreference);
       onboardingService.atClient = mockAtClient;
       onboardingService.enrollmentBase = mockEnrollmentBase;
       onboardingService.atLookUp = mockAtLookup;
@@ -135,6 +140,12 @@ void main() {
       when(() => mockAtClient.getCurrentAtSign()).thenReturn(atsign);
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
+      registerFallbackValue(AtKey.fromString('local:test.test$atsign'));
+      when(() => mockAtClient.put(any(), any())).thenAnswer((i) async {
+        AtKey atKey = i.positionalArguments[0];
+        dynamic value = i.positionalArguments[1];
+        return await localSecondary.putValue(atKey.toString(), value);
+      });
       // mock EncryptionPrivateKey and SelfEncryption retrieval from server
       // server encrypts these keys with APKAMSymmetricKey
       String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(

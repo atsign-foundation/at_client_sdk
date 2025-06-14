@@ -24,19 +24,32 @@ void main() {
   AtSignLogger.root_level = 'WARNING';
   String storageDir = 'test/storage';
 
+  String atSign1 = '@naresh🛠';
+  String atSign2 = '@eggovagency🛠';
+  String atSign3 = '@ashish🛠';
+  String atSign4 = '@colin🛠';
+  String atSign5 = '@purnima🛠';
+  String atSign6 = '@srie';
+  // String atSign1 = '@cli_test_01';
+  // String atSign2 = '@cli_test_02';
+  // String atSign3 = '@cli_test_03';
+  // String atSign4 = '@cli_test_04';
+  // String atSign5 = '@cli_test_05';
+  // String atSign6 = '@cli_test_06';
+
   group('A group of tests to assert on authenticate functionality', () {
     test(
         'A test to verify send enroll request, approve enrollment and auth by enrollmentId',
         () async {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
-      String atSign = '@naresh🛠';
-      //1. Onboard first client
-      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign);
-      AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign, preference_1);
 
-      logger.info('onboarding $atSign');
+      //1. Onboard first client
+      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign1);
+      AtOnboardingService? onboardingService_1 =
+          AtOnboardingServiceImpl(atSign1, preference_1);
+
+      logger.info('onboarding $atSign1');
       bool status = await onboardingService_1.onboard();
       expect(status, true);
 
@@ -50,19 +63,19 @@ void main() {
       expect(keysFileJson['apkamSymmetricKey'], isNotEmpty);
 
       //2. authenticate first client
-      logger.info('authenticating $atSign using onboarding keys');
+      logger.info('authenticating $atSign1 using onboarding keys');
       var authResult = await onboardingService_1.authenticate();
       expect(authResult, true);
       await _setLastReceivedNotificationDateTime(
-          onboardingService_1.atClient!, atSign);
+          onboardingService_1.atClient!, atSign1);
 
       Map<String, String> namespaces = {"buzz": "rw"};
       //3.1 test invalid otp
       String totp = 'a6b4df';
       AtOnboardingPreference enrollPreference_2 =
-          getPreferenceForEnroll(atSign);
+          getPreferenceForEnroll(atSign1);
       AtOnboardingService? onboardingService_2 =
-          AtOnboardingServiceImpl(atSign, enrollPreference_2);
+          AtOnboardingServiceImpl(atSign1, enrollPreference_2);
 
       logger.info('trying enrollment with invalid OTP');
       await expectLater(
@@ -158,11 +171,10 @@ void main() {
         () async {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
-      String atSign = '@ashish🛠';
       //1. Onboard first client
-      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign);
+      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign3);
       AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign, preference_1);
+          AtOnboardingServiceImpl(atSign3, preference_1);
       bool status = await onboardingService_1.onboard();
       expect(status, true);
       preference_1.privateKey = pkamPrivateKey;
@@ -180,20 +192,19 @@ void main() {
         () async {
       // when testing onboard() use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
-      String atSign = '@colin🛠';
       // preference without appName and deviceName
       AtOnboardingPreference preference_1 = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
         ..isLocalStoreRequired = true
         ..hiveStoragePath = 'storage/hive/client'
         ..commitLogPath = 'storage/hive/client/commit'
-        ..cramSecret = at_demos.cramKeyMap[atSign]
+        ..cramSecret = at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)
         ..namespace =
             'wavi' // unique identifier that can be used to identify data from your app
         ..rootDomain = 'vip.ve.atsign.zone';
 
       AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign, preference_1);
+          AtOnboardingServiceImpl(atSign4, preference_1);
       bool onboardStatus = await onboardingService_1.onboard();
       expect(onboardStatus, true);
 
@@ -206,11 +217,10 @@ void main() {
         () async {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
-      String atSign = '@purnima🛠';
       //1. Onboard first client
-      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign);
+      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign5);
       AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign, preference_1);
+          AtOnboardingServiceImpl(atSign5, preference_1);
       bool status = await onboardingService_1.onboard();
       expect(status, true);
       preference_1.privateKey = pkamPrivateKey;
@@ -218,7 +228,7 @@ void main() {
       //2. authenticate first client
       await onboardingService_1.authenticate();
       await _setLastReceivedNotificationDateTime(
-          onboardingService_1.atClient!, atSign);
+          onboardingService_1.atClient!, atSign5);
 
       //3. run otp:get from first client
       String? totp = await onboardingService_1.atClient!
@@ -258,9 +268,9 @@ void main() {
           }, count: 1, max: -1));
 
       //5. enroll second client
-      preference_1 = getPreferenceForEnroll(atSign);
+      preference_1 = getPreferenceForEnroll(atSign5);
       AtOnboardingServiceImpl? onboardingService_2 =
-          AtOnboardingServiceImpl(atSign, preference_1);
+          AtOnboardingServiceImpl(atSign5, preference_1);
 
       expectLater(
           onboardingService_2.enroll(
@@ -288,13 +298,12 @@ void main() {
         () async {
       // creates an enrollment with rw access to wavi namespace. Then validate
       // that updating a key with buzz namespace fails.
-      String atsign = '@srie';
       String appName = 'test_app_name';
       String deviceName = 'functional_test_1';
       Map<String, String> namespaces = {'wavi': 'rw'};
-      String masterKeysFilePath = '$storageDir/keys/${atsign}_key.atKeys';
+      String masterKeysFilePath = '$storageDir/keys/${atSign6}_key.atKeys';
       String enrollmentAtKeysFilePath =
-          '$storageDir/keys/${atsign}_wavi_key.atKeys';
+          '$storageDir/keys/${atSign6}_wavi_key.atKeys';
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -308,9 +317,9 @@ void main() {
       // Init an OnboardingService instance and onboard. Creates a master
       // atKeys file at the location provided in variable 'masterKeysFilePath'
       AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
-        atsign,
+        atSign6,
         preference
-          ..cramSecret = at_demos.cramKeyMap[atsign]
+          ..cramSecret = at_demos.cramKeyMap[atSign6] ?? atSign6.substring(1)
           ..atKeysFilePath = masterKeysFilePath,
       );
       await onboardingService.onboard();
@@ -319,14 +328,14 @@ void main() {
       AtClientManager.getInstance().reset();
 
       // Fetch otp
-      EnrollmentOperations? enrollmentOperations = EnrollmentOperations(atsign);
+      EnrollmentOperations? enrollmentOperations = EnrollmentOperations(atSign6);
       String? otp = await enrollmentOperations.getOtp(masterKeysFilePath);
 
       // Create a new instance of OnboardingService that will be used to send an
       // enrollment request. Once this request is approved, this creates a new
       // atKeys file at the location provided in 'enrollmentAtKeysFilePath'
       onboardingService = AtOnboardingServiceImpl(
-        atsign,
+        atSign6,
         preference..atKeysFilePath = enrollmentAtKeysFilePath,
       );
 
@@ -363,7 +372,7 @@ void main() {
       // Create a new instance of OnboardingCli and authenticate using the newly
       // created atKeys file that only has access to wavi namespace
       onboardingService = AtOnboardingServiceImpl(
-        atsign,
+        atSign6,
         preference..atKeysFilePath = enrollmentAtKeysFilePath,
       );
       bool authStatus = await onboardingService.authenticate(
@@ -377,7 +386,7 @@ void main() {
       AtKey buzzKey = AtKey.public(
         'dummy_key_27',
         namespace: 'buzz',
-        sharedBy: atsign,
+        sharedBy: atSign6,
       ).build();
       String expectedExceptionMessage =
           'Exception: Cannot perform update on $buzzKey due to insufficient privilege';
@@ -397,13 +406,12 @@ void main() {
         () async {
       // creates an enrollment with r access to 'delta' namespace.
       // Then validate that updating a key with buzz namespace fails.
-      String atsign = '@eggovagency🛠';
       String appName = 'access_test_appname';
       String deviceName = 'functional_test_2';
       Map<String, String> namespaces = {'delta': 'r'};
-      String masterKeysFilePath = '$storageDir/keys/${atsign}_key.atKeys';
+      String masterKeysFilePath = '$storageDir/keys/${atSign2}_key.atKeys';
       String enrollmentAtKeysFilePath =
-          '$storageDir/keys/${atsign}_wavi_key.atKeys';
+          '$storageDir/keys/${atSign2}_wavi_key.atKeys';
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -417,9 +425,9 @@ void main() {
       // Init an OnboardingService instance and onboard. Creates a master
       // atKeys file at the location provided in variable 'masterKeysFilePath'
       AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
-        atsign,
+        atSign2,
         preference
-          ..cramSecret = at_demos.cramKeyMap[atsign]
+          ..cramSecret = at_demos.cramKeyMap[atSign2] ?? atSign2.substring(1)
           ..atKeysFilePath = masterKeysFilePath,
       );
       await onboardingService.onboard();
@@ -428,14 +436,14 @@ void main() {
       AtClientManager.getInstance().reset();
 
       // Fetch otp
-      EnrollmentOperations enrollmentOperations = EnrollmentOperations(atsign);
+      EnrollmentOperations enrollmentOperations = EnrollmentOperations(atSign2);
       String? otp = await enrollmentOperations.getOtp(masterKeysFilePath);
 
       // Create a new instance of OnboardingService that will be used to send an
       // enrollment request. Once this request is approved, this creates a new
       // atKeys file at the location provided in 'enrollmentAtKeysFilePath'
       onboardingService = AtOnboardingServiceImpl(
-        atsign,
+        atSign2,
         preference..atKeysFilePath = enrollmentAtKeysFilePath,
       );
 
@@ -471,7 +479,7 @@ void main() {
       // Create a new instance of OnboardingCli and authenticate using the newly
       // created atKeys file that only has access to wavi namespace
       onboardingService = AtOnboardingServiceImpl(
-        atsign,
+        atSign2,
         preference..atKeysFilePath = enrollmentAtKeysFilePath,
       );
       bool authStatus = await onboardingService.authenticate(
@@ -485,7 +493,7 @@ void main() {
       AtKey deltaKey = AtKey.public(
         'dummy_key_28',
         namespace: 'delta',
-        sharedBy: atsign,
+        sharedBy: atSign2,
       ).build();
       String expectedExceptionMessage =
           'Exception: Cannot perform update on $deltaKey due to insufficient privilege';
@@ -579,7 +587,7 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
     ..isLocalStoreRequired = true
     ..hiveStoragePath = 'storage/hive/client'
     ..commitLogPath = 'storage/hive/client/commit'
-    ..cramSecret = at_demos.cramKeyMap[atSign]
+    ..cramSecret = at_demos.cramKeyMap[atSign] ?? atSign.substring(1)
     ..namespace =
         'wavi' // unique identifier that can be used to identify data from your app
     ..atKeysFilePath =

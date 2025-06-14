@@ -11,7 +11,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
@@ -193,22 +192,16 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     await _initAtClient(_atLookUp!.atChops!,
         enrollmentId: enrollmentResponse.enrollmentId);
-    var atData = AtData();
     var enrollmentDetails = EnrollmentDetails();
     enrollmentDetails.namespace = namespaces;
-    atData.data = jsonEncode(enrollmentDetails);
-    // Cannot use atClient.put since The "_isAuthorized" method fetches enrollment
-    // info from the key-store. Since there is no enrollment info,
-    // it returns null and throws throws AtKeyNotFoundException.
     var localEnrollmentKey = AtKey()
       ..isLocal = true
       ..key = enrollmentResponse.enrollmentId
       ..sharedBy = atClient!.getCurrentAtSign();
-    final putResult = await atClient!
-        .getLocalSecondary()!
-        .keyStore!
-        .put(localEnrollmentKey.toString(), atData);
-    logger.finer('putResult for storing enrollment details: $putResult');
+    await atClient!.getLocalSecondary()!.putValue(
+          localEnrollmentKey.toString(),
+          jsonEncode(enrollmentDetails.toJson()),
+        );
 
     await createAtKeysFile(
       enrollmentResponse,
