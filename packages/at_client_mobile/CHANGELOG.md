@@ -1,3 +1,6 @@
+## 3.2.23
+- build[deps]: update dependencies
+
 ## 3.2.22
 - build[deps]: update dependencies
 
