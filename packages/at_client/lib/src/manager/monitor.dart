@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -45,9 +44,11 @@ class Monitor {
 
   late AtClientPreference _preference;
 
-  OutboundConnection? _monitorConnection;
+  AtConnection? _monitorConnection;
 
   late RemoteSecondary _remoteSecondary;
+
+  late AtConnectionFactory? _atConnectionFactory;
 
   final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
 
@@ -125,6 +126,7 @@ class Monitor {
       MonitorPreference monitorPreference,
       Function retryCallBack,
       {RemoteSecondary? remoteSecondary,
+      AtConnectionFactory? atConnectionFactory,
       MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
       Duration? monitorHeartbeatInterval,
       this.atChops,
@@ -139,12 +141,15 @@ class Monitor {
     _lastNotificationTime = monitorPreference.lastNotificationTime;
     _enrollmentId = enrollmentId;
     _logger.finer('enrollmentId: $_enrollmentId');
+    _atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
     _remoteSecondary = remoteSecondary ??
         RemoteSecondary(atSign, preference,
-            atChops: atChops, enrollmentId: enrollmentId);
+            atChops: atChops,
+            enrollmentId: enrollmentId,
+            atConnectionFactory: _atConnectionFactory);
     _retryCallBack = retryCallBack;
-    _monitorOutboundConnectionFactory =
-        monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
+    _monitorOutboundConnectionFactory = monitorOutboundConnectionFactory ??
+        MonitorOutboundConnectionFactory(_atConnectionFactory!);
     _heartbeatInterval =
         monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
   }
@@ -172,7 +177,7 @@ class Monitor {
       _monitorConnection = await _createNewConnection(
           _atSign, _preference.rootDomain, _preference.rootPort);
       runZonedGuarded(() {
-        _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
+        _monitorConnection!.underlying.listen(_messageHandler, onDone: () {
           _logger.info(
               'socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
           _callCloseStopAndRetry();
@@ -294,7 +299,7 @@ class Monitor {
     _logger.finer('Monitor connection authentication successful');
   }
 
-  Future<OutboundConnection> _createNewConnection(
+  Future<AtConnection> _createNewConnection(
       String toAtSign, String rootDomain, int rootPort) async {
     //1. look up the secondary url for this atsign
     var secondaryUrl = await _remoteSecondary.findSecondaryUrl();
@@ -462,7 +467,10 @@ class Monitor {
 enum MonitorStatus { notStarted, started, stopped, errored }
 
 class MonitorOutboundConnectionFactory {
-  Future<OutboundConnection> createConnection(String secondaryUrl,
+  final AtConnectionFactory _atConnectionFactory;
+
+  MonitorOutboundConnectionFactory(this._atConnectionFactory);
+  Future<AtConnection> createConnection(String secondaryUrl,
       {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
     var secondaryInfo = _getSecondaryInfo(secondaryUrl);
     var host = secondaryInfo[0];
@@ -473,9 +481,15 @@ class MonitorOutboundConnectionFactory {
     secureSocketConfig.pathToCerts = pathToCerts;
     secureSocketConfig.tlsKeysSavePath = tlsKeysSavePath;
 
-    SecureSocket secureSocket = await SecureSocketUtil.createSecureSocket(
+    // Create the socket connection using the factory
+    final underlying = await _atConnectionFactory.createUnderlying(
         host, port, secureSocketConfig);
-    return OutboundConnectionImpl(secureSocket);
+
+    // Create at connection
+    AtConnection atConnection =
+        _atConnectionFactory.createConnection(underlying);
+
+    return atConnection;
   }
 
   List<String> _getSecondaryInfo(String url) {

@@ -30,6 +30,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   late final NotificationServiceImpl _statsNotificationListener;
   @visibleForTesting
   late AtKeyDecryptionManager atKeyDecryptionManager;
+  // AtConnectionFactory? _atConnectionFactory;
 
   /// utility method to reduce code verbosity in this file
   /// Does nothing if a telemetryService has not been injected
@@ -72,22 +73,30 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   static Future<SyncService> create(AtClient atClient,
       {required AtClientManager atClientManager,
       required NotificationService notificationService,
-      RemoteSecondary? remoteSecondary}) async {
+      RemoteSecondary? remoteSecondary,
+      AtConnectionFactory? atConnectionFactory}) async {
+    // Default to AtLookupSecureSocketFactory if atConnectionFactory is not provided
+    atConnectionFactory ??= AtLookupSecureSocketFactory();
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-        atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
+        atChops: atClient.atChops,
+        enrollmentId: atClient.enrollmentId,
+        atConnectionFactory: atConnectionFactory);
     final syncService = SyncServiceImpl._(
-        atClientManager, atClient, notificationService, remoteSecondary);
+      atClientManager,
+      atClient,
+      notificationService,
+      remoteSecondary,
+      atConnectionFactory: atConnectionFactory,
+    );
     await syncService.statsServiceListener();
     syncService._scheduleSyncRun();
     return syncService;
   }
 
-  SyncServiceImpl._(
-      AtClientManager atClientManager,
-      AtClient atClient,
-      NotificationService notificationService,
-      RemoteSecondary remoteSecondary) {
+  SyncServiceImpl._(AtClientManager atClientManager, AtClient atClient,
+      NotificationService notificationService, RemoteSecondary remoteSecondary,
+      {AtConnectionFactory? atConnectionFactory}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
@@ -99,6 +108,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         AtKey.local('skipdeletesuntil', currentAtSign).build();
     atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
     _atClientManager.listenToAtSignChange(this);
+    atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
   }
 
   void _scheduleSyncRun() {

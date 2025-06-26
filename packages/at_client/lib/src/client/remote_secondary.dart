@@ -28,7 +28,10 @@ class RemoteSecondary implements Secondary {
   final AtChops? atChops;
 
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey, this.atChops, String? enrollmentId}) {
+      {String? privateKey,
+      this.atChops,
+      String? enrollmentId,
+      AtConnectionFactory? atConnectionFactory}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -43,7 +46,8 @@ class RemoteSecondary implements Secondary {
         secondaryAddressFinder:
             AtClientManager.getInstance().secondaryAddressFinder,
         secureSocketConfig: secureSocketConfig,
-        clientConfig: _getClientConfig());
+        clientConfig: _getClientConfig(),
+        atConnectionFactory: atConnectionFactory);
     atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
@@ -139,7 +143,7 @@ class RemoteSecondary implements Secondary {
   }
 
   void addStreamData(List<int> data) {
-    atLookUp.connection!.getSocket().add(data);
+    atLookUp.connection!.underlying.add(data);
   }
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
@@ -173,7 +177,7 @@ class RemoteSecondary implements Secondary {
   ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback]
   ///[Deprecated] Use [AtClient.notificationService]
   @Deprecated('Use AtClient.notificationService')
-  Future<OutboundConnection> monitor(
+  Future<AtConnection> monitor(
       String command, Function? notificationCallBack, String privateKey) {
     return MonitorClient(privateKey).executeMonitorVerb(
         command, _atSign, _preference.rootDomain, _preference.rootPort,

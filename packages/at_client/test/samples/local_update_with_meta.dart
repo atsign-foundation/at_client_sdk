@@ -13,4 +13,6 @@ void main() async {
   atKey.metadata = metadata;
   var result = await atClient.put(atKey, value);
   print(result);
+  var getResult = await atClient.get(atKey);
+  print(getResult);
 }

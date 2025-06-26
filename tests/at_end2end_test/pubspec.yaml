@@ -15,6 +15,13 @@ dependencies:
     path: ../../packages/at_client
   at_utils: ^3.2.0
 
+dependency_overrides:
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: websocket_uptake
+      
 dev_dependencies:
   test: ^1.25.8
   lints: ^2.0.0

@@ -16,6 +16,7 @@ import 'package:at_client/src/transformer/response_transformer/notification_resp
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -47,6 +48,7 @@ class NotificationServiceImpl
   Monitor? _monitor;
 
   late AtClientManager _atClientManager;
+  AtConnectionFactory? _atConnectionFactory;
   AtClientValidation atClientValidation = AtClientValidation();
   late AtKeyEncryptionManager atKeyEncryptionManager;
 
@@ -85,9 +87,10 @@ class NotificationServiceImpl
   }
 
   NotificationServiceImpl._(AtClientManager atClientManager, AtClient atClient,
-      {Monitor? monitor}) {
+      {Monitor? monitor, AtConnectionFactory? atConnectionFactory}) {
     _atClientManager = atClientManager;
     _atClient = atClient;
+    _atConnectionFactory = atConnectionFactory ?? AtLookupSecureSocketFactory();
     _logger = AtSignLogger(
         'NotificationServiceImpl (${_atClient.getCurrentAtSign()})');
 
@@ -101,7 +104,8 @@ class NotificationServiceImpl
             MonitorPreference()..keepAlive = true,
             monitorRetry,
             atChops: atClient.atChops,
-            enrollmentId: atClient.enrollmentId);
+            enrollmentId: atClient.enrollmentId,
+            atConnectionFactory: _atConnectionFactory);
     _atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, _atClient.getCurrentAtSign()!,

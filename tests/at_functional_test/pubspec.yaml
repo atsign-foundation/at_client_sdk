@@ -1,5 +1,5 @@
 name: at_functional_test
-publish_to: none
+# publish_to: none
 description: Functional tests for the at_client_sdk packages
 version: 1.0.0
 
@@ -21,6 +21,13 @@ dependencies:
   at_persistence_secondary_server: ^4.0.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_lookup:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_lookup
+      ref: websocket_uptake
+     
 dev_dependencies:
   test: ^1.26.2
   lints: ^6.0.0
