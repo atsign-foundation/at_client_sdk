@@ -272,9 +272,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         ..atKey = (AtKey()
           ..key = 'publickey'
           ..sharedBy = atKey.sharedWith);
-      String fetchedPK = await _atClient
+      final String fetchedPK = defaultResponseParser.parse(await _atClient
           .getRemoteSecondary()!
-          .executeVerb(encryptionPublicKeyBuilder);
+          .executeVerb(encryptionPublicKeyBuilder)).response;
 
       // Got it - first of all, cache it locally (in case sync is not enabled)
       final uvb = UpdateVerbBuilder()
@@ -284,7 +284,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       await _atClient.getLocalSecondary()!.executeVerb(uvb, sync: false);
 
       // Then return it
-      return defaultResponseParser.parse(fetchedPK).response;
+      return fetchedPK;
     } on AtException catch (exception) {
       throw AtPublicKeyNotFoundException(
           'Failed to fetch public key of ${atKey.sharedWith}')
