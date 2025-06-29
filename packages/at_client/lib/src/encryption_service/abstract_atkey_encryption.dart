@@ -259,6 +259,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
       // Got it - return
       if (cachedLocallyPK != null && cachedLocallyPK != 'data:null') {
+        _logger.finest('Found public key locally: $cachedLocallyPK');
         return defaultResponseParser.parse(cachedLocallyPK).response;
       }
     } on KeyNotFoundException {
@@ -279,6 +280,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       final uvb = UpdateVerbBuilder()
         ..atKey = AtKey.fromString('cached:public:publickey${atKey.sharedWith}')
         ..value = fetchedPK;
+      _logger.info('Updating public key locally: ${uvb.buildCommand()}');
       await _atClient.getLocalSecondary()!.executeVerb(uvb, sync: false);
 
       // Then return it
