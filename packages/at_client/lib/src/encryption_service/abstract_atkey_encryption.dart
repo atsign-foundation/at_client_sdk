@@ -253,14 +253,16 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
             ..isPublic = true
             ..isCached = true));
 
-      String? cachedLocallyPK = await _atClient
+      String? llookupResponse = await _atClient
           .getLocalSecondary()!
           .executeVerb(cachedEncryptionPublicKeyBuilder);
 
       // Got it - return
-      if (cachedLocallyPK != null && cachedLocallyPK != 'data:null') {
+      if (llookupResponse != null && llookupResponse != 'data:null') {
+        String cachedLocallyPK =
+            defaultResponseParser.parse(llookupResponse).response;
         _logger.finest('Found public key locally: $cachedLocallyPK');
-        return defaultResponseParser.parse(cachedLocallyPK).response;
+        return cachedLocallyPK;
       }
     } on KeyNotFoundException {
       _logger.finer('${atKey.sharedWith} encryption public key is not found');
@@ -272,9 +274,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         ..atKey = (AtKey()
           ..key = 'publickey'
           ..sharedBy = atKey.sharedWith);
-      final String fetchedPK = defaultResponseParser.parse(await _atClient
-          .getRemoteSecondary()!
-          .executeVerb(encryptionPublicKeyBuilder)).response;
+      final String fetchedPK = defaultResponseParser
+          .parse(await _atClient
+              .getRemoteSecondary()!
+              .executeVerb(encryptionPublicKeyBuilder))
+          .response;
 
       // Got it - first of all, cache it locally (in case sync is not enabled)
       final uvb = UpdateVerbBuilder()
