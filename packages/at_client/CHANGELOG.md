@@ -1,3 +1,8 @@
+## 3.4.4
+- fix[performance]: when fetching `public:publickey` of another atSign from
+  atServer, cache it in local storage instead of depending on sync to take
+  care of that (since programs can disable sync)
+
 ## 3.4.3
 - build[deps]: update dependencies including at_persistence major version 
   changes

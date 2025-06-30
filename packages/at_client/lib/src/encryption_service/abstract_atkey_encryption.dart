@@ -243,9 +243,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// Returns sharedWith atSign publicKey.
   /// Throws [KeyNotFoundException] if sharedWith atSign publicKey is not found.
   Future<String> _getSharedWithPublicKey(AtKey atKey) async {
-    String? sharedWithPublicKey;
     try {
-      // 1. Get the cached public key
+      // 1. Try to fetch cached public key from local storage
       var cachedEncryptionPublicKeyBuilder = LLookupVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'publickey'
@@ -254,22 +253,42 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
             ..isPublic = true
             ..isCached = true));
 
-      sharedWithPublicKey = await _atClient
+      String? llookupResponse = await _atClient
           .getLocalSecondary()!
           .executeVerb(cachedEncryptionPublicKeyBuilder);
+
+      // Got it - return
+      if (llookupResponse != null && llookupResponse != 'data:null') {
+        String cachedLocallyPK =
+            defaultResponseParser.parse(llookupResponse).response;
+        _logger.finest('Found public key locally: $cachedLocallyPK');
+        return cachedLocallyPK;
+      }
     } on KeyNotFoundException {
       _logger.finer('${atKey.sharedWith} encryption public key is not found');
     }
+
+    // Didn't find in local storage - check on atServer
     try {
-      if (sharedWithPublicKey.isNull || sharedWithPublicKey == 'data:null') {
-        var encryptionPublicKeyBuilder = PLookupVerbBuilder()
-          ..atKey = (AtKey()
-            ..key = 'publickey'
-            ..sharedBy = atKey.sharedWith);
-        sharedWithPublicKey = await _atClient
-            .getRemoteSecondary()!
-            .executeVerb(encryptionPublicKeyBuilder);
-      }
+      var encryptionPublicKeyBuilder = PLookupVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = 'publickey'
+          ..sharedBy = atKey.sharedWith);
+      final String fetchedPK = defaultResponseParser
+          .parse(await _atClient
+              .getRemoteSecondary()!
+              .executeVerb(encryptionPublicKeyBuilder))
+          .response;
+
+      // Got it - first of all, cache it locally (in case sync is not enabled)
+      final uvb = UpdateVerbBuilder()
+        ..atKey = AtKey.fromString('cached:public:publickey${atKey.sharedWith}')
+        ..value = fetchedPK;
+      _logger.info('Updating public key locally: ${uvb.buildCommand()}');
+      await _atClient.getLocalSecondary()!.executeVerb(uvb, sync: false);
+
+      // Then return it
+      return fetchedPK;
     } on AtException catch (exception) {
       throw AtPublicKeyNotFoundException(
           'Failed to fetch public key of ${atKey.sharedWith}')
@@ -277,11 +296,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         ..stack(AtChainedException(Intent.shareData,
             ExceptionScenario.keyNotFound, exception.message));
     }
-    if (sharedWithPublicKey.isNull || sharedWithPublicKey == 'data:null') {
-      return throw AtPublicKeyNotFoundException(
-          'Failed to fetch public key of ${atKey.sharedWith}');
-    }
-    return defaultResponseParser.parse(sharedWithPublicKey!).response;
   }
 
   /// Stores the encryptedSharedKey for future use.
