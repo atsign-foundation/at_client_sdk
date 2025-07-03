@@ -1,6 +1,6 @@
 ## 3.5.0
 - feat: add `atLookUp` parameter to AtClientManager.setCurrentAtSign,
-  AtClientImpl.create, etc so we can inject an existing AtLookUp instance if 
+  AtClientImpl.create, etc. so we can inject an existing AtLookUp instance if 
   we have one rather than having to create a new one and authenticate again
 
 ## 3.4.4

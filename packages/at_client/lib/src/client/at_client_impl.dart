@@ -694,6 +694,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  @Deprecated("Obsolete, wil be removed in v4")
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
     var streamResponse = AtStreamResponse();
@@ -735,6 +736,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  @Deprecated("Obsolete, wil be removed in v4")
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
