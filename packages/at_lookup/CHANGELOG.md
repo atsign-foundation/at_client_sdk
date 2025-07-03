@@ -1,3 +1,6 @@
+## 3.1.0
+- feat: add `OutboundConnection? connection` to the `AtLookUp` interface
+
 ## 3.0.52
 - fix: update exception and log messages to use standard terminology 
   ('atServer' instead of 'secondary server', 'atDirectory' instead of 'root 

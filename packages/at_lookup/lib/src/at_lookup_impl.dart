@@ -23,6 +23,7 @@ class AtLookupImpl implements AtLookUp {
 
   OutboundConnection? _connection;
 
+  @override
   OutboundConnection? get connection => _connection;
 
   @override
