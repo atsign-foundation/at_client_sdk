@@ -137,6 +137,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
       AtChops? atChops,
+      AtLookUp? atLookUp,
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig,
       String? enrollmentId}) async {
@@ -154,11 +155,12 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           encryptionService: encryptionService,
           localSecondaryKeyStore: localSecondaryKeyStore,
           atChops: atChops,
+          atLookUp: atLookUp,
           atClientCommitLogCompaction: atClientCommitLogCompaction,
           atClientConfig: atClientConfig,
           enrollmentId: enrollmentId);
 
-      await atClientImpl._init();
+      await atClientImpl._init(atLookUp: atLookUp);
     }
 
     await atClientImpl!.startCompactionJob();
@@ -168,15 +170,20 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     return atClientInstanceMap[currentAtSign];
   }
 
-  AtClientImpl._(String theAtSign, String? namespace,
-      AtClientPreference preference, AtClientManager atClientManager,
-      {RemoteSecondary? remoteSecondary,
-      EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore,
-      AtChops? atChops,
-      AtClientCommitLogCompaction? atClientCommitLogCompaction,
-      AtClientConfig? atClientConfig,
-      this.enrollmentId}) {
+  AtClientImpl._(
+    String theAtSign,
+    String? namespace,
+    AtClientPreference preference,
+    AtClientManager atClientManager, {
+    RemoteSecondary? remoteSecondary,
+    EncryptionService? encryptionService,
+    SecondaryKeyStore? localSecondaryKeyStore,
+    AtChops? atChops,
+    AtLookUp? atLookUp,
+    AtClientCommitLogCompaction? atClientCommitLogCompaction,
+    AtClientConfig? atClientConfig,
+    this.enrollmentId,
+  }) {
     _atSign = AtUtils.fixAtSign(theAtSign);
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -184,17 +191,19 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _namespace = namespace;
     _atClientManager = atClientManager;
     _localSecondaryKeyStore = localSecondaryKeyStore;
+
     if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
       throw IllegalArgumentException(
           'A SecondaryKeyStore was injected, but preference.isLocalStoreRequired is false');
     }
+
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
   }
 
-  Future<void> _init() async {
+  Future<void> _init({AtLookUp? atLookUp}) async {
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
         var storageManager = StorageManager(preference);
@@ -205,13 +214,14 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       _atChops ??= await _createAtChops(_atSign);
     }
 
-    // Now using ??= because we may be injecting a RemoteSecondary
+    // Using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
         atChops: atChops,
+        atLookUp: atLookUp,
         privateKey: _preference!.privateKey,
         enrollmentId: enrollmentId);
 
-    // Now using ??= because we may be injecting an EncryptionService
+    // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.localSecondary = _localSecondary;
@@ -684,6 +694,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  @Deprecated("Obsolete, wil be removed in v4")
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
     var streamResponse = AtStreamResponse();
@@ -706,7 +717,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      var streamResult = await remoteSecondary.atLookUp.messageListener
+      var streamResult = await (remoteSecondary.atLookUp as AtLookupImpl)
+          .messageListener
           .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
       if (streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
@@ -724,6 +736,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
+  @Deprecated("Obsolete, wil be removed in v4")
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
