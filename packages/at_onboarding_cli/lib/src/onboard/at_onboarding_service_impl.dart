@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' as at_auth;
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -38,13 +37,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   /// a [DefaultAtServiceFactory]
   AtServiceFactory? atServiceFactory;
 
-  at_auth.AtEnrollmentBase? _atEnrollment;
+  AtEnrollmentBase? _atEnrollment;
 
   AtOnboardingServiceImpl(atsign, this.atOnboardingPreference,
       {this.atServiceFactory, String? enrollmentId}) {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
-    _atEnrollment ??= at_auth.atAuthBase.atEnrollment(_atSign);
+    _atEnrollment ??= atAuthBase.atEnrollment(_atSign);
     // set default LocalStorage paths for this instance
     atOnboardingPreference.commitLogPath ??=
         HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
@@ -64,8 +63,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await atClientManager.setCurrentAtSign(
         _atSign, atOnboardingPreference.namespace, atOnboardingPreference,
         atChops: atChops,
+        atLookUp: atLookUp,
         serviceFactory: atServiceFactory,
         enrollmentId: enrollmentId);
+
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
     _atLookUp?.enrollmentId = enrollmentId;
@@ -131,8 +132,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       throw AtActivateException('atsign $_atSign is already activated');
     }
 
-    atAuth ??= at_auth.atAuthBase.atAuth();
-    var atOnboardingRequest = at_auth.AtOnboardingRequest(_atSign);
+    atAuth ??= atAuthBase.atAuth();
+    var atOnboardingRequest = AtOnboardingRequest(_atSign);
     atOnboardingRequest.rootDomain = atOnboardingPreference.rootDomain;
     atOnboardingRequest.rootPort = atOnboardingPreference.rootPort;
     atOnboardingRequest.appName = atOnboardingPreference.appName;
@@ -170,7 +171,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   @override
-  Future<at_auth.AtEnrollmentResponse> enroll(
+  Future<AtEnrollmentResponse> enroll(
     String appName,
     String deviceName,
     String otp,
@@ -231,7 +232,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   @override
-  Future<at_auth.AtEnrollmentResponse> sendEnrollRequest(String appName,
+  Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
       {Duration? apkamKeysExpiryDuration}) async {
     if (appName == null || deviceName == null) {
@@ -239,12 +240,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'appName and deviceName are mandatory for enrollment');
     }
 
-    at_auth.EnrollmentRequest newClientEnrollmentRequest =
-        at_auth.EnrollmentRequest(
-            appName: appName,
-            deviceName: deviceName,
-            namespaces: namespaces,
-            otp: otp);
+    EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
+        appName: appName,
+        deviceName: deviceName,
+        namespaces: namespaces,
+        otp: otp);
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 
@@ -490,7 +490,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   ///write newly created encryption keypairs into atKeys file
   Future<File> _generateAtKeysFile(
-    at_auth.AtAuthKeys atAuthKeys, {
+    AtAuthKeys atAuthKeys, {
     String? enrollmentId,
     File? atKeysFile,
     bool allowOverwrite = true,
@@ -561,7 +561,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   ///back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
-  Future<void> _persistKeysLocalSecondary(at_auth.AtAuthKeys atAuthKeys) async {
+  Future<void> _persistKeysLocalSecondary(AtAuthKeys atAuthKeys) async {
     //backup keys into local secondary
     bool? response = await atClient
         ?.getLocalSecondary()
@@ -591,8 +591,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   @override
   Future<bool> authenticate({String? enrollmentId}) async {
-    atAuth ??= at_auth.atAuthBase.atAuth();
-    var atAuthRequest = at_auth.AtAuthRequest(_atSign)
+    atAuth ??= atAuthBase.atAuth();
+    var atAuthRequest = AtAuthRequest(_atSign)
       ..enrollmentId = enrollmentId
       ..atKeysFilePath = atOnboardingPreference.atKeysFilePath
       ..authMode = atOnboardingPreference.authMode
@@ -798,7 +798,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   @visibleForTesting
-  set enrollmentBase(at_auth.AtEnrollmentBase enrollmentBase) {
+  set enrollmentBase(AtEnrollmentBase enrollmentBase) {
     _atEnrollment = enrollmentBase;
   }
 
@@ -810,7 +810,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   AtChops? atChops;
 
   @override
-  at_auth.AtAuth? atAuth;
+  AtAuth? atAuth;
 
   final StreamController<ProgressEvent> _psc = StreamController.broadcast();
 
