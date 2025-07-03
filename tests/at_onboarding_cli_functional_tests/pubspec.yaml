@@ -13,6 +13,11 @@ dependencies:
   at_demo_data: ^1.2.0
 
 dependency_overrides:
+  at_client:
+    git:
+      url: https://github.com/atsign-foundation/at_client_sdk
+      path: packages/at_client
+      ref: trunk
   at_onboarding_cli:
     path: "../../packages/at_onboarding_cli"
   at_auth:
