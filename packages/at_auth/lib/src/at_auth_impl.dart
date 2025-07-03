@@ -27,6 +27,7 @@ class AtAuthImpl implements AtAuth {
 
   AtEnrollmentBase? atEnrollmentBase;
 
+  @override
   AtLookUp? atLookUp;
 
   AtAuthImpl(
