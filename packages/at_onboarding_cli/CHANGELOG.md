@@ -1,3 +1,7 @@
+## 1.11.0
+- feat: reuse the authenticated connection from AtAuth.authenticate when
+  creating the AtClient which is handed back to the calling code.
+
 ## 1.10.1
 - feat: remove unnecessary dependency on at_persistence_secondary_server
 
