@@ -1,9 +1,9 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_lookup/src/cache/secondary_address_finder.dart';
+import 'package:at_lookup/at_lookup.dart';
 
-abstract class AtLookUp {
+abstract interface class AtLookUp {
   /// update
   Future<bool> update(String key, String value,
       {String? sharedWith, Metadata? metadata});
@@ -47,6 +47,8 @@ abstract class AtLookUp {
 
   /// set an instance of  [AtChops] for signing and verification operations.
   set atChops(AtChops? atChops);
+
+  OutboundConnection? get connection;
 
   AtChops? get atChops;
 
