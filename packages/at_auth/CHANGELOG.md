@@ -1,6 +1,6 @@
 ## 2.3.0
 - feat: add `AtLookUp? atLookUp` to the `AtAuth` interface so that it can be 
-  reused (e.g.) by AtClient once auth is complete
+  reused (e.g. by AtClient) once auth is complete
 
 ## 2.2.0
 
