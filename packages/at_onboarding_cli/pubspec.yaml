@@ -12,12 +12,6 @@ executables:
   at_register: register_cli
   at_activate: activate_cli
 
-dependency_overrides:
-  at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk
-      path: packages/at_client
-      ref: trunk
 dependencies:
    args: ^2.5.0
    alfred: ^1.1.2+1
@@ -30,7 +24,7 @@ dependencies:
    zxing2: ^0.2.0
    at_auth: ^2.3.0
    at_chops: ^2.2.0
-   at_client: ^3.4.3
+   at_client: ^3.5.0
    at_commons: ^5.0.2
    at_lookup: ^3.0.52
    at_server_status: ^1.0.5

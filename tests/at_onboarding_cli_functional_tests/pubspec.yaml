@@ -8,16 +8,11 @@ environment:
 
 dependencies:
   at_lookup: ^3.0.49
-  at_client: ^3.4.3
+  at_client: ^3.5.0
   at_commons: ^5.3.0
   at_demo_data: ^1.2.0
 
 dependency_overrides:
-  at_client:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk
-      path: packages/at_client
-      ref: trunk
   at_onboarding_cli:
     path: "../../packages/at_onboarding_cli"
   at_auth:
