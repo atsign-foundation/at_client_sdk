@@ -1,3 +1,9 @@
+## 3.2.24
+- fix: at_client_mobile: fix immediate issue caused by widespread leakage of 
+  `AtLookupImpl`, exposed by recent removal of that leakage from
+  `at_client.RemoteSecondary`
+- build[deps]: update at_client dependency to `^3.5.0`
+
 ## 3.2.23
 - build[deps]: update dependencies
 
