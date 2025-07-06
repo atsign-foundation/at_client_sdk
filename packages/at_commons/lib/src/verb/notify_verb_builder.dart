@@ -34,7 +34,7 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
   int? latestN;
 
   @override
-  String buildCommand() {
+  String buildCommand({bool useAtKeyToString = false}) {
     StringBuffer sb = StringBuffer();
     sb.write('notify:id:$id');
 
@@ -61,8 +61,9 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
     // Add in all of the metadata parameters in atProtocol command format
     sb.write(atKey.metadata.toAtProtocolFragment());
 
-    // ignore: deprecated_member_use_from_same_package
-    if (messageType == MessageTypeEnum.text) {
+    if (useAtKeyToString) {
+      sb.write(':${atKey.toString()}');
+    } else {
       if (atKey.sharedWith != null) {
         sb.write(':${VerbUtil.formatAtSign(atKey.sharedWith)}');
       }
@@ -75,8 +76,6 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
       if (atKey.sharedBy != null) {
         sb.write('${VerbUtil.formatAtSign(atKey.sharedBy)}');
       }
-    } else {
-      sb.write(':${atKey.toString()}');
     }
 
     if (value != null) {

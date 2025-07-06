@@ -25,7 +25,7 @@ void main() {
         ..atKey.namespace = 'my_app'
         ..atKey.sharedWith = '@bob'
         ..atKey.sharedBy = '@alice';
-      expect(nvb.buildCommand(),
+      expect(nvb.buildCommand(useAtKeyToString: true),
           'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo.my_app@alice:foo\n');
     });
 
@@ -43,7 +43,7 @@ void main() {
         ..id = '123'
         ..value = 'foo'
         ..atKey = AtKey.fromString('@bob:foo.my_app@alice');
-      expect(nvb.buildCommand(),
+      expect(nvb.buildCommand(useAtKeyToString: true),
           'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo.my_app@alice:foo\n');
     });
 
