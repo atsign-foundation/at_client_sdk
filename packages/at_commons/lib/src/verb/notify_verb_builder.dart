@@ -61,18 +61,8 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
     // Add in all of the metadata parameters in atProtocol command format
     sb.write(atKey.metadata.toAtProtocolFragment());
 
-    if (atKey.sharedWith != null) {
-      sb.write(':${VerbUtil.formatAtSign(atKey.sharedWith)}');
-    }
+    sb.write(':${atKey.toString()}');
 
-    if (atKey.metadata.isPublic == true) {
-      sb.write(':public');
-    }
-    sb.write(':${atKey.key}');
-
-    if (atKey.sharedBy != null) {
-      sb.write('${VerbUtil.formatAtSign(atKey.sharedBy)}');
-    }
     if (value != null) {
       sb.write(':$value');
     }
