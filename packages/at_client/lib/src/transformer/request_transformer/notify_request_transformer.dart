@@ -43,12 +43,21 @@ class NotificationRequestTransformer
   }
 
   Future<NotifyVerbBuilder> _prepareNotificationBuilder(
-      NotificationParams notificationParams,
-      AtClientPreference atClientPreference) async {
+    NotificationParams notificationParams,
+    AtClientPreference atClientPreference,
+  ) async {
+    AtKey ak = notificationParams.atKey;
+
+    if (notificationParams.messageType == MessageTypeEnum.key &&
+        ak.metadata.namespaceAware &&
+        atClientPreference.namespace != null &&
+        ak.namespace != atClientPreference.namespace) {
+      ak = AtKey.fromString('${ak.toString()}.${atClientPreference.namespace}');
+    }
+
     var builder = NotifyVerbBuilder()
       ..id = notificationParams.id
-      ..atKey.sharedBy = notificationParams.atKey.sharedBy
-      ..atKey.sharedWith = notificationParams.atKey.sharedWith
+      ..atKey = ak
       ..operation = notificationParams.operation
       ..messageType = notificationParams.messageType
       ..priority = notificationParams.priority
@@ -56,12 +65,8 @@ class NotificationRequestTransformer
       ..latestN = notificationParams.latestN
       ..notifier = notificationParams.notifier
       ..ttln = notificationParams.notificationExpiry.inMilliseconds;
-    // Append namespace only to message type key. For message type text do not
-    // append namespaces.
-    if (notificationParams.messageType == MessageTypeEnum.key) {
-      builder.atKey.key = AtClientUtil.getKeyWithNameSpace(
-          notificationParams.atKey, atClientPreference);
-    }
+
+    // message type 'text' is obsolete and does not work
     // ignore: deprecated_member_use
     if (notificationParams.messageType == MessageTypeEnum.text) {
       if (notificationParams.atKey.metadata.isEncrypted) {

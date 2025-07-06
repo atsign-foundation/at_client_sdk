@@ -122,7 +122,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               SharedKeyEncryption(mockAtClientImpl))
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.key, 'phone');
+      expect(notifyVerbBuilder.atKey.namespace, 'wavi');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.low);
@@ -148,7 +149,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.key, 'phone');
+      expect(notifyVerbBuilder.atKey.namespace, 'wavi');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.high);
@@ -177,7 +179,8 @@ void main() {
               AtClientPreference()..namespace = 'wavi',
               mockSharedKeyEncryptionImpl)
           .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey.key, 'phone.wavi');
+      expect(notifyVerbBuilder.atKey.key, 'phone');
+      expect(notifyVerbBuilder.atKey.namespace, 'wavi');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.high);
