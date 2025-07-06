@@ -43,43 +43,57 @@ class NotificationRequestTransformer
   }
 
   Future<NotifyVerbBuilder> _prepareNotificationBuilder(
-    NotificationParams params,
-    AtClientPreference prefs,
+    NotificationParams notificationParams,
+    AtClientPreference atClientPreference,
   ) async {
-    AtKey ak = params.atKey;
-
-    if (params.messageType == MessageTypeEnum.key &&
-        ak.metadata.namespaceAware) {
-      ak.namespace ??= prefs.namespace;
-      if (prefs.namespace != null && ak.namespace != prefs.namespace) {
-        ak.key = '${ak.key}.${ak.namespace}';
-        ak.namespace = prefs.namespace;
-      }
-      ak = AtKey.fromString(ak.toString());
-    }
-
-    var builder = NotifyVerbBuilder()
-      ..id = params.id
-      ..atKey = ak
-      ..operation = params.operation
-      ..messageType = params.messageType
-      ..priority = params.priority
-      ..strategy = params.strategy
-      ..latestN = params.latestN
-      ..notifier = params.notifier
-      ..ttln = params.notificationExpiry.inMilliseconds;
-
-    // message type 'text' is obsolete and does not work
     // ignore: deprecated_member_use
-    if (params.messageType == MessageTypeEnum.text) {
-      if (params.atKey.metadata.isEncrypted) {
-        builder.atKey.key =
-            await _encryptNotificationValue(params.atKey, params.atKey.key);
+    if (notificationParams.messageType == MessageTypeEnum.text) {
+      // NB: message type 'text' is obsolete and does not work.
+
+      var builder = NotifyVerbBuilder()
+        ..id = notificationParams.id
+        ..atKey.sharedBy = notificationParams.atKey.sharedBy
+        ..atKey.sharedWith = notificationParams.atKey.sharedWith
+        ..operation = notificationParams.operation
+        ..messageType = notificationParams.messageType
+        ..priority = notificationParams.priority
+        ..strategy = notificationParams.strategy
+        ..latestN = notificationParams.latestN
+        ..notifier = notificationParams.notifier
+        ..ttln = notificationParams.notificationExpiry.inMilliseconds;
+
+      if (notificationParams.atKey.metadata.isEncrypted) {
+        builder.atKey.key = await _encryptNotificationValue(
+            notificationParams.atKey, notificationParams.atKey.key);
       } else {
-        builder.atKey.key = params.atKey.key;
+        builder.atKey.key = notificationParams.atKey.key;
       }
+      return builder;
+    } else {
+      AtKey ak = notificationParams.atKey;
+
+      if (notificationParams.messageType == MessageTypeEnum.key &&
+          ak.metadata.namespaceAware) {
+        ak.namespace ??= atClientPreference.namespace;
+        if (atClientPreference.namespace != null &&
+            ak.namespace != atClientPreference.namespace) {
+          ak.key = '${ak.key}.${ak.namespace}';
+          ak.namespace = atClientPreference.namespace;
+        }
+        ak = AtKey.fromString(ak.toString());
+      }
+
+      return NotifyVerbBuilder()
+        ..id = notificationParams.id
+        ..atKey = ak
+        ..operation = notificationParams.operation
+        ..messageType = notificationParams.messageType
+        ..priority = notificationParams.priority
+        ..strategy = notificationParams.strategy
+        ..latestN = notificationParams.latestN
+        ..notifier = notificationParams.notifier
+        ..ttln = notificationParams.notificationExpiry.inMilliseconds;
     }
-    return builder;
   }
 
   void _addMetadataToBuilder(
