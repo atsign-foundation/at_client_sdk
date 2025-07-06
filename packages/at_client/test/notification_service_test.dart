@@ -719,6 +719,7 @@ void main() {
       NotificationParams notificationParams =
           NotificationParams.forUpdate(atKey, value: value);
       NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
+        ..useAtKeyToString = true
         ..atKey = atKey
         ..messageType = MessageTypeEnum.key
         ..value = 'demo-value';
@@ -742,6 +743,7 @@ void main() {
       NotificationParams notificationParams =
           NotificationParams.forText('Hello bob', '@bob');
       NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
+        ..useAtKeyToString = true
         ..atKey.key = '@bob:Hello bob';
 
       expect(

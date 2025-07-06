@@ -50,7 +50,8 @@ class NotificationRequestTransformer
     if (notificationParams.messageType == MessageTypeEnum.text) {
       // NB: message type 'text' is obsolete and does not work.
 
-      var builder = NotifyVerbBuilder()
+      NotifyVerbBuilder builder = NotifyVerbBuilder()
+        ..useAtKeyToString = true
         ..id = notificationParams.id
         ..atKey.sharedBy = notificationParams.atKey.sharedBy
         ..atKey.sharedWith = notificationParams.atKey.sharedWith
@@ -84,6 +85,7 @@ class NotificationRequestTransformer
       }
 
       return NotifyVerbBuilder()
+        ..useAtKeyToString = true
         ..id = notificationParams.id
         ..atKey = ak
         ..operation = notificationParams.operation
