@@ -1,3 +1,7 @@
+## 3.5.1
+- fix: ensure that namespace is preserved if it happens to be repeated in a 
+  notification's key (e.g. `@bob:foo.my_app.my_app@alice` )
+
 ## 3.5.0
 - feat: add `atLookUp` parameter to AtClientManager.setCurrentAtSign,
   AtClientImpl.create, etc. so we can inject an existing AtLookUp instance if 
