@@ -51,7 +51,7 @@ class NotificationRequestTransformer
       // NB: message type 'text' is obsolete and does not work.
 
       NotifyVerbBuilder builder = NotifyVerbBuilder()
-        ..useAtKeyToString = true
+        ..useAtKeyToString = false
         ..id = notificationParams.id
         ..atKey.sharedBy = notificationParams.atKey.sharedBy
         ..atKey.sharedWith = notificationParams.atKey.sharedWith
