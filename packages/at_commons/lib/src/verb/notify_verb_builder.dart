@@ -1,4 +1,5 @@
 import 'package:at_commons/src/verb/abstract_verb_builder.dart';
+import 'package:at_commons/src/verb/verb_util.dart';
 import 'package:uuid/uuid.dart';
 
 import '../at_constants.dart';
@@ -60,7 +61,23 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
     // Add in all of the metadata parameters in atProtocol command format
     sb.write(atKey.metadata.toAtProtocolFragment());
 
-    sb.write(':${atKey.toString()}');
+    // ignore: deprecated_member_use_from_same_package
+    if (messageType == MessageTypeEnum.text) {
+      if (atKey.sharedWith != null) {
+        sb.write(':${VerbUtil.formatAtSign(atKey.sharedWith)}');
+      }
+
+      if (atKey.metadata.isPublic == true) {
+        sb.write(':public');
+      }
+      sb.write(':${atKey.key}');
+
+      if (atKey.sharedBy != null) {
+        sb.write('${VerbUtil.formatAtSign(atKey.sharedBy)}');
+      }
+    } else {
+      sb.write(':${atKey.toString()}');
+    }
 
     if (value != null) {
       sb.write(':$value');
