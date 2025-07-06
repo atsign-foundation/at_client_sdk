@@ -33,8 +33,10 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
   /// Latest N notifications to notify. Defaults to 1
   int? latestN;
 
+  bool useAtKeyToString = false;
+
   @override
-  String buildCommand({bool useAtKeyToString = false}) {
+  String buildCommand() {
     StringBuffer sb = StringBuffer();
     sb.write('notify:id:$id');
 

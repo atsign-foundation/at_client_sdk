@@ -19,13 +19,14 @@ void main() {
 
     test('notify with namespace', () {
       final nvb = NotifyVerbBuilder()
+        ..useAtKeyToString = true
         ..id = '123'
         ..value = 'foo'
         ..atKey.key = 'foo'
         ..atKey.namespace = 'my_app'
         ..atKey.sharedWith = '@bob'
         ..atKey.sharedBy = '@alice';
-      expect(nvb.buildCommand(useAtKeyToString: true),
+      expect(nvb.buildCommand(),
           'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo.my_app@alice:foo\n');
     });
 
@@ -40,10 +41,11 @@ void main() {
 
     test('notify with namespace using atKey toString', () {
       final nvb = NotifyVerbBuilder()
+        ..useAtKeyToString = true
         ..id = '123'
         ..value = 'foo'
         ..atKey = AtKey.fromString('@bob:foo.my_app@alice');
-      expect(nvb.buildCommand(useAtKeyToString: true),
+      expect(nvb.buildCommand(),
           'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo.my_app@alice:foo\n');
     });
 
