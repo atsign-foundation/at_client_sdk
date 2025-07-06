@@ -111,6 +111,88 @@ void main() {
     setUp(() {
       mockSharedKeyEncryptionImpl = MockSharedKeyEncryptionImpl();
     });
+
+    test('Notification request without namespace but with namespace in prefs',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          AtKey.fromString('@bob:phone@alice')..metadata.namespaceAware = true);
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              SharedKeyEncryption(mockAtClientImpl))
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.atKey.key, 'phone');
+      expect(notifyVerbBuilder.atKey.namespace, 'wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
+      expect(notifyVerbBuilder.priority, PriorityEnum.low);
+      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
+      // The default duration is 24 hours - converted into milliseconds
+      expect(notifyVerbBuilder.ttln, 86400000);
+    });
+
+    test('Notification request with namespace and with same namespace in prefs',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          AtKey.fromString('@bob:phone.wavi@alice')
+            ..metadata.namespaceAware = true);
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              SharedKeyEncryption(mockAtClientImpl))
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.atKey.key, 'phone');
+      expect(notifyVerbBuilder.atKey.namespace, 'wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
+      expect(notifyVerbBuilder.priority, PriorityEnum.low);
+      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
+      // The default duration is 24 hours - converted into milliseconds
+      expect(notifyVerbBuilder.ttln, 86400000);
+    });
+
+    test(
+        'Notification request with a namespace but a different namespace in prefs',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          AtKey.fromString('@bob:phone.my_app@alice')
+            ..metadata.namespaceAware = true);
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              SharedKeyEncryption(mockAtClientImpl))
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.atKey.key, 'phone.my_app');
+      expect(notifyVerbBuilder.atKey.namespace, 'wavi');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
+      expect(notifyVerbBuilder.priority, PriorityEnum.low);
+      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
+      // The default duration is 24 hours - converted into milliseconds
+      expect(notifyVerbBuilder.ttln, 86400000);
+    });
+
+    test(
+        'with namespace and different namespace in prefs but not namespace aware',
+        () async {
+      var notificationParams = NotificationParams.forUpdate(
+          AtKey.fromString('@bob:phone.my_app@alice')
+            ..metadata.namespaceAware = false);
+      var notifyVerbBuilder = await NotificationRequestTransformer(
+              '@alice',
+              AtClientPreference()..namespace = 'wavi',
+              SharedKeyEncryption(mockAtClientImpl))
+          .transform(notificationParams);
+      expect(notifyVerbBuilder.atKey.key, 'phone');
+      expect(notifyVerbBuilder.atKey.namespace, 'my_app');
+      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
+      expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
+      expect(notifyVerbBuilder.priority, PriorityEnum.low);
+      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
+      // The default duration is 24 hours - converted into milliseconds
+      expect(notifyVerbBuilder.ttln, 86400000);
+    });
+
     test(
         'A test to validate notification request without value return verb builder',
         () async {

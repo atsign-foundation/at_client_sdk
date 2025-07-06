@@ -43,37 +43,40 @@ class NotificationRequestTransformer
   }
 
   Future<NotifyVerbBuilder> _prepareNotificationBuilder(
-    NotificationParams notificationParams,
-    AtClientPreference atClientPreference,
+    NotificationParams params,
+    AtClientPreference prefs,
   ) async {
-    AtKey ak = notificationParams.atKey;
+    AtKey ak = params.atKey;
 
-    if (notificationParams.messageType == MessageTypeEnum.key &&
-        ak.metadata.namespaceAware &&
-        atClientPreference.namespace != null &&
-        ak.namespace != atClientPreference.namespace) {
-      ak = AtKey.fromString('${ak.toString()}.${atClientPreference.namespace}');
+    if (params.messageType == MessageTypeEnum.key &&
+        ak.metadata.namespaceAware) {
+      ak.namespace ??= prefs.namespace;
+      if (prefs.namespace != null && ak.namespace != prefs.namespace) {
+        ak.key = '${ak.key}.${ak.namespace}';
+        ak.namespace = prefs.namespace;
+      }
+      ak = AtKey.fromString(ak.toString());
     }
 
     var builder = NotifyVerbBuilder()
-      ..id = notificationParams.id
+      ..id = params.id
       ..atKey = ak
-      ..operation = notificationParams.operation
-      ..messageType = notificationParams.messageType
-      ..priority = notificationParams.priority
-      ..strategy = notificationParams.strategy
-      ..latestN = notificationParams.latestN
-      ..notifier = notificationParams.notifier
-      ..ttln = notificationParams.notificationExpiry.inMilliseconds;
+      ..operation = params.operation
+      ..messageType = params.messageType
+      ..priority = params.priority
+      ..strategy = params.strategy
+      ..latestN = params.latestN
+      ..notifier = params.notifier
+      ..ttln = params.notificationExpiry.inMilliseconds;
 
     // message type 'text' is obsolete and does not work
     // ignore: deprecated_member_use
-    if (notificationParams.messageType == MessageTypeEnum.text) {
-      if (notificationParams.atKey.metadata.isEncrypted) {
-        builder.atKey.key = await _encryptNotificationValue(
-            notificationParams.atKey, notificationParams.atKey.key);
+    if (params.messageType == MessageTypeEnum.text) {
+      if (params.atKey.metadata.isEncrypted) {
+        builder.atKey.key =
+            await _encryptNotificationValue(params.atKey, params.atKey.key);
       } else {
-        builder.atKey.key = notificationParams.atKey.key;
+        builder.atKey.key = params.atKey.key;
       }
     }
     return builder;
