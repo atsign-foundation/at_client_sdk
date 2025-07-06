@@ -6,6 +6,47 @@ import 'syntax_test.dart';
 
 void main() {
   group('A group of notify verb builder tests to check notify command', () {
+    test('notify without namespace', () {
+      final nvb = NotifyVerbBuilder()
+        ..id = '123'
+        ..value = 'foo'
+        ..atKey.key = 'foo'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.sharedBy = '@alice';
+      expect(nvb.buildCommand(),
+          'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo@alice:foo\n');
+    });
+
+    test('notify with namespace', () {
+      final nvb = NotifyVerbBuilder()
+        ..id = '123'
+        ..value = 'foo'
+        ..atKey.key = 'foo'
+        ..atKey.namespace = 'my_app'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.sharedBy = '@alice';
+      expect(nvb.buildCommand(),
+          'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo.my_app@alice:foo\n');
+    });
+
+    test('notify without namespace using atKey toString', () {
+      final nvb = NotifyVerbBuilder()
+        ..id = '123'
+        ..value = 'foo'
+        ..atKey = AtKey.fromString('@bob:foo@alice');
+      expect(nvb.buildCommand(),
+          'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo@alice:foo\n');
+    });
+
+    test('notify with namespace using atKey toString', () {
+      final nvb = NotifyVerbBuilder()
+        ..id = '123'
+        ..value = 'foo'
+        ..atKey = AtKey.fromString('@bob:foo.my_app@alice');
+      expect(nvb.buildCommand(),
+          'notify:id:123:notifier:SYSTEM:isEncrypted:false:@bob:foo.my_app@alice:foo\n');
+    });
+
     test('notify public key', () {
       var notifyVerbBuilder = NotifyVerbBuilder()
         ..id = '123'

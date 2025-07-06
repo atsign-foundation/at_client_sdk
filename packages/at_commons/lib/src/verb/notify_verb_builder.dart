@@ -3,7 +3,6 @@ import 'package:uuid/uuid.dart';
 
 import '../at_constants.dart';
 import 'operation_enum.dart';
-import 'verb_util.dart';
 
 class NotifyVerbBuilder extends AbstractVerbBuilder {
   /// id for each notification.
