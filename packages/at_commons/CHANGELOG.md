@@ -1,3 +1,7 @@
+## 5.4.1
+- fix: `NotifyVerbBuilder.buildCommand()` uses `AtKey.toString()` instead of 
+  doing its own thing.
+
 ## 5.4.0
 - feat: add `EnrollmentConstants`. Contains various patterns and regular 
   expressions for enrollment-related data

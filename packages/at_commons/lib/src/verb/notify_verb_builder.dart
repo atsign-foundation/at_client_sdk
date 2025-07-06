@@ -1,9 +1,9 @@
 import 'package:at_commons/src/verb/abstract_verb_builder.dart';
+import 'package:at_commons/src/verb/verb_util.dart';
 import 'package:uuid/uuid.dart';
 
 import '../at_constants.dart';
 import 'operation_enum.dart';
-import 'verb_util.dart';
 
 class NotifyVerbBuilder extends AbstractVerbBuilder {
   /// id for each notification.
@@ -33,6 +33,8 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
   /// Latest N notifications to notify. Defaults to 1
   int? latestN;
 
+  bool useAtKeyToString = false;
+
   @override
   String buildCommand() {
     StringBuffer sb = StringBuffer();
@@ -61,18 +63,23 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
     // Add in all of the metadata parameters in atProtocol command format
     sb.write(atKey.metadata.toAtProtocolFragment());
 
-    if (atKey.sharedWith != null) {
-      sb.write(':${VerbUtil.formatAtSign(atKey.sharedWith)}');
+    if (useAtKeyToString) {
+      sb.write(':${atKey.toString()}');
+    } else {
+      if (atKey.sharedWith != null) {
+        sb.write(':${VerbUtil.formatAtSign(atKey.sharedWith)}');
+      }
+
+      if (atKey.metadata.isPublic == true) {
+        sb.write(':public');
+      }
+      sb.write(':${atKey.key}');
+
+      if (atKey.sharedBy != null) {
+        sb.write('${VerbUtil.formatAtSign(atKey.sharedBy)}');
+      }
     }
 
-    if (atKey.metadata.isPublic == true) {
-      sb.write(':public');
-    }
-    sb.write(':${atKey.key}');
-
-    if (atKey.sharedBy != null) {
-      sb.write('${VerbUtil.formatAtSign(atKey.sharedBy)}');
-    }
     if (value != null) {
       sb.write(':$value');
     }
