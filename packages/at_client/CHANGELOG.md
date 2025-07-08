@@ -1,3 +1,8 @@
+## 3.5.3
+- feat: fetch various atKeys keys from atChops if we have it (which we always 
+  do, now) instead of going to the keyStore
+- refactor: some deprecations for readability / maintainability
+
 ## 3.5.2
 - fix: ensure that namespaces in `notify` requests aren't messed up by 
   multipart namespaces in AtClientPreference (e.g. namespace of `foo.bar`)
