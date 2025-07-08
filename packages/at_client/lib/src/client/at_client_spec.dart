@@ -11,8 +11,6 @@ import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  /// Returns a singleton instance of [SyncManager] that is responsible for syncing data between
-  /// local secondary server and remote secondary server.
   /// [Deprecated] Use [AtClient.syncService]
   @Deprecated("Use AtClient.syncService")
   SyncManager? getSyncManager();

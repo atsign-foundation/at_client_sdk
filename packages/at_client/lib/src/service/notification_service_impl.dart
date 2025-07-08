@@ -251,13 +251,14 @@ class NotificationServiceImpl
               streamController.add(transformedNotification);
             }
           } on AtException catch (e) {
-            _logger.severe(e.getTraceMessage());
+            _logger.severe('${e.getTraceMessage()}'
+                ' while processing notificationJson: $notificationJSON');
           }
         });
       }
     } on Exception catch (e) {
-      _logger.severe(
-          'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+      _logger.severe('unexpected error:${e.toString()}'
+          ' while processing notificationJson: $notificationJSON');
     }
   }
 
