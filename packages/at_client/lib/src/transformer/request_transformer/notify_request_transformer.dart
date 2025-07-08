@@ -77,7 +77,8 @@ class NotificationRequestTransformer
           ak.metadata.namespaceAware) {
         ak.namespace ??= atClientPreference.namespace;
         if (atClientPreference.namespace != null &&
-            ak.namespace != atClientPreference.namespace) {
+            !'${ak.key}.${ak.namespace}'
+                .endsWith('.${atClientPreference.namespace!}')) {
           ak.key = '${ak.key}.${ak.namespace}';
           ak.namespace = atClientPreference.namespace;
         }

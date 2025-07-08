@@ -1,3 +1,7 @@
+## 3.5.2
+- fix: ensure that namespaces in `notify` requests aren't messed up by 
+  multipart namespaces in AtClientPreference (e.g. namespace of `foo.bar`)
+
 ## 3.5.1
 - fix: ensure that namespace is preserved if it happens to be repeated in a 
   notification's key (e.g. `@bob:foo.my_app.my_app@alice` )
