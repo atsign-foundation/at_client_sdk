@@ -1,0 +1,62 @@
+name: apkam_example
+description: "An example of authorising AtSigns trying to enroll."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  at_client:
+    path: ../../at_client
+  at_client_mobile:
+    path: ../../at_client_mobile
+  at_onboarding_flutter: ^6.1.9
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  path_provider: ^2.1.5
+  at_auth: ^2.0.7
+  at_lookup: ^3.0.49
+  at_onboarding_cli: ^1.7.0
+  at_commons: ^5.0.1
+  collection: ^1.18.0
+  at_utils: ^3.0.19
+  biometric_storage: ^5.0.1
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+
+
+dependency_overrides:
+  at_client:
+    path: ../../at_client
+  at_client_mobile:
+    path: ../../at_client_mobile
+  meta: ^1.16.0
+  intl: ^0.19.0
+
+
+flutter:
+
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700

@@ -145,9 +145,10 @@ class NotificationServiceImpl
     int? lastNotificationTime;
     try {
       lastNotificationTime = await getLastNotificationTime();
-    } catch (e) {
+    } catch (e, st) {
       _logger.warning(
           '${_atClient.getCurrentAtSign()}: startMonitor(): getLastNotificationTime() failed : $e');
+      print(st);
       return;
     }
 
@@ -255,9 +256,10 @@ class NotificationServiceImpl
           }
         });
       }
-    } on Exception catch (e) {
+    } on Exception catch (e, st) {
       _logger.severe(
           'exception processing: error:${e.toString()} notificationJson: $notificationJSON');
+      print(st);
     }
   }
 
