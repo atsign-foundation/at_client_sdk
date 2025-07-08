@@ -355,6 +355,7 @@ void main() {
           atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
@@ -539,6 +540,7 @@ void main() {
           atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
