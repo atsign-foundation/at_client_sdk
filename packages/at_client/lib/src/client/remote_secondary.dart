@@ -23,12 +23,15 @@ class RemoteSecondary implements Secondary {
 
   late AtClientPreference _preference;
 
-  late AtLookupImpl atLookUp;
+  late AtLookUp atLookUp;
 
   final AtChops? atChops;
 
   RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey, this.atChops, String? enrollmentId}) {
+      {String? privateKey,
+      this.atChops,
+      AtLookUp? atLookUp,
+      String? enrollmentId}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -37,19 +40,20 @@ class RemoteSecondary implements Secondary {
       ..decryptPackets = preference.decryptPackets
       ..pathToCerts = preference.pathToCerts
       ..tlsKeysSavePath = preference.tlsKeysSavePath;
-    atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
-        privateKey: privateKey,
-        cramSecret: preference.cramSecret,
-        secondaryAddressFinder:
-            AtClientManager.getInstance().secondaryAddressFinder,
-        secureSocketConfig: secureSocketConfig,
-        clientConfig: _getClientConfig());
-    atLookUp.enrollmentId = enrollmentId;
+    this.atLookUp = atLookUp ??
+        AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
+            privateKey: privateKey,
+            cramSecret: preference.cramSecret,
+            secondaryAddressFinder:
+                AtClientManager.getInstance().secondaryAddressFinder,
+            secureSocketConfig: secureSocketConfig,
+            clientConfig: _getClientConfig());
+    this.atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
-    atLookUp.signingAlgoType = preference.signingAlgoType;
-    atLookUp.hashingAlgoType = preference.hashingAlgoType;
-    atLookUp.atChops = atChops;
+    this.atLookUp.signingAlgoType = preference.signingAlgoType;
+    this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
+    this.atLookUp.atChops = atChops;
   }
 
   Map<String, String> _getClientConfig() {
@@ -86,7 +90,7 @@ class RemoteSecondary implements Secondary {
       logger.finer(logger.getLogMessageWithClientParticulars(
           _preference.atClientParticulars,
           'Command sent to server: ${builder.buildCommand()}'));
-      verbResult = await atLookUp.executeVerb(builder);
+      verbResult = (await atLookUp.executeVerb(builder))!;
       logger.finer(logger.getLogMessageWithClientParticulars(
           _preference.atClientParticulars,
           'Response from server: $verbResult'));
@@ -140,13 +144,6 @@ class RemoteSecondary implements Secondary {
 
   void addStreamData(List<int> data) {
     atLookUp.connection!.getSocket().add(data);
-  }
-
-  /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
-  /// secondary server. This method is executed for all verbs that requires authentication.
-  Future<bool> authenticate(String? privateKey) async {
-    var authResult = await atLookUp.authenticate(privateKey);
-    return authResult;
   }
 
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to

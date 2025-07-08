@@ -518,15 +518,17 @@ abstract class AtClient {
   /// the notification on the client.
   /// Optionally a regular expression and be passed to filter the notifications
   /// [deprecated] Use [NotificationService.subscribe]
-  @Deprecated("Use Monitor Service")
+  @Deprecated("Obsolete. Use the NotificationService")
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
 
   /// Streams the file in [filePath] to [sharedWith] atSign.
+  @Deprecated("Obsolete, wil be removed in v4")
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
 
   /// Sends stream acknowledgement
+  @Deprecated("Obsolete, wil be removed in v4")
   Future<void> sendStreamAck(
       String streamId,
       String fileName,

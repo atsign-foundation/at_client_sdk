@@ -458,7 +458,8 @@ void main() {
         ..namespace = {"fubar": "rw"};
 
       final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
-          'public:phone.fubar@alice', NotifyVerbBuilder());
+          'public:phone.fubar@alice',
+          NotifyVerbBuilder()..useAtKeyToString = true);
       expect(authorized, true);
     });
 
@@ -474,7 +475,8 @@ void main() {
         ..namespace = {"fubar": "r"};
 
       final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
-          'public:phone.fubar@alice', NotifyVerbBuilder());
+          'public:phone.fubar@alice',
+          NotifyVerbBuilder()..useAtKeyToString = true);
       expect(authorized, false);
     });
 
@@ -491,7 +493,8 @@ void main() {
         ..namespace = {"fubar": "rw"};
 
       final bool authorized = await ls.isEnrollmentAuthorizedForOperation(
-          'public:phone.unauth@alice', NotifyVerbBuilder());
+          'public:phone.unauth@alice',
+          NotifyVerbBuilder()..useAtKeyToString = true);
       expect(authorized, false);
     });
 

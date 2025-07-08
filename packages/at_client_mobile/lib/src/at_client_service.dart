@@ -40,12 +40,12 @@ class AtClientService {
         atSign, preference.namespace, preference,
         atChops: atChops);
     _atClient = atClientManager.atClient;
-    _atLookUp = _atClient!.getRemoteSecondary()!.atLookUp;
+    _atLookUp = _atClient!.getRemoteSecondary()!.atLookUp as AtLookupImpl;
     if (preference.outboundConnectionTimeout > 0) {
-      _atClient!.getRemoteSecondary()!.atLookUp.outboundConnectionTimeout =
+      _atLookUp!.outboundConnectionTimeout =
           preference.outboundConnectionTimeout;
     }
-    atClientAuthenticator!.atLookUp = _atClient!.getRemoteSecondary()!.atLookUp;
+    atClientAuthenticator!.atLookUp = _atLookUp!;
     return true;
   }
 
@@ -156,7 +156,7 @@ class AtClientService {
   }
 
   ///Throws [Error] of type [OnboardingStatus]
-  ///if the details for [atsign] is not found in localsecondary.
+  ///if the details for [atsign] is not found in the LocalSecondary.
   ///Returns `true` on successful fetching of all the details.
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
     String? pkamPublicKey =

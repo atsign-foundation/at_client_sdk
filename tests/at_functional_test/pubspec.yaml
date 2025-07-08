@@ -17,7 +17,7 @@ dependencies:
   at_lookup: ^3.0.52
   at_utils: ^3.2.0
   at_chops: ^2.2.0
-  at_commons: ^5.3.0
+  at_commons: ^5.4.1
   at_persistence_secondary_server: ^4.0.0
   version: ^3.0.2
 

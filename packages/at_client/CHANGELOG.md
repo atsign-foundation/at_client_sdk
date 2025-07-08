@@ -1,3 +1,21 @@
+## 3.5.2
+- fix: ensure that namespaces in `notify` requests aren't messed up by 
+  multipart namespaces in AtClientPreference (e.g. namespace of `foo.bar`)
+
+## 3.5.1
+- fix: ensure that namespace is preserved if it happens to be repeated in a 
+  notification's key (e.g. `@bob:foo.my_app.my_app@alice` )
+
+## 3.5.0
+- feat: add `atLookUp` parameter to AtClientManager.setCurrentAtSign,
+  AtClientImpl.create, etc. so we can inject an existing AtLookUp instance if 
+  we have one rather than having to create a new one and authenticate again
+
+## 3.4.4
+- fix[performance]: when fetching `public:publickey` of another atSign from
+  atServer, cache it in local storage instead of depending on sync to take
+  care of that (since programs can disable sync)
+
 ## 3.4.3
 - build[deps]: update dependencies including at_persistence major version 
   changes
