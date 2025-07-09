@@ -7,7 +7,7 @@ import 'dart:math';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_client/src/util/logger_util.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -33,15 +33,11 @@ class ChildIsolatePreferences {
 }
 
 class IsolateAtClientResponse {
-  ClientId clientId;
-  dynamic message;
+  final ClientId clientId;
+  final String type;
+  final dynamic message;
 
-  IsolateAtClientResponse(this.clientId, this.message);
-
-  @override
-  String toString() {
-    return 'clientId: ${clientId.name}  Message: ${message.toString()}';
-  }
+  IsolateAtClientResponse(this.clientId, this.type, this.message);
 }
 
 late AtClientManager atClientManager;
@@ -51,22 +47,23 @@ var currentAtSign = '@alice🛠';
 String namespace = 'wavi';
 // A global variable to pause the execution of test until sync is completed.
 // The variable will be used within the child isolates.
-bool isSyncCompleted = false;
-final _logger = AtSignLogger('SyncSystemTest');
-final _mainIsolateLogger = AtSignLogger('MainIsolate');
-final _childIsolateLogger = AtSignLogger('ChildIsolate');
+final _logger = AtSignLogger('SyncSystemTest')..level = 'warning';
+final _mainIsolateLogger = AtSignLogger('MainIsolate')..level = 'warning';
+final _childIsolateLogger = AtSignLogger('ChildIsolate')..level = 'warning';
 
 var isolateResponseQueue = Queue();
 
 var childIsolateSendPortMap = <ClientId, SendPort>{};
-bool isClientOneCompleted = false;
-bool isClientTwoCompleted = false;
 final String clientOneHiveKeyStorePath = 'test/hive/client1';
 final String clientTwoHiveKeyStorePath = 'test/hive/client2';
 late Isolate clientOneIsolate;
 late Isolate clientTwoIsolate;
 int N = 35;
+late Completer clientOneAck;
+late Completer clientTwoAck;
+
 void main() async {
+  AtSignLogger.root_level = 'shout';
   var mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
   SyncServiceImpl.syncRequestThreshold = 1;
   SyncServiceImpl.syncRequestTriggerInSeconds = 1;
@@ -78,7 +75,7 @@ void main() async {
     'country-$uniqueId',
     'phone-$uniqueId',
     'location-$uniqueId',
-    'worknumber-$uniqueId',
+    'work_number-$uniqueId',
     'city-$uniqueId'
   ];
   // create 35 keys
@@ -86,7 +83,7 @@ void main() async {
     atKeyEntityList.add('country_$i-$uniqueId');
     atKeyEntityList.add('phone_$i-$uniqueId');
     atKeyEntityList.add('location_$i-$uniqueId');
-    atKeyEntityList.add('worknumber_$i-$uniqueId');
+    atKeyEntityList.add('work_number_$i-$uniqueId');
     atKeyEntityList.add('city_$i-$uniqueId');
   }
 
@@ -110,63 +107,77 @@ void main() async {
       () async {
     // Add listener for main isolate to receive messages from child isolates
     mainIsolateReceivePort.listen(mainIsolateMessageListener);
+
     // Spawn isolate for client-1
+    clientOneAck = Completer();
     clientOneIsolate = await Isolate.spawn(
         childIsolate, clientInitializationParameters['client1']!,
         debugName: clientInitializationParameters['client1']!.clientId.name);
+
     // Spawn isolate for client-2
+    clientTwoAck = Completer();
     clientTwoIsolate = await Isolate.spawn(
         childIsolate, clientInitializationParameters['client2']!,
         debugName: clientInitializationParameters['client2']!.clientId.name);
 
     // Wait until both the client's complete execution
-    while (isClientOneCompleted == false || isClientTwoCompleted == false) {
-      _logger.info(
-          'Waiting for all client to complete: Client1: $isClientOneCompleted, Client2: $isClientTwoCompleted');
-      await Future.delayed(Duration(seconds: 10));
-    }
-    _logger
-        .info('Completion status of clients before requesting for commit log:'
-            ' Client1 Complete: $isClientOneCompleted'
-            ' Client2 Complete: $isClientTwoCompleted');
+    _logger.info('Waiting for all clients to finish starting up');
+    await clientOneAck.future;
+    await clientTwoAck.future;
 
-    //Call to sync after update/delete is completed on both the clients.
-    childIsolateSendPortMap[ClientId.client1]?.send('finalSync');
-    childIsolateSendPortMap[ClientId.client2]?.send('finalSync');
+    // Do an initial sync
+    _logger.info('Requesting clients perform an initial sync');
+    clientOneAck = Completer();
+    clientTwoAck = Completer();
+    childIsolateSendPortMap[ClientId.client1]?.send('doSync');
+    childIsolateSendPortMap[ClientId.client2]?.send('doSync');
+    _logger.info('Waiting for client sync calls to complete');
+    await clientOneAck.future;
+    await clientTwoAck.future;
 
-    isClientOneCompleted = false;
-    isClientTwoCompleted = false;
-    // Wait until both the client's complete execution
-    while (isClientOneCompleted == false || isClientTwoCompleted == false) {
-      _logger.info(
-          'Waiting for additional sync call to complete: Client1: $isClientOneCompleted, Client2: $isClientTwoCompleted');
-      await Future.delayed(Duration(seconds: 10));
-    }
+    // Do the ops
+    _logger.info('Requesting clients perform their update / delete ops');
+    clientOneAck = Completer();
+    clientTwoAck = Completer();
+    childIsolateSendPortMap[ClientId.client1]?.send('doOpsAndSync');
+    childIsolateSendPortMap[ClientId.client2]?.send('doOpsAndSync');
+    _logger.info('Waiting for client update / delete ops to complete');
+    await clientOneAck.future;
+    await clientTwoAck.future;
+
+    // Do a final sync
+    await Future.delayed(Duration(seconds: 1));
+    _logger.info('Requesting clients perform a final sync');
+    clientOneAck = Completer();
+    clientTwoAck = Completer();
+    childIsolateSendPortMap[ClientId.client1]?.send('doSync');
+    childIsolateSendPortMap[ClientId.client2]?.send('doSync');
+    _logger.info('Waiting for client sync calls to complete');
+    await clientOneAck.future;
+    await clientTwoAck.future;
 
     // NOTE: Do not fetch local commit until all the client have finished sync process
     // Fetch client-1 commit log
     _logger.info('Fetching Client one commitLog...');
     childIsolateSendPortMap[ClientId.client1]?.send('localCommitLog');
     var clientOneCommitLog = await readFromIsolateQueue();
-    _logger.info('Client one commitLog: $clientOneCommitLog');
+    _logger.finer('Client one commitLog: $clientOneCommitLog');
 
     // Fetch client-2 commit log
     _logger.info('Fetching Client two commitLog...');
     childIsolateSendPortMap[ClientId.client2]?.send('localCommitLog');
     var clientTwoCommitLog = await readFromIsolateQueue();
-    _logger.info('Client two commitLog: $clientTwoCommitLog');
+    _logger.finer('Client two commitLog: $clientTwoCommitLog');
 
     // Fetch the server commit log.
     _logger.info('Fetching Server commitLog...');
     var serverCommitLog = await _getServerCommitEntries(uniqueId);
-    _logger.info('Server commit log: $serverCommitLog');
+    _logger.finer('Server commit log: $serverCommitLog');
 
-    if (serverCommitLog != null) {
-      var testResult = assertCommitEntries(atKeyEntityList, serverCommitLog,
-          clientOneCommitLog, clientTwoCommitLog);
-      expect(testResult, true);
-    }
-  }, timeout: Timeout(Duration(minutes: 5)));
+    var testResult = assertCommitEntries(atKeyEntityList, serverCommitLog,
+        clientOneCommitLog, clientTwoCommitLog);
+    expect(testResult, true);
+  });
 
   // Kill the isolates at the end of the test
   tearDown(() {
@@ -189,10 +200,10 @@ void main() async {
 Future<dynamic> readFromIsolateQueue() async {
   dynamic response;
   for (int i = 0; i < 600; i++) {
-    _logger.info('Polling for message');
+    _logger.finer('Polling for message');
     if (isolateResponseQueue.isNotEmpty) {
       response = isolateResponseQueue.removeFirst();
-      _logger.info('Found message: $response');
+      _logger.finer('Found message: $response');
       isolateResponseQueue.clear();
       return response;
     }
@@ -206,13 +217,13 @@ Future<dynamic> readFromIsolateQueue() async {
 /// Main Isolate listener
 void mainIsolateMessageListener(dynamic data) {
   if (data is IsolateAtClientResponse) {
-    _mainIsolateLogger
-        .info('RCVD message: ${data.message} from ${data.clientId}');
+    _mainIsolateLogger.info('RCVD ${data.type} message from ${data.clientId}');
+    _mainIsolateLogger.finer('\tMessage: ${data.message}');
     if (data.message is String && data.message == 'completed') {
       if (data.clientId == ClientId.client1) {
-        isClientOneCompleted = true;
+        clientOneAck.complete();
       } else if (data.clientId == ClientId.client2) {
-        isClientTwoCompleted = true;
+        clientTwoAck.complete();
       }
     } else if (data.message is SendPort) {
       childIsolateSendPortMap[data.clientId] = data.message;
@@ -224,6 +235,8 @@ void mainIsolateMessageListener(dynamic data) {
 }
 
 Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
+  AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+  AtSignLogger.root_level = 'warning';
   int numberOfRepetitions = N;
   int counter = 0;
   var random = Random();
@@ -231,69 +244,78 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
   var clientReceivePort = ReceivePort(clientParameters.clientId.name);
   // Send isolate's sendPort to mainIsolate for communication
   clientParameters.sendPort.send(IsolateAtClientResponse(
-      clientParameters.clientId, clientReceivePort.sendPort));
+      clientParameters.clientId, 'SendPort', clientReceivePort.sendPort));
 
   // Child isolate listener
   clientReceivePort.listen((message) async {
     _childIsolateLogger
         .info('${clientParameters.clientId}: RCVD from MainIsolate: $message');
-    if (message is String && message == 'localCommitLog') {
-      Map<String, Map<String, dynamic>> localCommitLogMap =
-          await _getLocalCommitEntries(clientParameters.localKeysList,
-              clientId: clientParameters.clientId.name);
-      _childIsolateLogger.info(
-          '${clientParameters.clientId}: SENT: LocalCommitLog: $localCommitLogMap');
-      clientParameters.sendPort.send(IsolateAtClientResponse(
-          clientParameters.clientId, localCommitLogMap));
-    }
-    // Adding an additional call to sync after both the client complete update/delete
-    if (message is String && message == 'finalSync') {
-      await waitForSyncToComplete(clientId: clientParameters.clientId.name);
-      _childIsolateLogger.info(
-          '${clientParameters.clientId}: Additional Final sync completed. Sending ACK to main isolate');
-      clientParameters.sendPort.send(
-          IsolateAtClientResponse(clientParameters.clientId, 'completed'));
+    if (message is String) {
+      switch (message) {
+        case 'localCommitLog':
+          Map<String, Map<String, dynamic>> localCommitLogMap =
+              await _getLocalCommitEntries(clientParameters.localKeysList,
+                  clientId: clientParameters.clientId.name);
+          _childIsolateLogger.finer(
+              '${clientParameters.clientId}: SENT: LocalCommitLog: $localCommitLogMap');
+          clientParameters.sendPort.send(IsolateAtClientResponse(
+              clientParameters.clientId, 'LocalCommitLog', localCommitLogMap));
+          break;
+
+        case 'doOpsAndSync':
+          // Execute Update/delete operations on the client
+          _childIsolateLogger.info(
+              '${clientParameters.clientId}: Will perform $numberOfRepetitions update or delete operations');
+
+          for (counter = 0; counter < numberOfRepetitions; counter++) {
+            AtKey atKey = (AtKey.self(
+                    clientParameters.localKeysList[random.nextInt(N)],
+                    namespace: namespace,
+                    sharedBy: currentAtSign))
+                .build();
+            await updateOrDeleteKey(
+              atKey,
+              random.nextInt(3),
+              clientId: clientParameters.clientId.name,
+            );
+            await Future.delayed(Duration(milliseconds: 100));
+          }
+
+          _childIsolateLogger.info(
+              '${clientParameters.clientId}: $numberOfRepetitions operations complete');
+
+          _childIsolateLogger.info('${clientParameters.clientId}: Syncing');
+          await FunctionalTestSyncService.getInstance()
+              .syncData(label: clientParameters.clientId.toString());
+          _childIsolateLogger.info(
+              '${clientParameters.clientId}: Sync completed. Sending ACK to main isolate');
+
+          clientParameters.sendPort.send(IsolateAtClientResponse(
+              clientParameters.clientId, 'completed', 'completed'));
+          break;
+
+        case 'doSync':
+          _childIsolateLogger.info('${clientParameters.clientId}: Syncing');
+          await FunctionalTestSyncService.getInstance()
+              .syncData(label: clientParameters.clientId.toString());
+          _childIsolateLogger.info(
+              '${clientParameters.clientId}: Sync completed. Sending ACK to main isolate');
+          clientParameters.sendPort.send(IsolateAtClientResponse(
+              clientParameters.clientId, 'completed', 'completed'));
+          break;
+
+        default:
+          _childIsolateLogger
+              .shout('UNRECOGNIZED REQUEST FROM MAIN ISOLATE: $message');
+      }
     }
   });
 
   // Initializes the AtClient Instance
   await startClient(clientParameters);
 
-  _childIsolateLogger
-      .info('${clientParameters.clientId}: Starting initial sync');
-  await waitForSyncToComplete(clientId: clientParameters.clientId.name);
-  _childIsolateLogger.info(
-      '${clientParameters.clientId}: Initial sync completed successfully');
-
-  // Execute Update/delete operation on the client
-  for (counter = 0; counter < numberOfRepetitions; counter++) {
-    AtKey atKey = (AtKey.self(clientParameters.localKeysList[random.nextInt(N)],
-            namespace: namespace, sharedBy: currentAtSign))
-        .build();
-    _childIsolateLogger
-        .info('(${clientParameters.clientId}) Counter: $counter');
-    await updateDeleteKey(atKey, random.nextInt(3),
-        clientId: clientParameters.clientId.name);
-    await Future.delayed(Duration(milliseconds: 100));
-  }
-
-  // Wait until sync is completed. Since bulk of keys are being inserted,
-  // SyncProgress will be triggered intermittently when a batch is
-  // completed. So adding an additional check to wait until counter
-  // is less than "numberOfRepetitions"
-  while (!isSyncCompleted || counter < numberOfRepetitions) {
-    _childIsolateLogger.info(
-        '(${clientParameters.clientId}) SyncCompletedStatus: $isSyncCompleted, Counter: $counter');
-    atClientManager.atClient.syncService.sync();
-    await Future.delayed(Duration(seconds: 1));
-  }
-
-  _childIsolateLogger.info('${clientParameters.clientId}: Starting final sync');
-  await waitForSyncToComplete(clientId: clientParameters.clientId.name);
-  _childIsolateLogger.info(
-      '${clientParameters.clientId}: Final sync completed. Sending ACK to main isolate');
-  clientParameters.sendPort
-      .send(IsolateAtClientResponse(clientParameters.clientId, 'completed'));
+  clientParameters.sendPort.send(IsolateAtClientResponse(
+      clientParameters.clientId, 'completed', 'completed'));
 }
 
 Future<void> startClient(ChildIsolatePreferences clientParameters) async {
@@ -303,49 +325,18 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
       commitLogPath: clientParameters.commitLogPath);
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
       preference: atClientPreferences);
-  MySyncProgressListener mySyncProgressListener = MySyncProgressListener();
-  atClientManager.atClient.syncService
-      .addProgressListener(mySyncProgressListener);
 }
 
-/// Triggers sync and waits for it to be completed
-Future<void> waitForSyncToComplete({String clientId = ''}) async {
-  if ((await atClientManager.atClient.syncService.isInSync())) {
-    _logger.info(_logger.getLogMessageWithClientParticulars(
-        atClientManager.atClient.getPreferences()!.atClientParticulars,
-        '($clientId)| Client and Server are in Sync'));
-    return;
-  }
-  isSyncCompleted = false;
-  _logger.info(_logger.getLogMessageWithClientParticulars(
-      atClientManager.atClient.getPreferences()!.atClientParticulars,
-      '($clientId): Client and Server are not in Sync... Initializing sync process'));
-  atClientManager.atClient.syncService.sync();
-  while (!isSyncCompleted) {
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        atClientManager.atClient.getPreferences()!.atClientParticulars,
-        '($clientId) SyncCompletedStatus: $isSyncCompleted'));
-    atClientManager.atClient.syncService.sync();
-    await Future.delayed(Duration(milliseconds: 20));
-  }
-  _logger.info(_logger.getLogMessageWithClientParticulars(
-      atClientManager.atClient.getPreferences()!.atClientParticulars,
-      '($clientId) Sync Completed Successfully'));
-  // Resetting back to false for future use
-  isSyncCompleted = false;
-  await Future.delayed(Duration(milliseconds: 30));
-}
-
-Future<void> updateDeleteKey(AtKey atKey, int randomValueForOperation,
+Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,
     {String clientId = ''}) async {
   switch (randomValueForOperation) {
     case 1:
-      _logger.info('($clientId) Key to delete: ${atKey.toString()}');
+      _logger.finer('($clientId) Key to delete: ${atKey.toString()}');
       await atClientManager.atClient.delete(atKey);
       break;
     case 2:
     default:
-      _logger.info('($clientId) Key to update: ${atKey.toString()}');
+      _logger.finer('($clientId) Key to update: ${atKey.toString()}');
       await atClientManager.atClient
           .put(atKey, '${clientId.hashCode}-${atKey.hashCode}');
       break;
@@ -413,7 +404,7 @@ Future<Map<String, Map<String, dynamic>>> _getLocalCommitEntries(
       };
     }
   }
-  _logger.info('($clientId) Client CommitEntries: $commitLogEntriesMap');
+  _logger.finer('($clientId) Client CommitEntries: $commitLogEntriesMap');
   return commitLogEntriesMap;
 }
 
@@ -429,7 +420,7 @@ bool assertCommitEntries(
     if (!(atKeyList.contains(AtKey.fromString(mapEntry.key).key))) {
       continue;
     }
-    _logger.info('mapEntry: $mapEntry');
+    _logger.finer('mapEntry: $mapEntry');
     // Compare server commit id with both client's commit log
     if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
         (serverCommitLogMap[mapEntry.key][0] !=
@@ -442,23 +433,6 @@ bool assertCommitEntries(
     }
   }
   return true;
-}
-
-class MySyncProgressListener extends SyncProgressListener {
-  @override
-  Future<void> onSyncProgressEvent(SyncProgress syncProgress) async {
-    if (syncProgress.syncStatus == SyncStatus.success) {
-      _logger.info(_logger.getLogMessageWithClientParticulars(
-          atClientManager.atClient.getPreferences()!.atClientParticulars,
-          'SyncProgress: $syncProgress'));
-      // Setting isSyncCompleted to true to mark sync is completed and break the loop
-      // in waitForSyncToComplete method
-      isSyncCompleted = await atClientManager.atClient.syncService.isInSync();
-      _logger.info(_logger.getLogMessageWithClientParticulars(
-          atClientManager.atClient.getPreferences()!.atClientParticulars,
-          'IsInSync from sync progress listener: $isSyncCompleted'));
-    }
-  }
 }
 
 AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,

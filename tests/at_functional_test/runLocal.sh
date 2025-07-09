@@ -1,8 +1,27 @@
 #!/bin/bash
 
-echo "Getting dependencies" && dart pub get
-echo "Starting docker compose" && sudo docker compose -f test/docker-compose.yaml up -d
-echo "Checking docker readiness" && dart run test/check_docker_readiness.dart
-echo "Executing pkamLoad" && sudo docker exec test-virtualenv-1 supervisorctl start pkamLoad
-echo "Checking test environment" && dart run test/check_test_env.dart
-echo "Running tests" && dart test --concurrency=1
+echo "***********************************"
+echo "*** Getting dependencies" && dart pub get
+
+echo "***"
+echo "*** Running docker compose up" && sudo docker compose -f test/docker-compose.yaml up -d
+
+echo "***"
+echo "*** Checking docker readiness" && dart run test/check_docker_readiness.dart
+
+echo "***"
+echo "*** Executing pkamLoad" && sudo docker exec test-virtualenv-1 supervisorctl start pkamLoad
+
+echo "***"
+echo "*** Checking test environment" && dart run test/check_test_env.dart
+
+echo "***"
+echo "*** Clearing client test storage" && rm -rf test/hive
+
+echo "***"
+echo "*** Running tests" && dart test --concurrency=1 -r expanded
+
+echo "***"
+echo "***"
+echo "Running docker compose down" && sudo docker compose -f test/docker-compose.yaml down
+echo "***********************************"

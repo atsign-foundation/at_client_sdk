@@ -49,7 +49,7 @@ void main() {
         auth: true);
     expect(result != null, true);
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
     var metadata = await atClient.getMeta(phoneKey);
     expect(metadata?.sharedKeyEnc, isNotEmpty);
     expect(metadata?.pubKeyCS, isNotEmpty);

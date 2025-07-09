@@ -20,7 +20,7 @@ void main() async {
   // The SyncProgressListener is removed and stream is closed at the end of each test.
   // So, create an instance of SyncProgressListener at the start of each test
   setUp(() async {
-    mySyncProgressListener = MySyncProgressListener();
+    mySyncProgressListener = MySyncProgressListener(true);
     atClientManager.atClient.syncService
         .addProgressListener(mySyncProgressListener);
   });
@@ -47,7 +47,7 @@ void main() async {
         .executeVerb(updateVerbBuilder);
 
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
 
     mySyncProgressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
@@ -93,11 +93,10 @@ void main() async {
     await Future.delayed(Duration(seconds: 1));
 
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
 
     mySyncProgressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
-      print(syncProgress);
       expect(syncProgress.syncStatus, SyncStatus.success);
       expect(syncProgress.keyInfoList, isNotEmpty);
       for (var keyInfo in syncProgress.keyInfoList!) {

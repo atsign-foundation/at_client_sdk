@@ -25,7 +25,7 @@ void main() {
     preference.syncBatchSize = 15;
     atClientManager =
         await TestUtils.initAtClient(atSign, namespace, preference: preference);
-    progressListener = MySyncProgressListener();
+    progressListener = MySyncProgressListener(true);
     atClientManager.atClient.syncService.addProgressListener(progressListener);
   });
 
@@ -38,7 +38,6 @@ void main() {
     }
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
-      print('sync progress status : $syncProgress');
       expect(syncProgress.syncStatus, SyncStatus.success);
       expect(syncProgress.keyInfoList, isNotEmpty);
       expect(syncProgress.localCommitId,
@@ -139,11 +138,10 @@ void main() {
     expect(updateResponse.isNotEmpty, true);
 
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
 
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
-      print('SyncProgress: $syncProgress');
       expect(syncProgress.syncStatus, SyncStatus.success);
       // If localCommitIdBeforeSync and localCommitId (local commitId after sync)
       // are equal, it means there is not nothing to sync. So do not assert below conditions.
@@ -185,9 +183,8 @@ void main() {
     await AtClientManager.getInstance().atClient.put(firstAtKey, 'value-1');
     await AtClientManager.getInstance().atClient.put(secondAtKey, 'value-2');
     await AtClientManager.getInstance().atClient.delete(firstAtKey);
-    await FunctionalTestSyncService.getInstance().syncData(
-        AtClientManager.getInstance().atClient.syncService,
-        syncOptions: SyncOptions()..key = firstAtKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: AtClientManager.getInstance().atClient.syncService);
 
     progressListener.streamController.stream.listen((syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);

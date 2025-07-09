@@ -207,6 +207,37 @@ class NotificationServiceImpl
       _logger.finer('json from hive: ${atValue?.value}');
       return jsonDecode(atValue?.value)['epochMillis'];
     }
+
+    // If we're here, we've never received a notification, since the last
+    // notification received time has never been saved.
+    //
+    // In that case, we're going to set the last notification received time to
+    // _now_
+    //
+    // But we're still going to return null. But then, next time we're called,
+    // we'll have a value to return.
+    //
+    // This upholds the principle of least surprise which is that
+    // - I run a client for the first time, I get no notifications from the past
+    // - But let's assume you only run the client for a very short period, so
+    //   you get no notifications before you shut it down.
+    // - You run up the client again some time later, assuming that any
+    //   notifications received while you were offline will be delivered to you
+    // - And now because we did this last time, that will be true. Whereas
+    //   previously, you would simply have got no notifications, again.
+    AtNotification n = AtNotification(
+      'abcd-123456-wxyz',
+      '@bob:notification.foo.bar.baz@alice',
+      '@alice',
+      '@bob',
+      DateTime.now().millisecondsSinceEpoch,
+      MessageTypeEnum.key.toString(),
+      false,
+      value: 'placeholder',
+      metadata: Metadata(),
+    );
+    await _atClient.put(lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
+
     return null;
   }
 

@@ -262,12 +262,22 @@ class LocalSecondary implements Secondary {
   }
 
   /// get it from atChops if we have it, otherwise try the keystore
-  Future<String?> getEncryptionPublicKey(String atSign) async {
+  Future<String?> getEncryptionPublicKey(
+    String atSign, {
+    bool useAtChops = true,
+  }) async {
     atSign = AtUtils.fixAtSign(atSign);
-    return _atClient
-            .atChops?.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey ??
-        (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
-            ?.data;
+    String? v;
+
+    // This is only here because the functional tests need it
+    if (useAtChops) {
+      v = _atClient
+          .atChops?.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey;
+    }
+    v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
+        ?.data;
+
+    return v;
   }
 
   /// get it from atChops if we have it, otherwise try the keystore

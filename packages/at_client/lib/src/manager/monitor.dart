@@ -186,7 +186,9 @@ class Monitor {
         _handleError(error);
       });
       await _authenticateConnection();
-      await _monitorConnection!.write(_buildMonitorCommand());
+      String cmd = _buildMonitorCommand();
+      _logger.info('SENDING: $cmd');
+      await _monitorConnection!.write(cmd);
       status = MonitorStatus.started;
       _logger.info(
           'monitor started for $_atSign with last notification time: $_lastNotificationTime');

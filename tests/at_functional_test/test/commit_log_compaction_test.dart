@@ -41,7 +41,7 @@ void main() {
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
     // Start the compaction job in async mode
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
@@ -66,10 +66,9 @@ void main() {
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
 
     await compactionFuture.then((atCompactionStats) {
-      print(atCompactionStats);
       expect(
           atCompactionStats.postCompactionEntriesCount <
               atCompactionStats.preCompactionEntriesCount,
@@ -97,12 +96,11 @@ void main() {
     // Client side commit log compaction removes the duplicate entries only
     // if they have been synced to the cloud secondary.
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
 
     Future<AtCompactionStats> compactionFuture =
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
     await compactionFuture.then((atCompactionStats) {
-      print(atCompactionStats);
       expect(
           atCompactionStats.postCompactionEntriesCount <
               atCompactionStats.preCompactionEntriesCount,
@@ -120,7 +118,6 @@ void main() {
         AtCompactionService.getInstance().executeCompaction(atCommitLog!);
 
     await compactionFuture.then((atCompactionStats) {
-      print(atCompactionStats);
       expect(
           atCompactionStats.postCompactionEntriesCount ==
               atCompactionStats.preCompactionEntriesCount,

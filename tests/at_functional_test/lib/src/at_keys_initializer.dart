@@ -27,7 +27,10 @@ class AtEncryptionKeysLoader {
     String? encryptionPublicKey;
     try {
       encryptionPublicKey =
-          await atClient.getLocalSecondary()?.getEncryptionPublicKey(atSign);
+          await atClient.getLocalSecondary()?.getEncryptionPublicKey(
+                atSign,
+                useAtChops: false,
+              );
     } on KeyNotFoundException {
       _logger.info('Encryption keys are not found. Adding to the keystore.');
     }

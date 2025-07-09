@@ -53,7 +53,6 @@ void main() {
       // onboard with enable enrollment set
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
-      print('atOnboardingResponse: $atOnboardingResponse');
       expect(atOnboardingResponse.isSuccessful, true);
       expect(atOnboardingResponse.atAuthKeys, isNotNull);
       expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
@@ -69,7 +68,6 @@ void main() {
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(apkamAtSign)
         ..atKeysFilePath = 'test/testData/$apkamAtSign.atKeys'
         ..rootDomain = 'vip.ve.atsign.zone');
-      print('atAuthResponse: $atAuthResponse');
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
@@ -540,7 +538,7 @@ void main() {
           atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-      atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
+      // atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
@@ -613,13 +611,11 @@ void main() {
           await TestUtils.initAtClient(atSign, namespace);
 
       AtResponse otpResponse = await atClientManager.atClient.getOTP();
-      print(otpResponse.response);
 
       Stream<AtNotification> notificationStream = atClientManager
           .atClient.notificationService
           .subscribe(regex: "__manage");
       notificationStream.listen(expectAsync1((notification) {
-        print('RCVD: $notification');
         enrollmentIdFromServer =
             notification.key.substring(0, notification.key.indexOf('.'));
         expect(notification.key, isNotEmpty);
@@ -636,7 +632,6 @@ void main() {
           namespaces: {'wavi': 'rw'});
       AtEnrollmentResponse atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-      print('Enrollment Response: $atEnrollmentResponse');
 
       // Wait until the notification is received.
       while (!enrollmentMap.containsKey(atEnrollmentResponse.enrollmentId)) {

@@ -14,9 +14,7 @@ import 'test_utils.dart';
 late AtSignLogger logger;
 
 void main() {
-  AtSignLogger.root_level = 'warning';
   logger = AtSignLogger('at_lookup_race_test.dart');
-  logger.level = 'info';
   late String atSign;
   late AtClientManager atClientManager;
   late AtClient atClient;
@@ -36,7 +34,7 @@ void main() {
     // Wait for initial sync to complete
     logger.info("Waiting for initial sync");
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
     logger.info("Initial sync complete");
 
     // Create three public keys, then repeatedly get them and check they are as expected
@@ -67,7 +65,7 @@ void main() {
 
     logger.info("Waiting for post-put sync");
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClientManager.atClient.syncService);
+        .syncData(syncSvc: atClientManager.atClient.syncService);
     logger.info("Post-put sync complete");
 
     var atLookup = atClient.getRemoteSecondary()!.atLookUp;

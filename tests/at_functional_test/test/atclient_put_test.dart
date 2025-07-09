@@ -33,9 +33,8 @@ void main() {
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
     expect(getResult.metadata?.isEncrypted, true);
-    await FunctionalTestSyncService.getInstance().syncData(
-        AtClientManager.getInstance().atClient.syncService,
-        syncOptions: SyncOptions()..key = phoneKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: AtClientManager.getInstance().atClient.syncService);
     // fetch the key from remote and verify isEncrypted
     var getResultRemote = await atClientManager.atClient.get(phoneKey,
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
@@ -63,9 +62,8 @@ void main() {
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
     expect(getResult.metadata?.isEncrypted, false);
-    await FunctionalTestSyncService.getInstance().syncData(
-        AtClientManager.getInstance().atClient.syncService,
-        syncOptions: SyncOptions()..key = phoneKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: AtClientManager.getInstance().atClient.syncService);
     // fetch the key from remote and verify isEncrypted
     var getResultRemote = await atClientManager.atClient.get(phoneKey,
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
