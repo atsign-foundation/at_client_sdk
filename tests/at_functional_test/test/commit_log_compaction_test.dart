@@ -32,7 +32,7 @@ void main() {
     // Insert the same key for multiple times for the commit log compaction to have duplicate entries
     for (int i = 0; i < 500; i++) {
       await atClientManager.atClient.put(atKey, value);
-      await Future.delayed(Duration(milliseconds: 2));
+      await Future.delayed(Duration(milliseconds: 1));
     }
     atCommitLog =
         await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);

@@ -617,7 +617,7 @@ void main() {
         String enrollmentIdFromServer =
             notification.key.substring(0, notification.key.indexOf('.'));
         var enrollmentData = jsonDecode(notification.value!);
-        received.complete((enrollmentIdFromServer, enrollmentData));
+        if (!received.isCompleted) received.complete((enrollmentIdFromServer, enrollmentData));
       }, count: 1, max: -1));
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
