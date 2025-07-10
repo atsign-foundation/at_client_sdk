@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -609,29 +611,38 @@ void main() {
 
       AtResponse otpResponse = await atClientManager.atClient.getOTP();
 
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
-          appName: 'wavi',
-          deviceName: 'device-$random',
-          otp: otpResponse.response,
-          namespaces: {'wavi': 'rw'});
-      AtEnrollmentResponse atEnrollmentResponse =
-          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-
-      expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
-      expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
-
       Completer received = Completer();
       Stream<AtNotification> notificationStream = atClientManager
           .atClient.notificationService
           .subscribe(regex: "__manage");
       notificationStream.listen((notification) {
+        if (received.isCompleted) {
+          return;
+        }
         String enId =
             notification.key.substring(0, notification.key.indexOf('.'));
-        if (enId == atEnrollmentResponse.enrollmentId) {
-          var enData = jsonDecode(notification.value!);
-          if (!received.isCompleted) received.complete((enId, enData));
-        }
+        var enData = jsonDecode(notification.value!);
+        received.complete((enId, enData));
       });
+
+      while ((atClientManager.atClient.notificationService
+                  as NotificationServiceImpl)
+              .getMonitorStatus() !=
+          MonitorStatus.started) {
+        await Future.delayed(Duration(milliseconds: 50));
+      }
+
+      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.submit(
+        EnrollmentRequest(
+            appName: 'wavi',
+            deviceName: 'device-$random',
+            otp: otpResponse.response,
+            namespaces: {'wavi': 'rw'}),
+        atLookUp,
+      );
+
+      expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
+      expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       String rcvdEnrollmentId;
       Map<String, dynamic> rcvdEnrollmentData;
