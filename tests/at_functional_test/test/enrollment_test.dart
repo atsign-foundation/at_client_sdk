@@ -609,7 +609,17 @@ void main() {
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
 
-      AtResponse otpResponse = await atClientManager.atClient.getOTP();
+      // let's initialize the notification service before we do anything else
+      // to ensure that the monitor is started etc
+      atClientManager.atClient.notificationService
+          .subscribe(regex: 'never.never.never.never.getting.this')
+          .listen((_) {});
+      while ((atClientManager.atClient.notificationService
+                  as NotificationServiceImpl)
+              .getMonitorStatus() !=
+          MonitorStatus.started) {
+        await Future.delayed(Duration(milliseconds: 100));
+      }
 
       Completer received = Completer();
       Stream<AtNotification> notificationStream = atClientManager
@@ -625,13 +635,7 @@ void main() {
         received.complete((enId, enData));
       });
 
-      while ((atClientManager.atClient.notificationService
-                  as NotificationServiceImpl)
-              .getMonitorStatus() !=
-          MonitorStatus.started) {
-        await Future.delayed(Duration(milliseconds: 50));
-      }
-
+      AtResponse otpResponse = await atClientManager.atClient.getOTP();
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.submit(
         EnrollmentRequest(
             appName: 'wavi',
@@ -644,15 +648,15 @@ void main() {
       expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
-      String rcvdEnrollmentId;
-      Map<String, dynamic> rcvdEnrollmentData;
+      String notifiedEnId;
+      Map<String, dynamic> notifiedEnData;
 
       // Wait until the notification is received.
-      (rcvdEnrollmentId, rcvdEnrollmentData) = await received.future;
+      (notifiedEnId, notifiedEnData) = await received.future;
 
-      expect(rcvdEnrollmentId, atEnrollmentResponse.enrollmentId);
-      expect(rcvdEnrollmentData['appName'], 'wavi');
-      expect(rcvdEnrollmentData['deviceName'], 'device-$random');
+      expect(notifiedEnId, atEnrollmentResponse.enrollmentId);
+      expect(notifiedEnData['appName'], 'wavi');
+      expect(notifiedEnData['deviceName'], 'device-$random');
     });
     //To prevent failure due to latency, adding timeout for client to receive notifications sent from the server.
   }, timeout: Timeout(Duration(minutes: 1)));
