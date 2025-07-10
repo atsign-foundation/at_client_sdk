@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
@@ -237,18 +238,20 @@ class LocalSecondary implements Secondary {
   @Deprecated("Use getPkamPrivateKey")
   Future<String?> getPrivateKey() => getPkamPrivateKey();
 
+  AtChopsKeys? get atChopsKeys => _atClient.atChops?.atChopsKeys;
+
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getPkamPrivateKey() async {
-    return _atClient
-            .atChops?.atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey ??
-        (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
+    String? v = atChopsKeys?.atPkamKeyPair?.atPrivateKey.privateKey;
+    v ??= (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
+    return v;
   }
 
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getEncryptionPrivateKey() async {
-    return _atClient.atChops?.atChopsKeys.atEncryptionKeyPair?.atPrivateKey
-            .privateKey ??
-        (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
+    String? v = atChopsKeys?.atEncryptionKeyPair?.atPrivateKey.privateKey;
+    v ??= (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
+    return v;
   }
 
   @Deprecated("Use getPkamPublicKey")
@@ -256,24 +259,15 @@ class LocalSecondary implements Secondary {
 
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getPkamPublicKey() async {
-    return _atClient
-            .atChops?.atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey ??
-        (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
+    String? v = atChopsKeys?.atPkamKeyPair?.atPublicKey.publicKey;
+    v ??= (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
+    return v;
   }
 
   /// get it from atChops if we have it, otherwise try the keystore
-  Future<String?> getEncryptionPublicKey(
-    String atSign, {
-    bool useAtChops = true,
-  }) async {
+  Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
-    String? v;
-
-    // This is only here because the functional tests need it
-    if (useAtChops) {
-      v = _atClient
-          .atChops?.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey;
-    }
+    String? v = atChopsKeys?.atEncryptionKeyPair?.atPublicKey.publicKey;
     v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
         ?.data;
 
@@ -282,8 +276,9 @@ class LocalSecondary implements Secondary {
 
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getEncryptionSelfKey() async {
-    return _atClient.atChops?.atChopsKeys.selfEncryptionKey?.key ??
-        (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
+    String? v = atChopsKeys?.selfEncryptionKey?.key;
+    v ??= (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
+    return v;
   }
 
   ///Returns `true` on successfully storing the values into local secondary.

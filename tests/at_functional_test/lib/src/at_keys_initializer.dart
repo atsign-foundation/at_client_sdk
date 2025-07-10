@@ -22,23 +22,6 @@ class AtEncryptionKeysLoader {
 
   /// Stores the encryption keys to the local secondary key-store.
   Future<void> setEncryptionKeys(AtClient atClient, String atSign) async {
-    // Check if the encryption keys are already for the atSign.
-    // If yes, return; else set the encryption keys.
-    String? encryptionPublicKey;
-    try {
-      encryptionPublicKey =
-          await atClient.getLocalSecondary()?.getEncryptionPublicKey(
-                atSign,
-                useAtChops: false,
-              );
-    } on KeyNotFoundException {
-      _logger.info('Encryption keys are not found. Adding to the keystore.');
-    }
-    if (encryptionPublicKey.isNotNull && encryptionPublicKey != 'data:null') {
-      _logger.info(
-          'The encryption keys are already updated to keystore, returning');
-      return;
-    }
     bool result;
     // Set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(
