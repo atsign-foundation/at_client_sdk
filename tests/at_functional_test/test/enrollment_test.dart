@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -604,26 +603,22 @@ void main() {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
       AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
-      Map<String, dynamic> enrollmentMap = HashMap();
-      String enrollmentIdFromServer = '';
 
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
 
       AtResponse otpResponse = await atClientManager.atClient.getOTP();
 
+      Completer received = Completer();
       Stream<AtNotification> notificationStream = atClientManager
           .atClient.notificationService
           .subscribe(regex: "__manage");
       notificationStream.listen(expectAsync1((notification) {
-        enrollmentIdFromServer =
+        String enrollmentIdFromServer =
             notification.key.substring(0, notification.key.indexOf('.'));
-        expect(notification.key, isNotEmpty);
         var enrollmentData = jsonDecode(notification.value!);
-        enrollmentMap.putIfAbsent(enrollmentIdFromServer, () => enrollmentData);
+        received.complete((enrollmentIdFromServer, enrollmentData));
       }, count: 1, max: -1));
-      // Adding 5 seconds time duration for the monitor connection to start and accept the incoming notifications.
-      await Future.delayed(Duration(seconds: 5));
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
           appName: 'wavi',
@@ -633,17 +628,18 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
 
-      // Wait until the notification is received.
-      while (!enrollmentMap.containsKey(atEnrollmentResponse.enrollmentId)) {
-        await Future.delayed(Duration(milliseconds: 1));
-      }
-
       expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
-      expect(
-          enrollmentMap[atEnrollmentResponse.enrollmentId]['appName'], 'wavi');
-      expect(enrollmentMap[atEnrollmentResponse.enrollmentId]['deviceName'],
-          'device-$random');
+
+      String rcvdEnrollmentId;
+      Map<String, dynamic> rcvdEnrollmentData;
+
+      // Wait until the notification is received.
+      (rcvdEnrollmentId, rcvdEnrollmentData) = await received.future;
+
+      expect(rcvdEnrollmentId, atEnrollmentResponse.enrollmentId);
+      expect(rcvdEnrollmentData['appName'], 'wavi');
+      expect(rcvdEnrollmentData['deviceName'], 'device-$random');
     });
     //To prevent failure due to latency, adding timeout for client to receive notifications sent from the server.
   }, timeout: Timeout(Duration(minutes: 1)));

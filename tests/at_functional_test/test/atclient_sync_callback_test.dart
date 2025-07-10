@@ -19,6 +19,9 @@ void main() {
   var uniqueId = Uuid().v4();
   String namespace = 'wavi';
 
+  FunctionalTestSyncService testSyncSvc =
+      FunctionalTestSyncService.getInstance();
+
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     var preference = TestUtils.getPreference(atSign);
@@ -36,6 +39,7 @@ void main() {
       var value = '$i';
       await atClientManager.atClient.put(phoneKey, value);
     }
+    await testSyncSvc.syncData();
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
@@ -58,6 +62,7 @@ void main() {
     // phone.me@alice🛠
     var phoneKey = AtKey()..key = 'number-$uniqueId';
     await atClientManager.atClient.delete(phoneKey);
+    await testSyncSvc.syncData();
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
@@ -81,6 +86,7 @@ void main() {
     var usernameKey = AtKey()..key = 'username-$uniqueId';
     var value = 'alice123';
     await atClientManager.atClient.put(usernameKey, value);
+    await testSyncSvc.syncData();
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
@@ -104,6 +110,7 @@ void main() {
     var twitterKey = AtKey()..key = 'twitter-$uniqueId';
     var value = 'alice_A';
     await atClientManager.atClient.put(twitterKey, value);
+    await testSyncSvc.syncData();
 
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
@@ -137,8 +144,7 @@ void main() {
         .executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
 
-    await FunctionalTestSyncService.getInstance()
-        .syncData(syncSvc: atClientManager.atClient.syncService);
+    await testSyncSvc.syncData();
 
     progressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
@@ -183,8 +189,8 @@ void main() {
     await AtClientManager.getInstance().atClient.put(firstAtKey, 'value-1');
     await AtClientManager.getInstance().atClient.put(secondAtKey, 'value-2');
     await AtClientManager.getInstance().atClient.delete(firstAtKey);
-    await FunctionalTestSyncService.getInstance()
-        .syncData(syncSvc: AtClientManager.getInstance().atClient.syncService);
+
+    await testSyncSvc.syncData();
 
     progressListener.streamController.stream.listen((syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);

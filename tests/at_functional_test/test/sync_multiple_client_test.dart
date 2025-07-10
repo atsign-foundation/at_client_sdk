@@ -278,7 +278,7 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
               random.nextInt(3),
               clientId: clientParameters.clientId.name,
             );
-            await Future.delayed(Duration(milliseconds: 100));
+            await Future.delayed(Duration(milliseconds: 1));
           }
 
           _childIsolateLogger.info(

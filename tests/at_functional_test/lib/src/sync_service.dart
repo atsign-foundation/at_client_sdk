@@ -34,6 +34,8 @@ class FunctionalTestSyncService {
     SyncServiceImpl syncImpl = syncSvc as SyncServiceImpl;
 
     isSyncInProgress = true;
+    Completer syncOutcome = Completer();
+    late TestSyncProgressListener testSyncProgressListener;
     try {
       _logger.info('syncData starting for $atSign ($logLabel)');
 
@@ -42,59 +44,63 @@ class FunctionalTestSyncService {
       SyncServiceImpl.syncRequestTriggerInSeconds = 1;
       SyncServiceImpl.syncRunIntervalSeconds = 1;
 
-      DateTime startTime = DateTime.now().toUtc();
-      DateTime lastReceivedDateTime = DateTime.now().toUtc();
-      Duration maxTotalWaitTime = Duration(minutes: 2);
-      int maxTotalWaitTimeMillis = maxTotalWaitTime.inMilliseconds;
-      Duration maxTransientWaitTime = Duration(seconds: 30);
-      int maxTransientWaitTimeMillis = maxTransientWaitTime.inMilliseconds;
-
-      TestSyncProgressListener testSyncProgressListener =
-          TestSyncProgressListener(logLabel);
+      testSyncProgressListener = TestSyncProgressListener(logLabel);
       syncSvc.addProgressListener(testSyncProgressListener);
 
+      final int maxSyncCount = 5;
+      int syncCount = 1;
       testSyncProgressListener.streamController.stream
           .listen((SyncProgress syncProgress) async {
         for (final KeyInfo ki in syncProgress.keyInfoList ?? []) {
           _logger.finer('${ki.syncDirection} ${ki.key}');
         }
-        lastReceivedDateTime = DateTime.now().toUtc();
         if (syncProgress.syncStatus == SyncStatus.success &&
             syncProgress.localCommitId != syncProgress.serverCommitId) {
-          _logger.warning('SyncProgress $logLabel: ${syncProgress.syncStatus}'
-              ' local ${syncProgress.localCommitId}'
-              ' remote ${syncProgress.serverCommitId}');
-          _logger.warning('Calling sync() again');
+          if (syncCount >= maxSyncCount) {
+            isSyncInProgress = false;
+            _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
+                ' local ${syncProgress.localCommitId}'
+                ' remote ${syncProgress.serverCommitId}');
+            syncOutcome.completeError(
+                'Have synced $syncCount times but still not in sync');
+          }
+          if (syncCount > 1) {
+            _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
+                ' local ${syncProgress.localCommitId}'
+                ' remote ${syncProgress.serverCommitId}');
+            _logger.shout('Syncing again');
+          } else {
+            _logger.info('SyncProgress $logLabel: ${syncProgress.syncStatus}'
+                ' local ${syncProgress.localCommitId}'
+                ' remote ${syncProgress.serverCommitId}');
+            _logger.info('Syncing again');
+          }
+          syncCount++;
+          // Call to syncService.sync to expedite the sync progress
           syncImpl.sync();
+          // ignore: invalid_use_of_visible_for_testing_member
+          unawaited(syncImpl.processSyncRequests(
+            respectSyncRequestQueueSizeAndRequestTriggerDuration: false,
+          ));
         } else if (syncProgress.syncStatus == SyncStatus.success ||
             syncProgress.syncStatus == SyncStatus.failure) {
           isSyncInProgress = false;
+          syncOutcome.complete();
         }
       });
 
       // Call to syncService.sync to expedite the sync progress
       syncImpl.sync();
       // ignore: invalid_use_of_visible_for_testing_member
-      await syncImpl.processSyncRequests(
+      unawaited(syncImpl.processSyncRequests(
         respectSyncRequestQueueSizeAndRequestTriggerDuration: false,
-      );
+      ));
 
-      while (isSyncInProgress) {
-        final now = DateTime.now().toUtc();
-        if (now.difference(lastReceivedDateTime).inMilliseconds >
-            maxTransientWaitTimeMillis) {
-          throw StateError(
-              'Sync duration exceeded maxTransientWaitTime ($maxTransientWaitTime)');
-        }
-        if (now.difference(startTime).inMilliseconds > maxTotalWaitTimeMillis) {
-          throw StateError(
-              'Sync duration exceeded maxTotalWaitTime ($maxTotalWaitTime)');
-        }
-        await Future.delayed(Duration(milliseconds: 10));
-      }
-      syncSvc.removeProgressListener(testSyncProgressListener);
+      await syncOutcome.future;
+
       _logger.info('syncData complete for $atSign $logLabel');
     } finally {
+      syncSvc.removeProgressListener(testSyncProgressListener);
       isSyncInProgress = false;
     }
   }

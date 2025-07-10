@@ -14,7 +14,6 @@ import 'test_utils.dart';
 late AtSignLogger logger;
 
 void main() {
-  logger = AtSignLogger('at_lookup_race_test.dart');
   late String atSign;
   late AtClientManager atClientManager;
   late AtClient atClient;
@@ -26,6 +25,8 @@ void main() {
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
     atClientManager.atClient.syncService.sync();
     atClient = atClientManager.atClient;
+
+    logger = AtSignLogger('at_lookup_race_test.dart');
   });
 
   test('race test - repeated gets without awaits', () async {

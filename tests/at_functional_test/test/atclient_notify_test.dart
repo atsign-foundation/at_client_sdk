@@ -18,7 +18,6 @@ void main() {
   late AtSignLogger logger;
 
   setUpAll(() async {
-    logger = AtSignLogger(' atclient_notify_test ');
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 
@@ -27,6 +26,8 @@ void main() {
 
     atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
     atClientManager.atClient.syncService.sync();
+
+    logger = AtSignLogger(' atclient_notify_test ');
   });
 
   setUp(() async {
@@ -130,10 +131,17 @@ void main() {
       ..key = 'phone'
       ..sharedWith = '@bob🛠'
       ..namespace = namespace;
-    await atClientManager.atClient.notificationService.notify(
-        NotificationParams.forDelete(phoneKey),
-        onSuccess: onSuccessCallback);
-    await Future.delayed(Duration(seconds: 10));
+    Completer received = Completer();
+    await atClientManager.atClient.notificationService
+        .notify(NotificationParams.forDelete(phoneKey),
+            onSuccess: (NotificationResult notificationResult) {
+      expect(notificationResult.notificationStatusEnum.toString(),
+          'NotificationStatusEnum.delivered');
+      expect(notificationResult.atKey?.key, 'phone');
+      expect(notificationResult.atKey?.sharedWith, '@bob🛠');
+      received.complete();
+    });
+    await received.future;
   });
 
   test('notify text of to sharedWith atSign', () async {
@@ -157,10 +165,17 @@ void main() {
   });
 
   test('notify text of to sharedWith atSign - callback', () async {
-    await atClientManager.atClient.notificationService.notify(
-        NotificationParams.forText('phone', '@bob🛠'),
-        onSuccess: onSuccessCallback);
-    await Future.delayed(Duration(seconds: 10));
+    Completer received = Completer();
+    await atClientManager.atClient.notificationService
+        .notify(NotificationParams.forText('phone', '@bob🛠'),
+            onSuccess: (NotificationResult notificationResult) {
+      expect(notificationResult.notificationStatusEnum.toString(),
+          'NotificationStatusEnum.delivered');
+      expect(notificationResult.atKey?.key, 'phone');
+      expect(notificationResult.atKey?.sharedWith, '@bob🛠');
+      received.complete();
+    });
+    await received.future;
   });
 
   test('notify - test deprecated method using notification service', () async {
@@ -236,48 +251,6 @@ void main() {
     expect(atNotification.status, 'NotificationStatus.expired');
   });
 
-  test('A test to verify the notification expiry', () async {
-    for (int i = 0; i < 10; i++) {
-      logger.info('Testing notification expiry - test run #$i');
-      var atKey = (AtKey.shared('test-notification-expiry',
-              namespace: 'wavi', sharedBy: currentAtSign)
-            ..sharedWith(sharedWithAtSign))
-          .build();
-      logger.info('atKey: $atKey');
-      atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-          currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
-
-      NotificationResult notificationResult = await atClientManager
-          .atClient.notificationService
-          .notify(NotificationParams.forUpdate(atKey,
-              notificationExpiry: Duration(minutes: 1)));
-
-      logger.info('notificationResult: $notificationResult');
-      logger.info(
-          'notificationResult.atClientException: ${notificationResult.atClientException}');
-
-      AtNotification atNotification = await atClientManager
-          .atClient.notificationService
-          .fetch(notificationResult.notificationID);
-
-      logger.info('Fetched notification $atNotification');
-
-      var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
-              atNotification.expiresAtInEpochMillis!)
-          .toUtc()
-          .millisecondsSinceEpoch;
-      var expectedExpiresAtInEpochMills =
-          DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
-              .toUtc()
-              .add(Duration(minutes: 1))
-              .millisecondsSinceEpoch;
-      expect(
-          (actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills).abs() <
-              10,
-          true);
-    }
-  });
-
   group('A group of tests for notification fetch', () {
     test('A test to verify non existent notification', () async {
       await AtClientManager.getInstance().setCurrentAtSign(
@@ -291,10 +264,10 @@ void main() {
     });
 
     test('A test to verify the notification expiry', () async {
+      await AtClientManager.getInstance().setCurrentAtSign(
+          currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
       for (int i = 0; i < 10; i++) {
         logger.info('Testing notification expiry - test run #$i');
-        await AtClientManager.getInstance().setCurrentAtSign(
-            currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
         var atKey = (AtKey.shared('test-notification-expiry',
                 namespace: 'wavi', sharedBy: currentAtSign)
               ..sharedWith(sharedWithAtSign))
@@ -303,8 +276,12 @@ void main() {
             await AtClientManager.getInstance()
                 .atClient
                 .notificationService
-                .notify(NotificationParams.forUpdate(atKey,
-                    notificationExpiry: Duration(minutes: 1)));
+                .notify(
+                  NotificationParams.forUpdate(atKey,
+                      notificationExpiry: Duration(minutes: 1)),
+                  waitForFinalDeliveryStatus: false,
+                  checkForFinalDeliveryStatus: false,
+                );
 
         AtNotification atNotification = await AtClientManager.getInstance()
             .atClient
@@ -328,11 +305,4 @@ void main() {
       }
     });
   });
-}
-
-void onSuccessCallback(NotificationResult notificationResult) {
-  expect(notificationResult.notificationStatusEnum.toString(),
-      'NotificationStatusEnum.delivered');
-  expect(notificationResult.atKey?.key, 'phone');
-  expect(notificationResult.atKey?.sharedWith, '@bob🛠');
 }
