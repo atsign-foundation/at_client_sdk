@@ -621,18 +621,15 @@ void main() {
         await Future.delayed(Duration(milliseconds: 100));
       }
 
-      Completer received = Completer();
+      Map<String, dynamic> received = {};
       Stream<AtNotification> notificationStream = atClientManager
           .atClient.notificationService
           .subscribe(regex: "__manage");
       notificationStream.listen((notification) {
-        if (received.isCompleted) {
-          return;
-        }
         String enId =
             notification.key.substring(0, notification.key.indexOf('.'));
         var enData = jsonDecode(notification.value!);
-        received.complete((enId, enData));
+        received[enId] = enData;
       });
 
       AtResponse otpResponse = await atClientManager.atClient.getOTP();
@@ -648,15 +645,15 @@ void main() {
       expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
-      String notifiedEnId;
-      Map<String, dynamic> notifiedEnData;
-
       // Wait until the notification is received.
-      (notifiedEnId, notifiedEnData) = await received.future;
+      // Wait until the notification is received.
+      while (!received.containsKey(atEnrollmentResponse.enrollmentId)) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
 
-      expect(notifiedEnId, atEnrollmentResponse.enrollmentId);
-      expect(notifiedEnData['appName'], 'wavi');
-      expect(notifiedEnData['deviceName'], 'device-$random');
+      expect(received[atEnrollmentResponse.enrollmentId]['appName'], 'wavi');
+      expect(received[atEnrollmentResponse.enrollmentId]['deviceName'],
+          'device-$random');
     });
     //To prevent failure due to latency, adding timeout for client to receive notifications sent from the server.
   }, timeout: Timeout(Duration(minutes: 1)));
