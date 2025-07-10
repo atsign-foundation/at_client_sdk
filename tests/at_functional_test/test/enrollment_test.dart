@@ -609,17 +609,6 @@ void main() {
 
       AtResponse otpResponse = await atClientManager.atClient.getOTP();
 
-      Completer received = Completer();
-      Stream<AtNotification> notificationStream = atClientManager
-          .atClient.notificationService
-          .subscribe(regex: "__manage");
-      notificationStream.listen(expectAsync1((notification) {
-        String enrollmentIdFromServer =
-            notification.key.substring(0, notification.key.indexOf('.'));
-        var enrollmentData = jsonDecode(notification.value!);
-        if (!received.isCompleted) received.complete((enrollmentIdFromServer, enrollmentData));
-      }, count: 1, max: -1));
-
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
           appName: 'wavi',
           deviceName: 'device-$random',
@@ -630,6 +619,19 @@ void main() {
 
       expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
+
+      Completer received = Completer();
+      Stream<AtNotification> notificationStream = atClientManager
+          .atClient.notificationService
+          .subscribe(regex: "__manage");
+      notificationStream.listen((notification) {
+        String enId =
+            notification.key.substring(0, notification.key.indexOf('.'));
+        if (enId == atEnrollmentResponse.enrollmentId) {
+          var enData = jsonDecode(notification.value!);
+          if (!received.isCompleted) received.complete((enId, enData));
+        }
+      });
 
       String rcvdEnrollmentId;
       Map<String, dynamic> rcvdEnrollmentData;
