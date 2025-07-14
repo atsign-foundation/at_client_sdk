@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
@@ -234,32 +235,50 @@ class LocalSecondary implements Secondary {
     return result;
   }
 
-  Future<String?> getPrivateKey() async {
-    var privateKeyData = await keyStore!.get(AtConstants.atPkamPrivateKey);
-    return privateKeyData?.data;
+  @Deprecated("Use getPkamPrivateKey")
+  Future<String?> getPrivateKey() => getPkamPrivateKey();
+
+  AtChopsKeys? get atChopsKeys => _atClient.atChops?.atChopsKeys;
+
+  /// get it from atChops if we have it, otherwise try the keystore
+  Future<String?> getPkamPrivateKey() async {
+    String? v = atChopsKeys?.atPkamKeyPair?.atPrivateKey.privateKey;
+    v ??= (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
+    return v;
   }
 
+  /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getEncryptionPrivateKey() async {
-    var privateKeyData =
-        await keyStore!.get(AtConstants.atEncryptionPrivateKey);
-    return privateKeyData?.data;
+    String? v = atChopsKeys?.atEncryptionKeyPair?.atPrivateKey.privateKey;
+    v ??= (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
+    return v;
   }
 
-  Future<String?> getPublicKey() async {
-    var publicKeyData = await keyStore!.get(AtConstants.atPkamPublicKey);
-    return publicKeyData?.data;
+  @Deprecated("Use getPkamPublicKey")
+  Future<String?> getPublicKey() => getPkamPublicKey();
+
+  /// get it from atChops if we have it, otherwise try the keystore
+  Future<String?> getPkamPublicKey() async {
+    String? v = atChopsKeys?.atPkamKeyPair?.atPublicKey.publicKey;
+    v ??= (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
+    return v;
   }
 
+  /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
-    var privateKeyData =
-        await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign');
-    return privateKeyData?.data;
+    String? v = atChopsKeys?.atEncryptionKeyPair?.atPublicKey.publicKey;
+    v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
+        ?.data;
+
+    return v;
   }
 
+  /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getEncryptionSelfKey() async {
-    var selfKeyData = await keyStore!.get(AtConstants.atEncryptionSelfKey);
-    return selfKeyData?.data;
+    String? v = atChopsKeys?.selfEncryptionKey?.key;
+    v ??= (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
+    return v;
   }
 
   ///Returns `true` on successfully storing the values into local secondary.

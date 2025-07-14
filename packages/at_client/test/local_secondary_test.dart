@@ -79,7 +79,7 @@ void main() {
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       await localSecondary.putValue(
           AtConstants.atPkamPrivateKey, pkamPrivateKey);
-      expect(await localSecondary.getPrivateKey(), pkamPrivateKey);
+      expect(await localSecondary.getPkamPrivateKey(), pkamPrivateKey);
     });
 
     test('test get public key', () async {
@@ -92,7 +92,7 @@ void main() {
       final localSecondary = LocalSecondary(atClient);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       await localSecondary.putValue(AtConstants.atPkamPublicKey, pkamPublicKey);
-      expect(await localSecondary.getPublicKey(), pkamPublicKey);
+      expect(await localSecondary.getPkamPublicKey(), pkamPublicKey);
     });
 
     test('test get encryption private key', () async {

@@ -38,8 +38,8 @@ void main() {
     var putResult = await atClient.put(twitterKey, value);
     expect(putResult, true);
     // Waits until sync twitter key is synced to the server
-    await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
-        syncOptions: SyncOptions()..key = twitterKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
     var serverCommitIdAfterPut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
@@ -65,7 +65,6 @@ void main() {
   test('Verify server changes are synced to local - server ahead', () async {
     var atClient = atClientManager.atClient;
     var localEntry = await SyncUtil().getLastSyncedEntry('', atSign: atSign);
-    print('localCommitId before put method ${localEntry?.commitId}');
     expect(localEntry?.commitId != null, true);
     // twitter.me@alice🛠
     var value = 'alice.linkedin';
@@ -77,8 +76,8 @@ void main() {
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
     // Waits until key is synced to the remote secondary
-    await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
-        syncOptions: SyncOptions()..key = updateVerbBuilder.atKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
     var localEntryAfterSync =
         await SyncUtil().getLastSyncedEntry('', atSign: atSign);
@@ -119,8 +118,8 @@ void main() {
     putResult = await atClient.put(atmosphereKey, valueAtmosphere);
     expect(putResult, true);
     // Sync Data
-    await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
-        syncOptions: SyncOptions()..key = atmosphereKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
     var serverCommitIdAfterPut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
@@ -163,8 +162,8 @@ void main() {
     var value = 'alice.discord';
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
-    await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
-        syncOptions: SyncOptions()..key = atKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'discord.wavi'
@@ -192,11 +191,10 @@ void main() {
     var putResult = await atClient.put(atKey, value);
     expect(putResult, true);
     await FunctionalTestSyncService.getInstance()
-        .syncData(atClient.syncService);
+        .syncData(syncSvc: atClient.syncService);
     var localEntryAfterSync =
         await SyncUtil().getLastSyncedEntry('', atSign: atSign);
     expect(localEntryAfterSync!.atKey, isNot('local:localkey.wavi$atSign'));
-    print('local synced entry $localEntryAfterSync');
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'local:localkey.wavi'
@@ -223,8 +221,8 @@ void main() {
     expect(putResult, true);
 
     // Waits until atKey is synced to the remote secondary
-    await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
-        syncOptions: SyncOptions()..key = atKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'key1.wavi'
@@ -254,8 +252,8 @@ void main() {
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
 
-    await FunctionalTestSyncService.getInstance().syncData(atClient.syncService,
-        syncOptions: SyncOptions()..key = atKey.toString());
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
 
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
@@ -302,7 +300,6 @@ void main() {
     var syncResponse =
         await atClient.getRemoteSecondary()!.executeVerb(syncVerbBuilder);
     final syncJson = jsonDecode(syncResponse.replaceFirst('data:', ''));
-    print(syncJson);
     Map<String, String> commitMap = {};
     for (var syncEntry in syncJson) {
       commitMap[syncEntry['atKey']] = syncEntry['operation'];
@@ -383,7 +380,6 @@ void main() {
     var syncResponse =
         await atClient.getRemoteSecondary()!.executeVerb(syncVerbBuilder);
     final syncJson = jsonDecode(syncResponse.replaceFirst('data:', ''));
-    print(syncJson);
     Map<String, String> commitMap = {};
     for (var syncEntry in syncJson) {
       commitMap[syncEntry['atKey']] = syncEntry['operation'];

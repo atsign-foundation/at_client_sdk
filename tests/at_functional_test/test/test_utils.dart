@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_client/at_client.dart';
@@ -11,15 +12,18 @@ class TestUtils {
   static final ObjectLifeCycleOptions optionsTtlOneMinute =
       ObjectLifeCycleOptions(timeToLive: Duration(minutes: 1));
 
+  static AtSignLogger logger = AtSignLogger(' TestUtils ');
+
   static AtClientPreference getPreference(String atsign) {
     var preference = AtClientPreference();
-    preference.hiveStoragePath = 'test/hive/client';
-    preference.commitLogPath = 'test/hive/client/commit';
+    preference.hiveStoragePath = 'test/hive/client/$atsign';
+    preference.commitLogPath = 'test/hive/client/$atsign';
     preference.isLocalStoreRequired = true;
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.decryptPackets = false;
     preference.pathToCerts = 'test/testData/cert.pem';
     preference.tlsKeysSavePath = 'test/tlsKeysFile';
+    preference.fetchOfflineNotifications = true;
     return preference;
   }
 
@@ -44,6 +48,7 @@ class TestUtils {
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
       {AtClientPreference? preference}) async {
+    AtSignLogger.root_level = 'shout';
     preference ??= TestUtils.getPreference(currentAtSign);
     final encryptionKeysLoader = AtEncryptionKeysLoader.getInstance();
     var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
@@ -63,9 +68,13 @@ class TestUtils {
   static Future<String?> executeCommandAndParse(AtClient? client, command,
       {bool auth = false, RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= client?.getRemoteSecondary();
-    String? response = await remoteSecondary
-        ?.executeCommand(formatCommand(command), auth: auth);
-    print('Command: $command -> Response: $response');
+    command = formatCommand(command);
+    logger.info('SENDING: $command');
+    String? response = await remoteSecondary?.executeCommand(
+      command,
+      auth: auth,
+    );
+    logger.info('RECEIVED: $response');
     return response?.replaceFirst('data:', '');
   }
 }

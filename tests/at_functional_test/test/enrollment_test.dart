@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -53,7 +54,6 @@ void main() {
       // onboard with enable enrollment set
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
-      print('atOnboardingResponse: $atOnboardingResponse');
       expect(atOnboardingResponse.isSuccessful, true);
       expect(atOnboardingResponse.atAuthKeys, isNotNull);
       expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
@@ -69,7 +69,6 @@ void main() {
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(apkamAtSign)
         ..atKeysFilePath = 'test/testData/$apkamAtSign.atKeys'
         ..rootDomain = 'vip.ve.atsign.zone');
-      print('atAuthResponse: $atAuthResponse');
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
@@ -355,6 +354,7 @@ void main() {
           atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
@@ -539,6 +539,7 @@ void main() {
           atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      // atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
@@ -604,48 +605,54 @@ void main() {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
       AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
-      Map<String, dynamic> enrollmentMap = HashMap();
-      String enrollmentIdFromServer = '';
 
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
 
-      AtResponse otpResponse = await atClientManager.atClient.getOTP();
-      print(otpResponse.response);
+      // let's initialize the notification service before we do anything else
+      // to ensure that the monitor is started etc
+      atClientManager.atClient.notificationService
+          .subscribe(regex: 'never.never.never.never.getting.this')
+          .listen((_) {});
+      while ((atClientManager.atClient.notificationService
+                  as NotificationServiceImpl)
+              .getMonitorStatus() !=
+          MonitorStatus.started) {
+        await Future.delayed(Duration(milliseconds: 100));
+      }
 
+      Map<String, dynamic> received = {};
       Stream<AtNotification> notificationStream = atClientManager
           .atClient.notificationService
           .subscribe(regex: "__manage");
-      notificationStream.listen(expectAsync1((notification) {
-        print('RCVD: $notification');
-        enrollmentIdFromServer =
+      notificationStream.listen((notification) {
+        String enId =
             notification.key.substring(0, notification.key.indexOf('.'));
-        expect(notification.key, isNotEmpty);
-        var enrollmentData = jsonDecode(notification.value!);
-        enrollmentMap.putIfAbsent(enrollmentIdFromServer, () => enrollmentData);
-      }, count: 1, max: -1));
-      // Adding 5 seconds time duration for the monitor connection to start and accept the incoming notifications.
-      await Future.delayed(Duration(seconds: 5));
+        var enData = jsonDecode(notification.value!);
+        received[enId] = enData;
+      });
 
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
-          appName: 'wavi',
-          deviceName: 'device-$random',
-          otp: otpResponse.response,
-          namespaces: {'wavi': 'rw'});
-      AtEnrollmentResponse atEnrollmentResponse =
-          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-      print('Enrollment Response: $atEnrollmentResponse');
-
-      // Wait until the notification is received.
-      while (!enrollmentMap.containsKey(atEnrollmentResponse.enrollmentId)) {
-        await Future.delayed(Duration(milliseconds: 1));
-      }
+      AtResponse otpResponse = await atClientManager.atClient.getOTP();
+      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.submit(
+        EnrollmentRequest(
+            appName: 'wavi',
+            deviceName: 'device-$random',
+            otp: otpResponse.response,
+            namespaces: {'wavi': 'rw'}),
+        atLookUp,
+      );
 
       expect(atEnrollmentResponse.enrollmentId, isNotEmpty);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
-      expect(
-          enrollmentMap[atEnrollmentResponse.enrollmentId]['appName'], 'wavi');
-      expect(enrollmentMap[atEnrollmentResponse.enrollmentId]['deviceName'],
+
+      // Wait until the notification is received.
+      // Wait until the notification is received.
+      while (!received.containsKey(atEnrollmentResponse.enrollmentId)) {
+        await Future.delayed(Duration(milliseconds: 10));
+      }
+
+      expect(received[atEnrollmentResponse.enrollmentId]['appName'], 'wavi');
+      expect(received[atEnrollmentResponse.enrollmentId]['deviceName'],
           'device-$random');
     });
     //To prevent failure due to latency, adding timeout for client to receive notifications sent from the server.

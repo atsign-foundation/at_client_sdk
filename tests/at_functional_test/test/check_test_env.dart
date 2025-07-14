@@ -5,8 +5,6 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 var _queue = Queue();
-var maxRetryCount = 10;
-var retryCount = 1;
 
 void main() {
   var atsign = '@sitaram🛠';
@@ -16,40 +14,58 @@ void main() {
   SecureSocket secureSocket;
 
   test('checking for test environment readiness', () async {
-    await Future.delayed(Duration(seconds: 10));
-    secureSocket = await secureSocketConnection(rootServer, atsignPort);
-    print('connection established');
-    socketListener(secureSocket);
+    secureSocket = await secureSocketConnection(
+      rootServer,
+      atsignPort,
+      maxTries: 20,
+      retryIntervalSecs: 3,
+    );
+
+    startSocketListener(secureSocket);
+
     String response = '';
-    while (response.isEmpty || response == 'data:null\n') {
+    print('waiting for up to 2 minutes for public:publickey$atsign');
+
+    int attempt = 0;
+    int maxAttempts = 40;
+    int retryIntervalSecs = 3;
+    while (response.isEmpty && attempt < maxAttempts) {
+      if (attempt > 0) {
+        await Future.delayed(Duration(seconds: retryIntervalSecs));
+      }
+      attempt++;
       secureSocket.write('lookup:publickey$atsign\n');
       response = await read();
-      print('waiting for signing public key response : $response');
-      await Future.delayed(Duration(seconds: 5));
     }
     await secureSocket.close();
+
+    expect(response, isNotEmpty);
   }, timeout: Timeout(Duration(minutes: 5)));
 }
 
-Future<SecureSocket> secureSocketConnection(String host, int port) async {
+Future<SecureSocket> secureSocketConnection(
+  String host,
+  int port, {
+  int maxTries = 20,
+  int retryIntervalSecs = 3,
+}) async {
   dynamic socket;
-  while (true) {
+  int attempts = 0;
+  while (socket == null && attempts < maxTries) {
+    print('Attempting to connect to $host:$port');
+    attempts++;
     try {
       socket = await SecureSocket.connect(host, port);
-      if (socket != null || retryCount > maxRetryCount) {
-        break;
-      }
-    } on Exception {
-      print('retrying for connection.. $retryCount');
-      await Future.delayed(Duration(seconds: 5));
-      retryCount++;
+      print('Connected to $host:$port');
+    } catch (_) {
+      await Future.delayed(Duration(seconds: retryIntervalSecs));
     }
   }
   return socket;
 }
 
 /// Socket Listener
-void socketListener(SecureSocket secureSocket) {
+void startSocketListener(SecureSocket secureSocket) {
   secureSocket.listen(_messageHandler);
 }
 
@@ -82,6 +98,9 @@ Future<String> read({int maxWaitMilliSeconds = 5000}) async {
       // of the handshake
       if (result.startsWith('data:') ||
           (result.startsWith('@') && result.endsWith('@'))) {
+        if (result == 'data:null\n') {
+          result = '';
+        }
         return result;
       } else {
         //log any other response and ignore

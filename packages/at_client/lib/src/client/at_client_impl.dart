@@ -679,8 +679,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}');
     }
     try {
-      var pkamPublicKey = await _localSecondary!.getPublicKey();
-      var pkamPrivateKey = await _localSecondary!.getPrivateKey();
+      var pkamPublicKey = await _localSecondary!.getPkamPublicKey();
+      var pkamPrivateKey = await _localSecondary!.getPkamPrivateKey();
 
       if (pkamPublicKey != null && pkamPrivateKey != null) {
         atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
