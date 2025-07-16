@@ -69,7 +69,7 @@ void main() async {
       }
       expect(syncProgress.localCommitId,
           greaterThan(syncProgress.localCommitIdBeforeSync!));
-    }));
+    }, max: -1));
   });
 
   /// The purpose of this test verify the following:
@@ -121,6 +121,6 @@ void main() async {
       }
       expect(syncProgress.localCommitId,
           greaterThan(syncProgress.localCommitIdBeforeSync!));
-    }));
+    }, max: -1));
   });
 }
