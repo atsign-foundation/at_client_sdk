@@ -30,6 +30,11 @@ jobs:
         with:
           sdk: ${{ matrix.dart-channel}}
 
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: tools/osv-scanner/go.sum
+
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
         working-directory: packages/at_client
@@ -54,12 +59,18 @@ jobs:
         working-directory: packages/at_client
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
-  #      Commenting out for now
-  #      - name: Upload at_client coverage to Codecov
-  #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-  #        with:
-  #          file: packages/at_client/unit_test_coverage.lcov
-  #          flags: at_client_unit_tests
+      #      Commenting out for now
+      #      - name: Upload at_client coverage to Codecov
+      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      #        with:
+      #          file: packages/at_client/unit_test_coverage.lcov
+      #          flags: at_client_unit_tests
+
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client/pubspec.lock
 
   unit_tests_and_code_analysis_at_client_mobile:
     runs-on: ubuntu-latest
@@ -79,6 +90,11 @@ jobs:
         uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
         with:
           channel: stable
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: tools/osv-scanner/go.sum
 
       # Install dependencies of at_client_mobile
       - name: Installing dependencies
@@ -104,34 +120,17 @@ jobs:
         working-directory: packages/at_client_mobile
         run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
-  #      Commenting out for now
-  #      - name: Upload at_client_mobile coverage to Codecov
-  #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-  #        with:
-  #          file: packages/at_client_mobile/unit_test_coverage.lcov
-  #          flags: at_client_mobile_unit_tests
-
-  osv_scanner:
-    # Runs osv-scanner to find any vulnerable Dart dependencies
-    # It needs to look at pubspec.lock files, which are created by the
-    # unit_tests_and_code_analysis_at_client and unit_tests_and_code_analysis_at_client_mobile jobs
-    needs: [ unit_tests_and_code_analysis_at_client, unit_tests_and_code_analysis_at_client_mobile ]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dart-channel: [ stable,beta ]
-    steps:
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: 'stable'
-          cache-dependency-path: tools/osv-scanner/go.sum
+      #      Commenting out for now
+      #      - name: Upload at_client_mobile coverage to Codecov
+      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      #        with:
+      #          file: packages/at_client_mobile/unit_test_coverage.lcov
+      #          flags: at_client_mobile_unit_tests
 
       - name: Run osv-scanner
         working-directory: packages
         run: |
           go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
-          osv-scanner --lockfile=./at_client/pubspec.lock
           osv-scanner --lockfile=./at_client_mobile/pubspec.lock
 
   functional_tests:

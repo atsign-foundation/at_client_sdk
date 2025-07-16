@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -16,8 +18,6 @@ void main() async {
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
-  // The SyncProgressListener is removed and stream is closed at the end of each test.
-  // So, create an instance of SyncProgressListener at the start of each test
   setUp(() async {});
 
   tearDown(() async {
@@ -55,26 +55,29 @@ void main() async {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
 
-    bool gotProgress = false;
+    Completer<SyncProgress> progress = Completer();
     mySyncProgressListener.streamController.stream
-        .listen(expectAsync1((SyncProgress syncProgress) {
-      if (gotProgress) {
-        return;
+        .listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
       }
-      gotProgress = true;
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      expect(syncProgress.keyInfoList, isNotEmpty);
-      for (var keyInfo in syncProgress.keyInfoList!) {
-        if (keyInfo.key == 'phone_0.wavi@alice🛠' &&
-            keyInfo.syncDirection == SyncDirection.remoteToLocal) {
-          expect(keyInfo.conflictInfo != null, true);
-          expect(keyInfo.conflictInfo?.remoteValue, '4');
-          expect(keyInfo.conflictInfo?.localValue, '0');
-        }
+    });
+    SyncProgress syncProgress = await progress.future;
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    bool foundKeyInfo = false;
+    for (var keyInfo in syncProgress.keyInfoList!) {
+      if (keyInfo.key == 'phone_0.wavi@alice🛠' &&
+          keyInfo.syncDirection == SyncDirection.remoteToLocal) {
+        foundKeyInfo = true;
+        expect(keyInfo.conflictInfo != null, true);
+        expect(keyInfo.conflictInfo?.remoteValue, '4');
+        expect(keyInfo.conflictInfo?.localValue, '0');
       }
-      expect(syncProgress.localCommitId,
-          greaterThan(syncProgress.localCommitIdBeforeSync!));
-    }, max: -1));
+    }
+    expect(foundKeyInfo, true);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
   });
 
   /// The purpose of this test verify the following:
@@ -114,23 +117,26 @@ void main() async {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
 
-    bool gotProgress = false;
+    Completer<SyncProgress> progress = Completer();
     mySyncProgressListener.streamController.stream
-        .listen(expectAsync1((SyncProgress syncProgress) {
-      if (gotProgress) {
-        return;
+        .listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
       }
-      gotProgress = true;
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      expect(syncProgress.keyInfoList, isNotEmpty);
-      for (var keyInfo in syncProgress.keyInfoList!) {
-        if (keyInfo.key == 'test.$namespace$atSign' &&
-            keyInfo.syncDirection == SyncDirection.remoteToLocal) {
-          expect(keyInfo.conflictInfo != null, true);
-        }
+    });
+    SyncProgress syncProgress = await progress.future;
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    bool foundKeyInfo = false;
+    for (var keyInfo in syncProgress.keyInfoList!) {
+      if (keyInfo.key.contains('test.$namespace$atSign') &&
+          keyInfo.syncDirection == SyncDirection.remoteToLocal) {
+        foundKeyInfo = true;
+        expect(keyInfo.conflictInfo != null, true);
       }
-      expect(syncProgress.localCommitId,
-          greaterThan(syncProgress.localCommitIdBeforeSync!));
-    }, max: -1));
+    }
+    expect(foundKeyInfo, true);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
   });
 }
