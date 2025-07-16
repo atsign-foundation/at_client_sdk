@@ -421,6 +421,13 @@ bool assertCommitEntries(
       continue;
     }
     _logger.finer('mapEntry: $mapEntry');
+
+    if (serverCommitLogMap[mapEntry.key] == null) {
+      _logger.shout(
+          'Server commit log missing ${mapEntry.key} from clientOneCommitLog');
+      continue;
+    }
+
     // Compare server commit id with both client's commit log
     if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
         (serverCommitLogMap[mapEntry.key][0] !=

@@ -13,16 +13,16 @@ on:
     branches:
       - trunk
 
-permissions:  # added using https://github.com/step-security/secure-workflows
+permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
-  unit_tests_and_code_analysis:
+  unit_at_client:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        dart-channel: [stable,beta]
+        dart-channel: [ stable,beta ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -45,6 +45,18 @@ jobs:
         working-directory: packages/at_client
         run: dart analyze
 
+      # Check formatting
+      - name: Check that code in packages is correctly formatted
+        working-directory: packages/at_client
+        run: dart format . -o none --set-exit-if-changed
+
+      # Run the osv-scanner
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client/pubspec.lock
+
       # Run unit tests
       - name: Run at_client unit tests, with code coverage measurement
         working-directory: packages/at_client
@@ -54,17 +66,36 @@ jobs:
         working-directory: packages/at_client
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
-      - name: Upload at_client coverage to Codecov
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      #      Commenting out for now
+      #      - name: Upload at_client coverage to Codecov
+      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      #        with:
+      #          file: packages/at_client/unit_test_coverage.lcov
+      #          flags: at_client_unit_tests
+
+  unit_at_client_mobile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dart-channel: [ stable,beta ]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
         with:
-          file: packages/at_client/unit_test_coverage.lcov
-          flags: at_client_unit_tests
+          sdk: ${{ matrix.dart-channel}}
 
       # Adding flutter to path
       - name: Installing Flutter
         uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
         with:
           channel: stable
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: tools/osv-scanner/go.sum
 
       # Install dependencies of at_client_mobile
       - name: Installing dependencies
@@ -76,6 +107,18 @@ jobs:
         working-directory: packages/at_client_mobile
         run: flutter analyze --no-fatal-infos
 
+      # Check formatting
+      - name: Check that code in packages is correctly formatted
+        working-directory: packages/at_client_mobile
+        run: dart format . -o none --set-exit-if-changed
+
+      # Run the osv-scanner
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
+
       # Run unit tests
       - name: Run at_client_mobile unit tests, with code coverage measurement
         working-directory: packages/at_client_mobile
@@ -85,33 +128,19 @@ jobs:
         working-directory: packages/at_client_mobile
         run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
-      - name: Upload at_client_mobile coverage to Codecov
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-        with:
-          file: packages/at_client_mobile/unit_test_coverage.lcov
-          flags: at_client_mobile_unit_tests
-
-      # Check formatting
-      - name: Check that code in packages is correctly formatted
-        working-directory: packages
-        run: dart format . -o none --set-exit-if-changed
-
-      # Runs osv-scanner to find any vulnerable Dart dependencies
-      # It needs to look at pubspec.lock files, which is why it's
-      # placed here, as the `dart pub get` above will create them
-      - name: Run osv-scanner
-        working-directory: packages
-        run: |
-          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
-          osv-scanner --lockfile=./at_client/pubspec.lock
-          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
+      #      Commenting out for now
+      #      - name: Upload at_client_mobile coverage to Codecov
+      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      #        with:
+      #          file: packages/at_client_mobile/unit_test_coverage.lcov
+      #          flags: at_client_mobile_unit_tests
 
   functional_tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        dart-channel: [stable,beta]
+        dart-channel: [ stable,beta ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -152,11 +181,12 @@ jobs:
         working-directory: tests/at_functional_test
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-        with:
-          file: tests/at_functional_test/functional_test_coverage.lcov
-          flags: functional_tests
+      #      Commenting out for now
+      #      - name: Upload coverage to Codecov
+      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      #        with:
+      #          file: tests/at_functional_test/functional_test_coverage.lcov
+      #          flags: functional_tests
 
       # stop docker containers
       - name: stop docker containers
@@ -209,8 +239,8 @@ jobs:
         run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/lib/src/at_credentials.dart
 
       # Move the config file in-place
-      - name: Config for @cicd1/2
-        run: mv tests/at_end2end_test/config/config12.yaml tests/at_end2end_test/config/config.yaml
+      - name: Config for @cicd2/3
+        run: mv tests/at_end2end_test/config/config23.yaml tests/at_end2end_test/config/config.yaml
 
       # Run end-to-end test
       - name: End to end test
@@ -225,17 +255,18 @@ jobs:
         working-directory: tests/at_end2end_test
         run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=end2end_test_coverage.lcov --report-on=lib
 
-      - name: Upload coverage to Codecov
-        # Needs LCOV report to upload, so don't run for Dependabot PRs
-        if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-        with:
-          file: tests/at_end2end_test/end2end_test_coverage.lcov
-          flags: end2end_tests
+  #      Commenting out for now
+  #      - name: Upload coverage to Codecov
+  #        # Needs LCOV report to upload, so don't run for Dependabot PRs
+  #        if: ${{ github.actor != 'dependabot[bot]' }}
+  #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+  #        with:
+  #          file: tests/at_end2end_test/end2end_test_coverage.lcov
+  #          flags: end2end_tests
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
   end2end_test_14:
-    needs: [   end2end_tests ]
+    needs: [ end2end_tests_prep ]
     if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
