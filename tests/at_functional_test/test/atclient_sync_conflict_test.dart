@@ -55,8 +55,13 @@ void main() async {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
 
+    bool gotProgress = false;
     mySyncProgressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
+      if (gotProgress) {
+        return;
+      }
+      gotProgress = true;
       expect(syncProgress.syncStatus, SyncStatus.success);
       expect(syncProgress.keyInfoList, isNotEmpty);
       for (var keyInfo in syncProgress.keyInfoList!) {
@@ -109,8 +114,13 @@ void main() async {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
 
+    bool gotProgress = false;
     mySyncProgressListener.streamController.stream
         .listen(expectAsync1((SyncProgress syncProgress) {
+      if (gotProgress) {
+        return;
+      }
+      gotProgress = true;
       expect(syncProgress.syncStatus, SyncStatus.success);
       expect(syncProgress.keyInfoList, isNotEmpty);
       for (var keyInfo in syncProgress.keyInfoList!) {
