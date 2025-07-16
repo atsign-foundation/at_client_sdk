@@ -235,7 +235,7 @@ jobs:
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
   end2end_test_14:
-    needs: [   end2end_tests ]
+    needs: [ end2end_tests_prep ]
     if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:

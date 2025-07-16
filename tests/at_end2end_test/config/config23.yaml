@@ -15,7 +15,7 @@ atSign:
   # And the other tests will be for ce2e1 (trunk) to ce2e4 (canary)
   firstAtSign: '@ce2e2'
   secondAtSign: '@ce2e3'
-  thirdAtSign: '@ce2e3'
+  thirdAtSign: '@ce2e1'
   fourthAtSign: '@ce2e4'
 
 authType: 'pkam'
