@@ -8,6 +8,7 @@ import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
+import 'package:uuid/uuid.dart';
 import 'test_utils.dart';
 import 'package:at_functional_test/src/config_util.dart';
 
@@ -64,18 +65,22 @@ void main() {
 
   test('Verify server changes are synced to local - server ahead', () async {
     var atClient = atClientManager.atClient;
+
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
+
     var localEntry = await SyncUtil().getLastSyncedEntry('', atSign: atSign);
-    expect(localEntry?.commitId != null, true);
-    // twitter.me@alice🛠
-    var value = 'alice.linkedin';
+    expect(localEntry?.commitId, isNotNull);
+
+    var value = 'Some value';
+    String keyStr = 'public:${Uuid().v4()}.linkedin.$namespace$atSign';
     var updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey = AtKey.public('linkedin', namespace: namespace, sharedBy: atSign)
-          .build()
+      ..atKey = AtKey.fromString(keyStr)
       ..value = value;
     var updateResponse =
         await atClient.getRemoteSecondary()!.executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
-    // Waits until key is synced to the remote secondary
+
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
@@ -85,12 +90,11 @@ void main() {
     // After sync successful, the localCommitId after put should be greater
     // than localCommitId before put
     expect(localEntryAfterSync!.commitId! > localEntry!.commitId!, true);
-    // Getting value from remote secondary
-    var atKey = AtKey()
-      ..key = 'linkedin.wavi'
-      ..metadata = (Metadata()..isPublic = true)
-      ..sharedBy = atSign;
-    var getResponse = await atClient.get(atKey);
+
+    await Future.delayed(Duration(seconds: 1));
+
+    // Getting value from local secondary
+    var getResponse = await atClient.get(AtKey.fromString(keyStr));
     expect(getResponse.value, value);
   });
 

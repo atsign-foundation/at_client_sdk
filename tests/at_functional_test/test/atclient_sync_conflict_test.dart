@@ -18,7 +18,10 @@ void main() async {
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
   });
 
-  setUp(() async {});
+  setUp(() async {
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClientManager.atClient.syncService);
+  });
 
   tearDown(() async {
     atClientManager.atClient.syncService.removeAllProgressListeners();
@@ -28,34 +31,25 @@ void main() async {
     // Insert 5 keys into the keystore for uncommitted entries
     // among which, one is a conflict key - phone_0.wavi is a conflict key.
     for (var i = 0; i < 5; i++) {
-      var phoneKey = AtKey()..key = 'phone_$i';
+      var phoneKey = AtKey.fromString('phone_$i.$namespace$atSign');
       var value = '$i';
       await atClientManager.atClient.put(phoneKey, value);
     }
+
     // Update the key directly to remote secondary for having
     // the conflict key during sync
-    final updateVerbBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = 'phone_0.wavi'
-        ..sharedBy = atSign
-        ..metadata = (Metadata()..isEncrypted = true))
-      ..value = 'sMBnYFctMOg+lqX67ah9UA=='; //encrypted value of 4
+    AtKey remoteKey = AtKey.fromString('phone_0.$namespace$atSign');
+    await atClientManager.atClient.put(remoteKey, 'Things have changed',
+        putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
 
-    await atClientManager.atClient
-        .getRemoteSecondary()!
-        .executeVerb(updateVerbBuilder);
-
-    MySyncProgressListener mySyncProgressListener =
-        MySyncProgressListener(true);
-    atClientManager.atClient.syncService
-        .addProgressListener(mySyncProgressListener);
+    MySyncProgressListener pl = MySyncProgressListener(true);
+    atClientManager.atClient.syncService.addProgressListener(pl);
 
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
 
     Completer<SyncProgress> progress = Completer();
-    mySyncProgressListener.streamController.stream
-        .listen((SyncProgress syncProgress) {
+    pl.streamController.stream.listen((SyncProgress syncProgress) {
       if (!progress.isCompleted) {
         progress.complete(syncProgress);
       }
@@ -69,13 +63,15 @@ void main() async {
           keyInfo.syncDirection == SyncDirection.remoteToLocal) {
         foundKeyInfo = true;
         expect(keyInfo.conflictInfo, isNotNull);
-        expect(keyInfo.conflictInfo?.remoteValue, '4');
+        expect(keyInfo.conflictInfo?.remoteValue, 'Things have changed');
         expect(keyInfo.conflictInfo?.localValue, '0');
       }
     }
     expect(foundKeyInfo, true);
     expect(syncProgress.localCommitId,
         greaterThan(syncProgress.localCommitIdBeforeSync!));
+
+    await Future.delayed(Duration(milliseconds: 10));
   });
 
   /// The purpose of this test verify the following:

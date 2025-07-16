@@ -58,9 +58,12 @@ class SelfKeyDecryption implements AtKeyDecryption {
     try {
       var encryptionAlgo = AESEncryptionAlgo(
           AESKey(DefaultResponseParser().parse(selfEncryptionKey!).response));
+      _logger.finest(
+          'Decrypting $encryptedValue using $selfEncryptionKey with IV ${atKey.metadata.ivNonce}');
       decryptionResultFromAtChops = _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
+      _logger.finest('Decrypted to ${decryptionResultFromAtChops.result}');
     } on AtDecryptionException catch (e) {
       _logger.severe(
           'decryption exception during decryption of key: ${atKey.key}. Reason: ${e.toString()}');

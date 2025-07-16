@@ -97,13 +97,10 @@ class AtClientPreference {
   @Deprecated('No longer needed. at_chops will be used by default')
   bool useAtChops = true;
 
-  /// Which version of the atProtocol this client will use.
-  /// Note that this is different from the version of the
-  /// atProtocol that the client supports, which is set in
-  /// [AtClientConfig]
-  /// This instance variable is experimental, for now
-  @experimental
-  Version atProtocolEmitted = Version(1, 5, 0);
+  /// Poorly named variable which controls some aspects of at_client's
+  /// default data encryption
+  @Deprecated('Will be removed in next major version')
+  Version atProtocolEmitted = Version(2, 0, 0);
 
   @experimental
   AtClientParticulars atClientParticulars = AtClientParticulars();
