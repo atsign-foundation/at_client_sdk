@@ -25,8 +25,6 @@ void main() async {
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
-    await FunctionalTestSyncService.getInstance().syncData();
-
     // Insert 5 keys into the keystore for uncommitted entries
     // among which, one is a conflict key - phone_0.wavi is a conflict key.
     for (var i = 0; i < 5; i++) {
@@ -70,7 +68,7 @@ void main() async {
       if (keyInfo.key == 'phone_0.wavi@alice🛠' &&
           keyInfo.syncDirection == SyncDirection.remoteToLocal) {
         foundKeyInfo = true;
-        expect(keyInfo.conflictInfo != null, true);
+        expect(keyInfo.conflictInfo, isNotNull);
         expect(keyInfo.conflictInfo?.remoteValue, '4');
         expect(keyInfo.conflictInfo?.localValue, '0');
       }
@@ -87,9 +85,6 @@ void main() async {
   test(
       'A test to verify sync conflict info when a key is expired and server value is null',
       () async {
-    await FunctionalTestSyncService.getInstance()
-        .syncData(syncSvc: atClientManager.atClient.syncService);
-
     // Insert a key into local secondary for an uncommitted entry
     var testKey =
         AtKey.public('test', namespace: namespace, sharedBy: atSign).build();
@@ -102,12 +97,12 @@ void main() async {
         ..key = 'test.$namespace'
         ..sharedBy = atSign
         ..metadata = (Metadata()
-          ..ttl = 2
+          ..ttl = 2 // expires in two milliseconds
           ..isPublic = true))
       ..value = 'randomvalue';
     await remoteSecondary.executeVerb(updateVerbBuilder);
-    // Wait for 12 milliseconds to the key to expire
-    await Future.delayed(Duration(seconds: 1));
+    // Wait for a few milliseconds to the key to expire
+    await Future.delayed(Duration(milliseconds: 10));
 
     MySyncProgressListener mySyncProgressListener =
         MySyncProgressListener(true);

@@ -16,7 +16,6 @@ import 'test_utils.dart';
 void main() {
   late AtClientManager atClientManager;
   late String atSign;
-  late MySyncProgressListener progressListener;
   var uniqueId = Uuid().v4();
   String namespace = 'wavi';
   // final logger = AtSignLogger(' atclient_sync_callback_test.dart ');
@@ -30,13 +29,11 @@ void main() {
     preference.syncBatchSize = 15;
     atClientManager =
         await TestUtils.initAtClient(atSign, namespace, preference: preference);
-    progressListener = MySyncProgressListener(true);
-    atClientManager.atClient.syncService.addProgressListener(progressListener);
+    await testSyncSvc.syncData();
   });
 
   tearDown(() async {
-    atClientManager.atClient.syncService
-        .removeProgressListener(progressListener);
+    atClientManager.atClient.syncService.removeAllProgressListeners();
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
@@ -46,46 +43,64 @@ void main() {
       var value = '$i';
       await atClientManager.atClient.put(phoneKey, value);
     }
+
+    MySyncProgressListener pl = MySyncProgressListener(true);
+    atClientManager.atClient.syncService.addProgressListener(pl);
     await testSyncSvc.syncData();
-    progressListener.streamController.stream
-        .listen(expectAsync1((SyncProgress syncProgress) {
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      expect(syncProgress.keyInfoList, isNotEmpty);
-      expect(syncProgress.localCommitId,
-          greaterThan(syncProgress.localCommitIdBeforeSync!));
-      expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
-      syncProgress.keyInfoList?.forEach((keyInfo) {
-        if (keyInfo.key.startsWith('phone-$uniqueId')) {
-          expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
-          expect(keyInfo.syncDirection, SyncDirection.localToRemote);
-        }
-      });
-      atClientManager.atClient.syncService
-          .removeProgressListener(progressListener);
-    }));
+
+    Completer<SyncProgress> progress = Completer();
+    pl.streamController.stream.listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
+      }
+    });
+    SyncProgress syncProgress = await progress.future;
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
+    expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
+    bool keyInfoFound = false;
+    syncProgress.keyInfoList?.forEach((keyInfo) {
+      if (keyInfo.key.startsWith('phone-$uniqueId')) {
+        keyInfoFound = true;
+        expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+        expect(keyInfo.syncDirection, SyncDirection.localToRemote);
+      }
+    });
+    expect(keyInfoFound, true);
   });
 
   test('delete of a key to sharedWith atSign - using await', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()..key = 'number-$uniqueId';
     await atClientManager.atClient.delete(phoneKey);
+
+    MySyncProgressListener pl = MySyncProgressListener(true);
+    atClientManager.atClient.syncService.addProgressListener(pl);
     await testSyncSvc.syncData();
-    progressListener.streamController.stream
-        .listen(expectAsync1((SyncProgress syncProgress) {
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      expect(syncProgress.keyInfoList, isNotEmpty);
-      expect(syncProgress.localCommitId,
-          greaterThan(syncProgress.localCommitIdBeforeSync!));
-      expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
-      syncProgress.keyInfoList?.forEach((keyInfo) {
-        if (keyInfo.key.startsWith('number-$uniqueId')) {
-          expect(keyInfo.commitOp, CommitOp.DELETE);
-          expect(keyInfo.syncDirection, SyncDirection.localToRemote);
-        }
-      });
-      atClientManager.atClient.syncService
-          .removeProgressListener(progressListener);
-    }));
+
+    Completer<SyncProgress> progress = Completer();
+    pl.streamController.stream.listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
+      }
+    });
+    SyncProgress syncProgress = await progress.future;
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
+    expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
+    bool keyInfoFound = false;
+    syncProgress.keyInfoList?.forEach((keyInfo) {
+      if (keyInfo.key.startsWith('number-$uniqueId')) {
+        keyInfoFound = true;
+        expect(keyInfo.commitOp, CommitOp.DELETE);
+        expect(keyInfo.syncDirection, SyncDirection.localToRemote);
+      }
+    });
+    expect(keyInfoFound, true);
   });
 
   test('Verifying keyname exists in key info list', () async {
@@ -93,23 +108,33 @@ void main() {
     var usernameKey = AtKey()..key = 'username-$uniqueId';
     var value = 'alice123';
     await atClientManager.atClient.put(usernameKey, value);
+
+    MySyncProgressListener pl = MySyncProgressListener(true);
+    atClientManager.atClient.syncService.addProgressListener(pl);
     await testSyncSvc.syncData();
-    progressListener.streamController.stream
-        .listen(expectAsync1((SyncProgress syncProgress) {
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      expect(syncProgress.keyInfoList, isNotEmpty);
-      expect(syncProgress.localCommitId,
-          greaterThan(syncProgress.localCommitIdBeforeSync!));
-      expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
-      syncProgress.keyInfoList?.forEach((keyInfo) {
-        if (keyInfo.key.contains('username-$uniqueId')) {
-          expect(keyInfo.syncDirection, SyncDirection.localToRemote);
-          expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
-        }
-      });
-      atClientManager.atClient.syncService
-          .removeProgressListener(progressListener);
-    }));
+
+    Completer<SyncProgress> progress = Completer();
+    pl.streamController.stream.listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
+      }
+    });
+    SyncProgress syncProgress = await progress.future;
+
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
+    expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
+    bool keyInfoFound = false;
+    syncProgress.keyInfoList?.forEach((keyInfo) {
+      if (keyInfo.key.contains('username-$uniqueId')) {
+        keyInfoFound = true;
+        expect(keyInfo.syncDirection, SyncDirection.localToRemote);
+        expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+      }
+    });
+    expect(keyInfoFound, true);
   });
 
   test('Verifying sync progress - local ahead', () async {
@@ -120,42 +145,36 @@ void main() {
     // - where localCommitId > localCommitId before sync
     // - which includes KeyInfo for the key we put, localToRemote
 
-    // Let's start by running sync to make sure this test's sync is isolated
-    // from effects of other tests
-    atClientManager.atClient.syncService
-        .removeProgressListener(progressListener);
-    await testSyncSvc.syncData();
-
     // twitter.me@alice🛠
     var twitterKey = AtKey()..key = 'twitter-$uniqueId';
     var value = 'alice_A';
     await atClientManager.atClient.put(twitterKey, value);
 
-    atClientManager.atClient.syncService.addProgressListener(progressListener);
+    MySyncProgressListener pl = MySyncProgressListener(true);
+    atClientManager.atClient.syncService.addProgressListener(pl);
     await testSyncSvc.syncData();
 
-    final Completer testComplete = Completer();
-    progressListener.streamController.stream
-        .listen((SyncProgress syncProgress) {
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      expect(syncProgress.keyInfoList, isNotEmpty);
-      expect(syncProgress.localCommitId,
-          greaterThan(syncProgress.localCommitIdBeforeSync!));
-      expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
-      syncProgress.keyInfoList?.forEach((keyInfo) {
-        if (keyInfo.key.contains('twitter-$uniqueId')) {
-          expect(keyInfo.syncDirection, SyncDirection.localToRemote);
-          expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
-          if (!testComplete.isCompleted) {
-            testComplete.complete();
-          }
-        }
-      });
-      if (!testComplete.isCompleted) {
-        testComplete.completeError('No keyInfo for twitter-$uniqueId');
+    Completer<SyncProgress> progress = Completer();
+    pl.streamController.stream.listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
       }
     });
-    await testComplete.future;
+    SyncProgress syncProgress = await progress.future;
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    expect(syncProgress.keyInfoList, isNotEmpty);
+    expect(syncProgress.localCommitId,
+        greaterThan(syncProgress.localCommitIdBeforeSync!));
+    expect(syncProgress.localCommitId, equals(syncProgress.serverCommitId));
+    bool keyInfoFound = false;
+    syncProgress.keyInfoList?.forEach((keyInfo) {
+      if (keyInfo.key.contains('twitter-$uniqueId')) {
+        keyInfoFound = true;
+        expect(keyInfo.syncDirection, SyncDirection.localToRemote);
+        expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+      }
+    });
+    expect(keyInfoFound, true);
   });
 
   test('Verifying sync progress - server ahead', () async {
@@ -172,29 +191,36 @@ void main() {
         .executeVerb(updateVerbBuilder);
     expect(updateResponse.isNotEmpty, true);
 
+    MySyncProgressListener pl = MySyncProgressListener(true);
+    atClientManager.atClient.syncService.addProgressListener(pl);
     await testSyncSvc.syncData();
 
-    progressListener.streamController.stream
-        .listen(expectAsync1((SyncProgress syncProgress) {
-      expect(syncProgress.syncStatus, SyncStatus.success);
-      // If localCommitIdBeforeSync and localCommitId (local commitId after sync)
-      // are equal, it means there is not nothing to sync. So do not assert below conditions.
-      // The sync callback gets triggered twice, and the below conditions will be asserted
-      // on either of the sync process callback.
-      if (syncProgress.localCommitIdBeforeSync != syncProgress.localCommitId) {
-        expect(syncProgress.keyInfoList, isNotEmpty);
-        expect(syncProgress.localCommitId,
-            greaterThan(syncProgress.localCommitIdBeforeSync!));
-        syncProgress.keyInfoList?.forEach((keyInfo) {
-          if (keyInfo.key.contains('fb_username-$uniqueId')) {
-            expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
-            expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
-          }
-        });
+    Completer<SyncProgress> progress = Completer();
+    pl.streamController.stream.listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
       }
-      atClientManager.atClient.syncService
-          .removeProgressListener(progressListener);
-    }));
+    });
+    SyncProgress syncProgress = await progress.future;
+    expect(syncProgress.syncStatus, SyncStatus.success);
+    // If localCommitIdBeforeSync and localCommitId (local commitId after sync)
+    // are equal, it means there is not nothing to sync. So do not assert below conditions.
+    // The sync callback gets triggered twice, and the below conditions will be asserted
+    // on either of the sync process callback.
+    if (syncProgress.localCommitIdBeforeSync != syncProgress.localCommitId) {
+      expect(syncProgress.keyInfoList, isNotEmpty);
+      expect(syncProgress.localCommitId,
+          greaterThan(syncProgress.localCommitIdBeforeSync!));
+      bool keyInfoFound = false;
+      syncProgress.keyInfoList?.forEach((keyInfo) {
+        if (keyInfo.key.contains('fb_username-$uniqueId')) {
+          keyInfoFound = true;
+          expect(keyInfo.syncDirection, SyncDirection.remoteToLocal);
+          expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+        }
+      });
+      expect(keyInfoFound, true);
+    }
   });
 
   test(
@@ -218,11 +244,19 @@ void main() {
     await AtClientManager.getInstance().atClient.put(secondAtKey, 'value-2');
     await AtClientManager.getInstance().atClient.delete(firstAtKey);
 
+    MySyncProgressListener pl = MySyncProgressListener(true);
+    atClientManager.atClient.syncService.addProgressListener(pl);
     await testSyncSvc.syncData();
 
-    progressListener.streamController.stream.listen((syncProgress) {
-      expect(syncProgress.syncStatus, SyncStatus.success);
+    Completer<SyncProgress> progress = Completer();
+    pl.streamController.stream.listen((SyncProgress syncProgress) {
+      if (!progress.isCompleted) {
+        progress.complete(syncProgress);
+      }
     });
+    SyncProgress syncProgress = await progress.future;
+
+    expect(syncProgress.syncStatus, SyncStatus.success);
 
     // Get Commit Entries from server
     var serverCommitEntries = await AtClientManager.getInstance()
@@ -251,11 +285,5 @@ void main() {
             serverCommitLogMap[secondAtKey.toString()][1]);
       }
     }
-    atClientManager.atClient.syncService
-        .removeProgressListener(progressListener);
-  });
-
-  tearDown(() async {
-    await progressListener.streamController.close();
   });
 }
