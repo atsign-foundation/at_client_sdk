@@ -8,7 +8,6 @@ import 'test_utils.dart';
 
 void main() async {
   late AtClientManager atClientManager;
-  late MySyncProgressListener mySyncProgressListener;
   late String atSign;
   String namespace = 'wavi';
 
@@ -19,13 +18,15 @@ void main() async {
 
   // The SyncProgressListener is removed and stream is closed at the end of each test.
   // So, create an instance of SyncProgressListener at the start of each test
-  setUp(() async {
-    mySyncProgressListener = MySyncProgressListener(true);
-    atClientManager.atClient.syncService
-        .addProgressListener(mySyncProgressListener);
+  setUp(() async {});
+
+  tearDown(() async {
+    atClientManager.atClient.syncService.removeAllProgressListeners();
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
+    await FunctionalTestSyncService.getInstance().syncData();
+
     // Insert 5 keys into the keystore for uncommitted entries
     // among which, one is a conflict key - phone_0.wavi is a conflict key.
     for (var i = 0; i < 5; i++) {
@@ -45,6 +46,11 @@ void main() async {
     await atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(updateVerbBuilder);
+
+    MySyncProgressListener mySyncProgressListener =
+        MySyncProgressListener(true);
+    atClientManager.atClient.syncService
+        .addProgressListener(mySyncProgressListener);
 
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
@@ -73,6 +79,9 @@ void main() async {
   test(
       'A test to verify sync conflict info when a key is expired and server value is null',
       () async {
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClientManager.atClient.syncService);
+
     // Insert a key into local secondary for an uncommitted entry
     var testKey =
         AtKey.public('test', namespace: namespace, sharedBy: atSign).build();
@@ -92,6 +101,11 @@ void main() async {
     // Wait for 12 milliseconds to the key to expire
     await Future.delayed(Duration(seconds: 1));
 
+    MySyncProgressListener mySyncProgressListener =
+        MySyncProgressListener(true);
+    atClientManager.atClient.syncService
+        .addProgressListener(mySyncProgressListener);
+
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
 
@@ -108,10 +122,5 @@ void main() async {
       expect(syncProgress.localCommitId,
           greaterThan(syncProgress.localCommitIdBeforeSync!));
     }));
-  });
-
-  tearDown(() async {
-    atClientManager.atClient.syncService.removeAllProgressListeners();
-    await mySyncProgressListener.streamController.close();
   });
 }
