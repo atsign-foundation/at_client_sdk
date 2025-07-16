@@ -50,6 +50,13 @@ jobs:
         working-directory: packages/at_client
         run: dart format . -o none --set-exit-if-changed
 
+      # Run the osv-scanner
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client/pubspec.lock
+
       # Run unit tests
       - name: Run at_client unit tests, with code coverage measurement
         working-directory: packages/at_client
@@ -65,12 +72,6 @@ jobs:
       #        with:
       #          file: packages/at_client/unit_test_coverage.lcov
       #          flags: at_client_unit_tests
-
-      - name: Run osv-scanner
-        working-directory: packages
-        run: |
-          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
-          osv-scanner --lockfile=./at_client/pubspec.lock
 
   unit_at_client_mobile:
     runs-on: ubuntu-latest
@@ -111,6 +112,13 @@ jobs:
         working-directory: packages/at_client_mobile
         run: dart format . -o none --set-exit-if-changed
 
+      # Run the osv-scanner
+      - name: Run osv-scanner
+        working-directory: packages
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
+
       # Run unit tests
       - name: Run at_client_mobile unit tests, with code coverage measurement
         working-directory: packages/at_client_mobile
@@ -126,12 +134,6 @@ jobs:
       #        with:
       #          file: packages/at_client_mobile/unit_test_coverage.lcov
       #          flags: at_client_mobile_unit_tests
-
-      - name: Run osv-scanner
-        working-directory: packages
-        run: |
-          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
-          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
 
   functional_tests:
     runs-on: ubuntu-latest
