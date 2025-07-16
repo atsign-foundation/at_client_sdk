@@ -1,5 +1,6 @@
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
@@ -18,6 +19,7 @@ void main() {
   late MySyncProgressListener progressListener;
   var uniqueId = Uuid().v4();
   String namespace = 'wavi';
+  // final logger = AtSignLogger(' atclient_sync_callback_test.dart ');
 
   FunctionalTestSyncService testSyncSvc =
       FunctionalTestSyncService.getInstance();
@@ -30,6 +32,11 @@ void main() {
         await TestUtils.initAtClient(atSign, namespace, preference: preference);
     progressListener = MySyncProgressListener(true);
     atClientManager.atClient.syncService.addProgressListener(progressListener);
+  });
+
+  tearDown(() async {
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
@@ -106,14 +113,30 @@ void main() {
   });
 
   test('Verifying sync progress - local ahead', () async {
+    // Put one key, and sync it
+    // We expect to receive a SyncProgress:
+    // - whose status is 'success'
+    // - where localCommitId == serverCommitId
+    // - where localCommitId > localCommitId before sync
+    // - which includes KeyInfo for the key we put, localToRemote
+
+    // Let's start by running sync to make sure this test's sync is isolated
+    // from effects of other tests
+    atClientManager.atClient.syncService
+        .removeProgressListener(progressListener);
+    await testSyncSvc.syncData();
+
     // twitter.me@alice🛠
     var twitterKey = AtKey()..key = 'twitter-$uniqueId';
     var value = 'alice_A';
     await atClientManager.atClient.put(twitterKey, value);
+
+    atClientManager.atClient.syncService.addProgressListener(progressListener);
     await testSyncSvc.syncData();
 
+    final Completer testComplete = Completer();
     progressListener.streamController.stream
-        .listen(expectAsync1((SyncProgress syncProgress) {
+        .listen((SyncProgress syncProgress) {
       expect(syncProgress.syncStatus, SyncStatus.success);
       expect(syncProgress.keyInfoList, isNotEmpty);
       expect(syncProgress.localCommitId,
@@ -123,11 +146,16 @@ void main() {
         if (keyInfo.key.contains('twitter-$uniqueId')) {
           expect(keyInfo.syncDirection, SyncDirection.localToRemote);
           expect(keyInfo.commitOp, CommitOp.UPDATE_ALL);
+          if (!testComplete.isCompleted) {
+            testComplete.complete();
+          }
         }
       });
-      atClientManager.atClient.syncService
-          .removeProgressListener(progressListener);
-    }));
+      if (!testComplete.isCompleted) {
+        testComplete.completeError('No keyInfo for twitter-$uniqueId');
+      }
+    });
+    await testComplete.future;
   });
 
   test('Verifying sync progress - server ahead', () async {
