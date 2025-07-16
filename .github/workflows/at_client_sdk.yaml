@@ -209,8 +209,8 @@ jobs:
         run: echo "${{secrets.AT_CICD_CREDENTIALS}}" > tests/at_end2end_test/lib/src/at_credentials.dart
 
       # Move the config file in-place
-      - name: Config for @cicd1/2
-        run: mv tests/at_end2end_test/config/config12.yaml tests/at_end2end_test/config/config.yaml
+      - name: Config for @cicd2/3
+        run: mv tests/at_end2end_test/config/config23.yaml tests/at_end2end_test/config/config.yaml
 
       # Run end-to-end test
       - name: End to end test
