@@ -38,6 +38,7 @@ void main() {
             TestPreferences.getInstance().getPreference(atSign_1)))
         .atClient;
 
+    // ignore: deprecated_member_use
     atClient.getPreferences()!.atProtocolEmitted = version;
 
     return atClient;

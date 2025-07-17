@@ -209,6 +209,7 @@ void main() {
 
     group('Test encryption for self', () {
       test('Test put self, then get, no IV, 1.5 to 1.5', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
 
         var atKey = AtKey.self('test_put').build();
@@ -228,6 +229,7 @@ void main() {
       });
 
       test('Test put self, then get, no IV, 1.5 to 2.0', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
 
         var atKey = AtKey.self('test_put').build();
@@ -242,12 +244,14 @@ void main() {
         expect(EncryptionUtil.decryptValue(cipherText, selfEncryptionKey),
             clearText);
 
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
         var getResult = await atClient.get(atKey);
         expect(getResult.value, clearText);
       });
 
       test('Test put self, then get, with IV, 2.0 to 2.0', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
         var atKey = AtKey.self('test_put').build();
@@ -276,12 +280,14 @@ void main() {
       });
 
       test('Test put self, then get, with IV, 2.0 to 1.5', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
         var atKey = AtKey.self('test_put').build();
         await atClient.put(atKey, clearText);
         expect(atKey.metadata.ivNonce, isNotNull);
 
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
 
         var atData = await (atClient
@@ -308,6 +314,7 @@ void main() {
 
     group('Test encryption for sharing', () {
       test('Test put shared, then get, no IV, 1.5 to 1.5', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
@@ -327,12 +334,14 @@ void main() {
       });
 
       test('Test put shared, then get, no IV, 1.5 to 2.0', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
         expect(atKey.metadata.ivNonce, isNull);
 
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
         var atData = await (atClient
             .getLocalSecondary()!
@@ -347,6 +356,7 @@ void main() {
       });
 
       test('Test put shared, then get, with IV, 2.0 to 2.0', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
@@ -389,12 +399,14 @@ void main() {
       });
 
       test('Test put shared, then get, with IV, 2.0 to 1.5', () async {
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(2, 0, 0);
 
         var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
         await atClient.put(atKey, clearText);
         expect(atKey.metadata.ivNonce, isNotNull);
 
+        // ignore: deprecated_member_use_from_same_package
         fullStackPrefs.atProtocolEmitted = Version(1, 5, 0);
         var atData = await (atClient
             .getLocalSecondary()!
