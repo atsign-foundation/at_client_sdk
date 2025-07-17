@@ -515,6 +515,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
 
+    // ignore: deprecated_member_use_from_same_package
     if (preference!.atProtocolEmitted >= Version(2, 0, 0)) {
       atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     }

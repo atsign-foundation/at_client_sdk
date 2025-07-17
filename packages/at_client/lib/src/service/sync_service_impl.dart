@@ -496,8 +496,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
             final keyInfo = KeyInfo(
                 serverCommitEntry['atKey'],
                 SyncDirection.remoteToLocal,
-                convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
-            keyInfo.conflictInfo = conflictInfo;
+                convertCommitOpSymbolToEnum(serverCommitEntry['operation']))
+              ..conflictInfo = conflictInfo;
             keyInfoList.add(keyInfo);
             continue;
           }
@@ -623,10 +623,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       _logger.finer('$key found in conflict resolution, returning null');
       return null;
     }
-    final atKey = AtKey.fromString(key);
+
     // temporary fix to add @ to sharedBy. permanent fix should be in AtKey.fromString
-    if (atKey.sharedBy != null) {
-      atKey.sharedBy = AtUtils.fixAtSign(atKey.sharedBy!);
+    AtKey clientAtKey = AtKey.fromString(key);
+    if (clientAtKey.sharedBy != null) {
+      clientAtKey.sharedBy = AtUtils.fixAtSign(clientAtKey.sharedBy!);
     }
     final conflictInfo = ConflictInfo();
     try {
@@ -634,13 +635,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       // For a conflicting key, if an uncommitted entry is of CommitOp.Delete, then
       // key will not exist in Key-Store. On KeyNotFoundException, return null.
       try {
-        localAtValue = await _atClient.get(atKey);
+        localAtValue = await _atClient.get(clientAtKey);
       } on KeyNotFoundException {
         return null;
       } on AtKeyNotFoundException {
         return null;
       }
-      if (atKey is PublicKey || key.contains('public:')) {
+      if (clientAtKey is PublicKey || key.contains('public:')) {
         final serverValue = serverCommitEntry['value'];
         if (localAtValue.value != serverValue) {
           conflictInfo.localValue = localAtValue.value;
@@ -648,17 +649,19 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         }
         return conflictInfo;
       }
+      final serverAtKey = AtKey.fromString(clientAtKey.toString());
+      _setMetadataFromCommitEntry(serverAtKey.metadata, serverCommitEntry);
       final serverEncryptedValue = serverCommitEntry['value'];
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null &&
           serverMetaData[AtConstants.isEncrypted] == "true") {
-        final atKeyDecryption =
-            atKeyDecryptionManager.get(atKey, _atClient.getCurrentAtSign()!);
+        final atKeyDecryption = atKeyDecryptionManager.get(
+            serverAtKey, _atClient.getCurrentAtSign()!);
         // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue;
         if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {
           serverDecryptedValue =
-              await atKeyDecryption.decrypt(atKey, serverEncryptedValue);
+              await atKeyDecryption.decrypt(serverAtKey, serverEncryptedValue);
         }
         if (localAtValue.value != serverDecryptedValue) {
           conflictInfo.localValue = localAtValue.value;
@@ -668,7 +671,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return conflictInfo;
     } catch (e, st) {
       conflictInfo.errorOrExceptionMessage =
-          'Exception occurred when setting conflict info for $atKey | $e';
+          'Exception occurred when setting conflict info for $clientAtKey | $e';
       _logger.warning(conflictInfo.errorOrExceptionMessage, e, st);
       return conflictInfo;
     }
@@ -951,7 +954,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
           ..atKey = AtKey.fromString(serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
         builder.operation = AtConstants.updateAll;
-        _setMetaData(builder, serverCommitEntry);
+        _setMetadataFromCommitEntry(builder.atKey.metadata, serverCommitEntry);
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
@@ -984,76 +987,71 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return unCommittedEntryBatch;
   }
 
-  void _setMetaData(UpdateVerbBuilder builder, serverCommitEntry) {
+  void _setMetadataFromCommitEntry(Metadata md, Map serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
       if (metaData[AtConstants.ttl] != null) {
-        builder.atKey.metadata.ttl = int.parse(metaData[AtConstants.ttl]);
+        md.ttl = int.parse(metaData[AtConstants.ttl]);
       }
       if (metaData[AtConstants.ttb] != null) {
-        builder.atKey.metadata.ttb = int.parse(metaData[AtConstants.ttb]);
+        md.ttb = int.parse(metaData[AtConstants.ttb]);
       }
       if (metaData[AtConstants.ttr] != null) {
-        builder.atKey.metadata.ttr = int.parse(metaData[AtConstants.ttr]);
+        md.ttr = int.parse(metaData[AtConstants.ttr]);
       }
       if (metaData[AtConstants.ccd] != null) {
         (metaData[AtConstants.ccd].toLowerCase() == 'true')
-            ? builder.atKey.metadata.ccd = true
-            : builder.atKey.metadata.ccd = false;
+            ? md.ccd = true
+            : md.ccd = false;
       }
       if (metaData[AtConstants.publicDataSignature] != null) {
-        builder.atKey.metadata.dataSignature =
-            metaData[AtConstants.publicDataSignature];
+        md.dataSignature = metaData[AtConstants.publicDataSignature];
       }
       if (metaData[AtConstants.isBinary] != null) {
         (metaData[AtConstants.isBinary].toLowerCase() == 'true')
-            ? builder.atKey.metadata.isBinary = true
-            : builder.atKey.metadata.isBinary = false;
+            ? md.isBinary = true
+            : md.isBinary = false;
       }
       if (metaData[AtConstants.isEncrypted] != null) {
         (metaData[AtConstants.isEncrypted].toLowerCase() == 'true')
-            ? builder.atKey.metadata.isEncrypted = true
-            : builder.atKey.metadata.isEncrypted = false;
+            ? md.isEncrypted = true
+            : md.isEncrypted = false;
       }
       if (metaData[AtConstants.sharedKeyEncrypted] != null) {
-        builder.atKey.metadata.sharedKeyEnc =
-            metaData[AtConstants.sharedKeyEncrypted];
+        md.sharedKeyEnc = metaData[AtConstants.sharedKeyEncrypted];
       }
       if (metaData[AtConstants.sharedWithPublicKeyCheckSum] != null) {
-        builder.atKey.metadata.pubKeyCS =
-            metaData[AtConstants.sharedWithPublicKeyCheckSum];
+        md.pubKeyCS = metaData[AtConstants.sharedWithPublicKeyCheckSum];
       }
       if (metaData[AtConstants.sharedWithPublicKeyHash] != null) {
         Map pubKeyHash =
             jsonDecode(metaData[AtConstants.sharedWithPublicKeyHash]);
-        builder.atKey.metadata.pubKeyHash =
+        md.pubKeyHash =
             PublicKeyHash(pubKeyHash['hash'], pubKeyHash['hashingAlgo']);
       }
       if (metaData[AtConstants.encoding] != null) {
-        builder.atKey.metadata.encoding = metaData[AtConstants.encoding];
+        md.encoding = metaData[AtConstants.encoding];
       }
       if (metaData[AtConstants.encryptingKeyName] != null) {
-        builder.atKey.metadata.encKeyName =
-            metaData[AtConstants.encryptingKeyName];
+        md.encKeyName = metaData[AtConstants.encryptingKeyName];
       }
       if (metaData[AtConstants.encryptingAlgo] != null) {
-        builder.atKey.metadata.encAlgo = metaData[AtConstants.encryptingAlgo];
+        md.encAlgo = metaData[AtConstants.encryptingAlgo];
       }
       if (metaData[AtConstants.ivOrNonce] != null) {
-        builder.atKey.metadata.ivNonce = metaData[AtConstants.ivOrNonce];
+        md.ivNonce = metaData[AtConstants.ivOrNonce];
       }
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingKeyName] != null) {
-        builder.atKey.metadata.skeEncKeyName =
+        md.skeEncKeyName =
             metaData[AtConstants.sharedKeyEncryptedEncryptingKeyName];
       }
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo] != null) {
-        builder.atKey.metadata.skeEncAlgo =
-            metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo];
+        md.skeEncAlgo = metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo];
       }
 
       if (metaData[AtConstants.sharedWithPublicKeyHash] != null &&
           metaData[AtConstants.sharedWithPublicKeyHashingAlgo] != null) {
-        builder.atKey.metadata.pubKeyHash = PublicKeyHash(
+        md.pubKeyHash = PublicKeyHash(
             metaData[AtConstants.sharedWithPublicKeyHash],
             metaData[AtConstants.sharedWithPublicKeyHashingAlgo]);
       }

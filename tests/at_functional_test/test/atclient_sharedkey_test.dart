@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -41,19 +40,17 @@ void main() {
       ..sharedBy = currentAtSign
       ..metadata = (Metadata()..ttl = 120000);
     var value = '+91 887 888 3435';
-    var encryptionService =
-        AtKeyEncryptionManager(atClient).get(phoneKey, currentAtSign);
-    var encryptedValue = await encryptionService.encrypt(phoneKey, value);
-    var result = await atClient.getRemoteSecondary()!.executeCommand(
-        'update:sharedKeyEnc:${phoneKey.metadata.sharedKeyEnc}:pubKeyCS:${phoneKey.metadata.pubKeyCS}:pubKeyHash:${phoneKey.metadata.pubKeyHash?.hash}:hashingAlgo:${phoneKey.metadata.pubKeyHash?.hashingAlgo}:${phoneKey.sharedWith}:${phoneKey.key}.$namespace$currentAtSign $encryptedValue\n',
-        auth: true);
-    expect(result != null, true);
+    await atClient.put(phoneKey, value,
+        putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
+
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClientManager.atClient.syncService);
+
     var metadata = await atClient.getMeta(phoneKey);
     expect(metadata?.sharedKeyEnc, isNotEmpty);
     expect(metadata?.pubKeyCS, isNotEmpty);
     expect(metadata?.pubKeyHash?.hash, isNotEmpty);
     expect(metadata?.pubKeyHash?.hashingAlgo, isNotEmpty);
+    expect(metadata?.ivNonce, isNotEmpty);
   });
 }

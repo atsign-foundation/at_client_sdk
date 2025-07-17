@@ -28,6 +28,7 @@ void main() {
             atSign, namespace, TestUtils.getPreference(atSign_1)))
         .atClient;
 
+    // ignore: deprecated_member_use
     atClient.getPreferences()!.atProtocolEmitted = version;
 
     return atClient;
@@ -42,6 +43,7 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata.ivNonce, isNull);
 
+      // ignore: deprecated_member_use
       atClient.getPreferences()!.atProtocolEmitted = Version(1, 5, 0);
 
       String selfEncryptionKey =
@@ -63,6 +65,7 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata.ivNonce, isNull);
 
+      // ignore: deprecated_member_use
       atClient.getPreferences()!.atProtocolEmitted = Version(2, 0, 0);
       String selfEncryptionKey =
           (await atClient.getLocalSecondary()!.getEncryptionSelfKey())!;
@@ -83,6 +86,7 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata.ivNonce, isNotNull);
 
+      // ignore: deprecated_member_use
       atClient.getPreferences()!.atProtocolEmitted = Version(2, 0, 0);
       String selfEncryptionKey =
           (await atClient.getLocalSecondary()!.getEncryptionSelfKey())!;
@@ -105,6 +109,7 @@ void main() {
       await atClient.put(atKey, clearText);
       expect(atKey.metadata.ivNonce, isNotNull);
 
+      // ignore: deprecated_member_use
       atClient.getPreferences()!.atProtocolEmitted = Version(1, 5, 0);
       String selfEncryptionKey =
           (await atClient.getLocalSecondary()!.getEncryptionSelfKey())!;

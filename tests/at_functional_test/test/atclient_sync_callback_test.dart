@@ -105,7 +105,7 @@ void main() {
 
   test('Verifying keyname exists in key info list', () async {
     // username.wavi@alice🛠
-    var usernameKey = AtKey()..key = 'username-$uniqueId';
+    var usernameKey = AtKey.fromString('username-$uniqueId.$namespace$atSign');
     var value = 'alice123';
     await atClientManager.atClient.put(usernameKey, value);
 
@@ -146,7 +146,7 @@ void main() {
     // - which includes KeyInfo for the key we put, localToRemote
 
     // twitter.me@alice🛠
-    var twitterKey = AtKey()..key = 'twitter-$uniqueId';
+    var twitterKey = AtKey.fromString('twitter-$uniqueId.$namespace$atSign');
     var value = 'alice_A';
     await atClientManager.atClient.put(twitterKey, value);
 

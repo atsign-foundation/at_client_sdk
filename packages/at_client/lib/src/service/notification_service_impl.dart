@@ -360,6 +360,7 @@ class NotificationServiceImpl
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
 
+    // ignore: deprecated_member_use_from_same_package
     if (_atClient.getPreferences()!.atProtocolEmitted >= Version(2, 0, 0)) {
       notificationParams.atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     }

@@ -54,6 +54,10 @@ class TestUtils {
     var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, preference,
         atChops: encryptionKeysLoader.createAtChopsFromDemoKeys(currentAtSign));
+    // Set the preferences again because (1) setCurrentAtSign might do nothing
+    // because currentAtSign is the same, and (2) some other test may have messed
+    // with the preferences
+    atClientManager.atClient.setPreferences(preference);
     // To setup encryption keys
     await encryptionKeysLoader.setEncryptionKeys(
         atClientManager.atClient, currentAtSign);
