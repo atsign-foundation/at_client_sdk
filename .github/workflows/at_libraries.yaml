@@ -131,13 +131,8 @@ jobs:
         working-directory: tests/${{ matrix.package }}
         run: dart run check_docker_readiness.dart
 
-#      commented since onboarding tests throw atsign already activated exception
-#      - name: run pkamLoad on docker-image
-#        run: sudo docker exec at_onboarding_cli_functional_tests_virtualenv_1 supervisorctl start pkamLoad
-
-#      - name: Check test environment readiness
-#        working-directory: tests/${{ matrix.package }}
-#        run: dart run check_test_env.dart
+      # Note that, unlike the functional tests in at_client_sdk, we do not run the pkamLoad
+      # job here, since we require all the atSigns to NOT be already onboarded.
 
       - name: run tests
         working-directory: tests/${{ matrix.package }}

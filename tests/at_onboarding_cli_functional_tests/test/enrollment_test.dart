@@ -52,6 +52,7 @@ void main() {
       logger.info('onboarding $atSign1');
       bool status = await onboardingService_1.onboard();
       expect(status, true);
+      logger.info('successfully onboarded $atSign1');
 
       preference_1.privateKey = pkamPrivateKey;
       var keysFilePath = preference_1.atKeysFilePath;
@@ -66,6 +67,7 @@ void main() {
       logger.info('authenticating $atSign1 using onboarding keys');
       var authResult = await onboardingService_1.authenticate();
       expect(authResult, true);
+      logger.info('successfully authenticated $atSign1');
       await _setLastReceivedNotificationDateTime(
           onboardingService_1.atClient!, atSign1);
 
@@ -141,9 +143,7 @@ void main() {
       logger.info('Verifying atKeys file');
       final enrolledClientKeysFile = File(enrollPreference_2.atKeysFilePath!);
       while (!await enrolledClientKeysFile.exists()) {
-        logger
-            .info('Sleeping for 10 seconds until atKeys file has been created');
-        await Future.delayed(Duration(seconds: 10));
+        await Future.delayed(Duration(milliseconds: 100));
       }
       expect(await enrolledClientKeysFile.exists(), true);
       var enrolledClientKeysFileContent =
