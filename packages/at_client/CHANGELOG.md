@@ -1,3 +1,7 @@
+## 3.7.0
+
+- feat: Add `ApkamSigning` mixin
+ 
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
   `AtClientPreference.atProtocolEmitted` and change its default value
