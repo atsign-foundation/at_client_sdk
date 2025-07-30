@@ -13,7 +13,9 @@ class SecureSocketUtil {
     } else {
       SecurityContext securityContext = SecurityContext();
       try {
-        File keysFile = File(secureSocketConfig.tlsKeysSavePath!);
+        File? keysFile = secureSocketConfig.tlsKeysSavePath != null
+            ? File(secureSocketConfig.tlsKeysSavePath!)
+            : null;
         if (secureSocketConfig.pathToCerts != null &&
             await File(secureSocketConfig.pathToCerts!).exists()) {
           securityContext
@@ -25,7 +27,7 @@ class SecureSocketUtil {
         aSecureSocket = await SecureSocket.connect(host, int.parse(port),
             context: securityContext,
             keyLog: (line) =>
-                keysFile.writeAsStringSync(line, mode: FileMode.append));
+                keysFile?.writeAsStringSync(line, mode: FileMode.append));
         aSecureSocket.setOption(SocketOption.tcpNoDelay, true);
         return aSecureSocket;
       } catch (e) {

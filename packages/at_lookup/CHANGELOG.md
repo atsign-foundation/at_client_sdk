@@ -1,5 +1,6 @@
 ## 3.2.0
 - feat: add `SecureSocketConfig? config` to `SecondaryUrlFinder` constructor
+- fix: make `SecureSocketConfig.tlsKeysSavePath` optional
 
 ## 3.1.0
 - feat: add `OutboundConnection? connection` to the `AtLookUp` interface
