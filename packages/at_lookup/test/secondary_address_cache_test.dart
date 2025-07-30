@@ -345,13 +345,12 @@ void main() async {
     when(() => mockSecureSocket.destroy()).thenReturn(null);
     when(() => mockSecureSocket.flush()).thenAnswer((_) async => null);
 
-    SecondaryUrlFinder finder = SecondaryUrlFinder(
-      rootDomain,
-      rootPort,
-      socketFactory: mockSocketFactory,
-    );
+    SecondaryUrlFinder finder = SecondaryUrlFinder(rootDomain, rootPort,
+        socketFactory: mockSocketFactory, socketConfig: config);
 
-    await finder.findSecondaryUrl(atSign, secureSocketConfig: config);
+    await finder.findSecondaryUrl(
+      atSign,
+    );
 
     expect(
       configPassedToFactory.hashCode,

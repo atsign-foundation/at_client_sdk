@@ -1,5 +1,5 @@
 ## 3.2.0
-- feat: add `SecureSocketConfig? config` to `SecondaryUrlFinder.findSecondary`
+- feat: add `SecureSocketConfig? config` to `SecondaryUrlFinder` constructor
 
 ## 3.1.0
 - feat: add `OutboundConnection? connection` to the `AtLookUp` interface

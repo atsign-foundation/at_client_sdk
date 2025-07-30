@@ -18,9 +18,9 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   late SecondaryUrlFinder _secondaryFinder;
 
   CacheableSecondaryAddressFinder(this._rootDomain, this._rootPort,
-      {SecondaryUrlFinder? secondaryFinder}) {
-    _secondaryFinder =
-        secondaryFinder ?? SecondaryUrlFinder(_rootDomain, _rootPort);
+      {SecondaryUrlFinder? secondaryFinder, SecureSocketConfig? socketConfig}) {
+    _secondaryFinder = secondaryFinder ??
+        SecondaryUrlFinder(_rootDomain, _rootPort, socketConfig: socketConfig);
   }
 
   bool cacheContains(String atSign) {
@@ -133,10 +133,13 @@ class SecondaryUrlFinder {
   final String _rootDomain;
   final int _rootPort;
   late final AtLookupSecureSocketFactory _socketFactory;
+  late final SecureSocketConfig _socketConfig;
 
   SecondaryUrlFinder(this._rootDomain, this._rootPort,
-      {AtLookupSecureSocketFactory? socketFactory}) {
+      {AtLookupSecureSocketFactory? socketFactory,
+      SecureSocketConfig? socketConfig}) {
     _socketFactory = socketFactory ?? AtLookupSecureSocketFactory();
+    _socketConfig = socketConfig ?? SecureSocketConfig();
   }
 
   final _logger = AtSignLogger('AtServerUrlFinder');
@@ -146,12 +149,9 @@ class SecondaryUrlFinder {
   /// (b) the delay before each retry
   static List<int> retryDelaysMillis = [50, 100, 150, 200];
 
-  Future<String?> findSecondaryUrl(
-    String atSign, {
-    SecureSocketConfig? secureSocketConfig,
-  }) async {
+  Future<String?> findSecondaryUrl(String atSign) async {
     if (_rootDomain.startsWith("proxy:")) {
-      // In order to make it easy for clients to connect to a reverse proxy
+      // In order to mae it easy for clients to connect to a reverse proxy
       // instead of doing a root lookup,  we adopt the convention that:
       // if the rootDomain starts with 'proxy:'
       // then the secondary domain name will be deemed to be the portion of rootDomain after 'proxy:'
@@ -162,10 +162,7 @@ class SecondaryUrlFinder {
     String lastExceptionMsg = '';
     for (int i = 0; i <= retryDelaysMillis.length; i++) {
       try {
-        address = await _findSecondary(
-          atSign,
-          secureSocketConfig: secureSocketConfig,
-        );
+        address = await _findSecondary(atSign);
         return address;
       } catch (e) {
         lastExceptionMsg = e.toString();
@@ -184,10 +181,7 @@ class SecondaryUrlFinder {
     throw AtConnectException('findAtServer for $atSign : $lastExceptionMsg');
   }
 
-  Future<String?> _findSecondary(
-    String atsign, {
-    SecureSocketConfig? secureSocketConfig,
-  }) async {
+  Future<String?> _findSecondary(String atsign) async {
     String? response;
     SecureSocket? socket;
     try {
@@ -202,7 +196,7 @@ class SecondaryUrlFinder {
       socket = await _socketFactory.createSocket(
         _rootDomain,
         '$_rootPort',
-        secureSocketConfig ?? SecureSocketConfig(),
+        _socketConfig,
       );
       _logger.finer('findAtServerUrl: connection to atDirectory established');
       // listen to the received data event stream
