@@ -1,4 +1,7 @@
+import 'dart:async' show StreamSubscription;
+import 'dart:convert' show utf8;
 import 'dart:io';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -297,5 +300,63 @@ void main() async {
       expect(csaf.getCacheExpiryTime(atSign), isNotNull);
       expect((approxExpiry - csaf.getCacheExpiryTime(atSign)!) < 100, true);
     });
+  });
+
+  test(
+      'regression test - secureSocketConfig is used to create socket for findSecondary',
+      () async {
+    final rootDomain = 'root.atsign.unit.tests';
+    final rootPort = 64;
+    String atSign = "bob";
+
+    AtLookupSecureSocketFactory mockSocketFactory = MockSecureSocketFactory();
+    SecureSocket mockSecureSocket = MockSecureSocket();
+    StreamSubscription<Uint8List> mockStreamSubscription =
+        MockStreamSubscription();
+
+    SecureSocketConfig config = SecureSocketConfig();
+
+    late Future<void> Function(List<int>) callback;
+    late SecureSocketConfig configPassedToFactory;
+
+    when(
+      () => mockSocketFactory.createSocket(
+        rootDomain,
+        rootPort.toString(),
+        any(),
+      ),
+    ).thenAnswer((invocation) async {
+      configPassedToFactory = invocation.positionalArguments[2];
+      return mockSecureSocket;
+    });
+
+    when(() => mockSecureSocket.listen(any())).thenAnswer((invocation) {
+      callback = invocation.positionalArguments.first;
+      callback(utf8.encode("@"));
+      return mockStreamSubscription;
+    });
+
+    when(() => mockSecureSocket.write("$atSign\n")).thenAnswer((invocation) {
+      callback(utf8.encode("null\n"));
+    });
+
+    when(() => mockSecureSocket.write("@exit\n")).thenReturn(null);
+
+    when(() => mockSecureSocket.destroy()).thenReturn(null);
+    when(() => mockSecureSocket.flush()).thenAnswer((_) async => null);
+
+    SecondaryUrlFinder finder = SecondaryUrlFinder(
+      rootDomain,
+      rootPort,
+      socketFactory: mockSocketFactory,
+    );
+
+    await finder.findSecondaryUrl(atSign, secureSocketConfig: config);
+
+    expect(
+      configPassedToFactory.hashCode,
+      config.hashCode,
+      reason: "SecureSocketConfig was not passed through to socket factory",
+    );
   });
 }
