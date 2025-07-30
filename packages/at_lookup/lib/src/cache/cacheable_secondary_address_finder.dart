@@ -151,7 +151,7 @@ class SecondaryUrlFinder {
 
   Future<String?> findSecondaryUrl(String atSign) async {
     if (_rootDomain.startsWith("proxy:")) {
-      // In order to mae it easy for clients to connect to a reverse proxy
+      // In order to make it easy for clients to connect to a reverse proxy
       // instead of doing a root lookup,  we adopt the convention that:
       // if the rootDomain starts with 'proxy:'
       // then the secondary domain name will be deemed to be the portion of rootDomain after 'proxy:'
