@@ -1,0 +1,66 @@
+name: Refreshcerts
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '42 12 * * *' # At 1242 each day
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  checkcert:
+    runs-on: ubuntu-latest
+    outputs:
+      cert: ${{ steps.checkcert.outputs.cert }}
+    steps:
+      - name: checkout repo content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - id: checkcert
+        name: Check for new cert
+        run: |
+          cd tests/at_functional_test/test/testData
+          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
+          wget -O cert.pem ${CERTURL}
+          if [ -z "$(git status --porcelain)" ]; then
+            echo 'No new cert'
+            echo "cert=NOTNEW" >> $GITHUB_OUTPUT
+          else
+            echo "cert=NEW" >> $GITHUB_OUTPUT
+          fi
+
+  update_cert_in_repo:
+    needs: [checkcert]
+    if: ${{ needs.checkcert.outputs.cert == 'NEW' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout_to_update_version
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Update stable version
+        id: getcert
+        run: |
+          cd tests/at_functional_test/test/testData
+          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
+          wget -O cert.pem ${CERTURL}
+
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+          commit-message: 'chore: Update cert in testdata'
+          committer: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          signoff: false
+          add-paths: .
+          branch: bot-new-cert
+          delete-branch: true
+          title: 'chore: Update cert in testdata'
+          body: |
+            New cert copied from at_server
+          labels: |
+            operations
+          assignees: cpswan
+          reviewers: gkc
+          draft: false

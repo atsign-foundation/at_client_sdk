@@ -1,0 +1,22 @@
+# The @Protocol root server configuration
+root_server:
+  # The url to connect to root server
+  url: 'root.atsign.wtf'
+
+# cicd atSign details
+atSign:
+  # @ce2e1 and @ce2e2 are running latest at_secondary_server trunk
+  # @ce2e3 and @ce2e4 are running the latest canary release
+  # See https://github.com/atsign-foundation/at_client_sdk/issues/447#issuecomment-1075290415 for
+  # full details.
+  #
+  # We want the e2e tests to run in parallel, so:
+  # These tests will be for ce2e2 (trunk) to ce2e3 (canary)
+  # And the other tests will be for ce2e1 (trunk) to ce2e4 (canary)
+  firstAtSign: '@ce2e2'
+  secondAtSign: '@ce2e3'
+  thirdAtSign: '@ce2e1'
+  fourthAtSign: '@ce2e4'
+
+authType: 'pkam'
+    

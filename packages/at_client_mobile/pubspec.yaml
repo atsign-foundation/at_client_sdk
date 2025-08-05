@@ -1,0 +1,35 @@
+name: at_client_mobile
+description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
+version: 3.2.24
+repository: https://github.com/atsign-foundation/at_client_sdk/packages
+homepage: https://docs.atsign.com/
+
+environment:
+  sdk: ">=2.15.0 <4.0.0"
+
+dependencies:
+  path: ^1.8.2
+  flutter:
+    sdk: flutter
+  package_info_plus: ^8.0.0
+  flutter_keychain: ^2.2.1
+  biometric_storage: ^5.0.0
+  hive: ^2.2.3
+  crypton: ^2.2.1
+  at_commons: ^5.3.0
+  at_utils: ^3.0.19
+  at_chops: ^2.2.0
+  at_lookup: ^3.0.51
+  at_client: ^3.5.0
+  at_auth: ^2.1.0
+  at_file_saver: ^0.1.2
+  encrypt: ^5.0.3
+  at_persistence_secondary_server: ^4.1.0
+
+dependency_overrides:
+  # Very annoyingly have to add this here because latest stable flutter is pinned to meta 1.16.0
+  meta: ^1.16.0
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.2
+  mocktail: ^1.0.4

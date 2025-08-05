@@ -1,0 +1,22 @@
+import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
+import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_commons/at_commons.dart';
+
+/// Class responsible for encrypting the stream data.
+class StreamEncryption extends AbstractAtKeyEncryption {
+  StreamEncryption(super.atClient);
+
+  @override
+  Future<dynamic> encrypt(AtKey atKey, dynamic value,
+      {bool storeSharedKeyEncryptedWithData = true}) async {
+    if (value is! List<int>) {
+      throw AtEncryptionException(
+          'Invalid value type found: ${value.runtimeType}. Valid value type is List<int>');
+    }
+    await super.encrypt(atKey, value,
+        storeSharedKeyEncryptedWithData: storeSharedKeyEncryptedWithData);
+    // Encrypt value using sharedKey
+    return EncryptionUtil.encryptBytes(value, sharedKey,
+        ivBase64: atKey.metadata.ivNonce);
+  }
+}
