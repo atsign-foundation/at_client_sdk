@@ -4,7 +4,7 @@ description: Functional tests for the at_client_sdk packages
 version: 1.0.0
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   uuid: ^4.0.0
@@ -18,10 +18,21 @@ dependencies:
   at_chops: ^2.2.0
   at_commons: ^5.5.0
   at_persistence_secondary_server:
-    path: ../../../at_server/packages/at_persistence_secondary_server
+    git:
+      url: https://github.com/atsign-foundation/at_server
+      ref: at_persistence_secondary_server-4.2.0
+      path: packages/at_persistence_secondary_server
   version: ^3.0.2
+
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server
+      path: packages/at_persistence_secondary_server
+      ref: at_persistence_secondary_server-4.2.0
 
 dev_dependencies:
   test: ^1.26.2
   lints: ^6.0.0
   coverage: ^1.5.0
+

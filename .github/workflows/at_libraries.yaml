@@ -6,14 +6,14 @@ name: at_libraries
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
     branches:
       - trunk
   pull_request:
     branches:
       - trunk
 
-permissions:  # added using https://github.com/step-security/secure-workflows
+permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
@@ -34,8 +34,10 @@ jobs:
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version: 'stable'
+          go-version: "stable"
           cache-dependency-path: tools/osv-scanner/go.sum
+
+      - uses: ./actions/melos-bootstrap
 
       - name: Install dependencies in ${{ matrix.package }}
         working-directory: packages/${{ matrix.package }}
@@ -76,8 +78,10 @@ jobs:
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version: 'stable'
+          go-version: "stable"
           cache-dependency-path: tools/osv-scanner/go.sum
+
+      - uses: ./actions/melos-bootstrap
 
       - name: Install dependencies in ${{ matrix.package }}
         working-directory: packages/${{ matrix.package }}
@@ -118,6 +122,8 @@ jobs:
       #functional tests for at_onboarding_cli
       - name: add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      - uses: ./actions/melos-bootstrap
 
       - name: Get functional test dependencies
         working-directory: tests/${{ matrix.package }}

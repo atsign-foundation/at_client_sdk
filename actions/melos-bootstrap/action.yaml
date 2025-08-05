@@ -1,0 +1,23 @@
+name: melos bootstrap
+description: Installs flutter & melos, then runs melos bootstrap
+
+inputs:
+  melos_args:
+    required: false
+    description: Additional args passed to "melos bootstrap"
+
+runs:
+  using: composite
+  steps:
+    - name: Install melos
+      run: dart pub get
+      shell: bash
+
+    - name: Bootstrap project with melos
+      shell: bash
+      run: |
+        if command -v flutter; then
+          dart run melos bootstrap ${{ inputs.melos_args }}
+        else
+          dart run melos bootstrap --no-flutter ${{ inputs.melos_args }}
+        fi

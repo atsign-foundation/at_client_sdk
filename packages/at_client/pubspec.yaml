@@ -38,7 +38,10 @@ dependencies:
   at_auth: ^2.2.0
   at_persistence_spec: ^3.0.0
   at_persistence_secondary_server:
-    path: ../../../at_server/packages/at_persistence_secondary_server
+    git:
+      url: https://github.com/atsign-foundation/at_server
+      ref: at_persistence_secondary_server-4.2.0
+      path: packages/at_persistence_secondary_server
   meta: ^1.16.0
   version: ^3.0.2
 

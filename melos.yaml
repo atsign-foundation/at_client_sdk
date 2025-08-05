@@ -3,32 +3,65 @@ name: at_client_sdk
 packages:
   - packages/*
   - tests/*
+  - packages/*/example/
+
 ignore:
-  - "packages/*/*example*"
+  # omit at_chops from the workspace until 3.0 is published
+  - packages/at_chops
+
+categories:
+  sdks:
+    - "packages/at_client*"
+  libraries:
+    - "packages/at_auth"
+    # - "packages/at_chops"
+    - "packages/at_cli_commons"
+    - "packages/at_commons"
+    - "packages/at_contact"
+    - "packages/at_lookup"
+    - "packages/at_onboarding_cli"
+    - "packages/at_policy"
+    - "packages/at_server_status"
+    - "packages/at_utils"
+    - "packages/base2e15"
+    - "packages/dart_utf7"
+
+dependencyOverridePaths:
+  - "../at_server/packages/*"
 
 command:
   bootstrap:
     runPubGetInParallel: true
+    packageFilters: no-example
     dependencies:
-      # Our dependencies (minimums required for forward compatibility)
+      # Dependencies (minimums required for forward compatibility)
       # - When we do major version upgrades to dependencies and our code require
       #   changes this doesn't result in a breaking change in our package
       #   version, but it does result in a minimum version required for
       #   compatibility. Specify that minimum constraint here.
+      # - Setting a dependency here sets it for every package in the workspace
+
+      # In this repository
       at_commons: ^5.5.0
       at_client: ^3.7.0
+      at_chops: ^2.2.0
 
-      # Our dependencies in at_server
+      # Outside of this repository
       at_persistence_secondary_server:
-        # Add two ../../ for relative to the packages, not relative to this file
-        path: ../../../at_server/packages/at_persistence_secondary_server
-
+        # PUBLISH
+        version: ^4.2.0
+        # GIT
+        git:
+          url: https://github.com/atsign-foundation/at_server
+          path: packages/at_persistence_secondary_server
+          ref: at_persistence_secondary_server-4.2.0
       # External dependencies
-      # - Setting a version here will set it for the entire workspace
       uuid: ^4.0.0
       meta: ^1.16.0
+
   version:
-    includeScopes: false
-    updateGitTagRefs: false
-    changelogCommitBodies:
-      include: false
+    hooks:
+      pre: |
+        echo "Don't use 'melos version'"
+        echo "melos version does a lot of mysterious stuff"
+        exit 1

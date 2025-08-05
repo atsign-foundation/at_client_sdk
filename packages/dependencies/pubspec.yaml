@@ -1,7 +1,10 @@
 name: dependencies
-description: "Meta package used to keep minimum dependency versions compatible with flutter stable"
-publish_to: none
+description: |
+  Meta package used to keep minimum dependency versions compatible with
+  flutter stable. Use this package to enforce constraints on the workspace
+  against dependencies not found in this repo.
 
+publish_to: none
 environment:
   flutter: ^3.32.8 # Keep it at or below latest flutter stable
   sdk: ^3.5.0 # Minimum
@@ -9,6 +12,8 @@ environment:
 dependencies:
   # This will make melos bootstrap error if meta is bumped beyond
   # the version pinned in flutter_test
+  flutter:
+    sdk: flutter
   meta: ^1.16.0
 
 dev_dependencies:

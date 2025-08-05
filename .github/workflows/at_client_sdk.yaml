@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dart-channel: [ stable,beta ]
+        dart-channel: [stable, beta]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -30,9 +30,11 @@ jobs:
         with:
           sdk: ${{ matrix.dart-channel}}
 
+      - uses: ./actions/melos-bootstrap
+
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version: 'stable'
+          go-version: "stable"
           cache-dependency-path: tools/osv-scanner/go.sum
 
       # Install dependencies in at_client library
@@ -78,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dart-channel: [ stable,beta ]
+        dart-channel: [stable, beta]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -94,8 +96,10 @@ jobs:
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version: 'stable'
+          go-version: "stable"
           cache-dependency-path: tools/osv-scanner/go.sum
+
+      - uses: ./actions/melos-bootstrap
 
       # Install dependencies of at_client_mobile
       - name: Installing dependencies
@@ -140,13 +144,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dart-channel: [ stable,beta ]
+        dart-channel: [stable, beta]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
         with:
           sdk: ${{ matrix.dart-channel}}
+
+      - uses: ./actions/melos-bootstrap
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
@@ -215,13 +221,15 @@ jobs:
 
   # The Job runs end-to-end tests between two atSign's running on server trunk branch
   end2end_tests:
-    needs: [ end2end_tests_prep ]
+    needs: [end2end_tests_prep]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
         with:
           sdk: stable
+
+      - uses: ./actions/melos-bootstrap
 
       - name: Install dependencies in at_client
         working-directory: packages/at_client
@@ -266,7 +274,7 @@ jobs:
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
   end2end_test_14:
-    needs: [ end2end_tests_prep ]
+    needs: [end2end_tests_prep]
     if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
@@ -274,6 +282,8 @@ jobs:
       - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
         with:
           sdk: stable
+
+      - uses: ./actions/melos-bootstrap
 
       - name: Install dependencies in at_client
         working-directory: packages/at_client
