@@ -1,9 +1,15 @@
 name: at_client_sdk
 
 packages:
-  - packages/at_client_mobile
+  - packages/*
   - tests/*
+ignore:
+  - "packages/*/*example*"
 
 command:
   bootstrap:
     runPubGetInParallel: false
+    #dependencies:
+    #  uuid: ^4.5.1
+    #  TODO: See if adding flutter_test resolves meta to the pinned version
+    #  meta: ^1.16.0
