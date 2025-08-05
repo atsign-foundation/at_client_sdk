@@ -6,7 +6,8 @@ documentation: https://docs.atsign.com/
 version: 1.0.5
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ^3.6.0
+resolution: workspace
 
 dependencies:
   at_commons: ^5.5.0
@@ -15,5 +16,5 @@ dependencies:
   uuid: ^4.0.0
 
 dev_dependencies:
-  lints: ^1.0.1
-  test: ^1.17.1
+  lints: ^6.0.0
+  test: ^1.25.0

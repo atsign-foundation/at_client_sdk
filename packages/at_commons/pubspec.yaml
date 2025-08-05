@@ -5,7 +5,8 @@ repository: https://github.com/atsign-foundation/at_libraries
 homepage: https://atsign.dev
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ^3.6.0
+resolution: workspace
 
 dependencies:
   json_annotation: ^4.9.0
@@ -15,6 +16,6 @@ dependencies:
 dev_dependencies:
   build_runner: ^2.4.13
   json_serializable: ^6.9.0
-  lints: ^5.0.0
-  test: ^1.25.8
+  lints: ^6.0.0
+  test: ^1.25.0
   test_process: ^2.1.0

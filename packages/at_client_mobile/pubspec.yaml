@@ -5,10 +5,11 @@ repository: https://github.com/atsign-foundation/at_client_sdk/packages
 homepage: https://docs.atsign.com/
 
 environment:
-  sdk: ">=2.15.0 <4.0.0"
+  sdk: ^3.6.0
+resolution: workspace
 
 dependencies:
-  path: ^1.8.2
+  path: ^1.9.0
   flutter:
     sdk: flutter
   package_info_plus: ^8.0.0
@@ -24,15 +25,11 @@ dependencies:
   at_auth: ^2.1.0
   at_file_saver: ^0.1.2
   encrypt: ^5.0.3
-  at_persistence_secondary_server:
-    path: ../../../at_server/packages/at_persistence_secondary_server
+  at_persistence_secondary_server: ^4.2.0
 
-dependency_overrides:
-  # Very annoyingly have to add this here because latest stable flutter is pinned to meta 1.16.0
-  meta: ^1.16.0
 dev_dependencies:
-  lints: ^4.0.0
-  test: ^1.25.2
+  lints: ^6.0.0
+  test: ^1.25.0
   mocktail: ^1.0.4
   flutter_test:
     sdk: flutter

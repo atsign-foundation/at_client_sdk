@@ -47,7 +47,7 @@ AtClientPreference preferences = AtClientPreference()
 - These `preferences` are used for your application.
 
 ```dart
-AtClientManager atClientManagerInstance = await AtClientManager.getInstance().setCurrentAtSign(atSign, AtEnv.appNamespace, preferences);
+AtClientManager atClientManagerInstance = await AtClientManager.getInstance().setCurrentAtSign(atSign, 'my_namespace', preferences);
 ```
 
 - Update the user data using the `put()` method.

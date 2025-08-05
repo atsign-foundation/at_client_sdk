@@ -1,8 +1,90 @@
-name: at_client_sdk_workspace
+name: at_client_sdk
+publish_to: none
 
 environment:
-  sdk: ">=2.18.0 <4.0.0"
+  sdk: ^3.6.0
+
+workspace:
+  - packages/at_auth
+  # - packages/at_chops # omit until at_chops 3.0.0 is published
+  - packages/at_cli_commons
+  - packages/at_client
+  - packages/at_client_mobile
+  - packages/at_commons
+  - packages/at_contact
+  - packages/at_lookup
+  - packages/at_onboarding_cli
+  - packages/at_policy
+  - packages/at_server_status
+  - packages/at_utils
+  - tests/at_end2end_test
+  - tests/at_functional_test
+  - tests/at_onboarding_cli_functional_tests
+
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server
+      path: packages/at_persistence_secondary_server
+      ref: at_persistence_secondary_server-4.2.0
+
+dependencies:
+  # external dependencies
+  flutter:
+    sdk: flutter
+  archive: ^3.6.1
+  args: ^2.6.0
+  asn1lib: ^1.5.3
+  async: ^2.9.0
+  at_base2e15: ^1.0.0
+  at_file_saver: ^0.1.2
+  at_persistence_secondary_server: ^4.2.0
+  at_persistence_spec: ^3.0.0
+  at_utf7: ^1.0.0
+  better_cryptography: ^1.0.0+1
+  biometric_storage: ^5.0.0
+  chalkdart: ^2.0.9
+  collection: ^1.16.0
+  convert: ^3.0.2
+  cron: ^0.5.1
+  crypto: ^3.0.5
+  cryptography: ^2.7.0
+  crypton: ^2.2.1
+  dart_periphery: ^0.9.5
+  duration: ^4.0.3
+  ecdsa: ^0.1.0
+  elliptic: ^0.3.10
+  encrypt: ^5.0.3
+  flutter_keychain: ^2.2.1
+  hive: ^2.2.3
+  http: ^1.2.1
+  image: ^4.1.7
+  internet_connection_checker: ^1.0.0+1
+  intl: ^0.19.0
+  json_annotation: ^4.9.0
+  logging: ^1.2.0
+  meta: ^1.16.0
+  mutex: ^3.0.0
+  package_info_plus: ^8.0.0
+  path: ^1.9.0
+  pointycastle: ^3.9.1
+  uuid: ^4.0.0
+  version: ^3.0.2
+  yaml: ^3.1.0
+  zxing2: ^0.2.0
 
 dev_dependencies:
-  melos: ^6.0.0
-
+  flutter_test:
+    sdk: flutter
+  alfred: ^1.1.2+1
+  at_demo_data: ^1.2.0
+  build_runner: ^2.4.13
+  build_version: ^2.1.1
+  collection: ^1.19.1
+  coverage: ^1.14.0
+  json_serializable: ^6.9.0
+  lints: ^6.0.0
+  melos: 7.0.0-dev.8
+  mocktail: ^1.0.4
+  test: ^1.25.0
+  test_process: ^2.1.0

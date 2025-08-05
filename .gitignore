@@ -1,5 +1,4 @@
 # See https://www.dartlang.org/guides/libraries/private-files
-
 # Flutter/Dart/Pub related
 **/doc/api/
 .dart_tool/
@@ -8,6 +7,7 @@
 .pub-cache/
 .pub/
 build/
+.flutter-plugins-dependencies
 
 # If you're building an application, you may want to check-in your pubspec.lock
 pubspec.lock

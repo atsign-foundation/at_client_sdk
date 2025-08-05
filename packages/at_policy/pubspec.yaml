@@ -4,18 +4,19 @@ version: 1.0.0
 repository: https://github.com/atsign-foundation/at_libraries/tree/trunk/packages/at_policy
 
 environment:
-  sdk: ^3.5.0
+  sdk: ^3.6.0
+resolution: workspace
 
 dependencies:
   at_client: ^3.7.0
-  at_cli_commons: ^1.2.0
+  at_cli_commons: ^2.1.0
   at_utils: ^3.0.19
   json_annotation: ^4.9.0
 
 dev_dependencies:
-  build_runner: ^2.4.12
-  json_serializable: ^6.8.0
+  build_runner: ^2.4.13
+  json_serializable: ^6.9.0
   build_version: ^2.1.1
-  lints: ^4.0.0
-  mocktail: ^1.0.1
-  test: ^1.24.4
+  lints: ^6.0.0
+  mocktail: ^1.0.4
+  test: ^1.25.0

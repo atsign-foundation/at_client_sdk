@@ -6,19 +6,20 @@ homepage: https://atsign.com
 documentation: https://docs.atsign.com/
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ^3.6.0
+resolution: workspace
 
 dependencies:
-  path: ^1.8.0
-  crypton: ^2.0.1
-  crypto: ^3.0.1
+  path: ^1.9.0
+  crypton: ^2.2.1
+  crypto: ^3.0.5
   at_utils: ^3.0.19
   at_commons: ^5.5.0
   mutex: ^3.0.0
   meta: ^1.16.0
-  at_chops: ^2.0.1
+  at_chops: ^2.2.0
 
 dev_dependencies:
-  mocktail: ^1.0.1
-  lints: ^5.0.0
-  test: ^1.25.8
+  mocktail: ^1.0.4
+  lints: ^6.0.0
+  test: ^1.25.0
