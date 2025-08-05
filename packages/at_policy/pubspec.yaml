@@ -7,7 +7,7 @@ environment:
   sdk: ^3.5.0
 
 dependencies:
-  at_client: ^3.3.0
+  at_client: ^3.7.0
   at_cli_commons: ^1.2.0
   at_utils: ^3.0.19
   json_annotation: ^4.9.0
