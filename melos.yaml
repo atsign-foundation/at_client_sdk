@@ -29,3 +29,6 @@ command:
       meta: ^1.16.0
   version:
     includeScopes: false
+    updateGitTagRefs: false
+    changelogCommitBodies:
+      include: false
