@@ -9,10 +9,10 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-  at_commons: ^5.0.0
+  at_commons: ^5.5.0
   at_utils: ^3.0.19
   at_lookup: ^3.0.49
-  uuid: ^3.0.4
+  uuid: ^4.0.0
 
 dev_dependencies:
   lints: ^1.0.1

@@ -19,13 +19,13 @@ dependencies:
    encrypt: ^5.0.3
    http: ^1.2.1
    image: ^4.1.7
-   meta: ^1.14.0
+   meta: ^1.16.0
    path: ^1.9.0
    zxing2: ^0.2.0
    at_auth: ^2.3.0
    at_chops: ^2.2.0
-   at_client: ^3.5.0
-   at_commons: ^5.0.2
+   at_client: ^3.7.0
+   at_commons: ^5.5.0
    at_lookup: ^3.0.52
    at_server_status: ^1.0.5
    at_utils: ^3.2.0

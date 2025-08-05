@@ -16,15 +16,16 @@ dependencies:
   biometric_storage: ^5.0.0
   hive: ^2.2.3
   crypton: ^2.2.1
-  at_commons: ^5.3.0
+  at_commons: ^5.5.0
   at_utils: ^3.0.19
   at_chops: ^2.2.0
   at_lookup: ^3.0.51
-  at_client: ^3.5.0
+  at_client: ^3.7.0
   at_auth: ^2.1.0
   at_file_saver: ^0.1.2
   encrypt: ^5.0.3
-  at_persistence_secondary_server: ^4.1.0
+  at_persistence_secondary_server:
+    path: ../../../at_server/packages/at_persistence_secondary_server
 
 dependency_overrides:
   # Very annoyingly have to add this here because latest stable flutter is pinned to meta 1.16.0
@@ -33,3 +34,5 @@ dev_dependencies:
   lints: ^4.0.0
   test: ^1.25.2
   mocktail: ^1.0.4
+  flutter_test:
+    sdk: flutter

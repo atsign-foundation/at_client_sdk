@@ -7,18 +7,18 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-  uuid: 3.0.7
+  uuid: ^4.0.0
   at_demo_data: ^1.2.0
   crypto: ^3.0.3
   crypton: ^2.2.1
-  at_client:
-    path: ../../packages/at_client
+  at_client: ^3.7.0
   at_auth: ^2.2.0
   at_lookup: ^3.0.52
   at_utils: ^3.2.0
   at_chops: ^2.2.0
-  at_commons: ^5.4.1
-  at_persistence_secondary_server: ^4.0.0
+  at_commons: ^5.5.0
+  at_persistence_secondary_server:
+    path: ../../../at_server/packages/at_persistence_secondary_server
   version: ^3.0.2
 
 dev_dependencies:

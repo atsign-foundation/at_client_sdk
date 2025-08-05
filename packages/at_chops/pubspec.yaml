@@ -15,7 +15,7 @@ dependencies:
   dart_periphery: ^0.9.5
   elliptic: ^0.3.10
   pointycastle: ^3.9.1
-  at_commons: ^5.0.2
+  at_commons: ^5.5.0
   at_utils: ^3.0.19
   cryptography: ^2.7.0
   better_cryptography: ^1.0.0+1

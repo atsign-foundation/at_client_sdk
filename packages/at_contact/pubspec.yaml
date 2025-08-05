@@ -10,10 +10,10 @@ environment:
 
 dependencies:
   intl: ^0.19.0
-  at_client: ^3.2.2
-  at_commons: ^5.0.0
+  at_client: ^3.7.0
+  at_commons: ^5.5.0
   at_utils: ^3.0.19
-  uuid: ^3.0.7
+  uuid: ^4.0.0
 
 dev_dependencies:
   lints: ^1.0.1
