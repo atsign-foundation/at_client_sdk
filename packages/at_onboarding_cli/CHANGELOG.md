@@ -1,5 +1,6 @@
 ## 1.12.0
 
+- chore: fix lint warnings
 - chore(deps): at_commons ^5.5.0
 - chore(deps): at_client ^3.7.0
 - chore(deps): chalkdart ">=2.0.9<4.0.0"
