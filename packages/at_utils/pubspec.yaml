@@ -1,6 +1,6 @@
 name: at_utils
 description: A Dart library that contains various utility classes such as atSign, atmetadata, configuration, and logger.
-version: 3.2.0
+version: 3.3.0
 repository: https://github.com/atsign-foundation/at_libraries
 homepage: https://atsign.dev
 documentation: https://docs.atsign.com/
@@ -15,7 +15,7 @@ dependencies:
   crypto: ^3.0.5
   at_commons: ^5.5.0
   collection: ^1.16.0
-  chalkdart: ^2.0.9
+  chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
 
 dev_dependencies:
   lints: ^6.0.0

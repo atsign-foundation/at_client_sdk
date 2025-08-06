@@ -1,6 +1,6 @@
 name: at_cli_commons
 description: Library of useful stuff when building cli programs which use the AtClient SDK
-version: 2.1.0
+version: 2.2.0
 
 repository: https://github.com/atsign-foundation/at_libraries/tree/trunk/packages/at_cli_commons
 homepage: https://docs.atsign.com/
@@ -14,7 +14,7 @@ dependencies:
   at_client: ^3.7.0
   at_onboarding_cli: ^1.8.0
   at_utils: ^3.0.19
-  chalkdart: ^2.0.9
+  chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
   version: ^3.0.2
   logging: ^1.2.0
   meta: ^1.16.0

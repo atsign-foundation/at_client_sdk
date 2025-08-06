@@ -1,6 +1,8 @@
 ## 3.7.0
 
 - feat: Add `ApkamSigning` mixin
+- chore(deps): at_commons ^5.5.0
+- chore(deps): uuid ^4.0.0
  
 ## 3.6.0
 - feat: deprecate the (misleadingly named)

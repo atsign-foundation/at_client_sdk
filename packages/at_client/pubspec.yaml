@@ -17,32 +17,27 @@ resolution: workspace
 
 dependencies:
   path: ^1.9.0
-  hive: ^2.2.3
-  asn1lib: ^1.5.3
   crypto: ^3.0.5
   crypton: ^2.2.1
   encrypt: ^5.0.3
   cron: ^0.5.1
-  convert: ^3.0.2
   uuid: ^4.0.0
-  collection: ^1.16.0
   archive: ^3.6.1
   http: ^1.2.1
   internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
-  at_utf7: ^1.0.0
   at_base2e15: ^1.0.0
   at_commons: ^5.5.0
   at_utils: ^3.2.0
   at_chops: ^2.2.0
   at_lookup: ^3.1.0
   at_auth: ^2.2.0
-  at_persistence_spec: ^3.0.0
   at_persistence_secondary_server: ^4.2.0
   meta: ^1.16.0
   version: ^3.0.2
 
 dev_dependencies:
+  collection: ^1.16.0
   lints: ^6.0.0
   test: ^1.25.0
   at_demo_data: ^1.2.0

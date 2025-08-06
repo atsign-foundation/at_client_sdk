@@ -3,18 +3,16 @@ description: A Dart library that provides a means to check on the status of the 
 repository: https://github.com/atsign-foundation/at_libraries
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
-version: 1.0.5
+version: 1.1.0
 
 environment:
   sdk: ^3.6.0
 resolution: workspace
 
 dependencies:
-  at_commons: ^5.5.0
-  at_utils: ^3.0.19
   at_lookup: ^3.0.49
-  uuid: ^4.0.0
 
 dev_dependencies:
+  uuid: ^4.0.0
   lints: ^6.0.0
   test: ^1.25.0

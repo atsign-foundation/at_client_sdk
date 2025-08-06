@@ -10,7 +10,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  path: ^1.9.0
   crypton: ^2.2.1
   crypto: ^3.0.5
   at_utils: ^3.0.19

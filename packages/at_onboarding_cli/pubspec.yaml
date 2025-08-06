@@ -1,6 +1,6 @@
 name: at_onboarding_cli
 description: Dart tools for initial client onboarding, subsequent client enrollment, and enrollment management.
-version: 1.11.0
+version: 1.12.0
 repository: https://github.com/atsign-foundation/at_libraries
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -14,9 +14,6 @@ executables:
   at_activate: activate_cli
 
 dependencies:
-  # TODO review this for dependencies only used in tests which should be
-  # under dev_dependencies. alfred was in the wrong spot, which indicates that
-  # others may be too.
   args: ^2.6.0
   crypton: ^2.2.1
   encrypt: ^5.0.3
@@ -34,7 +31,7 @@ dependencies:
   at_utils: ^3.2.0
   duration: ^4.0.3
   crypto: ^3.0.5
-  chalkdart: ^2.0.9
+  chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
 
 dev_dependencies:
   alfred: ^1.1.2+1

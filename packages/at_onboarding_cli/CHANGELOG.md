@@ -1,3 +1,9 @@
+## 1.12.0
+
+- chore(deps): at_commons ^5.5.0
+- chore(deps): at_client ^3.7.0
+- chore(deps): chalkdart ">=2.0.9<4.0.0"
+
 ## 1.11.0
 - feat: reuse the authenticated connection from AtAuth.authenticate when
   creating the AtClient which is handed back to the calling code.
