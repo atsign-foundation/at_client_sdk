@@ -42,6 +42,6 @@ runs:
     - name: Ensure dart on path is not from Flutter SDK
       shell: bash
       run: |
-        if which dart | grep -qv "flutter"; then
+        if which dart | grep -q "flutter"; then
           exit 1
         fi
