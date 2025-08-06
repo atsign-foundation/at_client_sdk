@@ -1,0 +1,24 @@
+name: at_policy
+description: Policy management via atProtocol
+version: 1.1.0
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_policy
+homepage: https://atsign.com
+documentation: https://docs.atsign.com/
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  at_client: ^3.7.0
+  at_utils: ^3.0.19
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  at_cli_commons: ^2.1.0
+  build_runner: ^2.4.13
+  json_serializable: ^6.9.0
+  build_version: ^2.1.1
+  lints: ^6.0.0
+  mocktail: ^1.0.4
+  test: ^1.25.0

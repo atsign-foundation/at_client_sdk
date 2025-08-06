@@ -1,0 +1,22 @@
+name: Auto Assign Issues to Triage column in Sprint Planning Project Board
+
+on:
+  issues:
+    types: [opened]
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  issue_opened:
+    name: issue_opened
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Move issue to "Triage"'
+        uses: leonsteinhaeuser/project-beta-automations@939000fb1900c9fc4f7b5058a09d9f833ebc6859 # v2.2.1
+        with:
+          gh_token: ${{ secrets.MY_GITHUB_TOKEN }}
+          organization: atsign-foundation
+          project_id: 8
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: "Triage"

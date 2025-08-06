@@ -1,0 +1,13 @@
+# The @Protocol root server configuration
+root_server:
+  # The url to connect to root server
+  url: 'vip.ve.atsign.zone'
+
+# alice atsign details
+atSign:
+  firstAtSign: "@alice🛠"
+  secondAtSign: "@bob🛠"
+  apkamFirstAtSign: '@srie'
+  apkamSecondAtSign: '@sachin'
+
+

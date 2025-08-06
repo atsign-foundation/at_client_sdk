@@ -1,0 +1,21 @@
+name: at_end2end_test
+description: A starting point for Dart libraries or applications.
+version: 1.0.0
+homepage: https://www.atsign.com
+
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  at_demo_data: ^1.2.0
+  at_auth: ^2.3.0
+  at_client: ^3.7.0
+  at_utils: ^3.2.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0
+  coverage: ^1.14.0

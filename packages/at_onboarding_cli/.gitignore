@@ -1,0 +1,13 @@
+# Files and directories created by pub.
+.dart_tool/
+.packages
+
+# Conventional directory for build output.
+build/
+
+#Configuration
+lib/src/config/config_util.dart
+/.vscode/
+/lib/config/
+/lib/src/config_utils/
+**/storage/
