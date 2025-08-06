@@ -44,12 +44,10 @@ class AtOnboardingGenerateScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<AtOnboardingGenerateScreen> createState() =>
-      _AtOnboardingGenerateScreenState();
+  State<AtOnboardingGenerateScreen> createState() => _AtOnboardingGenerateScreenState();
 }
 
-class _AtOnboardingGenerateScreenState
-    extends State<AtOnboardingGenerateScreen> {
+class _AtOnboardingGenerateScreenState extends State<AtOnboardingGenerateScreen> {
   final TextEditingController _atsignController = TextEditingController();
   final FreeAtsignService _freeAtsignService = FreeAtsignService();
   late AtSyncDialog _inprogressDialog;
@@ -80,16 +78,14 @@ class _AtOnboardingGenerateScreenState
     if (widget.config.tutorialDisplay == AtOnboardingTutorialDisplay.always) {
       await Future.delayed(const Duration(milliseconds: 300));
       _showTutorial();
-    } else if (widget.config.tutorialDisplay ==
-        AtOnboardingTutorialDisplay.never) {
+    } else if (widget.config.tutorialDisplay == AtOnboardingTutorialDisplay.never) {
       return;
     } else {
       final result = await AtOnboardingTutorialService.checkShowTutorial();
       if (!result) {
         await Future.delayed(const Duration(milliseconds: 300));
 
-        final result =
-            await AtOnboardingTutorialService.hasShowTutorialSignUp();
+        final result = await AtOnboardingTutorialService.hasShowTutorialSignUp();
         if (!result) {
           _showTutorial();
         }
@@ -218,9 +214,8 @@ class _AtOnboardingGenerateScreenState
             child: SingleChildScrollView(
               child: Container(
                 decoration: BoxDecoration(
-                    color: theme.primaryColor.withOpacity(0.1),
-                    borderRadius:
-                        BorderRadius.circular(AtOnboardingDimens.borderRadius)),
+                    color: theme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AtOnboardingDimens.borderRadius)),
                 padding: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
                 margin: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
                 constraints: const BoxConstraints(
@@ -243,8 +238,7 @@ class _AtOnboardingGenerateScreenState
                       enabled: false,
                       validator: (String? value) {
                         if ((value ?? '').isEmpty) {
-                          return AtOnboardingLocalizations
-                              .current.msg_atSign_cannot_empty;
+                          return AtOnboardingLocalizations.current.msg_atSign_cannot_empty;
                         }
                         return null;
                       },
@@ -260,8 +254,7 @@ class _AtOnboardingGenerateScreenState
                             color: theme.primaryColor,
                           ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: AtOnboardingDimens.paddingSmall),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: AtOnboardingDimens.paddingSmall),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -355,8 +348,7 @@ class _AtOnboardingGenerateScreenState
                       highlightColor: Colors.transparent,
                       splashColor: Colors.transparent,
                       child: Text(
-                        AtOnboardingLocalizations
-                            .current.btn_already_have_atSign,
+                        AtOnboardingLocalizations.current.btn_already_have_atSign,
                         key: keyHaveAnAtSign,
                         style: TextStyle(
                           fontSize: AtOnboardingDimens.fontNormal,
@@ -402,10 +394,8 @@ class _AtOnboardingGenerateScreenState
   }
 
   Future<void> showErrorDialog(dynamic errorMessage, {String? title}) async {
-    String? messageString =
-        AtOnboardingErrorToString().getErrorMessage(errorMessage);
-    return AtOnboardingDialog.showError(
-        context: context, message: messageString);
+    String? messageString = AtOnboardingErrorToString().getErrorMessage(errorMessage);
+    return AtOnboardingDialog.showError(context: context, message: messageString);
   }
 
   void _showReferenceWebview() {
@@ -465,8 +455,7 @@ class _AtOnboardingGenerateScreenState
 
       if (isExist) {
         _inprogressDialog.close();
-        await _showAlertDialog(
-            AtOnboardingErrorToString().pairedAtsign(verifiedAtSign));
+        await _showAlertDialog(AtOnboardingErrorToString().pairedAtsign(verifiedAtSign));
         return;
       }
 
@@ -525,9 +514,7 @@ class _AtOnboardingGenerateScreenState
   }
 
   Future<void> _showAlertDialog(dynamic errorMessage, {String? title}) async {
-    String? messageString =
-        AtOnboardingErrorToString().getErrorMessage(errorMessage);
-    return AtOnboardingDialog.showError(
-        context: context, title: title, message: messageString);
+    String? messageString = AtOnboardingErrorToString().getErrorMessage(errorMessage);
+    return AtOnboardingDialog.showError(context: context, title: title, message: messageString);
   }
 }

@@ -143,9 +143,8 @@ class _AtOnboardingHomeScreenState extends State<AtOnboardingHomeScreen> {
               child: Container(
                 // width: _dialogWidth,
                 decoration: BoxDecoration(
-                    color: theme.primaryColor.withOpacity(0.1),
-                    borderRadius:
-                        BorderRadius.circular(AtOnboardingDimens.borderRadius)),
+                    color: theme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AtOnboardingDimens.borderRadius)),
                 padding: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
                 margin: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
                 constraints: const BoxConstraints(

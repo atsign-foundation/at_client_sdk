@@ -74,17 +74,17 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   at_file_saver: 1fc6ed722f17c7a20ce79cce168d1100fcad4b95
   biometric_storage: 43caa6e7ef00e8e19c074216e7e1786dacda9e76
-  device_info_plus: ce1b7762849d3ec103d0e0517299f2db7ad60720
-  emoji_picker_flutter: 533634326b1c5de9a181ba14b9758e6dfe967a20
+  device_info_plus: 1b14eed9bf95428983aed283a8d51cce3d8c4215
+  emoji_picker_flutter: 846d4afb3368bc864a3884f02654961198bd72da
   file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
   flutter_image_compress_macos: c26c3c13ea0f28ae6dea4e139b3292e7729f99f1
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
-  package_info_plus: fa739dd842b393193c5ca93c26798dff6e3d0e0c
+  package_info_plus: 12f1c5c2cfe8727ca46cbd0b26677728972d9a5b
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
-  share_plus: 36537c04ce0c3e3f5bd297ce4318b6d5ee5fd6cf
+  share_plus: 1fa619de8392a4398bfaf176d441853922614e89
   shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
-  url_launcher_macos: 5f437abeda8c85500ceb03f5c1938a8c5a705399
-  webview_flutter_wkwebview: 0982481e3d9c78fd5c6f62a002fcd24fc791f1e4
+  url_launcher_macos: c82c93949963e55b228a30115bd219499a6fe404
+  webview_flutter_wkwebview: a4af96a051138e28e29f60101d094683b9f82188
 
 PODFILE CHECKSUM: 0d3963a09fc94f580682bd88480486da345dc3f0
 

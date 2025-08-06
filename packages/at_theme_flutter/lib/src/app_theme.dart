@@ -42,9 +42,7 @@ class AppTheme {
       primaryColor: primaryColor,
       secondaryColor: secondaryColor ?? ColorConstants.secondary,
       backgroundColor: backgroundColor ??
-          (brightness == Brightness.dark
-              ? ColorConstants.backgroundDark
-              : ColorConstants.backgroundLight),
+          (brightness == Brightness.dark ? ColorConstants.backgroundDark : ColorConstants.backgroundLight),
       brightness: brightness,
     );
   }
@@ -69,25 +67,21 @@ class AppTheme {
       primaryColor: primaryColor,
       scaffoldBackgroundColor: backgroundColor,
       appBarTheme: AppBarTheme(color: primaryColor),
-      colorScheme: ThemeData().colorScheme.copyWith(
-          secondary: accentColor,
-          brightness: brightness,
-          surface: backgroundColor),
+      colorScheme:
+          ThemeData().colorScheme.copyWith(secondary: accentColor, brightness: brightness, surface: backgroundColor),
     );
   }
 
   static AppTheme of(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<InheritedAppTheme>()!
-        .theme;
+    return context.dependOnInheritedWidgetOfExactType<InheritedAppTheme>()!.theme;
   }
 
   encoded() {
     var appTheme = {
       'brightness': brightness.toString(),
-      'primaryColor': primaryColor.value.toString(),
-      'secondaryColor': secondaryColor.value.toString(),
-      'backgroundColor': backgroundColor.value.toString()
+      'primaryColor': primaryColor.toARGB32().toString(),
+      'secondaryColor': secondaryColor.toARGB32().toString(),
+      'backgroundColor': backgroundColor.toARGB32().toString()
     };
 
     return jsonEncode(appTheme);
@@ -96,24 +90,17 @@ class AppTheme {
   static decode(Map<String, dynamic> jsonMap) {
     try {
       return AppTheme(
-        brightness: jsonMap['brightness'] == 'Brightness.dark'
-            ? Brightness.dark
-            : Brightness.light,
-        primaryColor: jsonMap['primaryColor'] != null
-            ? Color(int.parse(jsonMap['primaryColor']))
-            : const Color(0xFF6EBCB7),
-        secondaryColor: jsonMap['secondaryColor'] != null
-            ? Color(int.parse(jsonMap['secondaryColor']))
-            : const Color(0xFF6EBCB7),
-        backgroundColor: jsonMap['backgroundColor'] != null
-            ? Color(int.parse(jsonMap['backgroundColor']))
-            : Colors.white,
+        brightness: jsonMap['brightness'] == 'Brightness.dark' ? Brightness.dark : Brightness.light,
+        primaryColor:
+            jsonMap['primaryColor'] != null ? Color(int.parse(jsonMap['primaryColor'])) : const Color(0xFF6EBCB7),
+        secondaryColor:
+            jsonMap['secondaryColor'] != null ? Color(int.parse(jsonMap['secondaryColor'])) : const Color(0xFF6EBCB7),
+        backgroundColor:
+            jsonMap['backgroundColor'] != null ? Color(int.parse(jsonMap['backgroundColor'])) : Colors.white,
       );
     } catch (e) {
       _logger.severe('error in decode theme data: ${e.toString()}');
-      return AppTheme.from(
-          secondaryColor: ColorConstants.secondary,
-          backgroundColor: ColorConstants.backgroundDark);
+      return AppTheme.from(secondaryColor: ColorConstants.secondary, backgroundColor: ColorConstants.backgroundDark);
     }
   }
 }

@@ -30,7 +30,7 @@ dependencies:
   at_app_flutter: ^5.2.0
   at_contacts_flutter:
     path: ../
-  at_onboarding_flutter: ^6.1.9
+  at_onboarding_flutter: ^6.1.12
   at_client: ^3.2.2
   at_client_mobile: ^3.2.19
   at_backupkey_flutter: ^4.0.16

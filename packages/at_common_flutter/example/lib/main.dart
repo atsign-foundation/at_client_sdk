@@ -136,8 +136,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 log('Current value of input field: $val');
               },
               inputFieldColor: Theme.of(context).brightness == Brightness.light
-                  ? Colors.black.withOpacity(0.2)
-                  : Colors.white.withOpacity(0.2),
+                  ? Colors.black.withValues(alpha: 0.2)
+                  : Colors.white.withValues(alpha: 0.2),
             ),
             const Divider(
               color: Color(0xFFBEC0C8),

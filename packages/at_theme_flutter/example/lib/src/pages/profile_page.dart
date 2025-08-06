@@ -140,7 +140,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               margin: const EdgeInsets.symmetric(vertical: 10),
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
               decoration: BoxDecoration(
-                color: appTheme.primaryColor.withOpacity(0.2),
+                color: appTheme.primaryColor.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(

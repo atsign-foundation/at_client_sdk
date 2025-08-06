@@ -19,12 +19,10 @@ class AtOnboardingInputAtSignScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<AtOnboardingInputAtSignScreen> createState() =>
-      _AtOnboardingInputAtSignScreenState();
+  State<AtOnboardingInputAtSignScreen> createState() => _AtOnboardingInputAtSignScreenState();
 }
 
-class _AtOnboardingInputAtSignScreenState
-    extends State<AtOnboardingInputAtSignScreen> {
+class _AtOnboardingInputAtSignScreenState extends State<AtOnboardingInputAtSignScreen> {
   final TextEditingController _atsignController = TextEditingController();
 
   @override
@@ -55,9 +53,8 @@ class _AtOnboardingInputAtSignScreenState
           child: SingleChildScrollView(
             child: Container(
               decoration: BoxDecoration(
-                  color: theme.primaryColor.withOpacity(0.1),
-                  borderRadius:
-                      BorderRadius.circular(AtOnboardingDimens.borderRadius)),
+                  color: theme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AtOnboardingDimens.borderRadius)),
               padding: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
               margin: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
               constraints: const BoxConstraints(
@@ -77,8 +74,7 @@ class _AtOnboardingInputAtSignScreenState
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    AtOnboardingLocalizations
-                        .current.enter_atSign_need_to_activate,
+                    AtOnboardingLocalizations.current.enter_atSign_need_to_activate,
                     style: const TextStyle(
                       fontSize: AtOnboardingDimens.fontSmall,
                     ),
@@ -88,8 +84,7 @@ class _AtOnboardingInputAtSignScreenState
                     enabled: true,
                     validator: (String? value) {
                       if ((value ?? '').isEmpty) {
-                        return AtOnboardingLocalizations
-                            .current.msg_atSign_cannot_empty;
+                        return AtOnboardingLocalizations.current.msg_atSign_cannot_empty;
                       }
                       return null;
                     },
@@ -105,8 +100,7 @@ class _AtOnboardingInputAtSignScreenState
                           color: theme.primaryColor,
                         ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AtOnboardingDimens.paddingSmall),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: AtOnboardingDimens.paddingSmall),
                     ),
                   ),
                   const SizedBox(height: 20),

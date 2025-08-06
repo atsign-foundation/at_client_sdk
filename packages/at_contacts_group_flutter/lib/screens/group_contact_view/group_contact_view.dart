@@ -5,7 +5,6 @@ import 'package:at_contact/at_contact.dart';
 import 'package:at_contacts_flutter/services/contact_service.dart';
 import 'package:at_contacts_flutter/utils/colors.dart';
 import 'package:at_contacts_flutter/utils/text_strings.dart';
-
 import 'package:at_contacts_flutter/widgets/custom_search_field.dart';
 import 'package:at_contacts_group_flutter/models/group_contacts_model.dart';
 import 'package:at_contacts_group_flutter/services/group_service.dart';
@@ -89,8 +88,7 @@ class _GroupContactViewState extends State<GroupContactView> {
     _groupService = GroupService();
     _contactService = ContactService();
     _groupService.fetchGroupsAndContacts(isDesktop: widget.isDesktop);
-    unmodifiedSelectedGroupContacts =
-        List.from(_groupService.selectedGroupContacts);
+    unmodifiedSelectedGroupContacts = List.from(_groupService.selectedGroupContacts);
 
     if (widget.contactSelectedHistory != null) {
       _groupService.selectedGroupContacts = [...widget.contactSelectedHistory!];
@@ -165,8 +163,7 @@ class _GroupContactViewState extends State<GroupContactView> {
         },
       ),
       body: Container(
-        padding: EdgeInsets.only(
-            left: 16.toHeight, right: 16.toHeight, bottom: 16.toHeight),
+        padding: EdgeInsets.only(left: 16.toHeight, right: 16.toHeight, bottom: 16.toHeight),
         height: double.infinity,
         child: ListView(
           children: [
@@ -236,8 +233,7 @@ class _GroupContactViewState extends State<GroupContactView> {
             (widget.asSelectionScreen)
                 ? (widget.singleSelection)
                     ? Container()
-                    : HorizontalCircularList(
-                        onContactsTap: widget.onContactsTap)
+                    : HorizontalCircularList(onContactsTap: widget.onContactsTap)
                 : Container(),
             StreamBuilder<List<GroupContactsModel?>>(
                 stream: _groupService.allContactsStream,
@@ -302,9 +298,7 @@ class _GroupContactViewState extends State<GroupContactView> {
                         physics: const NeverScrollableScrollPhysics(),
                         itemBuilder: (context, alphabetIndex) {
                           var contactsForAlphabet = <GroupContactsModel?>[];
-                          var currentChar =
-                              String.fromCharCode(alphabetIndex + 65)
-                                  .toUpperCase();
+                          var currentChar = String.fromCharCode(alphabetIndex + 65).toUpperCase();
 
                           if (alphabetIndex == 26) {
                             currentChar = 'Others';
@@ -341,9 +335,7 @@ class _GroupContactViewState extends State<GroupContactView> {
                                   SizedBox(width: 4.toWidth),
                                   Expanded(
                                     child: Divider(
-                                      color: AllColors()
-                                          .DIVIDER_COLOR
-                                          .withOpacity(0.2),
+                                      color: AllColors().DIVIDER_COLOR.withValues(alpha: 0.2),
                                       height: 1.toHeight,
                                     ),
                                   ),
@@ -371,7 +363,7 @@ class _GroupContactViewState extends State<GroupContactView> {
         physics: const NeverScrollableScrollPhysics(),
         shrinkWrap: true,
         separatorBuilder: (context, _) => Divider(
-              color: AllColors().DIVIDER_COLOR.withOpacity(0.2),
+              color: AllColors().DIVIDER_COLOR.withValues(alpha: 0.2),
               height: 1.toHeight,
             ),
         itemBuilder: (context, index) {
@@ -388,8 +380,7 @@ class _GroupContactViewState extends State<GroupContactView> {
                               backgroundColor: ColorConstants.inputFieldColor,
                               icon: Icons.block,
                               onPressed: (_context) async {
-                                blockUnblockContact(
-                                    contactsForAlphabet[index]!.contact!);
+                                blockUnblockContact(contactsForAlphabet[index]!.contact!);
                               },
                             ),
                             SlidableAction(
@@ -397,8 +388,7 @@ class _GroupContactViewState extends State<GroupContactView> {
                               backgroundColor: Colors.red,
                               icon: Icons.delete,
                               onPressed: (_context) async {
-                                deleteAtSign(
-                                    contactsForAlphabet[index]!.contact!);
+                                deleteAtSign(contactsForAlphabet[index]!.contact!);
                               },
                             )
                           ],
@@ -416,10 +406,8 @@ class _GroupContactViewState extends State<GroupContactView> {
                             if (contactsForAlphabet[index]!.contact != null) {
                               Navigator.pop(context);
 
-                              _groupService
-                                  .addGroupContact(contactsForAlphabet[index]);
-                              widget.selectedList!(
-                                  GroupService().selectedGroupContacts);
+                              _groupService.addGroupContact(contactsForAlphabet[index]);
+                              widget.selectedList!(GroupService().selectedGroupContacts);
                             }
                           },
                         ),
@@ -437,10 +425,8 @@ class _GroupContactViewState extends State<GroupContactView> {
                           if (contactsForAlphabet[index]!.group != null) {
                             Navigator.pop(context);
 
-                            _groupService
-                                .addGroupContact(contactsForAlphabet[index]);
-                            widget.selectedList!(
-                                GroupService().selectedGroupContacts);
+                            _groupService.addGroupContact(contactsForAlphabet[index]);
+                            widget.selectedList!(GroupService().selectedGroupContacts);
                           }
                         },
                       ),
@@ -448,8 +434,7 @@ class _GroupContactViewState extends State<GroupContactView> {
         });
   }
 
-  Widget gridViewContactList(
-      List<GroupContactsModel?> contactsForAlphabet, BuildContext context) {
+  Widget gridViewContactList(List<GroupContactsModel?> contactsForAlphabet, BuildContext context) {
     return GridView.builder(
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -528,8 +513,7 @@ class _GroupContactViewState extends State<GroupContactView> {
     );
   }
 
-  blockUnblockContact(AtContact contact,
-      {bool closeBottomSheet = false}) async {
+  blockUnblockContact(AtContact contact, {bool closeBottomSheet = false}) async {
     setState(() {
       blockingContact = true;
     });
@@ -547,8 +531,7 @@ class _GroupContactViewState extends State<GroupContactView> {
         ),
       ),
     );
-    var _res = await _contactService.blockUnblockContact(
-        contact: contact, blockAction: true);
+    var _res = await _contactService.blockUnblockContact(contact: contact, blockAction: true);
     await _groupService.fetchGroupsAndContacts();
     setState(() {
       blockingContact = true;
@@ -599,24 +582,18 @@ class _GroupContactViewState extends State<GroupContactView> {
   }
 
 // creates a list of contacts by merging atsigns and groups.
-  List<GroupContactsModel?> getAllContactList(
-      List<GroupContactsModel?> allGroupContactData) {
+  List<GroupContactsModel?> getAllContactList(List<GroupContactsModel?> allGroupContactData) {
     var _filteredList = <GroupContactsModel?>[];
     for (var c in allGroupContactData) {
       if (widget.showContacts &&
           c!.contact != null &&
-          c.contact!.atSign
-              .toString()
-              .toUpperCase()
-              .contains(searchText.toUpperCase())) {
+          c.contact!.atSign.toString().toUpperCase().contains(searchText.toUpperCase())) {
         _filteredList.add(c);
       }
       if (widget.showGroups &&
           c!.group != null &&
           c.group!.displayName != null &&
-          c.group!.displayName!
-              .toUpperCase()
-              .contains(searchText.toUpperCase())) {
+          c.group!.displayName!.toUpperCase().contains(searchText.toUpperCase())) {
         _filteredList.add(c);
       }
     }
@@ -624,8 +601,7 @@ class _GroupContactViewState extends State<GroupContactView> {
     return _filteredList;
   }
 
-  List<GroupContactsModel?> filterFavContacts(
-      List<GroupContactsModel?> _filteredList) {
+  List<GroupContactsModel?> filterFavContacts(List<GroupContactsModel?> _filteredList) {
     _filteredList.removeWhere((groupContact) {
       if (groupContact != null && groupContact.contact != null) {
         return groupContact.contact!.favourite == false;
@@ -641,9 +617,7 @@ class _GroupContactViewState extends State<GroupContactView> {
 
   /// returns list of atsigns, that matches with [currentChar] in [_filteredList]
   List<GroupContactsModel?> getContactsForAlphabets(
-      List<GroupContactsModel?> _filteredList,
-      String currentChar,
-      int alphabetIndex) {
+      List<GroupContactsModel?> _filteredList, String currentChar, int alphabetIndex) {
     var contactsForAlphabet = <GroupContactsModel?>[];
 
     /// contacts, groups that does not starts with alphabets
@@ -668,16 +642,12 @@ class _GroupContactViewState extends State<GroupContactView> {
       }
     } else {
       for (var c in _filteredList) {
-        if (widget.showContacts &&
-            c!.contact != null &&
-            c.contact?.atSign![1].toUpperCase() == currentChar) {
+        if (widget.showContacts && c!.contact != null && c.contact?.atSign![1].toUpperCase() == currentChar) {
           contactsForAlphabet.add(c);
         }
       }
       for (var c in _filteredList) {
-        if (widget.showGroups &&
-            c!.group != null &&
-            c.group?.displayName![0].toUpperCase() == currentChar) {
+        if (widget.showGroups && c!.group != null && c.group?.displayName![0].toUpperCase() == currentChar) {
           contactsForAlphabet.add(c);
         }
       }

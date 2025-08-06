@@ -117,9 +117,8 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
             child: SingleChildScrollView(
               child: Container(
                 decoration: BoxDecoration(
-                    color: theme.primaryColor.withOpacity(0.1),
-                    borderRadius:
-                        BorderRadius.circular(AtOnboardingDimens.borderRadius)),
+                    color: theme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AtOnboardingDimens.borderRadius)),
                 padding: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
                 margin: const EdgeInsets.all(AtOnboardingDimens.paddingNormal),
                 constraints: const BoxConstraints(
@@ -144,15 +143,11 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
                       textCapitalization: TextCapitalization.characters,
                       appContext: context,
                       length: 4,
-                      textStyle: const TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold),
+                      textStyle: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                       pinTheme: PinTheme(
-                        selectedColor:
-                            hasOTPError ? Colors.red : theme.primaryColor,
-                        activeColor:
-                            hasOTPError ? Colors.red : theme.primaryColor,
-                        inactiveColor:
-                            hasOTPError ? Colors.red : Colors.grey[500],
+                        selectedColor: hasOTPError ? Colors.red : theme.primaryColor,
+                        activeColor: hasOTPError ? Colors.red : theme.primaryColor,
+                        inactiveColor: hasOTPError ? Colors.red : Colors.grey[500],
                         shape: PinCodeFieldShape.box,
                         borderRadius: BorderRadius.circular(5),
                         fieldHeight: 48,
@@ -216,8 +211,7 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
                             ),
                           ),
                           TextSpan(
-                            text: AtOnboardingLocalizations
-                                .current.note_otp_content,
+                            text: AtOnboardingLocalizations.current.note_otp_content,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               fontSize: AtOnboardingDimens.fontSmall,
                               height: 1.5,
@@ -237,8 +231,7 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
   }
 
   Future<void> showErrorDialog(String? errorMessage) async {
-    return AtOnboardingDialog.showError(
-        context: context, message: errorMessage ?? '');
+    return AtOnboardingDialog.showError(context: context, message: errorMessage ?? '');
   }
 
   Future<void> _showSuccessDialog(ThemeData theme) {
@@ -250,8 +243,7 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
           data: theme,
           child: AtOnboardingDialog(
             title: AtOnboardingLocalizations.current.notice,
-            message:
-                '${AtOnboardingLocalizations.current.verification_code_sent_to} ${widget.email}',
+            message: '${AtOnboardingLocalizations.current.verification_code_sent_to} ${widget.email}',
             actions: [
               AtOnboardingSecondaryButton(
                 child: Text(
@@ -297,8 +289,7 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
     if ((widget.email ?? '').isEmpty) {
       isVerifing = true;
       setState(() {});
-      final secret = await validatewithAtsign(
-          widget.atSign, _pinCodeController.text, context);
+      final secret = await validatewithAtsign(widget.atSign, _pinCodeController.text, context);
       isVerifing = false;
       setState(() {});
       if (!mounted) return;
@@ -320,8 +311,7 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
       isVerifing = true;
       setState(() {});
 
-      String? result = await validatePerson(
-          widget.atSign, widget.email!, _pinCodeController.text);
+      String? result = await validatePerson(widget.atSign, widget.email!, _pinCodeController.text);
 
       isVerifing = false;
       setState(() {});
@@ -340,14 +330,12 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
   }
 
   ///With activate account
-  Future<String> validatewithAtsign(
-      String atsign, String otp, BuildContext context,
+  Future<String> validatewithAtsign(String atsign, String otp, BuildContext context,
       {bool isConfirmation = false}) async {
     dynamic data;
     String? cramSecret;
 
-    dynamic response =
-        await _freeAtsignService.verificationWithAtsign(atsign, otp);
+    dynamic response = await _freeAtsignService.verificationWithAtsign(atsign, otp);
     if (response.statusCode == 200) {
       data = response.body;
       data = jsonDecode(data);
@@ -423,8 +411,7 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
       hasOTPError = false;
     });
     // String atsign;
-    dynamic response =
-        await _freeAtsignService.registerPerson(widget.atSign, widget.email!);
+    dynamic response = await _freeAtsignService.registerPerson(widget.atSign, widget.email!);
     if (response.statusCode == 200) {
       //Success
       _pinCodeController.text = '';
@@ -449,22 +436,18 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
     });
   }
 
-  Future<String?> validatePerson(String atsign, String email, String? otp,
-      {bool isConfirmation = false}) async {
+  Future<String?> validatePerson(String atsign, String email, String? otp, {bool isConfirmation = false}) async {
     dynamic data;
     String? cramSecret;
     List<String> atsigns = <String>[];
     // String atsign;
 
-    dynamic response = await _freeAtsignService
-        .validatePerson(atsign, email, otp, confirmation: isConfirmation);
+    dynamic response = await _freeAtsignService.validatePerson(atsign, email, otp, confirmation: isConfirmation);
     if (response.statusCode == 200) {
       data = response.body;
       data = jsonDecode(data);
       //check for the atsign list and display them.
-      if (data['data'] != null &&
-          data['data'].length == 2 &&
-          data['status'] != 'error') {
+      if (data['data'] != null && data['data'].length == 2 && data['status'] != 'error') {
         dynamic responseData = data['data'];
         atsigns.addAll(List<String>.from(responseData['atsigns']));
 
@@ -482,8 +465,7 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
           );
           if (value != null) {
             if (!mounted) return null;
-            Navigator.pop(
-                context, AtOnboardingOTPResult(atSign: value, secret: null));
+            Navigator.pop(context, AtOnboardingOTPResult(atSign: value, secret: null));
           }
           return null;
         }
@@ -501,14 +483,12 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
             ),
           );
           if (value == responseData['newAtsign']) {
-            cramSecret = await validatePerson(value as String, email, otp,
-                isConfirmation: true);
+            cramSecret = await validatePerson(value as String, email, otp, isConfirmation: true);
             return cramSecret;
           } else {
             if (value != null) {
               if (!mounted) return null;
-              Navigator.pop(
-                  context, AtOnboardingOTPResult(atSign: value, secret: null));
+              Navigator.pop(context, AtOnboardingOTPResult(atSign: value, secret: null));
             }
             return null;
           }
@@ -541,14 +521,11 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
     return cramSecret;
   }
 
-  Future<bool> registerPersona(
-      String atsign, String email, BuildContext context,
-      {String? oldEmail}) async {
+  Future<bool> registerPersona(String atsign, String email, BuildContext context, {String? oldEmail}) async {
     dynamic data;
     bool status = false;
     // String atsign;
-    dynamic response = await _freeAtsignService.registerPerson(atsign, email,
-        oldEmail: oldEmail);
+    dynamic response = await _freeAtsignService.registerPerson(atsign, email, oldEmail: oldEmail);
     if (response.statusCode == 200) {
       data = response.body;
       data = jsonDecode(data);
@@ -585,10 +562,8 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
             text: TextSpan(
               children: <InlineSpan>[
                 TextSpan(
-                  style: const TextStyle(
-                      color: Colors.black, fontSize: 16, letterSpacing: 0.5),
-                  text:
-                      AtOnboardingLocalizations.current.msg_maximum_atSign_prev,
+                  style: const TextStyle(color: Colors.black, fontSize: 16, letterSpacing: 0.5),
+                  text: AtOnboardingLocalizations.current.msg_maximum_atSign_prev,
                 ),
                 TextSpan(
                     text: 'https://my.atsign.com',
@@ -600,16 +575,13 @@ class _AtOnboardingOTPScreenState extends State<AtOnboardingOTPScreen> {
                     recognizer: TapGestureRecognizer()
                       ..onTap = () async {
                         String url = 'https://my.atsign.com';
-                        if (!widget.hideReferences &&
-                            await canLaunchUrl(Uri.parse(url))) {
+                        if (!widget.hideReferences && await canLaunchUrl(Uri.parse(url))) {
                           await launchUrl(Uri.parse(url));
                         }
                       }),
                 TextSpan(
-                  text:
-                      AtOnboardingLocalizations.current.msg_maximum_atSign_next,
-                  style: const TextStyle(
-                      color: Colors.black, fontSize: 16, letterSpacing: 0.5),
+                  text: AtOnboardingLocalizations.current.msg_maximum_atSign_next,
+                  style: const TextStyle(color: Colors.black, fontSize: 16, letterSpacing: 0.5),
                 ),
               ],
             ),
