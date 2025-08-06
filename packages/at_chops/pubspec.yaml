@@ -5,7 +5,7 @@ repository: https://github.com/atsign-foundation/at_libraries
 
 environment:
   sdk: ^3.6.0
-resolution: workspace
+# resolution: workspace # disabled until 3.0.0 is released
 
 dependencies:
   args: ^2.6.0
