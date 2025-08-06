@@ -30,6 +30,8 @@ dependency_overrides:
 
 dependencies:
   # external dependencies
+  flutter:
+    sdk: flutter
   archive: ^3.6.1
   args: ^2.6.0
   asn1lib: ^1.5.3
@@ -72,6 +74,8 @@ dependencies:
   zxing2: ^0.2.0
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   alfred: ^1.1.2+1
   at_demo_data: ^1.2.0
   build_runner: ^2.4.13
