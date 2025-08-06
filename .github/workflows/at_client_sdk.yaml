@@ -92,6 +92,9 @@ jobs:
         with:
           channel: stable
 
+      - name: Check Dart location
+        run: which dart
+
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: "stable"
