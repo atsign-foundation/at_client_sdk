@@ -1,6 +1,8 @@
 ## 3.1.0
 
+- chore: cleanup lint warnings
 - chore(deps): remove unused deps (at_commons)
+- chore(deps): uuid ^4.0.0
 - chore(deps): at_client ^3.7.0
 
 ## 3.0.10
