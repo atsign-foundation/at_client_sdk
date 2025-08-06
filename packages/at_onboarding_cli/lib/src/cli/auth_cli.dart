@@ -27,6 +27,50 @@ final aca = AuthCliArgs();
 
 Directory? storageDir;
 
+void _showPreOnboardingKeyWarning() {
+  stderr.writeln();
+  stderr.writeln(chalk.yellow('⚠️  IMPORTANT - READ CAREFULLY ⚠️'));
+  stderr.writeln();
+  stderr.writeln(chalk.bold('You are about to onboard your atSign and generate cryptographic keys.'));
+  stderr.writeln(chalk.bold('These keys will be CRITICAL for accessing your atSign and its data.'));
+  stderr.writeln();
+  stderr.writeln(chalk.red('LOSING ACCESS TO THESE KEYS WILL RESULT IN:'));
+  stderr.writeln('• Loss of ability to authenticate into your atSign\'s atServer');
+  stderr.writeln('• Loss of ability to decrypt any data on your atSign\'s atServer');
+  stderr.writeln('• You will have to reset your atSign which means LOSS OF DATA');
+  stderr.writeln('• Loss of access to any applications/devices that use these keys');
+  stderr.writeln();
+  stderr.writeln(chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
+  stderr.writeln();
+  stderr.writeln(chalk.blue('IMPORTANT:'));
+  stderr.writeln('• After onboarding, you MUST back up your .atKeys file to a secure location');
+  stderr.writeln('• Store it in multiple secure locations (cloud storage, external drives, etc.)');
+  stderr.writeln('• Keep it safe from unauthorized access');
+  stderr.writeln();
+  
+  while (true) {
+    stderr.write(chalk.blue('[Action Required] ') + chalk.bold('Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
+    String? response = stdin.readLineSync();
+    
+    if (response != null) {
+      String normalized = response.trim().toLowerCase();
+      if (normalized == 'y' || normalized == 'yes') {
+        stderr.writeln();
+        stderr.writeln(chalk.green('✓ Acknowledged. Please remember to back up your keys securely!'));
+        stderr.writeln();
+        break;
+      } else if (normalized == 'n' || normalized == 'no') {
+        stderr.writeln();
+        stderr.writeln(chalk.red('Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
+        exit(1);
+      } else {
+        stderr.writeln(chalk.yellow('Please enter Y (yes) or N (no).'));
+        continue;
+      }
+    }
+  }
+}
+
 void deleteStorage() {
   // Windows will not let us delete files that are open
   // so will will ignore this step and leave them in %localappdata%\Temp
@@ -382,6 +426,10 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
           ' registrar certificates');
       logger.shout('*************');
       OnboardingUtil.allowBadCertificates = true;
+    }
+    // if  -f flag is not used, show back up key warning message
+    if (!argResults[AuthCliArgs.argNameForce]) {
+      _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
       maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
