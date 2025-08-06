@@ -10,7 +10,7 @@ on:
     branches:
       - trunk
 
-permissions:  # added using https://github.com/step-security/secure-workflows
+permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
@@ -45,7 +45,7 @@ jobs:
           channel: "${{ matrix.flutter-channel}}"
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version: 'stable'
+          go-version: "stable"
           cache-dependency-path: tools/osv-scanner/go.sum
 
       - name: Install dependencies and analyze in ${{ matrix.package }}
@@ -67,3 +67,4 @@ jobs:
         run: |
           go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
           osv-scanner --lockfile=./pubspec.lock
+
