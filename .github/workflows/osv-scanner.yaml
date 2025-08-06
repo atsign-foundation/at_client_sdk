@@ -38,3 +38,14 @@ jobs:
         run: |
           go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
           osv-scanner --lockfile=./pubspec.lock
+
+      # Temporary, until at_chops is added to the workspace
+      - name: Install at_chops dependencies (temp)
+        run: dart pub get
+        working-directory: packages/at_chops
+
+      - name: Run osv-scanner in at_chops (temp)
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          osv-scanner --lockfile=./pubspec.lock
+        working-directory: packages/at_chops
