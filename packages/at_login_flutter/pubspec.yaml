@@ -1,27 +1,30 @@
 name: at_login_flutter
 description: A flutter library for zero trust logins using the atProtocol
-version: 0.0.2
-homepage: https://docs.atsign.com/
+version: 0.1.0
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_login_flutter
+homepage: https://atsign.com/
+documentation: https://docs.atsign.com/
 
 environment:
-  sdk: ">=2.12.0 <4.0.0"
-  flutter: ">=1.20.0"
+  sdk: ^3.6.0
+  flutter: ^3.29.2
+resolution: workspace
 
 dependencies:
-  at_client: ^3.2.2
-  at_client_mobile: ^3.2.19
-  at_commons: ^5.0.0
+  at_client: ^3.7.0
+  at_client_mobile: ^3.3.0
+  at_commons: ^5.5.0
   at_server_status: ^1.0.5
   at_utils: ^3.0.19
   basic_utils: ^5.6.1
-  file_picker: ^8.0.6
+  file_picker: ^10.0.0
   flutter:
     sdk: flutter
-  flutter_local_notifications: ^17.2.1+2
+  flutter_local_notifications: ^19.0.0
   flutter_qr_reader: ^1.0.5
   http: ^1.1.0
   path_provider: ^2.1.1
-  permission_handler: ^11.0.0
+  permission_handler: ^12.0.0
   provider: ^6.0.5
   crypton: ^2.1.0
 

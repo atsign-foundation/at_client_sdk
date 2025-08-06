@@ -1,21 +1,21 @@
 name: at_events_flutter
 description: A Flutter plugin project to manage events (time, place and
   attendees) using the atPlatform.
-version: 3.1.15
-homepage: https://docs.atsign.com/
-repository: https://github.com/atsign-foundation/at_widgets/tree/trunk/packages/at_events_flutter
-issue_tracker: https://github.com/atsign-foundation/at_widgets/issues
+version: 3.2.0
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_events_flutter
+homepage: https://atsign.com/
 documentation: https://docs.atsign.com/
 
 environment:
-  sdk: ">=2.12.0 <4.0.0"
-  flutter: ">=1.20.0"
+  sdk: ^3.6.0
+  flutter: ^3.29.2
+resolution: workspace
 
 dependencies:
-  at_client: ^3.2.2
-  at_client_mobile: ^3.2.19
-  at_common_flutter: ^2.0.13
-  at_commons: ^5.0.0
+  at_client: ^3.7.0
+  at_client_mobile: ^3.3.0
+  at_common_flutter: ^2.1.0
+  at_commons: ^5.5.0
   at_contact: ^3.0.9
   at_contacts_flutter: ^4.0.16
   at_contacts_group_flutter: ^4.0.17
@@ -25,12 +25,12 @@ dependencies:
   flutter:
     sdk: flutter
   fluttertoast: ^8.2.2
-  geolocator: ^12.0.0
-  latlong2: ^0.9.0
+  geolocator: ^14.0.0
+  latlong2: 0.9.1
   sliding_up_panel: ^2.0.0+1
 
 dev_dependencies:
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
   mocktail: ^1.0.4

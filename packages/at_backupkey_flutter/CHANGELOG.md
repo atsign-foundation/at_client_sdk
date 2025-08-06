@@ -1,3 +1,10 @@
+## 4.1.0
+
+- chore(deps): at_client_mobile ^3.3.0
+- chore(deps): file_picker ^10.0.0
+- chore(deps): permission_handler ^12.0.0
+- chore(deps): share_plus ^11.0.0
+
 ## 4.0.18
 
 - **CHORE**: Build[deps] Upgraded dependencies in the following packages

@@ -1,3 +1,7 @@
+## 2.1.0
+
+- chore(deps): flutter_lints ^6.0.0
+
 ## 2.0.15
 
 - **FIX**: Replace depreciated `withOpacity` method with `withValues`

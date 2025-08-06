@@ -1,14 +1,15 @@
 name: at_common_flutter
 description: A Flutter package to provide common widgets used by other atPlatform Flutter packages.
-version: 2.0.15
+version: 2.1.0
 homepage: https://docs.atsign.com/
 repository: https://github.com/atsign-foundation/at_widgets/tree/trunk/packages/at_common_flutter
 issue_tracker: https://github.com/atsign-foundation/at_widgets/issues
 documentation: https://docs.atsign.com/
 
 environment:
-  sdk: '>=2.12.0 <4.0.0'
-  flutter: ">=1.17.0"
+  sdk: ^3.6.0
+  flutter: ^3.29.2
+resolution: workspace
 
 dependencies:
   flutter:
@@ -17,9 +18,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
   mocktail: ^1.0.4
-
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

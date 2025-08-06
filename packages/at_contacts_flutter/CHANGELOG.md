@@ -1,3 +1,10 @@
+## 4.1.0
+
+- chore(deps): at_commons ^5.5.0
+- chore(deps): at_commons_flutter ^2.1.0
+- chore(deps): at_client ^3.7.0
+- chore(deps): at_client_mobile ^3.5.0
+
 ## 4.0.17
 
 - **FIX**: `withOpacity` replaced with `withValue()`

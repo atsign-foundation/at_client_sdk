@@ -1,3 +1,11 @@
+## 3.1.0
+
+- chore(deps): at_commons ^5.5.0
+- chore(deps): at_client ^3.7.0
+- chore(deps): at_client_mobile ^3.5.0
+- chore(deps): flutter_local_notifications ^19.0.0
+- chore(deps): permission_handler ^12.0.0
+
 ## 3.0.15
 
 - Replace depreciated `withOpacity` method with `withValues`.

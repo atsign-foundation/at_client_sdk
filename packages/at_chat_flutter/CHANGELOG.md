@@ -1,3 +1,10 @@
+## 3.1.0
+
+- chore(deps): at_commons ^5.5.0
+- chore(deps): at_client ^3.7.0
+- chore(deps): at_client_mobile ^3.3.0
+- chore(deps): file_picker ^10.0.0
+
 ## 3.0.13:
 
 - **CHORE**: Kotlin version increased from 1.7.10 to 1.8.20

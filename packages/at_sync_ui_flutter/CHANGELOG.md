@@ -1,3 +1,9 @@
+## 1.1.0
+
+- chore(deps): at_common_flutter ^2.1.0
+- chore(deps): at_client ^3.7.0
+- chore(deps): at_client_mobile ^3.3.0
+
 ## 1.0.14
 
 - **FIX** Replace depreciated `withOpacity` method with `withValues`.
