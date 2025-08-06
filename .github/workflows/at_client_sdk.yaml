@@ -26,9 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+      - uses: ./actions/setup-flutter-and-dart
         with:
-          sdk: ${{ matrix.dart-channel}}
+          dart-channel: ${{ matrix.dart-channel}}
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
@@ -82,17 +82,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Installing Flutter
-        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+      - uses: ./actions/setup-flutter-and-dart
         with:
-          channel: stable
-
-      - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
-        with:
-          sdk: ${{ matrix.dart-channel}}
-
-      - name: Check Dart location
-        run: which dart
+          dart-channel: ${{ matrix.dart-channel}}
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
@@ -146,9 +138,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+      - uses: ./actions/setup-flutter-and-dart
         with:
-          sdk: ${{ matrix.dart-channel}}
+          dart-channel: ${{ matrix.dart-channel}}
 
       # Install dependencies in at_functional_test
       - name: Install dependencies in at_functional_test
@@ -221,9 +213,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+      - uses: ./actions/setup-flutter-and-dart
         with:
-          sdk: stable
+          dart-channel: ${{ matrix.dart-channel}}
 
       - name: Install dependencies in at_client
         working-directory: packages/at_client
@@ -273,9 +265,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+      - uses: ./actions/setup-flutter-and-dart
         with:
-          sdk: stable
+          dart-channel: ${{ matrix.dart-channel}}
 
       - name: Install dependencies in at_client
         working-directory: packages/at_client
