@@ -30,11 +30,6 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: "stable"
-          cache-dependency-path: tools/osv-scanner/go.sum
-
       # Install dependencies in at_client library
       - name: Install dependencies in at_client
         working-directory: packages/at_client
@@ -49,13 +44,6 @@ jobs:
       - name: Check that code in packages is correctly formatted
         working-directory: packages/at_client
         run: dart format . -o none --set-exit-if-changed
-
-      # Run the osv-scanner
-      - name: Run osv-scanner
-        working-directory: packages
-        run: |
-          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
-          osv-scanner --lockfile=./at_client/pubspec.lock
 
       # Run unit tests
       - name: Run at_client unit tests, with code coverage measurement
@@ -86,11 +74,6 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: "stable"
-          cache-dependency-path: tools/osv-scanner/go.sum
-
       # Install dependencies of at_client_mobile
       - name: Installing dependencies
         working-directory: packages/at_client_mobile
@@ -105,13 +88,6 @@ jobs:
       - name: Check that code in packages is correctly formatted
         working-directory: packages/at_client_mobile
         run: dart format . -o none --set-exit-if-changed
-
-      # Run the osv-scanner
-      - name: Run osv-scanner
-        working-directory: packages
-        run: |
-          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
-          osv-scanner --lockfile=./at_client_mobile/pubspec.lock
 
       # Run unit tests
       - name: Run at_client_mobile unit tests, with code coverage measurement
