@@ -247,16 +247,15 @@ class AtAuthImpl implements AtAuth {
   }
 
   AtAuthKeys _decryptAtKeysWithSelfEncKey(
-      Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
+      Map<String, dynamic> jsonData, PkamAuthMode authMode) {
     var securityKeys = AtAuthKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey]!;
     var atChops =
         AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
-    securityKeys.defaultEncryptionPublicKey = (await atChops.decryptString(
-            jsonData[auth_constants.defaultEncryptionPublicKey]!,
+    securityKeys.defaultEncryptionPublicKey = atChops
+        .decryptString(jsonData[auth_constants.defaultEncryptionPublicKey]!,
             EncryptionKeyType.aes256,
-            keyName: 'selfEncryptionKey',
-            iv: AtChopsUtil.generateIVLegacy()))
+            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
         .result;
     securityKeys.defaultEncryptionPrivateKey = atChops
         .decryptString(jsonData[auth_constants.defaultEncryptionPrivateKey]!,
