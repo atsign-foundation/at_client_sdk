@@ -1,5 +1,0 @@
-name: at_widgets
-
-packages:
-  - packages/*
-  - packages/*/*example
