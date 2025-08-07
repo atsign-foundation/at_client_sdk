@@ -1,3 +1,8 @@
+## 2.2.0
+
+- chore(deps): at_client ^3.7.0
+- chore(deps): chalkdart ">=2.0.9<4.0.0"
+
 ## 2.1.0
 - feat: Improve usability for args management, including the ability to hide 
   some args which, while they are very helpful for dev purposes, are not so 

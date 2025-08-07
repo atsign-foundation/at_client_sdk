@@ -1,3 +1,8 @@
+## 3.3.0
+
+- chore(deps): remove unused deps (path)
+- chore(deps): at_commons ^5.5.0
+
 ## 3.2.0
 - feat: add `SecureSocketConfig? config` to `SecondaryUrlFinder` constructor
 - fix: make `SecureSocketConfig.tlsKeysSavePath` optional

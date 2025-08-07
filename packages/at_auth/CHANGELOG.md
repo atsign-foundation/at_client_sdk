@@ -1,3 +1,7 @@
+## 2.4.0
+
+- chore(deps): at_commons ^5.5.0
+
 ## 2.3.0
 - feat: add `AtLookUp? atLookUp` to the `AtAuth` interface so that it can be 
   reused (e.g. by AtClient) once auth is complete

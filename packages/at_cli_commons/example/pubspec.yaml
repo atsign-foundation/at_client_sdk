@@ -1,4 +1,4 @@
-name: example
+name: at_cli_commons_example
 description: Simple CLI examples using at_cli_commons
 version: 1.0.0
 publish_to: none
@@ -6,11 +6,17 @@ publish_to: none
 environment:
   sdk: ^3.0.6
 
-# Add regular dependencies here.
+dependency_overrides:
+  at_client:
+    path: ../../at_client
+  at_cli_commons:
+    path: ..
+
 dependencies:
   at_cli_commons:
     path: ..
-  at_client: ^3.0.62
+  at_client: ^3.7.0
+
 dev_dependencies:
   lints: ^2.1.1
   test: ^1.24.4

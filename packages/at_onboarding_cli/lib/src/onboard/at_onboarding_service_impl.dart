@@ -39,7 +39,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   AtEnrollmentBase? _atEnrollment;
 
-  AtOnboardingServiceImpl(atsign, this.atOnboardingPreference,
+  AtOnboardingServiceImpl(String atsign, this.atOnboardingPreference,
       {this.atServiceFactory, String? enrollmentId}) {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
@@ -819,7 +819,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return _psc.stream;
   }
 
-  _addProgress(String group, String msg, ProgressEventType type) {
+  void _addProgress(String group, String msg, ProgressEventType type) {
     _psc.add(ProgressEvent(group: group, msg: msg, type: type));
   }
 }
