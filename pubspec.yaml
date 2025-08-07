@@ -21,13 +21,6 @@ workspace:
   - tests/at_functional_test
   - tests/at_onboarding_cli_functional_tests
 
-dependency_overrides:
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server
-      path: packages/at_persistence_secondary_server
-      ref: at_persistence_secondary_server-4.2.0
-
 dependencies:
   # external dependencies
   flutter:
