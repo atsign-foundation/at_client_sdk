@@ -63,7 +63,7 @@ void _showPreOnboardingKeyWarning() {
       } else if (normalized == 'n' || normalized == 'no') {
         stdout.writeln();
         stdout.writeln(chalk.red('Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
-        exit(1);
+        exit(0);
       } else {
         stdout.writeln(chalk.yellow('Please enter Y (yes) or N (no).'));
         continue;
