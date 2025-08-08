@@ -116,7 +116,7 @@ class AuthCliArgs {
   static const argNameHashingAlgoType = 'hashingAlgoType';
   static const argNameMaxRetries = 'max-retries';
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
-  static const argNameForce = 'force';
+  static const argNameYes = 'yes';
 
   ArgParser get parser {
     return _aap;
@@ -314,8 +314,8 @@ class AuthCliArgs {
       hide: true,
     );
     p.addFlag(
-      argNameForce,
-      abbr: 'f',
+      argNameYes,
+      abbr: 'y',
       help: 'Skip the key backup warning prompt',
       defaultsTo: false,
       negatable: false,

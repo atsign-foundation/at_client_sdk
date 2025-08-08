@@ -428,8 +428,8 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
       logger.shout('*************');
       OnboardingUtil.allowBadCertificates = true;
     }
-    // if  -f flag is not used, show back up key warning message
-    if (!argResults[AuthCliArgs.argNameForce]) {
+    // if  -y flag is not used, show back up key warning message
+    if (!argResults[AuthCliArgs.argNameYes]) {
       _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
