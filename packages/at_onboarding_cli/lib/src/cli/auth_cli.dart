@@ -428,8 +428,9 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
       logger.shout('*************');
       OnboardingUtil.allowBadCertificates = true;
     }
-    // if  -y flag is not used, show back up key warning message
-    if (!argResults[AuthCliArgs.argNameYes]) {
+    // if  -y flag is not used and --cramkey is not provided, show back up key warning message
+    // --cramkey implies --yes for backwards compatibility with automation scripts
+    if (!argResults[AuthCliArgs.argNameYes] && !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
       _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
