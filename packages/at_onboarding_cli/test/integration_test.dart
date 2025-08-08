@@ -10,7 +10,7 @@ void main() {
     test('Process-based test: CLI exits with code 0 on N response', () async {
       final result = await Process.run(
         'bash',
-        ['-c', 'echo "N" | dart bin/activate_cli.dart onboard --atsign @testintegration --keys $testKeysPath'],
+        ['-c', 'echo "N" | dart bin/activate_cli.dart onboard --atsign @8incanteater --keys $testKeysPath'],
         workingDirectory: Directory.current.path,
       );
       expect(result.exitCode, equals(0));
@@ -20,7 +20,7 @@ void main() {
     test('Process-based test: CLI accepts Y response and continues', () async {
       final result = await Process.run(
         'bash', 
-        ['-c', 'timeout 5s bash -c "echo Y | dart bin/activate_cli.dart onboard --atsign @testintegration --keys $testKeysPath" || true'],
+        ['-c', 'timeout 5s bash -c "echo Y | dart bin/activate_cli.dart onboard --atsign @8incanteater --keys $testKeysPath"'],
         workingDirectory: Directory.current.path,
       );
       
@@ -30,12 +30,13 @@ void main() {
     }, timeout: Timeout(Duration(seconds: 10)));
 
     // Test #3: Tests that using the `--cramkey` implies `--yes` and bypasses the backup key prompt
-    test('CLI with --yes bypasses prompt completely', () async {
+    test('CLI with --cramkey bypasses prompt (implies --yes)', () async {
       final result = await Process.run(
         'bash',
-        ['-c', 'timeout 5s dart bin/activate_cli.dart onboard --atsign @testintegration --keys $testKeysPath --cramkey dummy-key || true'],
+        ['-c', 'timeout 5s dart bin/activate_cli.dart onboard --atsign @8incanteater --keys $testKeysPath --cramkey dummy-key'],
         workingDirectory: Directory.current.path,
       );
+      
       expect(result.exitCode, isNot(equals(0)));
     }, timeout: Timeout(Duration(seconds: 10)));
 
@@ -43,9 +44,10 @@ void main() {
     test('CLI with --cramkey and --yes behaves the same as without --yes', () async {
       final result = await Process.run(
         'bash',
-        ['-c', 'timeout 5s dart bin/activate_cli.dart onboard --atsign @testintegration --keys $testKeysPath --cramkey dummy-key --yes || true'],
+        ['-c', 'timeout 5s dart bin/activate_cli.dart onboard --atsign @8incanteater --keys $testKeysPath --cramkey dummy-key --yes'],
         workingDirectory: Directory.current.path,
       );
+      
       expect(result.exitCode, isNot(equals(0)));
     }, timeout: Timeout(Duration(seconds: 10)));
 
