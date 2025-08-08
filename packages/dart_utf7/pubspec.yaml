@@ -1,0 +1,14 @@
+name: dart_utf7
+description: Provides methods to encode/decode strings to/from the utf7 format as defined in rfc 2152
+version: 0.2.1-null-safety
+homepage: https://github.com/michaelspiss/dart-utf7
+
+environment:
+  sdk: '>=2.12.0 <4.0.0'
+
+#dependencies:
+#  path: ^1.6.0
+
+dev_dependencies:
+  lints: ^1.0.1
+  test: ^1.17.1

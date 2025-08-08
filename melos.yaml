@@ -1,9 +1,0 @@
-name: at_client_sdk
-
-packages:
-  - packages/at_client_mobile
-  - tests/*
-
-command:
-  bootstrap:
-    runPubGetInParallel: false

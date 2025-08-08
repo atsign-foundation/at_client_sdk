@@ -1,0 +1,42 @@
+name: at_onboarding_cli
+description: Dart tools for initial client onboarding, subsequent client enrollment, and enrollment management.
+version: 1.12.0
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_onboarding_cli
+homepage: https://atsign.com
+documentation: https://docs.atsign.com/
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+executables:
+  at_register: register_cli
+  at_activate: activate_cli
+
+dependencies:
+  args: ^2.6.0
+  crypton: ^2.2.1
+  encrypt: ^5.0.3
+  http: ^1.2.1
+  image: ^4.1.7
+  meta: ^1.16.0
+  path: ^1.9.0
+  zxing2: ^0.2.0
+  at_auth: ^2.3.0
+  at_chops: ^2.2.0
+  at_client: ^3.7.0
+  at_commons: ^5.5.0
+  at_lookup: ^3.0.52
+  at_server_status: ^1.0.5
+  at_utils: ^3.2.0
+  duration: ^4.0.3
+  crypto: ^3.0.5
+  chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
+
+dev_dependencies:
+  at_persistence_secondary_server: ^4.2.0
+  alfred: ^1.1.2+1
+  lints: ^6.0.0
+  test: ^1.25.0
+  at_demo_data: ^1.2.0
+  mocktail: ^1.0.4

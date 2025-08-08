@@ -1,3 +1,13 @@
+## 3.3.0
+
+- chore(deps): remove unused dependencies
+- chore(deps): at_commons ^5.5.0
+- chore(deps): at_client ^3.7.0
+- chore(deps): at_persistence_secondary_server ^4.2.0
+- chore(deps): move path to dev_dependencies and bump to ^1.9.0
+- chore(deps): add flutter_test to dev_dependencies
+  to ensure the workspace remains compatible with flutter
+
 ## 3.2.24
 - fix: at_client_mobile: fix immediate issue caused by widespread leakage of 
   `AtLookupImpl`, exposed by recent removal of that leakage from

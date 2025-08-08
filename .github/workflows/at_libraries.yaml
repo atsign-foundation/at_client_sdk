@@ -1,0 +1,115 @@
+# This workflows runs when
+# 1. pull_request raised to trunk branch.
+# 2. tag created on at_tools repository
+name: at_libraries
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+    branches:
+      - trunk
+  pull_request:
+    branches:
+      - trunk
+
+permissions: # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - at_contact
+          - at_server_status
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          dart-channel: ${{ matrix.dart-channel}}
+
+      - name: Install dependencies in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart pub get
+
+      - name: Analyze project source in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart analyze
+
+  build_and_test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - at_lookup
+          - at_chops
+          - at_onboarding_cli
+          - at_commons
+          - at_utils
+          - at_cli_commons
+          - at_policy
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          dart-channel: ${{ matrix.dart-channel}}
+
+      - name: Install dependencies in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart pub get
+
+      - name: Analyze project source in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart analyze
+
+      - name: run tests
+        working-directory: packages/${{ matrix.package }}
+        run: dart test --concurrency=1
+
+  functional_tests_at_onboarding_cli:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - at_onboarding_cli_functional_tests
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          dart-channel: ${{ matrix.dart-channel}}
+
+      #functional tests for at_onboarding_cli
+      - name: add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      - name: Get functional test dependencies
+        working-directory: tests/${{ matrix.package }}
+        run: dart pub get
+
+      - name: Start docker instance
+        working-directory: tests/${{ matrix.package }}
+        run: sudo docker compose up -d
+
+      - name: Check for docker container readiness
+        working-directory: tests/${{ matrix.package }}
+        run: dart run check_docker_readiness.dart
+
+      # Note that, unlike the functional tests in at_client_sdk, we do not run the pkamLoad
+      # job here, since we require all the atSigns to NOT be already onboarded.
+
+      - name: run tests
+        working-directory: tests/${{ matrix.package }}
+        run: dart test --concurrency=1
+
+      - name: kill docker image
+        working-directory: tests/${{ matrix.package }}
+        run: sudo docker compose down

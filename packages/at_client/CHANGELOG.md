@@ -1,10 +1,18 @@
-## 3.7.0
+## 3.8.0
 
-- feat: Add `ApkamSigning` mixin
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
   `getAtKeys` so that apps can ask to fetch directly from atServer rather
   than the local datastore.
- 
+
+## 3.7.0
+
+- chore(deps): uuid ^4.0.0
+- chore(deps): at_commons ^5.5.0
+- chore(deps): at_persistence_secondary_server ^4.2.0
+- chore(deps): http ^1.2.1
+- chore(deps): remove unused dependencies
+- chore(deps): move collection to dev_dependencies
+
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
   `AtClientPreference.atProtocolEmitted` and change its default value

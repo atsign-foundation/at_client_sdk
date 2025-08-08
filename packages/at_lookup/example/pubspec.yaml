@@ -1,0 +1,22 @@
+name: at_lookup_example
+description: An example application to demostrate the at_lookup package usage.
+version: 1.0.0
+
+environment:
+  sdk: ">=2.14.4 <4.0.0"
+
+dependency_overrides:
+  at_utils:
+    path: ../../at_utils
+  at_commons:
+    path: ../../at_commons
+  at_lookup:
+    path: ../../at_lookup
+
+dependencies:
+  at_utils: ^3.0.2
+  at_commons: ^5.5.0
+  at_lookup: ^3.0.5
+
+dev_dependencies:
+  lints: ^1.0.0
