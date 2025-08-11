@@ -95,6 +95,19 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       atOnboardingPreference.rootPort,
     );
 
+    _atLookUp ??= atLookUpImpl;
+
+    // Send from: command to notify proxy server about the target atSign
+    logger.info('onboard: Sending from:$_atSign command to ${atOnboardingPreference.rootDomain}:${atOnboardingPreference.rootPort}');
+    try {
+      String? fromResponse = await _atLookUp!.executeCommand('from:$_atSign\n', auth: false);
+      logger.info('onboard: from: command successful, response: $fromResponse');
+    } catch (e) {
+      // Ignore errors from from: command as it's only needed for proxy servers
+      logger.severe('onboard: from: command failed: $e');
+      logger.info('onboard: This may indicate proxy server communication issue or non-proxy connection');
+    }
+
     // get cram_secret from either from AtOnboardingPreference
     // or fetch from the registrar using verification code sent to email
     if (atOnboardingPreference.cramSecret == null) {
@@ -123,7 +136,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     // check and wait till secondary exists
     await _waitUntilSecondaryCreated(
-      atLookUpImpl,
+      _atLookUp as AtLookupImpl,
       retryInterval: retryInterval,
       maxRetries: maxRetries,
     );
@@ -240,6 +253,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'appName and deviceName are mandatory for enrollment');
     }
 
+    AtLookupImpl atLookUpImpl = AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
+    _atLookUp ??= atLookUpImpl;
+
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
         appName: appName,
         deviceName: deviceName,
@@ -248,15 +268,20 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    try {
+      String? fromResponse = await _atLookUp!.executeCommand('from:$_atSign\n', auth: false);
+      logger.info('sendEnrollRequest: from: command successful, response: $fromResponse');
+    } catch (e) {
+      logger.severe('sendEnrollRequest: from: command failed: $e');
+    }
+
     logger.finer('sendEnrollRequest: submitting enrollment request');
     _addProgress(
         'Enroll', 'submitting enrollment request', ProgressEventType.info);
     await waitBriefly();
 
     AtEnrollmentResponse response =
-        await _atEnrollment!.submit(newClientEnrollmentRequest, atLookUpImpl);
+        await _atEnrollment!.submit(newClientEnrollmentRequest, _atLookUp!);
     logger.finer('sendEnrollRequest: received server response: $response');
     _addProgress('Enroll', 'submitted OK', ProgressEventType.success);
 
@@ -270,6 +295,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool logProgress = true,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
+    // Send from: command to notify proxy server about the target atSign
+    logger.info('awaitApproval: Sending from:$_atSign command to ${atOnboardingPreference.rootDomain}:${atOnboardingPreference.rootPort}');
+    try {
+      String? fromResponse = await _atLookUp!.executeCommand('from:$_atSign\n', auth: false);
+      logger.info('awaitApproval: from: command successful, response: $fromResponse');
+    } catch (e) {
+      // Ignore errors from from: command as it's only needed for proxy servers
+      logger.severe('awaitApproval: from: command failed: $e');
+      logger.info('awaitApproval: This may indicate proxy server communication issue or non-proxy connection');
+    }
+
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
         AtEncryptionKeyPair.create(
             enrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!, ''),
@@ -278,12 +314,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atChopsKeys.apkamSymmetricKey =
         AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!);
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-
-    atLookUpImpl.atChops = AtChopsImpl(atChopsKeys);
-    // ?? to support mocking
-    _atLookUp ??= atLookUpImpl;
+    // Create AtChops instance and assign it to the lookup for PKAM authentication
+    AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
+    _atLookUp!.atChops = atChops;
 
     // Pkam auth will be attempted asynchronously until enrollment is approved
     // or denied or times out. If denied or timed out, an exception will be
