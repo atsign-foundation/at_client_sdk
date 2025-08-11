@@ -525,6 +525,30 @@ void main() {
       });
     });
 
+    group('Tests for scan with useRemoteAtServer', () {
+      test('Scan useRemoteAtServer defaults to false', () async {
+        bool executedRemotely = false;
+        // Scan; verify that the RemoteSecondary was NOT invoked
+        when(() => mockRemoteSecondary.executeVerb(
+            any(that: isA<ScanVerbBuilder>()))).thenAnswer((invocation) async {
+          executedRemotely = true;
+          return 'data:[]';
+        });
+        await atClient.getAtKeys();
+        expect(executedRemotely, false);
+      });
+      test('Scan when useRemoteAtServer set to true', () async {
+        bool executedRemotely = false;
+        // Scan; verify that the RemoteSecondary was NOT invoked
+        when(() => mockRemoteSecondary.executeVerb(
+            any(that: isA<ScanVerbBuilder>()))).thenAnswer((invocation) async {
+          executedRemotely = true;
+          return 'data:[]';
+        });
+        await atClient.getAtKeys(useRemoteAtServer: true);
+        expect(executedRemotely, true);
+      });
+    });
     group('Tests for GetRequestOptions.useRemoteAtServer', () {
       test('GetRequestOptions.useRemoteAtServer defaults to false', () {
         GetRequestOptions gro = GetRequestOptions();
@@ -544,7 +568,7 @@ void main() {
           var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
           if (builder.atKey.toString() == atKey.toString()) {
             print('mockRemoteSecondary.executeVerb with LLookupVerbBuilder'
-                ' for ${builder.atKey.toString()} as expected');
+                ' for ${builder.atKey.toString()} - this is NOT expected');
             executedRemotely = true;
             return 'data:null';
           } else {

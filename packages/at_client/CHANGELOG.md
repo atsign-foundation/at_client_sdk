@@ -1,6 +1,11 @@
+## 3.8.0
+
+- feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
+  `getAtKeys` so that apps can ask to fetch directly from atServer rather
+  than the local datastore.
+
 ## 3.7.0
 
-- feat: Add `ApkamSigning` mixin
 - chore(deps): uuid ^4.0.0
 - chore(deps): at_commons ^5.5.0
 - chore(deps): at_persistence_secondary_server ^4.2.0
