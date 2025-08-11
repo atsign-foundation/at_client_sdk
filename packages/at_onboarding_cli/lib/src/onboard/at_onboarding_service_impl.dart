@@ -55,6 +55,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
 
+  /// Ensures atLookUp instance is initialized
+  void _ensureAtLookUpInstance() {
+    _atLookUp ??= AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
+  }
+
   Future<void> _initAtClient(AtChops atChops, {String? enrollmentId}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
     if (atOnboardingPreference.skipSync) {
@@ -88,14 +97,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultActivationCheckInterval,
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
   }) async {
-    // cram auth doesn't use at_chops. So create at_lookup here.
-    AtLookupImpl atLookUpImpl = AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
-
-    _atLookUp ??= atLookUpImpl;
+    // Ensure we have an AtLookUp instance
+    _ensureAtLookUpInstance();
 
     // Send from: command to notify proxy server about the target atSign
     logger.info('onboard: Sending from:$_atSign command to ${atOnboardingPreference.rootDomain}:${atOnboardingPreference.rootPort}');
@@ -253,12 +256,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'appName and deviceName are mandatory for enrollment');
     }
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
-    _atLookUp ??= atLookUpImpl;
+    // Ensure we have an AtLookUp instance
+    _ensureAtLookUpInstance();
 
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
         appName: appName,
@@ -295,6 +294,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool logProgress = true,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
+    // Ensure we have an AtLookUp instance
+    _ensureAtLookUpInstance();
+    
     // Send from: command to notify proxy server about the target atSign
     logger.info('awaitApproval: Sending from:$_atSign command to ${atOnboardingPreference.rootDomain}:${atOnboardingPreference.rootPort}');
     try {
