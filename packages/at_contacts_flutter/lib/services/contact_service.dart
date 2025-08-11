@@ -676,7 +676,6 @@ class ContactService {
       case STATE_UPDATE.markFav:
         baseContactList[indexToUpdate].isMarkingFav = state;
         break;
-      default:
     }
 
     if (stateToUpdate == STATE_UPDATE.unblock) {

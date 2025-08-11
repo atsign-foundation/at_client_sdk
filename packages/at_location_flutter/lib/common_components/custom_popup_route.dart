@@ -58,6 +58,6 @@ class CustomPopupRoutes<T> extends PopupRoute<T> {
           ),
           child: child);
     } // Some default transition
-    return _transitionBuilder!(context, animation, secondaryAnimation, child);
+    return _transitionBuilder(context, animation, secondaryAnimation, child);
   }
 }

@@ -28,22 +28,17 @@ class NotificationService {
   setOnNotificationClick(Function onNotificationClick) async {
     await _notificationsPlugin.initialize(initializationSettings,
         onDidReceiveNotificationResponse: (NotificationResponse payload) {
-          onNotificationClick(payload);
-        });
+      onNotificationClick(payload);
+    });
   }
 
   initializePlatformSpecifics() {
     var initializationSettingsAndroid =
         AndroidInitializationSettings('notification_icon');
-    var initializationSettingsIOS = 
-    DarwinInitializationSettings(
+    var initializationSettingsIOS = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: false,
-      onDidReceiveLocalNotification: (id, title, body, payload) async {
-        _logger.info(
-            'received notification ::id $id, title $title, body $body, payload $payload');
-      },
     );
 
     initializationSettings = InitializationSettings(

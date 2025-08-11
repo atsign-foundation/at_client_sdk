@@ -349,9 +349,9 @@ class Proj4Crs extends Crs {
     }
 
     var iZoom = zoom.round();
-    var lastIdx = _transformations!.length - 1;
+    var lastIdx = _transformations.length - 1;
 
-    return _transformations![iZoom > lastIdx ? lastIdx : iZoom];
+    return _transformations[iZoom > lastIdx ? lastIdx : iZoom];
   }
 }
 

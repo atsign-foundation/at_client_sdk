@@ -28,6 +28,7 @@ Future<void> confirmationDialog(String title,
                 ),
                 const SizedBox(height: 30),
                 _dialogLoading
+                    // ignore: dead_code
                     ? const CircularProgressIndicator()
                     : CustomButton(
                         onPressed: () async {

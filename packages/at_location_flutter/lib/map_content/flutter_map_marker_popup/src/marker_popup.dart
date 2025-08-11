@@ -59,7 +59,7 @@ class _MarkerPopupState extends State<MarkerPopup> {
 
     _popupController!.streamController =
         StreamController<PopupEvent>.broadcast();
-    _popupController!.streamController!.stream
+    _popupController.streamController!.stream
         .listen((PopupEvent popupEvent) => _handleAction(popupEvent));
   }
 

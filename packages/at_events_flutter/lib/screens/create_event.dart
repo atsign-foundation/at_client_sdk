@@ -93,8 +93,7 @@ class _CreateEventState extends State<CreateEvent> {
                         StreamBuilder(
                             stream: EventService().eventStream,
                             builder: (BuildContext context, snapshot) {
-                              var eventData =
-                                  snapshot.data as EventNotificationModel?;
+                              var eventData = snapshot.data;
 
                               if (eventData != null && snapshot.hasData) {
                                 // ignore: avoid_unnecessary_containers

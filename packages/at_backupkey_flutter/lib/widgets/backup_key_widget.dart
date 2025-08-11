@@ -46,7 +46,7 @@ class BackupKeyWidget extends StatelessWidget {
   final Color? buttonColor;
 
   BackupKeyWidget(
-      {super.key,
+      {Key? key,
       required this.atsign,
       this.isButton = false,
       this.isIcon,
@@ -55,7 +55,8 @@ class BackupKeyWidget extends StatelessWidget {
       this.buttonWidth,
       this.buttonHeight,
       this.buttonColor,
-      this.iconSize});
+      this.iconSize})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +97,7 @@ class BackupKeyWidget extends StatelessWidget {
           );
   }
 
-  void _showAlertDialog(BuildContext context) {
+  _showAlertDialog(BuildContext context) {
     showDialog(
         context: context,
         barrierDismissible: false,
@@ -129,7 +130,7 @@ class BackupKeyWidget extends StatelessWidget {
         });
   }
 
-  void showBackupDialog(BuildContext context) {
+  showBackupDialog(BuildContext context) {
     SizeConfig().init(context);
     GlobalKey key = GlobalKey();
     BuildContext? myContext;
@@ -240,7 +241,7 @@ class BackupKeyWidget extends StatelessWidget {
         });
   }
 
-  Future<bool?> onBackup(BuildContext context) async {
+  onBackup(BuildContext context) async {
     try {
       var aesEncryptedKeys = await BackUpKeyService.getEncryptedKeys(atsign);
       if (aesEncryptedKeys.isEmpty) {
@@ -352,7 +353,7 @@ class BackupKeyWidget extends StatelessWidget {
         final path = await FilePicker.platform.saveFile(
           fileName: '$atsign${Strings.backupKeyName}',
         );
-        if (path == null) return null;
+        if (path == null) return;
         final file = XFile(tempFilePath);
         await file.saveTo(path);
         if (context.mounted) {
@@ -367,7 +368,6 @@ class BackupKeyWidget extends StatelessWidget {
     } on Error catch (err) {
       _logger.severe('BackingUp keys throws $err error');
     }
-    return null;
   }
 
   Future<String> _generateFile(Map<String, String> aesEncryptedKeys) async {

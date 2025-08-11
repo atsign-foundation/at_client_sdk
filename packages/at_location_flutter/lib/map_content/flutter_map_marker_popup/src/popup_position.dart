@@ -36,8 +36,6 @@ class PopupPosition {
         return _snapBottom(visibleSize!, markerPosition, markerSize);
       case PopupSnap.center:
         return _snapCenter(visibleSize!, markerPosition, markerSize);
-      default:
-        return _snapTop(visibleSize!, markerPosition, markerSize);
     }
   }
 

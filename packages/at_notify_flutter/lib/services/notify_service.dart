@@ -33,7 +33,8 @@ class NotifyService {
   List<Notify> notifies = [];
 
   /// Stream to put the notification object list
-  StreamController<List<Notify>> notifyStreamController = StreamController<List<Notify>>.broadcast();
+  StreamController<List<Notify>> notifyStreamController =
+      StreamController<List<Notify>>.broadcast();
 
   Sink get notifySink => notifyStreamController.sink;
 
@@ -44,19 +45,23 @@ class NotifyService {
   }
 
   /// Initialise function to set the client preference, atsign and root domain
-  void initNotifyService(AtClientPreference atClientPreference, String currentAtSignFromApp, String rootDomainFromApp,
+  void initNotifyService(
+      AtClientPreference atClientPreference,
+      String currentAtSignFromApp,
+      String rootDomainFromApp,
       int rootPortFromApp) async {
     currentAtSign = currentAtSignFromApp;
     rootDomain = rootDomainFromApp;
     rootPort = rootPortFromApp;
     atClientManager = AtClientManager.getInstance();
-    AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSignFromApp, atClientPreference.namespace, atClientPreference);
+    AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSignFromApp, atClientPreference.namespace, atClientPreference);
     atClient = AtClientManager.getInstance().atClient;
     _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
     atClientManager.atClient.notificationService
-        .subscribe(regex: '.${atClientPreference.namespace}', shouldDecrypt: true)
+        .subscribe(
+            regex: '.${atClientPreference.namespace}', shouldDecrypt: true)
         .listen((AtNotification notification) {
       _notificationCallback(notification);
     });
@@ -69,24 +74,15 @@ class NotifyService {
 
   /// Initialized Notification Settings
   initializePlatformSpecifics() async {
-    var initializationSettingsAndroid = const AndroidInitializationSettings('@mipmap/ic_launcher');
+    var initializationSettingsAndroid =
+        const AndroidInitializationSettings('@mipmap/ic_launcher');
     var initializationSettingsIOS = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: false,
-      onDidReceiveLocalNotification: (id, title, body, payload) async {
-        var receivedNotification = ReceivedNotification(
-          id: id,
-          title: title!,
-          body: body!,
-          payload: payload!,
-        );
-        print('receivedNotification: ${receivedNotification.toString()}');
-        //     didReceivedLocalNotificationSubject.add(receivedNotification);
-      },
     );
-    initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid, iOS: initializationSettingsIOS);
+    initializationSettings = InitializationSettings(
+        android: initializationSettingsAndroid, iOS: initializationSettingsIOS);
 
     await _notificationsPlugin.initialize(
       initializationSettings,
@@ -96,7 +92,8 @@ class NotifyService {
   /// Request Alert, Badge, Sound Permission for IOS
   _requestIOSPermission() {
     _notificationsPlugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()!
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>()!
         .requestPermissions(
           alert: false,
           badge: true,
@@ -174,7 +171,9 @@ class NotifyService {
   }
 
   /// Call Notify in NotificationService, send notify to others
-  Future<bool> sendNotify(String sendToAtSign, Notify notify, NotifyEnum notifyType, {int noOfDays = 30}) async {
+  Future<bool> sendNotify(
+      String sendToAtSign, Notify notify, NotifyEnum notifyType,
+      {int noOfDays = 30}) async {
     if (!sendToAtSign.contains('@')) {
       sendToAtSign = '@$sendToAtSign';
     }
@@ -186,11 +185,13 @@ class NotifyService {
       ..sharedBy = currentAtSign
       ..sharedWith = sendToAtSign
       ..metadata = metadata;
-    var notificationResponse = await atClientManager.atClient.notificationService.notify(
+    var notificationResponse =
+        await atClientManager.atClient.notificationService.notify(
       NotificationParams.forUpdate(key, value: notify.toJson()),
     );
 
-    if (notificationResponse.notificationStatusEnum == NotificationStatusEnum.delivered) {
+    if (notificationResponse.notificationStatusEnum ==
+        NotificationStatusEnum.delivered) {
       print(notificationResponse.toString());
     } else {
       print(notificationResponse.atClientException.toString());
@@ -216,7 +217,8 @@ class NotifyService {
     );
     var iosChannelSpecifics = const DarwinNotificationDetails();
 
-    var platformChannelSpecifics = NotificationDetails(android: androidChannelSpecifics, iOS: iosChannelSpecifics);
+    var platformChannelSpecifics = NotificationDetails(
+        android: androidChannelSpecifics, iOS: iosChannelSpecifics);
     await _notificationsPlugin.show(
       0,
       atSign,
