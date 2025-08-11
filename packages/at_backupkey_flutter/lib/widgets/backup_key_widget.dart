@@ -46,7 +46,7 @@ class BackupKeyWidget extends StatelessWidget {
   final Color? buttonColor;
 
   BackupKeyWidget(
-      {Key? key,
+      {super.key,
       required this.atsign,
       this.isButton = false,
       this.isIcon,
@@ -55,8 +55,7 @@ class BackupKeyWidget extends StatelessWidget {
       this.buttonWidth,
       this.buttonHeight,
       this.buttonColor,
-      this.iconSize})
-      : super(key: key);
+      this.iconSize});
 
   @override
   Widget build(BuildContext context) {
@@ -73,12 +72,16 @@ class BackupKeyWidget extends StatelessWidget {
               width: buttonWidth ?? 158.toWidth,
               height: buttonHeight ?? (50.toHeight),
               padding: EdgeInsets.symmetric(horizontal: 10.toWidth),
-              decoration:
-                  BoxDecoration(borderRadius: BorderRadius.circular(30.toWidth), color: buttonColor ?? Colors.black),
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30.toWidth),
+                  color: buttonColor ?? Colors.black),
               child: Center(
                 child: Text(buttonText!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16.toFont, color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 16.toFont,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold)),
               ),
             ),
           )
@@ -93,7 +96,7 @@ class BackupKeyWidget extends StatelessWidget {
           );
   }
 
-  _showAlertDialog(BuildContext context) {
+  void _showAlertDialog(BuildContext context) {
     showDialog(
         context: context,
         barrierDismissible: false,
@@ -103,14 +106,16 @@ class BackupKeyWidget extends StatelessWidget {
               children: [
                 Text(
                   'Error',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.toFont),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14.toFont),
                 ),
                 Icon(Icons.sentiment_dissatisfied, size: 25.toFont)
               ],
             ),
             content: Text(
               'Could not backup the key file',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.toFont),
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, fontSize: 14.toFont),
             ),
             actions: <Widget>[
               TextButton(
@@ -124,7 +129,7 @@ class BackupKeyWidget extends StatelessWidget {
         });
   }
 
-  showBackupDialog(BuildContext context) {
+  void showBackupDialog(BuildContext context) {
     SizeConfig().init(context);
     GlobalKey key = GlobalKey();
     BuildContext? myContext;
@@ -136,7 +141,10 @@ class BackupKeyWidget extends StatelessWidget {
             return Dialog(
               child: Container(
                 padding: const EdgeInsets.all(20),
-                width: (Platform.isMacOS || Platform.isWindows || Platform.isLinux) ? 600 : null,
+                width:
+                    (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
+                        ? 600
+                        : null,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -152,7 +160,8 @@ class BackupKeyWidget extends StatelessWidget {
                                   'PLEASE SECURELY SAVE YOUR KEYS. WE DO NOT HAVE ACCESS TO THEM AND CANNOT CREATE A BACKUP OR RESET THEM.',
                               targetShapeBorder: const CircleBorder(),
                               disableMovingAnimation: true,
-                              targetBorderRadius: const BorderRadius.all(Radius.circular(40)),
+                              targetBorderRadius:
+                                  const BorderRadius.all(Radius.circular(40)),
                               showArrow: false,
                               targetPadding: const EdgeInsets.all(5),
                               blurValue: 2,
@@ -172,8 +181,9 @@ class BackupKeyWidget extends StatelessWidget {
                             ShowCaseWidget.of(myContext!).startShowCase([key]);
                           },
                           child: Container(
-                            decoration:
-                                BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(50)),
+                            decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                borderRadius: BorderRadius.circular(50)),
                             margin: const EdgeInsets.all(0),
                             height: 20,
                             width: 20,
@@ -199,8 +209,9 @@ class BackupKeyWidget extends StatelessWidget {
                         Row(
                           children: [
                             TextButton(
-                                child:
-                                    const Text(Strings.backButtonTitle, style: TextStyle(fontWeight: FontWeight.bold)),
+                                child: const Text(Strings.backButtonTitle,
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
                                 onPressed: () async {
                                   var result = await onBackup(context);
                                   if (context.mounted) {
@@ -212,7 +223,8 @@ class BackupKeyWidget extends StatelessWidget {
                                 }),
                             const Spacer(),
                             TextButton(
-                                child: const Text(Strings.cancelButtonTitle, style: TextStyle()),
+                                child: const Text(Strings.cancelButtonTitle,
+                                    style: TextStyle()),
                                 onPressed: () {
                                   Navigator.pop(context);
                                 })
@@ -228,7 +240,7 @@ class BackupKeyWidget extends StatelessWidget {
         });
   }
 
-  onBackup(BuildContext context) async {
+  Future<bool?> onBackup(BuildContext context) async {
     try {
       var aesEncryptedKeys = await BackUpKeyService.getEncryptedKeys(atsign);
       if (aesEncryptedKeys.isEmpty) {
@@ -263,17 +275,20 @@ class BackupKeyWidget extends StatelessWidget {
 
                         String? dir = await getDownloadPath();
                         if (dir != null) {
-                          String newPath = "$dir/$atsign${Strings.backupKeyName}";
+                          String newPath =
+                              "$dir/$atsign${Strings.backupKeyName}";
                           debugPrint(newPath);
 
                           try {
                             if (await File(newPath).exists()) {
                               if (context.mounted) {
                                 Navigator.of(context).pop();
-                                showSnackBar(context: context, content: "File exists!");
+                                showSnackBar(
+                                    context: context, content: "File exists!");
                               }
                             } else {
-                              final encryptedKeysFile = await File(newPath).create();
+                              final encryptedKeysFile =
+                                  await File(newPath).create();
                               var keyString = jsonEncode(aesEncryptedKeys);
                               encryptedKeysFile.writeAsStringSync(keyString);
                               if (context.mounted) {
@@ -323,10 +338,13 @@ class BackupKeyWidget extends StatelessWidget {
           var size = MediaQuery.of(context).size;
           await Share.shareXFiles(
             [XFile(tempFilePath)],
-            sharePositionOrigin: Rect.fromLTWH(0, 0, size.width, size.height / 2),
+            sharePositionOrigin:
+                Rect.fromLTWH(0, 0, size.width, size.height / 2),
           ).then((ShareResult shareResult) {
-            if (shareResult.status == ShareResultStatus.success && context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File saved successfully')));
+            if (shareResult.status == ShareResultStatus.success &&
+                context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('File saved successfully')));
             }
           });
         }
@@ -334,7 +352,7 @@ class BackupKeyWidget extends StatelessWidget {
         final path = await FilePicker.platform.saveFile(
           fileName: '$atsign${Strings.backupKeyName}',
         );
-        if (path == null) return;
+        if (path == null) return null;
         final file = XFile(tempFilePath);
         await file.saveTo(path);
         if (context.mounted) {
@@ -349,6 +367,7 @@ class BackupKeyWidget extends StatelessWidget {
     } on Error catch (err) {
       _logger.severe('BackingUp keys throws $err error');
     }
+    return null;
   }
 
   Future<String> _generateFile(Map<String, String> aesEncryptedKeys) async {
@@ -360,7 +379,8 @@ class BackupKeyWidget extends StatelessWidget {
 
       var directory = await path_provider.getApplicationSupportDirectory();
       String path = directory.path.toString() + Platform.pathSeparator;
-      final encryptedKeysFile = await File('$path$atsign${Strings.backupKeyName}').create();
+      final encryptedKeysFile =
+          await File('$path$atsign${Strings.backupKeyName}').create();
       var keyString = jsonEncode(aesEncryptedKeys);
       encryptedKeysFile.writeAsStringSync(keyString);
       return encryptedKeysFile.path;
@@ -369,8 +389,9 @@ class BackupKeyWidget extends StatelessWidget {
       var keyString = jsonEncode(aesEncryptedKeys);
       final List<int> codeUnits = keyString.codeUnits;
       final Uint8List data = Uint8List.fromList(codeUnits);
-      String desktopPath = await FileSaver.instance
-          .saveFile(encryptedKeysFile, data, Strings.backupKeyExtension, mimeType: MimeType.OTHER);
+      String desktopPath = await FileSaver.instance.saveFile(
+          encryptedKeysFile, data, Strings.backupKeyExtension,
+          mimeType: MimeType.OTHER);
       return desktopPath;
     }
   }
@@ -385,7 +406,8 @@ class BackupKeyWidget extends StatelessWidget {
       sharePositionOrigin: Rect.fromLTWH(0, 0, size.width, size.height / 2),
     ).then((ShareResult shareResult) {
       if (shareResult.status == ShareResultStatus.success && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File saved successfully')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('File saved successfully')));
       }
     });
   }
