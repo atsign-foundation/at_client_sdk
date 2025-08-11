@@ -55,7 +55,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
 
-  bool get _isUsingProxy => atOnboardingPreference.rootDomain.startsWith('proxy:');
+  bool get _isUsingProxy => atOnboardingPreference.isUsingProxy;
 
   void _ensureAtLookUpInstance() {
     _atLookUp ??= AtLookupImpl(
