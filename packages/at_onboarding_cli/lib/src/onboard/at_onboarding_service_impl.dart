@@ -44,6 +44,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
     _atEnrollment ??= atAuthBase.atEnrollment(_atSign);
+
+    _sanitizeRootDomainAndProxy();
+
     // set default LocalStorage paths for this instance
     atOnboardingPreference.commitLogPath ??=
         HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
@@ -53,6 +56,39 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atOnboardingPreference.isLocalStoreRequired = true;
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
+  }
+
+  /// Parses and sanitizes root domain, handling proxy prefixes and port extraction
+  void _sanitizeRootDomainAndProxy() {
+    String rawRootServer = atOnboardingPreference.rootDomain;
+
+    if (rawRootServer.startsWith('proxy:')) {
+      // Handle proxy:host:port or proxy:host format
+      atOnboardingPreference.isUsingProxy = true;
+      String serverPart = rawRootServer.substring(6); // Remove 'proxy:' prefix
+
+      if (serverPart.contains(':')) {
+        // proxy:host:port format
+        List<String> parts = serverPart.split(':');
+        atOnboardingPreference.rootDomain = parts[0];
+        atOnboardingPreference.rootPort = int.tryParse(parts[1]) ?? 64;
+      } else {
+        // proxy:host format
+        atOnboardingPreference.rootDomain = serverPart;
+        atOnboardingPreference.rootPort = 64;
+      }
+    } else if (rawRootServer.contains(':')) {
+      // Handle host:port format
+      List<String> parts = rawRootServer.split(':');
+      atOnboardingPreference.rootDomain = parts[0];
+      atOnboardingPreference.rootPort = int.tryParse(parts[1]) ?? 64;
+      atOnboardingPreference.isUsingProxy = false;
+    } else {
+      // Handle host format
+      // rootDomain is already set correctly, just ensure proxy flag is false
+      atOnboardingPreference.isUsingProxy = false;
+      // rootPort should already have a default value, no need to set it
+    }
   }
 
   /// Ensures atLookUp instance is initialized
@@ -69,15 +105,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
   Future<bool> _sendFromCommandIfUsingProxy({String context = 'sendFromCommand', String? atSign}) async {
     if (!atOnboardingPreference.isUsingProxy) {
-      return true; // Not using proxy, so success
+      return false;
     }
-    
+
     String targetAtSign = atSign ?? _atSign;
     _ensureAtLookUpInstance();
     try {
       String? fromResponse = await _atLookUp!.executeCommand('from:$targetAtSign\n', auth: false);
       logger.info('$context: from: command successful for $targetAtSign, response: $fromResponse');
-      
+
       if (fromResponse == null || fromResponse.isEmpty) {
         logger.warning('$context: from: command returned empty response for $targetAtSign');
         return false;
