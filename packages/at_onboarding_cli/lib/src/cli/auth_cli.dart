@@ -1022,14 +1022,51 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 @visibleForTesting
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
+  String rawRootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  
+  // Parse rootServer argument to extract domain, port, and proxy flag
+  bool isUsingProxy = false;
+  String rootDomain;
+  int rootPort = 64; // Default port
+  
+  if (rawRootServer.startsWith('proxy:')) {
+    // Handle proxy:host:port or proxy:host format
+    isUsingProxy = true;
+    String serverPart = rawRootServer.substring(6); // Remove 'proxy:' prefix
+    
+    if (serverPart.contains(':')) {
+      // proxy:host:port format
+      List<String> parts = serverPart.split(':');
+      rootDomain = parts[0];
+      rootPort = int.tryParse(parts[1]) ?? 64;
+    } else {
+      // proxy:host format (should not happen according to user, but handle gracefully)
+      rootDomain = serverPart;
+      rootPort = 64;
+    }
+  } else if (rawRootServer.contains(':')) {
+    // Handle host:port format
+    List<String> parts = rawRootServer.split(':');
+    rootDomain = parts[0];
+    rootPort = int.tryParse(parts[1]) ?? 64;
+    isUsingProxy = false;
+  } else {
+    // Handle host format
+    rootDomain = rawRootServer;
+    rootPort = 64;
+    isUsingProxy = false;
+  }
+  
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = ar[AuthCliArgs.argNameAtDirectoryFqdn]
+    ..rootDomain = rootDomain
+    ..rootPort = rootPort
     ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
     ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
     ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
+        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType])
+    ..isUsingProxy = isUsingProxy;
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';
