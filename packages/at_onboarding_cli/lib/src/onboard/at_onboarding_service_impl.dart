@@ -44,9 +44,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
     _atEnrollment ??= atAuthBase.atEnrollment(_atSign);
-
-    _sanitizeRootDomainAndProxy();
-
     // set default LocalStorage paths for this instance
     atOnboardingPreference.commitLogPath ??=
         HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
@@ -58,45 +55,37 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
 
-  /// Parses and sanitizes root domain, handling proxy prefixes and port extraction
-  void _sanitizeRootDomainAndProxy() {
-    String rawRootServer = atOnboardingPreference.rootDomain;
-
-    if (rawRootServer.startsWith('proxy:')) {
-      // Handle proxy:host:port or proxy:host format
-      atOnboardingPreference.isUsingProxy = true;
-      String serverPart = rawRootServer.substring(6); // Remove 'proxy:' prefix
-
-      if (serverPart.contains(':')) {
-        // proxy:host:port format
-        List<String> parts = serverPart.split(':');
-        atOnboardingPreference.rootDomain = parts[0];
-        atOnboardingPreference.rootPort = int.tryParse(parts[1]) ?? 64;
-      } else {
-        // proxy:host format
-        atOnboardingPreference.rootDomain = serverPart;
-        atOnboardingPreference.rootPort = 64;
-      }
-    } else if (rawRootServer.contains(':')) {
-      // Handle host:port format
-      List<String> parts = rawRootServer.split(':');
-      atOnboardingPreference.rootDomain = parts[0];
-      atOnboardingPreference.rootPort = int.tryParse(parts[1]) ?? 64;
-      atOnboardingPreference.isUsingProxy = false;
-    } else {
-      // Handle host format
-      // rootDomain is already set correctly, just ensure proxy flag is false
-      atOnboardingPreference.isUsingProxy = false;
-      // rootPort should already have a default value, no need to set it
+  bool get _isUsingProxy => atOnboardingPreference.rootDomain.startsWith('proxy:');
+  
+  String get _cleanRootDomain {
+    if (_isUsingProxy) {
+      String serverPart = atOnboardingPreference.rootDomain.substring(6);
+      return serverPart.contains(':') ? serverPart.split(':')[0] : serverPart;
     }
+    return atOnboardingPreference.rootDomain.contains(':') 
+        ? atOnboardingPreference.rootDomain.split(':')[0] 
+        : atOnboardingPreference.rootDomain;
+  }
+  
+  int get _cleanRootPort {
+    if (_isUsingProxy) {
+      String serverPart = atOnboardingPreference.rootDomain.substring(6);
+      if (serverPart.contains(':')) {
+        return int.tryParse(serverPart.split(':')[1]) ?? 64;
+      }
+      return 64;
+    }
+    if (atOnboardingPreference.rootDomain.contains(':')) {
+      return int.tryParse(atOnboardingPreference.rootDomain.split(':')[1]) ?? 64;
+    }
+    return atOnboardingPreference.rootPort;
   }
 
-  /// Ensures atLookUp instance is initialized
   void _ensureAtLookUpInstance() {
     _atLookUp ??= AtLookupImpl(
       _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
+      _cleanRootDomain,
+      _cleanRootPort,
     );
   }
 
@@ -104,7 +93,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   /// [context] - description of the operation for logging (defaults to 'sendFromCommand')
   /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
   Future<bool> _sendFromCommandIfUsingProxy({String context = 'sendFromCommand', String? atSign}) async {
-    if (!atOnboardingPreference.isUsingProxy) {
+    if (!_isUsingProxy) {
       return false;
     }
 
@@ -164,7 +153,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }) async {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
-    if (atOnboardingPreference.isUsingProxy) {
+    if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
       await _sendFromCommandIfUsingProxy(context: 'onboard');
     }
@@ -317,7 +306,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
 
-    if (atOnboardingPreference.isUsingProxy) {
+    if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
       await _sendFromCommandIfUsingProxy(context: 'enroll');
     }
@@ -353,7 +342,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
 
-    if (atOnboardingPreference.isUsingProxy) {
+    if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
       await _sendFromCommandIfUsingProxy(context: 'awaitApproval');
     }
@@ -729,7 +718,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
 
-    if (atOnboardingPreference.isUsingProxy) {
+    if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
       await _sendFromCommandIfUsingProxy(context: 'getServerStatus');
     }
@@ -744,7 +733,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<bool> isOnboarded() async {
     _ensureAtLookUpInstance();
 
-    if (atOnboardingPreference.isUsingProxy) {
+    if (_isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
       await _sendFromCommandIfUsingProxy(context: 'isOnboarded');
       
