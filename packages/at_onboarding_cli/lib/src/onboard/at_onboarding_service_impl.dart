@@ -84,8 +84,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   void _ensureAtLookUpInstance() {
     _atLookUp ??= AtLookupImpl(
       _atSign,
-      _cleanRootDomain,
-      _cleanRootPort,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
     );
   }
 
