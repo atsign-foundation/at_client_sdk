@@ -393,18 +393,27 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<List<String>> getKeys(
-      {String? regex,
-      String? sharedBy,
-      String? sharedWith,
-      bool showHiddenKeys = false}) async {
+  Future<List<String>> getKeys({
+    String? regex,
+    String? sharedBy,
+    String? sharedWith,
+    bool showHiddenKeys = false,
+    bool useRemoteAtServer = false,
+  }) async {
     var builder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
       ..regex = regex
       ..showHiddenKeys = showHiddenKeys
       ..auth = true;
-    var scanResult = await getSecondary().executeVerb(builder);
+    Secondary secondary;
+    if (useRemoteAtServer) {
+      secondary = getRemoteSecondary()!;
+    } else {
+      secondary = SecondaryManager.getSecondary(this, builder);
+    }
+
+    var scanResult = await secondary.executeVerb(builder);
     scanResult = _formatResult(scanResult);
     var result = [];
     if (scanResult.isNotEmpty) {
@@ -414,16 +423,20 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<List<AtKey>> getAtKeys(
-      {String? regex,
-      String? sharedBy,
-      String? sharedWith,
-      bool showHiddenKeys = false}) async {
+  Future<List<AtKey>> getAtKeys({
+    String? regex,
+    String? sharedBy,
+    String? sharedWith,
+    bool showHiddenKeys = false,
+    bool useRemoteAtServer = false,
+  }) async {
     var getKeysResult = await getKeys(
-        regex: regex,
-        sharedBy: sharedBy,
-        sharedWith: sharedWith,
-        showHiddenKeys: showHiddenKeys);
+      regex: regex,
+      sharedBy: sharedBy,
+      sharedWith: sharedWith,
+      showHiddenKeys: showHiddenKeys,
+      useRemoteAtServer: useRemoteAtServer,
+    );
     var result = <AtKey>[];
     if (getKeysResult.isNotEmpty) {
       for (var key in getKeysResult) {
