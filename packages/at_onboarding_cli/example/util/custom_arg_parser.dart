@@ -6,7 +6,7 @@ class CustomArgParser {
   ArgParser argParser;
   CustomArgParser(this.argParser);
 
-  ArgResults parse(args) {
+  ArgResults parse(List<String> args) {
     ArgResults argResults = argParser.parse(args);
 
     if (argResults.wasParsed('help')) {

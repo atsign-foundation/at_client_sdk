@@ -73,7 +73,7 @@ enum AuthCliCommand {
   final String usage;
 }
 
-main() {
+void main() {
   print(AuthCliCommand.values);
 }
 

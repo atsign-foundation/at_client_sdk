@@ -3,7 +3,7 @@ import 'package:at_onboarding_cli/src/util/onboarding_util.dart';
 
 import 'util/custom_arg_parser.dart';
 
-Future<void> main(args) async {
+Future<void> main(List<String> args) async {
   final argResults = CustomArgParser(getArgParser()).parse(args);
 
   // this step sends an OTP to the registered email

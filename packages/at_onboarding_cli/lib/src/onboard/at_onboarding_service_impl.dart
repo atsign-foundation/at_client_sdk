@@ -56,30 +56,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   bool get _isUsingProxy => atOnboardingPreference.rootDomain.startsWith('proxy:');
-  
-  String get _cleanRootDomain {
-    if (_isUsingProxy) {
-      String serverPart = atOnboardingPreference.rootDomain.substring(6);
-      return serverPart.contains(':') ? serverPart.split(':')[0] : serverPart;
-    }
-    return atOnboardingPreference.rootDomain.contains(':') 
-        ? atOnboardingPreference.rootDomain.split(':')[0] 
-        : atOnboardingPreference.rootDomain;
-  }
-  
-  int get _cleanRootPort {
-    if (_isUsingProxy) {
-      String serverPart = atOnboardingPreference.rootDomain.substring(6);
-      if (serverPart.contains(':')) {
-        return int.tryParse(serverPart.split(':')[1]) ?? 64;
-      }
-      return 64;
-    }
-    if (atOnboardingPreference.rootDomain.contains(':')) {
-      return int.tryParse(atOnboardingPreference.rootDomain.split(':')[1]) ?? 64;
-    }
-    return atOnboardingPreference.rootPort;
-  }
 
   void _ensureAtLookUpInstance() {
     _atLookUp ??= AtLookupImpl(
