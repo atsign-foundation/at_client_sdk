@@ -1,8 +1,8 @@
 ## 1.1.0
 
-- chore(deps): at_common_flutter ^2.1.0
 - chore(deps): at_client ^3.7.0
 - chore(deps): at_client_mobile ^3.3.0
+- chore(deps): at_common_flutter ^2.1.0 and move to dev_dependencies
 
 ## 1.0.14
 

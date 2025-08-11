@@ -2,10 +2,11 @@
 
 - chore(deps): at_commons ^5.5.0
 - chore(deps): at_common_flutter ^2.1.0
-- chore(deps): at_client ^3.7.0
 - chore(deps): geolocator ^16.0.0
 - chore(deps): latlong2 0.9.1
 - chore(deps): http ^1.2.1
+- chore(deps): remove unused at_client, transparent_image
+- chore(deps): move path_provider to dev_dependencies
 
 ## 3.1.14
 - build[deps]: Upgraded dependencies for the following packages:

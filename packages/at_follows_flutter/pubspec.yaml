@@ -16,8 +16,6 @@ dependencies:
   at_client: ^3.7.0
   at_client_mobile: ^3.3.0
   at_commons: ^5.5.0
-  at_file_saver: ^0.1.2
-  at_lookup: ^3.0.49
   at_server_status: ^1.0.5
   at_utils: ^3.0.19
   collection: ^1.17.0

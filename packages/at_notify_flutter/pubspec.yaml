@@ -15,7 +15,6 @@ dependencies:
   at_client: ^3.7.0
   at_client_mobile: ^3.3.0
   at_common_flutter: ^2.1.0
-  at_commons: ^5.5.0
   flutter:
     sdk: flutter
   flutter_local_notifications: ^19.0.0

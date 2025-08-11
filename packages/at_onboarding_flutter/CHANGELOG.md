@@ -1,10 +1,9 @@
 ## 6.2.0
 
-- chore(deps): at_commons ^5.5.0
-- chore(deps): at_client ^3.7.0
 - chore(deps): at_client_mobile ^3.3.0
 - chore(deps): permission_handler ^12.0.0
 - chore(deps): file_picker ^10.0.0
+- chore(deps): remove unused at_commons, at_client
 
 ## 6.1.12
 

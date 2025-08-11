@@ -13,17 +13,15 @@ resolution: workspace
 dependencies:
   at_client_mobile: ^3.3.0
   at_common_flutter: ^2.1.0
-  at_commons: ^5.5.0
-  at_lookup: ^3.0.49
   at_utils: ^3.0.19
   flutter:
     sdk: flutter
   pin_code_fields: ^8.0.1
-  uni_links: ^0.5.1 # FIXME: discontinued, replace with app_links
   url_launcher: ^6.2.4
   uuid: ^4.0.0
 
 dev_dependencies:
+  uni_links: ^0.5.1 # FIXME: discontinued, replace with app_links
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

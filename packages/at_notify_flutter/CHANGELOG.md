@@ -1,10 +1,10 @@
 ## 1.1.0
 
-- chore(deps): at_commons ^5.5.0
 - chore(deps): at_common_flutter ^2.1.0
 - chore(deps): at_client ^3.7.0
 - chore(deps): at_client_mobile ^3.3.0
 - chore(deps): flutter_local_notifications ^19.0.0
+- chore(deps): remove unused at_commons
 
 ## 1.0.11
 - build[deps]: Upgraded dependencies for the following packages:

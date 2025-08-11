@@ -1,11 +1,12 @@
 ## 0.1.0
 
-- chore(deps): at_commons ^5.5.0
 - chore(deps): at_client ^3.7.0
 - chore(deps): at_client_mobile ^3.3.0
-- chore(deps): file_picker ^10.0.0
+- chore(deps): ^10.0.0
 - chore(deps): flutter_local_notifications ^19.0.0
 - chore(deps): permission_handler ^12.0.0
+- chore(deps): remove unused at_commons, file_picker, http, provider
+- chore(deps): move path_provider to dev_dependencies
 
 ## 0.0.3
 

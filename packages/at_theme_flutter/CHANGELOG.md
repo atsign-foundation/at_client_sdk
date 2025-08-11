@@ -1,3 +1,9 @@
+## 1.1.0
+
+- chore(deps): at_client_mobile ^3.3.0
+- chore(deps): at_common_flutter ^2.1.0
+- chore(deps): remove unused at_commons
+
 ## 1.0.10
 
 - **FIX**: Replace deprecated `withOpacity` method with `withValues`

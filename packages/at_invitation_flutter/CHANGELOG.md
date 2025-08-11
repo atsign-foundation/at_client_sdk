@@ -1,9 +1,10 @@
 ## 2.1.0
 
 - chore(deps): uuid ^4.0.0
-- chore(deps): at_commons ^5.5.0
 - chore(deps): at_common_flutter ^2.1.0
 - chore(deps): at_client_mobile ^3.3.0
+- chore(deps): remove unused at_commons, at_lookup
+- chore(deps): move uni_links to dev_dependencies
 
 ## 2.0.5
 - build[deps]: Upgraded dependencies for the following packages:

@@ -5,6 +5,7 @@
 - chore(deps): at_client_mobile ^3.5.0
 - chore(deps): flutter_local_notifications ^19.0.0
 - chore(deps): permission_handler ^12.0.0
+- chore(deps): remove unused at_file_saver, at_lookup
 
 ## 3.0.15
 

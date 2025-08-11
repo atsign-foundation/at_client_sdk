@@ -13,7 +13,6 @@ resolution: workspace
 
 dependencies:
   async: ^2.11.0
-  at_client: ^3.7.0
   at_client_mobile: ^3.3.0
   at_common_flutter: ^2.1.0
   at_commons: ^5.5.0
@@ -30,15 +29,14 @@ dependencies:
   http: ^1.2.1
   latlong2: 0.9.1
   meta: ^1.16.0
-  path_provider: ^2.1.1
   positioned_tap_detector_2: ^1.0.4
   proj4dart: ^2.1.0
   sliding_up_panel: ^2.0.0+1
-  transparent_image: ^2.0.1
   tuple: ^2.0.2
   vector_math: ^2.1.4
 
 dev_dependencies:
+  path_provider: ^2.1.1
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
