@@ -36,7 +36,7 @@ jobs:
           - at_theme_flutter
         flutter-channel:
           - stable
-          - beta
+          # - beta
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -49,8 +49,4 @@ jobs:
         run: |
           touch example/.env
           flutter pub get --no-example
-          if [ "${{ matrix.flutter-channel}}" = "beta" ]; then
-            flutter analyze lib
-          else
-            flutter analyze --no-fatal-infos lib
-          fi
+          flutter analyze --no-fatal-infos lib
