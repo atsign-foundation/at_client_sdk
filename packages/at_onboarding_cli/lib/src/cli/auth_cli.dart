@@ -316,9 +316,11 @@ Future<int> wrappedMain(List<String> arguments) async {
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
+  
+  RootServerInfo rootServerInfo = RootServerParser.parse(ar[AuthCliArgs.argNameAtDirectoryFqdn]);
 
   SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
-      ar[AuthCliArgs.argNameAtDirectoryFqdn], 64);
+      rootServerInfo.host, rootServerInfo.port);
   try {
     await saf.findSecondary(atSign);
   } on SecondaryNotFoundException {
@@ -333,8 +335,8 @@ Future<int> status(ArgResults ar) async {
   try {
     AtLookUp al = AtLookupImpl(
       atSign,
-      ar[AuthCliArgs.argNameAtDirectoryFqdn],
-      64,
+      rootServerInfo.host,
+      rootServerInfo.port,
     );
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
@@ -1022,50 +1024,18 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 @visibleForTesting
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  String rawRootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
-  
-  bool isUsingProxy = false;
-  String rootDomain = 'root.atsign.org'; // Default root domain
-  int rootPort = 64; // Default root port 
-  
-  if (rawRootServer.startsWith('proxy:')) {
-    // Handle proxy:host:port or proxy:host format
-    isUsingProxy = true;
-    String serverPart = rawRootServer.substring(6); // Remove 'proxy:' prefix
-    
-    if (serverPart.contains(':')) {
-      // proxy:host:port format
-      List<String> parts = serverPart.split(':');
-      rootDomain = parts[0];
-      rootPort = int.tryParse(parts[1]) ?? 64;
-    } else {
-      // proxy:host format
-      rootDomain = serverPart;
-      rootPort = 64;
-    }
-  } else if (rawRootServer.contains(':')) {
-    // Handle host:port format
-    List<String> parts = rawRootServer.split(':');
-    rootDomain = parts[0];
-    rootPort = int.tryParse(parts[1]) ?? 64;
-    isUsingProxy = false;
-  } else {
-    // Handle host format
-    rootDomain = rawRootServer;
-    rootPort = 64;
-    isUsingProxy = false;
-  }
+  RootServerInfo rootServerInfo = RootServerParser.parse(ar[AuthCliArgs.argNameAtDirectoryFqdn]);
   
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = rootDomain
-    ..rootPort = rootPort
+    ..rootDomain = rootServerInfo.host
+    ..rootPort = rootServerInfo.port
     ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
     ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
     ..hashingAlgoType =
         HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType])
-    ..isUsingProxy = isUsingProxy;
+    ..isUsingProxy = rootServerInfo.isUsingProxy;
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';

@@ -7,6 +7,7 @@ import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_onboarding_cli/src/onboard/at_onboarding_service.dart';
 import 'package:at_onboarding_cli/src/onboard/at_onboarding_service_impl.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_preference.dart';
+import 'package:at_onboarding_cli/src/util/root_server_parser.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 
@@ -38,14 +39,18 @@ Future<AtClient> createAtClient(
   String downloadPathToUse = ('$homeDir!/.atsign/downloads/$atSign/$nameSpace')
       .replaceAll('/', Platform.pathSeparator);
 
+  RootServerInfo rootServerInfo = RootServerParser.parse(rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn);
+  
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..atKeysFilePath = atKeysFilePathToUse
     ..namespace = nameSpace
-    ..rootDomain = rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn
+    ..rootDomain = rootServerInfo.host
+    ..rootPort = rootServerInfo.port
     ..passPhrase = passPhrase
     ..hiveStoragePath = localStoragePathToUse
     ..commitLogPath = commitLogStoragePathToUse
-    ..downloadPath = downloadPathToUse;
+    ..downloadPath = downloadPathToUse
+    ..isUsingProxy = rootServerInfo.isUsingProxy;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
       atSign, atOnboardingPreference,
