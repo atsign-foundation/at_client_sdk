@@ -1,0 +1,60 @@
+name: at_common_flutter
+description: A Flutter package to provide common widgets used by other atPlatform Flutter packages.
+version: 2.1.0
+homepage: https://docs.atsign.com/
+repository: https://github.com/atsign-foundation/at_widgets/tree/trunk/packages/at_common_flutter
+issue_tracker: https://github.com/atsign-foundation/at_widgets/issues
+documentation: https://docs.atsign.com/
+
+environment:
+  sdk: ^3.6.0
+  flutter: ^3.29.2
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  mocktail: ^1.0.4
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter.
+flutter:
+  # To add assets to your package, add an assets section, like this:
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+  #
+  # For details regarding assets in packages, see
+  # https://flutter.dev/assets-and-images/#from-packages
+  #
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/assets-and-images/#resolution-aware.
+
+  # To add custom fonts to your package, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  fonts:
+    - family: HelveticaNeu
+      fonts:
+        - asset: assets/fonts/HelveticaLight.ttf
+          weight: 300
+        - asset: assets/fonts/HelveticaMedium.ttf
+          weight: 500
+        - asset: assets/fonts/HelveticaRegular.ttf
+          weight: 400
+        - asset: assets/fonts/HelveticaBold.otf
+          weight: 700
+        - asset: assets/fonts/HelveticaExtraBold.ttf
+          weight: 800
+  #
+  # For details regarding fonts in packages, see
+  # https://flutter.dev/custom-fonts/#from-packages

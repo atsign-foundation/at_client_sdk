@@ -1,0 +1,56 @@
+name: at_widgets
+# Runs the workflow on the below events:
+# 1. on pull request raised to trunk branch.
+# 2. on push event to trunk branch.
+on:
+  push:
+    branches:
+      - trunk
+  pull_request:
+    branches:
+      - trunk
+
+permissions: # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  static_analysis:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - at_backupkey_flutter
+          - at_chat_flutter
+          - at_common_flutter
+          - at_contacts_flutter
+          - at_contacts_group_flutter
+          - at_events_flutter
+          - at_follows_flutter
+          - at_invitation_flutter
+          - at_location_flutter
+          - at_login_flutter
+          - at_notify_flutter
+          - at_onboarding_flutter
+          - at_sync_ui_flutter
+          - at_theme_flutter
+        flutter-channel:
+          - stable
+          - beta
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          flutter-channel: ${{ matrix.flutter-channel}}
+
+      - name: Install dependencies and analyze in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          touch example/.env
+          flutter pub get
+          if [ "${{ matrix.flutter-channel}}" = "beta" ]; then
+            flutter analyze
+          else
+            flutter analyze --no-fatal-infos
+          fi

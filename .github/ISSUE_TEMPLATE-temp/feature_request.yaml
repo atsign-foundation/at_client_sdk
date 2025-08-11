@@ -1,0 +1,60 @@
+name: Feature Request
+description: Suggest an idea for this project
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: widget_package
+    attributes:
+      label: Which at_widget package you want to add enhancement?
+      multiple: true
+      options:
+        - at_backupkey_flutter
+        - at_chat_flutter
+        - at_common_flutter
+        - at_contacts_flutter
+        - at_contacts_group_flutter
+        - at_events_flutter
+        - at_follows_flutter
+        - at_invitation_flutter
+        - at_location_flutter
+        - at_login_flutter
+        - at_notify_flutter
+        - at_onboarding_flutter
+        - at_sync_ui_flutter
+        - at_theme_flutter
+        - new widget
+    validations:
+      required: true
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: On what platforms do you want to add enhancement?
+      multiple: true
+      options:
+        - Android
+        - iOS
+        - Windows
+        - MacOS
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      placeholder: "A clear description of what the problem is. Example: I'm always frustrated when [...]"
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Describe the solution that you'd like"
+      placeholder: "A clear description of what you want to happen. Example: When I use ... command I want it to ask ..."
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Describe alternatives that you have considered"
+      placeholder: "A clear description of any alternative solutions or features you've considered. Example: Instead of this it should do someother thing."
+  - type: textarea
+    id: additional
+    attributes:
+      label: "Additional context"
+      placeholder: "Add any other context or screenshots about the feature request here."
