@@ -1024,10 +1024,9 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   String rawRootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
   
-  // Parse rootServer argument to extract domain, port, and proxy flag
   bool isUsingProxy = false;
-  String rootDomain;
-  int rootPort = 64; // Default port
+  String rootDomain = 'root.atsign.org'; // Default root domain
+  int rootPort = 64; // Default root port 
   
   if (rawRootServer.startsWith('proxy:')) {
     // Handle proxy:host:port or proxy:host format
@@ -1040,7 +1039,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
       rootDomain = parts[0];
       rootPort = int.tryParse(parts[1]) ?? 64;
     } else {
-      // proxy:host format (should not happen according to user, but handle gracefully)
+      // proxy:host format
       rootDomain = serverPart;
       rootPort = 64;
     }

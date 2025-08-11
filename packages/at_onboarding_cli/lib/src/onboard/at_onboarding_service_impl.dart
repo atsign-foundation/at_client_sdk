@@ -30,7 +30,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
   AtLookUp? _atLookUp;
-  final bool _isUsingProxy = false;
 
   /// The object which controls what types of AtClients, NotificationServices
   /// and SyncServices get created when we call [AtClientManager.setCurrentAtSign].
@@ -65,19 +64,32 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     );
   }
 
-  /// Sends from: command to proxy server if we're using a proxy
-  Future<void> _sendFromCommandIfProxy(String context) async {
-    if (!_isUsingProxy) {
-      return;
+  /// Sends from: command if using proxy
+  /// [context] - description of the operation for logging (defaults to 'sendFromCommand')
+  /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
+  Future<bool> _sendFromCommandIfUsingProxy({String context = 'sendFromCommand', String? atSign}) async {
+    if (!atOnboardingPreference.isUsingProxy) {
+      return true; // Not using proxy, so success
     }
     
+    String targetAtSign = atSign ?? _atSign;
     _ensureAtLookUpInstance();
     try {
-      String? fromResponse = await _atLookUp!.executeCommand('from:$_atSign\n', auth: false);
-      logger.info('$context: from: command successful, response: $fromResponse');
+      String? fromResponse = await _atLookUp!.executeCommand('from:$targetAtSign\n', auth: false);
+      logger.info('$context: from: command successful for $targetAtSign, response: $fromResponse');
+      
+      if (fromResponse == null || fromResponse.isEmpty) {
+        logger.warning('$context: from: command returned empty response for $targetAtSign');
+        return false;
+      }
+      if (fromResponse.contains('error:')) {
+        logger.warning('$context: from: command returned error for $targetAtSign: $fromResponse');
+        return false;
+      }
+      return true;
     } catch (e) {
-      // Log error but don't throw - proxy might not require from: command or connection might work anyway
-      logger.warning('$context: from: command failed: $e - continuing anyway');
+      logger.warning('$context: from: command failed for $targetAtSign: $e - continuing anyway');
+      return false;
     }
   }
 
@@ -116,7 +128,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }) async {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
-    await _sendFromCommandIfProxy('onboard');
+    if (atOnboardingPreference.isUsingProxy) {
+      // When using a proxy, send from: command to ensure correct atSign context
+      await _sendFromCommandIfUsingProxy(context: 'onboard');
+    }
 
     // get cram_secret from either from AtOnboardingPreference
     // or fetch from the registrar using verification code sent to email
@@ -265,7 +280,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
-    await _sendFromCommandIfProxy('sendEnrollRequest');
+
+    if (atOnboardingPreference.isUsingProxy) {
+      // When using a proxy, send from: command to ensure correct atSign context
+      await _sendFromCommandIfUsingProxy(context: 'enroll');
+    }
 
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
         appName: appName,
@@ -297,7 +316,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }) async {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
-    await _sendFromCommandIfProxy('awaitApproval');
+
+    if (atOnboardingPreference.isUsingProxy) {
+      // When using a proxy, send from: command to ensure correct atSign context
+      await _sendFromCommandIfUsingProxy(context: 'awaitApproval');
+    }
 
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
         AtEncryptionKeyPair.create(
@@ -669,8 +692,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<AtStatus> getServerStatus() async {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
-    await _sendFromCommandIfProxy('getServerStatus');
-    
+
+    if (atOnboardingPreference.isUsingProxy) {
+      // When using a proxy, send from: command to ensure correct atSign context
+      await _sendFromCommandIfUsingProxy(context: 'getServerStatus');
+    }
+
     AtServerStatus atServerStatus = AtStatusImpl(
         rootUrl: atOnboardingPreference.rootDomain,
         rootPort: atOnboardingPreference.rootPort);
@@ -681,9 +708,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<bool> isOnboarded() async {
     _ensureAtLookUpInstance();
 
-    if (_isUsingProxy) {
+    if (atOnboardingPreference.isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
-      await _sendFromCommandIfProxy('isOnboarded');
+      await _sendFromCommandIfUsingProxy(context: 'isOnboarded');
       
       try {
         String? pkeyResponse = await _atLookUp!.executeCommand('lookup:publickey$_atSign\n', auth: false);
@@ -692,8 +719,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           _isAtsignOnboarded = true;
           return true;
         }
+        // No public key found, atSign is not activated
+        return false;
       } catch (e) {
         logger.info('isOnboarded: lookup failed, trying alternative approach: $e');
+        // If lookup fails, assume not onboarded to allow retry
+        return false;
       }      
     } else {
       // When not using a proxy, use the standard AtServerStatus method
