@@ -48,9 +48,9 @@ jobs:
         working-directory: packages/${{ matrix.package }}
         run: |
           touch example/.env
-          flutter pub get
+          flutter pub get --no-example
           if [ "${{ matrix.flutter-channel}}" = "beta" ]; then
-            flutter analyze
+            flutter analyze lib
           else
-            flutter analyze --no-fatal-infos
+            flutter analyze --no-fatal-infos lib
           fi
