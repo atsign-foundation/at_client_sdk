@@ -39,7 +39,7 @@ Future<AtClient> createAtClient(
   String downloadPathToUse = ('$homeDir!/.atsign/downloads/$atSign/$nameSpace')
       .replaceAll('/', Platform.pathSeparator);
 
-  RootServerInfo rootServerInfo = RootServerParser.parse(rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn);
+  RootServerParserResult rootServerInfo = RootServerParser.parse(rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn);
   
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..atKeysFilePath = atKeysFilePathToUse

@@ -317,7 +317,7 @@ Future<int> wrappedMain(List<String> arguments) async {
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   
-  RootServerInfo rootServerInfo = RootServerParser.parse(ar[AuthCliArgs.argNameAtDirectoryFqdn]);
+  RootServerParserResult rootServerInfo = RootServerParser.parse(ar[AuthCliArgs.argNameAtDirectoryFqdn]);
 
   SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
       rootServerInfo.host, rootServerInfo.port);
@@ -1024,7 +1024,7 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 @visibleForTesting
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  RootServerInfo rootServerInfo = RootServerParser.parse(ar[AuthCliArgs.argNameAtDirectoryFqdn]);
+  RootServerParserResult rootServerInfo = RootServerParser.parse(ar[AuthCliArgs.argNameAtDirectoryFqdn]);
   
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = rootServerInfo.host

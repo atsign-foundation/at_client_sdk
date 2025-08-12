@@ -1,9 +1,9 @@
-class RootServerInfo {
+class RootServerParserResult {
   final String host;
   final int port;
   final bool isUsingProxy;
 
-  RootServerInfo({
+  RootServerParserResult({
     required this.host,
     required this.port,
     this.isUsingProxy = false,
@@ -14,7 +14,7 @@ class RootServerParser {
   static const int defaultPort = 64;
   static const String defaultHost = 'root.atsign.org';
 
-  static RootServerInfo parse(String rawRootServer) {
+  static RootServerParserResult parse(String rawRootServer) {
     bool isUsingProxy = false;
     String host = defaultHost;
     int port = defaultPort;
@@ -47,7 +47,7 @@ class RootServerParser {
       isUsingProxy = false;
     }
 
-    return RootServerInfo(
+    return RootServerParserResult(
       host: host,
       port: port,
       isUsingProxy: isUsingProxy,
