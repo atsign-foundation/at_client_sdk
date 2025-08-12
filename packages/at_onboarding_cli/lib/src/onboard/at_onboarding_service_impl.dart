@@ -278,10 +278,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       throw AtEnrollmentException(
           'appName and deviceName are mandatory for enrollment');
     }
-    
-    // Ensure AtLookUp instance is available for enrollment
+
+    // Ensure we have an AtLookUp instance and send from: command if using proxy
     _ensureAtLookUpInstance();
-    
+
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
       await _sendFromCommandIfUsingProxy(context: 'enroll');
