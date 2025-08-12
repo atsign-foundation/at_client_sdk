@@ -1,0 +1,33 @@
+version: '3.7'
+services:
+  at_virtualenv:
+    container_name: at_virtualenv
+    # image: atsigncompany/ephemeral:latest
+    image: atsigncompany/virtualenv:vip
+    ports:
+      - '127.0.0.1:6379:6379'
+      # - '64:64'
+      - '127.0.0.1:9001:9001'
+      # - '25000-25025:25000-25025'
+    extra_hosts:
+      - 'vip.ve.atsign.zone:127.0.0.1'
+    hostname: vip.ve.atsign.zone
+    networks:
+      - default
+  at_proxyserver:
+    container_name: at_proxyserver
+    image: atsigncompany/at_proxyserver
+    command: "vip.ve.atsign.zone:443 vip.ve.atsign.zone:64 1443"
+    ports:
+      - '443:1443'
+    volumes:
+      - "./certs:/atsign/certs"
+    networks:
+      - default
+      - outside
+
+
+networks:
+  outside:
+    driver: bridge
+    name: outside_network
