@@ -7,7 +7,6 @@ import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_onboarding_cli/src/onboard/at_onboarding_service.dart';
 import 'package:at_onboarding_cli/src/onboard/at_onboarding_service_impl.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_preference.dart';
-import 'package:at_onboarding_cli/src/util/root_server_parser.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 
@@ -39,18 +38,50 @@ Future<AtClient> createAtClient(
   String downloadPathToUse = ('$homeDir!/.atsign/downloads/$atSign/$nameSpace')
       .replaceAll('/', Platform.pathSeparator);
 
-  RootServerParserResult rootServerInfo = RootServerParser.parse(rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn);
+  String rootServer = rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn;
+  
+  // Parse rootServer to extract domain and port
+  String parsedRootDomain;
+  int parsedRootPort;
+  bool isUsingProxy;
+  
+  if (rootServer.startsWith('proxy:')) {
+    isUsingProxy = true;
+    String serverPart = rootServer.substring(6); // Remove 'proxy:' prefix
+    
+    if (serverPart.contains(':')) {
+      // proxy:host:port format
+      List<String> parts = serverPart.split(':');
+      parsedRootDomain = 'proxy:${parts[0]}';
+      parsedRootPort = int.tryParse(parts[1]) ?? 64;
+    } else {
+      // proxy:host format
+      parsedRootDomain = rootServer;
+      parsedRootPort = 64;
+    }
+  } else if (rootServer.contains(':')) {
+    // host:port format
+    isUsingProxy = false;
+    List<String> parts = rootServer.split(':');
+    parsedRootDomain = parts[0];
+    parsedRootPort = int.tryParse(parts[1]) ?? 64;
+  } else {
+    // host format
+    isUsingProxy = false;
+    parsedRootDomain = rootServer;
+    parsedRootPort = 64;
+  }
   
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..atKeysFilePath = atKeysFilePathToUse
     ..namespace = nameSpace
-    ..rootDomain = rootServerInfo.host
-    ..rootPort = rootServerInfo.port
+    ..rootDomain = parsedRootDomain
+    ..rootPort = parsedRootPort
     ..passPhrase = passPhrase
     ..hiveStoragePath = localStoragePathToUse
     ..commitLogPath = commitLogStoragePathToUse
     ..downloadPath = downloadPathToUse
-    ..isUsingProxy = rootServerInfo.isUsingProxy;
+    ..isUsingProxy = isUsingProxy;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
       atSign, atOnboardingPreference,
