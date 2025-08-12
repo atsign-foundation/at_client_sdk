@@ -1,6 +1,7 @@
 ## 1.13.0
 
 - add a warning message before onboarding attempts to cut keys that presents a message explaining importance of backing up keys and prompting the user asking if they understand the risks of not backing up keys
+- made it so that passing `--cramkey` to the `onboard` command will skip the warning message inherently
 - add a `--yes` | `-y` flag to the `onboard` command to skip this warning message
 
 ## 1.12.0
