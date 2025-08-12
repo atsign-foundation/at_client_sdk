@@ -57,26 +57,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   bool get _isUsingProxy => atOnboardingPreference.isUsingProxy;
 
-  void _ensureAtLookUpInstance() {
-    _atLookUp ??= AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
-  }
-
   /// Sends from: command if using proxy
   /// [context] - description of the operation for logging (defaults to 'sendFromCommand')
   /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
-  Future<bool> _sendFromCommandIfUsingProxy({String context = 'sendFromCommand', String? atSign}) async {
+  Future<bool> _sendFromCommandIfUsingProxy(AtLookUp atLookUp, {String context = 'sendFromCommand', String? atSign}) async {
     if (!_isUsingProxy) {
       return false;
     }
 
     String targetAtSign = atSign ?? _atSign;
-    _ensureAtLookUpInstance();
     try {
-      String? fromResponse = await _atLookUp!.executeCommand('from:$targetAtSign\n', auth: false);
+      String? fromResponse = await atLookUp.executeCommand('from:$targetAtSign\n', auth: false);
       logger.info('$context: from: command successful for $targetAtSign, response: $fromResponse');
 
       if (fromResponse == null || fromResponse.isEmpty) {
@@ -128,10 +119,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
   }) async {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
-    _ensureAtLookUpInstance();
+    _atLookUp ??= AtLookupImpl(
+        _atSign, atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
-      await _sendFromCommandIfUsingProxy(context: 'onboard');
+      await _sendFromCommandIfUsingProxy(_atLookUp!, context: 'onboard');
     }
 
     // log the atOnboardingPreference.rootDomain and port
@@ -283,13 +276,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'appName and deviceName are mandatory for enrollment');
     }
 
-    // Ensure we have an AtLookUp instance and send from: command if using proxy
-    // _ensureAtLookUpInstance();
-
-    // if (_isUsingProxy) {
-    //   // When using a proxy, send from: command to ensure correct atSign context
-    //   await _sendFromCommandIfUsingProxy(context: 'enroll');
-    // }
+    _atLookUp ??= AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
 
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
         appName: appName,
@@ -299,13 +290,21 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 
+    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
+        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+
+    if (_isUsingProxy) {
+      // When using a proxy, send from: command to ensure correct atSign context
+      await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'enroll');
+    }
+
     logger.finer('sendEnrollRequest: submitting enrollment request');
     _addProgress(
         'Enroll', 'submitting enrollment request', ProgressEventType.info);
     await waitBriefly();
 
     AtEnrollmentResponse response =
-        await _atEnrollment!.submit(newClientEnrollmentRequest, _atLookUp!);
+        await _atEnrollment!.submit(newClientEnrollmentRequest, atLookUpImpl);
     logger.finer('sendEnrollRequest: received server response: $response');
     _addProgress('Enroll', 'submitted OK', ProgressEventType.success);
 
@@ -319,12 +318,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool logProgress = true,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
-    // Ensure we have an AtLookUp instance and send from: command if using proxy
-    _ensureAtLookUpInstance();
+    _atLookUp ??= AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
-      await _sendFromCommandIfUsingProxy(context: 'awaitApproval');
+      await _sendFromCommandIfUsingProxy(_atLookUp!, context: 'awaitApproval');
     }
 
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
@@ -695,14 +697,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   ///returns secondary server status
   Future<AtStatus> getServerStatus() async {
-    // Ensure we have an AtLookUp instance and send from: command if using proxy
-    _ensureAtLookUpInstance();
-
-    if (_isUsingProxy) {
-      // When using a proxy, send from: command to ensure correct atSign context
-      await _sendFromCommandIfUsingProxy(context: 'getServerStatus');
-    }
-
     AtServerStatus atServerStatus = AtStatusImpl(
         rootUrl: atOnboardingPreference.rootDomain,
         rootPort: atOnboardingPreference.rootPort);
@@ -711,26 +705,23 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   @override
   Future<bool> isOnboarded() async {
-    _ensureAtLookUpInstance();
 
     if (_isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
-      await _sendFromCommandIfUsingProxy(context: 'isOnboarded');
-      
+      AtLookUp atLookUp = AtLookupImpl(_atSign, atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      await _sendFromCommandIfUsingProxy(atLookUp, context: 'isOnboarded');
+
       try {
         String? pkeyResponse = await _atLookUp!.executeCommand('lookup:publickey$_atSign\n', auth: false);
         if (pkeyResponse != null && !pkeyResponse.contains('error:') && !pkeyResponse.contains('null') && pkeyResponse.trim().isNotEmpty) {
-          // Public key found, atSign is activated
           _isAtsignOnboarded = true;
           return true;
         }
-        // No public key found, atSign is not activated
         return false;
       } catch (e) {
         logger.info('isOnboarded: lookup failed, trying alternative approach: $e');
-        // If lookup fails, assume not onboarded to allow retry
         return false;
-      }      
+      }
     } else {
       // When not using a proxy, use the standard AtServerStatus method
       try {
