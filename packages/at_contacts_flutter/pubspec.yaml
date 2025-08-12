@@ -8,7 +8,7 @@ documentation: https://docs.atsign.com/
 
 environment:
   sdk: ^3.6.0
-  flutter: ^3.29.2
+  flutter: ">=3.29.2"
 resolution: workspace
 
 dependencies:

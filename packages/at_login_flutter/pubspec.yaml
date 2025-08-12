@@ -7,7 +7,7 @@ documentation: https://docs.atsign.com/
 
 environment:
   sdk: ^3.6.0
-  flutter: ^3.29.2
+  flutter: ">=3.29.2"
 resolution: workspace
 
 dependencies:
@@ -16,6 +16,7 @@ dependencies:
   at_server_status: ^1.0.5
   at_utils: ^3.0.19
   basic_utils: ^5.6.1
+  collection: ^1.16.0
   flutter:
     sdk: flutter
   flutter_local_notifications: ^19.0.0
