@@ -119,13 +119,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
   }) async {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
-    _atLookUp ??= AtLookupImpl(
-        _atSign, atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    AtLookupImpl atLookUpImpl = AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
 
-    if (_isUsingProxy) {
-      // When using a proxy, send from: command to ensure correct atSign context
-      await _sendFromCommandIfUsingProxy(_atLookUp!, context: 'onboard');
-    }
+    await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'onboard');
 
     // log the atOnboardingPreference.rootDomain and port
     logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
@@ -159,7 +159,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     // check and wait till secondary exists
     await _waitUntilSecondaryCreated(
-      _atLookUp as AtLookupImpl,
+      atLookUpImpl,
       retryInterval: retryInterval,
       maxRetries: maxRetries,
     );
