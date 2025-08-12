@@ -5,6 +5,7 @@
 - Docker Compose
 - Docker Engine
 - this line in `/etc/hosts`: `127.0.0.1       vip.ve.atsign.zone`
+- certs in a folder called `certs/` in teh same directory
 
 ## Running the Tests
 
@@ -14,8 +15,20 @@
 sudo docker-compose up -d
 ```
 
-2. Run an individual test
+2. Check system readiness (optional)
+
+```bash
+dart run check_docker_readiness.dart
+```
+
+3. Run an individual test
 
 ```bash
 dart test tests/<test name>.dart
+```
+
+Example
+
+```bash
+dart test tests/test_onboard.dart
 ```
