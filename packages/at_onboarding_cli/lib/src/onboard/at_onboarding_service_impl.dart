@@ -284,12 +284,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
 
     // Ensure we have an AtLookUp instance and send from: command if using proxy
-    _ensureAtLookUpInstance();
+    // _ensureAtLookUpInstance();
 
-    if (_isUsingProxy) {
-      // When using a proxy, send from: command to ensure correct atSign context
-      await _sendFromCommandIfUsingProxy(context: 'enroll');
-    }
+    // if (_isUsingProxy) {
+    //   // When using a proxy, send from: command to ensure correct atSign context
+    //   await _sendFromCommandIfUsingProxy(context: 'enroll');
+    // }
 
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
         appName: appName,
