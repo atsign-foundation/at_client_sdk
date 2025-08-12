@@ -7,6 +7,7 @@ const String relayCommand = 'relay1\n';
 const String expectedResponse = 'vip.ve.atsign.zone:443';
 const Duration connectionTimeout = Duration(seconds: 10);
 const List<String> requiredContainers = ['at_proxyserver', 'at_virtualenv'];
+const String yesFlag = '-y';
 
 Future<bool> checkDockerAndRootResponse() async {
   try {
@@ -32,7 +33,7 @@ Future<bool> checkDockerAndRootResponse() async {
 
 Future<bool> checkDockerContainers() async {
   try {
-    ProcessResult result = await Process.run('sudo', ['docker', 'ps']);
+    ProcessResult result = await Process.run('docker', ['ps']);
     
     if (result.exitCode != 0) {
       print('Failed to run docker ps: ${result.stderr}');
@@ -115,9 +116,40 @@ Future<bool> checkForRootResponse() async {
   }
 }
 
-void main() async {
+Future<bool> restartDockerCompose() async {
+  try {
+    print('Stopping Docker Compose services...');
+    ProcessResult downResult = await Process.run('docker-compose', ['down']);
+    
+    if (downResult.exitCode != 0) {
+      print('Warning: docker-compose down failed: ${downResult.stderr}');
+    } else {
+      print('Docker Compose services stopped successfully');
+    }
+    
+    print('Starting Docker Compose services...');
+    ProcessResult upResult = await Process.run('docker-compose', ['up', '-d']);
+    
+    if (upResult.exitCode != 0) {
+      print('Failed to start Docker Compose services: ${upResult.stderr}');
+      return false;
+    }
+    
+    print('Docker Compose services started successfully');
+    print('Waiting for services to initialize...');
+    await Future.delayed(Duration(seconds: 5));
+    
+    return true;
+  } catch (e) {
+    print('Error restarting Docker Compose: $e');
+    return false;
+  }
+}
+
+void main(List<String> arguments) async {
   print('Checking Docker and Relay readiness...');
   
+  bool autoRestart = arguments.contains(yesFlag);
   bool isReady = await checkDockerAndRootResponse();
   
   if (isReady) {
@@ -125,6 +157,37 @@ void main() async {
     exit(0);
   } else {
     print('✗ System is not ready');
-    exit(1);
+    
+    bool shouldRestart = autoRestart;
+    
+    if (!autoRestart) {
+      stdout.write('Attempt starting Docker Compose services? (Y/N): ');
+      String? input = stdin.readLineSync();
+      shouldRestart = input?.toLowerCase() == 'y' || input?.toLowerCase() == 'yes';
+    }
+    
+    if (shouldRestart) {
+      print('Attempting to restart Docker Compose services...');
+      bool restartSuccess = await restartDockerCompose();
+      
+      if (restartSuccess) {
+        print('Rechecking system readiness...');
+        bool recheckReady = await checkDockerAndRootResponse();
+        
+        if (recheckReady) {
+          print('✓ System is now ready');
+          exit(0);
+        } else {
+          print('✗ System still not ready after restart');
+          exit(1);
+        }
+      } else {
+        print('✗ Failed to restart Docker Compose services');
+        exit(1);
+      }
+    } else {
+      print('Skipping restart attempt');
+      exit(1);
+    }
   }
 }
