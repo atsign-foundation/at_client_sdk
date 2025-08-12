@@ -1,0 +1,11 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude: [build/**]
+
+linter:
+  rules:
+    camel_case_types: true
+    unnecessary_statements: true
+    library_private_types_in_public_api: false
+    no_leading_underscores_for_local_identifiers: false
