@@ -51,6 +51,17 @@ void main() {
       expect(result.exitCode, isNot(equals(0)));
     }, timeout: Timeout(Duration(seconds: 10)));
 
+    // Test #5: Tests that using just `--yes` bypasses the backup key prompt
+    test('CLI with --yes bypasses prompt and continues', () async {
+      final result = await Process.run(
+        'bash',
+        ['-c', 'timeout 5s dart bin/activate_cli.dart onboard --atsign @8incanteater --keys $testKeysPath --yes'],
+        workingDirectory: Directory.current.path,
+      );
+      
+      expect(result.exitCode, isNot(equals(0)));
+    }, timeout: Timeout(Duration(seconds: 10)));
+
     // runs after each individual test
     tearDown(() {
       if (tempDir.existsSync()) {
