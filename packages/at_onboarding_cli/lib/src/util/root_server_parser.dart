@@ -27,11 +27,11 @@ class RootServerParser {
       if (serverPart.contains(':')) {
         // proxy:host:port format
         List<String> parts = serverPart.split(':');
-        host = parts[0];
+        host = 'proxy:${parts[0]}'; // Keep proxy: prefix
         port = int.tryParse(parts[1]) ?? defaultPort;
       } else {
         // proxy:host format
-        host = serverPart;
+        host = rawRootServer; // Keep full proxy:host format
         port = defaultPort;
       }
     } else if (rawRootServer.contains(':')) {

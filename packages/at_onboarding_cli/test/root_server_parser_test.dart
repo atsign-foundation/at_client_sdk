@@ -30,7 +30,7 @@ void main() {
     test('parse proxy:host format', () {
       final result = RootServerParser.parse('proxy:example.com');
       
-      expect(result.host, equals('example.com'));
+      expect(result.host, equals('proxy:example.com'));
       expect(result.port, equals(64));
       expect(result.isUsingProxy, equals(true));
     });
@@ -38,7 +38,7 @@ void main() {
     test('parse proxy:host:port format', () {
       final result = RootServerParser.parse('proxy:example.com:8080');
       
-      expect(result.host, equals('example.com'));
+      expect(result.host, equals('proxy:example.com'));
       expect(result.port, equals(8080));
       expect(result.isUsingProxy, equals(true));
     });
@@ -46,7 +46,7 @@ void main() {
     test('parse proxy:host:invalid_port - should default to port 64', () {
       final result = RootServerParser.parse('proxy:example.com:invalid');
       
-      expect(result.host, equals('example.com'));
+      expect(result.host, equals('proxy:example.com'));
       expect(result.port, equals(64));
       expect(result.isUsingProxy, equals(true));
     });

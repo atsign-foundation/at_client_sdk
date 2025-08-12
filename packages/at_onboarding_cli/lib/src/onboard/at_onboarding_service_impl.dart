@@ -134,6 +134,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       await _sendFromCommandIfUsingProxy(context: 'onboard');
     }
 
+    // log the atOnboardingPreference.rootDomain and port
+    logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
+        '${atOnboardingPreference.rootPort}');
+
     // get cram_secret from either from AtOnboardingPreference
     // or fetch from the registrar using verification code sent to email
     if (atOnboardingPreference.cramSecret == null) {
