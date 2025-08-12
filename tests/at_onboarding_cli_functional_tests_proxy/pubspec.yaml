@@ -7,6 +7,8 @@ environment:
 
 dependencies:
   at_demo_data: ^1.2.0
+  at_onboarding_cli:
+    path: ../../packages/at_onboarding_cli
 
 dev_dependencies:
   test: ^1.21.0
