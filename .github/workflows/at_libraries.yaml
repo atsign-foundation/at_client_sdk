@@ -79,6 +79,7 @@ jobs:
       matrix:
         package:
           - at_onboarding_cli_functional_tests
+          - at_onboarding_cli_functional_tests_proxy
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -113,31 +114,3 @@ jobs:
       - name: kill docker image
         working-directory: tests/${{ matrix.package }}
         run: sudo docker compose down
-
-  at_onboarding_cli_functional_tests_proxy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - uses: ./actions/setup-flutter-and-dart
-        with:
-          dart-channel: ${{ matrix.dart-channel}}
-
-      - name: add entry to hosts file
-        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
-
-      - name: Dart pub get
-        working-directory: tests/at_onboarding_cli_functional_tests_proxy
-        run: dart pub get
-
-      - name: Docker Compose Up
-        working-directory: tests/at_onboarding_cli_functional_tests_proxy
-        run: sudo docker-compose up -d
-
-      - name: Check Docker Readiness
-        working-directory: tests/at_onboarding_cli_functional_tests_proxy
-        run: dart run check_docker_readiness.dart
-
-      - name: Run Dart test
-        working-directory: tests/at_onboarding_cli_functional_tests_proxy
-        run: dart test --concurrency=1
