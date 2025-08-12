@@ -327,11 +327,13 @@ abstract class AtClient {
   ///  scan:@bob
   ///   getKeys(sharedBy:'@bob');
   ///```
-  Future<List<AtKey>> getAtKeys(
-      {String? regex,
-      String? sharedBy,
-      String? sharedWith,
-      bool showHiddenKeys = false});
+  Future<List<AtKey>> getAtKeys({
+    String? regex,
+    String? sharedBy,
+    String? sharedWith,
+    bool showHiddenKeys = false,
+    bool useRemoteAtServer = false,
+  });
 
   /// Get all the keys stored in user's secondary in string format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
@@ -345,11 +347,13 @@ abstract class AtClient {
   ///  scan:@bob
   ///   getKeys(sharedBy:'@bob');
   ///```
-  Future<List<String>> getKeys(
-      {String? regex,
-      String? sharedBy,
-      String? sharedWith,
-      bool showHiddenKeys = false});
+  Future<List<String>> getKeys({
+    String? regex,
+    String? sharedBy,
+    String? sharedWith,
+    bool showHiddenKeys = false,
+    bool useRemoteAtServer = false,
+  });
 
   /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
   ///```

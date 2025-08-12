@@ -489,8 +489,6 @@ class AtContactsImpl implements AtContactsLibrary {
         modifiedKey =
             isOld ? key : '$key.${AppConstants.LIBRARY_NAMESPACE}$appNamespace';
         break;
-      default:
-        break;
     }
     var atKey = _formAtKey(modifiedKey, isOld: isOld);
     return atKey;
@@ -600,7 +598,7 @@ class AtContactsImpl implements AtContactsLibrary {
   ///appends namespace for new format keys from scan key
   AtKey _formAtKeyFromScanKeys(AtKey key) {
     var atKey = key;
-    atKey.key = key.key + '.' + key.namespace!;
+    atKey.key = '${key.key}.${key.namespace!}';
     atKey.metadata.namespaceAware = false;
     return atKey;
   }

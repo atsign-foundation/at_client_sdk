@@ -1,8 +1,135 @@
-name: at_client_sdk_workspace
+name: at_client_sdk
+publish_to: none
 
 environment:
-  sdk: ">=2.18.0 <4.0.0"
+  sdk: ^3.6.0
+  flutter: ^3.29.2 # Ships with Dart 3.7.2, ensuring pub workspace support
+
+workspace:
+  - packages/at_auth
+  - packages/at_backupkey_flutter
+  - packages/at_chat_flutter
+  # - packages/at_chops # omit until at_chops 3.0.0 is published
+  - packages/at_cli_commons
+  - packages/at_client
+  - packages/at_client_mobile
+  - packages/at_commons
+  - packages/at_common_flutter
+  - packages/at_contact
+  - packages/at_contacts_flutter
+  - packages/at_contacts_group_flutter
+  - packages/at_events_flutter
+  - packages/at_follows_flutter
+  - packages/at_invitation_flutter
+  - packages/at_location_flutter
+  - packages/at_login_flutter
+  - packages/at_lookup
+  - packages/at_notify_flutter
+  - packages/at_onboarding_cli
+  - packages/at_onboarding_flutter
+  - packages/at_policy
+  - packages/at_server_status
+  - packages/at_sync_ui_flutter
+  - packages/at_theme_flutter
+  - packages/at_utils
+  - tests/at_end2end_test
+  - tests/at_functional_test
+  - tests/at_onboarding_cli_functional_tests
+
+dependencies:
+  # meta and intl are pinned in flutter test, be diligent to ensure you
+  # never bump this past flutter stable's current pinned version
+  meta: ^1.16.0
+  intl: ^0.19.0 # TODO: pin to the Flutter SDK and assess the damage
+  flutter:
+    sdk: flutter
+  # normal dependencies
+  archive: ^3.6.1
+  args: ^2.6.0
+  asn1lib: ^1.5.3
+  async: ^2.9.0
+  at_base2e15: ^1.0.0
+  at_file_saver: ^0.1.2
+  at_persistence_secondary_server: ^4.2.0
+  at_persistence_spec: ^3.0.0
+  at_utf7: ^1.0.0
+  basic_utils: ^5.6.1
+  better_cryptography: ^1.0.0+1
+  biometric_storage: ^5.0.0
+  cached_network_image: ^3.3.1
+  chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
+  collection: ^1.16.0
+  convert: ^3.0.2
+  cron: ^0.5.1
+  crypto: ^3.0.5
+  cryptography: ^2.7.0
+  crypton: ^2.2.1
+  dart_periphery: ^0.9.5
+  device_info_plus: ^11.3.3
+  duration: ^4.0.3
+  ecdsa: ^0.1.0
+  elliptic: ^0.3.10
+  emoji_picker_flutter: ^4.3.0
+  encrypt: ^5.0.3
+  file_picker: ^10.0.0
+  flutter_image: ^4.1.8 # FIXME: discontinued
+  flutter_image_compress: ^2.0.4
+  flutter_keychain: ^2.2.1
+  flutter_local_notifications: ^19.0.0
+  flutter_qr_reader: ^1.0.5
+  flutter_slidable: ^4.0.0
+  fluttertoast: ^8.2.2
+  flutter_toastr: ^1.0.3
+  geolocator: ^14.0.0
+  hive: ^2.2.3
+  http: ^1.2.1
+  image: ^4.1.7
+  image_compression: ^1.0.4
+  internet_connection_checker: ^1.0.0+1
+  json_annotation: ^4.9.0
+  latlong2: 0.9.1
+  logging: ^1.2.0
+  mutex: ^3.0.0
+  package_info_plus: ^8.0.0
+  path: ^1.9.0
+  path_provider: ^2.1.2
+  permission_handler: ^12.0.0
+  pin_code_fields: ^8.0.1
+  pointycastle: ^3.9.1
+  positioned_tap_detector_2: ^1.0.4
+  proj4dart: ^2.1.0
+  provider: ^6.0.5
+  qr_code_scanner: ^1.0.1
+  shared_preferences: ^2.2.2
+  share_plus: ^11.0.0
+  showcaseview: ^4.0.1
+  sliding_up_panel: ^2.0.0+1
+  transparent_image: ^2.0.1
+  tuple: ^2.0.2 # TODO: replace this with Dart records
+  tutorial_coach_mark: ^1.2.11
+  uni_links: ^0.5.1 # FIXME: discontinued, replace with app_links
+  url_launcher: ^6.2.4
+  uuid: ^4.0.0
+  vector_math: ^2.1.4
+  version: ^3.0.2
+  webview_flutter: ^4.5.0
+  yaml: ^3.1.0
+  zxing2: ^0.2.0
 
 dev_dependencies:
-  melos: ^6.0.0
-
+  flutter_test:
+    sdk: flutter
+  alfred: ^1.1.2+1
+  at_demo_data: ^1.2.0
+  build_runner: ^2.4.13
+  build_version: ^2.1.1
+  collection: ^1.19.1
+  coverage: ^1.14.0
+  flutter_lints: ^6.0.0
+  json_serializable: ^6.9.0
+  lints: ^6.0.0
+  melos: 7.0.0-dev.8
+  mocktail: ^1.0.4
+  plugin_platform_interface: ^2.1.6
+  test: ^1.25.0
+  test_process: ^2.1.0

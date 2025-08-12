@@ -1,3 +1,7 @@
+## 5.5.0
+
+- chore(deps): bump uuid to "^4.0.0"
+
 ## 5.4.1
 - fix: `NotifyVerbBuilder.buildCommand()` uses `AtKey.toString()` instead of 
   doing its own thing.

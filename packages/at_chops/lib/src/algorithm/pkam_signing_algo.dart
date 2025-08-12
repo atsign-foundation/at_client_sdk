@@ -18,7 +18,7 @@ class PkamSigningAlgo implements AtSigningAlgorithm {
       throw AtSigningException('pkam key pair is null. cannot sign data');
     }
     final rsaPrivateKey =
-        RSAPrivateKey.fromString(_pkamKeyPair!.atPrivateKey.privateKey);
+        RSAPrivateKey.fromString(_pkamKeyPair.atPrivateKey.privateKey);
     switch (_hashingAlgoType) {
       case HashingAlgoType.sha256:
         return rsaPrivateKey.createSHA256Signature(data);
@@ -37,7 +37,7 @@ class PkamSigningAlgo implements AtSigningAlgorithm {
       rsaPublicKey = RSAPublicKey.fromString(publicKey);
     } else if (_pkamKeyPair != null) {
       rsaPublicKey =
-          RSAPublicKey.fromString(_pkamKeyPair!.atPublicKey.publicKey);
+          RSAPublicKey.fromString(_pkamKeyPair.atPublicKey.publicKey);
     } else {
       throw AtSigningVerificationException(
           'Pkam key pair or public key not set for pkam verification');

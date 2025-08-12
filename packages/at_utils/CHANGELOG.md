@@ -1,3 +1,6 @@
+## 3.3.0
+- chore(deps): at_commons ^5.5.0
+- chore(deps): chalkdart ">=2.0.9<4.0.0"
 ## 3.2.0
 - feat: add ProgressPublisher interface
 ## 3.1.0

@@ -1,0 +1,10 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude: [build/**]
+  # strong-mode:
+  #   implicit-casts: false
+
+linter:
+  rules:
+    - camel_case_types

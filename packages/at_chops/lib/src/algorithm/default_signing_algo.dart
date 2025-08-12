@@ -21,7 +21,7 @@ class DefaultSigningAlgo implements AtSigningAlgorithm {
           'encryption key pair not set for default signing algo');
     }
     final rsaPrivateKey =
-        RSAPrivateKey.fromString(_encryptionKeyPair!.atPrivateKey.privateKey);
+        RSAPrivateKey.fromString(_encryptionKeyPair.atPrivateKey.privateKey);
     switch (_hashingAlgoType) {
       case HashingAlgoType.sha256:
         return rsaPrivateKey.createSHA256Signature(data);
@@ -40,7 +40,7 @@ class DefaultSigningAlgo implements AtSigningAlgorithm {
       rsaPublicKey = RSAPublicKey.fromString(publicKey);
     } else if (_encryptionKeyPair != null) {
       rsaPublicKey =
-          RSAPublicKey.fromString(_encryptionKeyPair!.atPublicKey.publicKey);
+          RSAPublicKey.fromString(_encryptionKeyPair.atPublicKey.publicKey);
     } else {
       throw AtSigningVerificationException(
           'Encryption key pair or public key not set for default signing algo');

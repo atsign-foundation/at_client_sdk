@@ -1,0 +1,13 @@
+include: package:flutter_lints/flutter.yaml
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options
+linter:
+  rules:
+    unawaited_futures: true
+    await_only_futures: true
+    camel_case_types: true
+    unnecessary_statements: true
+    library_private_types_in_public_api: false
+    no_leading_underscores_for_local_identifiers: false
+    use_build_context_synchronously: false

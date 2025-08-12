@@ -1,0 +1,46 @@
+[
+    { 
+        "title": "@colin",
+        "subtitle": "Colin",
+        "isFollowing": false,
+        "profilePicture": "assets/images/colin.jpg"
+    },
+    {
+        "title": "@catherine",
+        "subtitle": "Catherine",
+        "isFollowing": false,
+        "profilePicture": null
+    },
+    {
+        "title": "@bob",
+        "subtitle": "Bob",
+        "isFollowing": false,
+        "profilePicture": null
+    },
+    {
+        "title": "@barbara",
+        "subtitle": "Barbara",
+        "isFollowing": false,
+        "profilePicture": null
+    },
+    {
+        "title": "@alice",
+        "subtitle": "Alice",
+        "isFollowing": true,
+        "profilePicture": null
+    },
+    {
+        "title": "@xavier",
+        "subtitle": "Xavier",
+        "isFollowing": true,
+        "profilePicture": null
+
+    },
+    {
+        "title": "@Sam",
+        "subtitle": "Sam",
+        "isFollowing": true,
+        "profilePicture": null
+
+    }
+]
