@@ -57,8 +57,11 @@ void main() {
   });
   group("AtRootDomain - Invalid parse", () {
     invalidParseTest<IllegalArgumentException>("");
-    invalidParseTest<IllegalArgumentException>("foo:bar:baz");
-    invalidParseTest<IllegalArgumentException>("proxy:root.atsign.com:baz");
-    invalidParseTest<IllegalArgumentException>("root.atsign.com:baz");
+    invalidParseTest<IllegalArgumentException>("foo:root.atsign.org");
+    invalidParseTest<IllegalArgumentException>("foo:root.atsign.org:64");
+    invalidParseTest<IllegalArgumentException>("proxy:root.atsign.org:baz");
+    invalidParseTest<IllegalArgumentException>("root.atsign.org:baz");
+    invalidParseTest<IllegalArgumentException>("root.atsign.org:0");
+    invalidParseTest<IllegalArgumentException>("root.atsign.org:65536");
   });
 }
