@@ -22,6 +22,11 @@ jobs:
           cd tests/at_functional_test/test/testData
           CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
           wget -O cert.pem ${CERTURL}
+          
+          cd ../../../at_onboarding_cli_functional_tests_proxy/certs
+          wget -O cert.pem ${CERTURL}
+          
+          cd ../../../../
           if [ -z "$(git status --porcelain)" ]; then
             echo 'No new cert'
             echo "cert=NOTNEW" >> $GITHUB_OUTPUT
@@ -42,6 +47,9 @@ jobs:
         run: |
           cd tests/at_functional_test/test/testData
           CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
+          wget -O cert.pem ${CERTURL}
+          
+          cd ../../../at_onboarding_cli_functional_tests_proxy/certs
           wget -O cert.pem ${CERTURL}
 
       - name: Create Pull Request
