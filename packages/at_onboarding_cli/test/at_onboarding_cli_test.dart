@@ -44,7 +44,7 @@ void main() {
       registerFallbackValue(FakeAtAuthRequest());
     });
 
-    test('A test to check authenticate true', () async {
+    test('A test to check atOnboardingService.authenticate() returns true', () async {
       final atSign = '@alice🛠';
       AtOnboardingPreference onboardingPreference = AtOnboardingPreference()
         ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
@@ -55,7 +55,7 @@ void main() {
       mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
       onboardingService.atAuth = mockAtAuth;
       onboardingService.atClient = await AtClientImpl.create(
-          atSign, '.wavi', getAtClientPreferenceAlice());
+          atSign, 'unit_test', getAtClientPreferenceAlice());
       when(() => mockAtLookup.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtAuth.authenticate(any()))
