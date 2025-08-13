@@ -3,7 +3,6 @@ import 'dart:io';
 const String workingDirectory = '../../packages/at_onboarding_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
-/// Approves an enrollment request with the given enrollment ID
 Future<bool> approveEnrollment(String atSign, String enrollmentId, String keyFile, String rootServer) async {
   print('Approving enrollment $enrollmentId for $atSign...');
 
@@ -27,7 +26,6 @@ Future<bool> approveEnrollment(String atSign, String enrollmentId, String keyFil
     String stderr = result.stderr.toString();
     String stdout = result.stdout.toString();
 
-    // Check if the approval was successful but returned a non-zero exit code
     if (stdout.toLowerCase().contains('approved') || stderr.toLowerCase().contains('approved')) {
       print('✓ Enrollment approved successfully (despite non-zero exit code)');
       return true;

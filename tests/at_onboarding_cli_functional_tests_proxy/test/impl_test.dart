@@ -18,7 +18,6 @@ final Uuid _uuid = Uuid();
 void main() {
   group('System Readiness', () {
     test('fresh docker environment setup', () async {
-      // Ensure completely clean state by stopping any existing containers
       print('Ensuring clean docker state...');
       try {
         await Process.run('docker-compose', ['down']);
@@ -27,7 +26,6 @@ void main() {
         print('Note: Error during cleanup (expected if no containers running): $e');
       }
 
-      // Start fresh
       print('Starting fresh Docker Compose services...');
       bool restartSuccess = await restartDockerCompose();
       expect(restartSuccess, isTrue, reason: 'Docker Compose restart should succeed');
@@ -48,7 +46,7 @@ void main() {
     late AtOnboardingService onboardingService;
 
     setUpAll(() {
-      atSign = atSignData['atSign']!; // Use @gary for both onboarding and enrollment
+      atSign = atSignData['atSign']!;
       masterKeyFile = 'gary_master_impl_${_uuid.v4()}.atKeys';
       deviceId = _uuid.v4();
       enrollmentKeyFile = '${deviceId}_key.atKeys';
@@ -58,25 +56,20 @@ void main() {
     });
 
     tearDownAll(() async {
-      // Clean up key files
       await cleanupTestFiles(filesToCleanup);
 
-      // Stop docker containers
       await stopDockerServices();
     });
 
     test('step 1: fresh onboard using implementation', () async {
-      // Clean up any existing key files first to ensure fresh start
       await cleanupAllKeyFiles();
 
-      // Setup AtOnboarding preferences with CRAM key
       AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
         ..atKeysFilePath = '$workingDirectory/$masterKeyFile'
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = 443
-        ..cramSecret = atSignData['cramKey']!; // Set CRAM key in preference
+        ..cramSecret = atSignData['cramKey']!;
 
-      // Create onboarding service
       onboardingService = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
 
       try {
@@ -87,17 +80,14 @@ void main() {
         expect(onboardingSuccess, isTrue, reason: 'Onboarding should succeed');
         print('✓ Onboarding completed using implementation');
 
-        // Verify key file exists
         String keyFilePath = '$workingDirectory/$masterKeyFile';
         File keyFile = File(keyFilePath);
         expect(keyFile.existsSync(), isTrue, reason: 'Key file should exist after onboarding');
 
-        // Add to cleanup list
         filesToCleanup.add(keyFilePath);
 
       } catch (e) {
         print('Onboarding failed: $e');
-        // Check if it's a connectivity issue we can ignore for proxy testing
         if (e.toString().contains('Found atServer') || e.toString().contains('Connected to')) {
           print('✓ Proxy connectivity verified despite onboarding failure');
         } else {
@@ -110,14 +100,12 @@ void main() {
       try {
         print('Generating OTP using implementation...');
 
-        // First authenticate to get AtClient
         bool authSuccess = await onboardingService.authenticate();
         expect(authSuccess, isTrue, reason: 'Authentication should succeed before OTP generation');
 
         AtClient? atClient = onboardingService.atClient;
         expect(atClient, isNotNull, reason: 'AtClient should be available after authentication');
 
-        // Generate OTP using AtLookup command directly
         AtLookUp atLookup = atClient!.getRemoteSecondary()!.atLookUp;
         String? response = await atLookup.executeCommand('otp:get\n', auth: true);
 
@@ -136,7 +124,6 @@ void main() {
     });
 
     test('step 3: submit enrollment request using implementation', () async {
-      // Setup enrollment preferences
       AtOnboardingPreference enrollmentPreference = AtOnboardingPreference()
         ..atKeysFilePath = '$workingDirectory/$enrollmentKeyFile'
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -145,13 +132,11 @@ void main() {
         ..appName = appName
         ..deviceName = deviceId;
 
-      // Create new onboarding service for enrollment
       AtOnboardingService enrollmentService = AtOnboardingServiceImpl(atSign, enrollmentPreference);
 
       try {
         print('Submitting enrollment request using implementation...');
 
-        // Submit enrollment with namespaces
         Map<String, String> namespacesMap = {
           'sshnp': 'rw',
           'sshrvd': 'rw'
@@ -168,13 +153,11 @@ void main() {
         print('✓ Enrollment request submitted using implementation');
         print('Enrollment ID: ${enrollmentResponse.enrollmentId}');
 
-        // Add enrollment key file to cleanup list
         filesToCleanup.add('$workingDirectory/$enrollmentKeyFile');
 
       } catch (e) {
         print('Enrollment submission failed: $e');
 
-        // Check if it's a timeout or waiting issue
         if (e.toString().contains('Waited for') || e.toString().contains('timeout')) {
           print('✓ Enrollment submitted but timed out waiting for approval (expected behavior)');
         } else {
@@ -184,17 +167,13 @@ void main() {
     });
 
     test('step 4: validate implementation enrollment workflow', () async {
-      // For implementation tests, we can validate that the services were created correctly
-      // and that the workflow executed without major errors
 
       expect(onboardingService, isNotNull, reason: 'Onboarding service should be initialized');
       expect(generatedOtp.isNotEmpty, isTrue, reason: 'OTP should have been generated');
 
-      // Check if any key files were created during the process
       String masterKeyPath = '$workingDirectory/$masterKeyFile';
       String enrollmentKeyPath = '$workingDirectory/$enrollmentKeyFile';
 
-      // At least the master key file should exist from onboarding
       if (File(masterKeyPath).existsSync()) {
         print('✓ Master key file created by implementation');
       }
@@ -221,11 +200,9 @@ void main() {
       ];
 
       try {
-        // Step 1: Clean up and fresh onboard using implementation
         print('Step 1: Cleaning and fresh onboarding using implementation...');
         await cleanupAllKeyFiles();
 
-        // Setup master onboarding
         AtOnboardingPreference masterPreference = AtOnboardingPreference()
           ..atKeysFilePath = '$workingDirectory/$masterKeyFile'
           ..rootDomain = 'vip.ve.atsign.zone'
@@ -237,14 +214,11 @@ void main() {
         bool onboardingResult = await masterService.onboard();
         expect(onboardingResult, isTrue);
 
-        // Step 2: Generate OTP using implementation
         print('Step 2: Generating OTP using implementation...');
 
-        // Authenticate first
         bool authSuccess = await masterService.authenticate();
         expect(authSuccess, isTrue);
 
-        // Generate OTP
         AtClient? atClient = masterService.atClient;
         AtLookUp atLookup = atClient!.getRemoteSecondary()!.atLookUp;
         String? response = await atLookup.executeCommand('otp:get\n', auth: true);
@@ -255,7 +229,6 @@ void main() {
         }
         expect(otp.isNotEmpty, isTrue);
 
-        // Step 3: Submit enrollment using implementation
         print('Step 3: Submitting enrollment using implementation...');
 
         AtOnboardingPreference enrollmentPreference = AtOnboardingPreference()
@@ -294,7 +267,6 @@ void main() {
 
       } catch (e) {
         print('Implementation workflow error: $e');
-        // For implementation tests, some failures are expected due to the testing environment
         print('⚠ Implementation test completed with expected limitations');
       } finally {
         await cleanupTestFiles(filesToCleanup);

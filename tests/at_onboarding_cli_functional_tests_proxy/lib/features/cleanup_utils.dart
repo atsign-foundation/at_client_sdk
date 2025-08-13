@@ -1,6 +1,5 @@
 import 'dart:io';
 
-/// Cleans up test files and Docker containers
 Future<void> cleanupTestFiles(List<String> filePaths) async {
   for (String filePath in filePaths) {
     try {
@@ -15,7 +14,6 @@ Future<void> cleanupTestFiles(List<String> filePaths) async {
   }
 }
 
-/// Stops Docker Compose services
 Future<void> stopDockerServices() async {
   print('Stopping Docker Compose services...');
   try {
@@ -30,7 +28,6 @@ Future<void> stopDockerServices() async {
   }
 }
 
-/// Cleans up all existing key files from the working directory
 Future<void> cleanupAllKeyFiles() async {
   const String workingDirectory = '../../packages/at_onboarding_cli';
   Directory workingDir = Directory(workingDirectory);

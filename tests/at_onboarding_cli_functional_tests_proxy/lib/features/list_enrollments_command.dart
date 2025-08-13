@@ -3,7 +3,6 @@ import 'dart:io';
 const String workingDirectory = '../../packages/at_onboarding_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
-/// Lists pending enrollments for the given atSign
 Future<List<String>> listPendingEnrollments(String atSign, String rootServer, {String? keyFile}) async {
   print('Listing pending enrollments for $atSign...');
 
@@ -32,8 +31,6 @@ Future<List<String>> listPendingEnrollments(String atSign, String rootServer, {S
   String output = result.stdout.toString();
   List<String> enrollmentIds = [];
 
-  // Parse enrollment IDs from output
-  // Look for patterns like "ID: <enrollment_id>" or similar
   RegExp idRegex = RegExp(r'(?:ID|id|enrollmentId):\s*([a-f0-9\-]+)', caseSensitive: false);
   Iterable<Match> matches = idRegex.allMatches(output);
 
@@ -42,9 +39,7 @@ Future<List<String>> listPendingEnrollments(String atSign, String rootServer, {S
     enrollmentIds.add(enrollmentId);
   }
 
-  // Also try alternative parsing patterns if first approach doesn't work
   if (enrollmentIds.isEmpty) {
-    // Look for UUID-like patterns in the output
     RegExp uuidRegex = RegExp(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', caseSensitive: false);
     Iterable<Match> uuidMatches = uuidRegex.allMatches(output);
 

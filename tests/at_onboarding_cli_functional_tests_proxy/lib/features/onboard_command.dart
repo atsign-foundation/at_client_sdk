@@ -3,7 +3,6 @@ import 'dart:io';
 const String workingDirectory = '../../packages/at_onboarding_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
-/// Onboards an atSign using CRAM key to generate initial key file
 Future<bool> onboardAtSign(String atSign, String cramKey, String keyFile, String rootServer) async {
   print('Onboarding $atSign to generate keys...');
 
@@ -25,7 +24,6 @@ Future<bool> onboardAtSign(String atSign, String cramKey, String keyFile, String
   print('Onboard stdout: ${result.stdout}');
   print('Onboard stderr: ${result.stderr}');
 
-  // Check if the key file was generated
   String keyFilePath = '$workingDirectory/$keyFile';
   File keyFileObj = File(keyFilePath);
 

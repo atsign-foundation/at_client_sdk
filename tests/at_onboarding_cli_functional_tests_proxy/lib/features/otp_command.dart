@@ -3,7 +3,6 @@ import 'dart:io';
 const String workingDirectory = '../../packages/at_onboarding_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
-/// Generates OTP using existing key file for the given atSign
 Future<String> generateOtpWithExistingKeys(String atSign, String keyFile, String rootServer) async {
   print('Generating OTP for $atSign using existing keys: $keyFile');
 
@@ -24,21 +23,19 @@ Future<String> generateOtpWithExistingKeys(String atSign, String keyFile, String
     throw Exception('Failed to generate OTP: ${result.stderr}');
   }
 
-  // Parse OTP from output
   String output = result.stdout.toString();
 
-  // Try multiple patterns for OTP extraction
   List<RegExp> otpPatterns = [
     RegExp(r'OTP:\s*([A-Z0-9]+)', caseSensitive: false),
-    RegExp(r'([A-Z0-9]{6,})', caseSensitive: false), // Look for alphanumeric codes 6+ chars
-    RegExp(r'^([A-Z0-9]+)$', multiLine: true, caseSensitive: false), // Standalone codes on their own line
+    RegExp(r'([A-Z0-9]{6,})', caseSensitive: false),
+    RegExp(r'^([A-Z0-9]+)$', multiLine: true, caseSensitive: false),
   ];
 
   for (RegExp pattern in otpPatterns) {
     Match? match = pattern.firstMatch(output.trim());
     if (match != null) {
       String otp = match.group(1)!;
-      if (otp.length >= 5) { // Reasonable minimum OTP length
+      if (otp.length >= 5) {
         print('✓ OTP generated successfully: $otp');
         return otp;
       }

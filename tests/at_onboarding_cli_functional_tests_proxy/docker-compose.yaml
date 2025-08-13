@@ -2,13 +2,10 @@ version: '3.7'
 services:
   at_virtualenv:
     container_name: at_virtualenv
-    # image: atsigncompany/ephemeral:latest
     image: atsigncompany/virtualenv:vip
     ports:
       - '127.0.0.1:6379:6379'
-      # - '64:64'
       - '127.0.0.1:9001:9001'
-      # - '25000-25025:25000-25025'
     extra_hosts:
       - 'vip.ve.atsign.zone:127.0.0.1'
     hostname: vip.ve.atsign.zone
