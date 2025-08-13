@@ -35,7 +35,7 @@ void main() {
       expect(restartSuccess, isTrue, reason: 'Docker Compose restart should succeed');
 
       print('Checking system readiness...');
-      bool isReady = await checkDockerAndRootResponse();
+      bool isReady = await checkDockerContainers();
       expect(isReady, isTrue, reason: 'System should be ready with fresh Docker Compose');
     });
   });
