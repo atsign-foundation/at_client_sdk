@@ -10,6 +10,7 @@ import '../lib/features/enroll_command.dart';
 import '../lib/features/list_enrollments_command.dart';
 import '../lib/features/approve_command.dart';
 import '../lib/features/validate_keys.dart';
+import '../lib/features/test_already_onboarded.dart';
 import '../lib/features/cleanup_utils.dart';
 import '../lib/docker_utils.dart';
 
@@ -129,8 +130,8 @@ void main() {
       expect(success, isTrue, reason: 'Enrollment keys should be valid and functional for listing');
     });
 
-    test('step 6: test onboard with enrollment keys (should show already activated)', () async {
-      bool success = await testOnboardWithEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
+    test('step 6: test onboard on an already activated atSign', () async {
+      bool success = await testOnboardOnAlreadyActivatedAtSign(atSign, rootServer);
       expect(success, isTrue, reason: 'Onboard command should show atSign is already activated');
     });
   });
@@ -175,8 +176,8 @@ void main() {
         bool validationSuccess = await validateEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
         expect(validationSuccess, isTrue);
 
-        logger.info('Step 6: Testing onboard with enrollment keys (should show already activated)...');
-        bool onboardTestSuccess = await testOnboardWithEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
+        logger.info('Step 6: Testing onboard on already activated atSign (should show already activated)...');
+        bool onboardTestSuccess = await testOnboardOnAlreadyActivatedAtSign(atSign, rootServer);
         expect(onboardTestSuccess, isTrue);
 
         logger.info('✓ Complete enrollment workflow completed successfully');
