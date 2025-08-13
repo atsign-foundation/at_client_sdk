@@ -64,7 +64,7 @@ void main() {
   group('Enrollment Workflow Tests', () {
     late String atSign;
     late String masterKeyFile;
-    late String deviceId;
+    late String deviceName;
     late String enrollmentKeyFile;
     late String generatedOtp;
     late List<String> filesToCleanup;
@@ -72,9 +72,9 @@ void main() {
     setUpAll(() {
       const int atSignIndex = 31;
       atSign = allAtsigns[atSignIndex];
-      masterKeyFile = '${atSign.substring(1)}_master_${_uuid.v4()}.atKeys';
-      deviceId = _uuid.v4();
-      enrollmentKeyFile = '${deviceId}_key.atKeys';
+      masterKeyFile = '${atSign}_master_${_uuid.v4()}_key.atKeys';
+      deviceName = _uuid.v4();
+      enrollmentKeyFile = '${atSign}_enrolled_${deviceName}_key.atKeys';
       filesToCleanup = [];
 
       logger.info('Setup: Using atSign: $atSign for enrollment workflow');
@@ -107,7 +107,7 @@ void main() {
       filesToCleanup.add('../../packages/at_onboarding_cli/$enrollmentKeyFile');
 
       // Start enrollment request (this will wait for approval)
-      Future<bool> enrollmentFuture = submitEnrollmentRequest(generatedOtp, atSign, deviceId, enrollmentKeyFile, rootServer, appName, namespaces);
+      Future<bool> enrollmentFuture = submitEnrollmentRequest(generatedOtp, atSign, deviceName, enrollmentKeyFile, rootServer, appName, namespaces);
 
       // Give enrollment request a moment to be submitted and start waiting
       await Future.delayed(Duration(seconds: 5));
