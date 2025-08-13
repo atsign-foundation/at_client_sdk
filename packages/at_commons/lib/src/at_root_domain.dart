@@ -4,7 +4,7 @@ class AtRootDomain {
   String rootDomain;
   int rootPort;
 
-  AtRootDomain(this.rootDomain, this.rootPort);
+  const AtRootDomain(this.rootDomain, this.rootPort);
 
   static int _parseRootPort(String value) {
     try {
