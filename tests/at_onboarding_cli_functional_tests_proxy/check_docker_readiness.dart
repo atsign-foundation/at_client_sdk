@@ -8,8 +8,9 @@ const String expectedResponse = 'vip.ve.atsign.zone:443';
 const Duration connectionTimeout = Duration(seconds: 10);
 const List<String> requiredContainers = ['at_proxyserver', 'at_virtualenv'];
 const String yesFlag = '-y';
-const int maxRetries = 3;
-const Duration baseRetryDelay = Duration(seconds: 2);
+const int maxRetries = 5;
+const Duration baseRetryDelay = Duration(seconds: 3);
+const Duration initialWaitTime = Duration(seconds: 5);
 
 Future<bool> checkDockerAndRootResponse() async {
   for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -58,6 +59,7 @@ Future<bool> checkDockerAndRootResponse() async {
 
 Future<bool> checkDockerContainers() async {
   try {
+    // First try standard docker ps
     ProcessResult result = await Process.run('docker', ['ps']);
     
     if (result.exitCode != 0) {
@@ -66,14 +68,75 @@ Future<bool> checkDockerContainers() async {
     }
     
     String output = result.stdout.toString();
-    List<String> lines = output.split('\n');
+    print('Docker ps output:');
+    print(output);
     
+    List<String> lines = output.split('\n');
     List<String> foundContainers = [];
     
+    // More robust container detection - check both container names and image names
     for (String line in lines) {
+      String lowerLine = line.toLowerCase();
       for (String containerName in requiredContainers) {
-        if (line.contains(containerName) && !foundContainers.contains(containerName)) {
+        // Check if line contains the container name or related image
+        if ((lowerLine.contains(containerName.toLowerCase()) || 
+             lowerLine.contains(containerName.replaceAll('_', '-').toLowerCase()) ||
+             lowerLine.contains(containerName.replaceAll('at_', '').toLowerCase())) && 
+            !foundContainers.contains(containerName)) {
           foundContainers.add(containerName);
+          print('Found container: $containerName in line: ${line.trim()}');
+        }
+      }
+    }
+    
+    // If standard parsing didn't work, try docker ps with format
+    if (foundContainers.length != requiredContainers.length) {
+      print('Standard parsing found ${foundContainers.length}/${requiredContainers.length} containers, trying formatted output...');
+      
+      ProcessResult formatResult = await Process.run('docker', ['ps', '--format', 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}']);
+      if (formatResult.exitCode == 0) {
+        String formatOutput = formatResult.stdout.toString();
+        print('Docker ps formatted output:');
+        print(formatOutput);
+        
+        List<String> formatLines = formatOutput.split('\n');
+        for (String line in formatLines) {
+          String lowerLine = line.toLowerCase();
+          for (String containerName in requiredContainers) {
+            if ((lowerLine.contains(containerName.toLowerCase()) || 
+                 lowerLine.contains(containerName.replaceAll('_', '-').toLowerCase()) ||
+                 lowerLine.contains(containerName.replaceAll('at_', '').toLowerCase())) && 
+                !foundContainers.contains(containerName)) {
+              foundContainers.add(containerName);
+              print('Found container via formatted output: $containerName in line: ${line.trim()}');
+            }
+          }
+        }
+      }
+    }
+    
+    // Final check - try docker container ls
+    if (foundContainers.length != requiredContainers.length) {
+      print('Formatted parsing found ${foundContainers.length}/${requiredContainers.length} containers, trying container ls...');
+      
+      ProcessResult containerResult = await Process.run('docker', ['container', 'ls']);
+      if (containerResult.exitCode == 0) {
+        String containerOutput = containerResult.stdout.toString();
+        print('Docker container ls output:');
+        print(containerOutput);
+        
+        List<String> containerLines = containerOutput.split('\n');
+        for (String line in containerLines) {
+          String lowerLine = line.toLowerCase();
+          for (String containerName in requiredContainers) {
+            if ((lowerLine.contains(containerName.toLowerCase()) || 
+                 lowerLine.contains(containerName.replaceAll('_', '-').toLowerCase()) ||
+                 lowerLine.contains(containerName.replaceAll('at_', '').toLowerCase())) && 
+                !foundContainers.contains(containerName)) {
+              foundContainers.add(containerName);
+              print('Found container via container ls: $containerName in line: ${line.trim()}');
+            }
+          }
         }
       }
     }
@@ -81,6 +144,8 @@ Future<bool> checkDockerContainers() async {
     if (foundContainers.length != requiredContainers.length) {
       List<String> missing = requiredContainers.where((name) => !foundContainers.contains(name)).toList();
       print('Missing required containers: ${missing.join(', ')}');
+      print('Found containers: ${foundContainers.join(', ')}');
+      print('Required containers: ${requiredContainers.join(', ')}');
       return false;
     }
     
