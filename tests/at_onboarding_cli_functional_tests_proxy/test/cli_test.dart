@@ -23,12 +23,31 @@ final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 void main() {
   group('System Readiness', () {
     test('fresh docker environment setup', () async {
-      logger.info('Ensuring clean docker state...');
-      try {
-        await runDockerComposeDown();
-        await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
-      } catch (e) {
-        logger.info('Note: Error during cleanup (expected if no containers running): $e');
+      logger.info('Checking current docker state...');
+      
+      // Check if docker compose services are running
+      bool composeRunning = await isDockerComposeRunning();
+      
+      // Check if specific containers are running
+      bool containersRunning = await areContainersRunning(['at_proxyserver', 'at_virtualenv']);
+      
+      if (composeRunning || containersRunning) {
+        logger.info('Found running containers/services, cleaning up...');
+        try {
+          if (composeRunning) {
+            logger.info('Stopping Docker Compose services...');
+            await runDockerComposeDown();
+          }
+          
+          if (containersRunning) {
+            logger.info('Removing specific containers...');
+            await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
+          }
+        } catch (e) {
+          logger.warning('Error during cleanup: $e');
+        }
+      } else {
+        logger.info('No running containers found, skipping cleanup');
       }
 
       logger.info('Starting fresh Docker Compose services...');
