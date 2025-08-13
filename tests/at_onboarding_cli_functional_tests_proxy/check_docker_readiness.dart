@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'lib/features/docker_utils.dart';
+import 'lib/docker_utils.dart';
 
 const List<String> requiredContainers = ['at_proxyserver', 'at_virtualenv'];
 const String yesFlag = '-y';

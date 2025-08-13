@@ -10,7 +10,7 @@ import '../lib/features/list_enrollments_command.dart';
 import '../lib/features/approve_command.dart';
 import '../lib/features/validate_keys.dart';
 import '../lib/features/cleanup_utils.dart';
-import '../lib/features/docker_utils.dart';
+import '../lib/docker_utils.dart';
 
 const String rootServer = 'vip.ve.atsign.zone:443';
 const String appName = 'noports';
