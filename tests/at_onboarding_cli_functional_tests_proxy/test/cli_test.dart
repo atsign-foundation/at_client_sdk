@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
+import 'package:at_utils/at_logger.dart';
 import '../check_docker_readiness.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import '../lib/features/onboard_command.dart';
@@ -17,23 +18,24 @@ const String appName = 'noports';
 const String namespaces = 'sshnp:rw,sshrvd:rw';
 
 final Uuid _uuid = Uuid();
+final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 
 void main() {
   group('System Readiness', () {
     test('fresh docker environment setup', () async {
-      print('Ensuring clean docker state...');
+      logger.info('Ensuring clean docker state...');
       try {
         await runDockerComposeDown();
         await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
       } catch (e) {
-        print('Note: Error during cleanup (expected if no containers running): $e');
+        logger.info('Note: Error during cleanup (expected if no containers running): $e');
       }
 
-      print('Starting fresh Docker Compose services...');
+      logger.info('Starting fresh Docker Compose services...');
       bool restartSuccess = await restartDockerCompose();
       expect(restartSuccess, isTrue, reason: 'Docker Compose restart should succeed');
 
-      print('Checking system readiness...');
+      logger.info('Checking system readiness...');
       bool isReady = await checkDockerContainers();
       expect(isReady, isTrue, reason: 'System should be ready with fresh Docker Compose');
     });
@@ -55,7 +57,7 @@ void main() {
       enrollmentKeyFile = '${deviceId}_key.atKeys';
       filesToCleanup = [];
 
-      print('Setup: Using atSign: $atSign for enrollment workflow');
+      logger.info('Setup: Using atSign: $atSign for enrollment workflow');
     });
 
     tearDownAll(() async {
@@ -78,7 +80,7 @@ void main() {
     test('step 2: generate OTP using master keys', () async {
       generatedOtp = await generateOtpWithExistingKeys(atSign, masterKeyFile, rootServer);
       expect(generatedOtp.isNotEmpty, isTrue, reason: 'OTP should be generated successfully');
-      print('Generated OTP: $generatedOtp');
+      logger.info('Generated OTP: $generatedOtp');
     });
 
     test('step 3 & 4: submit enrollment request and approve concurrently', () async {
@@ -122,22 +124,22 @@ void main() {
       ];
 
       try {
-        print('Step 1: Cleaning and fresh onboarding...');
+        logger.info('Step 1: Cleaning and fresh onboarding...');
         await cleanupAllKeyFiles();
 
         String cramKey = cramKeyMap[atSign] ?? '';
         bool onboardSuccess = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
         expect(onboardSuccess, isTrue, reason: 'Onboarding should succeed');
 
-        print('Step 2: Generating OTP...');
+        logger.info('Step 2: Generating OTP...');
         String otp = await generateOtpWithExistingKeys(atSign, masterKeyFile, rootServer);
         expect(otp.isNotEmpty, isTrue);
 
-        print('Step 3: Submitting enrollment request...');
+        logger.info('Step 3: Submitting enrollment request...');
         bool enrollmentSuccess = await submitEnrollmentRequest(otp, atSign, deviceId, enrollmentKeyFile, rootServer, appName, namespaces);
         expect(enrollmentSuccess, isTrue);
 
-        print('Step 4: Listing and approving enrollment...');
+        logger.info('Step 4: Listing and approving enrollment...');
         List<String> enrollmentIds = await listPendingEnrollments(atSign, rootServer, keyFile: masterKeyFile);
         expect(enrollmentIds.isNotEmpty, isTrue);
 
@@ -145,11 +147,11 @@ void main() {
         bool approvalSuccess = await approveEnrollment(atSign, enrollmentId, masterKeyFile, rootServer);
         expect(approvalSuccess, isTrue);
 
-        print('Step 5: Validating enrollment keys...');
+        logger.info('Step 5: Validating enrollment keys...');
         bool validationSuccess = await validateEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
         expect(validationSuccess, isTrue);
 
-        print('✓ Complete enrollment workflow completed successfully');
+        logger.info('✓ Complete enrollment workflow completed successfully');
       } finally {
         await cleanupTestFiles(filesToCleanup);
         await stopDockerServices();

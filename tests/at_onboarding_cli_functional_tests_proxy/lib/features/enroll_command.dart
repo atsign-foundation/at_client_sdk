@@ -1,13 +1,16 @@
 import 'dart:io';
+import 'package:at_utils/at_logger.dart';
 
 const String workingDirectory = '../../packages/at_onboarding_cli';
 const Duration enrollmentTimeout = Duration(seconds: 180);
 
+final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
+
 Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId, String keyFile, String rootServer, String appName, String namespaces) async {
-  print('Submitting enrollment request for $atSign with device ID: $deviceId');
+  logger.info('Submitting enrollment request for $atSign with device ID: $deviceId');
 
   String enrollCommand = 'dart run bin/activate_cli.dart enroll -s $otp -a $atSign --rootServer $rootServer -d $deviceId -n "$namespaces" --app $appName --keys $keyFile';
-  print('Executing command: $enrollCommand');
+  logger.info('Executing command: $enrollCommand');
   List<String> enrollParts = enrollCommand.split(' ');
 
   List<String> processedParts = [];
@@ -32,7 +35,7 @@ Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId,
     }
   }
 
-  print('Executing enrollment command: ${processedParts.join(' ')}');
+  logger.info('Executing enrollment command: ${processedParts.join(' ')}');
 
   ProcessResult result = await Process.run(
     processedParts[0],
@@ -40,12 +43,12 @@ Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId,
     workingDirectory: workingDirectory,
   ).timeout(enrollmentTimeout);
 
-  print('Enrollment command exit code: ${result.exitCode}');
-  print('Enrollment command stdout: ${result.stdout}');
-  print('Enrollment command stderr: ${result.stderr}');
+  logger.info('Enrollment command exit code: ${result.exitCode}');
+  logger.info('Enrollment command stdout: ${result.stdout}');
+  logger.info('Enrollment command stderr: ${result.stderr}');
 
   if (result.exitCode == 0) {
-    print('✓ Enrollment request submitted successfully');
+    logger.info('✓ Enrollment request submitted successfully');
     return true;
   } else {
     String stderr = result.stderr.toString();
@@ -53,21 +56,21 @@ Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId,
 
     if (stderr.contains('enrollment') && (stderr.contains('pending') || stderr.contains('waiting')) ||
         stdout.contains('enrollment') && (stdout.contains('pending') || stdout.contains('waiting'))) {
-      print('✓ Enrollment request submitted and is pending approval');
+      logger.info('✓ Enrollment request submitted and is pending approval');
       return true;
     }
 
     if (stderr.contains('AT0023') || stderr.contains('Waited for') || stderr.contains('millis')) {
-      print('✓ Enrollment request submitted but timed out waiting for approval');
+      logger.info('✓ Enrollment request submitted but timed out waiting for approval');
       return true;
     }
 
     if (stderr.contains('unable to connect') || stderr.contains('AT0021')) {
-      print('⚠ Connection issue during enrollment - may need to retry or check proxy');
+      logger.warning('⚠ Connection issue during enrollment - may need to retry or check proxy');
       return false;
     }
 
-    print('✗ Enrollment request failed: $stderr');
+    logger.warning('✗ Enrollment request failed: $stderr');
     return false;
   }
 }

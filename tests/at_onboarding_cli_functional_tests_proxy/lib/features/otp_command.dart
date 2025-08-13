@@ -1,13 +1,16 @@
 import 'dart:io';
+import 'package:at_utils/at_logger.dart';
 
 const String workingDirectory = '../../packages/at_onboarding_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
+final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
+
 Future<String> generateOtpWithExistingKeys(String atSign, String keyFile, String rootServer) async {
-  print('Generating OTP for $atSign using existing keys: $keyFile');
+  logger.info('Generating OTP for $atSign using existing keys: $keyFile');
 
   String otpCommand = 'dart run bin/activate_cli.dart otp -a $atSign --rootServer $rootServer --keys $keyFile';
-  print('Executing command: $otpCommand');
+  logger.info('Executing command: $otpCommand');
   List<String> otpParts = otpCommand.split(' ');
 
   ProcessResult result = await Process.run(
@@ -16,9 +19,9 @@ Future<String> generateOtpWithExistingKeys(String atSign, String keyFile, String
     workingDirectory: workingDirectory,
   ).timeout(commandTimeout);
 
-  print('OTP command exit code: ${result.exitCode}');
-  print('OTP command stdout: ${result.stdout}');
-  print('OTP command stderr: ${result.stderr}');
+  logger.info('OTP command exit code: ${result.exitCode}');
+  logger.info('OTP command stdout: ${result.stdout}');
+  logger.info('OTP command stderr: ${result.stderr}');
 
   if (result.exitCode != 0) {
     throw Exception('Failed to generate OTP: ${result.stderr}');
@@ -37,7 +40,7 @@ Future<String> generateOtpWithExistingKeys(String atSign, String keyFile, String
     if (match != null) {
       String otp = match.group(1)!;
       if (otp.length >= 5) {
-        print('✓ OTP generated successfully: $otp');
+        logger.info('✓ OTP generated successfully: $otp');
         return otp;
       }
     }

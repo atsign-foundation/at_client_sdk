@@ -1,5 +1,8 @@
 import 'dart:io';
+import 'package:at_utils/at_logger.dart';
 import 'docker_utils.dart';
+
+final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 
 Future<void> cleanupTestFiles(List<String> filePaths) async {
   for (String filePath in filePaths) {
@@ -7,25 +10,25 @@ Future<void> cleanupTestFiles(List<String> filePaths) async {
       File file = File(filePath);
       if (file.existsSync()) {
         file.deleteSync();
-        print('✓ Cleaned up test file: $filePath');
+        logger.info('✓ Cleaned up test file: $filePath');
       }
     } catch (e) {
-      print('⚠ Failed to cleanup file $filePath: $e');
+      logger.warning('⚠ Failed to cleanup file $filePath: $e');
     }
   }
 }
 
 Future<void> stopDockerServices() async {
-  print('Stopping Docker Compose services...');
+  logger.info('Stopping Docker Compose services...');
   try {
     ProcessResult downResult = await runDockerComposeDown();
     if (downResult.exitCode == 0) {
-      print('✓ Docker Compose services stopped successfully');
+      logger.info('✓ Docker Compose services stopped successfully');
     } else {
-      print('⚠ Warning: docker compose down failed: ${downResult.stderr}');
+      logger.warning('⚠ Warning: docker compose down failed: ${downResult.stderr}');
     }
   } catch (e) {
-    print('⚠ Warning: Failed to stop Docker Compose: $e');
+    logger.warning('⚠ Warning: Failed to stop Docker Compose: $e');
   }
 }
 
@@ -36,7 +39,7 @@ Future<void> cleanupAllKeyFiles() async {
 
   for (FileSystemEntity file in files) {
     if (file is File && file.path.endsWith('.atKeys')) {
-      print('Removing existing key file: ${file.path}');
+      logger.info('Removing existing key file: ${file.path}');
       file.deleteSync();
     }
   }
