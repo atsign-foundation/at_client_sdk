@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:at_utils/at_logger.dart';
-import 'docker_utils.dart';
+import '../docker_utils.dart';
 
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 
