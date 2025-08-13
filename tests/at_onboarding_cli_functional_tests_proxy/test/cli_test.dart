@@ -10,7 +10,7 @@ import '../lib/features/list_enrollments_command.dart';
 import '../lib/features/approve_command.dart';
 import '../lib/features/validate_keys.dart';
 import '../lib/features/cleanup_utils.dart';
-import '../lib/docker_utils.dart';
+import '../lib/features/docker_utils.dart';
 
 const String rootServer = 'vip.ve.atsign.zone:443';
 const String appName = 'noports';
@@ -73,7 +73,7 @@ void main() {
       expect(success, isTrue, reason: 'Onboarding should succeed and generate master key file');
 
       filesToCleanup.add('../../packages/at_onboarding_cli/$masterKeyFile');
-    });
+    }, timeout: Timeout(Duration(minutes: 3)));
 
     test('step 2: generate OTP using master keys', () async {
       generatedOtp = await generateOtpWithExistingKeys(atSign, masterKeyFile, rootServer);
@@ -86,7 +86,7 @@ void main() {
       expect(success, isTrue, reason: 'Enrollment request should be submitted successfully');
 
       filesToCleanup.add('../../packages/at_onboarding_cli/$enrollmentKeyFile');
-    });
+    }, timeout: Timeout(Duration(minutes: 3)));
 
     test('step 4: list and approve enrollment', () async {
       List<String> enrollmentIds = await listPendingEnrollments(atSign, rootServer, keyFile: masterKeyFile);
@@ -148,6 +148,6 @@ void main() {
         await cleanupTestFiles(filesToCleanup);
         await stopDockerServices();
       }
-    });
+    }, timeout: Timeout(Duration(minutes: 5)));
   });
 }

@@ -1,5 +1,5 @@
 import 'dart:io';
-import '../docker_utils.dart';
+import 'docker_utils.dart';
 
 Future<void> cleanupTestFiles(List<String> filePaths) async {
   for (String filePath in filePaths) {

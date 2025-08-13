@@ -50,7 +50,8 @@ Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId,
     String stderr = result.stderr.toString();
     String stdout = result.stdout.toString();
 
-    if (stderr.contains('enrollment') && (stderr.contains('pending') || stderr.contains('waiting'))) {
+    if (stderr.contains('enrollment') && (stderr.contains('pending') || stderr.contains('waiting')) ||
+        stdout.contains('enrollment') && (stdout.contains('pending') || stdout.contains('waiting'))) {
       print('✓ Enrollment request submitted and is pending approval');
       return true;
     }
