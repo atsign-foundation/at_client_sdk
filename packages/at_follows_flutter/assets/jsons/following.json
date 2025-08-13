@@ -1,0 +1,30 @@
+[
+    { 
+        "title": "@dave",
+        "subtitle": "Dave",
+        "isFollowing": true
+    },
+    {
+        "title": "@henry",
+        "subtitle": "Henry",
+        "isFollowing": true
+    },
+    {
+        "title": "@Tom",
+        "subtitle": "Tom",
+        "isFollowing": true
+
+    },
+    {
+        "title": "@xavier",
+        "subtitle": "Xavier",
+        "isFollowing": true
+
+    },
+    {
+        "title": "@Sam",
+        "subtitle": "Sam",
+        "isFollowing": true
+
+    }
+]

@@ -1,0 +1,9 @@
+.idea/libraries/Dart_SDK.xml
+.idea/modules.xml
+.idea/runConfigurations/example_lib_main_dart.xml
+.idea/workspace.xml
+at_onboarding_flutter.iml
+example/.idea/runConfigurations/main_dart.xml
+example/ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+example/ios/Runner.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+pubspec.lock
