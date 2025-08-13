@@ -7,6 +7,7 @@ Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId,
   print('Submitting enrollment request for $atSign with device ID: $deviceId');
 
   String enrollCommand = 'dart run bin/activate_cli.dart enroll -s $otp -a $atSign --rootServer $rootServer -d $deviceId -n "$namespaces" --app $appName --keys $keyFile';
+  print('Executing command: $enrollCommand');
   List<String> enrollParts = enrollCommand.split(' ');
 
   List<String> processedParts = [];

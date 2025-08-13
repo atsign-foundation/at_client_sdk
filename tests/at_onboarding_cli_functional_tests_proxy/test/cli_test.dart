@@ -12,7 +12,7 @@ import '../lib/features/validate_keys.dart';
 import '../lib/features/cleanup_utils.dart';
 import '../lib/features/docker_utils.dart';
 
-const String rootServer = 'vip.ve.atsign.zone:443';
+const String rootServer = 'proxy:vip.ve.atsign.zone:443';
 const String appName = 'noports';
 const String namespaces = 'sshnp:rw,sshrvd:rw';
 
@@ -24,7 +24,7 @@ void main() {
       print('Ensuring clean docker state...');
       try {
         await runDockerComposeDown();
-        await Process.run('docker', ['rm', '-f', 'at_proxyserver', 'at_virtualenv']);
+        await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
       } catch (e) {
         print('Note: Error during cleanup (expected if no containers running): $e');
       }

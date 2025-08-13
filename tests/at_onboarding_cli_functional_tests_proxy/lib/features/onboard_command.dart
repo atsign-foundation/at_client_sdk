@@ -7,6 +7,7 @@ Future<bool> onboardAtSign(String atSign, String cramKey, String keyFile, String
   print('Onboarding $atSign to generate keys...');
 
   String onboardCommand = 'dart run bin/activate_cli.dart -a $atSign --cramkey $cramKey --keys $keyFile --rootServer $rootServer';
+  print('Executing command: $onboardCommand');
   List<String> commandParts = onboardCommand.split(' ');
   String executable = commandParts[0];
   List<String> arguments = commandParts.skip(1).toList();

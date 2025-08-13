@@ -43,6 +43,7 @@ Future<bool> validateEnrollmentKeys(String atSign, String keyFile, String rootSe
 
   print('Testing authentication with enrollment keys...');
   String authCommand = 'dart run bin/activate_cli.dart -a $atSign --keys $keyFile --rootServer $rootServer';
+  print('Executing command: $authCommand');
   List<String> authParts = authCommand.split(' ');
 
   ProcessResult authResult = await Process.run(

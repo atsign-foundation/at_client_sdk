@@ -31,3 +31,7 @@ Future<ProcessResult> runDockerComposeUp({bool detached = true}) async {
   }
   return await runDockerCompose(args);
 }
+
+Future<ProcessResult> removeDockerContainers(List<String> containerNames) async {
+  return await Process.run('docker', ['rm', '-f', ...containerNames]);
+}

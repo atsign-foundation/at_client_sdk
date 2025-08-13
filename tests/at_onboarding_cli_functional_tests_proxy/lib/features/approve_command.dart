@@ -7,6 +7,7 @@ Future<bool> approveEnrollment(String atSign, String enrollmentId, String keyFil
   print('Approving enrollment $enrollmentId for $atSign...');
 
   String approveCommand = 'dart run bin/activate_cli.dart approve -a $atSign -i $enrollmentId --rootServer $rootServer --keys $keyFile';
+  print('Executing command: $approveCommand');
   List<String> approveParts = approveCommand.split(' ');
 
   ProcessResult result = await Process.run(

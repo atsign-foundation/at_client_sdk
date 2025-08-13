@@ -12,6 +12,7 @@ Future<List<String>> listPendingEnrollments(String atSign, String rootServer, {S
   } else {
     listCommand = 'dart run bin/activate_cli.dart list -s pending -a $atSign --rootServer $rootServer';
   }
+  print('Executing command: $listCommand');
   List<String> listParts = listCommand.split(' ');
 
   ProcessResult result = await Process.run(

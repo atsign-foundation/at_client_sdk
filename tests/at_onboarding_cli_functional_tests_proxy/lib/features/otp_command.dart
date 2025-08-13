@@ -7,6 +7,7 @@ Future<String> generateOtpWithExistingKeys(String atSign, String keyFile, String
   print('Generating OTP for $atSign using existing keys: $keyFile');
 
   String otpCommand = 'dart run bin/activate_cli.dart otp -a $atSign --rootServer $rootServer --keys $keyFile';
+  print('Executing command: $otpCommand');
   List<String> otpParts = otpCommand.split(' ');
 
   ProcessResult result = await Process.run(
