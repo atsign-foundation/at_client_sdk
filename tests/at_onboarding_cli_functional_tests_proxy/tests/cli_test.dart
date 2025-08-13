@@ -28,12 +28,12 @@ void main() {
       } catch (e) {
         print('Note: Error during cleanup (expected if no containers running): $e');
       }
-      
+
       // Start fresh
       print('Starting fresh Docker Compose services...');
       bool restartSuccess = await restartDockerCompose();
       expect(restartSuccess, isTrue, reason: 'Docker Compose restart should succeed');
-      
+
       print('Checking system readiness...');
       bool isReady = await checkDockerAndRootResponse();
       expect(isReady, isTrue, reason: 'System should be ready with fresh Docker Compose');
@@ -54,14 +54,14 @@ void main() {
       deviceId = _uuid.v4();
       enrollmentKeyFile = '${deviceId}_key.atKeys';
       filesToCleanup = [];
-      
+
       print('Setup: Using atSign: $atSign for enrollment workflow');
     });
 
     tearDownAll(() async {
       // Clean up key files
       await cleanupTestFiles(filesToCleanup);
-      
+
       // Stop docker containers
       await stopDockerServices();
     });
@@ -69,13 +69,13 @@ void main() {
     test('step 1: fresh onboard to generate master keys', () async {
       // Clean up any existing key files first to ensure fresh start
       await cleanupAllKeyFiles();
-      
+
       // Fresh onboarding
       String cramKey = atSignData['cramKey']!;
-      
+
       bool success = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
       expect(success, isTrue, reason: 'Onboarding should succeed and generate master key file');
-      
+
       // Add to cleanup list
       filesToCleanup.add('../../packages/at_onboarding_cli/$masterKeyFile');
     });
@@ -89,7 +89,7 @@ void main() {
     test('step 3: submit enrollment request', () async {
       bool success = await submitEnrollmentRequest(generatedOtp, atSign, deviceId, enrollmentKeyFile, rootServer, appName, namespaces);
       expect(success, isTrue, reason: 'Enrollment request should be submitted successfully');
-      
+
       // Add enrollment key file to cleanup list
       filesToCleanup.add('../../packages/at_onboarding_cli/$enrollmentKeyFile');
     });
@@ -97,7 +97,7 @@ void main() {
     test('step 4: list and approve enrollment', () async {
       List<String> enrollmentIds = await listPendingEnrollments(atSign, rootServer, keyFile: masterKeyFile);
       expect(enrollmentIds.isNotEmpty, isTrue, reason: 'Should find pending enrollment requests');
-      
+
       String enrollmentId = enrollmentIds.first;
       bool success = await approveEnrollment(atSign, enrollmentId, masterKeyFile, rootServer);
       expect(success, isTrue, reason: 'Enrollment should be approved successfully');
@@ -116,7 +116,7 @@ void main() {
       String deviceId = _uuid.v4();
       String enrollmentKeyFile = '${deviceId}_key.atKeys';
       List<String> filesToCleanup = [
-        '../../packages/at_onboarding_cli/$enrollmentKeyFile', 
+        '../../packages/at_onboarding_cli/$enrollmentKeyFile',
         '../../packages/at_onboarding_cli/$masterKeyFile'
       ];
 
@@ -124,11 +124,11 @@ void main() {
         // Step 1: Clean up and fresh onboard
         print('Step 1: Cleaning and fresh onboarding...');
         await cleanupAllKeyFiles();
-        
+
         String cramKey = atSignData['cramKey']!;
         bool onboardSuccess = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
         expect(onboardSuccess, isTrue, reason: 'Onboarding should succeed');
-        
+
         // Step 2: Generate OTP
         print('Step 2: Generating OTP...');
         String otp = await generateOtpWithExistingKeys(atSign, masterKeyFile, rootServer);
@@ -143,7 +143,7 @@ void main() {
         print('Step 4: Listing and approving enrollment...');
         List<String> enrollmentIds = await listPendingEnrollments(atSign, rootServer, keyFile: masterKeyFile);
         expect(enrollmentIds.isNotEmpty, isTrue);
-        
+
         String enrollmentId = enrollmentIds.first;
         bool approvalSuccess = await approveEnrollment(atSign, enrollmentId, masterKeyFile, rootServer);
         expect(approvalSuccess, isTrue);

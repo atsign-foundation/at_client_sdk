@@ -35,7 +35,7 @@ Future<void> cleanupAllKeyFiles() async {
   const String workingDirectory = '../../packages/at_onboarding_cli';
   Directory workingDir = Directory(workingDirectory);
   List<FileSystemEntity> files = workingDir.listSync();
-  
+
   for (FileSystemEntity file in files) {
     if (file is File && file.path.endsWith('.atKeys')) {
       print('Removing existing key file: ${file.path}');
