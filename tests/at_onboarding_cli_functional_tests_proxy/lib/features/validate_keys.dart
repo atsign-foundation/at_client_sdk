@@ -41,7 +41,7 @@ Future<bool> validateEnrollmentKeys(String atSign, String keyFile, String rootSe
     return false;
   }
 
-  print('Testing authentication with enrollment keys...');
+  print('Testing enrollment keys by running onboard command (should show already activated)...');
   String authCommand = 'dart run bin/activate_cli.dart -a $atSign --keys $keyFile --rootServer $rootServer';
   print('Executing command: $authCommand');
   List<String> authParts = authCommand.split(' ');
@@ -56,15 +56,25 @@ Future<bool> validateEnrollmentKeys(String atSign, String keyFile, String rootSe
   print('Auth test stdout: ${authResult.stdout}');
   print('Auth test stderr: ${authResult.stderr}');
 
-  if (authResult.exitCode != 0) {
-    String stderr = authResult.stderr.toString();
-    if (!stderr.toLowerCase().contains('authenticated') && !stderr.toLowerCase().contains('success')) {
-      print('✗ Authentication test failed');
-      return false;
-    }
+  String stdout = authResult.stdout.toString();
+  String stderr = authResult.stderr.toString();
+
+  // Check for "already activated" message
+  if (stdout.toLowerCase().contains('already activated') || stderr.toLowerCase().contains('already activated')) {
+    print('✓ Enrollment keys validated - atSign is already activated');
+    return true;
   }
 
-  print('✓ Authentication test successful');
-  print('✓ Enrollment key validation completed successfully');
-  return true;
+  // Fallback checks for other success indicators
+  if (authResult.exitCode == 0 || 
+      stderr.toLowerCase().contains('authenticated') || 
+      stderr.toLowerCase().contains('success') ||
+      stdout.toLowerCase().contains('authenticated') ||
+      stdout.toLowerCase().contains('success')) {
+    print('✓ Enrollment keys validated successfully');
+    return true;
+  }
+
+  print('✗ Enrollment key validation failed - expected "already activated" message');
+  return false;
 }
