@@ -36,7 +36,7 @@ jobs:
 
       - name: Run osv-scanner
         run: |
-          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@04a8728383d8f286cf2b0f110e68482e8773df6e # v2.2.1
           osv-scanner --lockfile=./pubspec.lock
 
       # Temporary, until at_chops is added to the workspace
@@ -46,6 +46,6 @@ jobs:
 
       - name: Run osv-scanner in at_chops (temp)
         run: |
-          go install github.com/google/osv-scanner/cmd/osv-scanner@6316373e47d7e3e4b4fd3630c4bbc10987738de6 # v1.4.3
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@04a8728383d8f286cf2b0f110e68482e8773df6e # v2.2.1
           osv-scanner --lockfile=./pubspec.lock
         working-directory: packages/at_chops
