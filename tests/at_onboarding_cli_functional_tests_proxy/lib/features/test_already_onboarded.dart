@@ -9,7 +9,7 @@ final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 Future<bool> testOnboardOnAlreadyActivatedAtSign(String atSign, String rootServer) async {
   logger.info('Testing onboard on already activated atSign (should show already activated)...');
 
-  String onboardCommand = 'dart run bin/activate_cli.dart onboard -a $atSign --rootServer $rootServer --cramkey dummy';
+  String onboardCommand = 'dart run bin/activate_cli.dart onboard -a $atSign --rootServer $rootServer --yes';
   logger.info('Executing command: $onboardCommand');
   List<String> onboardParts = onboardCommand.split(' ');
 
