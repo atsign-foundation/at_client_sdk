@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'lib/features/docker_utils.dart';
 
 const List<String> requiredContainers = ['at_proxyserver', 'at_virtualenv'];
 const String yesFlag = '-y';
@@ -61,16 +62,16 @@ Future<bool> checkDockerContainers() async {
 Future<bool> restartDockerCompose() async {
   try {
     print('Stopping Docker Compose services...');
-    ProcessResult downResult = await Process.run('docker-compose', ['down']);
+    ProcessResult downResult = await runDockerComposeDown();
 
     if (downResult.exitCode != 0) {
-      print('Warning: docker-compose down failed: ${downResult.stderr}');
+      print('Warning: docker compose down failed: ${downResult.stderr}');
     } else {
       print('Docker Compose services stopped successfully');
     }
 
     print('Starting Docker Compose services...');
-    ProcessResult upResult = await Process.run('docker-compose', ['up', '-d']);
+    ProcessResult upResult = await runDockerComposeUp();
 
     if (upResult.exitCode != 0) {
       print('Failed to start Docker Compose services: ${upResult.stderr}');

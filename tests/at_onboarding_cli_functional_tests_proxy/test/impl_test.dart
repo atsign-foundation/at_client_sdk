@@ -7,6 +7,7 @@ import 'package:at_lookup/at_lookup.dart';
 import '../check_docker_readiness.dart';
 import '../lib/at_demo_data_wrapper.dart';
 import '../lib/features/cleanup_utils.dart';
+import '../lib/features/docker_utils.dart';
 
 const String rootServer = 'vip.ve.atsign.zone:443';
 const String appName = 'noports';
@@ -20,7 +21,7 @@ void main() {
     test('fresh docker environment setup', () async {
       print('Ensuring clean docker state...');
       try {
-        await Process.run('docker-compose', ['down']);
+        await runDockerComposeDown();
         await Process.run('docker', ['rm', '-f', 'at_proxyserver', 'at_virtualenv']);
       } catch (e) {
         print('Note: Error during cleanup (expected if no containers running): $e');

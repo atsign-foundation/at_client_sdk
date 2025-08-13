@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'docker_utils.dart';
 
 Future<void> cleanupTestFiles(List<String> filePaths) async {
   for (String filePath in filePaths) {
@@ -17,11 +18,11 @@ Future<void> cleanupTestFiles(List<String> filePaths) async {
 Future<void> stopDockerServices() async {
   print('Stopping Docker Compose services...');
   try {
-    ProcessResult downResult = await Process.run('docker-compose', ['down']);
+    ProcessResult downResult = await runDockerComposeDown();
     if (downResult.exitCode == 0) {
       print('✓ Docker Compose services stopped successfully');
     } else {
-      print('⚠ Warning: docker-compose down failed: ${downResult.stderr}');
+      print('⚠ Warning: docker compose down failed: ${downResult.stderr}');
     }
   } catch (e) {
     print('⚠ Warning: Failed to stop Docker Compose: $e');
