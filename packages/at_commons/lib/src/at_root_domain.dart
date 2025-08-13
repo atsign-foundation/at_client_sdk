@@ -1,8 +1,8 @@
 import 'package:at_commons/at_commons.dart' show IllegalArgumentException;
 
 class AtRootDomain {
-  String rootDomain;
-  int rootPort;
+  final String rootDomain;
+  final int rootPort;
 
   const AtRootDomain(this.rootDomain, this.rootPort);
 
