@@ -1,3 +1,7 @@
+## 5.6.0
+
+- feat: add `AtRootDomain` with basic parsing including proxy.
+
 ## 5.5.0
 
 - chore(deps): bump uuid to "^4.0.0"
