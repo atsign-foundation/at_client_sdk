@@ -124,9 +124,14 @@ void main() {
       expect(enrollmentSuccess, isTrue, reason: 'Enrollment request should complete successfully after approval');
     }, timeout: Timeout(Duration(minutes: 5)));
 
-    test('step 5: validate enrollment keys', () async {
+    test('step 5: validate enrollment keys with list command', () async {
       bool success = await validateEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
-      expect(success, isTrue, reason: 'Enrollment keys should be valid and functional');
+      expect(success, isTrue, reason: 'Enrollment keys should be valid and functional for listing');
+    });
+
+    test('step 6: test onboard with enrollment keys (should show already activated)', () async {
+      bool success = await testOnboardWithEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
+      expect(success, isTrue, reason: 'Onboard command should show atSign is already activated');
     });
   });
 
@@ -166,9 +171,13 @@ void main() {
         bool approvalSuccess = await approveEnrollment(atSign, enrollmentId, masterKeyFile, rootServer);
         expect(approvalSuccess, isTrue);
 
-        logger.info('Step 5: Validating enrollment keys...');
+        logger.info('Step 5: Validating enrollment keys with list command...');
         bool validationSuccess = await validateEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
         expect(validationSuccess, isTrue);
+
+        logger.info('Step 6: Testing onboard with enrollment keys (should show already activated)...');
+        bool onboardTestSuccess = await testOnboardWithEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
+        expect(onboardTestSuccess, isTrue);
 
         logger.info('✓ Complete enrollment workflow completed successfully');
       } finally {
