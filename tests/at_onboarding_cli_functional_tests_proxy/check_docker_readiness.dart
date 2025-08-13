@@ -8,27 +8,52 @@ const String expectedResponse = 'vip.ve.atsign.zone:443';
 const Duration connectionTimeout = Duration(seconds: 10);
 const List<String> requiredContainers = ['at_proxyserver', 'at_virtualenv'];
 const String yesFlag = '-y';
+const int maxRetries = 3;
+const Duration baseRetryDelay = Duration(seconds: 2);
 
 Future<bool> checkDockerAndRootResponse() async {
-  try {
-    bool dockerReady = await checkDockerContainers();
-    if (!dockerReady) {
-      print('Docker check failed: No running containers found');
-      return false;
+  for (int attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      print('Attempt $attempt of $maxRetries...');
+      
+      bool dockerReady = await checkDockerContainers();
+      if (!dockerReady) {
+        if (attempt < maxRetries) {
+          print('Docker check failed: No running containers found. Retrying in ${baseRetryDelay.inSeconds * attempt} seconds...');
+          await Future.delayed(Duration(seconds: baseRetryDelay.inSeconds * attempt));
+          continue;
+        } else {
+          print('Docker check failed: No running containers found');
+          return false;
+        }
+      }
+      
+      bool relayReady = await checkForRootResponse();
+      if (!relayReady) {
+        if (attempt < maxRetries) {
+          print('Relay check failed: $relayHost:$relayPort not responding correctly. Retrying in ${baseRetryDelay.inSeconds * attempt} seconds...');
+          await Future.delayed(Duration(seconds: baseRetryDelay.inSeconds * attempt));
+          continue;
+        } else {
+          print('Relay check failed: $relayHost:$relayPort not responding correctly');
+          return false;
+        }
+      }
+      
+      print('All checks passed: Docker and relay are ready');
+      return true;
+    } catch (e) {
+      if (attempt < maxRetries) {
+        print('Error during readiness checks: $e. Retrying in ${baseRetryDelay.inSeconds * attempt} seconds...');
+        await Future.delayed(Duration(seconds: baseRetryDelay.inSeconds * attempt));
+        continue;
+      } else {
+        print('Error during readiness checks: $e');
+        return false;
+      }
     }
-    
-    bool relayReady = await checkForRootResponse();
-    if (!relayReady) {
-      print('Relay check failed: $relayHost:$relayPort not responding correctly');
-      return false;
-    }
-    
-    print('All checks passed: Docker and relay are ready');
-    return true;
-  } catch (e) {
-    print('Error during readiness checks: $e');
-    return false;
   }
+  return false;
 }
 
 Future<bool> checkDockerContainers() async {
