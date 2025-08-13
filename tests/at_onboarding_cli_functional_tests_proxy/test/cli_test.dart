@@ -81,21 +81,27 @@ void main() {
       print('Generated OTP: $generatedOtp');
     });
 
-    test('step 3: submit enrollment request', () async {
-      bool success = await submitEnrollmentRequest(generatedOtp, atSign, deviceId, enrollmentKeyFile, rootServer, appName, namespaces);
-      expect(success, isTrue, reason: 'Enrollment request should be submitted successfully');
-
+    test('step 3 & 4: submit enrollment request and approve concurrently', () async {
       filesToCleanup.add('../../packages/at_onboarding_cli/$enrollmentKeyFile');
-    }, timeout: Timeout(Duration(minutes: 3)));
 
-    test('step 4: list and approve enrollment', () async {
+      // Start enrollment request (this will wait for approval)
+      Future<bool> enrollmentFuture = submitEnrollmentRequest(generatedOtp, atSign, deviceId, enrollmentKeyFile, rootServer, appName, namespaces);
+
+      // Give enrollment request a moment to be submitted and start waiting
+      await Future.delayed(Duration(seconds: 5));
+
+      // Find and approve the enrollment while Step 3 is waiting
       List<String> enrollmentIds = await listPendingEnrollments(atSign, rootServer, keyFile: masterKeyFile);
       expect(enrollmentIds.isNotEmpty, isTrue, reason: 'Should find pending enrollment requests');
 
       String enrollmentId = enrollmentIds.first;
-      bool success = await approveEnrollment(atSign, enrollmentId, masterKeyFile, rootServer);
-      expect(success, isTrue, reason: 'Enrollment should be approved successfully');
-    });
+      bool approvalSuccess = await approveEnrollment(atSign, enrollmentId, masterKeyFile, rootServer);
+      expect(approvalSuccess, isTrue, reason: 'Enrollment should be approved successfully');
+
+      // Wait for enrollment to complete (should finish after approval)
+      bool enrollmentSuccess = await enrollmentFuture;
+      expect(enrollmentSuccess, isTrue, reason: 'Enrollment request should complete successfully after approval');
+    }, timeout: Timeout(Duration(minutes: 5)));
 
     test('step 5: validate enrollment keys', () async {
       bool success = await validateEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);

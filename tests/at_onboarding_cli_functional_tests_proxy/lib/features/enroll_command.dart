@@ -1,7 +1,7 @@
 import 'dart:io';
 
 const String workingDirectory = '../../packages/at_onboarding_cli';
-const Duration enrollmentTimeout = Duration(seconds: 30);
+const Duration enrollmentTimeout = Duration(seconds: 180);
 
 Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId, String keyFile, String rootServer, String appName, String namespaces) async {
   print('Submitting enrollment request for $atSign with device ID: $deviceId');
@@ -38,13 +38,7 @@ Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId,
     processedParts[0],
     processedParts.skip(1).toList(),
     workingDirectory: workingDirectory,
-  ).timeout(enrollmentTimeout).catchError((error) {
-    if (error.toString().contains('TimeoutException')) {
-      print('✓ Enrollment request submitted but timed out waiting for approval (expected)');
-      return ProcessResult(0, 1, '', 'TimeoutException: Enrollment submitted, waiting for approval');
-    }
-    throw error;
-  });
+  ).timeout(enrollmentTimeout);
 
   print('Enrollment command exit code: ${result.exitCode}');
   print('Enrollment command stdout: ${result.stdout}');
@@ -63,7 +57,7 @@ Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId,
       return true;
     }
 
-    if (stderr.contains('AT0023') || stderr.contains('Waited for') || stderr.contains('millis') || stderr.contains('TimeoutException: Enrollment submitted')) {
+    if (stderr.contains('AT0023') || stderr.contains('Waited for') || stderr.contains('millis')) {
       print('✓ Enrollment request submitted but timed out waiting for approval');
       return true;
     }
