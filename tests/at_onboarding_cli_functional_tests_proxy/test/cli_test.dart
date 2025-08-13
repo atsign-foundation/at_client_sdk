@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import '../check_docker_readiness.dart';
-import '../lib/at_demo_data_wrapper.dart';
+import 'package:at_demo_data/at_demo_data.dart';
 import '../lib/features/onboard_command.dart';
 import '../lib/features/otp_command.dart';
 import '../lib/features/enroll_command.dart';
@@ -47,8 +47,9 @@ void main() {
     late List<String> filesToCleanup;
 
     setUpAll(() {
-      atSign = atSignData['atSign']!;
-      masterKeyFile = 'gary_master_${_uuid.v4()}.atKeys';
+      const int atSignIndex = 31;
+      atSign = allAtsigns[atSignIndex];
+      masterKeyFile = '${atSign.substring(1)}_master_${_uuid.v4()}.atKeys';
       deviceId = _uuid.v4();
       enrollmentKeyFile = '${deviceId}_key.atKeys';
       filesToCleanup = [];
@@ -65,7 +66,7 @@ void main() {
     test('step 1: fresh onboard to generate master keys', () async {
       await cleanupAllKeyFiles();
 
-      String cramKey = atSignData['cramKey']!;
+      String cramKey = cramKeyMap[atSign] ?? '';
 
       bool success = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
       expect(success, isTrue, reason: 'Onboarding should succeed and generate master key file');
@@ -103,8 +104,9 @@ void main() {
 
   group('End-to-End Integration', () {
     test('complete enrollment workflow', () async {
-      String atSign = atSignData['atSign']!;
-      String masterKeyFile = 'integration_master_${_uuid.v4()}.atKeys';
+      const int atSignIndexE2E = 32;
+      String atSign = allAtsigns[atSignIndexE2E];
+      String masterKeyFile = '${atSign.substring(1)}_integration_master_${_uuid.v4()}.atKeys';
       String deviceId = _uuid.v4();
       String enrollmentKeyFile = '${deviceId}_key.atKeys';
       List<String> filesToCleanup = [
@@ -116,7 +118,7 @@ void main() {
         print('Step 1: Cleaning and fresh onboarding...');
         await cleanupAllKeyFiles();
 
-        String cramKey = atSignData['cramKey']!;
+        String cramKey = cramKeyMap[atSign] ?? '';
         bool onboardSuccess = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
         expect(onboardSuccess, isTrue, reason: 'Onboarding should succeed');
 
