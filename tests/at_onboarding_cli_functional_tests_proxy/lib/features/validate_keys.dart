@@ -67,9 +67,9 @@ Future<bool> validateEnrollmentKeys(String atSign, String keyFile, String rootSe
     String stdout = listResult.stdout.toString();
 
     // Check for authentication success indicators even with non-zero exit code
-    if (stderr.toLowerCase().contains('connected') || 
+    if (stderr.toLowerCase().contains('connected') ||
         stdout.toLowerCase().contains('connected') ||
-        stderr.toLowerCase().contains('authenticated') || 
+        stderr.toLowerCase().contains('authenticated') ||
         stdout.toLowerCase().contains('authenticated')) {
       logger.info('✓ Enrollment keys validated - successfully connected/authenticated');
       return true;

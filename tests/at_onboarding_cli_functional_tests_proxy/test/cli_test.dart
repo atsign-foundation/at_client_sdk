@@ -24,13 +24,13 @@ void main() {
   group('System Readiness', () {
     test('fresh docker environment setup', () async {
       logger.info('Checking current docker state...');
-      
+
       // Check if docker compose services are running
       bool composeRunning = await isDockerComposeRunning();
-      
+
       // Check if specific containers are running
       bool containersRunning = await areContainersRunning(['at_proxyserver', 'at_virtualenv']);
-      
+
       if (composeRunning || containersRunning) {
         logger.info('Found running containers/services, cleaning up...');
         try {
@@ -38,7 +38,7 @@ void main() {
             logger.info('Stopping Docker Compose services...');
             await runDockerComposeDown();
           }
-          
+
           if (containersRunning) {
             logger.info('Removing specific containers...');
             await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);

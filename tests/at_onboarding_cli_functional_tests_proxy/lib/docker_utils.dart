@@ -7,7 +7,7 @@ Future<ProcessResult> runDockerCompose(List<String> arguments) async {
   ProcessResult result = await Process.run('docker-compose', arguments).catchError((error) async {
     return await Process.run('docker', ['compose', ...arguments]);
   });
-  
+
   if (result.exitCode != 0) {
     try {
       result = await Process.run('docker', ['compose', ...arguments]);
@@ -19,7 +19,7 @@ Future<ProcessResult> runDockerCompose(List<String> arguments) async {
       }
     }
   }
-  
+
   return result;
 }
 
@@ -68,7 +68,7 @@ Future<bool> isDockerComposeRunning() async {
       // Try with docker compose
       result = await Process.run('docker', ['compose', 'ps', '-q']);
     }
-    
+
     if (result.exitCode == 0) {
       String output = result.stdout.toString().trim();
       return output.isNotEmpty;
