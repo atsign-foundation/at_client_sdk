@@ -19,12 +19,16 @@ jobs:
       - id: checkcert
         name: Check for new cert
         run: |
+          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs'
+          
           cd tests/at_functional_test/test/testData
-          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
-          wget -O cert.pem ${CERTURL}
+          wget -O cert.pem ${CERTURL}/cert.pem
           
           cd ../../../at_onboarding_cli_functional_tests_proxy/certs
-          wget -O cert.pem ${CERTURL}
+          wget -O cacert.pem ${CERTURL}/cacert.pem
+          wget -O cert.pem ${CERTURL}/cert.pem
+          wget -O fullchain.pem ${CERTURL}/fullchain.pem
+          wget -O privkey.pem ${CERTURL}/privkey.pem
           
           cd ../../../../
           if [ -z "$(git status --porcelain)" ]; then
@@ -45,12 +49,16 @@ jobs:
       - name: Update stable version
         id: getcert
         run: |
+          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs'
+          
           cd tests/at_functional_test/test/testData
-          CERTURL='https://raw.githubusercontent.com/atsign-foundation/at_server/trunk/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs/cert.pem'
-          wget -O cert.pem ${CERTURL}
+          wget -O cert.pem ${CERTURL}/cert.pem
           
           cd ../../../at_onboarding_cli_functional_tests_proxy/certs
-          wget -O cert.pem ${CERTURL}
+          wget -O cacert.pem ${CERTURL}/cacert.pem
+          wget -O cert.pem ${CERTURL}/cert.pem
+          wget -O fullchain.pem ${CERTURL}/fullchain.pem
+          wget -O privkey.pem ${CERTURL}/privkey.pem
 
       - name: Create Pull Request
         id: cpr
