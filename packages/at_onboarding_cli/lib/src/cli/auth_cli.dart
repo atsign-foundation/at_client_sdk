@@ -1090,8 +1090,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
     ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType])
-    ..isUsingProxy = rootDomain.isProxyAddress;
+        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';

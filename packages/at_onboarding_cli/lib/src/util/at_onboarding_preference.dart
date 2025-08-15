@@ -29,7 +29,7 @@ class AtOnboardingPreference extends AtClientPreference {
   int apkamAuthRetryDurationMins = 30;
 
   /// Flag to indicate if we're using a proxy server for connection
-  bool isUsingProxy = false;
+  bool get isUsingProxy => rootDomain.startsWith("proxy:");
 
   /// The password (or pass-phrase) with which the atKeys file is encrypted/decrypted.
   String? passPhrase;

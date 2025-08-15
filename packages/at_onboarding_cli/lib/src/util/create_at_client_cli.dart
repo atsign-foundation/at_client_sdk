@@ -51,8 +51,7 @@ Future<AtClient> createAtClient(
     ..passPhrase = passPhrase
     ..hiveStoragePath = localStoragePathToUse
     ..commitLogPath = commitLogStoragePathToUse
-    ..downloadPath = downloadPathToUse
-    ..isUsingProxy = parsedRootDomain.isProxyAddress;
+    ..downloadPath = downloadPathToUse;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
       atSign, atOnboardingPreference,
