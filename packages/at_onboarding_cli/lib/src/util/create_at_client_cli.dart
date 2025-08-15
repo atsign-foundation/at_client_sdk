@@ -40,48 +40,19 @@ Future<AtClient> createAtClient(
 
   String rootServer = rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn;
   
-  // Parse rootServer to extract domain and port
-  String parsedRootDomain;
-  int parsedRootPort;
-  bool isUsingProxy;
-  
-  if (rootServer.startsWith('proxy:')) {
-    isUsingProxy = true;
-    String serverPart = rootServer.substring(6); // Remove 'proxy:' prefix
-    
-    if (serverPart.contains(':')) {
-      // proxy:host:port format
-      List<String> parts = serverPart.split(':');
-      parsedRootDomain = 'proxy:${parts[0]}';
-      parsedRootPort = int.tryParse(parts[1]) ?? 64;
-    } else {
-      // proxy:host format
-      parsedRootDomain = rootServer;
-      parsedRootPort = 64;
-    }
-  } else if (rootServer.contains(':')) {
-    // host:port format
-    isUsingProxy = false;
-    List<String> parts = rootServer.split(':');
-    parsedRootDomain = parts[0];
-    parsedRootPort = int.tryParse(parts[1]) ?? 64;
-  } else {
-    // host format
-    isUsingProxy = false;
-    parsedRootDomain = rootServer;
-    parsedRootPort = 64;
-  }
+  // Parse rootServer using AtRootDomain
+  AtRootDomain parsedRootDomain = AtRootDomain.parse(rootServer);
   
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..atKeysFilePath = atKeysFilePathToUse
     ..namespace = nameSpace
-    ..rootDomain = parsedRootDomain
-    ..rootPort = parsedRootPort
+    ..rootDomain = parsedRootDomain.rootDomain
+    ..rootPort = parsedRootDomain.rootPort
     ..passPhrase = passPhrase
     ..hiveStoragePath = localStoragePathToUse
     ..commitLogPath = commitLogStoragePathToUse
     ..downloadPath = downloadPathToUse
-    ..isUsingProxy = isUsingProxy;
+    ..isUsingProxy = parsedRootDomain.isProxyAddress;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
       atSign, atOnboardingPreference,
