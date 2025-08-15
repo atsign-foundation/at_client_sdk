@@ -77,7 +77,7 @@ jobs:
       # Install dependencies of at_client_mobile
       - name: Installing dependencies
         working-directory: packages/at_client_mobile
-        run: flutter pub get
+        run: flutter pub get --no-example
 
       # Analyze at_client_mobile package
       - name: flutter analyze
