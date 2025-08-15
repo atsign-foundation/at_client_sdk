@@ -41,7 +41,7 @@ jobs:
           author: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           signoff: false
           add-paths: .
-          branch: bot-new-stable-version
+          branch: bot-new-${{ matrix.channel }}-version
           delete-branch: true
           title: "chore: New Flutter ${{ matrix.channel }} version"
           labels: |
