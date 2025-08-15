@@ -1,0 +1,51 @@
+name: Flutter Channel
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "42 7 * * *" # At 0742 each day
+
+permissions: # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  check_for_new_channel_version:
+    strategy:
+      fail-fast: true
+      matrix:
+        channel: ["stable", "beta"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo content
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Get flutter ${{ matrix.channel }} ref
+        run: |
+          sha=$(
+            curl -fsSL \
+              --retry 3 \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/flutter/flutter/branches/${{ matrix.channel }} |
+            jq -r '.commit.sha'
+          )
+          echo "$sha" >flutter_ref-${{ matrix.channel }}
+        working-directory: ./actions/setup-flutter-and-dart/
+
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+          commit-message: "chore: Bump flutter_ref file to match latest ${{ matrix.channel }} release"
+          committer: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          signoff: false
+          add-paths: .
+          branch: bot-new-stable-version
+          delete-branch: true
+          title: "chore: New Flutter ${{ matrix.channel }} version"
+          labels: |
+            operations
+          assignees: xavierchanth
+          reviewers: gkc
+          draft: false
