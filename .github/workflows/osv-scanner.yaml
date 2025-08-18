@@ -26,26 +26,17 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: "stable"
-          cache-dependency-path: tools/osv-scanner/go.sum
-
       - name: Install workspace dependencies
         run: dart pub get
-
-      - name: Run osv-scanner
-        run: |
-          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@04a8728383d8f286cf2b0f110e68482e8773df6e # v2.2.1
-          osv-scanner --lockfile=./pubspec.lock
 
       # Temporary, until at_chops is added to the workspace
       - name: Install at_chops dependencies (temp)
         run: dart pub get
         working-directory: packages/at_chops
 
-      - name: Run osv-scanner in at_chops (temp)
-        run: |
-          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@04a8728383d8f286cf2b0f110e68482e8773df6e # v2.2.1
-          osv-scanner --lockfile=./pubspec.lock
-        working-directory: packages/at_chops
+      - name: Run osv-scanner
+        uses: google/osv-scanner-action/osv-scanner-action@456ceb78310755116e0a3738121351006286b797 # v2.2.1
+        with:
+          scan-args: |-
+            --lockfile=./pubspec.lock
+            --lockfile=./packages/at_chops/pubspec.lock
