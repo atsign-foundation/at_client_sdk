@@ -361,9 +361,14 @@ Future<int> wrappedMain(List<String> arguments) async {
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
+  
+  String rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  
+  // Parse rootServer using AtRootDomain
+  AtRootDomain rootDomain = AtRootDomain.parse(rootServer);
 
   SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
-      ar[AuthCliArgs.argNameAtDirectoryFqdn], 64);
+      rootDomain.rootDomain, rootDomain.rootPort);
   try {
     await saf.findSecondary(atSign);
   } on SecondaryNotFoundException {
@@ -378,8 +383,8 @@ Future<int> status(ArgResults ar) async {
   try {
     AtLookUp al = AtLookupImpl(
       atSign,
-      ar[AuthCliArgs.argNameAtDirectoryFqdn],
-      64,
+      rootDomain.rootDomain,
+      rootDomain.rootPort,
     );
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
@@ -1072,8 +1077,14 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 @visibleForTesting
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
+  String rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  
+  // Parse rootServer using AtRootDomain
+  AtRootDomain rootDomain = AtRootDomain.parse(rootServer);
+  
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = ar[AuthCliArgs.argNameAtDirectoryFqdn]
+    ..rootDomain = rootDomain.rootDomain
+    ..rootPort = rootDomain.rootPort
     ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
     ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]

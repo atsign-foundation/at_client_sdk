@@ -108,8 +108,14 @@ class EnrollmentOperations {
       ..deviceName = deviceName
       ..enrollmentListFilter = [EnrollmentStatus.pending];
 
-    return (await enrollmentService.fetchEnrollmentRequests(
-        enrollmentListParams: requestParam))[0];
+    List<Enrollment> enrollments = await enrollmentService.fetchEnrollmentRequests(
+        enrollmentListParams: requestParam);
+    
+    if (enrollments.isEmpty) {
+      throw Exception('No pending enrollment requests found for appName: $appName, deviceName: $deviceName');
+    }
+    
+    return enrollments[0];
   }
 
   AtOnboardingPreference getOnboardingPreference(

@@ -1,3 +1,8 @@
+## 1.14.0
+
+- Added proxy support for: `at_activate onboard --rootServer proxy:<host>:<port>`
+- Added proxy support for: `at_activate enroll --rootServer proxy:<host>:<port>`
+
 ## 1.13.0
 
 - add a warning message before onboarding attempts to cut keys that presents a message explaining importance of backing up keys and prompting the user asking if they understand the risks of not backing up keys

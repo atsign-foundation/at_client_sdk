@@ -55,6 +55,36 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
 
+  bool get _isUsingProxy => atOnboardingPreference.isUsingProxy;
+
+  /// Sends from: command if using proxy
+  /// [context] - description of the operation for logging (defaults to 'sendFromCommand')
+  /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
+  Future<bool> _sendFromCommandIfUsingProxy(AtLookUp atLookUp, {String context = 'sendFromCommand', String? atSign}) async {
+    if (!_isUsingProxy) {
+      return false;
+    }
+
+    String targetAtSign = atSign ?? _atSign;
+    try {
+      String? fromResponse = await atLookUp.executeCommand('from:$targetAtSign\n', auth: false);
+      logger.info('$context: from: command successful for $targetAtSign, response: $fromResponse');
+
+      if (fromResponse == null || fromResponse.isEmpty) {
+        logger.warning('$context: from: command returned empty response for $targetAtSign');
+        return false;
+      }
+      if (fromResponse.contains('error:')) {
+        logger.warning('$context: from: command returned error for $targetAtSign: $fromResponse');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      logger.warning('$context: from: command failed for $targetAtSign: $e - continuing anyway');
+      return false;
+    }
+  }
+
   Future<void> _initAtClient(AtChops atChops, {String? enrollmentId}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
     if (atOnboardingPreference.skipSync) {
@@ -88,12 +118,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultActivationCheckInterval,
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
   }) async {
-    // cram auth doesn't use at_chops. So create at_lookup here.
+    // Ensure we have an AtLookUp instance and send from: command if using proxy
     AtLookupImpl atLookUpImpl = AtLookupImpl(
       _atSign,
       atOnboardingPreference.rootDomain,
       atOnboardingPreference.rootPort,
     );
+
+    await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'onboard');
+
+    // log the atOnboardingPreference.rootDomain and port
+    logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
+        '${atOnboardingPreference.rootPort}');
 
     // get cram_secret from either from AtOnboardingPreference
     // or fetch from the registrar using verification code sent to email
@@ -240,6 +276,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'appName and deviceName are mandatory for enrollment');
     }
 
+    _atLookUp ??= AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
+
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
         appName: appName,
         deviceName: deviceName,
@@ -250,6 +292,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+
+    if (_isUsingProxy) {
+      // When using a proxy, send from: command to ensure correct atSign context
+      await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'enroll');
+    }
+
     logger.finer('sendEnrollRequest: submitting enrollment request');
     _addProgress(
         'Enroll', 'submitting enrollment request', ProgressEventType.info);
@@ -270,6 +318,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool logProgress = true,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
+    _atLookUp ??= AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+    );
+
+    if (_isUsingProxy) {
+      // When using a proxy, send from: command to ensure correct atSign context
+      await _sendFromCommandIfUsingProxy(_atLookUp!, context: 'awaitApproval');
+    }
+
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
         AtEncryptionKeyPair.create(
             enrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!, ''),
@@ -278,12 +337,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atChopsKeys.apkamSymmetricKey =
         AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!);
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-
-    atLookUpImpl.atChops = AtChopsImpl(atChopsKeys);
-    // ?? to support mocking
-    _atLookUp ??= atLookUpImpl;
+    // Create AtChops instance and assign it to the lookup for PKAM authentication
+    AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
+    _atLookUp!.atChops = atChops;
 
     // Pkam auth will be attempted asynchronously until enrollment is approved
     // or denied or times out. If denied or timed out, an exception will be
@@ -640,7 +696,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   ///returns secondary server status
-  Future<AtStatus> getServerStatus() {
+  Future<AtStatus> getServerStatus() async {
     AtServerStatus atServerStatus = AtStatusImpl(
         rootUrl: atOnboardingPreference.rootDomain,
         rootPort: atOnboardingPreference.rootPort);
@@ -649,22 +705,38 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   @override
   Future<bool> isOnboarded() async {
-    late AtStatus secondaryStatus;
-    try {
-      secondaryStatus = await getServerStatus();
-    } catch (e) {
-      stderr.writeln('${chalk.brightRed('[Error]')} $e');
+
+    if (_isUsingProxy) {
+      // When using a proxy, try a simple lookup command that doesn't require auth
+      AtLookUp atLookUp = AtLookupImpl(_atSign, atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      await _sendFromCommandIfUsingProxy(atLookUp, context: 'isOnboarded');
+
+      try {
+        String? pkeyResponse = await _atLookUp!.executeCommand('lookup:publickey$_atSign\n', auth: false);
+        if (pkeyResponse != null && !pkeyResponse.contains('error:') && !pkeyResponse.contains('null') && pkeyResponse.trim().isNotEmpty) {
+          _isAtsignOnboarded = true;
+          return true;
+        }
+        return false;
+      } catch (e) {
+        logger.info('isOnboarded: lookup failed, trying alternative approach: $e');
+        return false;
+      }
+    } else {
+      // When not using a proxy, use the standard AtServerStatus method
+      try {
+        AtStatus secondaryStatus = await getServerStatus();
+        if (secondaryStatus.status() == AtSignStatus.activated) {
+          _isAtsignOnboarded = true;
+          return true;
+        }
+        return false;
+      } catch (e) {
+        stderr.writeln('${chalk.brightRed('[Error]')} $e');
+        throw AtActivateException('Could not determine atsign activation status: $e',
+            intent: Intent.fetchData);
+      }
     }
-    if (secondaryStatus.status() == AtSignStatus.activated) {
-      _isAtsignOnboarded = true;
-      return _isAtsignOnboarded;
-    } else if (secondaryStatus.status() == AtSignStatus.teapot) {
-      return false;
-    }
-    stderr.writeln(
-        '${chalk.brightRed('[Error]')} atsign($_atSign) status is \'${secondaryStatus.status()!.name}\'');
-    throw AtActivateException('Could not determine atsign activation status',
-        intent: Intent.fetchData);
   }
 
   ///extracts cram secret from qrCode

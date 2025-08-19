@@ -5,7 +5,7 @@ import 'package:args/args.dart';
 extension PrintAllArgParserUsage on ArgParser {
   static final String singleIndentation = '    ';
 
-  printAllCommandsUsage({
+  void printAllCommandsUsage({
     String? header,
     IOSink? sink,
     int indent = 0,
@@ -43,7 +43,7 @@ extension PrintAllArgParserUsage on ArgParser {
     }
   }
 
-  _writelnWithIndentation(IOSink sink, int indent, String s) {
+  void _writelnWithIndentation(IOSink sink, int indent, String s) {
     for (int i = 0; i < indent; i++) {
       sink.write(singleIndentation);
     }

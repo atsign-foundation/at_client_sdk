@@ -31,7 +31,7 @@ Future<void> main(List<String> args) async {
   await onboardingService.close();
 }
 
-getArgParser() {
+ArgParser getArgParser() {
   return ArgParser()
     ..addOption('atsign',
         abbr: 'a', help: 'the atsign you would like to auth with')

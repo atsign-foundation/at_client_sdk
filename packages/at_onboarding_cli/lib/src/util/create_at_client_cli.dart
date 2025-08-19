@@ -38,10 +38,16 @@ Future<AtClient> createAtClient(
   String downloadPathToUse = ('$homeDir!/.atsign/downloads/$atSign/$nameSpace')
       .replaceAll('/', Platform.pathSeparator);
 
+  String rootServer = rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn;
+  
+  // Parse rootServer using AtRootDomain
+  AtRootDomain parsedRootDomain = AtRootDomain.parse(rootServer);
+  
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..atKeysFilePath = atKeysFilePathToUse
     ..namespace = nameSpace
-    ..rootDomain = rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn
+    ..rootDomain = parsedRootDomain.rootDomain
+    ..rootPort = parsedRootDomain.rootPort
     ..passPhrase = passPhrase
     ..hiveStoragePath = localStoragePathToUse
     ..commitLogPath = commitLogStoragePathToUse

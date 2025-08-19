@@ -4,7 +4,7 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 import '../util/custom_arg_parser.dart';
 
-Future<void> main(args) async {
+Future<void> main(List<String> args) async {
   final argResults = CustomArgParser(getArgParser()).parse(args);
 
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
