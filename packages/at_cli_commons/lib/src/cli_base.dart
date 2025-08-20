@@ -17,7 +17,7 @@ class CLIBase {
     'key-file',
     'home-dir',
     'storage-dir',
-    'root-domain',
+    'root-domain', // deprecated, kept for backward compatibility
     'never-sync',
     'max-connect-attempts',
     'pass-phrase',
@@ -80,9 +80,15 @@ class CLIBase {
       ..addOption('root-domain',
           abbr: 'd',
           mandatory: false,
-          help: 'Root Domain',
+          help: 'Root Domain (deprecated, use --root-server instead)',
           defaultsTo: 'root.atsign.org',
           hide: hide.contains('root-domain'))
+      ..addOption('root-server',
+          abbr: 'r',
+          mandatory: false,
+          help: 'Root Server (replaces --root-domain)',
+          defaultsTo: 'root.atsign.org',
+          hide: hide.contains('root-server'))
       ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
       ..addFlag('never-sync',
           negatable: false,
@@ -143,11 +149,38 @@ class CLIBase {
       exit(0);
     }
 
+    // Handle root-server vs root-domain with preference for root-server
+    String? rootServer = parsedArgs['root-server'];
+    String? rootDomain = parsedArgs['root-domain'];
+
+    // Prioritize --root-server over --root-domain, but warn if both are provided
+    String finalRootDomain;
+    if (rootServer != null && rootServer != 'root.atsign.org') {
+      // User provided --root-server
+      finalRootDomain = rootServer;
+      if (rootDomain != null && rootDomain != 'root.atsign.org') {
+        // Both provided, warn user
+        print('Warning: Both --root-server and --root-domain provided. Using --root-server value: $rootServer');
+        print('Note: --root-domain is deprecated, please use --root-server instead.');
+      }
+    } else if (rootDomain != null) {
+      // User provided --root-domain (deprecated)
+      finalRootDomain = rootDomain;
+      if (rootDomain != 'root.atsign.org') {
+        print('Warning: --root-domain is deprecated, please use --root-server instead.');
+      }
+    } else {
+      // Neither provided explicitly, use default
+      finalRootDomain = 'root.atsign.org';
+    }
+
+    AtRootDomain parsedRootDomain = AtRootDomain.parse(finalRootDomain);
+
     CLIBase cliBase = CLIBase(
         atSign: parsedArgs['atsign'],
         atKeysFilePath: parsedArgs['key-file'],
         nameSpace: parsedArgs['namespace'],
-        rootDomain: parsedArgs['root-domain'],
+        rootDomain: parsedRootDomain.rootDomain,
         homeDir: getHomeDirectory(),
         storageDir: parsedArgs['storage-dir'],
         verbose: parsedArgs['verbose'],

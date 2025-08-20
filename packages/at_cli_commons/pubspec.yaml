@@ -13,6 +13,7 @@ resolution: workspace
 dependencies:
   args: ^2.6.0
   at_client: ^3.7.0
+  at_commons: ^5.5.0
   at_onboarding_cli: ^1.8.0
   at_utils: ^3.0.19
   chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0

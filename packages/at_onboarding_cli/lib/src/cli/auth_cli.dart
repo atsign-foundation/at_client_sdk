@@ -362,7 +362,29 @@ Future<int> wrappedMain(List<String> arguments) async {
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   
-  String rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  // Handle both old and new root server arguments with preference for new one
+  String? newRootServer = ar[AuthCliArgs.argNameRootServer];
+  String? oldRootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  
+  String rootServer;
+  if (newRootServer != null && newRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
+    // User provided --root-server
+    rootServer = newRootServer;
+    if (oldRootServer != null && oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
+      // Both provided, warn user
+      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $newRootServer');
+      stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
+    }
+  } else if (oldRootServer != null) {
+    // User provided --rootServer (deprecated)
+    rootServer = oldRootServer;
+    if (oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
+      stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
+    }
+  } else {
+    // Neither provided explicitly, use default
+    rootServer = AuthCliArgs.defaultAtDirectoryFqdn;
+  }
   
   // Parse rootServer using AtRootDomain
   AtRootDomain rootDomain = AtRootDomain.parse(rootServer);
@@ -1077,7 +1099,30 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 @visibleForTesting
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  String rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  
+  // Handle both old and new root server arguments with preference for new one
+  String? newRootServer = ar[AuthCliArgs.argNameRootServer];
+  String? oldRootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  
+  String rootServer;
+  if (newRootServer != null && newRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
+    // User provided --root-server
+    rootServer = newRootServer;
+    if (oldRootServer != null && oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
+      // Both provided, warn user
+      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $newRootServer');
+      stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
+    }
+  } else if (oldRootServer != null) {
+    // User provided --rootServer (deprecated)
+    rootServer = oldRootServer;
+    if (oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
+      stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
+    }
+  } else {
+    // Neither provided explicitly, use default
+    rootServer = AuthCliArgs.defaultAtDirectoryFqdn;
+  }
   
   // Parse rootServer using AtRootDomain
   AtRootDomain rootDomain = AtRootDomain.parse(rootServer);

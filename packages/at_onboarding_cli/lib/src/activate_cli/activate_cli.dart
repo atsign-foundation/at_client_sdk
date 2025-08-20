@@ -33,7 +33,11 @@ Future<int> wrappedMain(List<String> arguments) async {
         defaultsTo: 'testdevice')
     ..addOption('rootServer',
         abbr: 'r',
-        help: 'root server\'s domain name',
+        help: 'root server\'s domain name (deprecated, use --root-server instead)',
+        defaultsTo: rootServer,
+        mandatory: false)
+    ..addOption('root-server',
+        help: 'root server\'s domain name (replaces --rootServer)',
         defaultsTo: rootServer,
         mandatory: false)
     ..addOption('registrarUrl',
@@ -61,12 +65,36 @@ Future<int> wrappedMain(List<String> arguments) async {
 @Deprecated('Use auth_cli')
 Future<int> activate(ArgResults argResults,
     {AtOnboardingService? atOnboardingService}) async {
-  stdout.writeln('[Information] Root server is ${argResults['rootServer']}');
+  // Handle both old and new root server arguments with preference for new one
+  String? newRootServer = argResults['root-server'];
+  String? oldRootServer = argResults['rootServer'];
+  
+  String finalRootServer;
+  if (newRootServer != null && newRootServer != 'root.atsign.org') {
+    // User provided --root-server
+    finalRootServer = newRootServer;
+    if (oldRootServer != null && oldRootServer != 'root.atsign.org') {
+      // Both provided, warn user
+      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $newRootServer');
+      stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
+    }
+  } else if (oldRootServer != null) {
+    // User provided --rootServer (deprecated)
+    finalRootServer = oldRootServer;
+    if (oldRootServer != 'root.atsign.org') {
+      stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
+    }
+  } else {
+    // Neither provided explicitly, use default
+    finalRootServer = 'root.atsign.org';
+  }
+
+  stdout.writeln('[Information] Root server is $finalRootServer');
   stdout.writeln(
       '[Information] Registrar url provided is ${argResults['registrarUrl']}');
   //onboarding preference builder can be used to set onboardingService parameters
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = argResults['rootServer']
+    ..rootDomain = finalRootServer
     ..registrarUrl = argResults['registrarUrl']
     ..cramSecret =
         argResults.wasParsed('cramkey') ? argResults['cramkey'] : null

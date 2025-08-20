@@ -93,6 +93,7 @@ class AuthCliArgs {
   static const argNameCramSecret = 'cramkey';
   static const argNameAtKeys = 'keys';
   static const argNameAtDirectoryFqdn = 'rootServer';
+  static const argNameRootServer = 'root-server';
   static const argNameRegistrarFqdn = 'registrarUrl';
   static const argNameSpp = 'spp';
   static const argNameAppName = 'app';
@@ -219,7 +220,14 @@ class AuthCliArgs {
     p.addOption(
       argNameAtDirectoryFqdn,
       abbr: 'r',
-      help: 'atDirectory (aka root) server\'s domain name',
+      help: 'atDirectory (aka root) server\'s domain name (deprecated, use --root-server instead)',
+      defaultsTo: atDirectoryFqdn,
+      mandatory: false,
+      hide: hide,
+    );
+    p.addOption(
+      argNameRootServer,
+      help: 'atDirectory (aka root) server\'s domain name (replaces --rootServer)',
       defaultsTo: atDirectoryFqdn,
       mandatory: false,
       hide: hide,
