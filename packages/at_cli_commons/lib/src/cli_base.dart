@@ -123,16 +123,11 @@ class CLIBase {
           mandatory: false,
           help: 'directory for this client\'s local storage files',
           hide: hide.contains('storage-dir'))
-      ..addOption('root-domain',
-          abbr: 'd',
-          mandatory: false,
-          help: 'Root Domain (deprecated, use --root-server instead)',
-          defaultsTo: 'root.atsign.org',
-          hide: hide.contains('root-domain'))
       ..addOption('root-server',
+          aliases: ['root-domain'],
           abbr: 'r',
           mandatory: false,
-          help: 'Root server domain (e.g., root.atsign.org). Replaces deprecated --root-domain',
+          help: 'Root server domain (e.g., root.atsign.org)',
           defaultsTo: 'root.atsign.org',
           hide: hide.contains('root-server'))
       ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
@@ -195,13 +190,8 @@ class CLIBase {
       exit(0);
     }
 
-    // Resolve root server with backward compatibility
-    String finalRootDomain = resolveRootServer(
-      parsedArgs,
-      newArgName: 'root-server',
-      oldArgName: 'root-domain',
-    );
-
+    // root-domain is now an alias of root-server, ArgParser handles both automatically
+    String finalRootDomain = parsedArgs['root-server'];
     AtRootDomain parsedRootDomain = AtRootDomain.parse(finalRootDomain);
 
     CLIBase cliBase = CLIBase(

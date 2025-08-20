@@ -362,27 +362,8 @@ Future<int> wrappedMain(List<String> arguments) async {
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   
-  // Handle both old and new root server arguments with preference for new one
-  bool newRootServerProvided = ar.wasParsed(AuthCliArgs.argNameRootServer);
-  bool oldRootServerProvided = ar.wasParsed(AuthCliArgs.argNameAtDirectoryFqdn);
-  
-  String rootServer;
-  if (newRootServerProvided) {
-    // User explicitly provided --root-server
-    rootServer = ar[AuthCliArgs.argNameRootServer];
-    if (oldRootServerProvided) {
-      // Both explicitly provided, warn user
-      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $rootServer');
-      stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
-    }
-  } else if (oldRootServerProvided) {
-    // User explicitly provided --rootServer (deprecated)
-    rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
-    stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
-  } else {
-    // Neither provided explicitly, use default
-    rootServer = AuthCliArgs.defaultAtDirectoryFqdn;
-  }
+  // rootServer is now an alias of root-server, ArgParser handles both automatically
+  String rootServer = ar[AuthCliArgs.argNameRootServer];
   
   // Parse rootServer using AtRootDomain
   AtRootDomain rootDomain;
@@ -1104,27 +1085,8 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   
-  // Handle both old and new root server arguments with preference for new one
-  bool newRootServerProvided = ar.wasParsed(AuthCliArgs.argNameRootServer);
-  bool oldRootServerProvided = ar.wasParsed(AuthCliArgs.argNameAtDirectoryFqdn);
-  
-  String rootServer;
-  if (newRootServerProvided) {
-    // User explicitly provided --root-server
-    rootServer = ar[AuthCliArgs.argNameRootServer];
-    if (oldRootServerProvided) {
-      // Both explicitly provided, warn user
-      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $rootServer');
-      stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
-    }
-  } else if (oldRootServerProvided) {
-    // User explicitly provided --rootServer (deprecated)
-    rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
-    stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
-  } else {
-    // Neither provided explicitly, use default
-    rootServer = AuthCliArgs.defaultAtDirectoryFqdn;
-  }
+  // rootServer is now an alias of root-server, ArgParser handles both automatically
+  String rootServer = ar[AuthCliArgs.argNameRootServer];
   
   // Parse rootServer using AtRootDomain
   AtRootDomain rootDomain;

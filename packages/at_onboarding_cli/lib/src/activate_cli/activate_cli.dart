@@ -31,13 +31,10 @@ Future<int> wrappedMain(List<String> arguments) async {
         help: 'device name on which the application is running',
         mandatory: false,
         defaultsTo: 'testdevice')
-    ..addOption('rootServer',
-        abbr: 'r',
-        help: 'root server\'s domain name (deprecated, use --root-server instead)',
-        defaultsTo: rootServer,
-        mandatory: false)
     ..addOption('root-server',
-        help: 'Root server domain (e.g., root.atsign.org). Replaces deprecated --rootServer',
+        aliases: ['rootServer'],
+        abbr: 'r',
+        help: 'Root server domain (e.g., root.atsign.org)',
         defaultsTo: rootServer,
         mandatory: false)
     ..addOption('registrarUrl',
@@ -65,27 +62,8 @@ Future<int> wrappedMain(List<String> arguments) async {
 @Deprecated('Use auth_cli')
 Future<int> activate(ArgResults argResults,
     {AtOnboardingService? atOnboardingService}) async {
-  // Handle both old and new root server arguments with preference for new one
-  bool newRootServerProvided = argResults.wasParsed('root-server');
-  bool oldRootServerProvided = argResults.wasParsed('rootServer');
-  
-  String finalRootServer;
-  if (newRootServerProvided) {
-    // User explicitly provided --root-server
-    finalRootServer = argResults['root-server'];
-    if (oldRootServerProvided) {
-      // Both explicitly provided, warn user
-      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $finalRootServer');
-      stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
-    }
-  } else if (oldRootServerProvided) {
-    // User explicitly provided --rootServer (deprecated)
-    finalRootServer = argResults['rootServer'];
-    stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
-  } else {
-    // Neither provided explicitly, use default
-    finalRootServer = 'root.atsign.org';
-  }
+  // rootServer is now an alias of root-server, ArgParser handles both automatically
+  String finalRootServer = argResults['root-server'];
 
   stdout.writeln('[Information] Root server is $finalRootServer');
   stdout.writeln(
