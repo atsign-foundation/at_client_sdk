@@ -57,7 +57,6 @@ class AtNotificationStreamChannel<Value, Encoded>
     required this.recvTransformer,
     required this.sendTransformer,
     this.sessionTimeout = const Duration(minutes: 30),
-    bool enableSigning = false, // TODO: add signing to this
     String? sessionId,
   }) : sessionId = sessionId ?? uuid.generate();
 
@@ -71,7 +70,6 @@ class AtNotificationStreamChannel<Value, Encoded>
     required StreamTransformer<(AtNotification, Encoded), Value>
         recvTransformer,
     required StreamTransformer<Value, Encoded> sendTransformer,
-    bool enableSigning = false,
     Duration handshakeTimeout = const Duration(seconds: 5),
   }) async {
     var channel = AtNotificationStreamChannel<Value, Encoded>(
@@ -81,7 +79,6 @@ class AtNotificationStreamChannel<Value, Encoded>
       domainNamespace: domainNamespace,
       recvTransformer: recvTransformer,
       sendTransformer: sendTransformer,
-      enableSigning: enableSigning,
     );
     await channel.initClient(handshakeTimeout: handshakeTimeout);
     return channel;
@@ -111,7 +108,6 @@ class AtNotificationStreamChannel<Value, Encoded>
         recvTransformer,
     required StreamTransformer<Value, Encoded> sendTransformer,
     Duration sessionTimeout = const Duration(seconds: 10),
-    bool enableSigning = false, // TODO: add signing to this
     AtSignLogger? logger,
   }) {
     final controller =
@@ -132,7 +128,6 @@ class AtNotificationStreamChannel<Value, Encoded>
         domainNamespace: domainNamespace,
         recvTransformer: recvTransformer,
         sendTransformer: sendTransformer,
-        enableSigning: enableSigning,
         // Session based
         otherAtsign: otherAtsign,
         sessionId: sessionId,
@@ -157,7 +152,6 @@ class AtNotificationStreamChannel<Value, Encoded>
     _initStarted = true;
     await initBase(onDone: sendDisconnectMessage);
 
-    // TODO: setup session timeouts
     AtKey key = AtKey()
       ..key = "${_messageCounter++}.$sessionId"
       ..namespace = "$domainNamespace.$baseNamespace"
