@@ -29,6 +29,7 @@ workspace:
   - packages/at_onboarding_flutter
   - packages/at_policy
   - packages/at_server_status
+  - packages/at_stream
   - packages/at_sync_ui_flutter
   - packages/at_theme_flutter
   - packages/at_utils
