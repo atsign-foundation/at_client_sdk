@@ -227,7 +227,7 @@ class AuthCliArgs {
     );
     p.addOption(
       argNameRootServer,
-      help: 'atDirectory (aka root) server\'s domain name (replaces --rootServer)',
+      help: 'atDirectory (aka root) server domain (e.g., root.atsign.org). Replaces deprecated --rootServer',
       defaultsTo: atDirectoryFqdn,
       mandatory: false,
       hide: hide,

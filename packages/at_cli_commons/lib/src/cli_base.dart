@@ -13,6 +13,52 @@ import 'package:version/version.dart';
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
 
+  /// Resolves root server arguments with backward compatibility support.
+  /// Prioritizes the new argument over the deprecated one and provides appropriate warnings.
+  ///
+  /// [args] - The parsed command line arguments
+  /// [newArgName] - Name of the new argument (e.g., 'root-server')
+  /// [oldArgName] - Name of the deprecated argument (e.g., 'root-domain')
+  /// [defaultValue] - Default value to use if neither argument is provided
+  ///
+  /// Returns the resolved root server value with proper error handling
+  static String resolveRootServer(
+    ArgResults args, {
+    required String newArgName,
+    required String oldArgName,
+    String defaultValue = 'root.atsign.org',
+  }) {
+    bool newArgProvided = args.wasParsed(newArgName);
+    bool oldArgProvided = args.wasParsed(oldArgName);
+    
+    String finalRootServer;
+    if (newArgProvided) {
+      // User explicitly provided new argument
+      finalRootServer = args[newArgName];
+      if (oldArgProvided) {
+        // Both explicitly provided, warn user
+        print('Warning: Both --$oldArgName and --$newArgName provided. Using --$newArgName value: $finalRootServer');
+        print('Note: --$oldArgName is deprecated, please use --$newArgName instead.');
+      }
+    } else if (oldArgProvided) {
+      // User explicitly provided deprecated argument
+      finalRootServer = args[oldArgName];
+      print('Warning: --$oldArgName is deprecated, please use --$newArgName instead.');
+    } else {
+      // Neither provided explicitly, use default
+      finalRootServer = defaultValue;
+    }
+
+    // Parse and validate the root domain
+    try {
+      AtRootDomain parsedRootDomain = AtRootDomain.parse(finalRootServer);
+      return parsedRootDomain.rootDomain;
+    } catch (e) {
+      print('Error: Invalid root server domain "$finalRootServer": $e');
+      exit(1);
+    }
+  }
+
   static const Set<String> hideableArgs = {
     'key-file',
     'home-dir',
@@ -86,7 +132,7 @@ class CLIBase {
       ..addOption('root-server',
           abbr: 'r',
           mandatory: false,
-          help: 'Root Server (replaces --root-domain)',
+          help: 'Root server domain (e.g., root.atsign.org). Replaces deprecated --root-domain',
           defaultsTo: 'root.atsign.org',
           hide: hide.contains('root-server'))
       ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
@@ -149,30 +195,12 @@ class CLIBase {
       exit(0);
     }
 
-    // Handle root-server vs root-domain with preference for root-server
-    String? rootServer = parsedArgs['root-server'];
-    String? rootDomain = parsedArgs['root-domain'];
-
-    // Prioritize --root-server over --root-domain, but warn if both are provided
-    String finalRootDomain;
-    if (rootServer != null && rootServer != 'root.atsign.org') {
-      // User provided --root-server
-      finalRootDomain = rootServer;
-      if (rootDomain != null && rootDomain != 'root.atsign.org') {
-        // Both provided, warn user
-        print('Warning: Both --root-server and --root-domain provided. Using --root-server value: $rootServer');
-        print('Note: --root-domain is deprecated, please use --root-server instead.');
-      }
-    } else if (rootDomain != null) {
-      // User provided --root-domain (deprecated)
-      finalRootDomain = rootDomain;
-      if (rootDomain != 'root.atsign.org') {
-        print('Warning: --root-domain is deprecated, please use --root-server instead.');
-      }
-    } else {
-      // Neither provided explicitly, use default
-      finalRootDomain = 'root.atsign.org';
-    }
+    // Resolve root server with backward compatibility
+    String finalRootDomain = resolveRootServer(
+      parsedArgs,
+      newArgName: 'root-server',
+      oldArgName: 'root-domain',
+    );
 
     AtRootDomain parsedRootDomain = AtRootDomain.parse(finalRootDomain);
 

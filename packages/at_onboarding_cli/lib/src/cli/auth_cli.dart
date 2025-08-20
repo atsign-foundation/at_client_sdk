@@ -363,31 +363,35 @@ Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   
   // Handle both old and new root server arguments with preference for new one
-  String? newRootServer = ar[AuthCliArgs.argNameRootServer];
-  String? oldRootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  bool newRootServerProvided = ar.wasParsed(AuthCliArgs.argNameRootServer);
+  bool oldRootServerProvided = ar.wasParsed(AuthCliArgs.argNameAtDirectoryFqdn);
   
   String rootServer;
-  if (newRootServer != null && newRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
-    // User provided --root-server
-    rootServer = newRootServer;
-    if (oldRootServer != null && oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
-      // Both provided, warn user
-      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $newRootServer');
+  if (newRootServerProvided) {
+    // User explicitly provided --root-server
+    rootServer = ar[AuthCliArgs.argNameRootServer];
+    if (oldRootServerProvided) {
+      // Both explicitly provided, warn user
+      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $rootServer');
       stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
     }
-  } else if (oldRootServer != null) {
-    // User provided --rootServer (deprecated)
-    rootServer = oldRootServer;
-    if (oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
-      stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
-    }
+  } else if (oldRootServerProvided) {
+    // User explicitly provided --rootServer (deprecated)
+    rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+    stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
   } else {
     // Neither provided explicitly, use default
     rootServer = AuthCliArgs.defaultAtDirectoryFqdn;
   }
   
   // Parse rootServer using AtRootDomain
-  AtRootDomain rootDomain = AtRootDomain.parse(rootServer);
+  AtRootDomain rootDomain;
+  try {
+    rootDomain = AtRootDomain.parse(rootServer);
+  } catch (e) {
+    stderr.writeln('Error: Invalid root server domain "$rootServer": $e');
+    exit(1);
+  }
 
   SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
       rootDomain.rootDomain, rootDomain.rootPort);
@@ -1101,31 +1105,35 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   
   // Handle both old and new root server arguments with preference for new one
-  String? newRootServer = ar[AuthCliArgs.argNameRootServer];
-  String? oldRootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  bool newRootServerProvided = ar.wasParsed(AuthCliArgs.argNameRootServer);
+  bool oldRootServerProvided = ar.wasParsed(AuthCliArgs.argNameAtDirectoryFqdn);
   
   String rootServer;
-  if (newRootServer != null && newRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
-    // User provided --root-server
-    rootServer = newRootServer;
-    if (oldRootServer != null && oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
-      // Both provided, warn user
-      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $newRootServer');
+  if (newRootServerProvided) {
+    // User explicitly provided --root-server
+    rootServer = ar[AuthCliArgs.argNameRootServer];
+    if (oldRootServerProvided) {
+      // Both explicitly provided, warn user
+      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $rootServer');
       stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
     }
-  } else if (oldRootServer != null) {
-    // User provided --rootServer (deprecated)
-    rootServer = oldRootServer;
-    if (oldRootServer != AuthCliArgs.defaultAtDirectoryFqdn) {
-      stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
-    }
+  } else if (oldRootServerProvided) {
+    // User explicitly provided --rootServer (deprecated)
+    rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+    stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
   } else {
     // Neither provided explicitly, use default
     rootServer = AuthCliArgs.defaultAtDirectoryFqdn;
   }
   
   // Parse rootServer using AtRootDomain
-  AtRootDomain rootDomain = AtRootDomain.parse(rootServer);
+  AtRootDomain rootDomain;
+  try {
+    rootDomain = AtRootDomain.parse(rootServer);
+  } catch (e) {
+    stderr.writeln('Error: Invalid root server domain "$rootServer": $e');
+    throw ArgumentError('Invalid root server domain: $e');
+  }
   
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = rootDomain.rootDomain

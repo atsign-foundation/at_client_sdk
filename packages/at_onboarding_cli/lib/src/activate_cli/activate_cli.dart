@@ -37,7 +37,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         defaultsTo: rootServer,
         mandatory: false)
     ..addOption('root-server',
-        help: 'root server\'s domain name (replaces --rootServer)',
+        help: 'Root server domain (e.g., root.atsign.org). Replaces deprecated --rootServer',
         defaultsTo: rootServer,
         mandatory: false)
     ..addOption('registrarUrl',
@@ -66,24 +66,22 @@ Future<int> wrappedMain(List<String> arguments) async {
 Future<int> activate(ArgResults argResults,
     {AtOnboardingService? atOnboardingService}) async {
   // Handle both old and new root server arguments with preference for new one
-  String? newRootServer = argResults['root-server'];
-  String? oldRootServer = argResults['rootServer'];
+  bool newRootServerProvided = argResults.wasParsed('root-server');
+  bool oldRootServerProvided = argResults.wasParsed('rootServer');
   
   String finalRootServer;
-  if (newRootServer != null && newRootServer != 'root.atsign.org') {
-    // User provided --root-server
-    finalRootServer = newRootServer;
-    if (oldRootServer != null && oldRootServer != 'root.atsign.org') {
-      // Both provided, warn user
-      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $newRootServer');
+  if (newRootServerProvided) {
+    // User explicitly provided --root-server
+    finalRootServer = argResults['root-server'];
+    if (oldRootServerProvided) {
+      // Both explicitly provided, warn user
+      stderr.writeln('Warning: Both --rootServer and --root-server provided. Using --root-server value: $finalRootServer');
       stderr.writeln('Note: --rootServer is deprecated, please use --root-server instead.');
     }
-  } else if (oldRootServer != null) {
-    // User provided --rootServer (deprecated)
-    finalRootServer = oldRootServer;
-    if (oldRootServer != 'root.atsign.org') {
-      stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
-    }
+  } else if (oldRootServerProvided) {
+    // User explicitly provided --rootServer (deprecated)
+    finalRootServer = argResults['rootServer'];
+    stderr.writeln('Warning: --rootServer is deprecated, please use --root-server instead.');
   } else {
     // Neither provided explicitly, use default
     finalRootServer = 'root.atsign.org';
