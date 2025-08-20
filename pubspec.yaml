@@ -66,6 +66,7 @@ dependencies:
   crypto: ^3.0.5
   cryptography: ^2.7.0
   crypton: ^2.2.1
+  dart_mcp: ^0.3.3
   dart_periphery: ^0.9.5
   device_info_plus: ^11.3.3
   duration: ^4.0.3
@@ -106,6 +107,7 @@ dependencies:
   share_plus: ^11.0.0
   showcaseview: ^4.0.1
   sliding_up_panel: ^2.0.0+1
+  stream_channel: ^2.1.4
   transparent_image: ^2.0.1
   tuple: ^2.0.2 # TODO: replace this with Dart records
   tutorial_coach_mark: ^1.2.11
