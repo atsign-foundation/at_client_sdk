@@ -18,7 +18,7 @@ class CLIBase {
     'key-file',
     'home-dir',
     'storage-dir',
-    'root-domain', // deprecated, kept for backward compatibility
+    'root-domain',
     'never-sync',
     'max-connect-attempts',
     'pass-phrase',
@@ -154,6 +154,7 @@ class CLIBase {
         atKeysFilePath: parsedArgs['key-file'],
         nameSpace: parsedArgs['namespace'],
         rootDomain: parsedRootDomain.rootDomain,
+        rootPort: parsedRootDomain.rootPort,
         homeDir: getHomeDirectory(),
         storageDir: parsedArgs['storage-dir'],
         verbose: parsedArgs['verbose'],
@@ -169,6 +170,7 @@ class CLIBase {
   late final String atSign;
   final String nameSpace;
   final String rootDomain;
+  final int rootPort;
   final String? homeDir;
 
   final String? atKeysFilePath;
@@ -207,6 +209,7 @@ class CLIBase {
       {required String atSign,
       required this.nameSpace,
       required this.rootDomain,
+      required this.rootPort,
       this.homeDir,
       this.verbose = false,
       this.atKeysFilePath,
@@ -275,6 +278,7 @@ class CLIBase {
       ..commitLogPath = '$localStoragePathToUse/commitLog'
           .replaceAll('/', Platform.pathSeparator)
       ..rootDomain = rootDomain
+      ..rootPort = rootPort
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
       ..atProtocolEmitted = Version(2, 0, 0)
