@@ -209,7 +209,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.otp:
@@ -226,7 +226,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.interactive:
@@ -239,7 +239,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.list:
@@ -249,7 +249,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.fetch:
@@ -259,7 +259,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.approve:
@@ -269,7 +269,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.auto:
@@ -279,7 +279,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.deny:
@@ -289,7 +289,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.revoke:
@@ -299,7 +299,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.enroll:
@@ -317,7 +317,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.delete:
@@ -327,7 +327,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
     }
   } on ArgumentError catch (e) {
