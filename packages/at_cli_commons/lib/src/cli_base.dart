@@ -13,51 +13,6 @@ import 'package:version/version.dart';
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
 
-  /// Resolves root server arguments with backward compatibility support.
-  /// Prioritizes the new argument over the deprecated one and provides appropriate warnings.
-  ///
-  /// [args] - The parsed command line arguments
-  /// [newArgName] - Name of the new argument (e.g., 'root-server')
-  /// [oldArgName] - Name of the deprecated argument (e.g., 'root-domain')
-  /// [defaultValue] - Default value to use if neither argument is provided
-  ///
-  /// Returns the resolved root server value with proper error handling
-  static String resolveRootServer(
-    ArgResults args, {
-    required String newArgName,
-    required String oldArgName,
-    String defaultValue = 'root.atsign.org',
-  }) {
-    bool newArgProvided = args.wasParsed(newArgName);
-    bool oldArgProvided = args.wasParsed(oldArgName);
-    
-    String finalRootServer;
-    if (newArgProvided) {
-      // User explicitly provided new argument
-      finalRootServer = args[newArgName];
-      if (oldArgProvided) {
-        // Both explicitly provided, warn user
-        print('Warning: Both --$oldArgName and --$newArgName provided. Using --$newArgName value: $finalRootServer');
-        print('Note: --$oldArgName is deprecated, please use --$newArgName instead.');
-      }
-    } else if (oldArgProvided) {
-      // User explicitly provided deprecated argument
-      finalRootServer = args[oldArgName];
-      print('Warning: --$oldArgName is deprecated, please use --$newArgName instead.');
-    } else {
-      // Neither provided explicitly, use default
-      finalRootServer = defaultValue;
-    }
-
-    // Parse and validate the root domain
-    try {
-      AtRootDomain parsedRootDomain = AtRootDomain.parse(finalRootServer);
-      return parsedRootDomain.rootDomain;
-    } catch (e) {
-      print('Error: Invalid root server domain "$finalRootServer": $e');
-      exit(1);
-    }
-  }
 
   static const Set<String> hideableArgs = {
     'key-file',
