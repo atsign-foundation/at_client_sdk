@@ -14,7 +14,10 @@ executables:
   at_activate: activate_cli
 
 dependencies:
-  args: ^2.6.0
+  args:
+    git:
+      ref: gkc/show-aliases-in-usage
+      url: https://github.com/gkc/args
   crypton: ^2.2.1
   encrypt: ^5.0.3
   http: ^1.2.1
