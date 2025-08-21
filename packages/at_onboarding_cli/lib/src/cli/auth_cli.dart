@@ -426,7 +426,7 @@ Future<int> status(ArgResults ar) async {
 Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
   svc ??= createOnboardingService(argResults);
   logger
-      .info('Root server is ${argResults[AuthCliArgs.argNameAtDirectoryFqdn]}');
+      .info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
       'Registrar url provided is ${argResults[AuthCliArgs.argNameRegistrarFqdn]}');
 
