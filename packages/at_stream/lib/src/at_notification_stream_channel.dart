@@ -282,64 +282,54 @@ class AtNotificationStreamChannel<Value, Encoded>
       regex: "$sessionId\\.$domainNamespace\\.$baseNamespace$otherAtsign",
       shouldDecrypt: true,
     )
-        .transform(NotificationTransformer<Encoded>(this))
+        .transform(StreamTransformer<AtNotification,
+            (AtNotification, Encoded)>.fromHandlers(
+          handleData: (notification, sink) async {
+            resetTimer();
+            logger.info("Got notification: $notification");
+            if (notification.value == null) return;
+            try {
+              final data = jsonDecode(notification.value!);
+              if (data == null || data is! Map) {
+                logger.warning(
+                  "Received invalid data from notification:"
+                  " $data",
+                );
+                return;
+              }
+              if (data.containsKey("control")) {
+                logger.info("Received control message: ${data["control"]}");
+                switch (data["control"]) {
+                  case "connected":
+                    logger.info(
+                      "Connected message from: ${notification.from}"
+                      " session: $sessionId",
+                    );
+                    if (_initCompleter.isCompleted) return;
+                    _initCompleter.complete();
+                    return;
+                  case "disconnect":
+                    logger.info(
+                      "Disconnect message from: ${notification.from}"
+                      " session: $sessionId",
+                    );
+                    unawaited(_sendController.close());
+                    return;
+                }
+              }
+              if (!data.containsKey("payload")) {
+                logger.warning(
+                  "Missing payload from notification:"
+                  " $data",
+                );
+              }
+              sink.add((notification, data["payload"]));
+            } catch (e) {
+              logger.severe("Error decoding message: $e");
+            }
+          },
+        ))
         .transform(recvTransformer)
         .listen((value) => _recvController.add(value));
-  }
-}
-
-@visibleForTesting
-class NotificationTransformer<Encoded>
-    extends StreamTransformerBase<AtNotification, (AtNotification, Encoded)> {
-  final AtNotificationStreamChannel channel;
-  const NotificationTransformer(this.channel);
-  @override
-  Stream<(AtNotification, Encoded)> bind(Stream<AtNotification> stream) {
-    final controller = StreamController<(AtNotification, Encoded)>();
-    stream.listen((AtNotification notification) async {
-      channel.resetTimer();
-      channel.logger.info("Got notification: $notification");
-      if (notification.value == null) return;
-      try {
-        final data = jsonDecode(notification.value!);
-        if (data == null || data is! Map) {
-          channel.logger.warning(
-            "Received invalid data from notification:"
-            " $data",
-          );
-          return;
-        }
-        if (data.containsKey("control")) {
-          channel.logger.info("Received control message: ${data["control"]}");
-          switch (data["control"]) {
-            case "connected":
-              channel.logger.info(
-                "Connected message from: ${notification.from}"
-                " session: ${channel.sessionId}",
-              );
-              if (channel._initCompleter.isCompleted) return;
-              channel._initCompleter.complete();
-              return;
-            case "disconnect":
-              channel.logger.info(
-                "Disconnect message from: ${notification.from}"
-                " session: ${channel.sessionId}",
-              );
-              unawaited(channel._sendController.close());
-              return;
-          }
-        }
-        if (!data.containsKey("payload")) {
-          channel.logger.warning(
-            "Missing payload from notification:"
-            " $data",
-          );
-        }
-        controller.add((notification, data["payload"]));
-      } catch (e) {
-        channel.logger.severe("Error decoding message: $e");
-      }
-    }, onDone: channel._sendController.close);
-    return controller.stream;
   }
 }
