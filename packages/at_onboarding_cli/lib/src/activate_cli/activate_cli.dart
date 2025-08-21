@@ -32,7 +32,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         mandatory: false,
         defaultsTo: 'testdevice')
     ..addOption('root-server',
-        aliases: ['rootServer'],
+        aliases: const ['rootServer'],
         abbr: 'r',
         help: 'Root server domain (e.g., root.atsign.org)',
         defaultsTo: rootServer,
@@ -63,14 +63,12 @@ Future<int> wrappedMain(List<String> arguments) async {
 Future<int> activate(ArgResults argResults,
     {AtOnboardingService? atOnboardingService}) async {
   // rootServer is now an alias of root-server, ArgParser handles both automatically
-  String finalRootServer = argResults['root-server'];
-
-  stdout.writeln('[Information] Root server is $finalRootServer');
+  stdout.writeln('[Information] Root server is ${argResults['root-server']}');
   stdout.writeln(
       '[Information] Registrar url provided is ${argResults['registrarUrl']}');
   //onboarding preference builder can be used to set onboardingService parameters
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = finalRootServer
+    ..rootDomain = argResults['root-server']
     ..registrarUrl = argResults['registrarUrl']
     ..cramSecret =
         argResults.wasParsed('cramkey') ? argResults['cramkey'] : null

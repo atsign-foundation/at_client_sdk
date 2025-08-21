@@ -79,7 +79,7 @@ class CLIBase {
           help: 'directory for this client\'s local storage files',
           hide: hide.contains('storage-dir'))
       ..addOption('root-server',
-          aliases: ['root-domain'],
+          aliases: const ['root-domain'],
           abbr: 'r',
           mandatory: false,
           help: 'Root server domain (e.g., root.atsign.org)',
@@ -96,7 +96,7 @@ class CLIBase {
           defaultsTo: defaultMaxConnectAttempts.toString(),
           hide: hide.contains('max-connect-attempts'))
       ..addOption('pass-phrase',
-          aliases: ['passPhrase'],
+          aliases: const ['passPhrase'],
           abbr: 'P',
           help:
               'Pass Phrase to encrypt/decrypt the password protected atKeys file',
