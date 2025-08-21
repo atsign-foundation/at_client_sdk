@@ -271,6 +271,7 @@ class AuthCliArgs {
     );
     p.addOption(
       argNameCramSecret,
+      aliases: const ['license-key'],
       abbr: 'c',
       help: 'CRAM key',
       mandatory: false,

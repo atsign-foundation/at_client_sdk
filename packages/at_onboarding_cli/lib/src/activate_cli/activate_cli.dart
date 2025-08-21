@@ -20,7 +20,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   //get atSign and CRAM key from args
   final parser = ArgParser()
     ..addOption('atsign', abbr: 'a', help: 'atSign to activate')
-    ..addOption('cramkey', abbr: 'c', help: 'CRAM key', mandatory: false)
+    ..addOption('cramkey', aliases: const ['license-key'], abbr: 'c', help: 'CRAM key', mandatory: false)
     ..addOption('appName',
         abbr: 'p',
         help: 'application name that identifies the client',
