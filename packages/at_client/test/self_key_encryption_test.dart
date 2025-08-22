@@ -13,21 +13,23 @@ class MockLocalSecondary extends Mock implements LocalSecondary {}
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
-class MockAtLookupImpl extends Mock implements AtLookUp {}
+class MockAtLookUp extends Mock implements AtLookUp {}
 
 class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
 
 void main() {
   AtClient mockAtClient = MockAtClientImpl();
-  AtLookUp mockAtLookUp = MockAtLookupImpl();
+  AtLookUp mockAtLookUp = MockAtLookUp();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   setUp(() {
     reset(mockAtLookUp);
-    when(() => mockAtClient.getLocalSecondary())
-        .thenAnswer((_) => mockLocalSecondary);
-    when(() => mockAtClient.getRemoteSecondary())
-        .thenAnswer((_) => mockRemoteSecondary);
+    when(
+      () => mockAtClient.getLocalSecondary(),
+    ).thenAnswer((_) => mockLocalSecondary);
+    when(
+      () => mockAtClient.getRemoteSecondary(),
+    ).thenAnswer((_) => mockRemoteSecondary);
 
     registerFallbackValue(FakeLocalLookUpVerbBuilder());
   });
@@ -39,15 +41,17 @@ void main() {
     var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     // generate new AES key for the test
-    var aliceSelfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var aliceSelfEncryptionKey = AtChopsUtil.generateSymmetricKey(
+      EncryptionKeyType.aes256,
+    ).key;
     // set atChops
     AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
     atChopsKeys.selfEncryptionKey = AESKey(aliceSelfEncryptionKey);
     var atChopsImpl = AtChopsImpl(atChopsKeys);
     when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
-    when(() => mockLocalSecondary.getEncryptionSelfKey())
-        .thenAnswer((_) => Future.value(aliceSelfEncryptionKey));
+    when(
+      () => mockLocalSecondary.getEncryptionSelfKey(),
+    ).thenAnswer((_) => Future.value(aliceSelfEncryptionKey));
     var selfKey = AtKey()
       ..sharedBy = '@alice'
       ..sharedWith = '@bob'
@@ -55,24 +59,32 @@ void main() {
     var location = 'New Jersey';
     var encryptedValue = await selfKeyEncryption.encrypt(selfKey, location);
     expect(encryptedValue != location, true);
-    var decryptionResult =
-        await selfKeyDecryption.decrypt(selfKey, encryptedValue);
+    var decryptionResult = await selfKeyDecryption.decrypt(
+      selfKey,
+      encryptedValue,
+    );
     expect(decryptionResult, location);
   });
   test(
-      'test to check self key encryption throws exception when passed value is not string type',
-      () async {
-    var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
-    var selfKey = AtKey()
-      ..sharedBy = '@alice'
-      ..sharedWith = '@bob'
-      ..key = 'location';
-    var locations = ['new jersey', 'new york'];
-    expect(
+    'test to check self key encryption throws exception when passed value is not string type',
+    () async {
+      var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
+      var selfKey = AtKey()
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob'
+        ..key = 'location';
+      var locations = ['new jersey', 'new york'];
+      expect(
         () async => await selfKeyEncryption.encrypt(selfKey, locations),
-        throwsA(predicate((dynamic e) =>
-            e is AtEncryptionException &&
-            e.message ==
-                'Invalid value type found: List<String>. Valid value type is String')));
-  });
+        throwsA(
+          predicate(
+            (dynamic e) =>
+                e is AtEncryptionException &&
+                e.message ==
+                    'Invalid value type found: List<String>. Valid value type is String',
+          ),
+        ),
+      );
+    },
+  );
 }

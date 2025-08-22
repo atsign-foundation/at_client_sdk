@@ -23,12 +23,17 @@ class RemoteSecondary implements Secondary {
 
   late AtClientPreference _preference;
 
-  late AtLookupImpl atLookUp;
+  late AtLookUp atLookUp;
 
   final AtChops? atChops;
 
-  RemoteSecondary(String atSign, AtClientPreference preference,
-      {String? privateKey, this.atChops, String? enrollmentId}) {
+  RemoteSecondary(
+    String atSign,
+    AtClientPreference preference, {
+    String? privateKey,
+    this.atChops,
+    String? enrollmentId,
+  }) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -37,16 +42,21 @@ class RemoteSecondary implements Secondary {
       ..decryptPackets = preference.decryptPackets
       ..pathToCerts = preference.pathToCerts
       ..tlsKeysSavePath = preference.tlsKeysSavePath;
-    atLookUp = AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
-        privateKey: privateKey,
-        cramSecret: preference.cramSecret,
-        secondaryAddressFinder:
-            AtClientManager.getInstance().secondaryAddressFinder,
-        secureSocketConfig: secureSocketConfig,
-        clientConfig: _getClientConfig());
+    atLookUp = AtLookupImpl(
+      atSign,
+      preference.rootDomain,
+      preference.rootPort,
+      privateKey: privateKey,
+      cramSecret: preference.cramSecret,
+      secondaryAddressFinder:
+          AtClientManager.getInstance().secondaryAddressFinder,
+      secureSocketConfig: secureSocketConfig,
+      clientConfig: _getClientConfig(),
+    );
     atLookUp.enrollmentId = enrollmentId;
     logger.finer(
-        'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
+      'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}',
+    );
     atLookUp.signingAlgoType = preference.signingAlgoType;
     atLookUp.hashingAlgoType = preference.hashingAlgoType;
     atLookUp.atChops = atChops;
@@ -83,23 +93,37 @@ class RemoteSecondary implements Secondary {
   Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
     try {
       String verbResult;
-      logger.finer(logger.getLogMessageWithClientParticulars(
+      logger.finer(
+        logger.getLogMessageWithClientParticulars(
           _preference.atClientParticulars,
-          'Command sent to server: ${builder.buildCommand()}'));
+          'Command sent to server: ${builder.buildCommand()}',
+        ),
+      );
       verbResult = await atLookUp.executeVerb(builder);
-      logger.finer(logger.getLogMessageWithClientParticulars(
+      logger.finer(
+        logger.getLogMessageWithClientParticulars(
           _preference.atClientParticulars,
-          'Response from server: $verbResult'));
+          'Response from server: $verbResult',
+        ),
+      );
       return verbResult;
     } on AtException catch (e) {
-      throw e
-        ..stack(AtChainedException(_getIntent(builder),
-            ExceptionScenario.remoteVerbExecutionFailed, e.message));
+      throw e..stack(
+        AtChainedException(
+          _getIntent(builder),
+          ExceptionScenario.remoteVerbExecutionFailed,
+          e.message,
+        ),
+      );
     } on AtLookUpException catch (e) {
       var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
-      throw exception
-        ..stack(AtChainedException(_getIntent(builder),
-            ExceptionScenario.remoteVerbExecutionFailed, exception.message));
+      throw exception..stack(
+        AtChainedException(
+          _getIntent(builder),
+          ExceptionScenario.remoteVerbExecutionFailed,
+          exception.message,
+        ),
+      );
     }
   }
 
@@ -110,9 +134,13 @@ class RemoteSecondary implements Secondary {
       verbResult = await executeVerb(builder);
       verbResult = verbResult.replaceFirst(RegExp('^data:'), '');
     } on AtException catch (e) {
-      throw e
-        ..stack(AtChainedException(Intent.fetchData,
-            ExceptionScenario.remoteVerbExecutionFailed, e.message));
+      throw e..stack(
+        AtChainedException(
+          Intent.fetchData,
+          ExceptionScenario.remoteVerbExecutionFailed,
+          e.message,
+        ),
+      );
     }
     return verbResult;
   }
@@ -120,21 +148,31 @@ class RemoteSecondary implements Secondary {
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
     if (atCommand.length > _preference.maxDataSize) {
       throw BufferOverFlowException(
-          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference.maxDataSize} bytes. Found ${atCommand.length} bytes');
+        'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference.maxDataSize} bytes. Found ${atCommand.length} bytes',
+      );
     }
     try {
       String? verbResult;
       verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
       return verbResult;
     } on AtException catch (e) {
-      e.stack(AtChainedException(Intent.fetchData,
-          ExceptionScenario.remoteVerbExecutionFailed, e.message));
+      e.stack(
+        AtChainedException(
+          Intent.fetchData,
+          ExceptionScenario.remoteVerbExecutionFailed,
+          e.message,
+        ),
+      );
       rethrow;
     } on AtLookUpException catch (e) {
       var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
-      throw exception
-        ..stack(AtChainedException(Intent.fetchData,
-            ExceptionScenario.remoteVerbExecutionFailed, exception.message));
+      throw exception..stack(
+        AtChainedException(
+          Intent.fetchData,
+          ExceptionScenario.remoteVerbExecutionFailed,
+          exception.message,
+        ),
+      );
     }
   }
 
@@ -174,12 +212,20 @@ class RemoteSecondary implements Secondary {
   ///[Deprecated] Use [AtClient.notificationService]
   @Deprecated('Use AtClient.notificationService')
   Future<OutboundConnection> monitor(
-      String command, Function? notificationCallBack, String privateKey) {
+    String command,
+    Function? notificationCallBack,
+    String privateKey,
+  ) {
     return MonitorClient(privateKey).executeMonitorVerb(
-        command, _atSign, _preference.rootDomain, _preference.rootPort,
-        (value) {
-      notificationCallBack!(value);
-    }, restartCallBack: _restartCallBack);
+      command,
+      _atSign,
+      _preference.rootDomain,
+      _preference.rootPort,
+      (value) {
+        notificationCallBack!(value);
+      },
+      restartCallBack: _restartCallBack,
+    );
   }
 
   Future<String?> findSecondaryUrl() async {
@@ -200,22 +246,29 @@ class RemoteSecondary implements Secondary {
       var internetAddress = await InternetAddress.lookup(host);
       //TODO getting first ip for now. explore best solution
       var addressCheckOptions = AddressCheckOptions(
-          address: internetAddress[0], port: int.parse(port));
+        address: internetAddress[0],
+        port: int.parse(port),
+      );
       var addressCheckResult = await InternetConnectionChecker()
           .isHostReachable(addressCheckOptions);
       return addressCheckResult.isSuccess;
     } on Exception catch (e) {
       logger.severe(
-          'Secondary server unavailable due to Exception: ${e.toString()}');
+        'Secondary server unavailable due to Exception: ${e.toString()}',
+      );
     } on Error catch (e) {
-      logger
-          .severe('Secondary server unavailable due to Error: ${e.toString()}');
+      logger.severe(
+        'Secondary server unavailable due to Error: ${e.toString()}',
+      );
     }
     return false;
   }
 
   Future<void> _restartCallBack(
-      String command, Function notificationCallBack, String privateKey) async {
+    String command,
+    Function notificationCallBack,
+    String privateKey,
+  ) async {
     logger.info('auto restarting monitor');
     // ignore: deprecated_member_use_from_same_package
     await monitor(command, notificationCallBack, privateKey);
