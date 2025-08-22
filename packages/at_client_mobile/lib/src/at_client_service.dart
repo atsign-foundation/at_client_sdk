@@ -19,14 +19,14 @@ class AtClientService {
   @visibleForTesting
   AtClientAuthenticator? atClientAuthenticator;
 
-  AtLookupImpl? _atLookUp;
+  AtLookup? _atLookUp;
 
   @visibleForTesting
-  set atLookupImpl(AtLookupImpl atLookupImpl) {
+  set atLookupImpl(AtLookup atLookupImpl) {
     _atLookUp = atLookupImpl;
   }
 
-  AtLookupImpl get atLookupImpl => _atLookUp!;
+  AtLookup get atLookupImpl => _atLookUp!;
 
   @visibleForTesting
   KeyChainManager keyChainManager = KeyChainManager.getInstance();
@@ -34,11 +34,17 @@ class AtClientService {
   // Will create at client instance for a given atSign and perform cram+pkam auth to the server.
   // if pkam is successful, encryption keys will be set for the user./// Will create at client instance for a given atSign.
   Future<bool> _init(
-      String atSign, AtClientPreference preference, AtChops atChops) async {
+    String atSign,
+    AtClientPreference preference,
+    AtChops atChops,
+  ) async {
     atClientAuthenticator ??= AtClientAuthenticator();
     await atClientManager.setCurrentAtSign(
-        atSign, preference.namespace, preference,
-        atChops: atChops);
+      atSign,
+      preference.namespace,
+      preference,
+      atChops: atChops,
+    );
     _atClient = atClientManager.atClient;
     _atLookUp = _atClient!.getRemoteSecondary()!.atLookUp;
     if (preference.outboundConnectionTimeout > 0) {
@@ -65,27 +71,27 @@ class AtClientService {
     (await keyChainManager.getPkamPrivateKey(atSign)).isNull
         ? throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND)
         : atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
-            (await keyChainManager.getPkamPrivateKey(atSign))!;
+              (await keyChainManager.getPkamPrivateKey(atSign))!;
     // Validate PKAM Public Key
     (await keyChainManager.getPkamPublicKey(atSign)).isNull
         ? throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND)
         : atKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
-            (await keyChainManager.getPkamPublicKey(atSign))!;
+              (await keyChainManager.getPkamPublicKey(atSign))!;
     // Validate Encryption Private Key
     (await keyChainManager.getEncryptionPrivateKey(atSign)).isNull
         ? throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND)
         : atKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
-            (await keyChainManager.getEncryptionPrivateKey(atSign))!;
+              (await keyChainManager.getEncryptionPrivateKey(atSign))!;
     // Validate Encryption Public Key
     (await keyChainManager.getEncryptionPublicKey(atSign)).isNull
         ? throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND)
         : atKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
-            (await keyChainManager.getEncryptionPublicKey(atSign))!;
+              (await keyChainManager.getEncryptionPublicKey(atSign))!;
     // Validate Self Encryption Key
     (await keyChainManager.getSelfEncryptionAESKey(atSign)).isNull
         ? throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND)
         : atKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
-            (await keyChainManager.getSelfEncryptionAESKey(atSign))!;
+              (await keyChainManager.getSelfEncryptionAESKey(atSign))!;
 
     return atKeysMap;
   }
@@ -95,12 +101,15 @@ class AtClientService {
     // Get keys from KeyChain manager
     String? pkamPrivateKey = await keyChainManager.getPkamPrivateKey(atSign);
     String? pkamPublicKey = await keyChainManager.getPkamPublicKey(atSign);
-    String? encryptPrivateKey =
-        await keyChainManager.getEncryptionPrivateKey(atSign);
-    String? encryptPublicKey =
-        await keyChainManager.getEncryptionPublicKey(atSign);
-    String? selfEncryptionKey =
-        await keyChainManager.getSelfEncryptionAESKey(atSign);
+    String? encryptPrivateKey = await keyChainManager.getEncryptionPrivateKey(
+      atSign,
+    );
+    String? encryptPublicKey = await keyChainManager.getEncryptionPublicKey(
+      atSign,
+    );
+    String? selfEncryptionKey = await keyChainManager.getSelfEncryptionAESKey(
+      atSign,
+    );
 
     // If the keys are missed, the authentication and encryption/decryption of data
     // does not work. Hence first throwing exception without going further.
@@ -121,17 +130,20 @@ class AtClientService {
     }
 
     //Store keys into local secondary.
-    await _atClient!
-        .getLocalSecondary()!
-        .putValue(AtConstants.atPkamPublicKey, pkamPublicKey);
+    await _atClient!.getLocalSecondary()!.putValue(
+      AtConstants.atPkamPublicKey,
+      pkamPublicKey,
+    );
 
-    await _atClient!
-        .getLocalSecondary()!
-        .putValue(AtConstants.atPkamPrivateKey, pkamPrivateKey);
+    await _atClient!.getLocalSecondary()!.putValue(
+      AtConstants.atPkamPrivateKey,
+      pkamPrivateKey,
+    );
 
-    await _atClient!
-        .getLocalSecondary()!
-        .putValue(AtConstants.atEncryptionPrivateKey, encryptPrivateKey);
+    await _atClient!.getLocalSecondary()!.putValue(
+      AtConstants.atEncryptionPrivateKey,
+      encryptPrivateKey,
+    );
 
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = (AtKey()
@@ -142,13 +154,15 @@ class AtClientService {
           ..isPublic = true))
       ..value = encryptPublicKey;
 
-    await _atClient!
-        .getLocalSecondary()!
-        .executeVerb(updateBuilder, sync: true);
+    await _atClient!.getLocalSecondary()!.executeVerb(
+      updateBuilder,
+      sync: true,
+    );
 
-    await _atClient!
-        .getLocalSecondary()!
-        .putValue(AtConstants.atEncryptionSelfKey, selfEncryptionKey);
+    await _atClient!.getLocalSecondary()!.putValue(
+      AtConstants.atEncryptionSelfKey,
+      selfEncryptionKey,
+    );
 
     // Verify if keys are added to local storage.
     var result = await _getKeysFromLocalSecondary(atSign);
@@ -159,28 +173,33 @@ class AtClientService {
   ///if the details for [atsign] is not found in localsecondary.
   ///Returns `true` on successful fetching of all the details.
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
-    String? pkamPublicKey =
-        await _atClient!.getLocalSecondary()!.getPublicKey();
+    String? pkamPublicKey = await _atClient!
+        .getLocalSecondary()!
+        .getPublicKey();
     if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
-    String? pkamPrivateKey =
-        await _atClient!.getLocalSecondary()!.getPrivateKey();
+    String? pkamPrivateKey = await _atClient!
+        .getLocalSecondary()!
+        .getPrivateKey();
     if (pkamPrivateKey == null || pkamPrivateKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND);
     }
-    String? encryptPrivateKey =
-        await _atClient!.getLocalSecondary()!.getEncryptionPrivateKey();
+    String? encryptPrivateKey = await _atClient!
+        .getLocalSecondary()!
+        .getEncryptionPrivateKey();
     if (encryptPrivateKey == null || encryptPrivateKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PRIVATE_KEY_NOT_FOUND);
     }
-    String? encryptPublicKey =
-        await _atClient!.getLocalSecondary()!.getEncryptionPublicKey(atsign);
+    String? encryptPublicKey = await _atClient!
+        .getLocalSecondary()!
+        .getEncryptionPublicKey(atsign);
     if (encryptPublicKey == null || encryptPublicKey.isEmpty) {
       throw (OnboardingStatus.ENCRYPTION_PUBLIC_KEY_NOT_FOUND);
     }
-    String? encryptSelfKey =
-        await _atClient!.getLocalSecondary()!.getEncryptionSelfKey();
+    String? encryptSelfKey = await _atClient!
+        .getLocalSecondary()!
+        .getEncryptionSelfKey();
     if (encryptSelfKey == null || encryptSelfKey.isEmpty) {
       throw (OnboardingStatus.SELF_ENCRYPTION_KEY_NOT_FOUND);
     }
@@ -191,8 +210,12 @@ class AtClientService {
   /// if pkam is successful, encryption keys will be set for the user.
   @Deprecated('Use AtAuthService.authenticate method')
   Future<bool> authenticate(
-      String atsign, AtClientPreference atClientPreference,
-      {OnboardingStatus? status, String? jsonData, String? decryptKey}) async {
+    String atsign,
+    AtClientPreference atClientPreference, {
+    OnboardingStatus? status,
+    String? jsonData,
+    String? decryptKey,
+  }) async {
     /**ToDo Use OnboardingStatus enum instead of using
         atClientPreferences.cramSecret == null to know if atSign is new or existing
         If status == OnboardingStatus.ACTIVATE, then atSign is new, so perform initial auth and
@@ -226,18 +249,24 @@ class AtClientService {
       // "isNull" is an extension on String class that checks if String is null or empty.
       if ((jsonData.isNull) || (decryptKey.isNull)) {
         _logger.severe(
-            'Authentication failed. Encrypted keys from atKeys file not found for the atSign $atsign.');
+          'Authentication failed. Encrypted keys from atKeys file not found for the atSign $atsign.',
+        );
         return false;
       }
       var decryptedAtKeysMap = _decodeAndDecryptKeys(jsonData!, decryptKey!);
       atChops = createAtChops(decryptedAtKeysMap);
       // Inside "_validateAtKeys", performs PKAM auth using atChops.
       // If PKAM auth fails, UnAuthenticatedException is returned which is handled in the caller method.
-      var isValidAtKeysFile = await _validateAtKeys(atChops, atsign,
-          atClientPreference.rootDomain, atClientPreference.rootPort);
+      var isValidAtKeysFile = await _validateAtKeys(
+        atChops,
+        atsign,
+        atClientPreference.rootDomain,
+        atClientPreference.rootPort,
+      );
       if (!isValidAtKeysFile) {
         _logger.severe(
-            'Authentication failed. Invalid atKeys file found for the atSign $atsign.');
+          'Authentication failed. Invalid atKeys file found for the atSign $atsign.',
+        );
         return false;
       }
       //If atKeys are valid, store keys to keychain manager
@@ -247,8 +276,10 @@ class AtClientService {
     // Generate the PKAM and encryption key-pair and create the atChops instance.
     else {
       atClientAuthenticator ??= AtClientAuthenticator();
-      var isAuthenticated = await atClientAuthenticator!
-          .performInitialAuth(atsign, atClientPreference);
+      var isAuthenticated = await atClientAuthenticator!.performInitialAuth(
+        atsign,
+        atClientPreference,
+      );
       // If authentication is failed, return false.
       if (!isAuthenticated) {
         return isAuthenticated;
@@ -268,44 +299,54 @@ class AtClientService {
 
   ///Decodes the [jsonData] with [decryptKey] and returns the original keys in a map
   Map<String, String> _decodeAndDecryptKeys(
-      String jsonData, String decryptKey) {
+    String jsonData,
+    String decryptKey,
+  ) {
     var extractedJsonData = jsonDecode(jsonData);
 
     var pkamPublicKey = EncryptionUtil.decryptValue(
-        extractedJsonData[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
-        decryptKey);
+      extractedJsonData[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
+      decryptKey,
+    );
 
     var pkamPrivateKey = EncryptionUtil.decryptValue(
-        extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
-        decryptKey);
+      extractedJsonData[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
+      decryptKey,
+    );
 
     var encryptionPublicKey = EncryptionUtil.decryptValue(
-        extractedJsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
-        decryptKey);
+      extractedJsonData[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE],
+      decryptKey,
+    );
 
     var encryptionPrivateKey = EncryptionUtil.decryptValue(
-        extractedJsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
-        decryptKey);
+      extractedJsonData[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE],
+      decryptKey,
+    );
 
     var atKeysMap = {
       BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE: pkamPrivateKey,
       BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE: pkamPublicKey,
       BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE: encryptionPrivateKey,
       BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE: encryptionPublicKey,
-      BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE: decryptKey
+      BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE: decryptKey,
     };
     return atKeysMap;
   }
 
   /// Stores the atKeys to Key-Chain Manager.
   Future<void> _storeToKeyChainManager(
-      String atsign, Map<String, String> atKeysMap) async {
-    await keyChainManager.storePkamKeysToKeychain(atsign,
-        privateKey:
-            atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
-        publicKey: atKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]);
+    String atsign,
+    Map<String, String> atKeysMap,
+  ) async {
+    await keyChainManager.storePkamKeysToKeychain(
+      atsign,
+      privateKey: atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
+      publicKey: atKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
+    );
 
-    var atSignItem = await keyChainManager.readAtsign(name: atsign) ??
+    var atSignItem =
+        await keyChainManager.readAtsign(name: atsign) ??
         AtsignKey(atSign: atsign);
     atSignItem = atSignItem.copyWith(
       encryptionPrivateKey:
@@ -319,18 +360,23 @@ class AtClientService {
     await keyChainManager.storeAtSign(atSign: atSignItem);
 
     // Add atSign to the keychain.
-    await keyChainManager.storeCredentialToKeychain(atsign,
-        privateKey:
-            atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
-        publicKey: atKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]);
+    await keyChainManager.storeCredentialToKeychain(
+      atsign,
+      privateKey: atKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE],
+      publicKey: atKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE],
+    );
   }
 
   /// Validates if the provided atKeys file is valid.
   /// Performs PKAM auth on the cloud secondary.
   /// If atKeys are valid returns true; else, returns false.
-  Future<bool> _validateAtKeys(AtChops atChops, String atSign,
-      String rootServerDomain, int rootServerPort) async {
-    _atLookUp ??= AtLookupImpl(atSign, rootServerDomain, rootServerPort);
+  Future<bool> _validateAtKeys(
+    AtChops atChops,
+    String atSign,
+    String rootServerDomain,
+    int rootServerPort,
+  ) async {
+    _atLookUp ??= AtLookup(atSign, rootServerDomain, rootServerPort);
     _atLookUp!.atChops = atChops;
     var isAuthSuccessful = await _atLookUp!.pkamAuthenticate();
     _atLookUp!.close();
@@ -349,8 +395,10 @@ class AtClientService {
   /// Throws [OnboardingStatus.atSignNotFound] exception if atsign not found.
   /// Throws [OnboardingStatus.privateKeyNotFound] exception if privatekey not found.
   @Deprecated('Use AtAuthService.onboard method')
-  Future<bool> onboard(
-      {required AtClientPreference atClientPreference, String? atsign}) async {
+  Future<bool> onboard({
+    required AtClientPreference atClientPreference,
+    String? atsign,
+  }) async {
     AtChops? atChops;
     // If optional argument "atSign" is null, fetches the atSign from the keyChainManager
     if (atsign.isNull) {
@@ -376,8 +424,9 @@ class AtClientService {
   ///Returns [OnboardingStatus] of the atsign by checking it with remote server.
   Future<OnboardingStatus> getKeyRestorePolicy(String atSign) async {
     var serverEncryptionPublicKey = await _getServerEncryptionPublicKey(atSign);
-    var localEncryptionPublicKey =
-        await keyChainManager.getEncryptionPublicKey(atSign);
+    var localEncryptionPublicKey = await keyChainManager.getEncryptionPublicKey(
+      atSign,
+    );
     if (_isNullOrEmpty(localEncryptionPublicKey) &&
             _isNullOrEmpty(serverEncryptionPublicKey) ||
         (_isNullOrEmpty(serverEncryptionPublicKey) &&
@@ -449,14 +498,17 @@ class AtClientService {
   @visibleForTesting
   AtChops createAtChops(Map<String, String> decryptedAtKeys) {
     final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        decryptedAtKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE]!,
-        decryptedAtKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE]!);
+      decryptedAtKeys[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE]!,
+      decryptedAtKeys[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE]!,
+    );
     final atPkamKeyPair = AtPkamKeyPair.create(
-        decryptedAtKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]!,
-        decryptedAtKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE]!);
+      decryptedAtKeys[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE]!,
+      decryptedAtKeys[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE]!,
+    );
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     atChopsKeys.selfEncryptionKey = AESKey(
-        decryptedAtKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE]!);
+      decryptedAtKeys[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE]!,
+    );
     final atChops = AtChopsImpl(atChopsKeys);
     return atChops;
   }
@@ -543,28 +595,37 @@ class KeychainUtil {
 
     if (atsignKeyData == null) {
       throw AtClientException.message(
-          "Failed to fetch the keys for the atsign: $atsign");
+        "Failed to fetch the keys for the atsign: $atsign",
+      );
     }
 
     Map<String, String> encryptedAtKeysMap = <String, String>{};
 
     String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
-        atsignKeyData.pkamPublicKey!, atsignKeyData.selfEncryptionKey!);
+      atsignKeyData.pkamPublicKey!,
+      atsignKeyData.selfEncryptionKey!,
+    );
     encryptedAtKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
     String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
-        atsignKeyData.pkamPrivateKey!, atsignKeyData.selfEncryptionKey!);
+      atsignKeyData.pkamPrivateKey!,
+      atsignKeyData.selfEncryptionKey!,
+    );
     encryptedAtKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
     String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
-        atsignKeyData.encryptionPublicKey!, atsignKeyData.selfEncryptionKey!);
+      atsignKeyData.encryptionPublicKey!,
+      atsignKeyData.selfEncryptionKey!,
+    );
     encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
     String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
-        atsignKeyData.encryptionPrivateKey!, atsignKeyData.selfEncryptionKey!);
+      atsignKeyData.encryptionPrivateKey!,
+      atsignKeyData.selfEncryptionKey!,
+    );
     encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
 
