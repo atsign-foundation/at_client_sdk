@@ -25,7 +25,7 @@ dependencies:
   at_auth: ^2.3.0
   at_chops: ^2.2.0
   at_client: ^3.7.0
-  at_commons: ^5.5.0
+  at_commons: ^5.6.0
   at_lookup: ^3.0.52
   at_server_status: ^1.0.5
   at_utils: ^3.2.0
