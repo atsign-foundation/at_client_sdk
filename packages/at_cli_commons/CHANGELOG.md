@@ -1,5 +1,6 @@
 ## 3.0.0
 
+- feat!: changed `-d` (root-domain) option to `-r`
 - chore(deps): at_commons ^5.6.0
 - feat: Add `license-key` alias to `cramkey` argument in auth CLI
 - fix: Implement rootPort functionality
