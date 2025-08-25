@@ -1,6 +1,6 @@
 ## 1.2.0
 
-- feat: add `--root-server` option to specify root server domain
+- chore(deps): at_cli_commons: ^3.0.0
 
 ## 1.1.0
 
