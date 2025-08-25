@@ -13,6 +13,7 @@ import 'package:version/version.dart';
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
 
+
   static const Set<String> hideableArgs = {
     'key-file',
     'home-dir',
@@ -77,12 +78,13 @@ class CLIBase {
           mandatory: false,
           help: 'directory for this client\'s local storage files',
           hide: hide.contains('storage-dir'))
-      ..addOption('root-domain',
-          abbr: 'd',
+      ..addOption('root-server',
+          aliases: const ['root-domain'],
+          abbr: 'r',
           mandatory: false,
-          help: 'Root Domain',
+          help: 'Root server domain (e.g., root.atsign.org)',
           defaultsTo: 'root.atsign.org',
-          hide: hide.contains('root-domain'))
+          hide: hide.contains('root-server'))
       ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
       ..addFlag('never-sync',
           negatable: false,
@@ -94,7 +96,7 @@ class CLIBase {
           defaultsTo: defaultMaxConnectAttempts.toString(),
           hide: hide.contains('max-connect-attempts'))
       ..addOption('pass-phrase',
-          aliases: ['passPhrase'],
+          aliases: const ['passPhrase'],
           abbr: 'P',
           help:
               'Pass Phrase to encrypt/decrypt the password protected atKeys file',
@@ -143,11 +145,16 @@ class CLIBase {
       exit(0);
     }
 
+    // root-domain is now an alias of root-server, ArgParser handles both automatically
+    String finalRootDomain = parsedArgs['root-server'];
+    AtRootDomain parsedRootDomain = AtRootDomain.parse(finalRootDomain);
+
     CLIBase cliBase = CLIBase(
         atSign: parsedArgs['atsign'],
         atKeysFilePath: parsedArgs['key-file'],
         nameSpace: parsedArgs['namespace'],
-        rootDomain: parsedArgs['root-domain'],
+        rootDomain: parsedRootDomain.rootDomain,
+        rootPort: parsedRootDomain.rootPort,
         homeDir: getHomeDirectory(),
         storageDir: parsedArgs['storage-dir'],
         verbose: parsedArgs['verbose'],
@@ -163,6 +170,7 @@ class CLIBase {
   late final String atSign;
   final String nameSpace;
   final String rootDomain;
+  final int rootPort;
   final String? homeDir;
 
   final String? atKeysFilePath;
@@ -201,6 +209,7 @@ class CLIBase {
       {required String atSign,
       required this.nameSpace,
       required this.rootDomain,
+      required this.rootPort,
       this.homeDir,
       this.verbose = false,
       this.atKeysFilePath,
@@ -269,6 +278,7 @@ class CLIBase {
       ..commitLogPath = '$localStoragePathToUse/commitLog'
           .replaceAll('/', Platform.pathSeparator)
       ..rootDomain = rootDomain
+      ..rootPort = rootPort
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
       ..atProtocolEmitted = Version(2, 0, 0)

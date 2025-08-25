@@ -92,7 +92,8 @@ class AuthCliArgs {
   static const argNameAtSign = 'atsign';
   static const argNameCramSecret = 'cramkey';
   static const argNameAtKeys = 'keys';
-  static const argNameAtDirectoryFqdn = 'rootServer';
+  static const argNameRootServer = 'root-server';
+  static const argNameAtDirectoryFqdn = 'rootServer'; // alias to argNameRootServer
   static const argNameRegistrarFqdn = 'registrarUrl';
   static const argNameSpp = 'spp';
   static const argNameAppName = 'app';
@@ -217,9 +218,10 @@ class AuthCliArgs {
       hide: hide,
     );
     p.addOption(
-      argNameAtDirectoryFqdn,
+      argNameRootServer,
+      aliases: const [argNameAtDirectoryFqdn],
       abbr: 'r',
-      help: 'atDirectory (aka root) server\'s domain name',
+      help: 'atDirectory (aka root) server domain (e.g., root.atsign.org)',
       defaultsTo: atDirectoryFqdn,
       mandatory: false,
       hide: hide,
@@ -269,6 +271,7 @@ class AuthCliArgs {
     );
     p.addOption(
       argNameCramSecret,
+      aliases: const ['license-key'],
       abbr: 'c',
       help: 'CRAM key',
       mandatory: false,
