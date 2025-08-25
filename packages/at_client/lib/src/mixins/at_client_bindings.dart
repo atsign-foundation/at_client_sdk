@@ -1,11 +1,7 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
+import 'package:at_client/src/mixins/at_base.dart' show AtBase;
 
-mixin AtClientBindings {
-  AtClient get atClient;
-
-  AtSignLogger get logger;
-
+mixin AtClientBindings implements AtBase {
   Future<NotificationResult> notify(
     AtKey atKey,
     String value, {
