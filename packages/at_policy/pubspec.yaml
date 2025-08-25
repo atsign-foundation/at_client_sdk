@@ -1,6 +1,6 @@
 name: at_policy
 description: Policy management via atProtocol
-version: 1.1.0
+version: 1.2.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_policy
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
