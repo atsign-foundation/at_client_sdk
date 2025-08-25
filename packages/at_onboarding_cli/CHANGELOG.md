@@ -2,6 +2,7 @@
 
 - feat: add `--root-server` option to specify root server domain
 - feat: add `--license-key` alias for `--cramkey`
+- chore(deps): at_commons: ^5.6.0
 
 ## 1.14.0
 
