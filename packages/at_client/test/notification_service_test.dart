@@ -64,14 +64,12 @@ class MockSharedKeyEncryption extends Mock implements SharedKeyEncryption {}
 // Mock class with implementation to populate metadata on encrypting value
 class MockSharedKeyEncryptionImpl extends Mock implements SharedKeyEncryption {
   @override
-  Future encrypt(AtKey atKey, value,
-      {bool storeSharedKeyEncryptedWithData = true}) async {
+  Future encrypt(AtKey atKey, value) async {
     //Set encryptionMetadata to atKey metadata
     atKey.metadata = Metadata();
-    if (storeSharedKeyEncryptedWithData) {
-      atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
-      atKey.metadata.pubKeyCS = 'publicKeyCS';
-    }
+    atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
+    atKey.metadata.pubKeyCS = 'publicKeyCS';
+
     return 'encryptedValue';
   }
 }

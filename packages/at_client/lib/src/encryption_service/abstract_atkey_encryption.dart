@@ -37,8 +37,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// - Doesn't actually encrypt the value, leaves that to the relevant
   ///   subclass.
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value,
-      {bool storeSharedKeyEncryptedWithData = true}) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     _sharedKey = await getMyCopyOfSharedSymmetricKey(atKey);
     if (_sharedKey.isEmpty) {
       _sharedKey = await createMyCopyOfSharedSymmetricKey(atKey);
@@ -47,18 +46,16 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     var theirEncryptedSymmetricKeyCopy =
         await verifyTheirCopyOfSharedSymmetricKey(atKey, _sharedKey);
 
-    if (storeSharedKeyEncryptedWithData) {
-      atKey.metadata.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
-      // This is a legacy checksum with MD5 algo.
-      atKey.metadata.pubKeyCS =
-          EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
-      // Hashed the encryption public key with sha512. This is to ensure the encryption
-      // public key of the receiver are same during encryption and decryption process.
-      String hash = await AtChops.hashWith(HashingAlgoType.sha512)
-          .hash((await _getSharedWithPublicKey(atKey)).codeUnits);
-      atKey.metadata.pubKeyHash =
-          PublicKeyHash(hash, HashingAlgoType.sha512.name);
-    }
+    atKey.metadata.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
+    // This is a legacy checksum with MD5 algo.
+    atKey.metadata.pubKeyCS =
+        EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
+    // Hashed the encryption public key with sha512. This is to ensure the encryption
+    // public key of the receiver are same during encryption and decryption process.
+    String hash = await AtChops.hashWith(HashingAlgoType.sha512)
+        .hash((await _getSharedWithPublicKey(atKey)).codeUnits);
+    atKey.metadata.pubKeyHash =
+        PublicKeyHash(hash, HashingAlgoType.sha512.name);
   }
 
   /// Fetches existing shared symmetric key
