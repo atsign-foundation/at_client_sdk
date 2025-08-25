@@ -1,7 +1,6 @@
 ## 1.2.0
 
 - feat: add `--root-server` option to specify root server domain
-- feat: add `--license-key` alias for `--cramkey`
 
 ## 1.1.0
 
