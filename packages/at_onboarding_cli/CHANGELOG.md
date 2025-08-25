@@ -1,3 +1,8 @@
+## 1.15.0
+
+- feat: add `--root-server` option to specify root server domain
+- feat: add `--license-key` alias for `--cramkey`
+
 ## 1.14.0
 
 - Added proxy support for: `at_activate onboard --rootServer proxy:<host>:<port>`

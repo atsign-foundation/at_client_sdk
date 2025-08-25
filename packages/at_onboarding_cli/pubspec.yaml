@@ -1,6 +1,6 @@
 name: at_onboarding_cli
 description: Dart tools for initial client onboarding, subsequent client enrollment, and enrollment management.
-version: 1.14.0
+version: 1.15.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_onboarding_cli
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
