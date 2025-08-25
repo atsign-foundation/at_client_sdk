@@ -35,7 +35,6 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-import 'package:version/version.dart';
 
 /// Implementation of [AtClient] interface and [AtSignChangeListener] interface
 ///
@@ -528,10 +527,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
 
-    // ignore: deprecated_member_use_from_same_package
-    if (preference!.atProtocolEmitted >= Version(2, 0, 0)) {
-      atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
-    }
+    atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     ensureLowerCase(atKey);
 
     // validate the atKey

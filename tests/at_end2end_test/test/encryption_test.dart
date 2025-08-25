@@ -5,7 +5,6 @@ import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
-import 'package:version/version.dart';
 
 void main() {
   late String atSign_1;
@@ -31,15 +30,12 @@ void main() {
     AtSignLogger.root_level = logLevelToRestore;
   });
 
-  Future<AtClient> getAtClient(String atSign, Version version) async {
+  Future<AtClient> getAtClient(String atSign) async {
     AtClient atClient = (await AtClientManager.getInstance().setCurrentAtSign(
             atSign,
             namespace,
             TestPreferences.getInstance().getPreference(atSign_1)))
         .atClient;
-
-    // ignore: deprecated_member_use
-    atClient.getPreferences()!.atProtocolEmitted = version;
 
     return atClient;
   }
@@ -52,40 +48,8 @@ void main() {
   group(
       'Test encryption for sharing, storing shared encryption key in metadata',
       () {
-    test('Test put shared, then get, no IV, 1.5 to 1.5', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
-
-      var atKey = (AtKey.shared('test_share.1_5.to.1_5', sharedBy: atSign_1)
-            ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinuteMillis))
-          .build();
-      await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
-      expect(atKey.metadata.ivNonce, isNull);
-
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
-
-      var getResult = await atClient_2.get(atKey, getRequestOptions: remoteGRO);
-      expect(getResult.value, clearText);
-    }, timeout: Timeout(Duration(minutes: 1)));
-
-    test('Test put shared, then get, no IV, 1.5 to 2.0', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
-
-      var atKey = (AtKey.shared('test_share.1_5.to.2_0', sharedBy: atSign_1)
-            ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinuteMillis))
-          .build();
-      await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
-      expect(atKey.metadata.ivNonce, isNull);
-
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(2, 0, 0));
-
-      var getResult = await atClient_2.get(atKey, getRequestOptions: remoteGRO);
-      expect(getResult.value, clearText);
-    });
-
-    test('Test put shared, then get, with IV, 2.0 to 2.0', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(2, 0, 0));
+    test('Test put shared, then get, with IV', () async {
+      AtClient atClient_1 = await getAtClient(atSign_1);
 
       var atKey = (AtKey.shared('test_share.2_0.to.2_0', sharedBy: atSign_1)
             ..sharedWith(atSign_2)
@@ -94,23 +58,7 @@ void main() {
       await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
       expect(atKey.metadata.ivNonce, isNotNull);
 
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(2, 0, 0));
-
-      var getResult = await atClient_2.get(atKey, getRequestOptions: remoteGRO);
-      expect(getResult.value, clearText);
-    });
-
-    test('Test put shared, then get, with IV, 2.0 to 1.5', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(2, 0, 0));
-
-      var atKey = (AtKey.shared('test_share.2_0.to.1_5', sharedBy: atSign_1)
-            ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinuteMillis))
-          .build();
-      await atClient_1.put(atKey, clearText, putRequestOptions: remotePRO);
-      expect(atKey.metadata.ivNonce, isNotNull);
-
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
+      AtClient atClient_2 = await getAtClient(atSign_2);
 
       var getResult = await atClient_2.get(atKey, getRequestOptions: remoteGRO);
       expect(getResult.value, clearText);
@@ -121,54 +69,13 @@ void main() {
       'Test encryption for sharing, NOT storing shared encryption key in metadata',
       () {
     PutRequestOptions putOptions = PutRequestOptions()
-      ..useRemoteAtServer = true
-      ..storeSharedKeyEncryptedMetadata = false;
+      ..useRemoteAtServer = true;
     GetRequestOptions getOptions = GetRequestOptions()
       ..bypassCache = true
       ..useRemoteAtServer = true;
 
-    test('Test put shared, then get, no IV, 1.5 to 1.5', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
-
-      var atKey = (AtKey.shared('test_share.1_5.to.1_5.no_inlined_key',
-              sharedBy: atSign_1)
-            ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinuteMillis))
-          .build();
-      await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
-      expect(atKey.metadata.ivNonce, isNull);
-      expect(atKey.metadata.sharedKeyEnc, isNull);
-      expect(atKey.metadata.pubKeyCS, isNull);
-
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
-
-      var getResult =
-          await atClient_2.get(atKey, getRequestOptions: getOptions);
-      expect(getResult.value, clearText);
-    }, timeout: Timeout(Duration(minutes: 1)));
-
-    test('Test put shared, then get, no IV, 1.5 to 2.0', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(1, 5, 0));
-
-      var atKey = (AtKey.shared('test_share.1_5.to.2_0.no_inlined_key',
-              sharedBy: atSign_1)
-            ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinuteMillis))
-          .build();
-      await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
-      expect(atKey.metadata.ivNonce, isNull);
-      expect(atKey.metadata.sharedKeyEnc, isNull);
-      expect(atKey.metadata.pubKeyCS, isNull);
-
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(2, 0, 0));
-
-      var getResult =
-          await atClient_2.get(atKey, getRequestOptions: getOptions);
-      expect(getResult.value, clearText);
-    });
-
-    test('Test put shared, then get, with IV, 2.0 to 2.0', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(2, 0, 0));
+    test('Test put shared, then get, with IV', () async {
+      AtClient atClient_1 = await getAtClient(atSign_1);
 
       var atKey = (AtKey.shared('test_share.2_0.to.2_0.no_inlined_key',
               sharedBy: atSign_1)
@@ -180,27 +87,7 @@ void main() {
       expect(atKey.metadata.sharedKeyEnc, isNull);
       expect(atKey.metadata.pubKeyCS, isNull);
 
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(2, 0, 0));
-
-      var getResult =
-          await atClient_2.get(atKey, getRequestOptions: getOptions);
-      expect(getResult.value, clearText);
-    });
-
-    test('Test put shared, then get, with IV, 2.0 to 1.5', () async {
-      AtClient atClient_1 = await getAtClient(atSign_1, Version(2, 0, 0));
-
-      var atKey = (AtKey.shared('test_share.2_0.to.1_5.no_inlined_key',
-              sharedBy: atSign_1)
-            ..sharedWith(atSign_2)
-            ..timeToLive(TestConstants.oneMinuteMillis))
-          .build();
-      await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
-      expect(atKey.metadata.ivNonce, isNotNull);
-      expect(atKey.metadata.sharedKeyEnc, isNull);
-      expect(atKey.metadata.pubKeyCS, isNull);
-
-      AtClient atClient_2 = await getAtClient(atSign_2, Version(1, 5, 0));
+      AtClient atClient_2 = await getAtClient(atSign_2);
 
       var getResult =
           await atClient_2.get(atKey, getRequestOptions: getOptions);

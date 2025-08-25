@@ -97,9 +97,9 @@ class AtClientPreference {
   @Deprecated('No longer needed. at_chops will be used by default')
   bool useAtChops = true;
 
-  /// Poorly named variable which controls some aspects of at_client's
-  /// default data encryption
-  @Deprecated('Will be removed in next major version')
+  /// Poorly named variable which used to control some aspects of at_client's
+  /// default data encryption. Is now fully ignored.
+  @Deprecated('Ignored. Will be removed in next major version')
   Version atProtocolEmitted = Version(2, 0, 0);
 
   @experimental
