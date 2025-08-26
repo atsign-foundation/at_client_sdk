@@ -3,7 +3,6 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -13,7 +12,6 @@ void main() {
 
   var clearText = 'Some clear text';
 
-  var logLevelToRestore = AtSignLogger.root_level;
   setUpAll(() async {
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atSign_2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
@@ -25,9 +23,7 @@ void main() {
         .testInitializer(atSign_2, namespace, authType);
   });
 
-  tearDownAll(() {
-    AtSignLogger.root_level = logLevelToRestore;
-  });
+  tearDownAll(() {});
 
   Future<AtClient> getAtClient(String atSign) async {
     AtClient atClient = (await AtClientManager.getInstance().setCurrentAtSign(
@@ -44,9 +40,7 @@ void main() {
   final GetRequestOptions remoteGRO = GetRequestOptions()
     ..useRemoteAtServer = true;
 
-  group(
-      'Test encryption for sharing, storing shared encryption key in metadata',
-      () {
+  group('Group of tests storing shared encryption key in metadata', () {
     test('Test put shared, then get, with IV', () async {
       AtClient atClient_1 = await getAtClient(atSign_1);
 
@@ -64,9 +58,7 @@ void main() {
     });
   });
 
-  group(
-      'Test encryption for sharing, NOT storing shared encryption key in metadata',
-      () {
+  group('Group of tests NOT storing shared encryption key in metadata', () {
     PutRequestOptions putOptions = PutRequestOptions()
       ..useRemoteAtServer = true;
     GetRequestOptions getOptions = GetRequestOptions()
@@ -83,8 +75,9 @@ void main() {
           .build();
       await atClient_1.put(atKey, clearText, putRequestOptions: putOptions);
       expect(atKey.metadata.ivNonce, isNotNull);
-      expect(atKey.metadata.sharedKeyEnc, isNull);
-      expect(atKey.metadata.pubKeyCS, isNull);
+      // sharedKeyEnc and pubKeyCS are now *always* set
+      expect(atKey.metadata.sharedKeyEnc, isNotNull);
+      expect(atKey.metadata.pubKeyCS, isNotNull);
 
       AtClient atClient_2 = await getAtClient(atSign_2);
 
