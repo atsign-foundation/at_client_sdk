@@ -15,7 +15,6 @@ void main() {
 
   var logLevelToRestore = AtSignLogger.root_level;
   setUpAll(() async {
-    AtSignLogger.root_level = 'SHOUT';
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atSign_2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];

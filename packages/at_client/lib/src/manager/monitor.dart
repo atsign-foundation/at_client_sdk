@@ -11,6 +11,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
+import 'package:mutex/mutex.dart';
 
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
@@ -83,6 +84,8 @@ class Monitor {
 
   final int newLineCodeUnit = 10;
   final int atCharCodeUnit = 64;
+
+  final _connectionMutex = Mutex();
 
   ///
   /// Creates a [Monitor] object.
@@ -161,16 +164,21 @@ class Monitor {
       _logger.finer('Monitor is already running');
       return;
     }
+    _logger.info(
+        'starting monitor for $_atSign with lastNotificationTime: $lastNotificationTime');
     // This enables start method to be called with lastNotificationTime on the same instance of Monitor
     if (lastNotificationTime != null) {
-      _logger.info(
-          'starting monitor for $_atSign with lastNotificationTime: $lastNotificationTime');
       _lastNotificationTime = lastNotificationTime;
     }
     try {
       //1. Get a new outbound connection dedicated to monitor verb.
-      _monitorConnection = await _createNewConnection(
-          _atSign, _preference.rootDomain, _preference.rootPort);
+      try {
+        await _connectionMutex.acquire();
+        _monitorConnection = await _createNewConnection(
+            _atSign, _preference.rootDomain, _preference.rootPort);
+      } finally {
+        _connectionMutex.release();
+      }
       runZonedGuarded(() {
         _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
           _logger.info(
@@ -247,14 +255,14 @@ class Monitor {
   }
 
   void _callCloseStopAndRetry() {
+    _logger.info('Close stop and retry');
     if (_closeOpInProgress) {
       _logger.info('Another closeStopAndRetry operation is in progress');
       return;
     }
     try {
       _closeOpInProgress = true;
-      status = MonitorStatus.stopped;
-      _monitorConnection!.close();
+      stop();
       _retryCallBack();
     } finally {
       _closeOpInProgress = false;
@@ -354,15 +362,30 @@ class Monitor {
     return monitorVerbBuilder.buildCommand();
   }
 
-  /// Stops the monitor. Call [Monitor#start] to start it again.
-  void stop() {
-    status = MonitorStatus.stopped;
-    if (_monitorConnection != null) {
-      _monitorConnection!.close();
+  Future<void> _closeConnection() async {
+    try {
+      await _connectionMutex.acquire();
+      if (_monitorConnection != null) {
+        _logger.info('Closing connection');
+        await _monitorConnection!.close();
+        _monitorConnection = null;
+      }
+    } finally {
+      _connectionMutex.release();
     }
   }
 
-// Stops the monitor from receiving notification
+  /// Stops the monitor. Call [Monitor#start] to start it again.
+  void stop() {
+    if (status == MonitorStatus.stopped) {
+      return;
+    }
+    status = MonitorStatus.stopped;
+    _logger.info('Stopping monitor for $_atSign');
+    _closeConnection();
+  }
+
+  // Stops the monitor from receiving notification
   MonitorStatus getStatus() {
     return status;
   }
@@ -380,7 +403,7 @@ class Monitor {
   }
 
   void _handleError(dynamic e) {
-    _monitorConnection?.close();
+    _closeConnection();
     status = MonitorStatus.errored;
     // Pass monitor and error
     if (_keepAlive) {
