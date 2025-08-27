@@ -4,12 +4,12 @@ import 'package:at_commons/src/exception/at_exceptions.dart';
 
 class AtClientException extends AtException {
   /// The default constructor to preserve the backward compatibility.
-  AtClientException(dynamic errorCode, String message) : super(message);
+  AtClientException(dynamic errorCode, String? message) : super(message!);
 
   /// The named constructor that takes only message
-  AtClientException.message(String message,
+  AtClientException.message(String? message,
       {Intent? intent, ExceptionScenario? exceptionScenario})
-      : super(message, intent: intent, exceptionScenario: exceptionScenario);
+      : super(message!, intent: intent, exceptionScenario: exceptionScenario);
 }
 
 class AtKeyException extends AtClientException {
