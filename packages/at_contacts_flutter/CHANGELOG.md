@@ -1,3 +1,7 @@
+## 4.1.1
+
+- chore: define namespace in android/build.gradle
+
 ## 4.1.0
 
 - chore(deps): at_commons_flutter ^2.1.0

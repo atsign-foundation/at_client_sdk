@@ -1,7 +1,7 @@
 name: at_contacts_flutter
 description: A Flutter plugin project to provide ease of managing contacts for
   an atSign using atPlatform.
-version: 4.1.0
+version: 4.1.1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_contacts_flutter
 homepage: https://atsign.com/
 documentation: https://docs.atsign.com/
