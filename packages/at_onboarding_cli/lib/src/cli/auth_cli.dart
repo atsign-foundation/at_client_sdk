@@ -396,7 +396,7 @@ Future<int> status(ArgResults ar) async {
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
     } on AtLookUpException catch (e) {
-      final e1 = AtExceptionUtils.get(e.errorCode ?? '', e.errorMessage ?? '');
+      final e1 = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw e1;
     }
   } on SecondaryServerConnectivityException catch (e) {

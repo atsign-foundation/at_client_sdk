@@ -1009,12 +1009,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @Deprecated('Use AtClient.notificationService')
   Future<void> startMonitor(String privateKey, Function? notificationCallback,
       {String? regex}) async {
-    var monitorVerbBuilder = MonitorVerbBuilder();
-    if (regex != null) {
-      monitorVerbBuilder.regex = regex;
-    }
-    await _remoteSecondary!.monitor(
-        monitorVerbBuilder.buildCommand(), notificationCallback, privateKey);
+    throw UnimplementedError('AtClient.startMonitor has been deprecated');
   }
 
   @override

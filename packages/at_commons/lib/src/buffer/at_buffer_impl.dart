@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:at_commons/src/buffer/at_buffer.dart';
 
 class StringBuffer extends AtBuffer<String> {
-  StringBuffer({var terminatingChar = '\n', int capacity = 4096}) {
+  StringBuffer({String terminatingChar = '\n', int capacity = 4096}) {
     this.terminatingChar = terminatingChar;
     this.capacity = capacity;
     message = '';
@@ -19,7 +19,7 @@ class StringBuffer extends AtBuffer<String> {
     }
   }
 
-  bool canAppend(data) => length() + data.length <= capacity!;
+  bool canAppend(String data) => length() + data.length <= capacity!;
 
   @override
   bool isEnd() => message!.endsWith(terminatingChar);
@@ -37,7 +37,7 @@ class StringBuffer extends AtBuffer<String> {
 class ByteBuffer extends AtBuffer<List<int>> {
   late BytesBuilder _bytesBuilder;
 
-  ByteBuffer({var terminatingChar = '\n', int capacity = 4096}) {
+  ByteBuffer({String terminatingChar = '\n', int capacity = 4096}) {
     this.terminatingChar = utf8.encode(terminatingChar)[0];
     this.capacity = capacity;
     _bytesBuilder = BytesBuilder(copy: false);
@@ -57,7 +57,7 @@ class ByteBuffer extends AtBuffer<List<int>> {
     }
   }
 
-  bool isOverFlow(data) => length() + data.length > capacity!;
+  bool isOverFlow(List<int> data) => length() + data.length > capacity!;
 
   @override
   bool isEnd() => _bytesBuilder.toBytes().last == terminatingChar;

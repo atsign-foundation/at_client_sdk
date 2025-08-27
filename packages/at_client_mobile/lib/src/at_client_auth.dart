@@ -18,7 +18,7 @@ class AtClientAuthenticator implements AtClientAuth {
   bool _isPKAMAuthenticated = false;
   var logger = AtSignLogger('AtClientAuthenticator');
 
-  Future<bool?> init(var preference, {String? atSign}) async {
+  Future<bool?> init(dynamic preference, {String? atSign}) async {
     _keyChainManager = KeyChainManager.getInstance();
     if (atSign == null || atSign.isEmpty) {
       atSign = await _keyChainManager.getAtSign();

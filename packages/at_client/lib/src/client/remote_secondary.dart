@@ -100,7 +100,7 @@ class RemoteSecondary implements Secondary {
         ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
-      var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
+      var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, exception.message));
@@ -135,7 +135,7 @@ class RemoteSecondary implements Secondary {
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
       rethrow;
     } on AtLookUpException catch (e) {
-      var exception = AtExceptionUtils.get(e.errorCode!, e.errorMessage!);
+      var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(Intent.fetchData,
             ExceptionScenario.remoteVerbExecutionFailed, exception.message));
@@ -165,18 +165,6 @@ class RemoteSecondary implements Secondary {
 
     var atCommand = syncVerbBuilder.buildCommand();
     return await atLookUp.executeCommand(atCommand, auth: true);
-  }
-
-  ///Executes monitor verb on remote secondary. Result of the monitor verb is processed using [monitorResponseCallback]
-  ///[Deprecated] Use [AtClient.notificationService]
-  @Deprecated('Use AtClient.notificationService')
-  Future<OutboundConnection> monitor(
-      String command, Function? notificationCallBack, String privateKey) {
-    return MonitorClient(privateKey).executeMonitorVerb(
-        command, _atSign, _preference.rootDomain, _preference.rootPort,
-        (value) {
-      notificationCallBack!(value);
-    }, restartCallBack: _restartCallBack);
   }
 
   Future<String?> findSecondaryUrl() async {
@@ -209,13 +197,6 @@ class RemoteSecondary implements Secondary {
           .severe('Secondary server unavailable due to Error: ${e.toString()}');
     }
     return false;
-  }
-
-  Future<void> _restartCallBack(
-      String command, Function notificationCallBack, String privateKey) async {
-    logger.info('auto restarting monitor');
-    // ignore: deprecated_member_use_from_same_package
-    await monitor(command, notificationCallBack, privateKey);
   }
 
   Intent _getIntent(VerbBuilder builder) {
