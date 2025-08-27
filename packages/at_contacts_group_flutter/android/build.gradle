@@ -25,6 +25,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
+    namespace 'com.atsign.at_contacts_group_flutter'
     compileSdkVersion 34
 
     sourceSets {

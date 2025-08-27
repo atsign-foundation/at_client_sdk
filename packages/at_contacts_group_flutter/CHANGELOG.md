@@ -1,3 +1,7 @@
+## 4.1.1
+
+- chore: namespace explicitly defined in build.gradle to support AGV 8 and above.
+
 ## 4.1.0
 
 - chore(deps): at_commons ^5.5.0
