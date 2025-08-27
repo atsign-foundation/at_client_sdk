@@ -63,7 +63,7 @@ class OutboundMessageListener {
   /// Handles messages on the inbound client's connection and calls the verb executor
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
-  Future<void> messageHandler(List data) async {
+  Future<void> messageHandler(List<int> data) async {
     String result;
     int offset;
     _lastReceivedTime = DateTime.now();
@@ -105,9 +105,9 @@ class OutboundMessageListener {
   /// The methods verifies if buffer has the capacity to accept the data.
   ///
   /// Throw BufferOverFlowException if data length exceeds the buffer capacity
-  _checkBufferOverFlow(data) {
+  void _checkBufferOverFlow(List<int> data) {
     if (_buffer.isOverFlow(data)) {
-      int bufferLength = (_buffer.length() + data.length) as int;
+      int bufferLength = _buffer.length() + data.length;
       _buffer.clear();
       throw BufferOverFlowException(
           'data length exceeded the buffer limit. Data length : $bufferLength and Buffer capacity ${_buffer.capacity}');

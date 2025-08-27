@@ -730,7 +730,7 @@ class KeyChainManager {
     return result;
   }
 
-  writeToEnrollmentStore(String atSign, String data) async {
+  Future<void> writeToEnrollmentStore(String atSign, String data) async {
     final store = await getEnrollmentStorage(atSign);
     await _writeDataToStore(store: store, data: data);
   }
@@ -740,7 +740,7 @@ class KeyChainManager {
     return await _readDataFromStore(store: store);
   }
 
-  deleteEnrollmentStore(String atSign) async {
+  Future<void> deleteEnrollmentStore(String atSign) async {
     final store = await getEnrollmentStorage(atSign);
     await store.delete();
   }
