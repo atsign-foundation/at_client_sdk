@@ -34,7 +34,7 @@ abstract class AtBuffer<T> {
   /// @param incoming data
   /// @returns void
   /// @throws AtBufferOverFlowException if length() + data.length > capacity
-  void append(T data);
+  void append(dynamic data);
 }
 
 class AtBufferOverFlowException implements Exception {
