@@ -23,7 +23,7 @@ class PseudoServerSocket implements ServerSocket {
     return this;
   }
 
-  add(Socket socket) {
+  void add(Socket socket) {
     logger.info('add was called with socket: $socket');
     sc.add(socket);
   }

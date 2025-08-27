@@ -188,7 +188,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
-              e.errorMessage!
+              e.errorMessage
                   .contains('invalid otp. Cannot process enroll request'))));
     });
 
@@ -217,7 +217,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
-              e.errorMessage!
+              e.errorMessage
                   .contains('invalid otp. Cannot process enroll request'))));
     });
   });

@@ -1,3 +1,5 @@
+// ignore_for_file: implicit_call_tearoffs
+
 import 'package:chalkdart/chalk.dart';
 
 /// When implemented on a given class, other code can subscribe to

@@ -32,9 +32,7 @@ class MockAtLookUp extends Mock implements AtLookUp {}
 
 class MockAtEnrollmentBase extends Mock implements AtEnrollmentBase {}
 
-class MockPackageInfo extends Mock implements PackageInfo {
-  fromPlatform() {}
-}
+class MockPackageInfo extends Mock implements PackageInfo {}
 
 class MockAtServiceFactor extends Mock implements AtServiceFactory {}
 

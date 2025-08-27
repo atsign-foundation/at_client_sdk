@@ -22,11 +22,13 @@ class MockAtClient extends Mock implements AtClient {
   }
 
   @override
-  Future<List<String>> getKeys(
-      {String? regex,
-      String? sharedBy,
-      String? sharedWith,
-      bool showHiddenKeys = false}) async {
+  Future<List<String>> getKeys({
+    String? regex,
+    String? sharedBy,
+    String? sharedWith,
+    bool showHiddenKeys = false,
+    bool useRemoteAtServer = false,
+  }) async {
     return ["@83apedistinct", "@45expected"];
   }
 
@@ -128,7 +130,7 @@ void main() {
     expect(EventService().selectedContactsAtSigns.length, 1);
   });
 
-  test("create_contact_list_from_group_memebers", () async {
+  test("create_contact_list_from_group_members", () async {
     EventService().eventNotificationModel = model;
 
     EventService().createContactListFromGroupMembers();

@@ -2,8 +2,8 @@ import 'package:at_commons/at_commons.dart';
 
 /// AtLookUpException class
 class AtLookUpException implements Exception {
-  String? errorCode;
-  String? errorMessage;
+  String errorCode;
+  String errorMessage;
 
   AtLookUpException(this.errorCode, this.errorMessage);
 
