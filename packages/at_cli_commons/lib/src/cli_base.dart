@@ -8,7 +8,6 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 import 'package:logging/logging.dart';
-import 'package:version/version.dart';
 
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
@@ -281,7 +280,6 @@ class CLIBase {
       ..rootPort = rootPort
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
-      ..atProtocolEmitted = Version(2, 0, 0)
       ..passPhrase = passPhrase;
 
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(

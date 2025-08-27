@@ -1,5 +1,3 @@
-library at_client_mobile;
-
 export 'package:at_client/at_client.dart';
 
 @Deprecated('Use AtClientMobile.authService')

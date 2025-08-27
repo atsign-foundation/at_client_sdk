@@ -1,6 +1,7 @@
 name: at_onboarding_cli_functional_tests_proxy
 version: 1.0.0
 description: Functional tests for at_onboarding_cli with proxy support
+publish_to: none
 
 environment:
   sdk: ^3.6.0

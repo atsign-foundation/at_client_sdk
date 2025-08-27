@@ -40,8 +40,10 @@ class AtLookupImpl implements AtLookUp {
 
   String? cramSecret;
 
-  // ignore: prefer_typing_uninitialized_variables
-  var outboundConnectionTimeout;
+  /// Permitted number of milliseconds before connection to atServer
+  /// is deemed 'idle' and will be closed. The default is usually set to
+  /// 10 minutes i.e. 600,000 milliseconds
+  int? outboundConnectionTimeout;
 
   late SecureSocketConfig _secureSocketConfig;
 
@@ -557,8 +559,8 @@ class AtLookupImpl implements AtLookUp {
   }
 
   @Deprecated('use AtLookup().cramAuthenticate()')
-// ignore: non_constant_identifier_names
-  Future<bool> authenticate_cram(var secret) async {
+  // ignore: non_constant_identifier_names
+  Future<bool> authenticate_cram(String? secret) async {
     secret ??= cramSecret;
     if (secret == null) {
       throw UnAuthenticatedException('Cram secret not passed');
