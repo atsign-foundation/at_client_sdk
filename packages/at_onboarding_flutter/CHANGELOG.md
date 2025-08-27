@@ -1,3 +1,7 @@
+## 6.2.1
+
+- chore: namespace explicitly defined in android/build.gradle to support AGV 8 and above.
+
 ## 6.2.0
 
 - chore(deps): at_client_mobile ^3.3.0

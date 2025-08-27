@@ -25,6 +25,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
+    namespace 'com.atsign.at_onboarding_flutter'
     compileSdkVersion 32
 
     sourceSets {
