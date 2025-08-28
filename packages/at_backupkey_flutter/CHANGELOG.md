@@ -1,6 +1,7 @@
 ## 4.1.1
 
 - chore: namespace explicitly defined in build.gradle to support AGV 8 and above.
+- chore: update imports and refactor methods in BackupKeyWidget for improved functionality
 
 ## 4.1.0
 

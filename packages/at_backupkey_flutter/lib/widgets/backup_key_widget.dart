@@ -5,9 +5,9 @@ import 'dart:typed_data';
 import 'package:at_backupkey_flutter/services/backupkey_service.dart';
 import 'package:at_backupkey_flutter/utils/size_config.dart';
 import 'package:at_backupkey_flutter/utils/strings.dart';
-import 'package:at_file_saver/at_file_saver.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:path_provider/path_provider.dart';
@@ -46,7 +46,7 @@ class BackupKeyWidget extends StatelessWidget {
   final Color? buttonColor;
 
   BackupKeyWidget(
-      {Key? key,
+      {super.key,
       required this.atsign,
       this.isButton = false,
       this.isIcon,
@@ -55,8 +55,7 @@ class BackupKeyWidget extends StatelessWidget {
       this.buttonWidth,
       this.buttonHeight,
       this.buttonColor,
-      this.iconSize})
-      : super(key: key);
+      this.iconSize});
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +96,7 @@ class BackupKeyWidget extends StatelessWidget {
           );
   }
 
-  _showAlertDialog(BuildContext context) {
+  void _showAlertDialog(BuildContext context) {
     showDialog(
         context: context,
         barrierDismissible: false,
@@ -130,7 +129,7 @@ class BackupKeyWidget extends StatelessWidget {
         });
   }
 
-  showBackupDialog(BuildContext context) {
+  void showBackupDialog(BuildContext context) {
     SizeConfig().init(context);
     GlobalKey key = GlobalKey();
     BuildContext? myContext;
@@ -241,7 +240,7 @@ class BackupKeyWidget extends StatelessWidget {
         });
   }
 
-  onBackup(BuildContext context) async {
+  Future<bool> onBackup(BuildContext context) async {
     try {
       var aesEncryptedKeys = await BackUpKeyService.getEncryptedKeys(atsign);
       if (aesEncryptedKeys.isEmpty) {
@@ -334,6 +333,7 @@ class BackupKeyWidget extends StatelessWidget {
             );
           },
         );
+        return true;
       } else if (Platform.isIOS) {
         if (context.mounted) {
           var size = MediaQuery.of(context).size;
@@ -349,11 +349,12 @@ class BackupKeyWidget extends StatelessWidget {
             }
           });
         }
+        return true;
       } else {
         final path = await FilePicker.platform.saveFile(
           fileName: '$atsign${Strings.backupKeyName}',
         );
-        if (path == null) return;
+        if (path == null) return false;
         final file = XFile(tempFilePath);
         await file.saveTo(path);
         if (context.mounted) {
@@ -362,11 +363,14 @@ class BackupKeyWidget extends StatelessWidget {
             content: 'File saved successfully',
           );
         }
+        return true;
       }
     } on Exception catch (ex) {
       _logger.severe('BackingUp keys throws $ex exception');
+      return false;
     } on Error catch (err) {
       _logger.severe('BackingUp keys throws $err error');
+      return false;
     }
   }
 
@@ -390,8 +394,10 @@ class BackupKeyWidget extends StatelessWidget {
       final List<int> codeUnits = keyString.codeUnits;
       final Uint8List data = Uint8List.fromList(codeUnits);
       String desktopPath = await FileSaver.instance.saveFile(
-          encryptedKeysFile, data, Strings.backupKeyExtension,
-          mimeType: MimeType.OTHER);
+          name: encryptedKeysFile,
+          bytes: data,
+          fileExtension: Strings.backupKeyExtension,
+          mimeType: MimeType.other);
       return desktopPath;
     }
   }
