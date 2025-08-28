@@ -4,16 +4,14 @@ import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
 import 'package:at_utils/at_logger.dart';
 
-/// Class responsible for decrypting the value of key shared to other atSign's
-/// Example of local keys:
-/// CurrentAtSign: @bob
-/// llookup:@alice:phone@bob
-class LocalKeyDecryption extends AbstractAtKeyEncryption
+/// Class responsible for decrypting values shared by me TO others
+/// If I am @alice then an example would be @bob:foo.bar@alice
+class SharedByMeDecryption extends AbstractAtKeyEncryption
     implements AtKeyDecryption {
   late final AtSignLogger _logger;
   final AtClient _atClient;
 
-  LocalKeyDecryption(this._atClient) : super(_atClient) {
+  SharedByMeDecryption(this._atClient) : super(_atClient) {
     _logger =
         AtSignLogger('LocalKeyDecryption (${_atClient.getCurrentAtSign()})');
   }

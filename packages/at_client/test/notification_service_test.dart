@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -15,7 +16,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:uuid/uuid.dart';
 
 String? lastNotificationJson;
@@ -58,6 +59,9 @@ class MockMonitor extends Mock implements Monitor {
   }
 }
 
+class MockAtKeyDecryptionManager extends Mock
+    implements AtKeyDecryptionManager {}
+
 // Mock class without implementation to throw exceptions
 class MockSharedKeyEncryption extends Mock implements SharedKeyEncryption {}
 
@@ -74,7 +78,7 @@ class MockSharedKeyEncryptionImpl extends Mock implements SharedKeyEncryption {
   }
 }
 
-class MockSharedKeyDecryption extends Mock implements SharedKeyDecryption {}
+class MockSharedKeyDecryption extends Mock implements SharedWithMeDecryption {}
 
 class MockAtClientManager extends Mock implements AtClientManager {}
 
@@ -95,13 +99,13 @@ class FakeAtKey extends Fake implements AtKey {}
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  SharedKeyDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
+  AtKeyDecryptionManager mockDecryptionManager = MockAtKeyDecryptionManager();
+  SharedWithMeDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
   AtClientManager mockAtClientManager = MockAtClientManager();
   MockMonitor mockMonitor = MockMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
-  AtKeyEncryptionManager mockAtKeyEncryptionManager =
-      MockAtKeyEncryptionManager();
+  AtKeyEncryptionManager mockEncryptionManager = MockAtKeyEncryptionManager();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
   group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';
@@ -489,59 +493,9 @@ void main() {
   group('A group of test to validate notification response transformer', () {
     setUp(() {
       registerFallbackValue(FakeAtKey());
+      mockDecryptionManager = MockAtKeyDecryptionManager();
       when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedValue'))
           .thenAnswer((_) => Future.value('decryptedValue'));
-    });
-    test(
-        'A test to verify notification text is decrypted when isEncrypted is set to true',
-        () async {
-      var isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
-          '124',
-          '@bob:encryptedValue',
-          '@alice',
-          '@bob',
-          DateTime.now().millisecondsSinceEpoch,
-          // ignore: deprecated_member_use
-          MessageTypeEnum.text.toString(),
-          isEncrypted);
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
-
-      var transformedNotification =
-          await notificationResponseTransformer.transform(Tuple()
-            ..one = atNotification
-            ..two = (NotificationConfig()
-              ..regex = '.*'
-              ..shouldDecrypt = true));
-      expect(transformedNotification.key, '@bob:decryptedValue');
-    });
-
-    test(
-        'A test to verify notification text is not decrypted when isEncrypted is set to false',
-        () async {
-      var isEncrypted = false;
-      var atNotification = at_notification.AtNotification(
-          '124',
-          '@bob:encryptedValue',
-          '@alice',
-          '@bob',
-          DateTime.now().millisecondsSinceEpoch,
-          // ignore: deprecated_member_use
-          MessageTypeEnum.text.toString(),
-          isEncrypted);
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
-
-      var transformedNotification =
-          await notificationResponseTransformer.transform(Tuple()
-            ..one = atNotification
-            ..two = (NotificationConfig()
-              ..regex = '.*'
-              ..shouldDecrypt = true));
-      expect(transformedNotification.key, '@bob:encryptedValue');
     });
 
     test(
@@ -550,16 +504,18 @@ void main() {
       bool? isEncrypted;
       var atNotification = at_notification.AtNotification(
           '124',
-          'key-1',
+          '@bob:key-1.foo@alice',
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -576,16 +532,18 @@ void main() {
       bool isEncrypted = true;
       var atNotification = at_notification.AtNotification(
           '124',
-          'key-1',
+          '@bob:key-1.foo@alice',
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -602,16 +560,18 @@ void main() {
       var isEncrypted = false;
       var atNotification = at_notification.AtNotification(
           '124',
-          'key-1',
+          '@bob:key-1.foo@alice',
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -628,16 +588,18 @@ void main() {
       var isEncrypted = true;
       var atNotification = at_notification.AtNotification(
           '124',
-          'key-1',
+          '@bob:key-1.foo@alice',
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -652,22 +614,24 @@ void main() {
       var isEncrypted = false;
       var atNotification = at_notification.AtNotification(
           '124',
-          'key-1',
+          '@bob:key-1.foo@alice',
           '@alice',
           '@bob',
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted);
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
             ..one = atNotification
             ..two = (NotificationConfig()..regex = '.*'));
       expect(transformedNotification.id, '124');
-      expect(transformedNotification.key, 'key-1');
+      expect(transformedNotification.key, '@bob:key-1.foo@alice');
     });
 
     test('A test to verify the reserved key is not decrypted', () async {
@@ -681,9 +645,11 @@ void main() {
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -717,7 +683,7 @@ void main() {
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
-      when(() => mockAtKeyEncryptionManager.get(atKey, currentAtSign))
+      when(() => mockEncryptionManager.get(atKey, currentAtSign))
           .thenAnswer((_) => mockSharedKeyEncryption);
       when(() => mockSharedKeyEncryption.encrypt(atKey, value)).thenThrow(
           AtPublicKeyNotFoundException(
@@ -734,8 +700,7 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: mockMonitor) as NotificationServiceImpl;
 
-      notificationServiceImpl.atKeyEncryptionManager =
-          mockAtKeyEncryptionManager;
+      notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;
 
       var notificationResult = await notificationServiceImpl.notify(
           NotificationParams.forUpdate(atKey, value: value),
@@ -761,7 +726,7 @@ void main() {
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
-      when(() => mockAtKeyEncryptionManager.get(atKey, currentAtSign))
+      when(() => mockEncryptionManager.get(atKey, currentAtSign))
           .thenAnswer((_) => mockSharedKeyEncryption);
       when(() => mockSharedKeyEncryption.encrypt(atKey, value))
           .thenAnswer((_) => Future.value('encrypted_value'));
@@ -776,8 +741,7 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: mockMonitor) as NotificationServiceImpl;
 
-      notificationServiceImpl.atKeyEncryptionManager =
-          mockAtKeyEncryptionManager;
+      notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;
 
       var notificationResult = await notificationServiceImpl.notify(
           NotificationParams.forUpdate(atKey, value: value),

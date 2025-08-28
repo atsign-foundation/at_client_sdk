@@ -1,5 +1,5 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
@@ -68,7 +68,7 @@ void main() {
     when(() => bobMockAtClient.getCurrentAtSign()).thenReturn('@bob');
     when(() => bobMockLocalSecondary.getEncryptionPublicKey('@bob'))
         .thenAnswer((_) => Future.value(bobEncryptionPublicKey));
-    var sharedKeyDecryption = SharedKeyDecryption(bobMockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(bobMockAtClient);
 
     // encrypted AES key @bob:shared_key@alice
     var sharedKeyEncryptedWithBobPublicKey =
@@ -150,7 +150,7 @@ void main() {
     when(() => bobMockAtClient.getCurrentAtSign()).thenReturn('@bob');
     when(() => bobMockLocalSecondary.getEncryptionPublicKey('@bob'))
         .thenAnswer((_) => Future.value(bobEncryptionPublicKey));
-    var sharedKeyDecryption = SharedKeyDecryption(bobMockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(bobMockAtClient);
 
     // local copy of the AES key that @alice maintains - shared_key.bob@alice
     var symmetricKeyEncryptedWithAlicePublicKey = EncryptionUtil.encryptKey(

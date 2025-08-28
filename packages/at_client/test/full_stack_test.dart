@@ -462,9 +462,11 @@ void main() {
 
         // 2b. atServer available - new key should be created in remote and in local
         remoteSecondaryAvailable = true;
-        await ske.createMyCopyOfSharedSymmetricKey(fooBarForVictor);
+        await ske.createLegacySharedSymmetricKey(fooBarForVictor);
         expect(remoteLLookupRequestCount, 1); // still the same
-        expect(remoteUpdateRequestCount, 1); // update 'our' copy to atServer
+
+        // We've written two copies (us and them) to atServer
+        expect(remoteUpdateRequestCount, 2);
         expect(remoteUpdatedMap[myCopyVicSymKeyName] != null, true);
         expect(localStore.isKeyExists(myCopyVicSymKeyName), true);
       });

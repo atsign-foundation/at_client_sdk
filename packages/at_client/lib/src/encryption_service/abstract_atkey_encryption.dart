@@ -31,20 +31,20 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
   /// - Fetches the appropriate shared symmetric key by calling
   /// [getMyCopyOfSharedSymmetricKey]
-  /// - Calls [createMyCopyOfSharedSymmetricKey] if
+  /// - Calls [createLegacySharedSymmetricKey] if
   ///   [getMyCopyOfSharedSymmetricKey] returns the empty string
-  /// - Calls [verifyTheirCopyOfSharedSymmetricKey]
+  /// - Calls [getTheirCopyOfLegacySharedSymmetricKey]
   /// - Doesn't actually encrypt the value, leaves that to the relevant
   ///   subclass.
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     _sharedKey = await getMyCopyOfSharedSymmetricKey(atKey);
     if (_sharedKey.isEmpty) {
-      _sharedKey = await createMyCopyOfSharedSymmetricKey(atKey);
+      _sharedKey = await createLegacySharedSymmetricKey(atKey);
     }
 
     var theirEncryptedSymmetricKeyCopy =
-        await verifyTheirCopyOfSharedSymmetricKey(atKey, _sharedKey);
+        await getTheirCopyOfLegacySharedSymmetricKey(atKey, _sharedKey);
 
     atKey.metadata.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
     // This is a legacy checksum with MD5 algo.
@@ -77,7 +77,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
     try {
       /// If not found in local storage, look in atServer
-      /// Also, delete *their* copy from our local storage
       if (encryptedSharedKey.isNull || encryptedSharedKey == 'data:null') {
         _logger.info(
             'Encrypted shared symmetric key for ${atKey.sharedBy} not found in local storage');
@@ -115,10 +114,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// Create a new symmetric shared key and share it.
   /// - cut key, encrypt copy for self, and save to remote atServer, then to
   ///   local storage, return the unencrypted symmetric key
-  /// - If atServer save rejects it because it already exists, then call
-  ///   [getMyCopyOfSharedSymmetricKey] again and return that value
+  ///
+  /// This is 'legacy' because it is a singleton, and we should and will have
+  /// many many symmetric keys.
   @visibleForTesting
-  Future<String> createMyCopyOfSharedSymmetricKey(AtKey atKey) async {
+  Future<String> createLegacySharedSymmetricKey(AtKey atKey) async {
     _logger.info(
         "Creating new shared symmetric key as ${atKey.sharedBy} for ${atKey.sharedWith}");
     // Generate new symmetric key
@@ -137,18 +137,33 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _logger.info("Storing new shared symmetric key to atServer");
     await _storeMyEncryptedCopyOfSharedSymmetricKey(
         atKey, encryptedSharedKeyMyCopy, _atClient.getRemoteSecondary()!);
-    // // TODO
-    // } on KeyAlreadyExistsException catch (e) {
-    //  return await getMyCopyOfSharedSymmetricKey(atKey);
-    // }
 
     // Now store to local
     _logger.info("Storing new shared symmetric key to local storage");
     await _storeMyEncryptedCopyOfSharedSymmetricKey(
         atKey, encryptedSharedKeyMyCopy, _atClient.getLocalSecondary()!);
 
+    // Store 'their' copy - this is for backwards compatibility.
+    await _shareEncryptedCopyOfLegacySymmetricKey(atKey,
+        await encryptSymmetricKeyForRecipient(atKey, newSymmetricKeyBase64));
     // Return the unencrypted symmetric key
     return newSymmetricKeyBase64;
+  }
+
+  Future<void> _shareEncryptedCopyOfLegacySymmetricKey(
+    AtKey atKey,
+    String encryptedSharedKeyValue,
+  ) async {
+    var updateSharedKeyBuilder = UpdateVerbBuilder()
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = atKey.sharedWith
+        ..sharedBy = atKey.sharedBy
+        ..metadata = (Metadata()..ttr = 3888000))
+      ..value = encryptedSharedKeyValue;
+    await _atClient
+        .getRemoteSecondary()!
+        .executeVerb(updateSharedKeyBuilder, sync: false);
   }
 
   /// Fetch public key of recipient
@@ -172,8 +187,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         symmetricKeyBase64, EncryptionKeyType.rsa2048,
         encryptionAlgorithm: rsaEncryptionAlgo);
     String encryptedSharedSymmetricKey = encryptionResult.result!;
-    inMemEncryptedSharedSymmetricKeyCache[atKey.sharedWith!] =
-        encryptedSharedSymmetricKey;
     return encryptedSharedSymmetricKey;
   }
 
@@ -188,11 +201,12 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// reuse, rather than storing it to data stores etc. It is safe to do this
   /// because for a long time, clients will decrypt using the `sharedKeyEnc`
   /// in the metadata, which we are always setting.
-  Future<String> verifyTheirCopyOfSharedSymmetricKey(
+  Future<String> getTheirCopyOfLegacySharedSymmetricKey(
       AtKey atKey, String symmetricKeyBase64) async {
     // If it's not already in the cache, do the encryption.
     if (!inMemEncryptedSharedSymmetricKeyCache.containsKey(atKey.sharedWith)) {
-      await encryptSymmetricKeyForRecipient(atKey, symmetricKeyBase64);
+      inMemEncryptedSharedSymmetricKeyCache[atKey.sharedWith!] =
+          await encryptSymmetricKeyForRecipient(atKey, symmetricKeyBase64);
     }
     return inMemEncryptedSharedSymmetricKeyCache[atKey.sharedWith!]!;
   }

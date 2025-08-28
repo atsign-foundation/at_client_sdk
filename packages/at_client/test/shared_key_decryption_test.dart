@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
@@ -40,7 +40,7 @@ void main() {
 
   test('test to check AtDecryptionException when encrypted value is null',
       () async {
-    var sharedKeyDecryption = SharedKeyDecryption(mockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
     var sharedKey = AtKey()
       ..sharedBy = '@alice'
       ..sharedWith = '@bob'
@@ -53,7 +53,7 @@ void main() {
   });
 
   test('test to check SharedKeyNotFound exception', () async {
-    var sharedKeyDecryption = SharedKeyDecryption(mockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
     when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
         .thenAnswer((_) => Future.value(null));
@@ -76,7 +76,7 @@ void main() {
   test(
       'test to check AtPublicKeyNotFoundException - public key is not found in local secondary',
       () async {
-    var sharedKeyDecryption = SharedKeyDecryption(mockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
     when(() =>
         mockLocalSecondary.getEncryptionPublicKey(
@@ -100,7 +100,7 @@ void main() {
   test(
       'test to check AtPublicKeyChangeException - checksum from metadata is different from checksum of retrieved public key',
       () async {
-    var sharedKeyDecryption = SharedKeyDecryption(mockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
     when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
         .thenAnswer((_) => Future.value('testPublicKey'));
@@ -122,7 +122,7 @@ void main() {
   test(
       'test to verify that decryption will always use sharedKeyEncrypted if it is present in the metadata',
       () async {
-    var sharedKeyDecryption = SharedKeyDecryption(mockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
     RSAKeypair aliceKeypair = AtChopsUtil.generateRSAKeyPair(keySize: 2048);
     var aliceEncryptionPublicKey = aliceKeypair.publicKey.toString();
     var aliceEncryptionPrivateKey = aliceKeypair.privateKey.toString();
@@ -160,7 +160,7 @@ void main() {
   });
 
   test('test to check shared key decryption - with IV', () async {
-    var sharedKeyDecryption = SharedKeyDecryption(mockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
     RSAKeypair aliceKeypair = AtChopsUtil.generateRSAKeyPair(keySize: 2048);
     var aliceEncryptionPublicKey = aliceKeypair.publicKey.toString();
     var aliceEncryptionPrivateKey = aliceKeypair.privateKey.toString();
