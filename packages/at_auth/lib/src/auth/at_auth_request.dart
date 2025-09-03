@@ -22,7 +22,7 @@ class AtAuthRequest {
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
-  AtKeys? atKeys;
+  AtKeys? atAuthKeys;
 
   /// The file path which contains the .atKeys file for authentication.
   String? atKeysFilePath;

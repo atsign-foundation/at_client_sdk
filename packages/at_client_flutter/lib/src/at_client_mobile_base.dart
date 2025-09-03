@@ -1,5 +1,4 @@
-import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client_mobile/src/auth/at_auth_service_impl.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 /// The Base class to expose the AtClientMobile services.

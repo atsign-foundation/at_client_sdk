@@ -5,7 +5,7 @@ import 'package:at_auth/at_auth.dart';
 /// of an app closure. When an enrollment is approved, the key pairs are fetches and .atKeys file is generated.
 class EnrollmentInfo {
   String enrollmentId;
-  AtAuthKeys atAuthKeys;
+  AtKeys atAuthKeys;
   int enrollmentSubmissionTimeEpoch;
   Map<String, dynamic>? namespace;
   String? keysFilePath;
@@ -29,7 +29,7 @@ class EnrollmentInfo {
 
   EnrollmentInfo.fromJson(Map<String, dynamic> json)
       : enrollmentId = json['enrollmentId'],
-        atAuthKeys = AtAuthKeys.fromJson(json['atAuthKeys']),
+        atAuthKeys = AtKeys.fromJson(json['atAuthKeys']),
         enrollmentSubmissionTimeEpoch = json['enrollmentSubmissionTimeEpoch'],
         namespace = json['namespace'],
         keysFilePath = json['keysFilePath'];

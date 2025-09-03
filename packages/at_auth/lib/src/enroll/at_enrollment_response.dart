@@ -11,7 +11,7 @@ class AtEnrollmentResponse {
   EnrollmentStatus enrollStatus;
 
   /// Optional authentication keys associated with the enrollment.
-  AtAuthKeys? atAuthKeys;
+  AtKeys? atAuthKeys;
 
   /// Creates an instance of [AtEnrollmentResponse].
   ///

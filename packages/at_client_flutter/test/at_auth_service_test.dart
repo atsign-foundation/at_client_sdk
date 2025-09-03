@@ -3,9 +3,8 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client_mobile/src/atsign_key.dart';
-import 'package:at_client_mobile/src/auth/at_auth_service_impl.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_client_flutter/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:biometric_storage/biometric_storage.dart';
@@ -126,17 +125,14 @@ void main() {
               namespaces: {'wavi': 'rw'}));
 
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
-      expect(atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.isNotEmpty, true);
-      expect(
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.isNotEmpty, true);
-      expect(
-          atEnrollmentResponse
-              .atAuthKeys!.defaultEncryptionPublicKey!.isNotEmpty,
-          true);
-      expect(
-          atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey!.isNotEmpty, true);
-      expect(atEnrollmentResponse.atAuthKeys!.enrollmentId!.isNotEmpty, true);
-      expect(atEnrollmentResponse.enrollmentId.isNotEmpty, true);
+      expect(atEnrollmentResponse.atAuthKeys!.apkamPublicKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.apkamPrivateKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.enrollmentId, isNotNull);
+      expect(atEnrollmentResponse.enrollmentId, isNotNull);
       expect(mockBiometricStorageEnrollmentFile.dummyStorageFile.length, 1);
     });
 
@@ -197,17 +193,14 @@ void main() {
               'Failed to authenticate error: AT0025 enrollment is denied'));
 
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
-      expect(atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.isNotEmpty, true);
-      expect(
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.isNotEmpty, true);
-      expect(
-          atEnrollmentResponse
-              .atAuthKeys!.defaultEncryptionPublicKey!.isNotEmpty,
-          true);
-      expect(
-          atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey!.isNotEmpty, true);
-      expect(atEnrollmentResponse.atAuthKeys!.enrollmentId!.isNotEmpty, true);
-      expect(atEnrollmentResponse.enrollmentId.isNotEmpty, true);
+      expect(atEnrollmentResponse.atAuthKeys!.apkamPublicKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.apkamPrivateKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.enrollmentId, isNotNull);
+      expect(atEnrollmentResponse.enrollmentId, isNotNull);
       expect(mockBiometricStorageEnrollmentFile.dummyStorageFile.length, 1);
 
       Future<EnrollmentStatus> enrollmentStatus =
@@ -232,7 +225,7 @@ void main() {
               any(that: EnrollmentRequestMatcher()), mockAtLookUp))
           .thenAnswer((_) => Future.value(AtEnrollmentResponse(
               '010ad3dc-02ee-41c6-b74b-c82f5122b181', EnrollmentStatus.pending)
-            ..atAuthKeys = AtAuthKeys()));
+            ..atAuthKeys = AtKeys()));
       when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo',
               options: any(named: 'options')))
           .thenAnswer((_) async => mockBiometricStorageEnrollmentFile);
@@ -358,11 +351,11 @@ void main() {
         String jsonEncodedEnrollmentInfo =
             await Future.value(jsonEncode(EnrollmentInfo(
                 '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-                AtAuthKeys()
-                  ..apkamPublicKey = pkamPublicKey
-                  ..apkamPrivateKey = pkamPrivateKey
-                  ..defaultEncryptionPublicKey = encryptionPublicKey
-                  ..apkamSymmetricKey = atChopsKeys.apkamSymmetricKey?.key
+                AtKeys()
+                  ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
+                  ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
+                  ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
+                  ..apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key)
                   ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
                 DateTime.now().microsecondsSinceEpoch,
                 {'wavi': 'rw'})));
@@ -380,11 +373,11 @@ void main() {
             jsonEncode(
               EnrollmentInfo(
                   '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-                  AtAuthKeys()
-                    ..apkamPublicKey = pkamPublicKey
-                    ..apkamPrivateKey = pkamPrivateKey
-                    ..defaultEncryptionPublicKey = encryptionPublicKey
-                    ..apkamSymmetricKey = atChopsKeys.apkamSymmetricKey?.key
+                  AtKeys()
+                    ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
+                    ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
+                    ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
+                    ..apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key)
                     ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
                   DateTime.now().microsecondsSinceEpoch,
                   {'wavi': 'rw'}),
@@ -489,19 +482,19 @@ void main() {
 
       AtsignKey atsignKey = AtsignKey(
           atSign: atSign,
-          encryptionPublicKey: encryptionKeyPair.publicKey.toString());
+          encryptionPublicKey: AtBytes.fromString(encryptionKeyPair.publicKey.toString()));
 
       // Mock object to return keys from keychain manager
       when(() => mockKeyChainManager.readAtsign(name: atSign))
           .thenAnswer((_) => Future.value(atsignKey));
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
-      atAuthRequest.atAuthKeys = AtAuthKeys()
-        ..apkamPrivateKey = pkamKeyPair.privateKey.toString()
-        ..apkamPublicKey = pkamKeyPair.publicKey.toString()
-        ..defaultEncryptionPublicKey = encryptionKeyPair.publicKey.toString()
-        ..defaultEncryptionPrivateKey = encryptionKeyPair.privateKey.toString()
-        ..defaultSelfEncryptionKey = selfEncryptionKey
+      atAuthRequest.atAuthKeys = AtKeys()
+        ..apkamPrivateKey = AtBytes.fromString(pkamKeyPair.privateKey.toString())
+        ..apkamPublicKey = AtBytes.fromString(pkamKeyPair.publicKey.toString())
+        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionKeyPair.publicKey.toString())
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionKeyPair.privateKey.toString())
+        ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey)
         ..enrollmentId = '123';
 
       AtAuthResponse atAuthResponse =
@@ -533,20 +526,20 @@ void main() {
       (atAuthService as AtAuthServiceImpl).keyChainManager =
           mockKeyChainManager;
 
-      AtsignKey atsignKey = AtsignKey(atSign: atSign, encryptionPublicKey: '');
+      AtsignKey atsignKey = AtsignKey(atSign: atSign, encryptionPublicKey: null);
 
       // Mock object to return keys from keychain manager
       when(() => mockKeyChainManager.readAtsign(name: atSign))
           .thenAnswer((_) => Future.value(atsignKey));
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
-      atAuthRequest.atAuthKeys = AtAuthKeys()
-        ..apkamPrivateKey = pkamKeyPair.privateKey.toString()
-        ..apkamPublicKey = pkamKeyPair.publicKey.toString()
-        ..defaultEncryptionPublicKey = encryptionKeyPair.publicKey.toString()
-        ..defaultEncryptionPrivateKey = encryptionKeyPair.privateKey.toString()
-        ..defaultSelfEncryptionKey =
-            KeyChainManager.getInstance().generateAESKey();
+      atAuthRequest.atAuthKeys = AtKeys()
+        ..apkamPrivateKey = AtBytes.fromString(pkamKeyPair.privateKey.toString())
+        ..apkamPublicKey = AtBytes.fromString(pkamKeyPair.publicKey.toString())
+        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionKeyPair.publicKey.toString())
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionKeyPair.privateKey.toString())
+        ..defaultSelfEncryptionKey = AtBytes.fromString(
+            KeyChainManager.getInstance().generateAESKey());
 
       AtAuthResponse atAuthResponse =
           await atAuthService.authenticate(atAuthRequest);
@@ -572,7 +565,7 @@ void main() {
 
       AtsignKey atsignKey = AtsignKey(
           atSign: atSign,
-          encryptionPublicKey: encryptionKeyPair.publicKey.toString());
+          encryptionPublicKey: AtBytes.fromString(encryptionKeyPair.publicKey.toString()));
 
       // Mock object to return keys from keychain manager
       when(() => mockKeyChainManager.readAtsign(name: atSign))
@@ -582,12 +575,12 @@ void main() {
           .thenAnswer((_) => Future.value(true));
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
-      atAuthRequest.atAuthKeys = AtAuthKeys()
-        ..apkamPrivateKey = pkamKeyPair.privateKey.toString()
-        ..apkamPublicKey = pkamKeyPair.publicKey.toString()
-        ..defaultEncryptionPublicKey = encryptionKeyPair.publicKey.toString()
-        ..defaultEncryptionPrivateKey = encryptionKeyPair.privateKey.toString()
-        ..defaultSelfEncryptionKey = selfEncryptionKey
+      atAuthRequest.atAuthKeys = AtKeys()
+        ..apkamPrivateKey = AtBytes.fromString(pkamKeyPair.privateKey.toString())
+        ..apkamPublicKey = AtBytes.fromString(pkamKeyPair.publicKey.toString())
+        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionKeyPair.publicKey.toString())
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionKeyPair.privateKey.toString())
+        ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey)
         ..enrollmentId = '123';
 
       AtAuthResponse atAuthResponse =

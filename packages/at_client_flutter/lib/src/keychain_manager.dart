@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:crypton/crypton.dart';
@@ -13,6 +12,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:at_client_flutter/src/atsign_key.dart';
 
 import 'auth_constants.dart';
 
@@ -227,12 +227,12 @@ class KeyChainManager {
                     .read();
             final newAtSignKey = AtsignKey(
               atSign: key,
-              pkamPublicKey: pkamPublicKey,
-              pkamPrivateKey: pkamPrivateKey,
-              encryptionPublicKey: encryptionPublicKey,
-              encryptionPrivateKey: encryptionPrivateKey,
-              selfEncryptionKey: selfEncryptionKey,
-              hiveSecret: hiveSecret,
+              pkamPublicKey: AtBytes.fromString(pkamPublicKey!),
+              pkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
+              encryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
+              encryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
+              selfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
+              hiveSecret: hiveSecret!,
               secret: secret,
             );
             newAtSignKeys.add(newAtSignKey);
@@ -261,11 +261,11 @@ class KeyChainManager {
                 await FlutterKeychain.get(key: '$key:_secret');
             final newAtSignKey = AtsignKey(
               atSign: key,
-              pkamPublicKey: pkamPublicKey,
-              pkamPrivateKey: pkamPrivateKey,
-              encryptionPublicKey: encryptionPublicKey,
-              encryptionPrivateKey: encryptionPrivateKey,
-              selfEncryptionKey: selfEncryptionKey,
+              pkamPublicKey: AtBytes.fromString(pkamPublicKey!),
+              pkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
+              encryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
+              encryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
+              selfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
               hiveSecret: hiveSecret,
               secret: secret,
             );
@@ -389,20 +389,6 @@ class KeyChainManager {
     return atsigns?.secret ?? '';
   }
 
-  /// Use [readAtsign]
-  @Deprecated("Use readAtsign function to get AtsignKey")
-  Future<String?> getPrivateKeyFromKeyChain(String atsign) async {
-    final atsigns = await readAtsign(name: atsign);
-    return atsigns?.pkamPrivateKey;
-  }
-
-  /// Use [readAtsign]
-  @Deprecated("Use readAtsign function to get AtsignKey")
-  Future<String?> getPublicKeyFromKeyChain(String atsign) async {
-    final atsigns = await readAtsign(name: atsign);
-    return atsigns?.pkamPublicKey;
-  }
-
   /// Function to save atsign and pkam keys passed to keychain
   Future<bool> storeCredentialToKeychain(String atSign,
       {String? secret, String? privateKey, String? publicKey}) async {
@@ -421,14 +407,14 @@ class KeyChainManager {
       if (index >= 0) {
         atsigns[index] = atsigns[index].copyWith(
           secret: secret,
-          pkamPrivateKey: privateKey,
-          pkamPublicKey: publicKey,
+          pkamPrivateKey: AtBytes.fromString(privateKey!),
+          pkamPublicKey: AtBytes.fromString(publicKey!),
         );
       } else {
         atsigns.add(AtsignKey(atSign: atSign).copyWith(
           secret: secret,
-          pkamPrivateKey: privateKey,
-          pkamPublicKey: publicKey,
+          pkamPrivateKey: AtBytes.fromString(privateKey!),
+          pkamPublicKey: AtBytes.fromString(publicKey!),
         ));
       }
       if (atClientData != null) {
@@ -459,13 +445,13 @@ class KeyChainManager {
       final index = atsigns.indexWhere((element) => element.atSign == atsign);
       if (index >= 0) {
         atsigns[index] = atsigns[index].copyWith(
-          pkamPrivateKey: privateKey,
-          pkamPublicKey: publicKey,
+          pkamPrivateKey: AtBytes.fromString(privateKey!),
+          pkamPublicKey: AtBytes.fromString(publicKey!),
         );
       } else {
         atsigns.add(AtsignKey(atSign: atsign).copyWith(
-          pkamPrivateKey: privateKey,
-          pkamPublicKey: publicKey,
+          pkamPrivateKey: AtBytes.fromString(privateKey!),
+          pkamPublicKey: AtBytes.fromString(publicKey!),
         ));
       }
       atClientData?.keys = atsigns;
@@ -506,31 +492,31 @@ class KeyChainManager {
   /// Function to get pkam private key from keychain
   Future<String?> getPkamPrivateKey(String atSign) async {
     final atsigns = await readAtsign(name: atSign);
-    return atsigns?.pkamPrivateKey;
+    return atsigns?.pkamPrivateKey.toString();
   }
 
   /// Function to get pkam public key from keychain
   Future<String?> getPkamPublicKey(String atSign) async {
     final atsigns = await readAtsign(name: atSign);
-    return atsigns?.pkamPublicKey;
+    return atsigns?.pkamPublicKey.toString();
   }
 
   /// Function to get encryption private key from keychain
   Future<String?> getEncryptionPrivateKey(String atSign) async {
     final atsigns = await readAtsign(name: atSign);
-    return atsigns?.encryptionPrivateKey;
+    return atsigns?.encryptionPrivateKey.toString();
   }
 
   /// Function to get encryption public key from keychain
   Future<String?> getEncryptionPublicKey(String atSign) async {
     final atsigns = await readAtsign(name: atSign);
-    return atsigns?.encryptionPublicKey;
+    return atsigns?.encryptionPublicKey.toString();
   }
 
   /// Function to get self encryption key from keychain
   Future<String?> getSelfEncryptionAESKey(String atSign) async {
     final atsigns = await readAtsign(name: atSign);
-    return atsigns?.selfEncryptionKey;
+    return atsigns?.selfEncryptionKey.toString();
   }
 
   /// Function to get hive secret from keychain
@@ -830,31 +816,35 @@ class KeyChainManager {
     Map<String, String> encryptedAtKeysMap = <String, String>{};
 
     String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
-        atsignKeyData.pkamPublicKey!, atsignKeyData.selfEncryptionKey!);
+        atsignKeyData.pkamPublicKey!.toString(),
+        atsignKeyData.selfEncryptionKey!.toString());
     encryptedAtKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
         encryptedPkamPublicKey;
 
     String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
-        atsignKeyData.pkamPrivateKey!, atsignKeyData.selfEncryptionKey!);
+        atsignKeyData.pkamPrivateKey!.toString(),
+        atsignKeyData.selfEncryptionKey!.toString());
     encryptedAtKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
         encryptedPkamPrivateKey;
 
     String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
-        atsignKeyData.encryptionPublicKey!, atsignKeyData.selfEncryptionKey!);
+        atsignKeyData.encryptionPublicKey!.toString(),
+        atsignKeyData.selfEncryptionKey!.toString());
     encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
         encryptedEncryptionPublicKey;
 
     String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
-        atsignKeyData.encryptionPrivateKey!, atsignKeyData.selfEncryptionKey!);
+        atsignKeyData.encryptionPrivateKey!.toString(),
+        atsignKeyData.selfEncryptionKey!.toString());
     encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
         encryptedEncryptionPrivateKey;
     encryptedAtKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
-        atsignKeyData.selfEncryptionKey!;
+        atsignKeyData.selfEncryptionKey.toString();
     // The atKeys file generated previous to APKAM feature will not have the
     // apkam_symmetric_key. Hence adding null check to prevent null-pointer exception.
     if (atsignKeyData.apkamSymmetricKey != null) {
       encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
-          atsignKeyData.apkamSymmetricKey!;
+          atsignKeyData.apkamSymmetricKey.toString();
     }
     // The atKeys file generated previous to APKAM feature will not have the
     // enrollment-id. Hence adding null check to prevent null-pointer exception.

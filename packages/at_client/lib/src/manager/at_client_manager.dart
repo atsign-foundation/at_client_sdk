@@ -200,7 +200,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
   @override
   EnrollmentService enrollmentService(AtClient atClient) {
     AtEnrollmentBase atEnrollmentBase =
-        atAuthBase.atEnrollment(atClient.getCurrentAtSign()!);
+        AtEnrollmentBase.create(atClient.getCurrentAtSign()!);
     return EnrollmentServiceImpl(atClient, atEnrollmentBase);
   }
 }

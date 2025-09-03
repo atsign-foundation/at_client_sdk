@@ -1,4 +1,5 @@
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 
 /// Represents and authentication response of an atSign.
 class AtAuthResponse {
@@ -12,7 +13,7 @@ class AtAuthResponse {
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
-  AtAuthKeys? atAuthKeys;
+  AtKeys? atAuthKeys;
 
   /// Constructor that takes an @sign as a parameter
   AtAuthResponse(this.atSign);

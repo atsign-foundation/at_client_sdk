@@ -2,29 +2,29 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
-import 'package:at_onboarding_cli/at_onboarding_cli.dart'
-    show HomeDirectoryUtil;
+import 'package:at_auth/at_auth.dart';
 
 final AtSignLogger _logger = AtSignLogger('AtKeysFileIo');
 
 class AtKeysFileIo extends AtKeysIo {
+  String? filePath;
+
+  AtKeysFileIo(String this.filePath);
+
   @override
   FutureOr<AtKeys> read(String atSign) async {
     AtKeys? atKeys;
-    String filePath = HomeDirectoryUtil.getAtKeysPath(atSign);
     AtAuthRequest atAuthRequest = AtAuthRequest(atSign)
       ..atKeysFilePath = filePath;
     if (atAuthRequest.atKeysFilePath != null) {
       atKeys = await _prepareAtKeysFromFilePath(atAuthRequest);
     } else {
-      atKeys = atAuthRequest.atKeys;
+      atKeys = atAuthRequest.atAuthKeys;
     }
     if (atKeys == null) {
       throw AtAuthenticationException(
@@ -42,44 +42,64 @@ class AtKeysFileIo extends AtKeysIo {
 }
 
 class AtKeysKeychainIo extends AtKeysIo {
-  @override
-  FutureOr<AtKeys> read(String atSign) {}
+  late AtKeys atKeys;
+
+  AtKeysKeychainIo(this.atKeys);
 
   @override
-  Future write(String atSign, AtKeys atKeys) {}
+  FutureOr<AtKeys> read(String atSign) {
+    return atKeys;
+  }
+
+  @override
+  Future write(String atSign, AtKeys atKeys) {
+    // TODO: implement write
+    return Future.value();
+  }
 }
 
 AtKeys _decryptAtKeys(Map<String, dynamic> jsonData) {
-  AtKeys atKeys = AtKeys();
   String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey]!;
   var atChops =
       AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
-  atKeys.defaultEncryptionPublicKey = atChops
+  var defaultEncryptionPublicKey = atChops
       .decryptString(jsonData[auth_constants.defaultEncryptionPublicKey]!,
           EncryptionKeyType.aes256,
           keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
       .result;
-  atKeys.defaultEncryptionPrivateKey = atChops
+  var defaultEncryptionPrivateKey = atChops
       .decryptString(jsonData[auth_constants.defaultEncryptionPrivateKey]!,
           EncryptionKeyType.aes256,
           keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
       .result;
-  atKeys.defaultSelfEncryptionKey = AtBytes.fromString(decryptionKey);
-  atKeys.apkamPublicKey = atChops
+  var defaultSelfEncryptionKey = AtBytes.fromString(decryptionKey);
+  var apkamPublicKey = atChops
       .decryptString(
           jsonData[auth_constants.apkamPublicKey]!, EncryptionKeyType.aes256,
           keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
       .result;
 
   // decrypt the private key since is keysFile
-  atKeys.apkamPrivateKey = atChops
+  var apkamPrivateKey = atChops
       .decryptString(
           jsonData[auth_constants.apkamPrivateKey]!, EncryptionKeyType.aes256,
           keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
       .result;
 
-  atKeys.apkamSymmetricKey = jsonData[auth_constants.apkamSymmetricKey];
-  atKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
+  var apkamSymmetricKey = jsonData[auth_constants.apkamSymmetricKey];
+  var enrollmentId = jsonData[AtConstants.enrollmentId];
+
+  AtKeys atKeys = AtKeys()
+    ..defaultEncryptionPublicKey =
+        AtBytes.fromString(defaultEncryptionPublicKey)
+    ..defaultEncryptionPrivateKey =
+        AtBytes.fromString(defaultEncryptionPrivateKey)
+    ..defaultSelfEncryptionKey = defaultSelfEncryptionKey
+    ..apkamPublicKey = AtBytes.fromString(apkamPublicKey)
+    ..apkamPrivateKey = AtBytes.fromString(apkamPrivateKey)
+    ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey)
+    ..enrollmentId = enrollmentId;
+
   return atKeys;
 }
 

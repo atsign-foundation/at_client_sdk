@@ -1,7 +1,7 @@
-import 'package:at_auth/src/onboard/at_onboarding_request.dart';
-import 'package:at_auth/src/onboard/at_onboarding_response.dart';
-import 'package:at_auth/src/auth/at_auth_request.dart';
-import 'package:at_auth/src/auth/at_auth_response.dart';
+import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/at_auth_impl.dart';
+import 'package:at_auth/src/auth/cram_authenticator.dart';
+import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
@@ -9,6 +9,20 @@ import 'package:at_lookup/at_lookup.dart';
 abstract interface class AtAuth {
   AtChops? atChops;
   AtLookUp? atLookUp;
+
+  factory AtAuth.create(
+      {AtLookUp? atLookUp,
+      AtChops? atChops,
+      CramAuthenticator? cramAuthenticator,
+      PkamAuthenticator? pkamAuthenticator,
+      AtEnrollmentBase? atEnrollmentBase}) {
+    return AtAuthImpl(
+        atLookUp: atLookUp,
+        atChops: atChops,
+        cramAuthenticator: cramAuthenticator,
+        pkamAuthenticator: pkamAuthenticator,
+        atEnrollmentBase: atEnrollmentBase);
+  }
 
   /// Authenticate method is invoked when an atsign wants to authenticate to secondary server with an .atKeys file
   /// Step 1. Read the keys from [atAuthRequest.atAuthKeys] or [atAuthRequest.atKeysFilePath]

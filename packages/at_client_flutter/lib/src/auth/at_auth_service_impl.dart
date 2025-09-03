@@ -3,13 +3,13 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
-import 'package:at_client_mobile/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:at_client_flutter/src/atsign_key.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
 
 class AtAuthServiceImpl implements AtAuthService {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
@@ -52,8 +52,8 @@ class AtAuthServiceImpl implements AtAuthService {
     if (!_atSign.startsWith('@')) {
       _atSign = '@$_atSign';
     }
-    _atAuth = atAuthBase.atAuth(atLookUp: _atLookUp);
-    atEnrollmentBase = atAuthBase.atEnrollment(_atSign);
+    _atAuth = AtAuth.create(atLookUp: _atLookUp);
+    atEnrollmentBase = AtEnrollmentBase.create(_atSign);
   }
 
   @override
@@ -107,20 +107,25 @@ class AtAuthServiceImpl implements AtAuthService {
     return atAuthResponse;
   }
 
-  Future<AtAuthKeys> _fetchKeysFromKeychainManager() async {
+  Future<AtKeys> _fetchKeysFromKeychainManager() async {
     AtsignKey? atSignKey = await keyChainManager.readAtsign(name: _atSign);
     if (atSignKey == null) {
       throw AtAuthenticationException(
           'Failed to authenticate. Keys not found in Keychain manager for atSign: $_atSign');
     }
 
-    AtAuthKeys atAuthKeys = AtAuthKeys()
-      ..apkamPrivateKey = atSignKey.pkamPrivateKey
-      ..apkamPublicKey = atSignKey.pkamPublicKey
-      ..defaultEncryptionPrivateKey = atSignKey.encryptionPrivateKey
-      ..defaultEncryptionPublicKey = atSignKey.encryptionPublicKey
-      ..defaultSelfEncryptionKey = atSignKey.selfEncryptionKey
-      ..apkamSymmetricKey = atSignKey.apkamSymmetricKey
+    AtKeys atAuthKeys = AtKeys()
+      ..apkamPrivateKey =
+          AtBytes.fromString(atSignKey.pkamPrivateKey.toString())
+      ..apkamPublicKey = AtBytes.fromString(atSignKey.pkamPublicKey.toString())
+      ..defaultEncryptionPrivateKey =
+          AtBytes.fromString(atSignKey.encryptionPrivateKey.toString())
+      ..defaultEncryptionPublicKey =
+          AtBytes.fromString(atSignKey.encryptionPublicKey.toString())
+      ..defaultSelfEncryptionKey =
+          AtBytes.fromString(atSignKey.selfEncryptionKey.toString())
+      ..apkamSymmetricKey =
+          AtBytes.fromString(atSignKey.apkamSymmetricKey.toString())
       ..enrollmentId = atSignKey.enrollmentId;
 
     return atAuthKeys;
@@ -132,8 +137,7 @@ class AtAuthServiceImpl implements AtAuthService {
     if (atsignKey == null) {
       return false;
     }
-    if (atsignKey.encryptionPublicKey == null ||
-        atsignKey.encryptionPublicKey!.isEmpty) {
+    if (atsignKey.encryptionPublicKey == null) {
       return false;
     }
     return true;
@@ -167,7 +171,7 @@ class AtAuthServiceImpl implements AtAuthService {
 
   /// Stores the atKeys to Key-Chain Manager.
   Future<void> _storeToKeyChainManager(
-      String atSign, AtAuthKeys? atAuthKeys) async {
+      String atSign, AtKeys? atAuthKeys) async {
     if (atAuthKeys == null) {
       throw AtException(
           'Failed to store keys in Keychain manager for atSign: $_atSign. AtAuthKeys instance is null');
@@ -187,26 +191,24 @@ class AtAuthServiceImpl implements AtAuthService {
     await keyChainManager.storeAtSign(atSign: atSignItem);
   }
 
-  Future<void> _persistKeysLocalSecondary(AtAuthKeys? atAuthKeys) async {
+  Future<void> _persistKeysLocalSecondary(AtKeys? atAuthKeys) async {
     if (atAuthKeys == null) {
       throw AtException(
           'Failed to store keys in Keychain manager for atSign: $_atSign. AtAuthKeys instance is null');
     }
 
-    await _atClient!
-        .getLocalSecondary()!
-        .putValue(AtConstants.atPkamPublicKey, atAuthKeys.apkamPublicKey!);
+    await _atClient!.getLocalSecondary()!.putValue(
+        AtConstants.atPkamPublicKey, atAuthKeys.apkamPublicKey!.toString());
 
     // pkam private will not be available in case of secure element
     if (atAuthKeys.apkamPrivateKey != null) {
-      await _atClient!
-          .getLocalSecondary()!
-          .putValue(AtConstants.atPkamPrivateKey, atAuthKeys.apkamPrivateKey!);
+      await _atClient!.getLocalSecondary()!.putValue(
+          AtConstants.atPkamPrivateKey, atAuthKeys.apkamPrivateKey!.toString());
     }
 
     await _atClient!.getLocalSecondary()!.putValue(
         AtConstants.atEncryptionPrivateKey,
-        atAuthKeys.defaultEncryptionPrivateKey!);
+        atAuthKeys.defaultEncryptionPrivateKey!.toString());
 
     var updateBuilder = UpdateVerbBuilder()
       ..atKey = AtKey.public('publickey', sharedBy: _atSign).build();
@@ -218,7 +220,8 @@ class AtAuthServiceImpl implements AtAuthService {
         .executeVerb(updateBuilder, sync: true);
 
     await _atClient!.getLocalSecondary()!.putValue(
-        AtConstants.atEncryptionSelfKey, atAuthKeys.defaultSelfEncryptionKey!);
+        AtConstants.atEncryptionSelfKey,
+        atAuthKeys.defaultSelfEncryptionKey!.toString());
   }
 
   Future<void> _init(AtChops atChops, {String? enrollmentId}) async {
@@ -379,10 +382,11 @@ class AtAuthServiceImpl implements AtAuthService {
     // If enrollment is approved, then apkam authentication will be successful.
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
         null,
-        AtPkamKeyPair.create(enrollmentInfo.atAuthKeys.apkamPublicKey!,
-            enrollmentInfo.atAuthKeys.apkamPrivateKey!));
+        AtPkamKeyPair.create(
+            enrollmentInfo.atAuthKeys.apkamPublicKey!.toString(),
+            enrollmentInfo.atAuthKeys.apkamPrivateKey!.toString()));
     atChopsKeys.apkamSymmetricKey =
-        AESKey(enrollmentInfo.atAuthKeys.apkamSymmetricKey!);
+        AESKey(enrollmentInfo.atAuthKeys.apkamSymmetricKey!.toString());
     _atLookUp?.atChops = AtChopsImpl(atChopsKeys);
 
     return await _atLookUp?.pkamAuthenticate(
@@ -445,7 +449,7 @@ class AtAuthServiceImpl implements AtAuthService {
   /// Retrieves the encrypted "encryption private key" from the server and decrypts.
   /// This process involves using the APKAM symmetric key for decryption.
   /// Returns the original "encryption private key" after decryption.
-  Future<String> _getDefaultEncryptionPrivateKey(
+  Future<AtBytes> _getDefaultEncryptionPrivateKey(
       String enrollmentIdFromServer, AtChops atChops) async {
     var privateKeyCommand =
         'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultEncryptionPrivateKey}.__manage$_atSign\n';
@@ -472,13 +476,13 @@ class AtAuthServiceImpl implements AtAuthService {
         iv: encryptionPrivateKeyIV != null
             ? InitialisationVector(base64Decode(encryptionPrivateKeyIV))
             : AtChopsUtil.generateIVLegacy());
-    return atEncryptionResult.result;
+    return AtBytes.fromString(atEncryptionResult.result);
   }
 
   /// Returns the decrypted selfEncryptionKey.
   /// Fetches the encrypted selfEncryptionKey from the server and decrypts the
   /// key with APKAM Symmetric key to get the original selfEncryptionKey.
-  Future<String> _getDefaultSelfEncryptionKey(
+  Future<AtBytes> _getDefaultSelfEncryptionKey(
       String enrollmentIdFromServer, AtChops atChops) async {
     var selfEncryptionKeyCommand =
         'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultSelfEncryptionKey}.__manage$_atSign\n';
@@ -507,7 +511,7 @@ class AtAuthServiceImpl implements AtAuthService {
         iv: selfEncryptionKeyIV != null
             ? InitialisationVector(base64Decode(selfEncryptionKeyIV))
             : AtChopsUtil.generateIVLegacy());
-    return atEncryptionResult.result;
+    return AtBytes.fromString(atEncryptionResult.result);
   }
 
   /// Stores the enrolled namespace in the local secondary to perform authorization checks
@@ -536,19 +540,19 @@ class AtAuthServiceImpl implements AtAuthService {
 
   AtChops _buildAtChops(EnrollmentInfo enrollmentInfo) {
     AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        enrollmentInfo.atAuthKeys.defaultEncryptionPublicKey!,
-        enrollmentInfo.atAuthKeys.defaultEncryptionPrivateKey!);
+        enrollmentInfo.atAuthKeys.defaultEncryptionPublicKey!.toString(),
+        enrollmentInfo.atAuthKeys.defaultEncryptionPrivateKey!.toString());
 
     AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-        enrollmentInfo.atAuthKeys.apkamPublicKey!,
-        enrollmentInfo.atAuthKeys.apkamPrivateKey!);
+        enrollmentInfo.atAuthKeys.apkamPublicKey!.toString(),
+        enrollmentInfo.atAuthKeys.apkamPrivateKey!.toString());
 
     AtChopsKeys atChopsKeys =
         AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     atChopsKeys.selfEncryptionKey =
-        AESKey(enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey!);
+        AESKey(enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey!.toString());
     atChopsKeys.apkamSymmetricKey =
-        AESKey(enrollmentInfo.atAuthKeys.apkamSymmetricKey!);
+        AESKey(enrollmentInfo.atAuthKeys.apkamSymmetricKey!.toString());
 
     AtChops atChops = AtChopsImpl(atChopsKeys);
     return atChops;

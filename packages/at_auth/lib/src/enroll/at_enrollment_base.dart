@@ -1,3 +1,4 @@
+import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/base_enrollment_request.dart';
 import 'package:at_auth/src/enroll/enrollment_request_decision.dart';
@@ -5,6 +6,10 @@ import 'package:at_lookup/at_lookup.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollmentBase {
+  factory AtEnrollmentBase.create(String atSign) {
+    return AtEnrollmentImpl(atSign);
+  }
+
   /// Submits an enrollment request.
   ///
   /// The [BaseEnrollmentRequest] is an abstract class and serves as the entity responsible for submitting the enrollment request. This

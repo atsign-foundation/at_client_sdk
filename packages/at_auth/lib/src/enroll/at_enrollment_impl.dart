@@ -8,7 +8,7 @@ import 'package:at_auth/src/enroll/enrollment_request.dart';
 import 'package:at_auth/src/enroll/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/first_enrollment_request.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_auth_keys.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -81,12 +81,14 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
     var enrollJson = jsonDecode(serverResponse);
     var enrollmentIdFromServer = enrollJson[AtConstants.enrollmentId];
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
-    AtAuthKeys atAuthKeys = AtAuthKeys()
-      ..apkamPrivateKey = apkamKeyPair.atPrivateKey.privateKey
-      ..apkamPublicKey = apkamKeyPair.atPublicKey.publicKey
-      ..apkamSymmetricKey = apkamSymmetricKey.key
+    AtKeys atAuthKeys = AtKeys()
+      ..apkamPrivateKey =
+          AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
+      ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
+      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key)
       ..enrollmentId = enrollJson[AtConstants.enrollmentId]
-      ..defaultEncryptionPublicKey = defaultEncryptionPublicKey;
+      ..defaultEncryptionPublicKey =
+          AtBytes.fromString(defaultEncryptionPublicKey);
 
     return AtEnrollmentResponse(enrollmentIdFromServer, enrollStatus)
       ..atAuthKeys = atAuthKeys;

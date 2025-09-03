@@ -1,13 +1,15 @@
+import 'package:at_commons/at_commons.dart';
+
 ///Save atsign key
 /// https://docs.google.com/document/d/1JAXNrGr6J30m1xTWD4t7z2eQRo6O7icEOprJh1KKNas/edit?hl=en&forcehl=1#
 class AtsignKey {
   final String atSign;
-  final String? pkamPublicKey;
-  final String? pkamPrivateKey;
-  final String? encryptionPublicKey;
-  final String? encryptionPrivateKey;
-  final String? selfEncryptionKey;
-  final String? apkamSymmetricKey;
+  final AtBytes? pkamPublicKey;
+  final AtBytes? pkamPrivateKey;
+  final AtBytes? encryptionPublicKey;
+  final AtBytes? encryptionPrivateKey;
+  final AtBytes? selfEncryptionKey;
+  final AtBytes? apkamSymmetricKey;
   final String? enrollmentId;
   final String? hiveSecret;
   final String? secret;
@@ -64,12 +66,12 @@ class AtsignKey {
 
   AtsignKey copyWith({
     String? name,
-    String? pkamPublicKey,
-    String? pkamPrivateKey,
-    String? encryptionPublicKey,
-    String? encryptionPrivateKey,
-    String? selfEncryptionKey,
-    String? apkamSymmetricKey,
+    AtBytes? pkamPublicKey,
+    AtBytes? pkamPrivateKey,
+    AtBytes? encryptionPublicKey,
+    AtBytes? encryptionPrivateKey,
+    AtBytes? selfEncryptionKey,
+    AtBytes? apkamSymmetricKey,
     String? enrollmentId,
     String? hiveSecret,
     String? secret,

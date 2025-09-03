@@ -1,4 +1,4 @@
-import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/first_enrollment_request.dart';
@@ -105,12 +107,12 @@ void main() {
           (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atAuthKeys = AtAuthKeys()
-        ..apkamPublicKey = 'testApkamPublicKey'
-        ..apkamPrivateKey = 'testApkamPrivateKey'
-        ..defaultEncryptionPublicKey = 'defaultEncryptionPublicKey'
-        ..defaultEncryptionPrivateKey = 'defaultEncryptionPrivateKey'
-        ..defaultSelfEncryptionKey = 'defaultSelfEncryptionKey'
+      atAuthRequest.atAuthKeys = AtKeys()
+        ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..apkamPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
       final response = await atAuth.authenticate(atAuthRequest);
@@ -130,11 +132,11 @@ void main() {
           (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atAuthKeys = AtAuthKeys()
-        ..apkamPublicKey = 'testApkamPublicKey'
-        ..defaultEncryptionPublicKey = 'defaultEncryptionPublicKey'
-        ..defaultEncryptionPrivateKey = 'defaultEncryptionPrivateKey'
-        ..defaultSelfEncryptionKey = 'defaultSelfEncryptionKey'
+      atAuthRequest.atAuthKeys = AtKeys()
+       ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
       expect(() async => await atAuth.authenticate(atAuthRequest),
