@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:at_onboarding_flutter/screen/at_onboarding_reference_screen.dart';
+import 'package:at_onboarding_flutter/utils/at_onboarding_app_constants.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_dimens.dart';
-import 'package:at_onboarding_flutter/utils/at_onboarding_strings.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_button.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -90,7 +90,7 @@ class _AtOnboardingInputAtSignScreenState extends State<AtOnboardingInputAtSignS
                     },
                     controller: _atsignController,
                     decoration: InputDecoration(
-                      hintText: AtOnboardingStrings.atsignHintText,
+                      hintText: AtOnboardingConstants.atsignHintText,
                       prefix: Text(
                         '@',
                         style: TextStyle(color: theme.primaryColor),
@@ -131,13 +131,13 @@ class _AtOnboardingInputAtSignScreenState extends State<AtOnboardingInputAtSignS
       AtOnboardingReferenceScreen.push(
         context: context,
         title: AtOnboardingLocalizations.current.title_FAQ,
-        url: AtOnboardingStrings.faqUrl,
+        url: AtOnboardingConstants.faqUrl,
         config: widget.config,
       );
     } else {
       launchUrl(
         Uri.parse(
-          AtOnboardingStrings.faqUrl,
+          AtOnboardingConstants.faqUrl,
         ),
       );
     }

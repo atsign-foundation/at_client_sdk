@@ -305,4 +305,15 @@ class OnboardingService {
     final result = await keyChainManager.disableUsingSharedStorage();
     return result;
   }
+
+   //TEMP: will be refactored later
+  Future<void> resetAtsigns(List<String> atsigns) async {
+    for (String atsign in atsigns) {
+      await keyChainManager.resetAtSignFromKeychain(atsign);
+      // Hint: Since, the OnboardingService is a singleton instance. Setting
+      // atSign to null to enable setting new atSign during subsequent
+      // onboard process.
+      setAtsign = null;
+    }
+  }
 }

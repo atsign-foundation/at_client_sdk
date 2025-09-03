@@ -1,7 +1,7 @@
 import 'package:at_onboarding_flutter/at_onboarding_result.dart';
 import 'package:at_onboarding_flutter/localizations/generated/l10n.dart';
 import 'package:at_onboarding_flutter/services/at_onboarding_config.dart';
-import 'package:at_onboarding_flutter/services/sdk_service.dart';
+import 'package:at_onboarding_flutter/services/onboarding_service.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_dimens.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_error_util.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_button.dart';
@@ -26,6 +26,7 @@ class _AtOnboardingResetScreenState extends State<AtOnboardingResetScreen> {
   List<String> atsignsList = [];
   Map<String, bool?> atsignMap = <String, bool>{};
   bool isSelectAll = false;
+  final OnboardingService _onboardingService = OnboardingService.getInstance();
 
   @override
   void initState() {
@@ -34,7 +35,7 @@ class _AtOnboardingResetScreenState extends State<AtOnboardingResetScreen> {
   }
 
   void setup() async {
-    atsignsList = await SDKService().getAtsignList() ?? [];
+    atsignsList = await _onboardingService.getAtsignList() ?? [];
     for (String atsign in atsignsList) {
       atsignMap[atsign] = false;
     }
@@ -209,7 +210,7 @@ class _AtOnboardingResetScreenState extends State<AtOnboardingResetScreen> {
   }
 
   Future<void> _resetDevice(List<String> checkedAtsigns) async {
-    await SDKService().resetAtsigns(checkedAtsigns).then((void value) async {
+    await _onboardingService.resetAtsigns(checkedAtsigns).then((void value) async {
       if (mounted) {
         Navigator.pop(context, AtOnboardingResetResult.success);
       }

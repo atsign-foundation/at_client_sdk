@@ -5,7 +5,6 @@ import 'package:at_onboarding_flutter/services/at_onboarding_backup_service.dart
 import 'package:at_onboarding_flutter/services/onboarding_service.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_app_constants.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_dimens.dart';
-import 'package:at_onboarding_flutter/utils/at_onboarding_strings.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_button.dart';
 import 'package:flutter/material.dart';
 
@@ -97,7 +96,7 @@ class _AtOnboardingBackupScreenState extends State<AtOnboardingBackupScreen> {
               ),
               Center(
                 child: Image.asset(
-                  AtOnboardingStrings.backupZip,
+                  AtOnboardingConstants.backupZip,
                   height: Platform.isAndroid || Platform.isIOS
                       ? MediaQuery.of(context).size.height * 0.3
                       : 250,

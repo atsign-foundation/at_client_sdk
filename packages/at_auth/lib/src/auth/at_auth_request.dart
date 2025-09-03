@@ -1,4 +1,4 @@
-import 'package:at_auth/src/keys/at_auth_keys.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -22,7 +22,7 @@ class AtAuthRequest {
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
-  AtAuthKeys? atAuthKeys;
+  AtKeys? atKeys;
 
   /// The file path which contains the .atKeys file for authentication.
   String? atKeysFilePath;

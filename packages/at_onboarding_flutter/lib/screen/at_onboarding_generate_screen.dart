@@ -9,10 +9,10 @@ import 'package:at_onboarding_flutter/screen/at_onboarding_reference_screen.dart
 import 'package:at_onboarding_flutter/services/at_onboarding_tutorial_service.dart';
 import 'package:at_onboarding_flutter/services/free_atsign_service.dart';
 import 'package:at_onboarding_flutter/services/onboarding_service.dart';
+import 'package:at_onboarding_flutter/utils/at_onboarding_app_constants.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_dimens.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_error_util.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_response_status.dart';
-import 'package:at_onboarding_flutter/utils/at_onboarding_strings.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_button.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_dialog.dart';
 import 'package:at_sync_ui_flutter/at_sync_material.dart';
@@ -244,7 +244,7 @@ class _AtOnboardingGenerateScreenState extends State<AtOnboardingGenerateScreen>
                       },
                       controller: _atsignController,
                       decoration: InputDecoration(
-                        hintText: AtOnboardingStrings.atsignHintText,
+                        hintText: AtOnboardingConstants.atsignHintText,
                         prefix: Text(
                           '@',
                           style: TextStyle(color: theme.primaryColor),
@@ -403,13 +403,13 @@ class _AtOnboardingGenerateScreenState extends State<AtOnboardingGenerateScreen>
       AtOnboardingReferenceScreen.push(
         context: context,
         title: AtOnboardingLocalizations.current.title_FAQ,
-        url: AtOnboardingStrings.faqUrl,
+        url: AtOnboardingConstants.faqUrl,
         config: widget.config,
       );
     } else {
       launchUrl(
         Uri.parse(
-          AtOnboardingStrings.faqUrl,
+          AtOnboardingConstants.faqUrl,
         ),
       );
     }
