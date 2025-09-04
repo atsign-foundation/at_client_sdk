@@ -1,10 +1,11 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 
 class AtOnboardingRequest {
   String atSign;
   AtOnboardingRequest(this.atSign);
-  PkamAuthMode authMode = PkamAuthMode.keysFile;
+  AtKeysIo? atKeysIo;
   @Deprecated('no longer used')
   bool enableEnrollment = false;
   String rootDomain = 'root.atsign.org';
