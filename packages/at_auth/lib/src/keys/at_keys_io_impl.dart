@@ -2,15 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_auth/at_auth.dart';
 
-final AtSignLogger _logger = AtSignLogger('AtKeysIoImpl');
-
-class FileAtKeysIo extends AtKeysIo {
+class FileAtKeysIo extends BaseAtKeysIo {
   String? filePath;
   FileAtKeysIo(String this.filePath);
 
@@ -24,11 +19,11 @@ class FileAtKeysIo extends AtKeysIo {
       }
       String atAuthData = await File(filePath!).readAsString();
       decodedAtKeysData = jsonDecode(atAuthData);
-      decodedAtKeysData = await _decodeAtKeys(decodedAtKeysData, passPhrase: atAuthRequest.passPhrase);
+      decodedAtKeysData = await decodeAtKeys(decodedAtKeysData, passPhrase: atAuthRequest.passPhrase);
     } else {
       throw AtException('atKeys filePath is required to read from file');
     }
-    return _decryptAtKeysWithSelfEncKey(decodedAtKeysData, PkamAuthMode.keysFile);
+    return decryptAtKeysWithSelfEncKey(decodedAtKeysData, PkamAuthMode.keysFile);
   }
 
   @override
@@ -36,17 +31,17 @@ class FileAtKeysIo extends AtKeysIo {
     if (filePath == null) {
       throw AtException('atKeys filePath is required to write to file');
     }
-    String atKeysData = _encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
+    String atKeysData = encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     return File(filePath!).writeAsString(atKeysData);
   }
 
   @override
   FutureOr<AtKeys> generateKeys(String atSign, {String? publicKeyId}) {
-    return _generateKeyPairs(PkamAuthMode.keysFile);
+    return generateKeyPairs(PkamAuthMode.keysFile);
   }
 }
 
-class SimAtKeysIo extends AtKeysIo {
+class SimAtKeysIo extends BaseAtKeysIo {
   AtKeys? atKeys;
   Map<String, dynamic>? encryptedKeysMap;
 
@@ -58,8 +53,8 @@ class SimAtKeysIo extends AtKeysIo {
       return atKeys!;
     }
     if (encryptedKeysMap != null) {
-      encryptedKeysMap = await _decodeAtKeys(encryptedKeysMap!);
-      return _decryptAtKeysWithSelfEncKey(encryptedKeysMap!, PkamAuthMode.sim);
+      encryptedKeysMap = await decodeAtKeys(encryptedKeysMap!);
+      return decryptAtKeysWithSelfEncKey(encryptedKeysMap!, PkamAuthMode.sim);
     }
 
     throw AtAuthenticationException('atAuthKeys or encryptedKeysMap is required to read from keychain');
@@ -77,132 +72,8 @@ class SimAtKeysIo extends AtKeysIo {
     if (publicKeyId == null || publicKeyId.isEmpty) {
       throw AtException('publicKeyId is required to generate keys when auth mode is sim');
     }
-    return _generateKeyPairs(PkamAuthMode.keysFile, publicKeyId: publicKeyId);
+    return generateKeyPairs(PkamAuthMode.keysFile, publicKeyId: publicKeyId);
   }
 }
 
-Future<Map<String, dynamic>> _decodeAtKeys(Map<String, dynamic> decodedAtKeysData, {String? passPhrase}) async {
-  // If it contains "iv(InitializationVector)", it means the data is encrypted with a
-  // passphrase. Decrypt it.
-  if (decodedAtKeysData.containsKey('iv') && passPhrase.isNullOrEmpty) {
-    throw AtDecryptionException('Pass Phrase is required for password protected atKeys file');
-  }
-  if (decodedAtKeysData.containsKey('iv')) {
-    _logger.info('Found encrypted atKeys files. Decrypting with the given pass-phrase');
-    AtEncrypted atEncrypted = AtEncrypted.fromJson(decodedAtKeysData);
 
-    if (atEncrypted.hashingAlgoType == null) {
-      throw AtDecryptionException('Hashing algo type is required for decryption of password protected atKeys file');
-    }
-
-    String decryptedAtKeysData =
-        await AtKeysCrypto.fromHashingAlgorithm(atEncrypted.hashingAlgoType!).decrypt(atEncrypted, passPhrase!);
-    decodedAtKeysData = jsonDecode(decryptedAtKeysData);
-  }
-
-  return decodedAtKeysData;
-}
-
-AtKeys _decryptAtKeysWithSelfEncKey(Map<String, dynamic> jsonData, PkamAuthMode authMode) {
-  var securityKeys = AtKeys();
-  String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey];
-  var atChops = AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
-  securityKeys.defaultSelfEncryptionKey = AtBytes.fromString(decryptionKey);
-  securityKeys.defaultEncryptionPublicKey = AtBytes.fromString(atChops
-      .decryptString(jsonData[auth_constants.defaultEncryptionPublicKey], EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-      .result);
-  securityKeys.defaultEncryptionPrivateKey = AtBytes.fromString(atChops
-      .decryptString(jsonData[auth_constants.defaultEncryptionPrivateKey], EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-      .result);
-  securityKeys.apkamPublicKey = AtBytes.fromString(atChops
-      .decryptString(jsonData[auth_constants.apkamPublicKey], EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-      .result);
-  // pkam private key will not be saved in keyfile if auth mode is sim/any other secure element.
-  // decrypt the private key only when auth mode is keysFile
-  if (authMode == PkamAuthMode.keysFile) {
-    securityKeys.apkamPrivateKey = AtBytes.fromString(atChops
-        .decryptString(jsonData[auth_constants.apkamPrivateKey], EncryptionKeyType.aes256,
-            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-        .result);
-  }
-  securityKeys.apkamSymmetricKey = AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey]);
-  securityKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
-  return securityKeys;
-}
-
-String _encryptAtKeysWithSelfEncKey(AtKeys atKeys, PkamAuthMode authMode) {
-  Map<String, dynamic> atKeysMap = {};
-  if (atKeys.defaultSelfEncryptionKey == null) {
-    throw AtException('selfEncryptionKey is required to encrypt the atKeys');
-  }
-  var atChops = AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString()));
-  atKeysMap[auth_constants.defaultEncryptionPublicKey] = atChops.encryptString(
-      atKeys.defaultEncryptionPublicKey.toString(), EncryptionKeyType.aes256,
-      keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy());
-
-  atKeysMap[auth_constants.defaultEncryptionPrivateKey] = atChops.encryptString(
-      atKeys.defaultEncryptionPrivateKey.toString(), EncryptionKeyType.aes256,
-      keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy());
-
-  atKeysMap[auth_constants.apkamPublicKey] = atChops.encryptString(
-      atKeys.apkamPublicKey.toString(), EncryptionKeyType.aes256,
-      keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy());
-
-  if (authMode == PkamAuthMode.keysFile) {
-    atKeysMap[auth_constants.apkamPrivateKey] = atChops.encryptString(
-        atKeys.apkamPrivateKey.toString(), EncryptionKeyType.aes256,
-        keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy());
-  }
-
-  atKeysMap[auth_constants.apkamSymmetricKey] = atKeys.apkamSymmetricKey.toString();
-  atKeysMap[auth_constants.defaultSelfEncryptionKey] = atKeys.defaultSelfEncryptionKey.toString();
-  atKeysMap[AtConstants.enrollmentId] = atKeys.enrollmentId;
-  return jsonEncode(atKeysMap);
-}
-
-AtKeys _generateKeyPairs(PkamAuthMode authMode, {String? publicKeyId}) {
-  var atKeysFile = AtKeys();
-
-  // generate user encryption keypair
-  _logger.info('Generating encryption keypair');
-  var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
-
-  //generate selfEncryptionKey
-  var selfEncryptionKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-  var apkamSymmetricKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-  var atChops = AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(selfEncryptionKey.key));
-  _logger.info('Generating your encryption keys and .atKeys file\n');
-
-  //generating pkamKeyPair only if authMode is keysFile
-  String? pkamPublicKey;
-  if (authMode == PkamAuthMode.keysFile) {
-    _logger.info('Generating pkam keypair');
-    var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
-    pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
-    atKeysFile.apkamPrivateKey = AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
-  } else if (authMode == PkamAuthMode.sim) {
-    // get the public key from secure element
-    pkamPublicKey = atChops.readPublicKey(publicKeyId!);
-    _logger.info('pkam  public key from sim: $pkamPublicKey');
-
-    // encryption key pair and self encryption symmetric key
-    // are not available to injected at_chops. Set it here
-    atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-    atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-    atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-  }
-  atKeysFile.apkamPublicKey = AtBytes.fromString(pkamPublicKey.toString());
-  //Standard order of an atKeys file is ->
-  // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->
-  // @sign: selfEncryptionKey[self encryption key again]
-  // note: "->" stands for "followed by"
-  atKeysFile.defaultEncryptionPublicKey = AtBytes.fromString(atEncryptionKeyPair.atPublicKey.publicKey.toString());
-  atKeysFile.defaultEncryptionPrivateKey = AtBytes.fromString(atEncryptionKeyPair.atPrivateKey.privateKey.toString());
-  atKeysFile.defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey.key);
-  atKeysFile.apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key);
-
-  return atKeysFile;
-}
