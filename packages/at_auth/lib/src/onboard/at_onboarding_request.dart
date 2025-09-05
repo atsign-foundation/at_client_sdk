@@ -1,19 +1,17 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
 
 class AtOnboardingRequest {
   String atSign;
   AtOnboardingRequest(this.atSign);
-  AtKeysIo? atKeysIo;
-  @Deprecated('no longer used')
-  bool enableEnrollment = false;
+  PkamAuthMode authMode = PkamAuthMode.keysFile;
+
   String rootDomain = 'root.atsign.org';
   int rootPort = 64;
   String? appName;
   String? deviceName;
 
-  /// public key id if [authMode] is [PkamAuthMode.sim]
+  /// public key id for secure element sim based authentication
   String? publicKeyId;
 
   /// Signing algorithm to use for cram authentication

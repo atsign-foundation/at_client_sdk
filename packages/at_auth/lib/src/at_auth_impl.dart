@@ -106,10 +106,8 @@ class AtAuthImpl implements AtAuth {
           ' and try again (or) contact support@atsign.com');
     }
     //2. generate key pairs
-    if (atOnboardingRequest.atKeysIo == null) {
-      throw AtAuthenticationException('atKeysIO implementation is required to generate keys');
-    }
-    _atAuthKeys = await atOnboardingRequest.atKeysIo!.generateKeys(atOnboardingRequest.atSign);
+    _atAuthKeys = BaseAtKeysIo.generateKeyPairs(
+        atOnboardingRequest.authMode, publicKeyId: atOnboardingRequest.publicKeyId);
 
     atChops ??= _createAtChops(_atAuthKeys);
     atLookUp!.atChops = atChops;

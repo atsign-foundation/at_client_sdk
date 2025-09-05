@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
@@ -53,7 +54,7 @@ void main() {
           .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysIo = FileAtKeysIo('test/data/@alice🛠_key.atKeys');
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
 
       final response = await atAuth.authenticate(atAuthRequest);
 
@@ -67,7 +68,7 @@ void main() {
           .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = false));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysIo = FileAtKeysIo('test/data/@alice🛠_key.atKeys');
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
 
       final response = await atAuth.authenticate(atAuthRequest);
 
@@ -81,7 +82,7 @@ void main() {
           .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysIo = FileAtKeysIo('test/data/hello/@alice🛠_key.atKeys');
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
 
       expect(() async => await atAuth.authenticate(atAuthRequest), throwsA(isA<AtException>()));
     });
@@ -137,7 +138,7 @@ void main() {
           .thenThrow(AtAuthenticationException('Unauthenticated'));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysIo = FileAtKeysIo('test/data/@alice🛠_key.atKeys');
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
 
       expect(() async => await atAuth.authenticate(atAuthRequest), throwsA(isA<AtAuthenticationException>()));
     });
@@ -172,12 +173,11 @@ void main() {
           .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final mockEnrollmentResponse = AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final fileIo = FileAtKeysIo('test/data/@alice🛠_key.atKeys');
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
         ..rootDomain = 'test.atsign.com'
         ..rootPort = 64
         ..appName = 'wavi'
-        ..atKeysIo = fileIo
+        ..authMode = PkamAuthMode.keysFile
         ..deviceName = 'iphone';
 
       final response = await atAuth.onboard(atOnboardingRequest, testCramSecret);
@@ -196,15 +196,66 @@ void main() {
           .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final mockEnrollmentResponse = AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final fileIo = FileAtKeysIo('test/data/@alice🛠_key.atKeys');
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
         ..rootDomain = 'test.atsign.com'
         ..rootPort = 64
-        ..atKeysIo = fileIo;
+        ..authMode = PkamAuthMode.keysFile;
       final response = await atAuth.onboard(atOnboardingRequest, testCramSecret);
 
       expect(response.isSuccessful, true);
       expect(response.enrollmentId, 'abc123');
     });
   });
+
+  group('FileAtKeysIo tests', () {
+    test('Test read() with valid atKeys file path', () async {
+      final fileAtKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
+      final atKeys = await fileAtKeysIo.read('@alice🛠');
+
+      expect(atKeys.apkamPrivateKey, isNotNull);
+      expect(atKeys.apkamPublicKey, isNotNull);
+      expect(atKeys.apkamSymmetricKey, isNotNull);
+      expect(atKeys.defaultEncryptionPrivateKey, isNotNull);
+      expect(atKeys.defaultEncryptionPublicKey, isNotNull);
+      expect(atKeys.defaultSelfEncryptionKey, isNotNull);
+    });
+
+    test('Test read() with invalid atKeys file path', () async {
+      final fileAtKeysIo = FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
+
+      expect(() async => await fileAtKeysIo.read('@alice🛠'), throwsA(isA<AtException>()));
+    });
+
+    test('Test read() without atKeys file path', () async {
+      final fileAtKeysIo = FileAtKeysIo();
+      expect(() async => await fileAtKeysIo.read('@alice🛠'), throwsA(isA<AtException>()));
+    });
+
+    test('Test write()', () async {
+      final fileAtKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
+      final atKeys = AtKeys()
+        ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..apkamPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+        ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+      await fileAtKeysIo.write('@alice🛠', atKeys);
+
+      expect(matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!), true);
+    });
+  });
+}
+
+bool matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) {
+  final fileAtKeysIo = FileAtKeysIo(filePath: filePath);
+  final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
+  var decryptedAtKeysMap = fileAtKeysIo.decryptAtKeysWithSelfEncKey(encryptedAtKeysMap, PkamAuthMode.keysFile);
+  return  decryptedAtKeys.apkamPrivateKey.toString() == decryptedAtKeysMap.apkamPrivateKey.toString() &&
+      decryptedAtKeys.apkamPublicKey.toString() == decryptedAtKeysMap.apkamPublicKey.toString() &&
+      decryptedAtKeys.apkamSymmetricKey.toString() == decryptedAtKeysMap.apkamSymmetricKey.toString() &&
+      decryptedAtKeys.defaultEncryptionPrivateKey.toString() == decryptedAtKeysMap.defaultEncryptionPrivateKey.toString() &&
+      decryptedAtKeys.defaultEncryptionPublicKey.toString() == decryptedAtKeysMap.defaultEncryptionPublicKey.toString() &&
+      decryptedAtKeys.defaultSelfEncryptionKey.toString() == decryptedAtKeysMap.defaultSelfEncryptionKey.toString() &&
+      decryptedAtKeys.enrollmentId == decryptedAtKeysMap.enrollmentId;
 }

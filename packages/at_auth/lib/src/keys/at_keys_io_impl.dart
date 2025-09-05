@@ -1,21 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:meta/meta.dart';
 
 import 'package:at_commons/at_commons.dart';
+import 'package:at_cli_commons/at_cli_commons.dart' show getDefaultAtKeysFilePath, getHomeDirectory;
 import 'package:at_auth/at_auth.dart';
 
 class FileAtKeysIo extends BaseAtKeysIo {
+  @visibleForTesting
   String? filePath;
-  FileAtKeysIo(String this.filePath);
+  FileAtKeysIo({this.filePath});
 
   @override
   FutureOr<AtKeys> read(String atSign) async {
     Map<String, dynamic> decodedAtKeysData = {};
+    filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
     AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
     if (filePath != null) {
       if (!File(filePath!).existsSync()) {
-        throw AtException('provided keys file does not exist. Please check whether the file path ${filePath} is valid');
+        throw AtException('provided keys file does not exist. Please check whether the file path $filePath is valid');
       }
       String atAuthData = await File(filePath!).readAsString();
       decodedAtKeysData = jsonDecode(atAuthData);
@@ -28,16 +32,13 @@ class FileAtKeysIo extends BaseAtKeysIo {
 
   @override
   Future write(String atSign, AtKeys atKeys) {
-    if (filePath == null) {
-      throw AtException('atKeys filePath is required to write to file');
-    }
+    filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
     String atKeysData = encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     return File(filePath!).writeAsString(atKeysData);
   }
 
-  @override
-  FutureOr<AtKeys> generateKeys(String atSign, {String? publicKeyId}) {
-    return generateKeyPairs(PkamAuthMode.keysFile);
+  AtKeys generateKeys(String atSign, {String? publicKeyId}) {
+    return BaseAtKeysIo.generateKeyPairs(PkamAuthMode.keysFile);
   }
 }
 
@@ -67,13 +68,10 @@ class SimAtKeysIo extends BaseAtKeysIo {
     return Future.value();
   }
 
-  @override
-  FutureOr<AtKeys> generateKeys(String atSign, {String? publicKeyId}) {
+  AtKeys generateKeys(String atSign, {String? publicKeyId}) {
     if (publicKeyId == null || publicKeyId.isEmpty) {
-      throw AtException('publicKeyId is required to generate keys when auth mode is sim');
+      throw AtException('publicKeyId is required for sim auth mode');
     }
-    return generateKeyPairs(PkamAuthMode.keysFile, publicKeyId: publicKeyId);
+    return BaseAtKeysIo.generateKeyPairs(PkamAuthMode.sim, publicKeyId: publicKeyId);
   }
 }
-
-
