@@ -18,8 +18,8 @@ void main(List<String> args) async {
     final atAuth = AtAuthImpl();
     final atSign = argResults['atsign'];
     final atAuthRequest = AtAuthRequest(atSign)
-      ..rootDomain = 'vip.ve.atsign.zone'
-      ..atKeysFilePath = argResults['keysFilePath'];
+      ..rootDomain = 'root.atsign.org'
+      ..atKeysIo = FileAtKeysIo(filePath: argResults['keysFilePath']);
     final atAuthResponse = await atAuth.authenticate(atAuthRequest);
     print('atAuthResponse: $atAuthResponse');
   } on Exception catch (e, trace) {

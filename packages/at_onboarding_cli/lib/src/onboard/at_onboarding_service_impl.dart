@@ -650,8 +650,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atAuth ??= AtAuth.create();
     var atAuthRequest = AtAuthRequest(_atSign)
       ..enrollmentId = enrollmentId
-      ..atKeysFilePath = atOnboardingPreference.atKeysFilePath
-      ..authMode = atOnboardingPreference.authMode
+      ..atKeysIo = FileAtKeysIo(filePath: atOnboardingPreference.atKeysFilePath)
       ..rootDomain = atOnboardingPreference.rootDomain
       ..rootPort = atOnboardingPreference.rootPort
       ..publicKeyId = atOnboardingPreference.publicKeyId

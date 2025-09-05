@@ -25,5 +25,6 @@ export 'src/enroll/enrollment_server_response.dart';
 export 'src/exception/at_auth_exceptions.dart';
 export 'src/keys/at_keys.dart';
 export 'src/keys/at_keys_io.dart';
+export 'src/keys/at_keys_io_impl.dart';
 export 'src/onboard/at_onboarding_request.dart';
 export 'src/onboard/at_onboarding_response.dart';
