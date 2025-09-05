@@ -27,6 +27,18 @@ class AtAuthImpl implements AtAuth {
   AtAuthImpl({this.atLookUp, this.atChops, this.cramAuthenticator, this.pkamAuthenticator, this.atEnrollmentBase});
 
   @override
+  /// Authenticate using PKAM
+  /// The AtAuthRequest must contain either:
+  /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
+  /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
+  /// - 3. atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
+  ///    contains keys in encrypted format
+  /// 
+  /// The AtAuthRequest may optionally contain:
+  /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
+  ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
+  /// 
+  /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
     if (atAuthRequest.atKeysIo == null && atAuthRequest.atAuthKeys == null) {
       throw AtAuthenticationException(
@@ -36,8 +48,8 @@ class AtAuthImpl implements AtAuth {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
     if (atAuthKeys == null && atAuthRequest.atKeysIo != null) {
       atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
-    } else {
-      throw AtPrivateKeyNotFoundException(
+    } else if (atAuthKeys == null) {
+      throw AtAuthenticationException(
           'atKeysIO implementation is required to read keys, either provide atKeysIO implementation'
           ' or provide atAuthKeys in the AtAuthRequest');
     }
