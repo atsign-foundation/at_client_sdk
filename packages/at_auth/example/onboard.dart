@@ -1,10 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
-import 'package:encrypt/encrypt.dart';
 
 /// Perform initial onboarding for an atsign
 /// 1. CRAM authentication

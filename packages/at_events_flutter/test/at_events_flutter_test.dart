@@ -26,7 +26,8 @@ class MockAtClient extends Mock implements AtClient {
       {String? regex,
       String? sharedBy,
       String? sharedWith,
-      bool showHiddenKeys = false}) async {
+      bool showHiddenKeys = false,
+      bool useRemoteAtServer = false}) async {
     return ["@83apedistinct", "@45expected"];
   }
 

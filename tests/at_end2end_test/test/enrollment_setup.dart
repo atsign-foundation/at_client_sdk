@@ -47,7 +47,7 @@ void main() {
 
       // Submit an enrollment request with at_auth package
       AtEnrollmentBase atEnrollmentBase =
-          atAuthBase.atEnrollment(currentAtSign);
+          AtEnrollmentBase.create(currentAtSign);
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           currentAtSign,
@@ -90,24 +90,25 @@ void main() {
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!, '');
+          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!.toString(), '');
 
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
 
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
 
       AtChops atChops = AtChopsImpl(atChopsKeys);
       atChops.atChopsKeys.apkamSymmetricKey =
-          AESKey(atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey!);
+          AESKey(atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString());
       atLookUp.atChops = atChops;
       atLookUp.enrollmentId = atEnrollmentResponse.enrollmentId;
 
       // Fetch the encryption private key and self encryption key from the remote secondary.
       atChops.atChopsKeys.atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!,
+          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
+          .toString(),
           await getDefaultEncryptionPrivateKey(
               currentAtSign, atEnrollmentResponse.enrollmentId, atLookUp));
 
@@ -120,14 +121,14 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Authenticate the atSign
-      AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
+      AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign);
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          atChops.atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey;
+          AtBytes.fromString(atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          atChops.atChopsKeys.selfEncryptionKey?.key;
+          AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
       atAuthRequest.rootDomain =
           AtClientManager.getInstance().atClient.getPreferences()!.rootDomain;
 
@@ -151,31 +152,31 @@ void main() {
 }
 
 /// Writes the atKeys to the file.
-void writeAtKeysToFile(String atSign, AtAuthKeys atAuthKeys) {
+void writeAtKeysToFile(String atSign, AtKeys atAuthKeys) {
   // Encrypt the keys
   Map<String, String> encryptedAtKeysMap = <String, String>{};
 
   String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
-      atAuthKeys.apkamPublicKey!, atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.apkamPublicKey!.toString(), atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[pkamPublicKey] = encryptedPkamPublicKey;
 
   String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
-      atAuthKeys.apkamPrivateKey!, atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.apkamPrivateKey!.toString(), atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[pkamPrivateKey] = encryptedPkamPrivateKey;
 
   String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
-      atAuthKeys.defaultEncryptionPublicKey!,
-      atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.defaultEncryptionPublicKey!.toString(),
+      atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[encryptionPublicKey] = encryptedEncryptionPublicKey;
 
   String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
-      atAuthKeys.defaultEncryptionPrivateKey!,
-      atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.defaultEncryptionPrivateKey!.toString(),
+      atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[encryptionPrivateKey] = encryptedEncryptionPrivateKey;
 
-  encryptedAtKeysMap[selfEncryptionKey] = atAuthKeys.defaultSelfEncryptionKey!;
-  encryptedAtKeysMap[apkamSymmetricKey] = atAuthKeys.apkamSymmetricKey!;
-  encryptedAtKeysMap[enrollmentId] = atAuthKeys.enrollmentId!;
+  encryptedAtKeysMap[selfEncryptionKey] = atAuthKeys.defaultSelfEncryptionKey!.toString();
+  encryptedAtKeysMap[apkamSymmetricKey] = atAuthKeys.apkamSymmetricKey!.toString();
+  encryptedAtKeysMap[enrollmentId] = atAuthKeys.enrollmentId!.toString();
 
   // Write keys to file
   String keysString = jsonEncode(encryptedAtKeysMap);

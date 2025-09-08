@@ -29,8 +29,7 @@ void main() {
         AtLookupImpl(atSign, preference.rootDomain, preference.rootPort);
     atLookupInstance.signingAlgoType = preference.signingAlgoType;
     atLookupInstance.hashingAlgoType = preference.hashingAlgoType;
-    at_auth.AtAuth atAuthInstance = at_auth.atAuthBase
-        .atAuth(atLookUp: atLookupInstance, atChops: atChopsImpl);
+    at_auth.AtAuth atAuthInstance = at_auth.AtAuth.create(atLookUp: atLookupInstance, atChops: atChopsImpl);
     onboardingService.atAuth = atAuthInstance;
     atChopsImpl.init();
     logger.info('Onboarding the atSign: $atSign');
