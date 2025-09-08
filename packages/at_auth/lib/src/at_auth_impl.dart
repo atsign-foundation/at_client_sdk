@@ -59,7 +59,7 @@ class AtAuthImpl implements AtAuth {
     var enrollmentIdFromRequest = atAuthRequest.enrollmentId;
     enrollmentIdFromRequest ??= atAuthKeys.enrollmentId;
 
-    atLookUp ??= AtLookupImpl(atAuthRequest.atSign, atAuthRequest.rootDomain, atAuthRequest.rootPort);
+    atLookUp ??= AtLookupImpl(atAuthRequest.atSign, atAuthRequest.rootDomain.rootDomain, atAuthRequest.rootDomain.rootPort);
     // ??= to support mocking
     atChops ??= _createAtChops(atAuthKeys);
     atLookUp!.atChops = atChops;

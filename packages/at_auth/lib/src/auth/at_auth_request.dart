@@ -14,11 +14,8 @@ class AtAuthRequest {
   // Controls how the authentication is performed
   AtKeysIo? atKeysIo;
 
-  /// The default host of the root server
-  String rootDomain = 'root.atsign.org';
-
-  /// The default port of the root server
-  int rootPort = 64;
+  /// The default domain of the root server (e.g. root.atsign.org, 64)
+  AtRootDomain rootDomain = AtRootDomain('root.atsign.org', 64);
 
   /// The enrollmentId for APKAM authentication
   String? enrollmentId;

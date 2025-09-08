@@ -68,7 +68,7 @@ void main() {
       // auth using generated keysFile
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(apkamAtSign)
         ..atKeysIo = FileAtKeysIo(filePath: 'test/testData/$apkamAtSign.atKeys')
-        ..rootDomain = 'vip.ve.atsign.zone');
+        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
@@ -366,7 +366,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -458,7 +458,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
 
       expect(
           () async => await atAuth.authenticate(atAuthRequest),
@@ -553,7 +553,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
