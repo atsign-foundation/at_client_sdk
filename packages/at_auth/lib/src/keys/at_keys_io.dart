@@ -6,7 +6,6 @@ import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
-import 'package:at_auth/at_auth.dart';
 
 abstract class AtKeysIo {
   FutureOr<AtKeys> read(String atSign);

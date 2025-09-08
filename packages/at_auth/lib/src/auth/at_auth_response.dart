@@ -1,4 +1,3 @@
-import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 
 /// Represents and authentication response of an atSign.

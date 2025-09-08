@@ -1,7 +1,11 @@
-import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
+import 'package:at_auth/src/auth/at_auth_request.dart';
+import 'package:at_auth/src/auth/at_auth_response.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
+import 'package:at_auth/src/enroll/at_enrollment_base.dart';
+import 'package:at_auth/src/onboard/at_onboarding_request.dart';
+import 'package:at_auth/src/onboard/at_onboarding_response.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
