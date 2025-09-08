@@ -177,8 +177,7 @@ class OnboardingService {
       }
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atsign)
-        ..rootDomain = _atClientPreference.rootDomain
-        ..rootPort = _atClientPreference.rootPort;
+        ..rootDomain = AtRootDomain(_atClientPreference.rootDomain, _atClientPreference.rootPort);
 
       if (jsonData != null) {
         atAuthRequest.encryptedKeysMap = jsonDecode(jsonData);

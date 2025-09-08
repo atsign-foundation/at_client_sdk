@@ -18,6 +18,7 @@ import 'package:at_onboarding_flutter/utils/at_onboarding_app_constants.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_dimens.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_error_util.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_response_status.dart';
+import 'package:at_onboarding_flutter/utils/at_onboarding_strings.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_button.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_dialog.dart';
 import 'package:at_server_status/at_server_status.dart';
@@ -708,13 +709,13 @@ class _AtOnboardingHomeScreenState extends State<AtOnboardingHomeScreen> {
       AtOnboardingReferenceScreen.push(
         context: context,
         title: AtOnboardingLocalizations.current.title_FAQ,
-        url: AtOnboardingConstants.faqUrl,
+        url: AtOnboardingStrings.faqUrl,
         config: widget.config,
       );
     } else {
       launchUrl(
         Uri.parse(
-          AtOnboardingConstants.faqUrl,
+          AtOnboardingStrings.faqUrl,
         ),
       );
     }

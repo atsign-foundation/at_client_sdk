@@ -4,8 +4,8 @@ import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:at_onboarding_flutter/screen/at_onboarding_generate_screen.dart';
 import 'package:at_onboarding_flutter/screen/at_onboarding_home_screen.dart';
 import 'package:at_onboarding_flutter/screen/at_onboarding_reference_screen.dart';
-import 'package:at_onboarding_flutter/utils/at_onboarding_app_constants.dart';
 import 'package:at_onboarding_flutter/utils/at_onboarding_dimens.dart';
+import 'package:at_onboarding_flutter/utils/at_onboarding_strings.dart';
 import 'package:at_onboarding_flutter/widgets/at_onboarding_button.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -159,13 +159,13 @@ class _AtOnboardingIntroScreenState extends State<AtOnboardingIntroScreen> {
       AtOnboardingReferenceScreen.push(
         context: context,
         title: AtOnboardingLocalizations.current.title_FAQ,
-        url: AtOnboardingConstants.faqUrl,
+        url: AtOnboardingStrings.faqUrl,
         config: widget.config,
       );
     } else {
       launchUrl(
         Uri.parse(
-          AtOnboardingConstants.faqUrl,
+          AtOnboardingStrings.faqUrl,
         ),
       );
     }

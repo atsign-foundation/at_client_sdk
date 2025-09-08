@@ -19,15 +19,9 @@ class AtOnboardingConstants {
   static int responseTimeLimit = 30;
   static String contactAddress = 'support@atsign.com';
   static String activateAtSign = '/api/activateAtSign';
-  static const String _basepath = 'assets/images';
-  static const String backupZip = '$_basepath/backup_key.png';
 
   //.atKeys file key name
   static String atSelfEncryptionKey = 'selfEncryptionKey';
-
-  //UI Strings
-  static const String faqUrl = 'https://atsign.com/faqs/#atsigns';
-  static const String atsignHintText = 'alice';
 
   //Button titles
 
