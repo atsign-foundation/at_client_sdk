@@ -1,6 +1,7 @@
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
+import 'package:at_commons/at_commons.dart' show AtRootDomain;
 
 /// Perform authentication for an onboarded atsign
 /// 1. Read the PKAM private key from atKeys file saved after running onboard.dart
@@ -18,8 +19,8 @@ void main(List<String> args) async {
     final atAuth = AtAuthImpl();
     final atSign = argResults['atsign'];
     final atAuthRequest = AtAuthRequest(atSign)
-      ..rootDomain = 'vip.ve.atsign.zone'
-      ..atKeysFilePath = argResults['keysFilePath'];
+      ..rootDomain = AtRootDomain('root.atsign.org', 64)
+      ..atKeysIo = FileAtKeysIo(filePath: argResults['keysFilePath']);
     final atAuthResponse = await atAuth.authenticate(atAuthRequest);
     print('atAuthResponse: $atAuthResponse');
   } on Exception catch (e, trace) {

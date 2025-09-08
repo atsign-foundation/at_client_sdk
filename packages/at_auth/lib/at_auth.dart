@@ -1,9 +1,6 @@
 /// The [AtAuth] package contains common logic for onboarding/authenticating an atSign to a secondary server
 library;
 
-import 'package:at_auth/src/auth_interface.dart';
-import 'package:at_auth/src/auth_interface_impl.dart';
-
 export 'src/at_auth_base.dart';
 export 'src/auth/at_auth_request.dart';
 export 'src/auth/at_auth_response.dart';
@@ -26,11 +23,8 @@ export 'src/enroll/enrollment_request_decision.dart';
 /// request from the requesting app, for approval or denial.
 export 'src/enroll/enrollment_server_response.dart';
 export 'src/exception/at_auth_exceptions.dart';
-export 'src/keys/at_auth_keys.dart';
+export 'src/keys/at_keys.dart';
+export 'src/keys/at_keys_io.dart';
+export 'src/keys/at_keys_io_impl.dart';
 export 'src/onboard/at_onboarding_request.dart';
 export 'src/onboard/at_onboarding_response.dart';
-
-/// Global constant to access [AtAuthInterface].
-///
-/// Serves as the primary entry point to access public methods in at_auth package.
-final AtAuthInterface atAuthBase = AtAuthInterfaceImpl();

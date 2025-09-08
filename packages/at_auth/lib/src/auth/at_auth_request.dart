@@ -1,4 +1,5 @@
-import 'package:at_auth/src/keys/at_auth_keys.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -10,22 +11,17 @@ class AtAuthRequest {
   /// Constructor that takes an @sign as a parameter
   AtAuthRequest(this.atSign);
 
-  PkamAuthMode authMode = PkamAuthMode.keysFile;
+  // Controls how the authentication is performed
+  AtKeysIo? atKeysIo;
 
-  /// The default host of the root server
-  String rootDomain = 'root.atsign.org';
-
-  /// The default port of the root server
-  int rootPort = 64;
+  /// The default domain of the root server (e.g. root.atsign.org, 64)
+  AtRootDomain rootDomain = AtRootDomain('root.atsign.org', 64);
 
   /// The enrollmentId for APKAM authentication
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
-  AtAuthKeys? atAuthKeys;
-
-  /// The file path which contains the .atKeys file for authentication.
-  String? atKeysFilePath;
+  AtKeys? atAuthKeys;
 
   /// The contents of .atKeys file which contains the encrypted atKeys.
   Map<String, dynamic>? encryptedKeysMap;

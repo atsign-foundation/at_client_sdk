@@ -1,10 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
-import 'package:encrypt/encrypt.dart';
 
 /// Perform initial onboarding for an atsign
 /// 1. CRAM authentication
@@ -49,50 +46,8 @@ void main(List<String> args) async {
   }
 }
 
-Future<void> _generateAtKeysFile(String? currentEnrollmentId,
-    AtAuthKeys atAuthKeys, String atSign, String keysFilePath) async {
-  final atKeysMap = <String, String>{
-    'aesPkamPublicKey': _encryptValue(
-      atAuthKeys.apkamPublicKey!,
-      atAuthKeys.defaultSelfEncryptionKey!,
-    ),
-    'aesPkamPrivateKey': _encryptValue(
-      atAuthKeys.apkamPrivateKey!,
-      atAuthKeys.defaultSelfEncryptionKey!,
-    ),
-    'aesEncryptPublicKey': _encryptValue(
-      atAuthKeys.defaultEncryptionPublicKey!,
-      atAuthKeys.defaultSelfEncryptionKey!,
-    ),
-    'aesEncryptPrivateKey': _encryptValue(
-      atAuthKeys.defaultEncryptionPrivateKey!,
-      atAuthKeys.defaultSelfEncryptionKey!,
-    ),
-    'selfEncryptionKey': atAuthKeys.defaultSelfEncryptionKey!,
-    atSign: atAuthKeys.defaultSelfEncryptionKey!,
-    'apkamSymmetricKey': atAuthKeys.apkamSymmetricKey!
-  };
-
-  if (currentEnrollmentId != null) {
-    atKeysMap['enrollmentId'] = currentEnrollmentId;
-  }
-
-  File atKeysFile = File(keysFilePath);
-
-  if (!atKeysFile.existsSync()) {
-    atKeysFile.createSync(recursive: true);
-  }
-  IOSink fileWriter = atKeysFile.openWrite();
-
-  //generating .atKeys file
-  fileWriter.write(jsonEncode(atKeysMap));
-  await fileWriter.flush();
-  await fileWriter.close();
-  stdout.writeln('[Success] Your .atKeys file saved at $keysFilePath\n');
-}
-
-String _encryptValue(String value, String encryptionKey) {
-  var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));
-  var encryptedValue = aesEncrypter.encrypt(value, iv: IV(Uint8List(16)));
-  return encryptedValue.base64;
+Future<void> _generateAtKeysFile(String? enrollmentId, AtKeys atAuthKeys,
+    String atSign, String filePath) async {
+  var fileAtKeysIo = FileAtKeysIo(filePath: filePath);
+  await fileAtKeysIo.write(atSign, atAuthKeys);
 }

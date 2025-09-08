@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/first_enrollment_request.dart';
+import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -23,8 +27,7 @@ class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
 class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 
-class FakeFirstEnrollmentRequest extends Fake
-    implements FirstEnrollmentRequest {}
+class FakeFirstEnrollmentRequest extends Fake implements FirstEnrollmentRequest {}
 
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -40,23 +43,18 @@ void main() {
     mockPkamAuthenticator = MockPkamAuthenticator();
     mockAtEnrollment = MockAtEnrollment();
     atAuth = AtAuthImpl(
-        atLookUp: mockAtLookUp,
-        pkamAuthenticator: mockPkamAuthenticator,
-        atEnrollmentBase: mockAtEnrollment);
+        atLookUp: mockAtLookUp, pkamAuthenticator: mockPkamAuthenticator, atEnrollmentBase: mockAtEnrollment);
     registerFallbackValue(FakeVerbBuilder());
     registerFallbackValue(FakeFirstEnrollmentRequest());
   });
   group('AtAuthImpl authentication tests', () {
     test('Test authenticate() true with keys file', () async {
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
-          .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId)).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysFilePath = 'test/data/@alice🛠_key.atKeys';
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
 
       final response = await atAuth.authenticate(atAuthRequest);
 
@@ -65,15 +63,12 @@ void main() {
     });
 
     test('Test authenticate() false with keys file', () async {
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
-          .thenAnswer((_) => Future.value(false));
-      when(() => mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId))
-          .thenAnswer((_) =>
-              Future.value(AtAuthResponse('@alice🛠')..isSuccessful = false));
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId)).thenAnswer((_) => Future.value(false));
+      when(() => mockPkamAuthenticator.authenticate(enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = false));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysFilePath = 'test/data/@alice🛠_key.atKeys';
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
 
       final response = await atAuth.authenticate(atAuthRequest);
 
@@ -82,35 +77,28 @@ void main() {
     });
 
     test('Test authenticate() invalid keys file path', () async {
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
-          .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId)).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysFilePath = 'test/data/hello/@alice🛠_key.atKeys';
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
 
-      expect(() async => await atAuth.authenticate(atAuthRequest),
-          throwsA(isA<AtException>()));
+      expect(() async => await atAuth.authenticate(atAuthRequest), throwsA(isA<AtException>()));
     });
 
     test('Test authenticate() with atAuthKeys set', () async {
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
-          .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId)).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atAuthKeys = AtAuthKeys()
-        ..apkamPublicKey = 'testApkamPublicKey'
-        ..apkamPrivateKey = 'testApkamPrivateKey'
-        ..defaultEncryptionPublicKey = 'defaultEncryptionPublicKey'
-        ..defaultEncryptionPrivateKey = 'defaultEncryptionPrivateKey'
-        ..defaultSelfEncryptionKey = 'defaultSelfEncryptionKey'
+      atAuthRequest.atAuthKeys = AtKeys()
+        ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..apkamPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
       final response = await atAuth.authenticate(atAuthRequest);
@@ -119,98 +107,72 @@ void main() {
       expect(response.enrollmentId, testEnrollmentId);
     });
 
-    test(
-        'Test authenticate() - throw exception is pkamPrivateKey is not set for default auth mode.',
-        () async {
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
-          .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+    test('Test authenticate() - throw exception is pkamPrivateKey is not set for default auth mode.', () async {
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId)).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atAuthKeys = AtAuthKeys()
-        ..apkamPublicKey = 'testApkamPublicKey'
-        ..defaultEncryptionPublicKey = 'defaultEncryptionPublicKey'
-        ..defaultEncryptionPrivateKey = 'defaultEncryptionPrivateKey'
-        ..defaultSelfEncryptionKey = 'defaultSelfEncryptionKey'
+      atAuthRequest.atAuthKeys = AtKeys()
+        ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
-      expect(() async => await atAuth.authenticate(atAuthRequest),
-          throwsA(isA<AtPrivateKeyNotFoundException>()));
+      expect(() async => await atAuth.authenticate(atAuthRequest), throwsA(isA<AtPrivateKeyNotFoundException>()));
     });
 
-    test(
-        'Test authenticate throws exception when keysfile path and atAuthKeys is not set in request',
-        () async {
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
-          .thenAnswer((_) => Future.value(true));
+    test('Test authenticate throws exception when keysfile path and atAuthKeys is not set in request', () async {
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId)).thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
 
-      expect(() async => await atAuth.authenticate(atAuthRequest),
-          throwsA(isA<AtAuthenticationException>()));
+      expect(() async => await atAuth.authenticate(atAuthRequest), throwsA(isA<AtAuthenticationException>()));
     });
 
-    test(
-        'Test authenticate() pkamAuthenticate method throws UnAuthenticatedException',
-        () async {
+    test('Test authenticate() pkamAuthenticate method throws UnAuthenticatedException', () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenThrow(UnAuthenticatedException('Unauthenticated'));
-      when(() => mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId))
+      when(() => mockPkamAuthenticator.authenticate(enrollmentId: testEnrollmentId))
           .thenThrow(AtAuthenticationException('Unauthenticated'));
       final atAuthRequest = AtAuthRequest('@alice🛠');
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysFilePath = 'test/data/@alice🛠_key.atKeys';
+      atAuthRequest.atKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
 
-      expect(() async => await atAuth.authenticate(atAuthRequest),
-          throwsA(isA<AtAuthenticationException>()));
+      expect(() async => await atAuth.authenticate(atAuthRequest), throwsA(isA<AtAuthenticationException>()));
     });
   });
   group('AtAuthImpl onboarding tests', () {
     var testCramSecret = 'cram123';
     test('Test onboard - authenticate_cram returns false', () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
-          .thenAnswer((_) => Future.value(false));
-      when(() => mockAtLookUp.executeCommand(any()))
-          .thenAnswer((_) => Future.value('data:1'));
-      when(() => mockAtLookUp.executeVerb(any()))
-          .thenAnswer((_) => Future.value('data:2'));
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret)).thenAnswer((_) => Future.value(false));
+      when(() => mockAtLookUp.executeCommand(any())).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockAtLookUp.executeVerb(any())).thenAnswer((_) => Future.value('data:2'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate()).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate())
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
 
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
         ..rootDomain = 'test.atsign.com'
         ..rootPort = 64;
 
-      expect(
-          () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
+      expect(() async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
           throwsA(isA<AtAuthenticationException>()));
     });
 
-    test('Test onboard with appName and deviceName set in onboarding request',
-        () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
-          .thenAnswer((_) => Future.value(true));
-      when(() => mockAtLookUp.executeVerb(any()))
-          .thenAnswer((_) => Future.value('data:2'));
-      when(() =>
-          mockAtLookUp.executeCommand(
-              any(that: startsWith('enroll:request')))).thenAnswer((_) =>
-          Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
+    test('Test onboard with appName and deviceName set in onboarding request', () async {
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret)).thenAnswer((_) => Future.value(true));
+      when(() => mockAtLookUp.executeVerb(any())).thenAnswer((_) => Future.value('data:2'));
+      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:request'))))
+          .thenAnswer((_) => Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(enrollmentId: "abc123"))
-          .thenAnswer((_) =>
-              Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
-      final mockEnrollmentResponse =
-          AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
-      when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
-          .thenAnswer((_) => Future.value(mockEnrollmentResponse));
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      final mockEnrollmentResponse = AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
+      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) => Future.value(mockEnrollmentResponse));
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
         ..rootDomain = 'test.atsign.com'
         ..rootPort = 64
@@ -218,39 +180,82 @@ void main() {
         ..authMode = PkamAuthMode.keysFile
         ..deviceName = 'iphone';
 
-      final response =
-          await atAuth.onboard(atOnboardingRequest, testCramSecret);
+      final response = await atAuth.onboard(atOnboardingRequest, testCramSecret);
 
       expect(response.isSuccessful, true);
       expect(response.enrollmentId, 'abc123');
     });
     test('Test onboard with default appName and deviceName', () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
-          .thenAnswer((_) => Future.value(true));
-      when(() => mockAtLookUp.executeVerb(any()))
-          .thenAnswer((_) => Future.value('data:2'));
-      when(() =>
-          mockAtLookUp.executeCommand(
-              any(that: startsWith('enroll:request')))).thenAnswer((_) =>
-          Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret)).thenAnswer((_) => Future.value(true));
+      when(() => mockAtLookUp.executeVerb(any())).thenAnswer((_) => Future.value('data:2'));
+      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:request'))))
+          .thenAnswer((_) => Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(enrollmentId: "abc123"))
-          .thenAnswer((_) =>
-              Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
-      final mockEnrollmentResponse =
-          AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
-      when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
-          .thenAnswer((_) => Future.value(mockEnrollmentResponse));
+          .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      final mockEnrollmentResponse = AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
+      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) => Future.value(mockEnrollmentResponse));
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
         ..rootDomain = 'test.atsign.com'
         ..rootPort = 64
         ..authMode = PkamAuthMode.keysFile;
-      final response =
-          await atAuth.onboard(atOnboardingRequest, testCramSecret);
+      final response = await atAuth.onboard(atOnboardingRequest, testCramSecret);
 
       expect(response.isSuccessful, true);
       expect(response.enrollmentId, 'abc123');
     });
   });
+
+  group('FileAtKeysIo tests', () {
+    test('Test read() with valid atKeys file path', () async {
+      final fileAtKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
+      final atKeys = await fileAtKeysIo.read('@alice🛠');
+
+      expect(atKeys.apkamPrivateKey, isNotNull);
+      expect(atKeys.apkamPublicKey, isNotNull);
+      expect(atKeys.apkamSymmetricKey, isNotNull);
+      expect(atKeys.defaultEncryptionPrivateKey, isNotNull);
+      expect(atKeys.defaultEncryptionPublicKey, isNotNull);
+      expect(atKeys.defaultSelfEncryptionKey, isNotNull);
+    });
+
+    test('Test read() with invalid atKeys file path', () async {
+      final fileAtKeysIo = FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
+
+      expect(() async => await fileAtKeysIo.read('@alice🛠'), throwsA(isA<AtException>()));
+    });
+
+    test('Test read() without atKeys file path', () async {
+      final fileAtKeysIo = FileAtKeysIo();
+      expect(() async => await fileAtKeysIo.read('@alice🛠'), throwsA(isA<AtException>()));
+    });
+
+    test('Test write()', () async {
+      final fileAtKeysIo = FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys');
+      final atKeys = AtKeys()
+        ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..apkamPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+        ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+      await fileAtKeysIo.write('@alice🛠', atKeys);
+
+      expect(matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!), true);
+    });
+  });
+}
+
+bool matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) {
+  final fileAtKeysIo = FileAtKeysIo(filePath: filePath);
+  final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
+  var decryptedAtKeysMap = fileAtKeysIo.decryptAtKeysWithSelfEncKey(encryptedAtKeysMap, PkamAuthMode.keysFile);
+  return  decryptedAtKeys.apkamPrivateKey.toString() == decryptedAtKeysMap.apkamPrivateKey.toString() &&
+      decryptedAtKeys.apkamPublicKey.toString() == decryptedAtKeysMap.apkamPublicKey.toString() &&
+      decryptedAtKeys.apkamSymmetricKey.toString() == decryptedAtKeysMap.apkamSymmetricKey.toString() &&
+      decryptedAtKeys.defaultEncryptionPrivateKey.toString() == decryptedAtKeysMap.defaultEncryptionPrivateKey.toString() &&
+      decryptedAtKeys.defaultEncryptionPublicKey.toString() == decryptedAtKeysMap.defaultEncryptionPublicKey.toString() &&
+      decryptedAtKeys.defaultSelfEncryptionKey.toString() == decryptedAtKeysMap.defaultSelfEncryptionKey.toString() &&
+      decryptedAtKeys.enrollmentId == decryptedAtKeysMap.enrollmentId;
 }

@@ -1,11 +1,11 @@
-import 'package:at_auth/src/keys/at_auth_keys.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 
 class AtOnboardingResponse {
   String atSign;
   String? enrollmentId;
   AtOnboardingResponse(this.atSign);
   bool isSuccessful = false;
-  AtAuthKeys? atAuthKeys;
+  AtKeys? atAuthKeys;
 
   @override
   String toString() {

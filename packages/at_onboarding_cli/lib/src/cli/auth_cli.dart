@@ -866,8 +866,8 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
             encryptedAPKAMSymmetricKey: er['encryptedAPKAMSymmetricKey']));
 
     // Finally call approve method via an AtEnrollment object
-    final response = await atAuthBase
-        .atEnrollment(atClient.getCurrentAtSign()!)
+    final response = await AtEnrollmentBase
+        .create(atClient.getCurrentAtSign()!)
         .approve(decision, atLookup);
 
     stdout.writeln('Server response: $response');
@@ -953,8 +953,8 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
               encryptedAPKAMSymmetricKey: er['encryptedAPKAMSymmetricKey']));
 
       // Finally call approve method via an AtEnrollment object
-      final response = await atAuthBase
-          .atEnrollment(atClient.getCurrentAtSign()!)
+      final response = await AtEnrollmentBase
+          .create(atClient.getCurrentAtSign()!)
           .approve(decision, atLookup);
       stdout.writeln('Approval successful.\n'
           '\tResponse: $response');
