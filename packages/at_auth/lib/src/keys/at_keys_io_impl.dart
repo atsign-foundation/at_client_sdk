@@ -10,7 +10,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 
-class FileAtKeysIo extends BaseAtKeysIo {
+class FileAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   @visibleForTesting
   String? filePath;
   FileAtKeysIo({this.filePath});
@@ -33,23 +33,26 @@ class FileAtKeysIo extends BaseAtKeysIo {
     return decryptAtKeysWithSelfEncKey(decodedAtKeysData, PkamAuthMode.keysFile);
   }
 
+  //tbm to WrittenAtKeysIo ?
   @override
   Future write(String atSign, AtKeys atKeys) {
     filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
     String atKeysData = encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     return File(filePath!).writeAsString(atKeysData);
   }
-
-  AtKeys generateKeys(String atSign, {String? publicKeyId}) {
-    return BaseAtKeysIo.generateKeyPairs(PkamAuthMode.keysFile);
-  }
 }
 
-class SimAtKeysIo extends BaseAtKeysIo {
+class SimAtKeysIo extends GeneratedAtKeysIo with KeyIOMixin {
   AtKeys? atKeys;
   Map<String, dynamic>? encryptedKeysMap;
+  //Map of atsigns to publicKeyIds 
+  Map<String, String> publicKeyMap = {};
 
-  SimAtKeysIo({this.atKeys, this.encryptedKeysMap});
+  SimAtKeysIo({this.atKeys, this.encryptedKeysMap, String? publicKeyId}) {
+    if (publicKeyId != null) {
+    
+    }
+  }
 
   @override
   FutureOr<AtKeys> read(String atSign) async {
@@ -65,16 +68,10 @@ class SimAtKeysIo extends BaseAtKeysIo {
   }
 
   @override
-  Future write(String atSign, AtKeys atKeys) {
-    // TODO: implement write
-    /// how are sim keys written?
-    return Future.value();
-  }
-
-  AtKeys generateKeys(String atSign, {String? publicKeyId}) {
-    if (publicKeyId == null || publicKeyId.isEmpty) {
-      throw AtException('publicKeyId is required for sim auth mode');
+  AtKeys generateKeys(String atSign) {
+    if (publicKeyMap[atSign] == null) {
+      throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
     }
-    return BaseAtKeysIo.generateKeyPairs(PkamAuthMode.sim, publicKeyId: publicKeyId);
+    return generateKeyPairs(atSign: atSign);
   }
 }
