@@ -1,44 +1,37 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:biometric_storage/biometric_storage.dart';
-import 'package:crypton/crypton.dart';
-import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
-import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:at_client_flutter/src/atsign_key.dart';
-
-import 'auth_constants.dart';
 
 const String _kDefaultKeystoreAccount = '@atsigns';
 const String enrollmentInfoKey = 'enrollmentInfo';
 
-const int _kDataSchemeVersion = 1;
+const int _kDataSchemeVersion = 2;
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
 /// Service to manage keychain entries. This includes saving the
 /// encryption keys and secret to keychain
 class KeyChainManager {
-  static final KeyChainManager _singleton = KeyChainManager._internal();
 
   static final _logger = AtSignLogger('KeyChainUtil');
   late PackageInfo _packageInfo;
 
   KeyChainManager._internal();
 
-  factory KeyChainManager.getInstance() {
+  factory KeyChainManager() {
     if (Platform.isWindows) {
       // ignore: undefined_method
       Win32BiometricStoragePlugin.registerWith();
     }
-    return _singleton;
+    return KeyChainManager._internal();
   }
 
   @visibleForTesting
@@ -62,7 +55,7 @@ class KeyChainManager {
   }) async {
     try {
       final store = await _getAppStorage(useSharedStorage: useSharedStorage);
-      final value = await _readDataFromStore(
+      final value = await readDataFromStore(
         store: store,
         useSharedStorage: useSharedStorage,
       );
@@ -95,7 +88,7 @@ class KeyChainManager {
       //Init shared storage if it not exiting
       final data = await readAtClientData(useSharedStorage: true);
       if (data == null) {
-        _saveAtClientData(
+        saveAtClientData(
           data: AtClientData(
             config: AtClientDataConfig(
               schemaVersion: _kDataSchemeVersion,
@@ -111,6 +104,245 @@ class KeyChainManager {
     }
   }
 
+  /// Function to get atsign's key with name
+  Future<AtsignKey?> readAtsign({required String name}) async {
+    final atSigns = await readAtsigns();
+    if (atSigns.isEmpty) {
+      return null;
+    }
+    for (int i = 0; i < atSigns.length; i++) {
+      if (atSigns[i].atSign == name) {
+        return atSigns[i];
+      }
+    }
+    return null;
+  }
+
+  /// Function to get all atsign item in keychain
+  Future<List<AtsignKey>> readAtsigns() async {
+    final atClientData = await readAtClientData(useSharedStorage: false);
+    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
+    final data = await readAtClientData(useSharedStorage: useSharedStorage);
+    return data?.keys ?? [];
+  }
+
+  /// Function to add a new atsign to keychain
+  Future<bool> storeAtSign({required AtsignKey atSign}) async {
+    final internalAtClientData = await readAtClientData(useSharedStorage: false);
+    final useSharedStorage = internalAtClientData?.config?.useSharedStorage ?? false;
+    final atClientData = await readAtClientData(useSharedStorage: useSharedStorage);
+    if (atClientData != null) {
+      final atSigns = atClientData.keys;
+      atSigns.removeWhere((element) => element.atSign == atSign.atSign);
+      atSigns.add(atSign);
+      await saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /// Function to add new atsigns to keychain
+  Future<bool> storeAtSigns({required List<AtsignKey> atSigns}) async {
+    final internalAtClientData = await readAtClientData(useSharedStorage: false);
+    final useSharedStorage = internalAtClientData?.config?.useSharedStorage ?? false;
+    final atClientData = await readAtClientData(useSharedStorage: useSharedStorage);
+    if (atClientData != null) {
+      final oldAtSigns = atClientData.keys;
+      //If have no account => make this account is default
+      for (var atsign in atSigns) {
+        oldAtSigns.removeWhere((element) => element.atSign == atsign.atSign);
+        oldAtSigns.add(atsign);
+      }
+      final newAtClientData = atClientData.copyWith(keys: oldAtSigns);
+      await saveAtClientData(data: newAtClientData, useSharedStorage: useSharedStorage);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /// Function to get default atsigns name from keychain
+  Future<String?> getAtSign() async {
+    final atClientData = await readAtClientData(useSharedStorage: false);
+    final defaultAtsign = atClientData?.defaultAtsign;
+    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
+    final atsignKeys = (await readAtClientData(useSharedStorage: useSharedStorage))?.keys ?? [];
+    for (var element in atsignKeys) {
+      if (element.atSign == defaultAtsign) {
+        return element.atSign;
+      }
+    }
+    if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
+    return null;
+  }
+
+  /// Function to make the atsign passed as primary
+  Future<bool> makeAtSignPrimary(String atsign) async {
+    final atClientData = await readAtClientData(useSharedStorage: false);
+    if (atClientData != null) {
+      atClientData.defaultAtsign = atsign;
+      await saveAtClientData(data: atClientData, useSharedStorage: false);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /// Function to remove an atsign from list of atsigns and hence, from keychain
+  Future<bool> deleteAtSignFromKeychain(String atsign) async {
+    final atClientData = await readAtClientData(useSharedStorage: false);
+    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
+    atClientData?.keys.removeWhere((element) => element.atSign == atsign);
+    if (atClientData != null) {
+      await saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /// Function to delete all values related to the atsign passed from keychain
+  Future<bool> resetAtSignFromKeychain(String atsign) async {
+    AtClientData? atClientData;
+
+    final useSharedStorage = await isUsingSharedStorage();
+
+    if (useSharedStorage == true) {
+      final atClientDataShared = await readAtClientData(useSharedStorage: true);
+
+      atClientDataShared?.keys.removeWhere((element) => element.atSign == atsign);
+
+      atClientData = await readAtClientData(useSharedStorage: false);
+
+      atClientData?.keys.removeWhere((element) => element.atSign == atsign);
+
+      if (atClientData != null && atClientDataShared != null) {
+        await saveAtClientData(data: atClientData, useSharedStorage: false);
+
+        await saveAtClientData(data: atClientDataShared, useSharedStorage: true);
+
+        return true;
+      } else {
+        return false;
+      }
+    } else {
+      atClientData = await readAtClientData(useSharedStorage: false);
+
+      atClientData?.keys.removeWhere((element) => element.atSign == atsign);
+
+      if (atClientData != null) {
+        await saveAtClientData(data: atClientData, useSharedStorage: false);
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+
+  Future<BiometricStorageFile> _getAppStorage({
+    bool useSharedStorage = false,
+  }) async {
+    String packageName = '';
+    try {
+      _packageInfo = await PackageInfo.fromPlatform();
+      packageName = _packageInfo.packageName;
+    } catch (e, s) {
+      _logger.warning('Get PackageInfo', e, s);
+    }
+
+    final data = await biometricStorage.getStorage(
+      useSharedStorage ? '$_kDefaultKeystoreAccount:shared' : '$_kDefaultKeystoreAccount:$packageName',
+      options: StorageFileInitOptions(
+        authenticationRequired: false,
+      ),
+    );
+
+    return data;
+  }
+
+  Future<BiometricStorageFile> getEnrollmentStorage(String atSign) async {
+    final data = await biometricStorage.getStorage(
+      '${atSign}_$enrollmentInfoKey',
+      options: StorageFileInitOptions(
+        authenticationRequired: false,
+      ),
+    );
+
+    return data;
+  }
+
+  /// Function to save client data
+  Future<bool> saveAtClientData({
+    required AtClientData data,
+    required bool useSharedStorage,
+  }) async {
+    try {
+      final store = await _getAppStorage(useSharedStorage: useSharedStorage);
+      final mapList = jsonEncode(data.toJson());
+      await writeDataToStore(
+        store: store,
+        data: mapList,
+        useSharedStorage: useSharedStorage,
+      );
+      return true;
+    } catch (e, s) {
+      _logger.info('_saveClientData', e, s);
+      return false;
+    }
+  }
+
+  /// The function write String data to BiometricStorageFile
+  /// If Platform is Windows, data will separated into segments before save. Because in Window, BiometricStorage limit the data length saved
+  Future<void> writeDataToStore({
+    required BiometricStorageFile store,
+    required String data,
+    bool useSharedStorage = false,
+  }) async {
+    if (Platform.isWindows) {
+      final dataList = _splitString(data, _kWindowSegmentDataLength);
+      await store.write(dataList.length.toString());
+      _packageInfo = await PackageInfo.fromPlatform();
+      final packageName = _packageInfo.packageName;
+
+      for (int i = 0; i < dataList.length; i++) {
+        final dataStore = await BiometricStorage().getStorage(
+          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
+          options: StorageFileInitOptions(
+            authenticationRequired: false,
+          ),
+        );
+        await dataStore.write(dataList[i]);
+      }
+    } else {
+      await store.write(data);
+    }
+  }
+
+  /// The function read String data to BiometricStorageFile
+  Future<String?> readDataFromStore({
+    required BiometricStorageFile store,
+    bool useSharedStorage = false,
+  }) async {
+    if (Platform.isWindows) {
+      final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
+      _packageInfo = await PackageInfo.fromPlatform();
+      final packageName = _packageInfo.packageName;
+      final results = <String>[];
+      for (int i = 0; i < segmentCount; i++) {
+        final dataStore = await biometricStorage.getStorage(
+          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
+          options: StorageFileInitOptions(
+            authenticationRequired: false,
+          ),
+        );
+        results.add(await dataStore.read() ?? '');
+      }
+      return _combineString(results);
+    }
+    return await store.read();
+  }
+
   /// Change atsign data to internal store
   Future<bool> disableUsingSharedStorage() async {
     final data = await readAtClientData(useSharedStorage: false);
@@ -120,9 +352,8 @@ class KeyChainManager {
       }
       final newConfig = data.config?.copyWith(useSharedStorage: false);
       var newData = data.copyWith(config: newConfig);
-      await _saveAtClientData(data: newData, useSharedStorage: false);
-      final sharedAtsigns =
-          (await readAtClientData(useSharedStorage: true))?.keys ?? [];
+      await saveAtClientData(data: newData, useSharedStorage: false);
+      final sharedAtsigns = (await readAtClientData(useSharedStorage: true))?.keys ?? [];
       final result = await storeAtSigns(atSigns: sharedAtsigns);
       return result;
     }
@@ -134,7 +365,7 @@ class KeyChainManager {
     //Init shared storage if it not exiting
     final sharedData = await readAtClientData(useSharedStorage: true);
     if (sharedData == null) {
-      await _saveAtClientData(
+      await saveAtClientData(
         data: AtClientData(
           config: AtClientDataConfig(
             schemaVersion: _kDataSchemeVersion,
@@ -149,11 +380,11 @@ class KeyChainManager {
     if (data != null) {
       final newConfig = data.config?.copyWith(useSharedStorage: true);
       var newData = data.copyWith(config: newConfig);
-      await _saveAtClientData(data: newData, useSharedStorage: false);
+      await saveAtClientData(data: newData, useSharedStorage: false);
       final result = await storeAtSigns(atSigns: data.keys);
       if (result) {
         newData = newData.copyWith(keys: []);
-        await _saveAtClientData(data: newData, useSharedStorage: false);
+        await saveAtClientData(data: newData, useSharedStorage: false);
       }
       return result;
     }
@@ -185,8 +416,7 @@ class KeyChainManager {
         Map<String, dynamic>? keysFromBiometric;
         Map<String, dynamic>? keysFromKeychain;
         try {
-          final data =
-              await (await BiometricStorage().getStorage('@atsign')).read();
+          final data = await (await BiometricStorage().getStorage('@atsign')).read();
           keysFromBiometric = jsonDecode(data ?? '{}');
         } catch (e, s) {
           _logger.warning('Read keys from BiometricStorage', e, s);
@@ -204,36 +434,24 @@ class KeyChainManager {
             if (value == true) {
               migratedData.defaultAtsign = key;
             }
-            final String? pkamPublicKey = await (await BiometricStorage()
-                    .getStorage('$key:_pkam_public_key'))
-                .read();
-            final String? pkamPrivateKey = await (await BiometricStorage()
-                    .getStorage('$key:_pkam_private_key'))
-                .read();
-            final String? encryptionPublicKey = await (await BiometricStorage()
-                    .getStorage('$key:_encryption_public_key'))
-                .read();
-            final String? encryptionPrivateKey = await (await BiometricStorage()
-                    .getStorage('$key:_encryption_private_key'))
-                .read();
-            final String? selfEncryptionKey =
-                await (await BiometricStorage().getStorage('$key:_aesKey'))
-                    .read();
-            final String? hiveSecret =
-                await (await BiometricStorage().getStorage('$key:_hive_secret'))
-                    .read();
-            final String? secret =
-                await (await BiometricStorage().getStorage('$key:_secret'))
-                    .read();
+            final String? pkamPublicKey = await (await BiometricStorage().getStorage('$key:_pkam_public_key')).read();
+            final String? pkamPrivateKey = await (await BiometricStorage().getStorage('$key:_pkam_private_key')).read();
+            final String? encryptionPublicKey =
+                await (await BiometricStorage().getStorage('$key:_encryption_public_key')).read();
+            final String? encryptionPrivateKey =
+                await (await BiometricStorage().getStorage('$key:_encryption_private_key')).read();
+            final String? selfEncryptionKey = await (await BiometricStorage().getStorage('$key:_aesKey')).read();
+            final String? hiveSecret = await (await BiometricStorage().getStorage('$key:_hive_secret')).read();
+            final String? secret = await (await BiometricStorage().getStorage('$key:_secret')).read();
             final newAtSignKey = AtsignKey(
               atSign: key,
-              pkamPublicKey: AtBytes.fromString(pkamPublicKey!),
-              pkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
-              encryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
-              encryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
-              selfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
+              apkamPublicKey: AtBytes.fromString(pkamPublicKey!),
+              apkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
+              defaultEncryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
+              defaultEncryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
+              defaultSelfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
               hiveSecret: hiveSecret!,
-              secret: secret,
+              cramKey: secret,
             );
             newAtSignKeys.add(newAtSignKey);
           }
@@ -245,29 +463,22 @@ class KeyChainManager {
             if (value == true) {
               migratedData.defaultAtsign = key;
             }
-            final String? pkamPublicKey =
-                await FlutterKeychain.get(key: '$key:_pkam_public_key');
-            final String? pkamPrivateKey =
-                await FlutterKeychain.get(key: '$key:_pkam_private_key');
-            final String? encryptionPublicKey =
-                await FlutterKeychain.get(key: '$key:_encryption_public_key');
-            final String? encryptionPrivateKey =
-                await FlutterKeychain.get(key: '$key:_encryption_private_key');
-            final String? selfEncryptionKey =
-                await FlutterKeychain.get(key: '$key:_aesKey');
-            final String? hiveSecret =
-                await FlutterKeychain.get(key: '$key:_hive_secret');
-            final String? secret =
-                await FlutterKeychain.get(key: '$key:_secret');
+            final String? pkamPublicKey = await FlutterKeychain.get(key: '$key:_pkam_public_key');
+            final String? pkamPrivateKey = await FlutterKeychain.get(key: '$key:_pkam_private_key');
+            final String? encryptionPublicKey = await FlutterKeychain.get(key: '$key:_encryption_public_key');
+            final String? encryptionPrivateKey = await FlutterKeychain.get(key: '$key:_encryption_private_key');
+            final String? selfEncryptionKey = await FlutterKeychain.get(key: '$key:_aesKey');
+            final String? hiveSecret = await FlutterKeychain.get(key: '$key:_hive_secret');
+            final String? secret = await FlutterKeychain.get(key: '$key:_secret');
             final newAtSignKey = AtsignKey(
               atSign: key,
-              pkamPublicKey: AtBytes.fromString(pkamPublicKey!),
-              pkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
-              encryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
-              encryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
-              selfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
+              apkamPublicKey: AtBytes.fromString(pkamPublicKey!),
+              apkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
+              defaultEncryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
+              defaultEncryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
+              defaultSelfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
               hiveSecret: hiveSecret,
-              secret: secret,
+              cramKey: secret,
             );
             newAtSignKeys.add(newAtSignKey);
           }
@@ -281,505 +492,7 @@ class KeyChainManager {
     if (schemaVersion < 2) {
       //For next update data structure
     }
-    await _saveAtClientData(data: migratedData, useSharedStorage: false);
-  }
-
-  /// Function to get atsign's key with name
-  Future<AtsignKey?> readAtsign({required String name}) async {
-    final atSigns = await readAtsigns();
-    if (atSigns.isEmpty) {
-      return null;
-    }
-    for (int i = 0; i < atSigns.length; i++) {
-      if (atSigns[i].atSign == name) {
-        return atSigns[i];
-      }
-    }
-    return null;
-  }
-
-  /// Function to get all atsign item in keychain
-  Future<List<AtsignKey>> readAtsigns() async {
-    final atClientData = await readAtClientData(useSharedStorage: false);
-    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    final data = await readAtClientData(useSharedStorage: useSharedStorage);
-    return data?.keys ?? [];
-  }
-
-  /// Function to add a new atsign to keychain
-  Future<bool> storeAtSign({required AtsignKey atSign}) async {
-    final internalAtClientData =
-        await readAtClientData(useSharedStorage: false);
-    final useSharedStorage =
-        internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData =
-        await readAtClientData(useSharedStorage: useSharedStorage);
-    if (atClientData != null) {
-      final atSigns = atClientData.keys;
-      atSigns.removeWhere((element) => element.atSign == atSign.atSign);
-      atSigns.add(atSign);
-      await _saveAtClientData(
-          data: atClientData, useSharedStorage: useSharedStorage);
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  /// Function to add new atsigns to keychain
-  Future<bool> storeAtSigns({required List<AtsignKey> atSigns}) async {
-    final internalAtClientData =
-        await readAtClientData(useSharedStorage: false);
-    final useSharedStorage =
-        internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData =
-        await readAtClientData(useSharedStorage: useSharedStorage);
-    if (atClientData != null) {
-      final oldAtSigns = atClientData.keys;
-      //If have no account => make this account is default
-      for (var atsign in atSigns) {
-        oldAtSigns.removeWhere((element) => element.atSign == atsign.atSign);
-        oldAtSigns.add(atsign);
-      }
-      final newAtClientData = atClientData.copyWith(keys: oldAtSigns);
-      await _saveAtClientData(
-          data: newAtClientData, useSharedStorage: useSharedStorage);
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  /// Function to get hive secret from keychain
-  Future<List<int>> getHiveSecretFromKeychain(String atsign) async {
-    assert(atsign.isNotEmpty);
-    List<int> secretAsUint8List = [];
-    try {
-      var atsignItem = await readAtsign(name: atsign);
-      var hiveSecretString = (await readAtsign(name: atsign))?.hiveSecret;
-      if (hiveSecretString == null) {
-        secretAsUint8List = _generatePersistenceSecret();
-        hiveSecretString = String.fromCharCodes(secretAsUint8List);
-        atsignItem = atsignItem?.copyWith(
-          hiveSecret: hiveSecretString,
-        );
-        if (atsignItem != null) {
-          storeAtSign(atSign: atsignItem);
-        }
-      } else {
-        secretAsUint8List = Uint8List.fromList(hiveSecretString.codeUnits);
-      }
-    } on Exception catch (exception) {
-      _logger.severe(
-          'exception in getHiveSecretFromKeychain : ${exception.toString()}');
-    }
-
-    return secretAsUint8List;
-  }
-
-  /// Fetches list of all the onboarded atsigns
-  Future<List<String>> getAtSignListFromKeychain() async {
-    final atsigns = await readAtsigns();
-    return atsigns.map((e) => e.atSign).toList();
-  }
-
-  /// Function to get atsign secret from keychain
-  Future<String> getSecretFromKeychain(String atsign) async {
-    final atsigns = await readAtsign(name: atsign);
-    return atsigns?.secret ?? '';
-  }
-
-  /// Function to save atsign and pkam keys passed to keychain
-  Future<bool> storeCredentialToKeychain(String atSign,
-      {String? secret, String? privateKey, String? publicKey}) async {
-    try {
-      final internalAtClientData =
-          await readAtClientData(useSharedStorage: false);
-      final useSharedStorage =
-          internalAtClientData?.config?.useSharedStorage ?? false;
-      final atClientData =
-          await readAtClientData(useSharedStorage: useSharedStorage);
-      final atsigns = atClientData?.keys ?? [];
-      if (secret != null) {
-        secret = secret.trim().toLowerCase().replaceAll(' ', '');
-      }
-      final index = atsigns.indexWhere((element) => element.atSign == atSign);
-      if (index >= 0) {
-        atsigns[index] = atsigns[index].copyWith(
-          secret: secret,
-          pkamPrivateKey: AtBytes.fromString(privateKey!),
-          pkamPublicKey: AtBytes.fromString(publicKey!),
-        );
-      } else {
-        atsigns.add(AtsignKey(atSign: atSign).copyWith(
-          secret: secret,
-          pkamPrivateKey: AtBytes.fromString(privateKey!),
-          pkamPublicKey: AtBytes.fromString(publicKey!),
-        ));
-      }
-      if (atClientData != null) {
-        await _saveAtClientData(
-            data: atClientData, useSharedStorage: useSharedStorage);
-        return true;
-      } else {
-        return false;
-      }
-    } on Exception catch (exception) {
-      _logger.severe(
-          'exception in storeCredentialToKeychain :${exception.toString()}');
-      return false;
-    }
-  }
-
-  /// Function to save pkam keys for the atsign passed to keychain
-  Future<bool> storePkamKeysToKeychain(String atsign,
-      {String? privateKey, String? publicKey}) async {
-    final internalAtClientData =
-        await readAtClientData(useSharedStorage: false);
-    final useSharedStorage =
-        internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData =
-        await readAtClientData(useSharedStorage: useSharedStorage);
-    try {
-      final atsigns = atClientData?.keys ?? [];
-      final index = atsigns.indexWhere((element) => element.atSign == atsign);
-      if (index >= 0) {
-        atsigns[index] = atsigns[index].copyWith(
-          pkamPrivateKey: AtBytes.fromString(privateKey!),
-          pkamPublicKey: AtBytes.fromString(publicKey!),
-        );
-      } else {
-        atsigns.add(AtsignKey(atSign: atsign).copyWith(
-          pkamPrivateKey: AtBytes.fromString(privateKey!),
-          pkamPublicKey: AtBytes.fromString(publicKey!),
-        ));
-      }
-      atClientData?.keys = atsigns;
-      if (atClientData != null) {
-        await _saveAtClientData(
-            data: atClientData, useSharedStorage: useSharedStorage);
-        return true;
-      } else {
-        return false;
-      }
-    } catch (e, s) {
-      print(e);
-      print(s);
-      return false;
-    }
-  }
-
-  /// Function to generate a secure encryption key
-  List<int> _generatePersistenceSecret() {
-    return Hive.generateSecureKey();
-  }
-
-  /// Function to generate an RSA key pair
-  RSAKeypair generateKeyPair() {
-    var rsaKeypair = RSAKeypair.fromRandom();
-    return rsaKeypair;
-  }
-
-  String generateAESKey() {
-    return encrypt.AES(encrypt.Key.fromSecureRandom(32)).key.base64;
-  }
-
-  /// Function to get cram secret from keychain
-  Future<String?> getCramSecret(String atSign) async {
-    return getSecretFromKeychain(atSign);
-  }
-
-  /// Function to get pkam private key from keychain
-  Future<String?> getPkamPrivateKey(String atSign) async {
-    final atsigns = await readAtsign(name: atSign);
-    return atsigns?.pkamPrivateKey.toString();
-  }
-
-  /// Function to get pkam public key from keychain
-  Future<String?> getPkamPublicKey(String atSign) async {
-    final atsigns = await readAtsign(name: atSign);
-    return atsigns?.pkamPublicKey.toString();
-  }
-
-  /// Function to get encryption private key from keychain
-  Future<String?> getEncryptionPrivateKey(String atSign) async {
-    final atsigns = await readAtsign(name: atSign);
-    return atsigns?.encryptionPrivateKey.toString();
-  }
-
-  /// Function to get encryption public key from keychain
-  Future<String?> getEncryptionPublicKey(String atSign) async {
-    final atsigns = await readAtsign(name: atSign);
-    return atsigns?.encryptionPublicKey.toString();
-  }
-
-  /// Function to get self encryption key from keychain
-  Future<String?> getSelfEncryptionAESKey(String atSign) async {
-    final atsigns = await readAtsign(name: atSign);
-    return atsigns?.selfEncryptionKey.toString();
-  }
-
-  /// Function to get hive secret from keychain
-  Future<List<int>?> getKeyStoreSecret(String atSign) async {
-    return getHiveSecretFromKeychain(atSign);
-  }
-
-  /// Function to get default atsigns name from keychain
-  Future<String?> getAtSign() async {
-    final atClientData = await readAtClientData(useSharedStorage: false);
-    final defaultAtsign = atClientData?.defaultAtsign;
-    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    final atsignKeys =
-        (await readAtClientData(useSharedStorage: useSharedStorage))?.keys ??
-            [];
-    for (var element in atsignKeys) {
-      if (element.atSign == defaultAtsign) {
-        return element.atSign;
-      }
-    }
-    if (atsignKeys.isNotEmpty) return atsignKeys.first.atSign;
-    return null;
-  }
-
-  /// Function to get Map of atsigns from keychain
-  Future<Map<String, bool?>> getAtsignsWithStatus() async {
-    return await _getAtSignMap();
-  }
-
-  /// Function to make the atsign passed as primary
-  Future<bool> makeAtSignPrimary(String atsign) async {
-    final atClientData = await readAtClientData(useSharedStorage: false);
-    if (atClientData != null) {
-      atClientData.defaultAtsign = atsign;
-      await _saveAtClientData(data: atClientData, useSharedStorage: false);
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  /// Function to remove an atsign from list of atsigns and hence, from keychain
-  Future<bool> deleteAtSignFromKeychain(String atsign) async {
-    final atClientData = await readAtClientData(useSharedStorage: false);
-    final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    atClientData?.keys.removeWhere((element) => element.atSign == atsign);
-    if (atClientData != null) {
-      await _saveAtClientData(
-          data: atClientData, useSharedStorage: useSharedStorage);
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  /// Function to delete all values related to the atsign passed from keychain
-  Future<bool> resetAtSignFromKeychain(String atsign) async {
-    AtClientData? atClientData;
-
-    final useSharedStorage = await isUsingSharedStorage();
-
-    if (useSharedStorage == true) {
-      final atClientDataShared = await readAtClientData(useSharedStorage: true);
-
-      atClientDataShared?.keys
-          .removeWhere((element) => element.atSign == atsign);
-
-      atClientData = await readAtClientData(useSharedStorage: false);
-
-      atClientData?.keys.removeWhere((element) => element.atSign == atsign);
-
-      if (atClientData != null && atClientDataShared != null) {
-        await _saveAtClientData(data: atClientData, useSharedStorage: false);
-
-        await _saveAtClientData(
-            data: atClientDataShared, useSharedStorage: true);
-
-        return true;
-      } else {
-        return false;
-      }
-    } else {
-      atClientData = await readAtClientData(useSharedStorage: false);
-
-      atClientData?.keys.removeWhere((element) => element.atSign == atsign);
-
-      if (atClientData != null) {
-        await _saveAtClientData(data: atClientData, useSharedStorage: false);
-        return true;
-      } else {
-        return false;
-      }
-    }
-  }
-
-  /// This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version. Use `getAtsignsWithStatus()` instead")
-  Future<Map<String, bool?>> checkForValuesInFlutterKeychain() async {
-    return getAtsignsWithStatus();
-  }
-
-  /// Function to clear all entries from keychain
-  Future<void> clearKeychainEntries() async {
-    for (var element
-        in (await KeyChainManager.getInstance().getAtSignListFromKeychain())) {
-      await KeyChainManager.getInstance().deleteAtSignFromKeychain(element);
-    }
-  }
-
-  /// This function is deprecated and will be removed in upcoming version
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version")
-  Future<BiometricStorageFile> getBiometricStorageFile(String key) async {
-    return await BiometricStorage().getStorage(key,
-        options: StorageFileInitOptions(
-          authenticationRequired: false,
-        ));
-  }
-
-  /// Function to get value for the key passed from keychain
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version")
-  Future<String?> getValue(String atsign, String key) async {
-    throw UnimplementedError();
-  }
-
-  /// Function to save value for the key passed to keychain
-  @Deprecated(
-      "This function is deprecated and will be removed in upcoming version")
-  Future<String> putValue(String atsign, String key, String value) async {
-    throw UnimplementedError();
-  }
-
-  Future<BiometricStorageFile> _getAppStorage({
-    bool useSharedStorage = false,
-  }) async {
-    String packageName = '';
-    try {
-      _packageInfo = await PackageInfo.fromPlatform();
-      packageName = _packageInfo.packageName;
-    } catch (e, s) {
-      _logger.warning('Get PackageInfo', e, s);
-    }
-
-    final data = await biometricStorage.getStorage(
-      useSharedStorage
-          ? '$_kDefaultKeystoreAccount:shared'
-          : '$_kDefaultKeystoreAccount:$packageName',
-      options: StorageFileInitOptions(
-        authenticationRequired: false,
-      ),
-    );
-
-    return data;
-  }
-
-  Future<BiometricStorageFile> getEnrollmentStorage(String atSign) async {
-    final data = await biometricStorage.getStorage(
-      '${atSign}_$enrollmentInfoKey',
-      options: StorageFileInitOptions(
-        authenticationRequired: false,
-      ),
-    );
-
-    return data;
-  }
-
-  /// Function to save client data
-  Future<bool> _saveAtClientData({
-    required AtClientData data,
-    required bool useSharedStorage,
-  }) async {
-    try {
-      final store = await _getAppStorage(useSharedStorage: useSharedStorage);
-      final mapList = jsonEncode(data.toJson());
-      await _writeDataToStore(
-        store: store,
-        data: mapList,
-        useSharedStorage: useSharedStorage,
-      );
-      return true;
-    } catch (e, s) {
-      _logger.info('_saveClientData', e, s);
-      return false;
-    }
-  }
-
-  /// Function to get Map of atsigns from keychain
-  Future<Map<String, bool?>> _getAtSignMap() async {
-    final atClientData = await readAtClientData(useSharedStorage: false);
-    final atsigns = await readAtsigns();
-    final result = <String, bool?>{};
-    for (var element in atsigns) {
-      result[element.atSign] = element.atSign == atClientData?.defaultAtsign;
-    }
-    return result;
-  }
-
-  writeToEnrollmentStore(String atSign, String data) async {
-    final store = await getEnrollmentStorage(atSign);
-    await _writeDataToStore(store: store, data: data);
-  }
-
-  Future<String?> readFromEnrollmentStore(String atSign) async {
-    final store = await getEnrollmentStorage(atSign);
-    return await _readDataFromStore(store: store);
-  }
-
-  deleteEnrollmentStore(String atSign) async {
-    final store = await getEnrollmentStorage(atSign);
-    await store.delete();
-  }
-
-  /// The function write String data to BiometricStorageFile
-  /// If Platform is Windows, data will separated into segments before save. Because in Window, BiometricStorage limit the data length saved
-  Future<void> _writeDataToStore({
-    required BiometricStorageFile store,
-    required String data,
-    bool useSharedStorage = false,
-  }) async {
-    if (Platform.isWindows) {
-      final dataList = _splitString(data, _kWindowSegmentDataLength);
-      await store.write(dataList.length.toString());
-      _packageInfo = await PackageInfo.fromPlatform();
-      final packageName = _packageInfo.packageName;
-
-      for (int i = 0; i < dataList.length; i++) {
-        final dataStore = await BiometricStorage().getStorage(
-          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
-          options: StorageFileInitOptions(
-            authenticationRequired: false,
-          ),
-        );
-        await dataStore.write(dataList[i]);
-      }
-    } else {
-      await store.write(data);
-    }
-  }
-
-  /// The function read String data to BiometricStorageFile
-  Future<String?> _readDataFromStore({
-    required BiometricStorageFile store,
-    bool useSharedStorage = false,
-  }) async {
-    if (Platform.isWindows) {
-      final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
-      _packageInfo = await PackageInfo.fromPlatform();
-      final packageName = _packageInfo.packageName;
-      final results = <String>[];
-      for (int i = 0; i < segmentCount; i++) {
-        final dataStore = await biometricStorage.getStorage(
-          useSharedStorage ? 'shared_data_$i' : '${packageName}_data_$i',
-          options: StorageFileInitOptions(
-            authenticationRequired: false,
-          ),
-        );
-        results.add(await dataStore.read() ?? '');
-      }
-      return _combineString(results);
-    }
-    return await store.read();
+    await saveAtClientData(data: migratedData, useSharedStorage: false);
   }
 
   /// The function separated a String to a list of segment String
@@ -803,55 +516,5 @@ class KeyChainManager {
       return null;
     }
     return texts.join();
-  }
-
-  Future<Map<String, String>> getEncryptedKeys(String atsign) async {
-    AtsignKey? atsignKeyData = await readAtsign(name: atsign);
-
-    if (atsignKeyData == null) {
-      throw AtClientException.message(
-          "Failed to fetch the keys for the atsign: $atsign");
-    }
-
-    Map<String, String> encryptedAtKeysMap = <String, String>{};
-
-    String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
-        atsignKeyData.pkamPublicKey!.toString(),
-        atsignKeyData.selfEncryptionKey!.toString());
-    encryptedAtKeysMap[BackupKeyConstants.PKAM_PUBLIC_KEY_FROM_KEY_FILE] =
-        encryptedPkamPublicKey;
-
-    String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
-        atsignKeyData.pkamPrivateKey!.toString(),
-        atsignKeyData.selfEncryptionKey!.toString());
-    encryptedAtKeysMap[BackupKeyConstants.PKAM_PRIVATE_KEY_FROM_KEY_FILE] =
-        encryptedPkamPrivateKey;
-
-    String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
-        atsignKeyData.encryptionPublicKey!.toString(),
-        atsignKeyData.selfEncryptionKey!.toString());
-    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PUBLIC_KEY_FROM_FILE] =
-        encryptedEncryptionPublicKey;
-
-    String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
-        atsignKeyData.encryptionPrivateKey!.toString(),
-        atsignKeyData.selfEncryptionKey!.toString());
-    encryptedAtKeysMap[BackupKeyConstants.ENCRYPTION_PRIVATE_KEY_FROM_FILE] =
-        encryptedEncryptionPrivateKey;
-    encryptedAtKeysMap[BackupKeyConstants.SELF_ENCRYPTION_KEY_FROM_FILE] =
-        atsignKeyData.selfEncryptionKey.toString();
-    // The atKeys file generated previous to APKAM feature will not have the
-    // apkam_symmetric_key. Hence adding null check to prevent null-pointer exception.
-    if (atsignKeyData.apkamSymmetricKey != null) {
-      encryptedAtKeysMap[BackupKeyConstants.APKAM_SYMMETRIC_KEY_FROM_FILE] =
-          atsignKeyData.apkamSymmetricKey.toString();
-    }
-    // The atKeys file generated previous to APKAM feature will not have the
-    // enrollment-id. Hence adding null check to prevent null-pointer exception.
-    if (atsignKeyData.enrollmentId != null) {
-      encryptedAtKeysMap[BackupKeyConstants.APKAM_ENROLLMENT_ID_FROM_FILE] =
-          atsignKeyData.enrollmentId!;
-    }
-    return encryptedAtKeysMap;
   }
 }
