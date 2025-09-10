@@ -9,6 +9,7 @@ import 'package:at_auth/src/enroll/first_enrollment_request.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_auth/src/onboard/at_onboarding_request.dart';
 import 'package:at_auth/src/onboard/at_onboarding_response.dart';
 import 'package:at_chops/at_chops.dart';
@@ -36,17 +37,18 @@ class AtAuthImpl implements AtAuth {
   AtAuthImpl({this.atLookUp, this.atChops, this.cramAuthenticator, this.pkamAuthenticator, this.atEnrollmentBase});
 
   @override
+
   /// Authenticate using PKAM
   /// The AtAuthRequest must contain either:
   /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
   /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
   /// - 3. atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
   ///    contains keys in encrypted format
-  /// 
+  ///
   /// The AtAuthRequest may optionally contain:
   /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
   ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
-  /// 
+  ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
     if (atAuthRequest.atKeysIo == null && atAuthRequest.atAuthKeys == null) {
@@ -68,7 +70,8 @@ class AtAuthImpl implements AtAuth {
     var enrollmentIdFromRequest = atAuthRequest.enrollmentId;
     enrollmentIdFromRequest ??= atAuthKeys.enrollmentId;
 
-    atLookUp ??= AtLookupImpl(atAuthRequest.atSign, atAuthRequest.rootDomain.rootDomain, atAuthRequest.rootDomain.rootPort);
+    atLookUp ??=
+        AtLookupImpl(atAuthRequest.atSign, atAuthRequest.rootDomain.rootDomain, atAuthRequest.rootDomain.rootPort);
     // ??= to support mocking
     atChops ??= _createAtChops(atAuthKeys);
     atLookUp!.atChops = atChops;
@@ -101,11 +104,13 @@ class AtAuthImpl implements AtAuth {
     AtOnboardingRequest atOnboardingRequest,
     String cramSecret, {
     bool autoCompleteActivation = true,
+    String? publicKeyId,
   }) async {
     _atOnboardingRequest = atOnboardingRequest;
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
     atEnrollmentBase = AtEnrollmentBase.create(atOnboardingRequest.atSign);
-    atLookUp ??= AtLookupImpl(atOnboardingRequest.atSign, atOnboardingRequest.rootDomain, atOnboardingRequest.rootPort);
+    atLookUp ??= AtLookupImpl(
+        atOnboardingRequest.atSign, atOnboardingRequest.rootDomain.rootDomain, atOnboardingRequest.rootDomain.rootPort);
 
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator(atOnboardingRequest.atSign, cramSecret, atLookUp);
@@ -115,8 +120,22 @@ class AtAuthImpl implements AtAuth {
           ' and try again (or) contact support@atsign.com');
     }
     //2. generate key pairs
-    _atAuthKeys = BaseAtKeysIo.generateKeyPairs(
-        atOnboardingRequest.authMode, publicKeyId: atOnboardingRequest.publicKeyId);
+    AtKeysIo atKeysIo = atOnboardingRequest.authMode == PkamAuthMode.sim ? SimAtKeysIo() : FileAtKeysIo();
+
+    switch (atKeysIo) {
+      case SimAtKeysIo():
+        if (publicKeyId == null || publicKeyId.isEmpty) {
+          throw AtAuthenticationException('sim publicKeyId is required for sim auth mode');
+        }
+        _atAuthKeys = atKeysIo.generateKeys(publicKeyId);
+        break;
+      case FileAtKeysIo():
+        _atAuthKeys = atKeysIo.generateKeyPairs();
+        await atKeysIo.write(atOnboardingRequest.atSign, _atAuthKeys);
+        break;
+      default:
+        throw AtAuthenticationException('Unsupported AtKeysIO implementation: ${atKeysIo.runtimeType}');
+    }
 
     atChops ??= _createAtChops(_atAuthKeys);
     atLookUp!.atChops = atChops;
