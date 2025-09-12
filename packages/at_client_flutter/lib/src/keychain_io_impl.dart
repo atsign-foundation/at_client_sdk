@@ -12,7 +12,7 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   Future<AtsignKey> read(String atSign) async {
     final atsignKey = await _keychainManager.readAtsign(name: atSign);
     if (atsignKey == null) {
-      throw Exception('AtsignKey not found for atSign: $atSign');
+      throw AtKeyException('AtsignKey not found in keychain for atSign: $atSign');
     }
     return atsignKey;
   }

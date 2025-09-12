@@ -74,10 +74,7 @@ class AtAuthServiceImpl implements AtAuthService {
     } else {
       atKeysIo = _keychainAtKeysIo;
     } 
-    if (atAuthRequest.atAuthKeys == null && atAuthRequest.encryptedKeysMap == null) {
-      _logger.info('Fetching the keys from Keychain Manager of atSign: ${atAuthRequest.atSign}');
-      atAuthRequest.atAuthKeys = await atKeysIo!.read(atAuthRequest.atSign);
-    }
+    atAuthRequest.atKeysIo = atKeysIo;
     // Invoke authenticate method in AtAuth package.
     AtAuthResponse atAuthResponse = AtAuthResponse(_atSign);
     try {
@@ -104,13 +101,14 @@ class AtAuthServiceImpl implements AtAuthService {
     await _init(_atAuth.atChops!, enrollmentId: atAuthResponse.enrollmentId);
     // When an atSign is authenticated via the .atKeys on a new device, the keys
     // will not be present in keychain manager. Add keys to key-chain manager.
+    AtsignKey? atSignKey;
     try {
-      AtsignKey atSignKey = await _keychainAtKeysIo.read(_atSign);
-      atAuthResponse.atAuthKeys = atSignKey;
+      atSignKey = await _keychainAtKeysIo.read(_atSign);
     } catch (_) {
       await _keychainAtKeysIo.write(_atSign, atAuthResponse.atAuthKeys!);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys);
     }
+    atAuthResponse.atAuthKeys = atSignKey;
 
     return atAuthResponse;
   }

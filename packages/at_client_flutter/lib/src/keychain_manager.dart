@@ -20,7 +20,6 @@ const int _kWindowSegmentDataLength =
 /// Service to manage keychain entries. This includes saving the
 /// encryption keys and secret to keychain
 class KeyChainManager {
-
   static final _logger = AtSignLogger('KeyChainUtil');
   late PackageInfo _packageInfo;
 
@@ -128,14 +127,18 @@ class KeyChainManager {
 
   /// Function to add a new atsign to keychain
   Future<bool> storeAtSign({required AtsignKey atSign}) async {
-    final internalAtClientData = await readAtClientData(useSharedStorage: false);
-    final useSharedStorage = internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData = await readAtClientData(useSharedStorage: useSharedStorage);
+    final internalAtClientData =
+        await readAtClientData(useSharedStorage: false);
+    final useSharedStorage =
+        internalAtClientData?.config?.useSharedStorage ?? false;
+    final atClientData =
+        await readAtClientData(useSharedStorage: useSharedStorage);
     if (atClientData != null) {
       final atSigns = atClientData.keys;
       atSigns.removeWhere((element) => element.atSign == atSign.atSign);
       atSigns.add(atSign);
-      await saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
+      await saveAtClientData(
+          data: atClientData, useSharedStorage: useSharedStorage);
       return true;
     } else {
       return false;
@@ -144,9 +147,12 @@ class KeyChainManager {
 
   /// Function to add new atsigns to keychain
   Future<bool> storeAtSigns({required List<AtsignKey> atSigns}) async {
-    final internalAtClientData = await readAtClientData(useSharedStorage: false);
-    final useSharedStorage = internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData = await readAtClientData(useSharedStorage: useSharedStorage);
+    final internalAtClientData =
+        await readAtClientData(useSharedStorage: false);
+    final useSharedStorage =
+        internalAtClientData?.config?.useSharedStorage ?? false;
+    final atClientData =
+        await readAtClientData(useSharedStorage: useSharedStorage);
     if (atClientData != null) {
       final oldAtSigns = atClientData.keys;
       //If have no account => make this account is default
@@ -155,7 +161,8 @@ class KeyChainManager {
         oldAtSigns.add(atsign);
       }
       final newAtClientData = atClientData.copyWith(keys: oldAtSigns);
-      await saveAtClientData(data: newAtClientData, useSharedStorage: useSharedStorage);
+      await saveAtClientData(
+          data: newAtClientData, useSharedStorage: useSharedStorage);
       return true;
     } else {
       return false;
@@ -167,7 +174,9 @@ class KeyChainManager {
     final atClientData = await readAtClientData(useSharedStorage: false);
     final defaultAtsign = atClientData?.defaultAtsign;
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    final atsignKeys = (await readAtClientData(useSharedStorage: useSharedStorage))?.keys ?? [];
+    final atsignKeys =
+        (await readAtClientData(useSharedStorage: useSharedStorage))?.keys ??
+            [];
     for (var element in atsignKeys) {
       if (element.atSign == defaultAtsign) {
         return element.atSign;
@@ -195,7 +204,8 @@ class KeyChainManager {
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
     atClientData?.keys.removeWhere((element) => element.atSign == atsign);
     if (atClientData != null) {
-      await saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
+      await saveAtClientData(
+          data: atClientData, useSharedStorage: useSharedStorage);
       return true;
     } else {
       return false;
@@ -211,7 +221,8 @@ class KeyChainManager {
     if (useSharedStorage == true) {
       final atClientDataShared = await readAtClientData(useSharedStorage: true);
 
-      atClientDataShared?.keys.removeWhere((element) => element.atSign == atsign);
+      atClientDataShared?.keys
+          .removeWhere((element) => element.atSign == atsign);
 
       atClientData = await readAtClientData(useSharedStorage: false);
 
@@ -220,7 +231,8 @@ class KeyChainManager {
       if (atClientData != null && atClientDataShared != null) {
         await saveAtClientData(data: atClientData, useSharedStorage: false);
 
-        await saveAtClientData(data: atClientDataShared, useSharedStorage: true);
+        await saveAtClientData(
+            data: atClientDataShared, useSharedStorage: true);
 
         return true;
       } else {
@@ -252,7 +264,9 @@ class KeyChainManager {
     }
 
     final data = await biometricStorage.getStorage(
-      useSharedStorage ? '$_kDefaultKeystoreAccount:shared' : '$_kDefaultKeystoreAccount:$packageName',
+      useSharedStorage
+          ? '$_kDefaultKeystoreAccount:shared'
+          : '$_kDefaultKeystoreAccount:$packageName',
       options: StorageFileInitOptions(
         authenticationRequired: false,
       ),
@@ -325,7 +339,8 @@ class KeyChainManager {
     bool useSharedStorage = false,
   }) async {
     if (Platform.isWindows) {
-      final segmentCount = int.tryParse(await store.read() ?? '0') ?? 0;
+      var whatsindex = await store.read();
+      final segmentCount = int.tryParse(whatsindex ?? '0') ?? 0;
       _packageInfo = await PackageInfo.fromPlatform();
       final packageName = _packageInfo.packageName;
       final results = <String>[];
@@ -353,7 +368,8 @@ class KeyChainManager {
       final newConfig = data.config?.copyWith(useSharedStorage: false);
       var newData = data.copyWith(config: newConfig);
       await saveAtClientData(data: newData, useSharedStorage: false);
-      final sharedAtsigns = (await readAtClientData(useSharedStorage: true))?.keys ?? [];
+      final sharedAtsigns =
+          (await readAtClientData(useSharedStorage: true))?.keys ?? [];
       final result = await storeAtSigns(atSigns: sharedAtsigns);
       return result;
     }
@@ -416,7 +432,8 @@ class KeyChainManager {
         Map<String, dynamic>? keysFromBiometric;
         Map<String, dynamic>? keysFromKeychain;
         try {
-          final data = await (await BiometricStorage().getStorage('@atsign')).read();
+          final data =
+              await (await BiometricStorage().getStorage('@atsign')).read();
           keysFromBiometric = jsonDecode(data ?? '{}');
         } catch (e, s) {
           _logger.warning('Read keys from BiometricStorage', e, s);
@@ -434,21 +451,35 @@ class KeyChainManager {
             if (value == true) {
               migratedData.defaultAtsign = key;
             }
-            final String? pkamPublicKey = await (await BiometricStorage().getStorage('$key:_pkam_public_key')).read();
-            final String? pkamPrivateKey = await (await BiometricStorage().getStorage('$key:_pkam_private_key')).read();
-            final String? encryptionPublicKey =
-                await (await BiometricStorage().getStorage('$key:_encryption_public_key')).read();
-            final String? encryptionPrivateKey =
-                await (await BiometricStorage().getStorage('$key:_encryption_private_key')).read();
-            final String? selfEncryptionKey = await (await BiometricStorage().getStorage('$key:_aesKey')).read();
-            final String? hiveSecret = await (await BiometricStorage().getStorage('$key:_hive_secret')).read();
-            final String? secret = await (await BiometricStorage().getStorage('$key:_secret')).read();
+            final String? pkamPublicKey = await (await BiometricStorage()
+                    .getStorage('$key:_pkam_public_key'))
+                .read();
+            final String? pkamPrivateKey = await (await BiometricStorage()
+                    .getStorage('$key:_pkam_private_key'))
+                .read();
+            final String? encryptionPublicKey = await (await BiometricStorage()
+                    .getStorage('$key:_encryption_public_key'))
+                .read();
+            final String? encryptionPrivateKey = await (await BiometricStorage()
+                    .getStorage('$key:_encryption_private_key'))
+                .read();
+            final String? selfEncryptionKey =
+                await (await BiometricStorage().getStorage('$key:_aesKey'))
+                    .read();
+            final String? hiveSecret =
+                await (await BiometricStorage().getStorage('$key:_hive_secret'))
+                    .read();
+            final String? secret =
+                await (await BiometricStorage().getStorage('$key:_secret'))
+                    .read();
             final newAtSignKey = AtsignKey(
               atSign: key,
               apkamPublicKey: AtBytes.fromString(pkamPublicKey!),
               apkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
-              defaultEncryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
-              defaultEncryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
+              defaultEncryptionPublicKey:
+                  AtBytes.fromString(encryptionPublicKey!),
+              defaultEncryptionPrivateKey:
+                  AtBytes.fromString(encryptionPrivateKey!),
               defaultSelfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
               hiveSecret: hiveSecret!,
               cramKey: secret,
@@ -463,19 +494,28 @@ class KeyChainManager {
             if (value == true) {
               migratedData.defaultAtsign = key;
             }
-            final String? pkamPublicKey = await FlutterKeychain.get(key: '$key:_pkam_public_key');
-            final String? pkamPrivateKey = await FlutterKeychain.get(key: '$key:_pkam_private_key');
-            final String? encryptionPublicKey = await FlutterKeychain.get(key: '$key:_encryption_public_key');
-            final String? encryptionPrivateKey = await FlutterKeychain.get(key: '$key:_encryption_private_key');
-            final String? selfEncryptionKey = await FlutterKeychain.get(key: '$key:_aesKey');
-            final String? hiveSecret = await FlutterKeychain.get(key: '$key:_hive_secret');
-            final String? secret = await FlutterKeychain.get(key: '$key:_secret');
+            final String? pkamPublicKey =
+                await FlutterKeychain.get(key: '$key:_pkam_public_key');
+            final String? pkamPrivateKey =
+                await FlutterKeychain.get(key: '$key:_pkam_private_key');
+            final String? encryptionPublicKey =
+                await FlutterKeychain.get(key: '$key:_encryption_public_key');
+            final String? encryptionPrivateKey =
+                await FlutterKeychain.get(key: '$key:_encryption_private_key');
+            final String? selfEncryptionKey =
+                await FlutterKeychain.get(key: '$key:_aesKey');
+            final String? hiveSecret =
+                await FlutterKeychain.get(key: '$key:_hive_secret');
+            final String? secret =
+                await FlutterKeychain.get(key: '$key:_secret');
             final newAtSignKey = AtsignKey(
               atSign: key,
               apkamPublicKey: AtBytes.fromString(pkamPublicKey!),
               apkamPrivateKey: AtBytes.fromString(pkamPrivateKey!),
-              defaultEncryptionPublicKey: AtBytes.fromString(encryptionPublicKey!),
-              defaultEncryptionPrivateKey: AtBytes.fromString(encryptionPrivateKey!),
+              defaultEncryptionPublicKey:
+                  AtBytes.fromString(encryptionPublicKey!),
+              defaultEncryptionPrivateKey:
+                  AtBytes.fromString(encryptionPrivateKey!),
               defaultSelfEncryptionKey: AtBytes.fromString(selfEncryptionKey!),
               hiveSecret: hiveSecret,
               cramKey: secret,

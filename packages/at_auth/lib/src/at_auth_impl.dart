@@ -58,7 +58,12 @@ class AtAuthImpl implements AtAuth {
     }
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
     if (atAuthKeys == null && atAuthRequest.atKeysIo != null) {
-      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
+      try {
+        atAuthKeys = await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
+      } on AtKeyException catch (e) {
+        throw AtAuthenticationException(
+            'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}');
+      }
     } else if (atAuthKeys == null) {
       throw AtAuthenticationException(
           'atKeysIO implementation is required to read keys, either provide atKeysIO implementation'
@@ -70,6 +75,7 @@ class AtAuthImpl implements AtAuth {
     var enrollmentIdFromRequest = atAuthRequest.enrollmentId;
     enrollmentIdFromRequest ??= atAuthKeys.enrollmentId;
 
+    atAuthKeys.enrollmentId = enrollmentIdFromRequest;
     atLookUp ??=
         AtLookupImpl(atAuthRequest.atSign, atAuthRequest.rootDomain.rootDomain, atAuthRequest.rootDomain.rootPort);
     // ??= to support mocking

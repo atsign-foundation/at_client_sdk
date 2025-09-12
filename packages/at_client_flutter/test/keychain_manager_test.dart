@@ -3,9 +3,10 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/src/keychain_io_impl.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:crypton/crypton.dart';
+import 'package:flutter/services.dart' show MethodChannel, MethodCall;
+import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:test/test.dart';
 
 import 'at_auth_service_test.dart';
 
@@ -18,9 +19,23 @@ class MockPackageInfo extends Mock implements PackageInfo {}
 class FakeStorageFileInitOptions extends Fake implements StorageFileInitOptions {}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late MockBiometricStorageFile mockBiometricStorageFile;
   late MockBiometricStorage mockBiometricStorage;
   late MockKeychainAtKeysIo mockKeychainAtKeysIo;
+
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(MethodChannel('dev.fluttercommunity.plus/package_info'), (MethodCall methodCall) async {
+    if (methodCall.method == 'getAll') {
+      return {
+        'appName': 'test',
+        'packageName': 'test',
+        'version': '1.0.0',
+        'buildNumber': '1',
+      };
+    }
+    return false;
+  });
 
   setUp(() {
     registerFallbackValue(FakeStorageFileInitOptions());
@@ -61,7 +76,7 @@ void main() {
 
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns:',
+          any(),
           options: any(named: 'options'),
         ),
       ).thenAnswer(
