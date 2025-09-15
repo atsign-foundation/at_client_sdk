@@ -126,15 +126,15 @@ class AtAuthImpl implements AtAuth {
           ' and try again (or) contact support@atsign.com');
     }
     //2. generate key pairs
-    AtKeysIo atKeysIo = atOnboardingRequest.authMode == PkamAuthMode.sim ? SimAtKeysIo() : FileAtKeysIo();
+    AtKeysIo atKeysIo = FileAtKeysIo();
 
     switch (atKeysIo) {
-      case SimAtKeysIo():
-        if (publicKeyId == null || publicKeyId.isEmpty) {
-          throw AtAuthenticationException('sim publicKeyId is required for sim auth mode');
-        }
-        _atAuthKeys = atKeysIo.generateKeys(publicKeyId);
-        break;
+      // case SimAtKeysIo():
+      //   if (publicKeyId == null || publicKeyId.isEmpty) {
+      //     throw AtAuthenticationException('sim publicKeyId is required for sim auth mode');
+      //   }
+      //   _atAuthKeys = atKeysIo.generateKeys(publicKeyId);
+      //   break;
       case FileAtKeysIo():
         _atAuthKeys = atKeysIo.generateKeyPairs();
         await atKeysIo.write(atOnboardingRequest.atSign, _atAuthKeys);

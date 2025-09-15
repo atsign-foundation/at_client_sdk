@@ -42,36 +42,5 @@ class FileAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   }
 }
 
-class SimAtKeysIo extends GeneratedAtKeysIo with KeyIOMixin {
-  AtKeys? atKeys;
-  Map<String, dynamic>? encryptedKeysMap;
-  //Map of atsigns to publicKeyIds 
-  Map<String, String> publicKeyMap = {};
-
-  SimAtKeysIo({this.atKeys, this.encryptedKeysMap, String? publicKeyId}) {
-    if (publicKeyId != null) {
-    
-    }
-  }
-
-  @override
-  FutureOr<AtKeys> read(String atSign) async {
-    if (atKeys != null) {
-      return atKeys!;
-    }
-    if (encryptedKeysMap != null) {
-      encryptedKeysMap = await decodeAtKeys(encryptedKeysMap!);
-      return decryptAtKeysWithSelfEncKey(encryptedKeysMap!, PkamAuthMode.sim);
-    }
-
-    throw AtAuthenticationException('atAuthKeys or encryptedKeysMap is required to read from keychain');
-  }
-
-  @override
-  AtKeys generateKeys(String atSign) {
-    if (publicKeyMap[atSign] == null) {
-      throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
-    }
-    return generateKeyPairs(atSign: atSign);
-  }
-}
+//TODO: future add simAtKeysIo
+// class SimAtKeysIo extends GeneratedAtKeysIo with KeyIOMixin {

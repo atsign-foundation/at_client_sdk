@@ -4,7 +4,6 @@ import 'package:at_commons/at_commons.dart';
 class AtOnboardingRequest {
   String atSign;
   AtOnboardingRequest(this.atSign);
-  PkamAuthMode authMode = PkamAuthMode.keysFile;
 
   // Default root domain and port
   AtRootDomain rootDomain = AtRootDomain('root.atsign.org', 64);

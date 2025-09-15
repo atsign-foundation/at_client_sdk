@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
 
 import 'at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
@@ -99,7 +99,6 @@ mixin KeyIOMixin on AtKeysIo {
     //generate selfEncryptionKey
     var selfEncryptionKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     var apkamSymmetricKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    var atChops = AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(selfEncryptionKey.key));
     logger.info('Generating your encryption keys and .atKeys file\n');
 
     //generating pkamKeyPair only if authMode is keysFile
@@ -109,24 +108,25 @@ mixin KeyIOMixin on AtKeysIo {
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
       atKeysFile.apkamPrivateKey = AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
-    } else if (this is SimAtKeysIo) {
-      // get the public key from secure element
-      if (atSign == null) {
-        throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
-      }
-      String? publicKeyId = (this as SimAtKeysIo).publicKeyMap[atSign];
-      if (publicKeyId == null) {
-        throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
-      }
-      pkamPublicKey = atChops.readPublicKey(publicKeyId);
-      logger.info('pkam  public key from sim: $pkamPublicKey');
+      } 
+    // else if (this is SimAtKeysIo) {
+    //   // get the public key from secure element
+    //   if (atSign == null) {
+    //     throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
+    //   }
+    //   String? publicKeyId = (this as SimAtKeysIo).publicKeyMap[atSign];
+    //   if (publicKeyId == null) {
+    //     throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
+    //   }
+    //   pkamPublicKey = atChops.readPublicKey(publicKeyId);
+    //   logger.info('pkam  public key from sim: $pkamPublicKey');
 
-      // encryption key pair and self encryption symmetric key
-      // are not available to injected at_chops. Set it here
-      atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-      atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-      atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-    }
+    //   // encryption key pair and self encryption symmetric key
+    //   // are not available to injected at_chops. Set it here
+    //   atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
+    //   atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
+    //   atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
+    // }
     atKeysFile.apkamPublicKey = AtBytes.fromString(pkamPublicKey.toString());
     //Standard order of an atKeys file is ->
     // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->

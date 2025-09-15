@@ -18,7 +18,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-
 // Create a mock for AtLookUp
 class MockAtLookUp extends Mock implements AtLookupImpl {}
 
@@ -160,8 +159,7 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate())
           .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
 
-      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
-        ..rootDomain = AtRootDomain('test.atsign.com', 64);
+      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')..rootDomain = AtRootDomain('test.atsign.com', 64);
 
       expect(() async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
           throwsA(isA<AtAuthenticationException>()));
@@ -181,7 +179,6 @@ void main() {
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
         ..rootDomain = AtRootDomain('test.atsign.com', 64)
         ..appName = 'wavi'
-        ..authMode = PkamAuthMode.keysFile
         ..deviceName = 'iphone';
 
       final response = await atAuth.onboard(atOnboardingRequest, testCramSecret);
@@ -200,9 +197,7 @@ void main() {
           .thenAnswer((_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final mockEnrollmentResponse = AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
-        ..rootDomain = AtRootDomain('test.atsign.com', 64)
-        ..authMode = PkamAuthMode.keysFile;
+      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')..rootDomain = AtRootDomain('test.atsign.com', 64);
       final response = await atAuth.onboard(atOnboardingRequest, testCramSecret);
 
       expect(response.isSuccessful, true);

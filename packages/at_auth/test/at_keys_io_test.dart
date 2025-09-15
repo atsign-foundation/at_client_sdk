@@ -8,7 +8,6 @@ import 'package:test/test.dart';
 
 void main() {
   String atSign = '@alice🛠';
-  String publicKeyId = 'dummy_public_key_id';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
 
   group('FileAtKeysIo tests', () {
