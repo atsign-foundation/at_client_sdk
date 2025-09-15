@@ -7,8 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'at_auth_service_test.dart';
-
 class MockBiometricStorageFile extends Mock implements BiometricStorageFile {}
 
 class MockBiometricStorage extends Mock implements BiometricStorage {}

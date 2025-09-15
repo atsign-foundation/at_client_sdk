@@ -352,7 +352,7 @@ class AtAuthServiceImpl implements AtAuthService {
     enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey =
         await _getDefaultSelfEncryptionKey(enrollmentInfo.enrollmentId, _atLookUp!.atChops!);
     // Store the auth keys into keychain manager for subsequent authentications
-    await keychainAtKeysIo.write(_atSign, enrollmentInfo.atAuthKeys!);
+    await keychainAtKeysIo.write(_atSign, enrollmentInfo.atAuthKeys);
     AtChops atChops = _buildAtChops(enrollmentInfo);
     await _initAtClient(atChops, enrollmentId: enrollmentInfo.enrollmentId);
     // Store enrolled namespace to local secondary to perform authorization checks
