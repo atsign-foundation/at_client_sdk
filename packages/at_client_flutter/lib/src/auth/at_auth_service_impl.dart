@@ -42,12 +42,18 @@ class AtAuthServiceImpl implements AtAuthService {
 
   final Map<String, Completer<EnrollmentStatus>> _outcomes = {};
 
-  /// Returns an instance of [AtAuthService]
+  /// Returns an instance of [AtAuthService] used for authentication and onboarding of an atSign in Flutter.
   ///
   /// Usage:
   /// ```dart
-  ///  AtAuthService authService = AtClientMobile.authService(_atsign!, _atClientPreference);
+  ///  AtAuthService authService = AtAuthServiceImpl(_atsign!, _atClientPreference);
   /// ```
+  /// 
+  /// Optional parameters:
+  /// - atLookUp: An instance of [AtLookUp] used to perform lookups on the secondary server. If not provided, a default instance will be created. 
+  /// - atClient: An instance of [AtClient] used to interact with the secondary server. If not provided, a default instance will be created.
+  /// - keyChainManager (VISIBLE FOR TESTING): Only used for testing purposes to inject a mock [KeyChainManager] instance. 
+  /// 
   AtAuthServiceImpl(this._atSign, this._atClientPreference,
       {AtLookUp? atLookUp, AtClient? atClient, KeyChainManager? keyChainManager})
       : _atLookUp = atLookUp,
