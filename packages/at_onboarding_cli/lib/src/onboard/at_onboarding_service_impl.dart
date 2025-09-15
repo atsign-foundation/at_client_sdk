@@ -173,7 +173,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atOnboardingRequest.rootDomain = AtRootDomain(atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.appName = atOnboardingPreference.appName;
     atOnboardingRequest.deviceName = atOnboardingPreference.deviceName;
-    atOnboardingRequest.authMode = atOnboardingPreference.authMode;
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,
