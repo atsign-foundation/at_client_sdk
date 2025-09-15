@@ -2,7 +2,6 @@ import 'package:at_auth/at_auth.dart' show AtKeys;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/src/keychain_io_impl.dart';
 import 'package:biometric_storage/biometric_storage.dart';
-import 'package:crypton/crypton.dart';
 import 'package:flutter/services.dart' show MethodChannel, MethodCall;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -22,7 +21,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late MockBiometricStorageFile mockBiometricStorageFile;
   late MockBiometricStorage mockBiometricStorage;
-  late MockKeychainAtKeysIo mockKeychainAtKeysIo;
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(MethodChannel('dev.fluttercommunity.plus/package_info'), (MethodCall methodCall) async {
@@ -42,7 +40,6 @@ void main() {
 
     mockBiometricStorageFile = MockBiometricStorageFile();
     mockBiometricStorage = MockBiometricStorage();
-    mockKeychainAtKeysIo = MockKeychainAtKeysIo();
   });
 
   group('A group of test getAtSign', () {
@@ -93,8 +90,6 @@ void main() {
     test('A test to getAtSign when onboard enable shareAtSign', () async {
       var keychainManager = KeyChainManager();
       MockBiometricStorageFile mockBiometricShared = MockBiometricStorageFile();
-      MockBiometricStorageFile mockBiometricDefault = MockBiometricStorageFile();
-
       when(
         () => mockBiometricShared.read(),
       ).thenAnswer(
@@ -130,7 +125,7 @@ void main() {
       );
 
       when(
-        () => mockBiometricDefault.read(),
+        () => mockBiometricStorageFile.read(),
       ).thenAnswer(
         (_) async => Future.value(
             '{"config":{"schemaVersion":1,"useSharedAtsign":true},"keys":[],"defaultAtsign":"@atSignTest"}'),
@@ -143,12 +138,11 @@ void main() {
         ),
       ).thenAnswer(
         (_) async => Future.value(
-          mockBiometricDefault,
+          mockBiometricShared,
         ),
       );
 
       keychainManager.biometricStorage = mockBiometricStorage;
-
       String? atSign = await keychainManager.getAtSign();
 
       expect(atSign, '@atSignTest');

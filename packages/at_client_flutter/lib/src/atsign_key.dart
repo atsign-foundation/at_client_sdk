@@ -1,5 +1,5 @@
 import 'package:at_auth/at_auth.dart' show AtKeys;
-import 'package:at_commons/at_commons.dart';
+import 'package:at_commons/at_commons.dart' show AtBytes;
 
 ///Save atsign key
 /// https://docs.google.com/document/d/1JAXNrGr6J30m1xTWD4t7z2eQRo6O7icEOprJh1KKNas/edit?hl=en&forcehl=1#
@@ -30,17 +30,19 @@ class AtsignKey extends AtKeys {
   }
 
   factory AtsignKey.fromJson(Map<String, dynamic> json) => AtsignKey(
-        atSign: json["name"] is String ? json["name"] : '',
-        apkamPrivateKey: json["pkamPrivateKey"] is String ? AtBytes(json["pkamPrivateKey"]) : null,
-        apkamPublicKey: json["pkamPublicKey"] is String ? AtBytes(json["pkamPublicKey"]) : null,
-        defaultEncryptionPublicKey: json["encryptionPublicKey"] is String ? AtBytes(json["encryptionPublicKey"]) : null,
+        atSign: isNotEmptyOrNull(json, "name") ? json["name"] : null,
+        apkamPrivateKey: isNotEmptyOrNull(json, "pkamPrivateKey") ? AtBytes(json["pkamPrivateKey"]) : null,
+        apkamPublicKey: isNotEmptyOrNull(json, "pkamPublicKey") ? AtBytes(json["pkamPublicKey"]) : null,
+        defaultEncryptionPublicKey:
+            isNotEmptyOrNull(json, "encryptionPublicKey") ? AtBytes(json["encryptionPublicKey"]) : null,
         defaultEncryptionPrivateKey:
-            json["encryptionPrivateKey"] is String ? AtBytes(json["encryptionPrivateKey"]) : null,
-        defaultSelfEncryptionKey: json["selfEncryptionKey"] is String ? AtBytes(json["selfEncryptionKey"]) : null,
-        apkamSymmetricKey: json["apkamSymmetricKey"] is String ? AtBytes(json["apkamSymmetricKey"]) : null,
-        enrollmentId: json["enrollmentId"] is String ? json["enrollmentId"] : null,
-        hiveSecret: json["hiveSecret"] is String ? json["hiveSecret"] : null,
-        cramKey: json["secret"] is String ? json["secret"] : null,
+            isNotEmptyOrNull(json, "encryptionPrivateKey") ? AtBytes(json["encryptionPrivateKey"]) : null,
+        defaultSelfEncryptionKey:
+            isNotEmptyOrNull(json, "selfEncryptionKey") ? AtBytes(json["selfEncryptionKey"]) : null,
+        apkamSymmetricKey: isNotEmptyOrNull(json, "apkamSymmetricKey") ? AtBytes(json["apkamSymmetricKey"]) : null,
+        enrollmentId: isNotEmptyOrNull(json, "enrollmentId") ? json["enrollmentId"] : null,
+        hiveSecret: isNotEmptyOrNull(json, "hiveSecret") ? json["hiveSecret"] : null,
+        cramKey: isNotEmptyOrNull(json, "secret") ? json["secret"] : null,
       );
 
   @override
@@ -126,14 +128,9 @@ class AtClientData {
   }
 
   factory AtClientData.fromJson(Map<String, dynamic> json) => AtClientData(
-        config: json['config'] == null
-            ? null
-            : AtClientDataConfig.fromJson(
-                json['config'] as Map<String, dynamic>),
-        keys: (json['keys'] as List<dynamic>?)
-                ?.map((e) => AtsignKey.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [],
+        config: json['config'] == null ? null : AtClientDataConfig.fromJson(json['config'] as Map<String, dynamic>),
+        keys:
+            (json['keys'] as List<dynamic>?)?.map((e) => AtsignKey.fromJson(e as Map<String, dynamic>)).toList() ?? [],
         defaultAtsign: json['defaultAtsign'],
       );
 
@@ -174,4 +171,10 @@ class AtClientDataConfig {
       useSharedStorage: useSharedStorage ?? this.useSharedStorage,
     );
   }
+}
+
+bool isNotEmptyOrNull(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value == null) return false;
+  return value.isNotEmpty;
 }

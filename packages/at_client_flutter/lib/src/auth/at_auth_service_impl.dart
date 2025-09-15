@@ -22,7 +22,9 @@ class AtAuthServiceImpl implements AtAuthService {
   AtClient? _atClient;
   AtLookUp? _atLookUp;
   String _atSign;
-  final KeychainAtKeysIo _keychainAtKeysIo;
+
+  @visibleForTesting
+  KeychainAtKeysIo keychainAtKeysIo;
   final AtClientPreference _atClientPreference;
   late AtAuth _atAuth;
 
@@ -46,10 +48,11 @@ class AtAuthServiceImpl implements AtAuthService {
   /// ```dart
   ///  AtAuthService authService = AtClientMobile.authService(_atsign!, _atClientPreference);
   /// ```
-  AtAuthServiceImpl(this._atSign, this._atClientPreference, {AtLookUp? atLookUp, AtClient? atClient, KeyChainManager? keyChainManager})
+  AtAuthServiceImpl(this._atSign, this._atClientPreference,
+      {AtLookUp? atLookUp, AtClient? atClient, KeyChainManager? keyChainManager})
       : _atLookUp = atLookUp,
         _atClient = atClient,
-        _keychainAtKeysIo = KeychainAtKeysIo(keyChainManager ?? KeyChainManager()) {
+        keychainAtKeysIo = KeychainAtKeysIo(keyChainManager ?? KeyChainManager()) {
     // If the '@' symbol is omitted, it leads to an incorrect format for the AtKey when retrieving the
     // encrypted defaultEncryptionPrivateKey and encrypted defaultSelfEncryptionKey.
     if (!_atSign.startsWith('@')) {
@@ -72,8 +75,8 @@ class AtAuthServiceImpl implements AtAuthService {
     if (atAuthRequest.atKeysIo != null) {
       atKeysIo = atAuthRequest.atKeysIo;
     } else {
-      atKeysIo = _keychainAtKeysIo;
-    } 
+      atKeysIo = keychainAtKeysIo;
+    }
     atAuthRequest.atKeysIo = atKeysIo;
     // Invoke authenticate method in AtAuth package.
     AtAuthResponse atAuthResponse = AtAuthResponse(_atSign);
@@ -103,9 +106,9 @@ class AtAuthServiceImpl implements AtAuthService {
     // will not be present in keychain manager. Add keys to key-chain manager.
     AtsignKey? atSignKey;
     try {
-      atSignKey = await _keychainAtKeysIo.read(_atSign);
+      atSignKey = await keychainAtKeysIo.read(_atSign);
     } catch (_) {
-      await _keychainAtKeysIo.write(_atSign, atAuthResponse.atAuthKeys!);
+      await keychainAtKeysIo.write(_atSign, atAuthResponse.atAuthKeys!);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys);
     }
     atAuthResponse.atAuthKeys = atSignKey;
@@ -117,7 +120,7 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<bool> isOnboarded(String atSign) async {
     AtsignKey? atsignKey;
     try {
-      atsignKey = await _keychainAtKeysIo.read(atSign);
+      atsignKey = await keychainAtKeysIo.read(atSign);
     } catch (_) {
       return false;
     }
@@ -155,7 +158,7 @@ class AtAuthServiceImpl implements AtAuthService {
           'Failed to onboard atSign: $_atSign. AtChops is not initialized in AtAuth Package');
     }
     await _init(_atAuth.atChops!, enrollmentId: atOnboardingResponse.enrollmentId);
-    await _keychainAtKeysIo.write(atOnboardingResponse.atSign, atOnboardingResponse.atAuthKeys!);
+    await keychainAtKeysIo.write(atOnboardingResponse.atSign, atOnboardingResponse.atAuthKeys!);
     await _persistKeysLocalSecondary(atOnboardingResponse.atAuthKeys);
     return atOnboardingResponse;
   }
@@ -214,7 +217,7 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<AtEnrollmentResponse> enroll(EnrollmentRequest enrollmentRequest) async {
     // Only one enrollment request can be submitted at a time.
     // Subsequent requests cannot be submitted until the pending one is fulfilled.
-    String? enrollmentInfoJsonString = await _keychainAtKeysIo.readFromEnrollmentStore(_atSign);
+    String? enrollmentInfoJsonString = await keychainAtKeysIo.readFromEnrollmentStore(_atSign);
     // if enrollmentInfoJsonString is not null, it indicates that there is a pending
     // enrollment request. So, do not allow another enrollment request.
     if (enrollmentInfoJsonString != null) {
@@ -231,13 +234,13 @@ class AtAuthServiceImpl implements AtAuthService {
       enrollmentRequest.namespaces,
     );
     // Store the enrollment keys into keychain to store the auth keys into keychain, if an enrollment is approved.
-    await _keychainAtKeysIo.writeToEnrollmentStore(_atSign, jsonEncode(enrollmentInfo));
+    await keychainAtKeysIo.writeToEnrollmentStore(_atSign, jsonEncode(enrollmentInfo));
     return atEnrollmentResponse;
   }
 
   @override
   Future<EnrollmentStatus> getFinalEnrollmentStatus() async {
-    String? enrollmentInfoJsonString = await _keychainAtKeysIo.readFromEnrollmentStore(_atSign);
+    String? enrollmentInfoJsonString = await keychainAtKeysIo.readFromEnrollmentStore(_atSign);
     // If there is no enrollment data in keychain, then the enrollment
     // is expired and hence deleted from the keychain.
     if (enrollmentInfoJsonString == null) {
@@ -256,7 +259,7 @@ class AtAuthServiceImpl implements AtAuthService {
 
   @override
   Future<EnrollmentInfo?> getSentEnrollmentRequest() async {
-    String? enrollmentInfoJsonString = await _keychainAtKeysIo.readFromEnrollmentStore(_atSign);
+    String? enrollmentInfoJsonString = await keychainAtKeysIo.readFromEnrollmentStore(_atSign);
     if (enrollmentInfoJsonString != null) {
       EnrollmentInfo enrollmentInfo = EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
       return enrollmentInfo;
@@ -311,7 +314,7 @@ class AtAuthServiceImpl implements AtAuthService {
           'EnrollmentId: ${enrollmentInfo.enrollmentId} has reached the maximum number of retries. Retry attempts have been stopped.');
       // If enrollment retry has reached the limit, do no retry. Remove
       // the enrollment info from the keychain manager.
-      await _keychainAtKeysIo.deleteEnrollmentStore(_atSign);
+      await keychainAtKeysIo.deleteEnrollmentStore(_atSign);
       return false;
     }
     return true;
@@ -349,13 +352,13 @@ class AtAuthServiceImpl implements AtAuthService {
     enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey =
         await _getDefaultSelfEncryptionKey(enrollmentInfo.enrollmentId, _atLookUp!.atChops!);
     // Store the auth keys into keychain manager for subsequent authentications
-    await _keychainAtKeysIo.write(_atSign, enrollmentInfo.atAuthKeys!);
+    await keychainAtKeysIo.write(_atSign, enrollmentInfo.atAuthKeys!);
     AtChops atChops = _buildAtChops(enrollmentInfo);
     await _initAtClient(atChops, enrollmentId: enrollmentInfo.enrollmentId);
     // Store enrolled namespace to local secondary to perform authorization checks
     // when perform CURD operation on keystore.
     await _storeEnrollmentInfoIntoLocalSecondary(enrollmentInfo);
-    await _keychainAtKeysIo.deleteEnrollmentStore(_atSign);
+    await keychainAtKeysIo.deleteEnrollmentStore(_atSign);
     _logger.info(
         'Enrollment Id: ${enrollmentInfo.atAuthKeys.enrollmentId} is approved and authentication keys are stored in the keychain');
     _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.approved);
@@ -375,7 +378,7 @@ class AtAuthServiceImpl implements AtAuthService {
     // submitting a new enrollment request. So remove the request from key-chain.
     if (e.message.contains('AT0025')) {
       _logger.info('Enrollment id: ${enrollmentInfo.enrollmentId} is denied. Stopping authentication retry.');
-      await _keychainAtKeysIo.deleteEnrollmentStore(_atSign);
+      await keychainAtKeysIo.deleteEnrollmentStore(_atSign);
       _outcomes[enrollmentInfo.enrollmentId]?.complete(EnrollmentStatus.denied);
       return;
     }
@@ -480,7 +483,8 @@ class AtAuthServiceImpl implements AtAuthService {
 
   AtChops createAtChops(AtKeys atKeys) {
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(atKeys.defaultEncryptionPublicKey!.toString(), atKeys.defaultEncryptionPrivateKey!.toString()),
+        AtEncryptionKeyPair.create(
+            atKeys.defaultEncryptionPublicKey!.toString(), atKeys.defaultEncryptionPrivateKey!.toString()),
         AtPkamKeyPair.create(atKeys.apkamPublicKey!.toString(), atKeys.apkamPrivateKey!.toString()));
     atChopsKeys.selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
     atChopsKeys.apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());

@@ -2,15 +2,17 @@ import 'package:at_auth/at_auth.dart' show KeyIOMixin, WrittenAtKeysIo, AtKeys;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/src/atsign_key.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:flutter/cupertino.dart';
 
 class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
-  final KeyChainManager _keychainManager;
+  @visibleForTesting
+  KeyChainManager keychainManager;
   final _logger = AtSignLogger('KeychainAtKeysIo');
-  KeychainAtKeysIo(this._keychainManager);
+  KeychainAtKeysIo(this.keychainManager);
 
   @override
   Future<AtsignKey> read(String atSign) async {
-    final atsignKey = await _keychainManager.readAtsign(name: atSign);
+    final atsignKey = await keychainManager.readAtsign(name: atSign);
     if (atsignKey == null) {
       throw AtKeyException('AtsignKey not found in keychain for atSign: $atSign');
     }
@@ -18,34 +20,34 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   }
 
   Future<List<AtsignKey>> readAll() async {
-    final atsigns = await _keychainManager.readAtsigns();
+    final atsigns = await keychainManager.readAtsigns();
     return atsigns;
   }
 
   @override
   Future<void> write(String atSign, AtKeys atKeys) async {
-    var atSignItem = await _keychainManager.readAtsign(name: atSign) ?? AtsignKey(atSign: atSign);
+    var atSignItem = await keychainManager.readAtsign(name: atSign) ?? AtsignKey(atSign: atSign);
     atSignItem = atSignItem.copyWithAtKeys(atSign, atKeys);
-    await _keychainManager.storeAtSign(atSign: atSignItem);
+    await keychainManager.storeAtSign(atSign: atSignItem);
   }
 
   Future<void> writeToEnrollmentStore(String atSign, String data) async {
-    final store = await _keychainManager.getEnrollmentStorage(atSign);
-    await _keychainManager.writeDataToStore(store: store, data: data);
+    final store = await keychainManager.getEnrollmentStorage(atSign);
+    await keychainManager.writeDataToStore(store: store, data: data);
   }
 
   Future<String?> readFromEnrollmentStore(String atSign) async {
-    final store = await _keychainManager.getEnrollmentStorage(atSign);
-    return await _keychainManager.readDataFromStore(store: store);
+    final store = await keychainManager.getEnrollmentStorage(atSign);
+    return await keychainManager.readDataFromStore(store: store);
   }
 
   Future<void> deleteEnrollmentStore(String atSign) async {
-    final store = await _keychainManager.getEnrollmentStorage(atSign);
+    final store = await keychainManager.getEnrollmentStorage(atSign);
     await store.delete();
   }
 
   Future<Map<String, String>> getEncryptedKeys(String atsign) async {
-    AtsignKey? atsignKeyData = await _keychainManager.readAtsign(name: atsign);
+    AtsignKey? atsignKeyData = await keychainManager.readAtsign(name: atsign);
 
     if (atsignKeyData == null) {
       throw AtClientException.message("Failed to fetch the keys for the atsign: $atsign");
@@ -85,9 +87,9 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
 
   /// Function to save keys for the atsign passed to keychain
   Future<bool> storeAtKeysToKeychain(String atsign, AtKeys atKeys) async {
-    final internalAtClientData = await _keychainManager.readAtClientData(useSharedStorage: false);
+    final internalAtClientData = await keychainManager.readAtClientData(useSharedStorage: false);
     final useSharedStorage = internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData = await _keychainManager.readAtClientData(useSharedStorage: useSharedStorage);
+    final atClientData = await keychainManager.readAtClientData(useSharedStorage: useSharedStorage);
     try {
       final atsigns = atClientData?.keys ?? [];
       final index = atsigns.indexWhere((element) => element.atSign == atsign);
@@ -98,7 +100,7 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
       }
       atClientData?.keys = atsigns;
       if (atClientData != null) {
-        await _keychainManager.saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
+        await keychainManager.saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
         return true;
       } else {
         return false;
@@ -112,9 +114,9 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
 
   /// Function to clear all entries from keychain
   Future<void> deleteAllAtSignFromKeychain() async {
-    var atsigns = await _keychainManager.readAtsigns();
+    var atsigns = await keychainManager.readAtsigns();
     for (var element in atsigns.map((e) => e.atSign).toList()) {
-      await _keychainManager.deleteAtSignFromKeychain(element);
+      await keychainManager.deleteAtSignFromKeychain(element);
     }
   }
 }
