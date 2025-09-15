@@ -1,15 +1,9 @@
-// ignore_for_file: deprecated_export_use
-// ignore_for_file: deprecated_member_use_from_same_package
-import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/src/atsign_key.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:test/test.dart';
 
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 

@@ -34,9 +34,9 @@ class FileAtKeysIo extends BaseAtKeysIo {
   }
 
   @override
-  Future write(String atSign, AtKeys atKeys) {
+  Future write(String atSign, AtKeys atKeys) async {
     filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
-    String atKeysData = encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
+    String atKeysData = await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     return File(filePath!).writeAsString(atKeysData);
   }
 

@@ -1,3 +1,7 @@
+## 3.4.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
 ## 3.3.0
 
 - chore(deps): remove unused deps (path)

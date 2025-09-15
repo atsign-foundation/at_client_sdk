@@ -43,7 +43,7 @@ class LocalKeyDecryption extends AbstractAtKeyEncryption
     AtEncryptionResult decryptionResultFromAtChops;
     try {
       var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
-      decryptionResultFromAtChops = _atClient.atChops!.decryptString(
+      decryptionResultFromAtChops = await _atClient.atChops!.decryptString(
           encryptedValue, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
       _logger.finer(

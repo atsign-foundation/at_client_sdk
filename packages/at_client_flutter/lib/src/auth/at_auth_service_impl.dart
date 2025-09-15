@@ -470,7 +470,7 @@ class AtAuthServiceImpl implements AtAuthService {
       throw AtEnrollmentException(
           'Exception while getting encrypted private key/self key from server: $e');
     }
-    AtEncryptionResult? atEncryptionResult = atChops.decryptString(
+    AtEncryptionResult? atEncryptionResult = await atChops.decryptString(
         encryptionPrivateKeyFromServer, EncryptionKeyType.aes256,
         keyName: 'apkamSymmetricKey',
         iv: encryptionPrivateKeyIV != null
@@ -505,7 +505,7 @@ class AtAuthServiceImpl implements AtAuthService {
       throw AtEnrollmentException(
           'Exception while getting encrypted private key/self key from server: $e');
     }
-    AtEncryptionResult? atEncryptionResult = atChops.decryptString(
+    AtEncryptionResult? atEncryptionResult = await atChops.decryptString(
         selfEncryptionKeyFromServer, EncryptionKeyType.aes256,
         keyName: 'apkamSymmetricKey',
         iv: selfEncryptionKeyIV != null

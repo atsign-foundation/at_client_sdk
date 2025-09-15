@@ -23,7 +23,7 @@ dependencies:
   path: ^1.9.0
   zxing2: ^0.2.0
   at_auth: ^2.3.0
-  at_chops: ^2.2.0
+  at_chops: ^3.0.0
   at_client: ^3.7.0
   at_commons: ^5.5.0
   at_lookup: ^3.0.52

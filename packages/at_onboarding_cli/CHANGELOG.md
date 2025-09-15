@@ -1,3 +1,7 @@
+## 1.15.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
 ## 1.14.0
 
 - Added proxy support for: `at_activate onboard --rootServer proxy:<host>:<port>`

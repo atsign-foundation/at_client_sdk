@@ -56,16 +56,16 @@ void main() {
                   'status': 'pending'
                 })}'));
 
-    when(() =>
+    when(()=>
         mockAtLookUp.executeCommand(
             any(
                 that: startsWith(
                     'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
-            auth: true)).thenAnswer((_) => Future.value(jsonEncode({
-          'value': atChopsImpl
+            auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
+          'value': (await atChopsImpl
               .encryptString(encryptionPrivateKey, EncryptionKeyType.aes256,
                   keyName: 'apkamSymmetricKey', iv: iv)
-              .result
+      ).result
         })));
 
     when(() =>
@@ -73,11 +73,11 @@ void main() {
             any(
                 that: startsWith(
                     'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
-            auth: true)).thenAnswer((_) => Future.value(jsonEncode({
-          'value': atChopsImpl
+            auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
+          'value': (await atChopsImpl
               .encryptString(selfEncryptionKey, EncryptionKeyType.aes256,
                   keyName: 'apkamSymmetricKey', iv: iv)
-              .result
+      ).result
         })));
     when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
         .thenAnswer((_) => Future.value(true));
