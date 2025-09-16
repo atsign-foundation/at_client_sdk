@@ -5,14 +5,13 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/auth/at_auth_service.dart';
-import 'package:at_client_flutter/src/keychain_io_impl.dart';
-import 'package:at_client_flutter/src/keychain_manager.dart';
+import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
+import 'package:at_client_flutter/src/keychain/keychain_manager.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:at_client_flutter/src/atsign_key.dart';
 import 'package:at_client_flutter/src/enrollment/enrollment_info.dart';
 
 class AtAuthServiceImpl implements AtAuthService {
@@ -48,17 +47,17 @@ class AtAuthServiceImpl implements AtAuthService {
   /// ```dart
   ///  AtAuthService authService = AtAuthServiceImpl(_atsign!, _atClientPreference);
   /// ```
-  /// 
+  ///
   /// Optional parameters:
-  /// - atLookUp: An instance of [AtLookUp] used to perform lookups on the secondary server. If not provided, a default instance will be created. 
+  /// - atLookUp: An instance of [AtLookUp] used to perform lookups on the secondary server. If not provided, a default instance will be created.
   /// - atClient: An instance of [AtClient] used to interact with the secondary server. If not provided, a default instance will be created.
-  /// - keyChainManager (VISIBLE FOR TESTING): Only used for testing purposes to inject a mock [KeyChainManager] instance. 
-  /// 
+  /// - keyChainManager (VISIBLE FOR TESTING): Only used for testing purposes to inject a mock [KeyChainManager] instance.
+  ///
   AtAuthServiceImpl(this._atSign, this._atClientPreference,
       {AtLookUp? atLookUp, AtClient? atClient, KeyChainManager? keyChainManager})
       : _atLookUp = atLookUp,
         _atClient = atClient,
-        keychainAtKeysIo = KeychainAtKeysIo(keyChainManager ?? KeyChainManager()) {
+        keychainAtKeysIo = KeychainAtKeysIo(keychainManager: keyChainManager) {
     // If the '@' symbol is omitted, it leads to an incorrect format for the AtKey when retrieving the
     // encrypted defaultEncryptionPrivateKey and encrypted defaultSelfEncryptionKey.
     if (!_atSign.startsWith('@')) {
@@ -110,11 +109,12 @@ class AtAuthServiceImpl implements AtAuthService {
     await _init(_atAuth.atChops!, enrollmentId: atAuthResponse.enrollmentId);
     // When an atSign is authenticated via the .atKeys on a new device, the keys
     // will not be present in keychain manager. Add keys to key-chain manager.
-    AtsignKey? atSignKey;
+    AtKeys atSignKey;
     try {
       atSignKey = await keychainAtKeysIo.read(_atSign);
     } catch (_) {
       await keychainAtKeysIo.write(_atSign, atAuthResponse.atAuthKeys!);
+      atSignKey = await keychainAtKeysIo.read(_atSign);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys);
     }
     atAuthResponse.atAuthKeys = atSignKey;
@@ -124,13 +124,13 @@ class AtAuthServiceImpl implements AtAuthService {
 
   @override
   Future<bool> isOnboarded(String atSign) async {
-    AtsignKey? atsignKey;
+    AtKeys? atKeys;
     try {
-      atsignKey = await keychainAtKeysIo.read(atSign);
+      atKeys = await keychainAtKeysIo.read(atSign);
     } catch (_) {
       return false;
     }
-    if (atsignKey.defaultEncryptionPublicKey == null) {
+    if (atKeys.defaultEncryptionPublicKey == null) {
       return false;
     }
     return true;
@@ -223,7 +223,7 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<AtEnrollmentResponse> enroll(EnrollmentRequest enrollmentRequest) async {
     // Only one enrollment request can be submitted at a time.
     // Subsequent requests cannot be submitted until the pending one is fulfilled.
-    String? enrollmentInfoJsonString = await keychainAtKeysIo.readFromEnrollmentStore(_atSign);
+    String? enrollmentInfoJsonString = await keychainAtKeysIo.readEnrollmentFromKeychain(_atSign);
     // if enrollmentInfoJsonString is not null, it indicates that there is a pending
     // enrollment request. So, do not allow another enrollment request.
     if (enrollmentInfoJsonString != null) {
@@ -240,13 +240,13 @@ class AtAuthServiceImpl implements AtAuthService {
       enrollmentRequest.namespaces,
     );
     // Store the enrollment keys into keychain to store the auth keys into keychain, if an enrollment is approved.
-    await keychainAtKeysIo.writeToEnrollmentStore(_atSign, jsonEncode(enrollmentInfo));
+    await keychainAtKeysIo.writeEnrollmentToKeychain(_atSign, jsonEncode(enrollmentInfo));
     return atEnrollmentResponse;
   }
 
   @override
   Future<EnrollmentStatus> getFinalEnrollmentStatus() async {
-    String? enrollmentInfoJsonString = await keychainAtKeysIo.readFromEnrollmentStore(_atSign);
+    String? enrollmentInfoJsonString = await keychainAtKeysIo.readEnrollmentFromKeychain(_atSign);
     // If there is no enrollment data in keychain, then the enrollment
     // is expired and hence deleted from the keychain.
     if (enrollmentInfoJsonString == null) {
@@ -265,7 +265,7 @@ class AtAuthServiceImpl implements AtAuthService {
 
   @override
   Future<EnrollmentInfo?> getSentEnrollmentRequest() async {
-    String? enrollmentInfoJsonString = await keychainAtKeysIo.readFromEnrollmentStore(_atSign);
+    String? enrollmentInfoJsonString = await keychainAtKeysIo.readEnrollmentFromKeychain(_atSign);
     if (enrollmentInfoJsonString != null) {
       EnrollmentInfo enrollmentInfo = EnrollmentInfo.fromJson(jsonDecode(enrollmentInfoJsonString));
       return enrollmentInfo;

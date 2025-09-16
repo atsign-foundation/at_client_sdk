@@ -8,5 +8,5 @@ export 'src/auth/at_auth_service_impl.dart';
 export 'src/auth_constants.dart' show BackupKeyConstants;
 // Contains the enrollment details
 export 'src/enrollment/enrollment_info.dart';
-export 'src/keychain_manager.dart';
+export 'src/keychain/keychain_manager.dart';
 export 'src/onboarding_status.dart';
