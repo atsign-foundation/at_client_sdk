@@ -20,7 +20,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   //get atSign and CRAM key from args
   final parser = ArgParser()
     ..addOption('atsign', abbr: 'a', help: 'atSign to activate')
-    ..addOption('cramkey', abbr: 'c', help: 'CRAM key', mandatory: false)
+    ..addOption('cramkey', aliases: const ['license-key'], abbr: 'c', help: 'CRAM key', mandatory: false)
     ..addOption('appName',
         abbr: 'p',
         help: 'application name that identifies the client',
@@ -31,9 +31,10 @@ Future<int> wrappedMain(List<String> arguments) async {
         help: 'device name on which the application is running',
         mandatory: false,
         defaultsTo: 'testdevice')
-    ..addOption('rootServer',
+    ..addOption('root-server',
+        aliases: const ['rootServer'],
         abbr: 'r',
-        help: 'root server\'s domain name',
+        help: 'Root server domain (e.g., root.atsign.org)',
         defaultsTo: rootServer,
         mandatory: false)
     ..addOption('registrarUrl',
@@ -61,12 +62,13 @@ Future<int> wrappedMain(List<String> arguments) async {
 @Deprecated('Use auth_cli')
 Future<int> activate(ArgResults argResults,
     {AtOnboardingService? atOnboardingService}) async {
-  stdout.writeln('[Information] Root server is ${argResults['rootServer']}');
+  // rootServer is now an alias of root-server, ArgParser handles both automatically
+  stdout.writeln('[Information] Root server is ${argResults['root-server']}');
   stdout.writeln(
       '[Information] Registrar url provided is ${argResults['registrarUrl']}');
   //onboarding preference builder can be used to set onboardingService parameters
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = argResults['rootServer']
+    ..rootDomain = argResults['root-server']
     ..registrarUrl = argResults['registrarUrl']
     ..cramSecret =
         argResults.wasParsed('cramkey') ? argResults['cramkey'] : null

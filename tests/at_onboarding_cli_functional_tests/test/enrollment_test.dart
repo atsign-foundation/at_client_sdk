@@ -85,7 +85,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
-              e.errorMessage!
+              e.errorMessage
                   .contains('invalid otp. Cannot process enroll request'))));
 
       //3.2 run otp:get from first client
@@ -528,6 +528,7 @@ Future<void> _notificationCallback(
       await atClient.getLocalSecondary()!.getEncryptionPrivateKey();
   var selfEncryptionKey =
       await atClient.getLocalSecondary()!.getEncryptionSelfKey();
+  // ignore: deprecated_member_use
   final apkamSymmetricKey = EncryptionUtil.decryptKey(
       encryptedApkamSymmetricKey, encryptionPrivateKey!);
   var encryptedDefaultPrivateEncKey =
@@ -573,7 +574,7 @@ Future<void> _setLastReceivedNotificationDateTime(
       atSign,
       '@bob🛠',
       DateTime.now().millisecondsSinceEpoch,
-      MessageTypeEnum.text.toString(),
+      MessageTypeEnum.key.toString(),
       true);
 
   await atClient.put(

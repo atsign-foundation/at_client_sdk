@@ -28,9 +28,9 @@ void main() {
     test('buffer not full default capacity',
         () => test_buffer_not_full_default_capacity());
     test('buffer full overridden capacity',
-        () => test_buffer_full_overrriden_capacity());
+        () => test_buffer_full_overridden_capacity());
     test('buffer not full overridden capacity',
-        () => test_buffer_not_full_overrriden_capacity());
+        () => test_buffer_not_full_overridden_capacity());
   });
 
   group('String buffer append tests', () {
@@ -107,14 +107,14 @@ void test_buffer_not_full_default_capacity() {
   expect(buffer.isFull(), false);
 }
 
-void test_buffer_full_overrriden_capacity() {
+void test_buffer_full_overridden_capacity() {
   var data = '1234567890';
   var buffer = sb.StringBuffer(capacity: 10);
   buffer.append(data);
   expect(buffer.isFull(), true);
 }
 
-void test_buffer_not_full_overrriden_capacity() {
+void test_buffer_not_full_overridden_capacity() {
   var data = '1234';
   var buffer = sb.StringBuffer(capacity: 10);
   buffer.append(data);

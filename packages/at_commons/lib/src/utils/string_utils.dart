@@ -1,10 +1,7 @@
 /// Extending the String class to check null and empty.
 extension NullOrEmptyCheck on String? {
-  _isNullOrEmpty() {
-    if (this == null || this!.isEmpty) {
-      return true;
-    }
-    return false;
+  bool _isNullOrEmpty() {
+    return (this == null || this!.isEmpty);
   }
 
   bool get isNullOrEmpty => _isNullOrEmpty();

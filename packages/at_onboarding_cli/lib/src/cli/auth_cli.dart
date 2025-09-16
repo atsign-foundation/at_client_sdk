@@ -209,7 +209,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.otp:
@@ -226,7 +226,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.interactive:
@@ -239,7 +239,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.list:
@@ -249,7 +249,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.fetch:
@@ -259,7 +259,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.approve:
@@ -269,7 +269,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.auto:
@@ -279,7 +279,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.deny:
@@ -289,7 +289,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.revoke:
@@ -299,7 +299,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.enroll:
@@ -317,7 +317,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.delete:
@@ -327,7 +327,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
-                    commandArgResults[AuthCliArgs.argNameAtDirectoryFqdn],
+                    commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
     }
   } on ArgumentError catch (e) {
@@ -362,10 +362,17 @@ Future<int> wrappedMain(List<String> arguments) async {
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
   
-  String rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  // rootServer is now an alias of root-server, ArgParser handles both automatically
+  String rootServer = ar[AuthCliArgs.argNameRootServer];
   
   // Parse rootServer using AtRootDomain
-  AtRootDomain rootDomain = AtRootDomain.parse(rootServer);
+  AtRootDomain rootDomain;
+  try {
+    rootDomain = AtRootDomain.parse(rootServer);
+  } catch (e) {
+    stderr.writeln('Error: Invalid root server domain "$rootServer": $e');
+    exit(1);
+  }
 
   SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
       rootDomain.rootDomain, rootDomain.rootPort);
@@ -389,7 +396,7 @@ Future<int> status(ArgResults ar) async {
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
     } on AtLookUpException catch (e) {
-      final e1 = AtExceptionUtils.get(e.errorCode ?? '', e.errorMessage ?? '');
+      final e1 = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw e1;
     }
   } on SecondaryServerConnectivityException catch (e) {
@@ -419,7 +426,7 @@ Future<int> status(ArgResults ar) async {
 Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
   svc ??= createOnboardingService(argResults);
   logger
-      .info('Root server is ${argResults[AuthCliArgs.argNameAtDirectoryFqdn]}');
+      .info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
       'Registrar url provided is ${argResults[AuthCliArgs.argNameRegistrarFqdn]}');
 
@@ -1077,10 +1084,18 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 @visibleForTesting
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  String rootServer = ar[AuthCliArgs.argNameAtDirectoryFqdn];
+  
+  // rootServer is now an alias of root-server, ArgParser handles both automatically
+  String rootServer = ar[AuthCliArgs.argNameRootServer];
   
   // Parse rootServer using AtRootDomain
-  AtRootDomain rootDomain = AtRootDomain.parse(rootServer);
+  AtRootDomain rootDomain;
+  try {
+    rootDomain = AtRootDomain.parse(rootServer);
+  } catch (e) {
+    stderr.writeln('Error: Invalid root server domain "$rootServer": $e');
+    throw ArgumentError('Invalid root server domain: $e');
+  }
   
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = rootDomain.rootDomain
