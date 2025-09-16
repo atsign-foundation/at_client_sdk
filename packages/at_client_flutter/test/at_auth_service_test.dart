@@ -1,11 +1,11 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_client_flutter/src/atsign_key.dart';
-import 'package:at_client_flutter/src/keychain_io_impl.dart';
+import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:biometric_storage/biometric_storage.dart';
@@ -69,8 +69,6 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockAtAuthService extends Mock implements AtAuthService {}
 
-class FakeAtSignKey extends Fake implements AtsignKey {}
-
 class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
 class FakeAtClientPreferences extends Fake implements AtClientPreference {}
@@ -125,17 +123,19 @@ void main() {
     late MockAtLookUp mockAtLookUp;
 
     setUp(() {
+      // Mock the Platform.isWindows to return false for testing purposes as mock biometric_storage does not support Windows
+      when(() => Platform.isWindows).thenReturn(false);
+
       mockBiometricStorage = MockBiometricStorage();
       mockBiometricStorageKeychainFile = MockKeychainBiometricStorageFile();
       mockAtLookUp = MockAtLookUp();
       KeyChainManager keyChainManager = KeyChainManager();
-      keyChainManager.biometricStorage = mockBiometricStorage;
       authServiceImpl =
           AtAuthServiceImpl(atSign, atClientPreference, atLookUp: mockAtLookUp, keyChainManager: keyChainManager);
     });
 
     tearDown(() {
-      KeyChainManager().deleteAtSignFromKeychain(atSign);
+      KeyChainManager().deleteAtSign(atSign);
     });
 
     test('A test to verify submission of enrollment', () async {
@@ -465,14 +465,14 @@ void main() {
         () async {
       // Mock object to return keys from keychain manager
       MockKeyChainManager mockKeyChainManager = MockKeyChainManager();
-      when(() => mockKeyChainManager.readAtsign(name: atSign)).thenAnswer((_) => Future.value(AtsignKey(
-            atSign: atSign,
-            defaultEncryptionPublicKey: atKeys.defaultEncryptionPublicKey,
-            defaultEncryptionPrivateKey: atKeys.defaultEncryptionPrivateKey,
-            apkamPublicKey: atKeys.apkamPublicKey,
-            apkamPrivateKey: atKeys.apkamPrivateKey,
-            defaultSelfEncryptionKey: atKeys.defaultSelfEncryptionKey,
-          )));
+      when(() => mockKeyChainManager.getAtSign(name: atSign)).thenAnswer((_) => Future.value(AtKeys()
+        ..defaultEncryptionPublicKey = atKeys.defaultEncryptionPublicKey
+        ..defaultEncryptionPrivateKey = atKeys.defaultEncryptionPrivateKey
+        ..apkamPublicKey = atKeys.apkamPublicKey
+        ..apkamPrivateKey = atKeys.apkamPrivateKey
+        ..defaultSelfEncryptionKey = atKeys.defaultSelfEncryptionKey
+        ..enrollmentId = '123'
+        ..metadata = {'atsign': atSign}));
       AtAuthService atAuthService = AtAuthService.create(atSign, atClientPreference,
           keyChainManager: mockKeyChainManager, atLookUp: mockAtLookUp);
 
@@ -503,16 +503,17 @@ void main() {
 
     test('A test to verify authentication is successful when pkamAuthentication returns true', () async {
       AtLookUp mockAtLookup = MockAtLookUp();
-      AtsignKey atsignKey = AtsignKey(
-          atSign: atSign,
-          defaultEncryptionPublicKey: atKeys.defaultEncryptionPublicKey,
-          defaultEncryptionPrivateKey: atKeys.defaultEncryptionPrivateKey,
-          apkamPublicKey: atKeys.apkamPublicKey,
-          apkamPrivateKey: atKeys.apkamPrivateKey,
-          defaultSelfEncryptionKey: atKeys.defaultSelfEncryptionKey);
+      AtKeys atsignKey = AtKeys()
+        ..defaultEncryptionPublicKey = atKeys.defaultEncryptionPublicKey
+        ..defaultEncryptionPrivateKey = atKeys.defaultEncryptionPrivateKey
+        ..apkamPublicKey = atKeys.apkamPublicKey
+        ..apkamPrivateKey = atKeys.apkamPrivateKey
+        ..defaultSelfEncryptionKey = atKeys.defaultSelfEncryptionKey
+        ..enrollmentId = '123'
+        ..metadata = {'atsign': atSign};
       MockKeyChainManager mockKeyChainManager = MockKeyChainManager();
       // Mock object to return keys from keychain manager
-      when(() => mockKeyChainManager.readAtsign(name: atSign)).thenAnswer((_) => Future.value(atsignKey));
+      when(() => mockKeyChainManager.getAtSign(name: atSign)).thenAnswer((_) => Future.value(atsignKey));
 
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: '123')).thenAnswer((_) => Future.value(true));
       AtAuthService atAuthService = AtAuthService.create(atSign, atClientPreference,
