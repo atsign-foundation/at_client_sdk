@@ -6,7 +6,6 @@ import 'package:meta/meta.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_cli_commons/at_cli_commons.dart' show getDefaultAtKeysFilePath, getHomeDirectory;
 import 'package:at_auth/src/auth/at_auth_request.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 
@@ -32,8 +31,6 @@ class FileAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
     }
     return decryptAtKeysWithSelfEncKey(decodedAtKeysData, PkamAuthMode.keysFile);
   }
-
-  //tbm to WrittenAtKeysIo ?
   @override
   Future write(String atSign, AtKeys atKeys) {
     filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);

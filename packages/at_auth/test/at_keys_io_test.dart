@@ -31,7 +31,14 @@ void main() {
 
     test('Test read() without atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo();
-      expect(() async => await fileAtKeysIo.read(atSign), throwsA(isA<AtException>()));
+
+      final atKeys = await fileAtKeysIo.read(atSign);
+      expect(atKeys.apkamPrivateKey, isNotNull);
+      expect(atKeys.apkamPublicKey, isNotNull);
+      expect(atKeys.apkamSymmetricKey, isNotNull);
+      expect(atKeys.defaultEncryptionPrivateKey, isNotNull);
+      expect(atKeys.defaultEncryptionPublicKey, isNotNull);
+      expect(atKeys.defaultSelfEncryptionKey, isNotNull);
     });
 
     test('Test write()', () async {

@@ -4,8 +4,6 @@ import 'dart:convert';
 
 import 'at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
@@ -103,13 +101,13 @@ mixin KeyIOMixin on AtKeysIo {
 
     //generating pkamKeyPair only if authMode is keysFile
     String? pkamPublicKey;
-    if (this is FileAtKeysIo) {
+    if (this is WrittenAtKeysIo) {
       logger.info('Generating pkam keypair');
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
       atKeysFile.apkamPrivateKey = AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
       } 
-    // else if (this is SimAtKeysIo) {
+    // else if (this is GeneratedAtKeysIo) {
     //   // get the public key from secure element
     //   if (atSign == null) {
     //     throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
