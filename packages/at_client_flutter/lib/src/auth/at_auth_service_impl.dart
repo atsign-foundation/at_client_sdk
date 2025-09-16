@@ -113,7 +113,7 @@ class AtAuthServiceImpl implements AtAuthService {
     try {
       atSignKey = await keychainAtKeysIo.read(_atSign);
     } catch (_) {
-      await keychainAtKeysIo.write(_atSign, atAuthResponse.atAuthKeys!);
+      await keychainAtKeysIo.write(_atSign, atKeys: atAuthResponse.atAuthKeys!);
       atSignKey = await keychainAtKeysIo.read(_atSign);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys);
     }
@@ -164,7 +164,7 @@ class AtAuthServiceImpl implements AtAuthService {
           'Failed to onboard atSign: $_atSign. AtChops is not initialized in AtAuth Package');
     }
     await _init(_atAuth.atChops!, enrollmentId: atOnboardingResponse.enrollmentId);
-    await keychainAtKeysIo.write(atOnboardingResponse.atSign, atOnboardingResponse.atAuthKeys!);
+    await keychainAtKeysIo.write(atOnboardingResponse.atSign, atKeys: atOnboardingResponse.atAuthKeys!);
     await _persistKeysLocalSecondary(atOnboardingResponse.atAuthKeys);
     return atOnboardingResponse;
   }
@@ -358,7 +358,7 @@ class AtAuthServiceImpl implements AtAuthService {
     enrollmentInfo.atAuthKeys.defaultSelfEncryptionKey =
         await _getDefaultSelfEncryptionKey(enrollmentInfo.enrollmentId, _atLookUp!.atChops!);
     // Store the auth keys into keychain manager for subsequent authentications
-    await keychainAtKeysIo.write(_atSign, enrollmentInfo.atAuthKeys);
+    await keychainAtKeysIo.write(_atSign, atKeys: enrollmentInfo.atAuthKeys);
     AtChops atChops = _buildAtChops(enrollmentInfo);
     await _initAtClient(atChops, enrollmentId: enrollmentInfo.enrollmentId);
     // Store enrolled namespace to local secondary to perform authorization checks

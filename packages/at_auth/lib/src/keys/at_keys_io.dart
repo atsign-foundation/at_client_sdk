@@ -13,7 +13,7 @@ sealed class AtKeysIo {
 }
 
 abstract class WrittenAtKeysIo implements AtKeysIo {
-  Future write(String atSign, AtKeys atKeys);
+  Future write(String atSign, {AtKeys? atKeys});
 }
 
 abstract class GeneratedAtKeysIo implements AtKeysIo {

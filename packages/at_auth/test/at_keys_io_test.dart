@@ -50,7 +50,7 @@ void main() {
         ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
         ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
-      await fileAtKeysIo.write(atSign, atKeys);
+      await fileAtKeysIo.write(atSign, atKeys: atKeys);
 
       expect(matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!), true);
     });

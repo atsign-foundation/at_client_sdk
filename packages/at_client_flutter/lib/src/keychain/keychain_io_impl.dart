@@ -27,8 +27,8 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   }
 
   @override
-  Future<void> write(String atSign, AtKeys atKeys) async {
-    var atKeys = await keychainManager.getAtSign(name: atSign) ?? AtKeys();
+  Future<void> write(String atSign, {AtKeys? atKeys}) async {
+    atKeys ??= await keychainManager.getAtSign(name: atSign) ?? AtKeys();
     atKeys.metadata['atsign'] = atSign;
     await keychainManager.putAtSign(atKeys: atKeys);
   }

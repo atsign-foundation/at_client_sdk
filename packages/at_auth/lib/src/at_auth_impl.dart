@@ -129,15 +129,14 @@ class AtAuthImpl implements AtAuth {
     AtKeysIo atKeysIo = FileAtKeysIo();
 
     switch (atKeysIo) {
-      // case SimAtKeysIo():
+      // case GeneratedAtKeysIo():
       //   if (publicKeyId == null || publicKeyId.isEmpty) {
       //     throw AtAuthenticationException('sim publicKeyId is required for sim auth mode');
       //   }
       //   _atAuthKeys = atKeysIo.generateKeys(publicKeyId);
       //   break;
-      case FileAtKeysIo():
-        _atAuthKeys = atKeysIo.generateKeyPairs();
-        await atKeysIo.write(atOnboardingRequest.atSign, _atAuthKeys);
+      case WrittenAtKeysIo():
+        await atKeysIo.write(atOnboardingRequest.atSign);
         break;
       default:
         throw AtAuthenticationException('Unsupported AtKeysIO implementation: ${atKeysIo.runtimeType}');
