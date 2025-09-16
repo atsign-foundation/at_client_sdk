@@ -1,6 +1,7 @@
 import 'package:at_auth/at_auth.dart' show KeyIOMixin, WrittenAtKeysIo, AtKeys;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:hive/hive.dart' show Hive;
 
 /// Implementation of WrittenAtKeysIo using Keychain storage
 /// Uses KeyChainManager to perform the CRUD operations related to keychains
@@ -28,8 +29,9 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
 
   @override
   Future<void> write(String atSign, {AtKeys? atKeys}) async {
-    atKeys ??= await keychainManager.getAtSign(name: atSign) ?? AtKeys();
+    atKeys ??= await keychainManager.getAtSign(name: atSign) ?? generateKeyPairs(atSign: atSign);
     atKeys.metadata['atsign'] = atSign;
+    atKeys.metadata['hiveSecret'] ??= String.fromCharCodes(Hive.generateSecureKey());
     await keychainManager.putAtSign(atKeys: atKeys);
   }
 
