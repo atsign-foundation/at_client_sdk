@@ -10,7 +10,7 @@ import 'dart:io';
 /// It also provides the following convenience methods
 /// status() returns an enumerated AtSignStatus value of the overall status of an @sign
 /// httpStatus() returns an integer HttpStatus code of the overall status of an @sign
-/// toJson() returns a Map<String, dynamic> representation of an AtStatus object
+/// toJson() returns a `Map<String, dynamic>` representation of an AtStatus object
 /// fromJson(Map json) returns an AtStatus object from a JSON Map
 /// toString() returns a String representation of an AtStatus object
 ///

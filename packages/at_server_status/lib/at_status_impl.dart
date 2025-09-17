@@ -1,5 +1,3 @@
-// ignore_for_file: non_constant_identifier_names
-
 import 'dart:async';
 
 import 'package:at_lookup/at_lookup.dart';
@@ -7,33 +5,33 @@ import 'package:at_lookup/at_lookup.dart';
 import 'at_server_status.dart';
 
 class AtStatusImpl implements AtServerStatus {
-  String? _root_url;
-  int? _root_port;
+  String? _rootUrl;
+  int? _rootPort;
 
-  String? get rootUrl => _root_url;
+  String? get rootUrl => _rootUrl;
 
   set rootUrl(String? value) {
     value ??= 'root.atsign.org';
-    _root_url = value;
+    _rootUrl = value;
   }
 
-  int? get rootPort => _root_port;
+  int? get rootPort => _rootPort;
 
   set rootPort(int? value) {
     value ??= 64;
-    _root_port = value;
+    _rootPort = value;
   }
 
   AtStatusImpl({String? rootUrl, int? rootPort}) {
     rootUrl ??= 'root.atsign.org';
-    _root_url = rootUrl;
+    _rootUrl = rootUrl;
     rootPort ??= 64;
-    _root_port = rootPort;
+    _rootPort = rootPort;
   }
 
   @override
   Future<AtStatus> get(String atSign) async {
-    atSign = atSign.startsWith('@') ? atSign : '@' + atSign;
+    atSign = atSign.startsWith('@') ? atSign : '@$atSign';
     // ignore: omit_local_variable_types
     AtStatus atStatus = AtStatus(atSign: atSign);
     atStatus.atSign = atSign;
@@ -71,7 +69,7 @@ class AtStatusImpl implements AtServerStatus {
     AtStatus atStatus = AtStatus();
     atStatus.atSign = atSign;
     // ignore: deprecated_member_use
-    await AtLookupImpl.findSecondary(atSign, _root_url, _root_port!)
+    await AtLookupImpl.findSecondary(atSign, _rootUrl, _rootPort!)
         .then((serverLocation) async {
       // enum RootStatus { running, stopped, unavailable, found, notFound }
       if (serverLocation != null && serverLocation.isNotEmpty) {
@@ -99,7 +97,7 @@ class AtStatusImpl implements AtServerStatus {
     } else {
       // ignore: omit_local_variable_types
       AtLookupImpl atLookupImpl =
-          AtLookupImpl(atSign!, _root_url!, _root_port!);
+          AtLookupImpl(atSign!, _rootUrl!, _rootPort!);
       await atLookupImpl.scan(auth: false).then((keysList) async {
         if (keysList.isNotEmpty) {
           if (keysList.contains(testKey)) {

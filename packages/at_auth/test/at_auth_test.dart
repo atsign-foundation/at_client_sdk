@@ -144,10 +144,13 @@ void main() {
   });
   group('AtAuthImpl onboarding tests', () {
     var testCramSecret = 'cram123';
-    test('Test onboard - authenticate_cram returns false', () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret)).thenAnswer((_) => Future.value(false));
-      when(() => mockAtLookUp.executeCommand(any())).thenAnswer((_) => Future.value('data:1'));
-      when(() => mockAtLookUp.executeVerb(any())).thenAnswer((_) => Future.value('data:2'));
+    test('Test onboard - cramAuthenticate returns false', () async {
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+          .thenAnswer((_) => Future.value(false));
+      when(() => mockAtLookUp.executeCommand(any()))
+          .thenAnswer((_) => Future.value('data:1'));
+      when(() => mockAtLookUp.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:2'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate())

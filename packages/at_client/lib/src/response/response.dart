@@ -2,13 +2,13 @@ class AtResponse {
   late String response;
   bool isError = false;
   String? errorCode;
-  String? errorDescription;
+  late String errorDescription;
 
   AtResponse fromJson(Map<String, dynamic> json) {
     response = json['response'];
     isError = json['isError'];
     errorCode = json['errorCode'];
-    errorDescription = json['errorDescription'];
+    errorDescription = json['errorDescription'] ?? 'Error description n/a';
     return this;
   }
 
