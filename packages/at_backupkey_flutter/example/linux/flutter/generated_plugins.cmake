@@ -5,7 +5,6 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   at_file_saver
   biometric_storage
-  emoji_picker_flutter
   url_launcher_linux
 )
 

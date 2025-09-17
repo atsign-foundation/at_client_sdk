@@ -18,7 +18,7 @@ void main(List<String> args) async {
   var atsign = argResults['atsign'];
   try {
     var atAuthKeys =
-        _decryptAtKeysFile(await _readAtKeysFile(argResults['atKeysPath']));
+        await _decryptAtKeysFile(await _readAtKeysFile(argResults['atKeysPath']));
     var atChops = _createAtChops(atAuthKeys);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(
@@ -66,8 +66,8 @@ Future<void> _notificationCallback(AtNotification notification,
           jsonDecode(notification.value!)['encryptedApkamSymmetricKey'];
     }
 
-    final apkamSymmetricKey = atChops
-        .decryptString(encryptedAPKAMSymmetricKey, EncryptionKeyType.rsa2048)
+    final apkamSymmetricKey = (await atChops.decryptString(
+            encryptedAPKAMSymmetricKey, EncryptionKeyType.rsa2048))
         .result;
     print('decrypted apkam symmetric key: $apkamSymmetricKey');
     var encryptedDefaultPrivateEncKey = EncryptionUtil.encryptValue(
@@ -89,34 +89,34 @@ Future<void> _notificationCallback(AtNotification notification,
   print('enrollResponse: $enrollResponse');
 }
 
-AtKeys _decryptAtKeysFile(Map<String, String> jsonData) {
+Future<AtKeys> _decryptAtKeysFile(Map<String, String> jsonData) async {
   var securityKeys = AtKeys();
   String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey]!;
   var atChops =
       AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
-  securityKeys.defaultEncryptionPublicKey = atChops
-      .decryptString(jsonData[auth_constants.defaultEncryptionPublicKey]!,
+  securityKeys.defaultEncryptionPublicKey = (await atChops.decryptString(
+          jsonData[auth_constants.defaultEncryptionPublicKey]!,
           EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
+          keyName: 'selfEncryptionKey',
+          iv: AtChopsUtil.generateIVLegacy()))
       .result;
-  securityKeys.defaultEncryptionPrivateKey = atChops
-      .decryptString(jsonData[auth_constants.defaultEncryptionPrivateKey]!,
+  securityKeys.defaultEncryptionPrivateKey = (await atChops.decryptString(
+          jsonData[auth_constants.defaultEncryptionPrivateKey]!,
           EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
+          keyName: 'selfEncryptionKey',
+          iv: AtChopsUtil.generateIVLegacy()))
       .result;
   securityKeys.defaultSelfEncryptionKey = AtBytes.fromString(decryptionKey);
-  securityKeys.apkamPublicKey = atChops
-      .decryptString(
+  securityKeys.apkamPublicKey = (await atChops.decryptString(
           jsonData[auth_constants.apkamPublicKey]!, EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
+          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
       .result;
-  securityKeys.apkamPrivateKey = atChops
-      .decryptString(
+  securityKeys.apkamPrivateKey = (await atChops.decryptString(
           jsonData[auth_constants.apkamPrivateKey]!, EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
+          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
       .result;
-  securityKeys.apkamSymmetricKey = AtBytes.fromString(
-      jsonData[auth_constants.apkamSymmetricKey]!);
+  securityKeys.apkamSymmetricKey =
+      AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey]!);
   securityKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
   return securityKeys;
 }
@@ -143,12 +143,15 @@ AtChops _createAtChops(AtKeys atKeysFile) {
       atKeysFile.defaultEncryptionPublicKey!.toString(),
       atKeysFile.defaultEncryptionPrivateKey!.toString());
   final atPkamKeyPair = AtPkamKeyPair.create(
-      atKeysFile.apkamPublicKey!.toString(), atKeysFile.apkamPrivateKey!.toString());
+      atKeysFile.apkamPublicKey!.toString(),
+      atKeysFile.apkamPrivateKey!.toString());
   final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
   if (atKeysFile.apkamSymmetricKey != null) {
-    atChopsKeys.apkamSymmetricKey = AESKey(atKeysFile.apkamSymmetricKey!.toString());
+    atChopsKeys.apkamSymmetricKey =
+        AESKey(atKeysFile.apkamSymmetricKey!.toString());
   }
-  atChopsKeys.selfEncryptionKey = AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
+  atChopsKeys.selfEncryptionKey =
+      AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
   return AtChopsImpl(atChopsKeys);
 }
 

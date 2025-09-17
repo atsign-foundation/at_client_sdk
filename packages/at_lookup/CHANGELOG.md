@@ -1,3 +1,16 @@
+## 3.5.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
+## 3.4.1
+
+- fix: revert breaking changes
+
+## 3.4.0
+
+- chore: clean up lint from new `strict_top_level_inference` rule
+- feat: AtLookupException non-nullable errorCode and errorMessage
+
 ## 3.3.0
 
 - chore(deps): remove unused deps (path)

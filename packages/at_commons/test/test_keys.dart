@@ -27,7 +27,7 @@ class TestKeys {
     _init(includeNonBobKeys);
   }
 
-  _init(bool includeNonBobKeys) {
+  void _init(bool includeNonBobKeys) {
     _initValidPublicKeys();
     _initInvalidPublicKeys();
 
@@ -56,7 +56,7 @@ class TestKeys {
     }
   }
 
-  _initNonBobPublicKeys() {
+  void _initNonBobPublicKeys() {
     // public key with max of 55 characters for the @sign
     validPublicKeys.add(
         "public:phone.buzz@bob0123456789012345678901234567890123456789012345");
@@ -92,7 +92,7 @@ class TestKeys {
     invalidPublicKeysNamespaceOptional.addAll(temp);
   }
 
-  _initValidPublicKeys() {
+  void _initValidPublicKeys() {
     //  simple public key
     validPublicKeys.add("public:phone.buzz@bob");
     //  public key with single character entity and namespace
@@ -109,7 +109,7 @@ class TestKeys {
     validPublicKeys.add("public:phone😀.buzz@bob");
   }
 
-  _initInvalidPublicKeys() {
+  void _initInvalidPublicKeys() {
     List<String> temp = [];
     // Misspelt public
     temp.add("publicc:phone.buzz@bob");
@@ -145,7 +145,7 @@ class TestKeys {
     invalidPublicKeysNamespaceMandatory.add("public:phone@bob");
   }
 
-  _initNonBobPrivateKeys() {
+  void _initNonBobPrivateKeys() {
     // private key with max of 55 characters for the @sign
     validPrivateKeys.add(
         "private:@bob0123456789012345678901234567890123456789012345:phone.buzz@bob0123456789012345678901234567890123456789012345");
@@ -166,7 +166,7 @@ class TestKeys {
     invalidPrivateKeysNamespaceOptional.addAll(temp);
   }
 
-  _initValidPrivateKeys() {
+  void _initValidPrivateKeys() {
     // private key with sharedWith specified
     validPrivateKeys.add("private:@bob:phone.buzz@bob");
     //  private key with sharedWith not specified
@@ -183,7 +183,7 @@ class TestKeys {
     validPrivateKeys.add("private:@bob:phone😀.buzz@bob");
   }
 
-  _initInvalidPrivateKeys() {
+  void _initInvalidPrivateKeys() {
     List<String> temp = [];
     // Misspelt private
     temp.add("privateeee:@bob:phone.buzz@bob");
@@ -206,7 +206,7 @@ class TestKeys {
     invalidPrivateKeysNamespaceMandatory.add("private:@bob:phone@bob");
   }
 
-  _initNonBobCachedPublicKeys() {
+  void _initNonBobCachedPublicKeys() {
     // cached public key with max of 55 characters for the @sign
     validCachedPublicKeys.add(
         "cached:public:phone.buzz@bob0123456789012345678901234567890123456789012345");
@@ -225,7 +225,7 @@ class TestKeys {
     invalidCachedPublicKeysNamespaceOptional.addAll(temp);
   }
 
-  _initValidCachedPublicKeys() {
+  void _initValidCachedPublicKeys() {
     // simple cached public key
     validCachedPublicKeys.add("cached:public:phone.buzz@bob");
     //  cached public key with single character entity and namespace
@@ -240,7 +240,7 @@ class TestKeys {
     validCachedPublicKeys.add("cached:public:phone😀.buzz@bob");
   }
 
-  _initInvalidCachedPublicKeys() {
+  void _initInvalidCachedPublicKeys() {
     List<String> temp = [];
     // Mis-spelt public
     temp.add("cached:publicc:phone.buzz@bob");
@@ -267,7 +267,7 @@ class TestKeys {
     invalidCachedPublicKeysNamespaceMandatory.add("cached:public:phone@bob");
   }
 
-  _initNonBobSelfKeys() {
+  void _initNonBobSelfKeys() {
     // Self key with max of 55 characters for the @sign
     validSelfKeys.add(
         "@bob0123456789012345678901234567890123456789012345:phone.buzz@bob0123456789012345678901234567890123456789012345");
@@ -285,7 +285,7 @@ class TestKeys {
     invalidSelfKeysNamespaceOptional.addAll(temp);
   }
 
-  _initValidSelfKeys() {
+  void _initValidSelfKeys() {
     // Self key with shared with specified
     validSelfKeys.add("@bob:phone.buzz@bob");
     //  Self key with sharedWith not being specified
@@ -302,7 +302,7 @@ class TestKeys {
     validSelfKeys.add("@bob:phone😀.buzz@bob");
   }
 
-  _initInvalidSelfKeys() {
+  void _initInvalidSelfKeys() {
     List<String> temp = [];
     //  Starts with a :
     temp.add(":phone.buzz@bob");
@@ -323,7 +323,7 @@ class TestKeys {
     invalidSelfKeysNamespaceMandatory.add("@bob:phone@bob");
   }
 
-  _initNonBobSharedKeys() {
+  void _initNonBobSharedKeys() {
     // Shared key with max of 55 characters for the @sign
     validSharedKeys.add(
         "@alice0123456789012345678901234567890123456789012345:phone.buzz@bob");
@@ -342,7 +342,7 @@ class TestKeys {
     invalidSharedKeysNamespaceOptional.addAll(temp);
   }
 
-  _initValidSharedKeys() {
+  void _initValidSharedKeys() {
     // Shared key with shared with specified
     validSharedKeys.add("@alice:phone.buzz@bob");
     //  Shared key with sharedWith specified and single character entity and namespace
@@ -357,7 +357,7 @@ class TestKeys {
     validSharedKeys.add("@alice:phone😀.buzz@bob");
   }
 
-  _initInvalidSharedKeys() {
+  void _initInvalidSharedKeys() {
     List<String> temp = [];
     //  Starts with a :
     temp.add(":phone.buzz@bob");
@@ -378,7 +378,7 @@ class TestKeys {
     invalidSharedKeysNamespaceMandatory.add("@alice:phone@bob");
   }
 
-  _initNonBobCachedSharedKeys() {
+  void _initNonBobCachedSharedKeys() {
     // Cached shared key with valid punctuations in the @sign
     validCachedSharedKeys.add("cached:@sita_ram:phone.buzz@jagann_a-d_h");
     //  Cached shared key with emoji's in @sign
@@ -394,7 +394,7 @@ class TestKeys {
     invalidCachedSharedKeysNamespaceOptional.addAll(temp);
   }
 
-  _initValidCachedSharedKeys() {
+  void _initValidCachedSharedKeys() {
     // Cached shared key with shared with specified
     validCachedSharedKeys.add("cached:@bob:phone.buzz@alice");
     // Cached shared key with sharedWith specified and single character entity and namespace
@@ -412,7 +412,7 @@ class TestKeys {
     validCachedSharedKeys.add("cached:@alice:phone😀.buzz@alice");
   }
 
-  _initInvalidCachedSharedKeys() {
+  void _initInvalidCachedSharedKeys() {
     List<String> temp = [];
     //  Starts with a :
     temp.add(":phone.buzz@bob");

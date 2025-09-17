@@ -160,12 +160,12 @@ class AtClientService {
   ///Returns `true` on successful fetching of all the details.
   Future<bool> _getKeysFromLocalSecondary(String atsign) async {
     String? pkamPublicKey =
-        await _atClient!.getLocalSecondary()!.getPublicKey();
+        await _atClient!.getLocalSecondary()!.getPkamPublicKey();
     if (pkamPublicKey == null || pkamPublicKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PUBLIC_KEY_NOT_FOUND);
     }
     String? pkamPrivateKey =
-        await _atClient!.getLocalSecondary()!.getPrivateKey();
+        await _atClient!.getLocalSecondary()!.getPkamPrivateKey();
     if (pkamPrivateKey == null || pkamPrivateKey.isEmpty) {
       throw (OnboardingStatus.PKAM_PRIVATE_KEY_NOT_FOUND);
     }

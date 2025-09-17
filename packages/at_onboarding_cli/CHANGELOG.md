@@ -1,3 +1,14 @@
+## 1.16.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
+## 1.15.0
+
+- feat: add `--root-server` option to specify root server domain
+- feat: add `--license-key` alias for `--cramkey`
+- chore(deps): at_commons: ^5.6.0
+- chore(deps): args gkc/show-aliases-in-usage dependency override
+
 ## 1.14.0
 
 - Added proxy support for: `at_activate onboard --rootServer proxy:<host>:<port>`

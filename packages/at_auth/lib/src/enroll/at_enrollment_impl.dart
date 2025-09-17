@@ -117,22 +117,24 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
     InitialisationVector encryptionPrivateKeyIV =
         AtChopsUtil.generateRandomIV(16);
     // Fetch the encryptionPrivateKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultEncryptionPrivateKey = atLookUp.atChops
-        ?.encryptString(
-            atLookUp.atChops!.atChopsKeys.atEncryptionKeyPair!.atPrivateKey
-                .privateKey,
-            EncryptionKeyType.aes256,
-            keyName: 'apkamSymmetricKey',
-            iv: encryptionPrivateKeyIV)
-        .result;
+    String encryptedDefaultEncryptionPrivateKey = (await atLookUp.atChops
+            ?.encryptString(
+                atLookUp.atChops!.atChopsKeys.atEncryptionKeyPair!.atPrivateKey
+                    .privateKey,
+                EncryptionKeyType.aes256,
+                keyName: 'apkamSymmetricKey',
+                iv: encryptionPrivateKeyIV))
+        ?.result;
 
     InitialisationVector selfEncryptionKeyIV = AtChopsUtil.generateRandomIV(16);
     // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultSelfEncryptionKey = atLookUp.atChops
-        ?.encryptString(atLookUp.atChops!.atChopsKeys.selfEncryptionKey!.key,
-            EncryptionKeyType.aes256,
-            keyName: 'apkamSymmetricKey', iv: selfEncryptionKeyIV)
-        .result;
+    String encryptedDefaultSelfEncryptionKey = (await atLookUp.atChops
+            ?.encryptString(
+                atLookUp.atChops!.atChopsKeys.selfEncryptionKey!.key,
+                EncryptionKeyType.aes256,
+                keyName: 'apkamSymmetricKey',
+                iv: selfEncryptionKeyIV))
+        ?.result;
 
     String command = 'enroll:approve:${jsonEncode({
           'enrollmentId': enrollmentRequestDecision.enrollmentId,

@@ -119,10 +119,10 @@ void main() {
       expect(true, status);
 
       expect(at_demos.pkamPrivateKeyMap[atSign],
-          await atClient?.getLocalSecondary()?.getPrivateKey());
+          await atClient?.getLocalSecondary()?.getPkamPrivateKey());
 
       expect(at_demos.pkamPublicKeyMap[atSign],
-          await atClient?.getLocalSecondary()?.getPublicKey());
+          await atClient?.getLocalSecondary()?.getPkamPublicKey());
 
       expect(at_demos.encryptionPrivateKeyMap[atSign],
           await atClient?.getLocalSecondary()?.getEncryptionPrivateKey());

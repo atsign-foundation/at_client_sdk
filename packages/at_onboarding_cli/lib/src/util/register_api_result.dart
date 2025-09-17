@@ -5,5 +5,5 @@ class RegisterApiResult {
 
   late ApiCallStatus apiCallStatus;
 
-  String? exceptionMessage;
+  String exceptionMessage = '';
 }

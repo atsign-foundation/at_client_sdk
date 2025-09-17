@@ -47,6 +47,7 @@ class AtSignLogger {
   AtSignLogger(String name, {LoggingHandler? loggingHandler}) {
     logger = logging.Logger.detached(name);
     loggingHandler ??= defaultLoggingHandler;
+    // ignore: implicit_call_tearoffs
     logger.onRecord.listen(loggingHandler);
     level = _root_level;
   }
@@ -87,22 +88,22 @@ class AtSignLogger {
   }
 
   //log methods
-  void shout(message, [Object? error, StackTrace? stackTrace]) =>
+  void shout(Object? message, [Object? error, StackTrace? stackTrace]) =>
       logger.shout(message, error, stackTrace);
 
-  void severe(message, [Object? error, StackTrace? stackTrace]) =>
+  void severe(Object? message, [Object? error, StackTrace? stackTrace]) =>
       logger.severe(message, error, stackTrace);
 
-  void warning(message, [Object? error, StackTrace? stackTrace]) =>
+  void warning(Object? message, [Object? error, StackTrace? stackTrace]) =>
       logger.warning(message, error, stackTrace);
 
-  void info(message, [Object? error, StackTrace? stackTrace]) =>
+  void info(Object? message, [Object? error, StackTrace? stackTrace]) =>
       logger.info(message, error, stackTrace);
 
-  void finer(message, [Object? error, StackTrace? stackTrace]) =>
+  void finer(Object? message, [Object? error, StackTrace? stackTrace]) =>
       logger.finer(message, error, stackTrace);
 
-  void finest(message, [Object? error, StackTrace? stackTrace]) =>
+  void finest(Object? message, [Object? error, StackTrace? stackTrace]) =>
       logger.finest(message, error, stackTrace);
 }
 

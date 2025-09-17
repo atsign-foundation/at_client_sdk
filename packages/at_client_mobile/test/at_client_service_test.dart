@@ -93,9 +93,9 @@ void main() {
         .thenAnswer((_) => Future.value(true));
     when(() => mockLocalSecondary.executeVerb(any(that: CustomVerbBuilder()),
         sync: true)).thenAnswer((_) => Future.value('data:1'));
-    when(() => mockLocalSecondary.getPrivateKey())
+    when(() => mockLocalSecondary.getPkamPrivateKey())
         .thenAnswer((_) => Future.value('dummy_private_key'));
-    when(() => mockLocalSecondary.getPublicKey())
+    when(() => mockLocalSecondary.getPkamPublicKey())
         .thenAnswer((_) => Future.value('dummy_public_key'));
     when(() => mockLocalSecondary.getEncryptionPrivateKey())
         .thenAnswer((_) => Future.value('dummy_encryption_private_key'));

@@ -54,7 +54,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
         iV = AtChopsUtil.generateIVLegacy();
       }
       var encryptionAlgo = AESEncryptionAlgo(AESKey(selfEncryptionKey!));
-      encryptionResultFromAtChops = atClient.atChops!.encryptString(
+      encryptionResultFromAtChops = await atClient.atChops!.encryptString(
           value, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
     } on AtEncryptionException catch (e) {

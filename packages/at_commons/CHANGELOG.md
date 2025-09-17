@@ -1,3 +1,7 @@
+## 5.6.1
+
+- chore: fix lint from the new `strict_top_level_inference` rule
+
 ## 5.6.0
 
 - feat: add `AtRootDomain` with basic parsing including proxy.

@@ -101,3 +101,7 @@ poetry.lock
 !**/ios/**/default.mode2v3
 !**/ios/**/default.pbxuser
 !**/ios/**/default.perspectivev3
+
+# Claude/AI coding stuff
+.serena
+.claude

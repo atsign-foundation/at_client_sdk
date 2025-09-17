@@ -1,3 +1,7 @@
+## 3.9.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
