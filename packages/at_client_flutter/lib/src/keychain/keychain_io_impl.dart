@@ -28,7 +28,7 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   }
 
   @override
-  Future<void> write(String atSign, {AtKeys? atKeys}) async {
+  Future<void> write(String atSign, AtKeys? atKeys) async {
     atKeys ??= await keychainManager.getAtSign(name: atSign) ?? generateKeyPairs(atSign: atSign);
     atKeys.metadata['atsign'] = atSign;
     atKeys.metadata['hiveSecret'] ??= String.fromCharCodes(Hive.generateSecureKey());

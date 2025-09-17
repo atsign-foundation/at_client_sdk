@@ -1,6 +1,5 @@
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -9,21 +8,13 @@ import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:biometric_storage/biometric_storage.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding, TestDefaultBinaryMessengerBinding;
+
+import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:test/test.dart';
 
 class MockBiometricStorage extends Mock implements BiometricStorage {}
-
-class MockEnrollmentBiometricStorageFile extends Mock implements BiometricStorageFile {
-  Map<String, String> dummyStorageFile = HashMap();
-}
-
-class MockKeychainBiometricStorageFile extends Mock implements BiometricStorageFile {
-  Map<String, String> dummyStorageFile = HashMap();
-}
 
 class MockAtLookUp extends Mock implements AtLookUp {}
 
@@ -47,7 +38,10 @@ class MockEnrollmentService extends Mock implements EnrollmentService {}
 
 class MockGeneratedAtKeysIo extends Mock implements GeneratedAtKeysIo {}
 
-class MockKeychainAtKeysIo extends Mock implements KeychainAtKeysIo {}
+class MockKeychainAtKeysIo extends Mock implements KeychainAtKeysIo {
+  Map<String, String> dummyEnrollmentKeychain = HashMap();
+  Map<String, dynamic> dummyKeychain = HashMap();
+}
 
 class FakeStorageFileInitOptions extends Fake implements StorageFileInitOptions {}
 
@@ -75,63 +69,23 @@ class FakeAtClientPreferences extends Fake implements AtClientPreference {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(MethodChannel('dev.fluttercommunity.plus/package_info'), (MethodCall methodCall) async {
-    if (methodCall.method == 'getAll') {
-      return {
-        'appName': 'test',
-        'packageName': 'test',
-        'version': '1.0.0',
-        'buildNumber': '1',
-      }; // Mock successful authentication
-    }
-    return false;
-  });
-
-  MockEnrollmentBiometricStorageFile mockBiometricStorageEnrollmentFile = MockEnrollmentBiometricStorageFile();
-
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(MethodChannel('biometric_storage'), (MethodCall methodCall) async {
-    if (methodCall.method == 'init') {
-      return {
-        '''
-        {
-          'name': "dummy",
-          'options': {
-            'authenticationValidityDurationSeconds': -1,
-            'authenticationRequired': false,
-            'androidBiometricOnly': false,
-            'darwinBiometricOnly': false,
-          },
-          'forceInit': forceInit,
-        }
-        '''
-      };
-    }
-    return false;
-  });
-
   group('A group of tests related to submission of enrollment request', () {
     String atSign = '@alice';
     AtClientPreference atClientPreference = AtClientPreference()..namespace = 'me';
 
     late AtAuthServiceImpl authServiceImpl;
     MockAtEnrollmentBase mockAtEnrollmentBase;
-    late MockKeychainBiometricStorageFile mockBiometricStorageKeychainFile;
-    late MockBiometricStorage mockBiometricStorage;
     late MockAtLookUp mockAtLookUp;
+    late MockKeychainAtKeysIo mockKeychainAtKeysIo;
 
     setUp(() {
-      // Mock the Platform.isWindows to return false for testing purposes as mock biometric_storage does not support Windows
-      when(() => Platform.isWindows).thenReturn(false);
-
-      mockBiometricStorage = MockBiometricStorage();
-      mockBiometricStorageKeychainFile = MockKeychainBiometricStorageFile();
+      registerFallbackValue(EnrollmentRequest(
+          appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'}));
       mockAtLookUp = MockAtLookUp();
-      KeyChainManager keyChainManager = KeyChainManager();
+      mockAtLookUp = MockAtLookUp();
+      mockKeychainAtKeysIo = MockKeychainAtKeysIo();
       authServiceImpl =
-          AtAuthServiceImpl(atSign, atClientPreference, atLookUp: mockAtLookUp, keyChainManager: keyChainManager);
+          AtAuthServiceImpl(atSign, atClientPreference, atLookUp: mockAtLookUp, keychainAtKeysIo: mockKeychainAtKeysIo);
     });
 
     tearDown(() {
@@ -144,17 +98,25 @@ void main() {
       registerFallbackValue(FakeStorageFileInitOptions());
       registerFallbackValue(FakeLookupVerbBuilder());
 
-      when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo', options: any(named: 'options')))
-          .thenAnswer((_) async => mockBiometricStorageEnrollmentFile);
+      when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
+          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
-      when(() => mockBiometricStorageEnrollmentFile.read()).thenAnswer(
-          (_) => Future.value(mockBiometricStorageEnrollmentFile.dummyStorageFile['${atSign}_enrollmentInfo']));
-
-      when(() => mockBiometricStorageEnrollmentFile.write(any(that: startsWith('{"enrollmentId"'))))
+      when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
           .thenAnswer((Invocation invocation) async {
-        mockBiometricStorageEnrollmentFile.dummyStorageFile
-            .putIfAbsent('${atSign}_enrollmentInfo', () => invocation.positionalArguments[0]);
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain
+            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
       });
+
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: any(named: "enrollmentId")))
+          .thenAnswer((_) => Future.value(true));
+
+      when(() => mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
+          .thenAnswer((_) => Future.value('data:$encryptionPublicKey'));
+
+      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:request')))).thenAnswer((_) => Future.value(
+          'data:${jsonEncode({'enrollmentId': '010ad3dc-02ee-41c6-b74b-c82f5122b181', 'status': 'pending'})}'));
+
+      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
 
       when(() => mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
           .thenAnswer((_) => Future.value('data:$encryptionPublicKey'));
@@ -180,7 +142,6 @@ void main() {
       expect(atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
       expect(atEnrollmentResponse.atAuthKeys!.enrollmentId, isNotNull);
       expect(atEnrollmentResponse.enrollmentId, isNotNull);
-      expect(mockBiometricStorageEnrollmentFile.dummyStorageFile.length, 1);
     });
 
     test('A test to verify enrollment request is submitted and denied', () async {
@@ -189,22 +150,21 @@ void main() {
       registerFallbackValue(FakeStorageFileInitOptions());
       registerFallbackValue(FakeLookupVerbBuilder());
 
-      when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo', options: any(named: 'options')))
-          .thenAnswer((_) async => mockBiometricStorageEnrollmentFile);
+      when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
+          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
-      when(() => mockBiometricStorageEnrollmentFile.read()).thenAnswer((_) async {
-        return Future.value(mockBiometricStorageEnrollmentFile.dummyStorageFile['${atSign}_enrollmentInfo']);
-      });
-
-      when(() => mockBiometricStorageEnrollmentFile.write(any(that: startsWith('{"enrollmentId"'))))
+      when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
           .thenAnswer((Invocation invocation) async {
-        mockBiometricStorageEnrollmentFile.dummyStorageFile
-            .putIfAbsent('${atSign}_enrollmentInfo', () => invocation.positionalArguments[0]);
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain
+            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
       });
 
-      when(() => mockBiometricStorageEnrollmentFile.delete()).thenAnswer((_) async {
-        mockBiometricStorageEnrollmentFile.dummyStorageFile.remove('${atSign}_enrollmentInfo');
+      when(() => mockKeychainAtKeysIo.deleteEnrollmentStore(atSign)).thenAnswer((_) async {
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain.remove('${atSign}_enrollmentInfo_keychain');
       });
+
+      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: any(named: "enrollmentId")))
+          .thenAnswer((_) => Future.value(true));
 
       when(() => mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
           .thenAnswer((_) => Future.value('data:$encryptionPublicKey'));
@@ -233,14 +193,15 @@ void main() {
       expect(atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
       expect(atEnrollmentResponse.atAuthKeys!.enrollmentId, isNotNull);
       expect(atEnrollmentResponse.enrollmentId, isNotNull);
-      expect(mockBiometricStorageEnrollmentFile.dummyStorageFile.length, 1);
 
       Future<EnrollmentStatus> enrollmentStatus = authServiceImpl.getFinalEnrollmentStatus();
 
       await enrollmentStatus.then((value) => expect(value, EnrollmentStatus.denied));
 
       // Verify enrollment info is removed from the enrollment keychain when enrollment request is denied
-      expect(mockBiometricStorageEnrollmentFile.dummyStorageFile.length, 0);
+      await mockKeychainAtKeysIo.readEnrollmentFromKeychain(atSign).then((value) {
+        expect(value, null);
+      });
     });
 
     test('A test to verify submission of new enrollment without fulfilling the previous enrollment throws exception',
@@ -250,21 +211,18 @@ void main() {
       mockAtEnrollmentBase = MockAtEnrollmentBase();
       authServiceImpl.atEnrollmentBase = mockAtEnrollmentBase;
 
+      when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
+          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
+
+      when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
+          .thenAnswer((Invocation invocation) async {
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain
+            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
+      });
+
       when(() => mockAtEnrollmentBase.submit(any(that: EnrollmentRequestMatcher()), mockAtLookUp)).thenAnswer((_) =>
           Future.value(AtEnrollmentResponse('010ad3dc-02ee-41c6-b74b-c82f5122b181', EnrollmentStatus.pending)
             ..atAuthKeys = AtKeys()));
-      when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo', options: any(named: 'options')))
-          .thenAnswer((_) async => mockBiometricStorageEnrollmentFile);
-
-      when(() => mockBiometricStorageEnrollmentFile.read()).thenAnswer((_) async {
-        return Future.value(mockBiometricStorageEnrollmentFile.dummyStorageFile['${atSign}_enrollmentInfo']);
-      });
-
-      when(() => mockBiometricStorageEnrollmentFile.write(any(that: startsWith('{"enrollmentId"'))))
-          .thenAnswer((Invocation invocation) async {
-        mockBiometricStorageEnrollmentFile.dummyStorageFile
-            .putIfAbsent('${atSign}_enrollmentInfo', () => invocation.positionalArguments[0]);
-      });
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
 
@@ -284,13 +242,14 @@ void main() {
 
     test('A test to verify getFinalEnrollmentStatus returns expired when there are no pending enrollments in keychain',
         () async {
-      when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo', options: any(named: 'options')))
-          .thenAnswer((_) async => mockBiometricStorageEnrollmentFile);
+      when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
+          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
-      when(() => mockBiometricStorageEnrollmentFile.read()).thenAnswer((_) async {
-        return Future.value(mockBiometricStorageEnrollmentFile.dummyStorageFile['${atSign}_enrollmentInfo']);
+      when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
+          .thenAnswer((Invocation invocation) async {
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain
+            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
       });
-
       EnrollmentStatus enrollmentStatus = await authServiceImpl.getFinalEnrollmentStatus();
 
       expect(enrollmentStatus, EnrollmentStatus.expired);
@@ -299,6 +258,27 @@ void main() {
     test('A test to verify enrollment approved', () async {
       registerFallbackValue(FakeAtClientPreference());
       registerFallbackValue(FakeAtKey());
+
+      when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
+          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
+
+      when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
+          .thenAnswer((Invocation invocation) async {
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain
+            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
+      });
+
+      when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer((Invocation invocation) async {
+        mockKeychainAtKeysIo.dummyKeychain.putIfAbsent(invocation.positionalArguments[0], () => "ffff");
+        return Future.value();
+      });
+
+      when(() => mockKeychainAtKeysIo.read(atSign))
+          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyKeychain[atSign]);
+
+      when(() => mockKeychainAtKeysIo.deleteEnrollmentStore(atSign)).thenAnswer((_) async {
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain.remove('${atSign}_enrollmentInfo_keychain');
+      });
 
       String encryptedDefaultEncryptionPrivateKey =
           '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';
@@ -318,70 +298,24 @@ void main() {
       AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
       atChopsKeys.selfEncryptionKey = AESKey('x1RB+Lbj9wDzpR23cx3FQiSCekQ1pFRSrNjouyGtrvk=');
       atChopsKeys.apkamSymmetricKey = AESKey('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=');
+      AtKeys mockAtKeys = AtKeys()
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionPrivateKey)
+        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(encryptedDefaultSelfEncryptionKey)
+        ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
+        ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
+        ..apkamSymmetricKey = AtBytes.fromString('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=')  
+        ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181';
 
       AtChops atChops = AtChopsImpl(atChopsKeys);
       AtServiceFactory mockAtServiceFactory = MockAtServiceFactor();
       AtClient mockAtClient = MockAtClient();
       LocalSecondary mockLocalSecondary = MockLocalSecondary();
 
-      when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo', options: any(named: 'options')))
-          .thenAnswer((_) async => mockBiometricStorageEnrollmentFile);
+      mockAtEnrollmentBase = MockAtEnrollmentBase();
+      authServiceImpl.atEnrollmentBase = mockAtEnrollmentBase;
 
-      when(() => mockBiometricStorage.getStorage(any(that: startsWith('@atsigns')), options: any(named: 'options')))
-          .thenAnswer(
-        (_) async => mockBiometricStorageKeychainFile,
-      );
-
-      when(() => mockBiometricStorageKeychainFile.read()).thenAnswer(
-          (_) => Future.value(mockBiometricStorageKeychainFile.dummyStorageFile['${atSign}_enrollmentInfo']));
-
-      when(() => mockBiometricStorageKeychainFile.write(any(that: startsWith(''))))
-          .thenAnswer((Invocation invocation) async {
-        mockBiometricStorageKeychainFile.dummyStorageFile
-            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[0]);
-      });
-
-      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
-
-      when(() => mockBiometricStorageEnrollmentFile.read()).thenAnswer((_) async {
-        String jsonEncodedEnrollmentInfo = await Future.value(jsonEncode(EnrollmentInfo(
-            '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-            AtKeys()
-              ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
-              ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
-              ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
-              ..apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key)
-              ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-            DateTime.now().microsecondsSinceEpoch,
-            {'wavi': 'rw'})));
-
-        mockBiometricStorageEnrollmentFile.dummyStorageFile
-            .putIfAbsent('${atSign}_enrollmentInfo', () => jsonEncodedEnrollmentInfo);
-
-        return jsonEncodedEnrollmentInfo;
-      });
-
-      when(() => mockBiometricStorageEnrollmentFile.write(any(that: startsWith('{"enrollmentId"'))))
-          .thenAnswer((Invocation invocation) async {
-        mockBiometricStorageEnrollmentFile.dummyStorageFile.putIfAbsent(
-            jsonEncode(
-              EnrollmentInfo(
-                  '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-                  AtKeys()
-                    ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
-                    ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
-                    ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
-                    ..apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key)
-                    ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-                  DateTime.now().microsecondsSinceEpoch,
-                  {'wavi': 'rw'}),
-            ),
-            () => invocation.positionalArguments[0]);
-      });
-
-      when(() => mockBiometricStorageEnrollmentFile.delete()).thenAnswer((_) async {
-        mockBiometricStorageEnrollmentFile.dummyStorageFile = {};
-      });
+      when(() => mockAtLookUp.close()).thenAnswer((_) async {});
 
       when(() => mockAtLookUp.atChops).thenAnswer((_) => atChops);
 
@@ -423,17 +357,19 @@ void main() {
         return Future.value(true);
       });
 
+      when(() => mockAtEnrollmentBase.submit(any(that: EnrollmentRequestMatcher()), mockAtLookUp)).thenAnswer((_) =>
+          Future.value(AtEnrollmentResponse('010ad3dc-02ee-41c6-b74b-c82f5122b181', EnrollmentStatus.pending)
+            ..atAuthKeys = mockAtKeys));
+
+      var enrollmentResponse = await authServiceImpl.enroll(  
+          EnrollmentRequest(appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'}));
+
       Future<EnrollmentStatus> enrollmentStatus = authServiceImpl.getFinalEnrollmentStatus();
 
       await enrollmentStatus.then((value) {
         expect(value, EnrollmentStatus.approved);
       });
-
-      expect(mockBiometricStorageEnrollmentFile.dummyStorageFile.length, 0);
-      expect(mockBiometricStorageKeychainFile.dummyStorageFile.length, 1);
     });
-
-    tearDown(() => tearDownMethod(mockBiometricStorageEnrollmentFile, mockAtLookUp, mockBiometricStorage));
   });
 
   group('A group of tests related to authenticate an atSign', () {
@@ -464,8 +400,8 @@ void main() {
         'A test to verify AtClient initializes successfully in offline mode upon network failure when keychain manager contains keys',
         () async {
       // Mock object to return keys from keychain manager
-      MockKeyChainManager mockKeyChainManager = MockKeyChainManager();
-      when(() => mockKeyChainManager.getAtSign(name: atSign)).thenAnswer((_) => Future.value(AtKeys()
+      MockKeychainAtKeysIo mockKeychainAtKeysIo = MockKeychainAtKeysIo();
+      when(() => mockKeychainAtKeysIo.read(atSign)).thenAnswer((_) => Future.value(AtKeys()
         ..defaultEncryptionPublicKey = atKeys.defaultEncryptionPublicKey
         ..defaultEncryptionPrivateKey = atKeys.defaultEncryptionPrivateKey
         ..apkamPublicKey = atKeys.apkamPublicKey
@@ -474,7 +410,7 @@ void main() {
         ..enrollmentId = '123'
         ..metadata = {'atsign': atSign}));
       AtAuthService atAuthService = AtAuthService.create(atSign, atClientPreference,
-          keyChainManager: mockKeyChainManager, atLookUp: mockAtLookUp);
+          keychainAtKeysIo: mockKeychainAtKeysIo, atLookUp: mockAtLookUp);
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
 
@@ -511,13 +447,13 @@ void main() {
         ..defaultSelfEncryptionKey = atKeys.defaultSelfEncryptionKey
         ..enrollmentId = '123'
         ..metadata = {'atsign': atSign};
-      MockKeyChainManager mockKeyChainManager = MockKeyChainManager();
+      MockKeychainAtKeysIo mockKeychainAtKeysIo = MockKeychainAtKeysIo();
       // Mock object to return keys from keychain manager
-      when(() => mockKeyChainManager.getAtSign(name: atSign)).thenAnswer((_) => Future.value(atsignKey));
+      when(() => mockKeychainAtKeysIo.read(atSign)).thenAnswer((_) => Future.value(atsignKey));
 
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: '123')).thenAnswer((_) => Future.value(true));
       AtAuthService atAuthService = AtAuthService.create(atSign, atClientPreference,
-          atLookUp: mockAtLookup, keyChainManager: mockKeyChainManager);
+          atLookUp: mockAtLookup, keychainAtKeysIo: mockKeychainAtKeysIo);
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign)..enrollmentId = '123';
       atAuthRequest.atAuthKeys = atKeys;
@@ -536,13 +472,10 @@ void main() {
   });
 }
 
-void tearDownMethod(MockEnrollmentBiometricStorageFile mockBiometricStorageFile, MockAtLookUp mockAtLookUp,
-    MockBiometricStorage mockBiometricStorage) {
+void tearDownMethod(MockKeychainAtKeysIo mockKeychainAtKeysIo, MockAtLookUp mockAtLookUp) {
   resetMocktailState();
-  reset(mockBiometricStorageFile);
   reset(mockAtLookUp);
-  reset(mockBiometricStorage);
-  mockBiometricStorageFile.dummyStorageFile.clear();
+  mockKeychainAtKeysIo.dummyEnrollmentKeychain.clear();
 }
 
 class LookupVerbBuilderMatcher extends Matcher {
