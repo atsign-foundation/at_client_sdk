@@ -136,7 +136,8 @@ class AtAuthImpl implements AtAuth {
       //   _atAuthKeys = atKeysIo.generateKeys(publicKeyId);
       //   break;
       case WrittenAtKeysIo():
-        await atKeysIo.write(atOnboardingRequest.atSign);
+        _atAuthKeys = (atKeysIo as FileAtKeysIo).generateKeyPairs(atSign: atOnboardingRequest.atSign);
+        await atKeysIo.write(atOnboardingRequest.atSign, _atAuthKeys);
         break;
       default:
         throw AtAuthenticationException('Unsupported AtKeysIO implementation: ${atKeysIo.runtimeType}');

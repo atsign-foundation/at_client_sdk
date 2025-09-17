@@ -33,8 +33,7 @@ class FileAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   }
 
   @override
-  Future write(String atSign, {AtKeys? atKeys}) {
-    atKeys ??= generateKeyPairs(atSign: atSign);
+  Future write(String atSign, AtKeys atKeys) {
     filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
     String atKeysData = encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     return File(filePath!).writeAsString(atKeysData);

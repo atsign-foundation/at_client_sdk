@@ -46,9 +46,9 @@ class AtKeys {
           ? AtBytes.fromString(json[auth_constants.apkamSymmetricKey])
           : null
       ..enrollmentId = _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
-    if (_existsAndNotNull(json, 'metadata')) {
-      for (var entry in (json['metadata'] as Map).entries) {
-        keys.metadata[entry.key] = entry.value;
+    for (var entry in json.entries) {
+      if (!keys.toJson().containsKey(entry.key)) {
+      keys.metadata[entry.key] = entry.value;
       }
     }
     return keys;

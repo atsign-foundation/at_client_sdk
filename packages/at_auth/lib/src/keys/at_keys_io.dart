@@ -12,8 +12,8 @@ sealed class AtKeysIo {
   FutureOr<AtKeys> read(String atSign);
 }
 
-abstract class WrittenAtKeysIo implements AtKeysIo {
-  Future write(String atSign, {AtKeys? atKeys});
+abstract class WrittenAtKeysIo implements AtKeysIo{
+  Future write(String atSign, AtKeys atKeys);
 }
 
 abstract class GeneratedAtKeysIo implements AtKeysIo {
