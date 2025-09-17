@@ -170,12 +170,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     atAuth ??= AtAuth.create();
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
-    atOnboardingRequest.rootDomain = atOnboardingPreference.rootDomain;
-    atOnboardingRequest.rootPort = atOnboardingPreference.rootPort;
+    atOnboardingRequest.rootDomain = AtRootDomain(atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.appName = atOnboardingPreference.appName;
     atOnboardingRequest.deviceName = atOnboardingPreference.deviceName;
-    atOnboardingRequest.publicKeyId = atOnboardingPreference.publicKeyId;
-    atOnboardingRequest.authMode = atOnboardingPreference.authMode;
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,

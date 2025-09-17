@@ -4,15 +4,11 @@ import 'package:at_commons/at_commons.dart';
 class AtOnboardingRequest {
   String atSign;
   AtOnboardingRequest(this.atSign);
-  PkamAuthMode authMode = PkamAuthMode.keysFile;
 
-  String rootDomain = 'root.atsign.org';
-  int rootPort = 64;
+  // Default root domain and port
+  AtRootDomain rootDomain = AtRootDomain('root.atsign.org', 64);
   String? appName;
   String? deviceName;
-
-  /// public key id for secure element sim based authentication
-  String? publicKeyId;
 
   /// Signing algorithm to use for cram authentication
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;

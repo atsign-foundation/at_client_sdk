@@ -1,29 +1,27 @@
 import 'dart:async';
 import 'dart:convert';
 
+
 import 'at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
-abstract class AtKeysIo {
+sealed class AtKeysIo {
   FutureOr<AtKeys> read(String atSign);
-  FutureOr write(String atSign, AtKeys atKeys);
 }
 
-class BaseAtKeysIo extends AtKeysIo {
+abstract class WrittenAtKeysIo implements AtKeysIo{
+  Future write(String atSign, AtKeys atKeys);
+}
+
+abstract class GeneratedAtKeysIo implements AtKeysIo {
+  AtKeys generateKeys(String publicKeyId);
+}
+
+mixin KeyIOMixin on AtKeysIo {
   final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
-
-  @override
-  FutureOr<AtKeys> read(String atSign) {
-    throw UnimplementedError('read is not implemented');
-  }
-
-  @override
-  Future write(String atSign, AtKeys atKeys) {
-    throw UnimplementedError('write is not implemented');
-  }
 
   FutureOr<AtKeys> decryptAtKeysWithSelfEncKey(
       Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
@@ -112,7 +110,7 @@ class BaseAtKeysIo extends AtKeysIo {
     return jsonEncode(atKeysMap);
   }
 
-  static AtKeys generateKeyPairs(PkamAuthMode authMode, {String? publicKeyId}) {
+  AtKeys generateKeyPairs({String? atSign}) {
     var atKeysFile = AtKeys();
     var logger = AtSignLogger("BaseAtKeysIo");
     // generate user encryption keypair
@@ -120,33 +118,36 @@ class BaseAtKeysIo extends AtKeysIo {
     var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
 
     //generate selfEncryptionKey
-    var selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    var apkamSymmetricKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    var atChops = AtChopsImpl(
-        AtChopsKeys()..selfEncryptionKey = AESKey(selfEncryptionKey.key));
+    var selfEncryptionKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    var apkamSymmetricKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     logger.info('Generating your encryption keys and .atKeys file\n');
 
     //generating pkamKeyPair only if authMode is keysFile
     String? pkamPublicKey;
-    if (authMode == PkamAuthMode.keysFile) {
+    if (this is WrittenAtKeysIo) {
       logger.info('Generating pkam keypair');
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
-      atKeysFile.apkamPrivateKey = AtBytes.fromString(
-          apkamRsaKeypair.atPrivateKey.privateKey.toString());
-    } else if (authMode == PkamAuthMode.sim) {
-      // get the public key from secure element
-      pkamPublicKey = atChops.readPublicKey(publicKeyId!);
-      logger.info('pkam  public key from sim: $pkamPublicKey');
+      atKeysFile.apkamPrivateKey = AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
+      } 
+    // else if (this is GeneratedAtKeysIo) {
+    //   // get the public key from secure element
+    //   if (atSign == null) {
+    //     throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
+    //   }
+    //   String? publicKeyId = (this as SimAtKeysIo).publicKeyMap[atSign];
+    //   if (publicKeyId == null) {
+    //     throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
+    //   }
+    //   pkamPublicKey = atChops.readPublicKey(publicKeyId);
+    //   logger.info('pkam  public key from sim: $pkamPublicKey');
 
-      // encryption key pair and self encryption symmetric key
-      // are not available to injected at_chops. Set it here
-      atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-      atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-      atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-    }
+    //   // encryption key pair and self encryption symmetric key
+    //   // are not available to injected at_chops. Set it here
+    //   atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
+    //   atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
+    //   atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
+    // }
     atKeysFile.apkamPublicKey = AtBytes.fromString(pkamPublicKey.toString());
     //Standard order of an atKeys file is ->
     // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->

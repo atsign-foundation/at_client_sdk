@@ -1,6 +1,9 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/auth/at_auth_service_impl.dart';
 import 'package:at_client_flutter/src/enrollment/enrollment_info.dart';
+import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 
 /// The [AtAuthService] class handles the onboarding, authentication, and enrollment submission for an atSign.
 /// For a new atSign, use the [onboard] method to activate it.
@@ -10,6 +13,13 @@ import 'package:at_client_flutter/src/enrollment/enrollment_info.dart';
 /// To implement an application-level authentication mechanism and restrict access to a designated namespace,
 /// use the [enroll] method to submit an enrollment.
 abstract class AtAuthService {
+
+
+  factory AtAuthService.create(String atSign, AtClientPreference atClientPreference,
+      {AtLookUp? atLookUp, AtClient? atClient, KeychainAtKeysIo? keychainAtKeysIo}) => AtAuthServiceImpl(atSign, atClientPreference,
+          atLookUp: atLookUp, atClient: atClient, keychainAtKeysIo: keychainAtKeysIo);
+
+
   /// This method is used to authenticate an atSign into the app.
   /// The user have to supply the atKeys file (which contains keys for authentication). Otherwise, if
   /// the atSign is logged-in previously, then the details are fetched in the KeyChain Manager and authentication is
