@@ -1,3 +1,7 @@
+## 1.16.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
 ## 1.15.0
 
 - feat: add `--root-server` option to specify root server domain

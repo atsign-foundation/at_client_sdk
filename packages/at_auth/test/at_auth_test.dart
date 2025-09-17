@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/first_enrollment_request.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -250,10 +249,10 @@ void main() {
   });
 }
 
-bool matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) {
+Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) async {
   final fileAtKeysIo = FileAtKeysIo(filePath: filePath);
   final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
-  var decryptedAtKeysMap = fileAtKeysIo.decryptAtKeysWithSelfEncKey(encryptedAtKeysMap, PkamAuthMode.keysFile);
+  var decryptedAtKeysMap = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(encryptedAtKeysMap, PkamAuthMode.keysFile);
   return  decryptedAtKeys.apkamPrivateKey.toString() == decryptedAtKeysMap.apkamPrivateKey.toString() &&
       decryptedAtKeys.apkamPublicKey.toString() == decryptedAtKeysMap.apkamPublicKey.toString() &&
       decryptedAtKeys.apkamSymmetricKey.toString() == decryptedAtKeysMap.apkamSymmetricKey.toString() &&
