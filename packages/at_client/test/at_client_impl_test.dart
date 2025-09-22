@@ -296,7 +296,7 @@ void main() {
           currentAtsign, 'buzz', AtClientPreference(),
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, AtEnrollmentBase.create(currentAtsign));
+          EnrollmentServiceImpl(client, AtEnrollmentBase.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests =

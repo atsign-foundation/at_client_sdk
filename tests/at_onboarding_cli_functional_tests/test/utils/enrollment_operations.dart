@@ -40,7 +40,7 @@ class EnrollmentOperations {
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
     EnrollmentService enrollmentService = EnrollmentServiceImpl(
-        onboardingService.atClient!, AtEnrollmentBase.create(atsign));
+        onboardingService.atClient!, AtEnrollmentBase.create());
 
     // when enrollmentId is not provided. Fetches all enrollment requests for
     // the given appName and deviceName and uses the data of the first request
@@ -75,7 +75,7 @@ class EnrollmentOperations {
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
     EnrollmentService enrollmentService = EnrollmentServiceImpl(
-        onboardingService.atClient!, AtEnrollmentBase.create(atsign));
+        onboardingService.atClient!, AtEnrollmentBase.create());
 
     // when enrollmentId is not provided. Fetches all enrollment requests for
     // the given appName and deviceName and uses the data of the first request

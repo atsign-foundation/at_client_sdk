@@ -89,6 +89,7 @@ void main() {
       registerFallbackValue(EnrollVerbBuilder());
       registerFallbackValue(mockAtLookup);
       registerFallbackValue(EnrollmentRequest(
+          atSign: atsign,
           appName: 'appName',
           deviceName: 'deviceName',
           otp: 'otp',

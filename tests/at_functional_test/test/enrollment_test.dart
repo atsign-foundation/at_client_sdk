@@ -50,7 +50,7 @@ void main() {
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
-        ..rootDomain = 'vip.ve.atsign.zone';
+      ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
       // onboard with enable enrollment set
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
@@ -177,11 +177,12 @@ void main() {
     test('A test to verify invalid OTP results in error response from server',
         () async {
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          atSign: atSign,
           appName: 'buzz',
           deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
           otp: 'a1b2c3'); //random invalid OTP
-      var atEnrollment = AtEnrollmentBase.create(atSign);
+      var atEnrollment = AtEnrollmentBase.create();
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
@@ -201,11 +202,12 @@ void main() {
       var otp = atResponse.response;
       expect(otp.length, 6);
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          atSign: atSign,
           appName: 'buzz',
           deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
           otp: otp); //random invalid OTP
-      var atEnrollment = AtEnrollmentBase.create(atSign);
+      var atEnrollment = AtEnrollmentBase.create();
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
@@ -301,7 +303,7 @@ void main() {
         'A test to validate client can authenticate with an approved enrollment and perform put operation',
         () async {
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create(atSign);
+      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           atSign,
@@ -309,6 +311,7 @@ void main() {
           atClientManager.atClient.getPreferences()!.rootPort);
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
@@ -401,7 +404,7 @@ void main() {
         'A test to validate client fails to authenticate with an denied enrollment',
         () async {
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create(atSign);
+      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           atSign,
@@ -409,6 +412,7 @@ void main() {
           atClientManager.atClient.getPreferences()!.rootPort);
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
@@ -472,7 +476,7 @@ void main() {
         'A test to verify atclient get when enrollment request has only read access',
         () async {
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create(atSign);
+      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           atSign,
@@ -480,6 +484,7 @@ void main() {
           atClientManager.atClient.getPreferences()!.rootPort);
 
       EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+          atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
@@ -606,7 +611,7 @@ void main() {
     test('A test to verify enrollment request is received via the notification',
         () async {
       String random = Uuid().v4().hashCode.toString();
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create(atSign);
+      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create();
       AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
 
       AtClientManager atClientManager =
@@ -638,6 +643,7 @@ void main() {
       AtResponse otpResponse = await atClientManager.atClient.getOTP();
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.submit(
         EnrollmentRequest(
+            atSign: atSign,
             appName: 'wavi',
             deviceName: 'device-$random',
             otp: otpResponse.response,
