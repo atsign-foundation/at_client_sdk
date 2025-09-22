@@ -6,8 +6,8 @@ import 'package:at_lookup/at_lookup.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollmentBase {
-  factory AtEnrollmentBase.create(String atSign) {
-    return AtEnrollmentImpl(atSign);
+  factory AtEnrollmentBase.create() {
+    return AtEnrollmentImpl();
   }
 
   /// Submits an enrollment request.

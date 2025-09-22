@@ -28,7 +28,7 @@ void main() {
       'A test to verify submitting enrollment to server and verify enrollment status is pending',
       () async {
     String atSign = '@alice🛠';
-    AtEnrollmentImpl atEnrollmentServiceImpl = AtEnrollmentImpl(atSign);
+    AtEnrollmentImpl atEnrollmentServiceImpl = AtEnrollmentImpl();
     AtLookUp mockAtLookUp = MockAtLookUp();
 
     String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
@@ -86,6 +86,7 @@ void main() {
         .thenAnswer((_) async => ());
 
     EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+        atSign: atSign,
         appName: 'wavi',
         deviceName: 'pixel',
         otp: 'A123FE',
@@ -122,7 +123,7 @@ void main() {
 
       AtLookUp mockAtLookUp = MockAtLookUp();
 
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl(atSign);
+      AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl();
 
       when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
 
@@ -166,7 +167,7 @@ void main() {
 
       AtLookUp mockAtLookUp = MockAtLookUp();
 
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl(atSign);
+      AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl();
 
       when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
 

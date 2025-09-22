@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-
 import 'at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
@@ -12,7 +11,7 @@ sealed class AtKeysIo {
   FutureOr<AtKeys> read(String atSign);
 }
 
-abstract class WrittenAtKeysIo implements AtKeysIo{
+abstract class WrittenAtKeysIo implements AtKeysIo {
   Future write(String atSign, AtKeys atKeys);
 }
 
@@ -118,8 +117,10 @@ mixin KeyIOMixin on AtKeysIo {
     var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
 
     //generate selfEncryptionKey
-    var selfEncryptionKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    var apkamSymmetricKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    var selfEncryptionKey =
+        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    var apkamSymmetricKey =
+        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     logger.info('Generating your encryption keys and .atKeys file\n');
 
     //generating pkamKeyPair only if authMode is keysFile
@@ -128,8 +129,9 @@ mixin KeyIOMixin on AtKeysIo {
       logger.info('Generating pkam keypair');
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
-      atKeysFile.apkamPrivateKey = AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
-      } 
+      atKeysFile.apkamPrivateKey = AtBytes.fromString(
+          apkamRsaKeypair.atPrivateKey.privateKey.toString());
+    }
     // else if (this is GeneratedAtKeysIo) {
     //   // get the public key from secure element
     //   if (atSign == null) {

@@ -24,9 +24,11 @@ void main() {
     });
 
     test('Test read() with invalid atKeys file path', () async {
-      final fileAtKeysIo = FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
+      final fileAtKeysIo =
+          FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
 
-      expect(() async => await fileAtKeysIo.read(atSign), throwsA(isA<AtException>()));
+      expect(() async => await fileAtKeysIo.read(atSign),
+          throwsA(isA<AtException>()));
     });
 
     test('Test read() without atKeys file path', () async {
@@ -44,36 +46,44 @@ void main() {
     test('Test write()', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: keyFilePath);
       final atKeys = AtKeys()
-        ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
-        ..apkamPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
-        ..defaultEncryptionPublicKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPublicKey')))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
-        ..defaultSelfEncryptionKey = AtBytes.fromString(base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+        ..apkamPublicKey =
+            AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..apkamPrivateKey =
+            AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
-      await fileAtKeysIo.write(atSign, atKeys: atKeys);
+      await fileAtKeysIo.write(atSign, atKeys);
 
-      expect(matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!), true);
+      expect(await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!), true);
     });
   });
 
   group('SimAtKeysIo tests', () {
-    test('Test read() with valid publicKeyId', () {
-      
-    });
+    test('Test read() with valid publicKeyId', () {});
   });
 }
 
-bool matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) {
+Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) async {
   final fileAtKeysIo = FileAtKeysIo(filePath: filePath);
   final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
-  var decryptedAtKeysMap = fileAtKeysIo.decryptAtKeysWithSelfEncKey(encryptedAtKeysMap, PkamAuthMode.keysFile);
-  return decryptedAtKeys.apkamPrivateKey.toString() == decryptedAtKeysMap.apkamPrivateKey.toString() &&
-      decryptedAtKeys.apkamPublicKey.toString() == decryptedAtKeysMap.apkamPublicKey.toString() &&
-      decryptedAtKeys.apkamSymmetricKey.toString() == decryptedAtKeysMap.apkamSymmetricKey.toString() &&
+  var decryptedAtKeysMap = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
+      encryptedAtKeysMap, PkamAuthMode.keysFile);
+  return decryptedAtKeys.apkamPrivateKey.toString() ==
+          decryptedAtKeysMap.toString() &&
+      decryptedAtKeys.apkamPublicKey.toString() ==
+          decryptedAtKeysMap.apkamPublicKey.toString() &&
+      decryptedAtKeys.apkamSymmetricKey.toString() ==
+          decryptedAtKeysMap.apkamSymmetricKey.toString() &&
       decryptedAtKeys.defaultEncryptionPrivateKey.toString() ==
           decryptedAtKeysMap.defaultEncryptionPrivateKey.toString() &&
       decryptedAtKeys.defaultEncryptionPublicKey.toString() ==
           decryptedAtKeysMap.defaultEncryptionPublicKey.toString() &&
-      decryptedAtKeys.defaultSelfEncryptionKey.toString() == decryptedAtKeysMap.defaultSelfEncryptionKey.toString() &&
+      decryptedAtKeys.defaultSelfEncryptionKey.toString() ==
+          decryptedAtKeysMap.defaultSelfEncryptionKey.toString() &&
       decryptedAtKeys.enrollmentId == decryptedAtKeysMap.enrollmentId;
 }

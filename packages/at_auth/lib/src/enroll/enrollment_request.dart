@@ -1,4 +1,5 @@
 import 'package:at_auth/src/enroll/base_enrollment_request.dart';
+import 'package:at_commons/at_commons.dart';
 
 /// The [EnrollmentRequest] is used by the apps to submit enrollment request for APKAM keys which provides .atKeys specific to
 /// an application with restricted access to the namespaces. The application can access only the namespaces which are specified
@@ -14,13 +15,17 @@ class EnrollmentRequest extends BaseEnrollmentRequest {
   String? encryptedAPKAMSymmetricKey;
   String otp;
   Duration? apkamKeysExpiryDuration;
+  AtRootDomain rootDomain;
 
   EnrollmentRequest(
       {required super.appName,
+      required super.atSign,
       required super.deviceName,
       super.apkamPublicKey,
       required this.otp,
       required this.namespaces,
+      this.rootDomain =
+          const AtRootDomain("root.atsign.org", 64),
       this.encryptedAPKAMSymmetricKey,
       this.apkamKeysExpiryDuration});
 }

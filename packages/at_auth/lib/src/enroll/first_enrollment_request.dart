@@ -24,7 +24,8 @@ import 'package:at_auth/src/enroll/base_enrollment_request.dart';
 
 class FirstEnrollmentRequest extends BaseEnrollmentRequest {
   FirstEnrollmentRequest(
-      {required super.appName,
+      {required super.atSign,
+      required super.appName,
       required super.deviceName,
       required super.apkamPublicKey});
 }

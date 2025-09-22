@@ -19,9 +19,7 @@ import 'package:crypton/crypton.dart';
 ///
 /// This class provides functionality to submit and manage enrollment requests.
 class AtEnrollmentImpl implements AtEnrollmentBase {
-  final String _atSign;
-
-  AtEnrollmentImpl(this._atSign);
+  AtEnrollmentImpl();
 
   @override
   Future<AtEnrollmentResponse> submit(
@@ -66,7 +64,7 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
     SymmetricKey apkamSymmetricKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     String defaultEncryptionPublicKey =
-        await _getDefaultEncryptionPublicKey(atLookUp);
+        await _getDefaultEncryptionPublicKey(atLookUp, enrollmentRequest.atSign);
     // Encrypting the Encryption Public key with APKAM Symmetric key.
     enrollVerbBuilder.encryptedAPKAMSymmetricKey =
         RSAPublicKey.fromString(defaultEncryptionPublicKey)
@@ -198,11 +196,11 @@ class AtEnrollmentImpl implements AtEnrollmentBase {
     return enrollmentResponse;
   }
 
-  Future<String> _getDefaultEncryptionPublicKey(AtLookUp atLookupImpl) async {
+  Future<String> _getDefaultEncryptionPublicKey(AtLookUp atLookupImpl, String atSign) async {
     var lookupVerbBuilder = LookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'publickey'
-        ..sharedBy = _atSign);
+        ..sharedBy = atSign);
     String? lookupResult = await atLookupImpl.executeVerb(lookupVerbBuilder);
     if (lookupResult == null || lookupResult.isEmpty) {
       throw AtEnrollmentException(

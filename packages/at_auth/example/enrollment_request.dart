@@ -27,10 +27,11 @@ void main(List<String> args) async {
     AtLookUp atLookUp =
         AtLookupImpl(argResults['atsign'], argResults['rootDomain'], 64);
 
-    AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl(argResults['atsign']);
+    AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create();
 
     // New app sending enrollment request to server:
     EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+        atSign: argResults['atsign'],
         appName: 'buzz',
         deviceName: 'pixel',
         namespaces: {'buzz': 'rw'},

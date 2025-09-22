@@ -1,3 +1,6 @@
+import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/at_keys_io_impl.dart';
+import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -9,6 +12,10 @@ class AtOnboardingRequest {
   AtRootDomain rootDomain = AtRootDomain('root.atsign.org', 64);
   String? appName;
   String? deviceName;
+
+  AtKeysIo? atKeysIo;
+
+  AtKeys? atKeys;
 
   /// Signing algorithm to use for cram authentication
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
