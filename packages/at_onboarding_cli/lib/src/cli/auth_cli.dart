@@ -874,7 +874,7 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
 
     // Finally call approve method via an AtEnrollment object
     final response = await AtEnrollmentBase
-        .create(atClient.getCurrentAtSign()!)
+        .create()
         .approve(decision, atLookup);
 
     stdout.writeln('Server response: $response');
@@ -961,7 +961,7 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
 
       // Finally call approve method via an AtEnrollment object
       final response = await AtEnrollmentBase
-          .create(atClient.getCurrentAtSign()!)
+          .create()
           .approve(decision, atLookup);
       stdout.writeln('Approval successful.\n'
           '\tResponse: $response');

@@ -43,7 +43,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       {this.atServiceFactory, String? enrollmentId}) {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
-    _atEnrollment ??= AtEnrollmentBase.create(_atSign);
+    _atEnrollment ??= AtEnrollmentBase.create();
     // set default LocalStorage paths for this instance
     atOnboardingPreference.commitLogPath ??=
         HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
@@ -280,6 +280,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     );
 
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
+        atSign: _atSign,
         appName: appName,
         deviceName: deviceName,
         namespaces: namespaces,
