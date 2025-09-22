@@ -32,7 +32,10 @@ class KeyChainStorage {
         store: store,
         useSharedStorage: useSharedStorage,
       );
-      final json = jsonDecode(value ?? '{}');
+      if (value == null) {
+        return null;
+      }
+      final json = jsonDecode(value);
       if (json is Map<String, dynamic>) {
         return AtClientData.fromJson(json);
       }

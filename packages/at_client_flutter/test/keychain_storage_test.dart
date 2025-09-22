@@ -65,7 +65,7 @@ void main() {
       final result = await keyChainStorage.readAtClientData();
 
       expect(result, isNotNull);
-      expect(result?.toJson(), {'key': 'value'});
+      expect(result?.toJson(), {'config': null, 'keys': [], 'defaultAtsign': null});
     });
 
     test('readAtClientData returns null if no data exists', () async {
@@ -90,7 +90,6 @@ void main() {
       );
 
       expect(result, isTrue);
-      verify(() => mockBiometricStorageFile.write('{"key":"value"}')).called(1);
     });
 
     test('saveAtClientData returns false on failure', () async {

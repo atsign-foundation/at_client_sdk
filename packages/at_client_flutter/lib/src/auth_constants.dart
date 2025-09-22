@@ -9,15 +9,13 @@ class BackupKeyConstants {
   static const String APKAM_ENROLLMENT_ID_FROM_FILE = 'enrollmentId';
 }
 
-const String keychainSecret = '_secret';
 const String keychainPKAMPrivateKey = '_pkam_private_key';
 const String keychainPKAMPublicKey = '_pkam_public_key';
 const String keychainEncryptionPrivateKey = '_encryption_private_key';
 const String keychainEncryptionPublicKey = '_encryption_public_key';
 const String keychainSelfEncryptionKey = '_aesKey';
 
-const List<String> keychainKeys = [
-  keychainSecret,
+const List<String> keychainKeys = <String>[
   keychainPKAMPrivateKey,
   keychainPKAMPublicKey,
   keychainEncryptionPrivateKey,

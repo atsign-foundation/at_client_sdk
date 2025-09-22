@@ -1,8 +1,10 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/at_onboarding_status.dart';
 import 'package:at_client_flutter/src/auth/at_auth_service_impl.dart';
 import 'package:at_client_flutter/src/enrollment/enrollment_info.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
+import 'package:at_server_status/at_server_status.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 
 /// The [AtAuthService] class handles the onboarding, authentication, and enrollment submission for an atSign.
@@ -13,12 +15,27 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 /// To implement an application-level authentication mechanism and restrict access to a designated namespace,
 /// use the [enroll] method to submit an enrollment.
 abstract class AtAuthService {
+  factory AtAuthService.create(
+          {AtClientPreference? atClientPreference,
+          AtLookUp? atLookUp,
+          AtClient? atClient,
+          KeychainAtKeysIo? keychainAtKeysIo}) =>
+      AtAuthServiceImpl(
+          atClientPreference: atClientPreference,
+          atLookUp: atLookUp,
+          atClient: atClient,
+          keychainAtKeysIo: keychainAtKeysIo);
 
+  final AtOnboardingStatusStream _atOnboardingStatusStream =
+      AtOnboardingStatusStream();
+  AtOnboardingStatusStream get onboardingStatusStream =>
+      _atOnboardingStatusStream;
 
-  factory AtAuthService.create(String atSign, AtClientPreference atClientPreference,
-      {AtLookUp? atLookUp, AtClient? atClient, KeychainAtKeysIo? keychainAtKeysIo}) => AtAuthServiceImpl(atSign, atClientPreference,
-          atLookUp: atLookUp, atClient: atClient, keychainAtKeysIo: keychainAtKeysIo);
+  String? get currentAtSign;
+  set currentAtSign(String? value);
 
+  AtClientPreference? get atClientPreference;
+  set atClientPreference(AtClientPreference? value);
 
   /// This method is used to authenticate an atSign into the app.
   /// The user have to supply the atKeys file (which contains keys for authentication). Otherwise, if
@@ -81,7 +98,7 @@ abstract class AtAuthService {
   /// Throws [AtAuthenticationException] if [AtOnboardingResponse.atAuthKeys] is not populated with generated
   /// RSA key pairs and AES key.
   Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest,
-      {String? cramSecret});
+      {String? cramSecret, String? registrarUrl});
 
   /// After successfully onboarding an atSign, the atKeys file is obtained, providing credentials with full access to
   /// all namespaces. However, for more precise access control in alignment with specific app requirements, users can
@@ -125,10 +142,16 @@ abstract class AtAuthService {
   ///
   /// [EnrollmentStatus.denied] indicates that the enrollment ID is not eligible for
   /// APKAM authentication.
-  Future<EnrollmentStatus> getFinalEnrollmentStatus();
+  Future<EnrollmentStatus> getFinalEnrollmentStatus(String atSign);
 
   /// Returns enrollment request data
   ///
   /// Returns null if no enrollment request found
-  Future<EnrollmentInfo?> getSentEnrollmentRequest();
+  Future<EnrollmentInfo?> getSentEnrollmentRequest(String atSign);
+
+  Future<ServerStatus?> checkAtSignServerStatus(String atsign);
+
+  Future<bool> isExistingAtsign(String atsign);
+
+  Future<List<String>> getAllAtsigns();
 }

@@ -43,7 +43,8 @@ class MockKeychainAtKeysIo extends Mock implements KeychainAtKeysIo {
   Map<String, dynamic> dummyKeychain = HashMap();
 }
 
-class FakeStorageFileInitOptions extends Fake implements StorageFileInitOptions {}
+class FakeStorageFileInitOptions extends Fake
+    implements StorageFileInitOptions {}
 
 class FakeLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
 
@@ -71,21 +72,27 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   group('A group of tests related to submission of enrollment request', () {
     String atSign = '@alice';
-    AtClientPreference atClientPreference = AtClientPreference()..namespace = 'me';
+    AtClientPreference atClientPreference = AtClientPreference()
+      ..namespace = 'me';
 
-    late AtAuthServiceImpl authServiceImpl;
+    late AtAuthServiceImpl authService;
     MockAtEnrollmentBase mockAtEnrollmentBase;
     late MockAtLookUp mockAtLookUp;
     late MockKeychainAtKeysIo mockKeychainAtKeysIo;
 
     setUp(() {
       registerFallbackValue(EnrollmentRequest(
-          appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'}));
-      mockAtLookUp = MockAtLookUp();
+          atSign: atSign,
+          appName: 'wavi',
+          deviceName: 'my-device',
+          otp: 'ABC123',
+          namespaces: {'wavi': 'rw'}));
       mockAtLookUp = MockAtLookUp();
       mockKeychainAtKeysIo = MockKeychainAtKeysIo();
-      authServiceImpl =
-          AtAuthServiceImpl(atSign, atClientPreference, atLookUp: mockAtLookUp, keychainAtKeysIo: mockKeychainAtKeysIo);
+      authService = AtAuthServiceImpl(
+          atClientPreference: atClientPreference,
+          atLookUp: mockAtLookUp,
+          keychainAtKeysIo: mockKeychainAtKeysIo);
     });
 
     tearDown(() {
@@ -99,40 +106,59 @@ void main() {
       registerFallbackValue(FakeLookupVerbBuilder());
 
       when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
-          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
+          .thenAnswer((_) async => mockKeychainAtKeysIo
+              .dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
       when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
           .thenAnswer((Invocation invocation) async {
-        mockKeychainAtKeysIo.dummyEnrollmentKeychain
-            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain.putIfAbsent(
+            '${atSign}_enrollmentInfo_keychain',
+            () => invocation.positionalArguments[1]);
       });
 
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: any(named: "enrollmentId")))
+      when(() => mockAtLookUp.pkamAuthenticate(
+              enrollmentId: any(named: "enrollmentId")))
           .thenAnswer((_) => Future.value(true));
 
-      when(() => mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
+      when(() =>
+              mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
           .thenAnswer((_) => Future.value('data:$encryptionPublicKey'));
 
-      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:request')))).thenAnswer((_) => Future.value(
-          'data:${jsonEncode({'enrollmentId': '010ad3dc-02ee-41c6-b74b-c82f5122b181', 'status': 'pending'})}'));
+      when(() => mockAtLookUp
+              .executeCommand(any(that: startsWith('enroll:request'))))
+          .thenAnswer((_) => Future.value('data:${jsonEncode({
+                    'enrollmentId': '010ad3dc-02ee-41c6-b74b-c82f5122b181',
+                    'status': 'pending'
+                  })}'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
 
-      when(() => mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
+      when(() =>
+              mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
           .thenAnswer((_) => Future.value('data:$encryptionPublicKey'));
 
-      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:request')))).thenAnswer((_) => Future.value(
-          'data:${jsonEncode({'enrollmentId': '010ad3dc-02ee-41c6-b74b-c82f5122b181', 'status': 'pending'})}'));
+      when(() => mockAtLookUp
+              .executeCommand(any(that: startsWith('enroll:request'))))
+          .thenAnswer((_) => Future.value('data:${jsonEncode({
+                    'enrollmentId': '010ad3dc-02ee-41c6-b74b-c82f5122b181',
+                    'status': 'pending'
+                  })}'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
 
-      AtEnrollmentResponse atEnrollmentResponse = await authServiceImpl.enroll(
-          EnrollmentRequest(appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'}));
+      AtEnrollmentResponse atEnrollmentResponse = await authService.enroll(
+          EnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'my-device',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'}));
 
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
       expect(atEnrollmentResponse.atAuthKeys!.apkamPublicKey, isNotNull);
       expect(atEnrollmentResponse.atAuthKeys!.apkamPrivateKey, isNotNull);
-      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey,
+          isNotNull);
       //does an enrollment expect a defaultEncryptionPrivateKey on response?
       // expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey, isNotNull);
 
@@ -144,46 +170,65 @@ void main() {
       expect(atEnrollmentResponse.enrollmentId, isNotNull);
     });
 
-    test('A test to verify enrollment request is submitted and denied', () async {
+    test('A test to verify enrollment request is submitted and denied',
+        () async {
       String encryptionPublicKey =
           'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr2nlIgyuezQuGNKAVeYPJMGcvYs13PeXqByuU6PkrCXA2pkDx91KynBv1+MzigMl/vjYiMr12+kE2fuvdlOGG5tOLz+b69s7WSUvwAy4Fa7hRVWxnfjoWD2Db5EdEcaVpKk0yL4KRO/K6grjkrtK92JeqLxkyMfOMwjTD/mO0BZfgCtGgSeJQPcw2IBuOAYpVJVUsIy5lPZKEk1lm7EYx3UfA5Ygw1VH8N9zYUu2OuHDvmQNMaDZxj2L+9HR71j5U1cq2PK6aJqEZc62nxoBLp4remaG66/EFzHNbCKVZ1BGh83PY9aTbw52PTaf7UxiVlNNy4Hqwp3C1Khq96rqJQIDAQAB';
       registerFallbackValue(FakeStorageFileInitOptions());
       registerFallbackValue(FakeLookupVerbBuilder());
 
       when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
-          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
+          .thenAnswer((_) async => mockKeychainAtKeysIo
+              .dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
       when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
           .thenAnswer((Invocation invocation) async {
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain.putIfAbsent(
+            '${atSign}_enrollmentInfo_keychain',
+            () => invocation.positionalArguments[1]);
+      });
+
+      when(() => mockKeychainAtKeysIo.deleteEnrollmentStore(atSign))
+          .thenAnswer((_) async {
         mockKeychainAtKeysIo.dummyEnrollmentKeychain
-            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
+            .remove('${atSign}_enrollmentInfo_keychain');
       });
 
-      when(() => mockKeychainAtKeysIo.deleteEnrollmentStore(atSign)).thenAnswer((_) async {
-        mockKeychainAtKeysIo.dummyEnrollmentKeychain.remove('${atSign}_enrollmentInfo_keychain');
-      });
-
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: any(named: "enrollmentId")))
+      when(() => mockAtLookUp.pkamAuthenticate(
+              enrollmentId: any(named: "enrollmentId")))
           .thenAnswer((_) => Future.value(true));
 
-      when(() => mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
+      when(() =>
+              mockAtLookUp.executeVerb(any(that: LookupVerbBuilderMatcher())))
           .thenAnswer((_) => Future.value('data:$encryptionPublicKey'));
 
-      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:request')))).thenAnswer((_) => Future.value(
-          'data:${jsonEncode({'enrollmentId': '010ad3dc-02ee-41c6-b74b-c82f5122b181', 'status': 'pending'})}'));
+      when(() => mockAtLookUp
+              .executeCommand(any(that: startsWith('enroll:request'))))
+          .thenAnswer((_) => Future.value('data:${jsonEncode({
+                    'enrollmentId': '010ad3dc-02ee-41c6-b74b-c82f5122b181',
+                    'status': 'pending'
+                  })}'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
 
-      AtEnrollmentResponse atEnrollmentResponse = await authServiceImpl.enroll(
-          EnrollmentRequest(appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'}));
+      AtEnrollmentResponse atEnrollmentResponse = await authService.enroll(
+          EnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'my-device',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'}));
 
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: any(named: "enrollmentId"))).thenAnswer(
-          (_) => throw UnAuthenticatedException('Failed to authenticate error: AT0025 enrollment is denied'));
+      when(() => mockAtLookUp.pkamAuthenticate(
+              enrollmentId: any(named: "enrollmentId")))
+          .thenAnswer((_) => throw UnAuthenticatedException(
+              'Failed to authenticate error: AT0025 enrollment is denied'));
 
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
       expect(atEnrollmentResponse.atAuthKeys!.apkamPublicKey, isNotNull);
       expect(atEnrollmentResponse.atAuthKeys!.apkamPrivateKey, isNotNull);
-      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey, isNotNull);
+      expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey,
+          isNotNull);
 
       //does an enrollment expect a defaultEncryptionPrivateKey on response?
       // expect(atEnrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey, isNotNull);
@@ -194,63 +239,87 @@ void main() {
       expect(atEnrollmentResponse.atAuthKeys!.enrollmentId, isNotNull);
       expect(atEnrollmentResponse.enrollmentId, isNotNull);
 
-      Future<EnrollmentStatus> enrollmentStatus = authServiceImpl.getFinalEnrollmentStatus();
+      Future<EnrollmentStatus> enrollmentStatus =
+          authService.getFinalEnrollmentStatus(atSign);
 
-      await enrollmentStatus.then((value) => expect(value, EnrollmentStatus.denied));
+      await enrollmentStatus
+          .then((value) => expect(value, EnrollmentStatus.denied));
 
       // Verify enrollment info is removed from the enrollment keychain when enrollment request is denied
-      await mockKeychainAtKeysIo.readEnrollmentFromKeychain(atSign).then((value) {
+      await mockKeychainAtKeysIo
+          .readEnrollmentFromKeychain(atSign)
+          .then((value) {
         expect(value, null);
       });
     });
 
-    test('A test to verify submission of new enrollment without fulfilling the previous enrollment throws exception',
+    test(
+        'A test to verify submission of new enrollment without fulfilling the previous enrollment throws exception',
         () async {
       registerFallbackValue(FakeEnrollmentRequest());
 
       mockAtEnrollmentBase = MockAtEnrollmentBase();
-      authServiceImpl.atEnrollmentBase = mockAtEnrollmentBase;
+      authService.atEnrollmentBase = mockAtEnrollmentBase;
 
       when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
-          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
+          .thenAnswer((_) async => mockKeychainAtKeysIo
+              .dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
       when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
           .thenAnswer((Invocation invocation) async {
-        mockKeychainAtKeysIo.dummyEnrollmentKeychain
-            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain.putIfAbsent(
+            '${atSign}_enrollmentInfo_keychain',
+            () => invocation.positionalArguments[1]);
       });
 
-      when(() => mockAtEnrollmentBase.submit(any(that: EnrollmentRequestMatcher()), mockAtLookUp)).thenAnswer((_) =>
-          Future.value(AtEnrollmentResponse('010ad3dc-02ee-41c6-b74b-c82f5122b181', EnrollmentStatus.pending)
+      when(() => mockAtEnrollmentBase.submit(
+              any(that: EnrollmentRequestMatcher()), mockAtLookUp))
+          .thenAnswer((_) => Future.value(AtEnrollmentResponse(
+              '010ad3dc-02ee-41c6-b74b-c82f5122b181', EnrollmentStatus.pending)
             ..atAuthKeys = AtKeys()));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
 
-      AtEnrollmentResponse atEnrollmentResponse = await authServiceImpl.enroll(
-          EnrollmentRequest(appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'}));
+      AtEnrollmentResponse atEnrollmentResponse = await authService.enroll(
+          EnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'my-device',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'}));
 
-      expect(atEnrollmentResponse.enrollmentId, '010ad3dc-02ee-41c6-b74b-c82f5122b181');
+      expect(atEnrollmentResponse.enrollmentId,
+          '010ad3dc-02ee-41c6-b74b-c82f5122b181');
 
       // Submit another enrollment
       expect(
-          () async => await authServiceImpl.enroll(
-              EnrollmentRequest(appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'})),
+          () async => await authService.enroll(EnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'my-device',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'})),
           throwsA(predicate((dynamic e) =>
               e is AtEnrollmentException &&
-              e.message == 'Cannot submit new enrollment request until the pending enrollment request is fulfilled')));
+              e.message ==
+                  'Cannot submit new enrollment request until the pending enrollment request is fulfilled')));
     });
 
-    test('A test to verify getFinalEnrollmentStatus returns expired when there are no pending enrollments in keychain',
+    test(
+        'A test to verify getFinalEnrollmentStatus returns expired when there are no pending enrollments in keychain',
         () async {
       when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
-          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
+          .thenAnswer((_) async => mockKeychainAtKeysIo
+              .dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
       when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
           .thenAnswer((Invocation invocation) async {
-        mockKeychainAtKeysIo.dummyEnrollmentKeychain
-            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain.putIfAbsent(
+            '${atSign}_enrollmentInfo_keychain',
+            () => invocation.positionalArguments[1]);
       });
-      EnrollmentStatus enrollmentStatus = await authServiceImpl.getFinalEnrollmentStatus();
+      EnrollmentStatus enrollmentStatus =
+          await authService.getFinalEnrollmentStatus(atSign);
 
       expect(enrollmentStatus, EnrollmentStatus.expired);
     });
@@ -260,29 +329,36 @@ void main() {
       registerFallbackValue(FakeAtKey());
 
       when(() => mockKeychainAtKeysIo.readEnrollmentFromKeychain(any()))
-          .thenAnswer((_) async => mockKeychainAtKeysIo.dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
+          .thenAnswer((_) async => mockKeychainAtKeysIo
+              .dummyEnrollmentKeychain['${atSign}_enrollmentInfo_keychain']);
 
       when(() => mockKeychainAtKeysIo.writeEnrollmentToKeychain(atSign, any()))
           .thenAnswer((Invocation invocation) async {
-        mockKeychainAtKeysIo.dummyEnrollmentKeychain
-            .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[1]);
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain.putIfAbsent(
+            '${atSign}_enrollmentInfo_keychain',
+            () => invocation.positionalArguments[1]);
       });
 
-      when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer((Invocation invocation) async {
-        mockKeychainAtKeysIo.dummyKeychain.putIfAbsent(invocation.positionalArguments[0], () => "ffff");
+      when(() => mockKeychainAtKeysIo.write(any(), any()))
+          .thenAnswer((Invocation invocation) async {
+        mockKeychainAtKeysIo.dummyKeychain
+            .putIfAbsent(invocation.positionalArguments[0], () => "ffff");
         return Future.value();
       });
 
       when(() => mockKeychainAtKeysIo.read(atSign))
           .thenAnswer((_) async => mockKeychainAtKeysIo.dummyKeychain[atSign]);
 
-      when(() => mockKeychainAtKeysIo.deleteEnrollmentStore(atSign)).thenAnswer((_) async {
-        mockKeychainAtKeysIo.dummyEnrollmentKeychain.remove('${atSign}_enrollmentInfo_keychain');
+      when(() => mockKeychainAtKeysIo.deleteEnrollmentStore(atSign))
+          .thenAnswer((_) async {
+        mockKeychainAtKeysIo.dummyEnrollmentKeychain
+            .remove('${atSign}_enrollmentInfo_keychain');
       });
 
       String encryptedDefaultEncryptionPrivateKey =
           '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';
-      String encryptedDefaultSelfEncryptionKey = 'LYp38EsUNznPAi+yMTAnHdtyfmIORJF6Ck5oNelgcplm6TiJMRzeBOiJQ4zRI+OB';
+      String encryptedDefaultSelfEncryptionKey =
+          'LYp38EsUNznPAi+yMTAnHdtyfmIORJF6Ck5oNelgcplm6TiJMRzeBOiJQ4zRI+OB';
 
       String encryptionPublicKey =
           'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtEVcUP9FaAYi3uK3YM2z/O0qvidBGkPk34ttDGMrr3891AxK/n6Ejs29VsVW0YeEypFSMxEWvFa9UBhLq9yWBaHU534CxvsKVRN09963wu5F7asBEpbfhBOUrv8Xqa2Je6yavAbWX5QjHbrqXTNCASyfjFrtDrsVNQLK3y3YkxSBxTbAj+EC+wv7pp7dg42Rq3lGLVsh3JwDOFMQNn/fyxeDYgrFmEBpwjfnaCzinPzFkbwSuC+qMu5AiSXf7IlTjb3vrREuWMoM1T2i5MYmvnQHDVasXcPWXNHQ+cg6iC93ZBLy/rqJhGiCyvhLdkMZrKMAUuxrzveQvEq7Pi8zVwIDAQAB';
@@ -293,18 +369,25 @@ void main() {
       String pkamPublicKey =
           'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiyJOz1nTk+zCyEdJLRJTRHvbwSyFpQujxfSF0utWQddrmrzLiwDij9GQyCSrwWzqKkAtJoCMmw7DkCD42wY0Go+i0d4EtSnL0Ws9ANGgdLnl+VzlfI59aZ54AFLZDnZzFMw8fdid/GJKEpLQZKcjQ1ewEzVEyOvQ5gTqFcBGT+S4vaK9Xn+QbcpwKrrK8zM7epF8Tdh2izxIapgbQmZOx6l0Ghat7ODqjNbEMBA9/eBW4J3Z8Y7I2A9B4K8CcAyGRc/tAOdDne+BY1raonJjJbGLfsxuerR1XfL0QB+rD99ptGvTz87bT5ji76mi4BQcodFd5b8LjMj9PF9HNLMfswIDAQAB';
 
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
-      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-      atChopsKeys.selfEncryptionKey = AESKey('x1RB+Lbj9wDzpR23cx3FQiSCekQ1pFRSrNjouyGtrvk=');
-      atChopsKeys.apkamSymmetricKey = AESKey('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=');
+      AtEncryptionKeyPair atEncryptionKeyPair =
+          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
+      AtPkamKeyPair atPkamKeyPair =
+          AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
+      AtChopsKeys atChopsKeys =
+          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      atChopsKeys.selfEncryptionKey =
+          AESKey('x1RB+Lbj9wDzpR23cx3FQiSCekQ1pFRSrNjouyGtrvk=');
+      atChopsKeys.apkamSymmetricKey =
+          AESKey('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=');
       AtKeys mockAtKeys = AtKeys()
         ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionPrivateKey)
         ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
-        ..defaultSelfEncryptionKey = AtBytes.fromString(encryptedDefaultSelfEncryptionKey)
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(encryptedDefaultSelfEncryptionKey)
         ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
         ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
-        ..apkamSymmetricKey = AtBytes.fromString('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=')  
+        ..apkamSymmetricKey =
+            AtBytes.fromString('2KZWscShvALlJabtMDrvnkDUoGIQidicyZvIXDFgMsU=')
         ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181';
 
       AtChops atChops = AtChopsImpl(atChopsKeys);
@@ -313,58 +396,82 @@ void main() {
       LocalSecondary mockLocalSecondary = MockLocalSecondary();
 
       mockAtEnrollmentBase = MockAtEnrollmentBase();
-      authServiceImpl.atEnrollmentBase = mockAtEnrollmentBase;
+      authService.atEnrollmentBase = mockAtEnrollmentBase;
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async {});
 
       when(() => mockAtLookUp.atChops).thenAnswer((_) => atChops);
 
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: any(named: "enrollmentId")))
+      when(() => mockAtLookUp.pkamAuthenticate(
+              enrollmentId: any(named: "enrollmentId")))
           .thenAnswer((_) => Future.value(true));
 
       // Returns the encrypted defaultEncryptionPrivateKey from the server
-      when(() => mockAtLookUp.executeCommand(any(that: contains(AtConstants.defaultEncryptionPrivateKey)), auth: true))
-          .thenAnswer(
-              (invocation) => Future.value('data:${jsonEncode({'value': encryptedDefaultEncryptionPrivateKey})}'));
+      when(() => mockAtLookUp.executeCommand(
+          any(that: contains(AtConstants.defaultEncryptionPrivateKey)),
+          auth: true)).thenAnswer((invocation) => Future.value(
+              'data:${jsonEncode({
+                'value': encryptedDefaultEncryptionPrivateKey
+              })}'));
 
       // Returns the encrypted defaultSelfEncryptionKey from the server
-      when(() => mockAtLookUp.executeCommand(any(that: contains(AtConstants.defaultSelfEncryptionKey)), auth: true))
-          .thenAnswer((invocation) => Future.value('data:${jsonEncode({'value': encryptedDefaultSelfEncryptionKey})}'));
+      when(() =>
+          mockAtLookUp.executeCommand(
+              any(that: contains(AtConstants.defaultSelfEncryptionKey)),
+              auth: true)).thenAnswer((invocation) => Future.value(
+          'data:${jsonEncode({'value': encryptedDefaultSelfEncryptionKey})}'));
 
-      when(() => mockAtServiceFactory.atClient(any(that: startsWith('@alice')), any(that: startsWith('me')),
-          any(that: FakeAtClientPreferenceMatcher()), AtClientManager.getInstance(),
-          atChops: any(named: "atChops"),
-          enrollmentId: '010ad3dc-02ee-41c6-b74b-c82f5122b181')).thenAnswer((_) => Future.value(mockAtClient));
+      when(() => mockAtServiceFactory.atClient(
+              any(that: startsWith('@alice')),
+              any(that: startsWith('me')),
+              any(that: FakeAtClientPreferenceMatcher()),
+              AtClientManager.getInstance(),
+              atChops: any(named: "atChops"),
+              enrollmentId: '010ad3dc-02ee-41c6-b74b-c82f5122b181'))
+          .thenAnswer((_) => Future.value(mockAtClient));
 
       NotificationService mockNotificationService = MockNotificationService();
 
-      when(() => mockAtServiceFactory.notificationService(mockAtClient, AtClientManager.getInstance()))
+      when(() => mockAtServiceFactory.notificationService(
+              mockAtClient, AtClientManager.getInstance()))
           .thenAnswer((_) => Future.value(mockNotificationService));
 
-      when(() => mockAtServiceFactory.syncService(mockAtClient, AtClientManager.getInstance(), mockNotificationService))
+      when(() => mockAtServiceFactory.syncService(mockAtClient,
+              AtClientManager.getInstance(), mockNotificationService))
           .thenAnswer((_) => Future.value(MockSyncService()));
 
-      when(() => mockAtServiceFactory.enrollmentService(mockAtClient)).thenAnswer((_) => MockEnrollmentService());
+      when(() => mockAtServiceFactory.enrollmentService(mockAtClient))
+          .thenAnswer((_) => MockEnrollmentService());
 
-      authServiceImpl.atServiceFactory = mockAtServiceFactory;
-      when(() => mockAtClient.getLocalSecondary()).thenAnswer((_) => mockLocalSecondary);
+      authService.atServiceFactory = mockAtServiceFactory;
+      when(() => mockAtClient.getLocalSecondary())
+          .thenAnswer((_) => mockLocalSecondary);
 
-      when(() => mockAtClient.put(any(that: FakeAtKeyMatcher()), any(that: contains('wavi'))))
+      when(() => mockAtClient.put(
+              any(that: FakeAtKeyMatcher()), any(that: contains('wavi'))))
           .thenAnswer((Invocation invocation) async {
-        expect('local:010ad3dc-02ee-41c6-b74b-c82f5122b181.new.enrollments.__manage@alice',
+        expect(
+            'local:010ad3dc-02ee-41c6-b74b-c82f5122b181.new.enrollments.__manage@alice',
             invocation.positionalArguments[0].toString());
         expect('{"wavi":"rw"}', invocation.positionalArguments[1].toString());
         return Future.value(true);
       });
 
-      when(() => mockAtEnrollmentBase.submit(any(that: EnrollmentRequestMatcher()), mockAtLookUp)).thenAnswer((_) =>
-          Future.value(AtEnrollmentResponse('010ad3dc-02ee-41c6-b74b-c82f5122b181', EnrollmentStatus.pending)
+      when(() => mockAtEnrollmentBase.submit(
+              any(that: EnrollmentRequestMatcher()), mockAtLookUp))
+          .thenAnswer((_) => Future.value(AtEnrollmentResponse(
+              '010ad3dc-02ee-41c6-b74b-c82f5122b181', EnrollmentStatus.pending)
             ..atAuthKeys = mockAtKeys));
 
-      var enrollmentResponse = await authServiceImpl.enroll(  
-          EnrollmentRequest(appName: 'wavi', deviceName: 'my-device', otp: 'ABC123', namespaces: {'wavi': 'rw'}));
+      var _ = await authService.enroll(EnrollmentRequest(
+          atSign: atSign,
+          appName: 'wavi',
+          deviceName: 'my-device',
+          otp: 'ABC123',
+          namespaces: {'wavi': 'rw'}));
 
-      Future<EnrollmentStatus> enrollmentStatus = authServiceImpl.getFinalEnrollmentStatus();
+      Future<EnrollmentStatus> enrollmentStatus =
+          authService.getFinalEnrollmentStatus(atSign);
 
       await enrollmentStatus.then((value) {
         expect(value, EnrollmentStatus.approved);
@@ -374,12 +481,14 @@ void main() {
 
   group('A group of tests related to authenticate an atSign', () {
     String atSign = '@alice';
-    AtClientPreference atClientPreference = AtClientPreference()..namespace = 'me';
+    AtClientPreference atClientPreference = AtClientPreference()
+      ..namespace = 'me';
     late MockAtLookUp mockAtLookUp;
     AtKeys atKeys = AtKeys()
       ..defaultEncryptionPrivateKey = AtBytes.fromString(
           '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')
-      ..defaultSelfEncryptionKey = AtBytes.fromString('x1RB+Lbj9wDzpR23cx3FQiSCekQ1pFRSrNjouyGtrvk=')
+      ..defaultSelfEncryptionKey =
+          AtBytes.fromString('x1RB+Lbj9wDzpR23cx3FQiSCekQ1pFRSrNjouyGtrvk=')
       ..defaultEncryptionPublicKey = AtBytes.fromString(
           'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtEVcUP9FaAYi3uK3YM2z/O0qvidBGkPk34ttDGMrr3891AxK/n6Ejs29VsVW0YeEypFSMxEWvFa9UBhLq9yWBaHU534CxvsKVRN09963wu5F7asBEpbfhBOUrv8Xqa2Je6yavAbWX5QjHbrqXTNCASyfjFrtDrsVNQLK3y3YkxSBxTbAj+EC+wv7pp7dg42Rq3lGLVsh3JwDOFMQNn/fyxeDYgrFmEBpwjfnaCzinPzFkbwSuC+qMu5AiSXf7IlTjb3vrREuWMoM1T2i5MYmvnQHDVasXcPWXNHQ+cg6iC93ZBLy/rqJhGiCyvhLdkMZrKMAUuxrzveQvEq7Pi8zVwIDAQAB')
       ..defaultEncryptionPrivateKey = AtBytes.fromString(
@@ -392,7 +501,8 @@ void main() {
 
     setUp(() {
       mockAtLookUp = MockAtLookUp();
-      when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: any(named: "enrollmentId")))
+      when(() => mockAtLookUp.pkamAuthenticate(
+              enrollmentId: any(named: "enrollmentId")))
           .thenAnswer((_) => Future.value(true));
     });
 
@@ -401,43 +511,55 @@ void main() {
         () async {
       // Mock object to return keys from keychain manager
       MockKeychainAtKeysIo mockKeychainAtKeysIo = MockKeychainAtKeysIo();
-      when(() => mockKeychainAtKeysIo.read(atSign)).thenAnswer((_) => Future.value(AtKeys()
-        ..defaultEncryptionPublicKey = atKeys.defaultEncryptionPublicKey
-        ..defaultEncryptionPrivateKey = atKeys.defaultEncryptionPrivateKey
-        ..apkamPublicKey = atKeys.apkamPublicKey
-        ..apkamPrivateKey = atKeys.apkamPrivateKey
-        ..defaultSelfEncryptionKey = atKeys.defaultSelfEncryptionKey
-        ..enrollmentId = '123'
-        ..metadata = {'atsign': atSign}));
-      AtAuthService atAuthService = AtAuthService.create(atSign, atClientPreference,
+      when(() => mockKeychainAtKeysIo.read(atSign))
+          .thenAnswer((_) => Future.value(AtKeys()
+            ..defaultEncryptionPublicKey = atKeys.defaultEncryptionPublicKey
+            ..defaultEncryptionPrivateKey = atKeys.defaultEncryptionPrivateKey
+            ..apkamPublicKey = atKeys.apkamPublicKey
+            ..apkamPrivateKey = atKeys.apkamPrivateKey
+            ..defaultSelfEncryptionKey = atKeys.defaultSelfEncryptionKey
+            ..enrollmentId = '123'
+            ..metadata = {'atsign': atSign}));
+      AtAuthService atAuthService = AtAuthService.create(
+          atClientPreference: atClientPreference,
           keychainAtKeysIo: mockKeychainAtKeysIo, atLookUp: mockAtLookUp);
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
 
-      AtAuthResponse atAuthResponse = await atAuthService.authenticate(atAuthRequest);
+      AtAuthResponse atAuthResponse =
+          await atAuthService.authenticate(atAuthRequest);
 
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atSign, atSign);
       expect(atAuthResponse.atAuthKeys?.apkamPublicKey, atKeys.apkamPublicKey);
-      expect(atAuthResponse.atAuthKeys?.apkamPrivateKey, atKeys.apkamPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey, atKeys.defaultEncryptionPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey, atKeys.defaultEncryptionPublicKey);
-      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey, atKeys.defaultSelfEncryptionKey);
+      expect(
+          atAuthResponse.atAuthKeys?.apkamPrivateKey, atKeys.apkamPrivateKey);
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey,
+          atKeys.defaultEncryptionPrivateKey);
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey,
+          atKeys.defaultEncryptionPublicKey);
+      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey,
+          atKeys.defaultSelfEncryptionKey);
     });
 
     test(
         'A test to verify atClient initialization fails when network is offline and keychain manager does not have keys',
         () async {
-      AtAuthService atAuthService = AtAuthService.create(atSign, atClientPreference);
+      AtAuthService atAuthService =
+          AtAuthService.create(atClientPreference: atClientPreference);
       KeychainAtKeysIo atKeysIo = MockKeychainAtKeysIo();
-      when(() => atKeysIo.read(any(that: startsWith('@alice')))).thenThrow(AtKeyException('Key not found in keychain'));
+      when(() => atKeysIo.read(any(that: startsWith('@alice'))))
+          .thenThrow(AtKeyException('Key not found in keychain'));
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
       atAuthRequest.atKeysIo = atKeysIo;
-      AtAuthResponse atAuthResponse = await atAuthService.authenticate(atAuthRequest);
+      AtAuthResponse atAuthResponse =
+          await atAuthService.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, false);
     });
 
-    test('A test to verify authentication is successful when pkamAuthentication returns true', () async {
+    test(
+        'A test to verify authentication is successful when pkamAuthentication returns true',
+        () async {
       AtLookUp mockAtLookup = MockAtLookUp();
       AtKeys atsignKey = AtKeys()
         ..defaultEncryptionPublicKey = atKeys.defaultEncryptionPublicKey
@@ -449,30 +571,39 @@ void main() {
         ..metadata = {'atsign': atSign};
       MockKeychainAtKeysIo mockKeychainAtKeysIo = MockKeychainAtKeysIo();
       // Mock object to return keys from keychain manager
-      when(() => mockKeychainAtKeysIo.read(atSign)).thenAnswer((_) => Future.value(atsignKey));
+      when(() => mockKeychainAtKeysIo.read(atSign))
+          .thenAnswer((_) => Future.value(atsignKey));
 
-      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: '123')).thenAnswer((_) => Future.value(true));
-      AtAuthService atAuthService = AtAuthService.create(atSign, atClientPreference,
+      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: '123'))
+          .thenAnswer((_) => Future.value(true));
+      AtAuthService atAuthService = AtAuthService.create(
+          atClientPreference: atClientPreference,
           atLookUp: mockAtLookup, keychainAtKeysIo: mockKeychainAtKeysIo);
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign)..enrollmentId = '123';
       atAuthRequest.atAuthKeys = atKeys;
 
-      AtAuthResponse atAuthResponse = await atAuthService.authenticate(atAuthRequest);
+      AtAuthResponse atAuthResponse =
+          await atAuthService.authenticate(atAuthRequest);
 
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atSign, atSign);
       expect(atAuthResponse.enrollmentId, '123');
       expect(atAuthResponse.atAuthKeys?.apkamPublicKey, atKeys.apkamPublicKey);
-      expect(atAuthResponse.atAuthKeys?.apkamPrivateKey, atKeys.apkamPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey, atKeys.defaultEncryptionPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey, atKeys.defaultEncryptionPublicKey);
-      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey, atKeys.defaultSelfEncryptionKey);
+      expect(
+          atAuthResponse.atAuthKeys?.apkamPrivateKey, atKeys.apkamPrivateKey);
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey,
+          atKeys.defaultEncryptionPrivateKey);
+      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey,
+          atKeys.defaultEncryptionPublicKey);
+      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey,
+          atKeys.defaultSelfEncryptionKey);
     });
   });
 }
 
-void tearDownMethod(MockKeychainAtKeysIo mockKeychainAtKeysIo, MockAtLookUp mockAtLookUp) {
+void tearDownMethod(
+    MockKeychainAtKeysIo mockKeychainAtKeysIo, MockAtLookUp mockAtLookUp) {
   resetMocktailState();
   reset(mockAtLookUp);
   mockKeychainAtKeysIo.dummyEnrollmentKeychain.clear();

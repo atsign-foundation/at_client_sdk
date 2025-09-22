@@ -9,4 +9,4 @@ export 'src/auth_constants.dart' show BackupKeyConstants;
 // Contains the enrollment details
 export 'src/enrollment/enrollment_info.dart';
 export 'src/keychain/keychain_manager.dart';
-export 'src/onboarding_status.dart';
+export 'src/at_onboarding_status.dart';
