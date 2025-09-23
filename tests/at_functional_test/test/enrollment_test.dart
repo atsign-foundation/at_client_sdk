@@ -50,7 +50,9 @@ void main() {
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
-      ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
+        ..atKeysIo =
+            FileAtKeysIo(filePath: 'test/testData/$apkamAtSign.atKeys');
       // onboard with enable enrollment set
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
@@ -680,9 +682,11 @@ Future<void> _generateAtKeysFile(String atSign, String? currentEnrollmentId,
     AtKeys atAuthKeys, String keysFilePath) async {
   final atKeysMap = <String, String>{
     'aesPkamPublicKey': EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPublicKey!.toString(), atAuthKeys.defaultSelfEncryptionKey!.toString()),
+        atAuthKeys.apkamPublicKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString()),
     'aesPkamPrivateKey': EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPrivateKey!.toString(), atAuthKeys.defaultSelfEncryptionKey!.toString()),
+        atAuthKeys.apkamPrivateKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString()),
     'aesEncryptPublicKey': EncryptionUtil.encryptValue(
         atAuthKeys.defaultEncryptionPublicKey!.toString(),
         atAuthKeys.defaultSelfEncryptionKey!.toString()),

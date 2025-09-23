@@ -12,7 +12,8 @@ import 'package:at_auth/src/keys/at_keys_io.dart';
 class FileAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   @visibleForTesting
   String? filePath;
-  FileAtKeysIo({this.filePath});
+  String? passPhrase;
+  FileAtKeysIo({this.filePath, this.passPhrase});
 
   @override
   FutureOr<AtKeys> read(String atSign) async {

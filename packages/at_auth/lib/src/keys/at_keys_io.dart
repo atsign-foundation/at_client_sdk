@@ -59,7 +59,7 @@ mixin KeyIOMixin on AtKeysIo {
               .result);
     }
     securityKeys.apkamSymmetricKey =
-        AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey]);
+        AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey] ?? '');
     securityKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
     return securityKeys;
   }

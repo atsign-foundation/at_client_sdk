@@ -29,7 +29,7 @@ class AtAuthImpl implements AtAuth {
 
   PkamAuthenticator? pkamAuthenticator;
 
-  AtEnrollmentBase? atEnrollmentBase;
+  AtEnrollmentBase atEnrollmentBase;
 
   @override
   AtLookUp? atLookUp;
@@ -39,7 +39,8 @@ class AtAuthImpl implements AtAuth {
       this.atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      this.atEnrollmentBase});
+      AtEnrollmentBase? atEnrollmentBase})
+      : atEnrollmentBase = atEnrollmentBase ?? AtEnrollmentBase.create();
 
   @override
 
@@ -64,6 +65,9 @@ class AtAuthImpl implements AtAuth {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
     if (atAuthKeys == null && atAuthRequest.atKeysIo != null) {
       try {
+        if(atAuthRequest.atKeysIo is FileAtKeysIo && atAuthRequest.passPhrase != null){
+          (atAuthRequest.atKeysIo as FileAtKeysIo).passPhrase = atAuthRequest.passPhrase;
+        }
         atAuthKeys = await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
       } on AtKeyException catch (e) {
         throw AtAuthenticationException(
@@ -280,7 +284,7 @@ class AtAuthImpl implements AtAuth {
     var enrollmentStatus = atEnrollmentResponse?.enrollStatus;
     if (enrollmentStatus != EnrollmentStatus.approved) {
       throw AtAuthenticationException(
-          'initial enrollment is not approved. Status from server: $enrollmentStatus');
+          'initial enrollment is not approved. Status from server: $enrollmentStatus \n with $atEnrollmentResponse');
     }
     return enrollmentIdFromServer!;
   }
