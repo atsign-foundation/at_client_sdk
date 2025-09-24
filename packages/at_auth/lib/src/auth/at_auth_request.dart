@@ -34,7 +34,4 @@ class AtAuthRequest {
 
   /// Hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
-
-  /// The pass phrase to password protect the AtKeys file.
-  String? passPhrase;
 }

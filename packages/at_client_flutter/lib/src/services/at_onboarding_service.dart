@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_client_flutter/src/services/onboarding_util.dart';
-import 'package:at_client_flutter/src/utils/at_onboarding_app_constants.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';

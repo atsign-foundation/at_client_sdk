@@ -65,9 +65,6 @@ class AtAuthImpl implements AtAuth {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
     if (atAuthKeys == null && atAuthRequest.atKeysIo != null) {
       try {
-        if(atAuthRequest.atKeysIo is FileAtKeysIo && atAuthRequest.passPhrase != null){
-          (atAuthRequest.atKeysIo as FileAtKeysIo).passPhrase = atAuthRequest.passPhrase;
-        }
         atAuthKeys = await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
       } on AtKeyException catch (e) {
         throw AtAuthenticationException(

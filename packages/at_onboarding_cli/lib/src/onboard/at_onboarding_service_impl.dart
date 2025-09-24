@@ -651,8 +651,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       ..enrollmentId = enrollmentId
       ..atKeysIo = FileAtKeysIo(filePath: atOnboardingPreference.atKeysFilePath)
       ..rootDomain = AtRootDomain(atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort)
-      ..publicKeyId = atOnboardingPreference.publicKeyId
-      ..passPhrase = atOnboardingPreference.passPhrase;
+      ..publicKeyId = atOnboardingPreference.publicKeyId;
+    (atAuthRequest.atKeysIo as FileAtKeysIo).passPhrase =
+        atOnboardingPreference.passPhrase;
     var atAuthResponse = await atAuth!.authenticate(atAuthRequest);
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&
