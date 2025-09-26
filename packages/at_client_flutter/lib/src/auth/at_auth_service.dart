@@ -57,7 +57,7 @@ abstract class AtAuthService {
   ///
   /// AtAuthResponse atAuthResponse = atAuthService.authenticate(atAuthRequest);
   ///```
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest);
+  Future<AtOnboardingStatusEvent> authenticate(AtAuthRequest atAuthRequest);
 
   /// Checks whether the provided atSign has been onboarded.
   /// Returns true if the atSign is onboarded; otherwise, returns false.
@@ -97,7 +97,7 @@ abstract class AtAuthService {
   ///
   /// Throws [AtAuthenticationException] if [AtOnboardingResponse.atAuthKeys] is not populated with generated
   /// RSA key pairs and AES key.
-  Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest,
+  Future<AtOnboardingStatusEvent> onboard(AtOnboardingRequest atOnboardingRequest,
       {String? cramSecret, String? registrarUrl});
 
   /// After successfully onboarding an atSign, the atKeys file is obtained, providing credentials with full access to
@@ -154,4 +154,6 @@ abstract class AtAuthService {
   Future<bool> isExistingAtsign(String atsign);
 
   Future<List<String>> getAllAtsigns();
+
+  void resetAllAtSigns();
 }

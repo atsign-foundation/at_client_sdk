@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/at_onboarding_status.dart';
-import 'package:at_client_flutter/src/services/onboarding_util.dart';
+import 'package:at_onboarding_cli/at_onboarding_cli.dart' show OnboardingUtil;
 import 'package:at_client_flutter/src/utils/at_onboarding_app_constants.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_chops/at_chops.dart';
@@ -23,18 +23,20 @@ import 'package:path_provider/path_provider.dart';
 final atAuthServiceProvider =
     Provider<AtAuthService>((ref) => AtAuthService.create());
 
+
 class AtAuthServiceImpl implements AtAuthService {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
-  final AtOnboardingStatusStream _atOnboardingStatusStream = AtOnboardingStatusStream();
-  
+  final AtOnboardingStatusStream _atOnboardingStatusStream =
+      AtOnboardingStatusStream();
+
   @override
-  AtOnboardingStatusStream get onboardingStatusStream => _atOnboardingStatusStream;
+  AtOnboardingStatusStream get onboardingStatusStream =>
+      _atOnboardingStatusStream;
   AtServiceFactory? atServiceFactory;
   AtClient? _atClient;
   AtLookUp? _atLookUp;
   AtClientPreference? _atClientPreference;
   late String atSign;
-
   @override
   AtClientPreference? get atClientPreference => _atClientPreference;
   @override
@@ -93,7 +95,8 @@ class AtAuthServiceImpl implements AtAuthService {
   }
 
   @override
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
+  Future<AtOnboardingStatusEvent> authenticate(
+      AtAuthRequest atAuthRequest) async {
     // If the user does not provide the keys data then fetch for the keys in the
     // keychain manager.
     // User provides keys data either by
@@ -101,8 +104,18 @@ class AtAuthServiceImpl implements AtAuthService {
     //  - 2. atAuthRequest.atAuthKeys - The AtAuthKeys instance which contains the keys
     //  - 3. atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
     //    contains keys in encrypted format
+
+    final Completer<AtOnboardingStatusEvent> completer =
+        Completer<AtOnboardingStatusEvent>();
     AtKeysIo? atKeysIo;
     atSign = atAuthRequest.atSign;
+    var status = await checkAtSignServerStatus(atAuthRequest.atSign);
+    if (status == ServerStatus.unavailable || status == ServerStatus.teapot) {
+      var error = AtOnboardingStatusError(
+          'AtSign ${atAuthRequest.atSign} not found in root domain ${atAuthRequest.rootDomain.rootDomain}:${atAuthRequest.rootDomain.rootPort}',
+          AtOnboardingStatus.serverNotReached);
+      return completeError(error, completer);
+    }
     _atClientPreference ??=
         await _loadAtClientPreference(atAuthRequest.rootDomain);
     if (atAuthRequest.atKeysIo != null) {
@@ -124,15 +137,20 @@ class AtAuthServiceImpl implements AtAuthService {
         _logger.info(
             'Network connectivity not available. Initializing at_client for offline usage');
         await _init(_atAuth.atChops!, enrollmentId: atAuthRequest.enrollmentId);
-        return atAuthResponse
-          ..isSuccessful = true
-          ..atAuthKeys = atAuthRequest.atAuthKeys
-          ..enrollmentId = atAuthRequest.enrollmentId;
+        onboardingStatusStream.add(AtOnboardingStatusSuccess());
       }
+    } on AtException catch (e) {
+      var error = AtOnboardingStatusError(
+          'Authentication failed for ${atAuthRequest.atSign}, $e',
+          AtOnboardingStatus.authFailed);
+      return completeError(error, completer);
     }
     // If authentication is failed, return the atAuthResponse. Do nothing.
     if (atAuthResponse.isSuccessful == false) {
-      return atAuthResponse;
+      var error = AtOnboardingStatusError(
+          'Authentication failed for ${atAuthRequest.atSign}',
+          AtOnboardingStatus.authFailed);
+      return completeError(error, completer);
     }
     // If authentication is successful, initialize AtClient instance.
     await _init(
@@ -141,17 +159,14 @@ class AtAuthServiceImpl implements AtAuthService {
     );
     // When an atSign is authenticated via the .atKeys on a new device, the keys
     // will not be present in keychain manager. Add keys to key-chain manager.
-    AtKeys atSignKey;
     try {
-      atSignKey = await keychainAtKeysIo.read(atSign);
+      var _ = await keychainAtKeysIo.read(atSign);
     } catch (_) {
       await keychainAtKeysIo.write(atSign, atAuthResponse.atAuthKeys!);
-      atSignKey = await keychainAtKeysIo.read(atSign);
       await _persistKeysLocalSecondary(atSign, atAuthResponse.atAuthKeys!);
     }
-    atAuthResponse.atAuthKeys = atSignKey;
 
-    return atAuthResponse;
+    return completer.future;
   }
 
   @override
@@ -167,21 +182,34 @@ class AtAuthServiceImpl implements AtAuthService {
   /// - AtKeysIo: The AtKeysIo instance which reads/writes the keys from/to the storage.
   ///
   /// returns [AtOnboardingResponse] which contains the details of the onboarding process.
-  Future<AtOnboardingResponse> onboard(AtOnboardingRequest atOnboardingRequest,
+  Future<AtOnboardingStatusEvent> onboard(AtOnboardingRequest atOnboardingRequest,
       {String? cramSecret, String? registrarUrl}) async {
+    Completer<AtOnboardingStatusEvent> completer = Completer<AtOnboardingStatusEvent>();
+    atOnboardingRequest.deviceName ??=
+        atOnboardingRequest.deviceName ?? 'default-device';
+    atOnboardingRequest.appName ??= atOnboardingRequest.appName ?? 'system';
     atSign = atOnboardingRequest.atSign;
     _atClientPreference ??=
         await _loadAtClientPreference(atOnboardingRequest.rootDomain);
-
+    var onboarded = await isOnboarded(atOnboardingRequest.atSign);
+    if (onboarded) {
+      var request = AtAuthRequest(atOnboardingRequest.atSign)
+        ..rootDomain = atOnboardingRequest.rootDomain;
+      await authenticate(request);
+      throw AtException(
+          'AtSign ${atOnboardingRequest.atSign} is already onboarded. Please authenticate the atSign.');
+    }
     //If the user is providing atKeysIo, they might be onboarding via key file (qr code etc)
     atOnboardingRequest.atKeysIo ??= keychainAtKeysIo;
-    try{
-      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(atSign); //otherwise, we'll check the keychain, maybe it exists already
-    }catch(e,s){
-      _logger.info('Failed to read keys for atSign: $atSign | Cause: $e', s); //swallow the error, we just want to know if keys exist or not
+    try {
+      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
+          atSign); //otherwise, we'll check the keychain, maybe it exists already
+    } catch (e, s) {
+      _logger.info('Failed to read keys for atSign: $atSign | Cause: $e',
+          s); //swallow the error, we just want to know if keys exist or not
     }
 
-     //if no cram key is provided, then try and enroll via otp
+    //if no cram key is provided, then try and enroll via otp
     if (cramSecret == null) {
       final util = OnboardingUtil();
       await util.requestAuthenticationOtp(
@@ -197,12 +225,23 @@ class AtAuthServiceImpl implements AtAuthService {
     }
 
     await _validateAtServerForOnboarding(atOnboardingRequest);
-    AtOnboardingResponse atOnboardingResponse =
-        await _atAuth.onboard(atOnboardingRequest, cramSecret);
+    AtOnboardingResponse? atOnboardingResponse;
+    try {
+      atOnboardingResponse =
+          await _atAuth.onboard(atOnboardingRequest, cramSecret);
+    } catch (e) {
+      var error = AtOnboardingStatusError(
+          'Onboarding failed for ${atOnboardingRequest.atSign}, $e',
+          AtOnboardingStatus.authFailed);
+      completeError(error, completer);
+    }
     // If onboarding is not successful, return the onboarding response
     // with the isSuccessful set to false.
-    if (!atOnboardingResponse.isSuccessful) {
-      return atOnboardingResponse;
+    if (atOnboardingResponse == null || !atOnboardingResponse.isSuccessful) {
+      var error = AtOnboardingStatusError(
+          'Onboarding failed for ${atOnboardingRequest.atSign}',
+          AtOnboardingStatus.authFailed);
+      return completeError(error, completer);
     }
     if (_atAuth.atChops == null) {
       throw AtAuthenticationException(
@@ -215,7 +254,8 @@ class AtAuthServiceImpl implements AtAuthService {
     await keychainAtKeysIo.write(
         atOnboardingResponse.atSign, atOnboardingResponse.atAuthKeys!);
     await _persistKeysLocalSecondary(atSign, atOnboardingResponse.atAuthKeys!);
-    return atOnboardingResponse;
+    onboardingStatusStream.add(AtOnboardingStatusSuccess());
+    return completer.future;
   }
 
   @override
@@ -656,8 +696,8 @@ class AtAuthServiceImpl implements AtAuthService {
         rootUrl: atOnboardingRequest.rootDomain.rootDomain,
         rootPort: atOnboardingRequest.rootDomain.rootPort);
     int retryCount = 1;
-    const int maxRetries = 3;
-    const Duration retryDelay = Duration(seconds: 2);
+    const int maxRetries = 10;
+    const Duration retryDelay = Duration(seconds: 3);
 
     while (retryCount < maxRetries) {
       try {
@@ -680,13 +720,28 @@ class AtAuthServiceImpl implements AtAuthService {
         _logger.severe('Error during onboarding atServer validation: $e');
         retryCount++;
         if (retryCount >= maxRetries) {
-          onboardingStatusStream.add(AtOnboardingStatusError("Unable to validate atServer and atSign for onboarding, error: ${e.toString()}", AtOnboardingStatus.authFailed));
+          onboardingStatusStream.add(AtOnboardingStatusError(
+              "Unable to validate atServer and atSign for onboarding, error: ${e.toString()}",
+              AtOnboardingStatus.authFailed));
         }
         _logger.warning(
             'Attempt $retryCount failed: $e. Retrying... $retryCount/$maxRetries');
         await Future.delayed(retryDelay); // Wait before retrying
       }
     }
+  }
+
+  AtOnboardingStatusEvent completeError(AtOnboardingStatusEvent event,
+      Completer<AtOnboardingStatusEvent> completer) {
+    if (!completer.isCompleted) {
+      completer.completeError(event);
+    }
+    onboardingStatusStream.add(event);
+    return event;
+  }
+
+  void resetAllAtSigns() {
+    keychainAtKeysIo.deleteAllAtSigns();
   }
 }
 

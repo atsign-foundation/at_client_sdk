@@ -9,7 +9,7 @@ class AtOnboardingConstants {
   static String registerPerson = 'register-person';
   static String validatePerson = 'validate-person';
   static String? website;
-  static String apiEndPoint = 'my.atsign.wtf';
+  static String apiEndPoint = 'my.atsign.com';
   static String apiPath = '/api/app/v2/';
   static String package = 'at_onboarding_flutter';
   static String encryptKeys = '_encrypt_keys';

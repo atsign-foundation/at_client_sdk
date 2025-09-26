@@ -52,6 +52,15 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
     return atKeysList.map((e) => e.metadata['atsign'] as String).toList();
   }
 
+  Future<void> deleteAllAtSigns() async {
+    List<AtKeys> atKeysList = await readAll();
+    for (AtKeys atKeys in atKeysList) {
+      String atsign = atKeys.metadata['atsign'] as String;
+      await keychainManager.deleteAtSign(atsign);
+      await deleteEnrollmentStore(atsign);
+    }
+  }
+
 
   // Should we support legacy backup format?
   Future<Map<String, String>> getEncryptedKeys(String atsign) async {

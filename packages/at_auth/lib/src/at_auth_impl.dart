@@ -272,17 +272,17 @@ class AtAuthImpl implements AtAuth {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse =
-          await atEnrollmentBase?.submit(firstEnrollmentRequest, atLookUp!);
+          await atEnrollmentBase.submit(firstEnrollmentRequest, atLookUp!);
     } on AtEnrollmentException catch (e) {
       throw AtAuthenticationException('Enrollment error:${e.toString}');
     }
     _logger.finer('enrollment response: ${atEnrollmentResponse.toString()}');
-    var enrollmentIdFromServer = atEnrollmentResponse?.enrollmentId;
-    var enrollmentStatus = atEnrollmentResponse?.enrollStatus;
+    var enrollmentIdFromServer = atEnrollmentResponse.enrollmentId;
+    var enrollmentStatus = atEnrollmentResponse.enrollStatus;
     if (enrollmentStatus != EnrollmentStatus.approved) {
       throw AtAuthenticationException(
           'initial enrollment is not approved. Status from server: $enrollmentStatus \n with $atEnrollmentResponse');
     }
-    return enrollmentIdFromServer!;
+    return enrollmentIdFromServer;
   }
 }

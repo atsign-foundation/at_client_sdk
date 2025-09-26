@@ -526,20 +526,10 @@ void main() {
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
 
-      AtAuthResponse atAuthResponse =
+      AtOnboardingStatusEvent response =
           await atAuthService.authenticate(atAuthRequest);
 
-      expect(atAuthResponse.isSuccessful, true);
-      expect(atAuthResponse.atSign, atSign);
-      expect(atAuthResponse.atAuthKeys?.apkamPublicKey, atKeys.apkamPublicKey);
-      expect(
-          atAuthResponse.atAuthKeys?.apkamPrivateKey, atKeys.apkamPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey,
-          atKeys.defaultEncryptionPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey,
-          atKeys.defaultEncryptionPublicKey);
-      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey,
-          atKeys.defaultSelfEncryptionKey);
+      expect(response, isA<AtOnboardingStatusSuccess>());
     });
 
     test(
@@ -552,9 +542,9 @@ void main() {
           .thenThrow(AtKeyException('Key not found in keychain'));
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
       atAuthRequest.atKeysIo = atKeysIo;
-      AtAuthResponse atAuthResponse =
+      AtOnboardingStatusEvent response =
           await atAuthService.authenticate(atAuthRequest);
-      expect(atAuthResponse.isSuccessful, false);
+      expect(response, isA<AtOnboardingStatusError>());
     });
 
     test(
@@ -583,21 +573,10 @@ void main() {
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign)..enrollmentId = '123';
       atAuthRequest.atAuthKeys = atKeys;
 
-      AtAuthResponse atAuthResponse =
+      AtOnboardingStatusEvent response =
           await atAuthService.authenticate(atAuthRequest);
 
-      expect(atAuthResponse.isSuccessful, true);
-      expect(atAuthResponse.atSign, atSign);
-      expect(atAuthResponse.enrollmentId, '123');
-      expect(atAuthResponse.atAuthKeys?.apkamPublicKey, atKeys.apkamPublicKey);
-      expect(
-          atAuthResponse.atAuthKeys?.apkamPrivateKey, atKeys.apkamPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPrivateKey,
-          atKeys.defaultEncryptionPrivateKey);
-      expect(atAuthResponse.atAuthKeys?.defaultEncryptionPublicKey,
-          atKeys.defaultEncryptionPublicKey);
-      expect(atAuthResponse.atAuthKeys?.defaultSelfEncryptionKey,
-          atKeys.defaultSelfEncryptionKey);
+      expect(response, isA<AtOnboardingStatusSuccess>());
     });
   });
 }

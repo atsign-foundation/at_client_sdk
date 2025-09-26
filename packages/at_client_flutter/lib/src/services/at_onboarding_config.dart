@@ -1,6 +1,5 @@
 import 'package:at_client_flutter/at_client_flutter.dart' show AtClientPreference;
 import 'package:at_client_flutter/src/services/at_onboarding_tutorial_service.dart';
-import 'package:at_client_flutter/src/utils/at_onboarding_app_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:at_utils/at_logger.dart';
 

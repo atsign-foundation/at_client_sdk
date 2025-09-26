@@ -5,7 +5,6 @@ import 'package:meta/meta.dart';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_cli_commons/at_cli_commons.dart' show getDefaultAtKeysFilePath, getHomeDirectory;
-import 'package:at_auth/src/auth/at_auth_request.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 
@@ -19,14 +18,13 @@ class FileAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
   FutureOr<AtKeys> read(String atSign) async {
     Map<String, dynamic> decodedAtKeysData = {};
     filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
-    AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
     if (filePath != null) {
       if (!File(filePath!).existsSync()) {
         throw AtException('provided keys file does not exist. Please check whether the file path $filePath is valid');
       }
       String atAuthData = await File(filePath!).readAsString();
       decodedAtKeysData = jsonDecode(atAuthData);
-      decodedAtKeysData = await decodeAtKeys(decodedAtKeysData, passPhrase: atAuthRequest.passPhrase);
+      decodedAtKeysData = await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
     } else {
       throw AtException('atKeys filePath is required to read from file');
     }
