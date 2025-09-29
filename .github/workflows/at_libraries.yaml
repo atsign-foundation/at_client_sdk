@@ -104,6 +104,10 @@ jobs:
         working-directory: tests/${{ matrix.package }}
         run: dart run check_docker_readiness.dart
 
+      - name: Sleep for 10 seconds
+        run: sleep 10s
+        shell: bash
+
       # Note that, unlike the functional tests in at_client_sdk, we do not run the pkamLoad
       # job here, since we require all the atSigns to NOT be already onboarded.
 
