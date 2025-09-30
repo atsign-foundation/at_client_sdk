@@ -9,10 +9,15 @@ class AtAuthRequest {
   String atSign;
 
   /// Constructor that takes an @sign as a parameter
-  AtAuthRequest(this.atSign);
+  AtAuthRequest(
+    this.atSign,
+    this.atKeysIo, {
+    this.atAuthKeys,
+    this.rootDomain = const AtRootDomain('root.atsign.org', 64),
+  });
 
   // Controls how the authentication is performed
-  AtKeysIo? atKeysIo;
+  AtKeysIo atKeysIo;
 
   /// The default domain of the root server (e.g. root.atsign.org, 64)
   AtRootDomain rootDomain = AtRootDomain('root.atsign.org', 64);

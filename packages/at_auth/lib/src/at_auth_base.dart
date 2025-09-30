@@ -3,23 +3,25 @@ import 'package:at_auth/src/auth/at_auth_request.dart';
 import 'package:at_auth/src/auth/at_auth_response.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
-import 'package:at_auth/src/enroll/at_enrollment_base.dart';
+import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/onboard/at_onboarding_request.dart';
 import 'package:at_auth/src/onboard/at_onboarding_response.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_progress.dart';
 
 /// Interface for onboarding and authentication to a secondary server of an atsign
 abstract interface class AtAuth {
   AtChops? atChops;
   AtLookUp? atLookUp;
+  Stream<ProgressEvent> get progressStream;
 
   factory AtAuth.create(
       {AtLookUp? atLookUp,
       AtChops? atChops,
       CramAuthenticator? cramAuthenticator,
       PkamAuthenticator? pkamAuthenticator,
-      AtEnrollmentBase? atEnrollmentBase}) {
+      AtEnrollment? atEnrollmentBase}) {
     return AtAuthImpl(
         atLookUp: atLookUp,
         atChops: atChops,

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 /// Requests for an enrollment
@@ -27,10 +26,10 @@ void main(List<String> args) async {
     AtLookUp atLookUp =
         AtLookupImpl(argResults['atsign'], argResults['rootDomain'], 64);
 
-    AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create();
+    AtEnrollment atEnrollmentBase = AtEnrollment.create();
 
     // New app sending enrollment request to server:
-    EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+    AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
         atSign: argResults['atsign'],
         appName: 'buzz',
         deviceName: 'pixel',

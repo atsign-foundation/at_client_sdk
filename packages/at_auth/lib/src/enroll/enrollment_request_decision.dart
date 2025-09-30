@@ -42,11 +42,14 @@ import 'package:at_commons/at_commons.dart';
 /// ```
 class EnrollmentRequestDecision {
   late final String _enrollmentId;
+  late final String _atSign;
   late final String _encryptedAPKAMSymmetricKey;
   late final EnrollOperationEnum _enrollOperationEnum;
   bool force = false;
 
   String get enrollmentId => _enrollmentId;
+
+  String get atSign => _atSign;
 
   String get encryptedAPKAMSymmetricKey => _encryptedAPKAMSymmetricKey;
 
@@ -72,13 +75,16 @@ class EnrollmentRequestDecision {
   ///           EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
   ///               enrollmentId: 'dummy-enrollment-id',
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
-  static EnrollmentRequestDecision approved(
-      ApprovedRequestDecisionBuilder approvedRequestDecisionBuilder) {
+  static EnrollmentRequestDecision approved({
+    required String enrollmentId,
+    required AtBytes apkamSymmetricKey,
+    required String atSign,
+  }) {
     EnrollmentRequestDecision enrollmentRequestDecision =
         EnrollmentRequestDecision._()
-          .._enrollmentId = approvedRequestDecisionBuilder.enrollmentId
-          .._encryptedAPKAMSymmetricKey =
-              approvedRequestDecisionBuilder.encryptedAPKAMSymmetricKey
+          .._enrollmentId = enrollmentId
+          .._atSign = atSign
+          .._encryptedAPKAMSymmetricKey = apkamSymmetricKey.toString()
           .._enrollOperationEnum = EnrollOperationEnum.approve;
 
     return enrollmentRequestDecision;
@@ -89,9 +95,10 @@ class EnrollmentRequestDecision {
   /// ```dart
   ///  EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
   /// ```
-  static EnrollmentRequestDecision denied(String enrollmentId) {
+  static EnrollmentRequestDecision denied(String enrollmentId, String atSign) {
     return EnrollmentRequestDecision._()
       .._enrollmentId = enrollmentId
+      .._atSign = atSign
       .._enrollOperationEnum = EnrollOperationEnum.deny;
   }
 
@@ -106,29 +113,12 @@ class EnrollmentRequestDecision {
   /// ```dart
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('enrollment123', force: false);
   /// ```
-  static EnrollmentRequestDecision revoked(String enrollmentId,
+  static EnrollmentRequestDecision revoked(String enrollmentId, String atSign,
       {bool force = false}) {
     return EnrollmentRequestDecision._()
       .._enrollmentId = enrollmentId
+      .._atSign = atSign
       .._enrollOperationEnum = EnrollOperationEnum.revoke
       ..force = force;
   }
-}
-
-/// The class encapsulates the data required for approving an enrollment.
-///
-/// The enrollmentId is a unique identifier assigned to each enrollment request. This allows identification of individual requests to
-/// perform the enrollment operations.
-///
-/// The encryptedAPKAMSymmetricKey is decrypted using default encryptionPrivateKey. The original APKAMSymmetricKey is used to
-/// encrypt default encryption private key and self encryption key and are sent to the server for the requesting app.
-///
-/// The requesting app, decrypts the encrypted default encryption private key and self encryption key. These keys are used for decryption
-/// of shared data and self data respectively.
-class ApprovedRequestDecisionBuilder {
-  String enrollmentId;
-  String encryptedAPKAMSymmetricKey;
-
-  ApprovedRequestDecisionBuilder(
-      {required this.enrollmentId, required this.encryptedAPKAMSymmetricKey});
 }

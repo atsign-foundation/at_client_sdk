@@ -22,6 +22,7 @@ class AtKeys {
       auth_constants.defaultSelfEncryptionKey: defaultSelfEncryptionKey?.toString(),
       auth_constants.apkamSymmetricKey: apkamSymmetricKey?.toString(),
       'enrollmentId': enrollmentId
+      ///
     };
   }
 

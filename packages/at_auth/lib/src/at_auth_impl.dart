@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:at_auth/src/at_auth_base.dart';
 import 'package:at_auth/src/auth/at_auth_request.dart';
 import 'package:at_auth/src/auth/at_auth_response.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
-import 'package:at_auth/src/enroll/at_enrollment_base.dart';
+import 'package:at_auth/src/enroll/at_enrollment_request.dart';
+import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/at_enrollment_response.dart';
-import 'package:at_auth/src/enroll/first_enrollment_request.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
@@ -13,15 +15,26 @@ import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_auth/src/onboard/at_onboarding_request.dart';
 import 'package:at_auth/src/onboard/at_onboarding_response.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_progress.dart';
 
 class AtAuthImpl implements AtAuth {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
   final String _defaultAppNameForOnboarding = 'firstApp';
   final String _defaultDeviceNameForOnboarding = 'firstDevice';
+  final StreamController<ProgressEvent> _progressController =
+      StreamController<ProgressEvent>.broadcast();
+  Stream<ProgressEvent> get progressStream => _progressController.stream;
+  void _addProgress(String group, String message, ProgressEventType type) {
+    var progressEvent =
+        ProgressEvent(group: group, msg: message, type: type);
+    _progressController.add(progressEvent);
+  }
+
   @override
   AtChops? atChops;
 
@@ -29,7 +42,7 @@ class AtAuthImpl implements AtAuth {
 
   PkamAuthenticator? pkamAuthenticator;
 
-  AtEnrollmentBase atEnrollmentBase;
+  AtEnrollment atEnrollmentBase;
 
   @override
   AtLookUp? atLookUp;
@@ -39,8 +52,8 @@ class AtAuthImpl implements AtAuth {
       this.atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      AtEnrollmentBase? atEnrollmentBase})
-      : atEnrollmentBase = atEnrollmentBase ?? AtEnrollmentBase.create();
+      AtEnrollment? atEnrollmentBase})
+      : atEnrollmentBase = atEnrollmentBase ?? AtEnrollment.create();
 
   @override
 
@@ -57,33 +70,17 @@ class AtAuthImpl implements AtAuth {
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    if (atAuthRequest.atKeysIo == null && atAuthRequest.atAuthKeys == null) {
-      throw AtAuthenticationException(
-          'atKeysIO implementation is required to read keys, either provide atKeysIO implementation'
-          ' or provide atAuthKeys in the AtAuthRequest');
-    }
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    if (atAuthKeys == null && atAuthRequest.atKeysIo != null) {
-      try {
-        atAuthKeys = await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
-      } on AtKeyException catch (e) {
-        throw AtAuthenticationException(
-            'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}');
-      }
-    } else if (atAuthKeys == null) {
+    await _validateAtServerForAuthentication(atAuthRequest);
+    try {
+      atAuthKeys ??= await atAuthRequest.atKeysIo.read(atAuthRequest.atSign);
+    } on AtKeyException catch (e) {
+      _addProgress("authentication", "Unable to read keys for atSign: ${atAuthRequest.atSign}", ProgressEventType.error);
       throw AtAuthenticationException(
-          'atKeysIO implementation is required to read keys, either provide atKeysIO implementation'
-          ' or provide atAuthKeys in the AtAuthRequest');
+          'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}');
     }
-    if (atAuthKeys.apkamPrivateKey == null ||
-        atAuthKeys.apkamPrivateKey!.toString().isEmpty) {
-      throw AtPrivateKeyNotFoundException(
-          'apkamPrivateKey is null or empty in atAuthKeys');
-    }
-    var enrollmentIdFromRequest = atAuthRequest.enrollmentId;
-    enrollmentIdFromRequest ??= atAuthKeys.enrollmentId;
-
-    atAuthKeys.enrollmentId = enrollmentIdFromRequest;
+    atAuthKeys.enrollmentId =
+        atAuthRequest.enrollmentId ?? atAuthKeys.enrollmentId;
     atLookUp ??= AtLookupImpl(atAuthRequest.atSign,
         atAuthRequest.rootDomain.rootDomain, atAuthRequest.rootDomain.rootPort);
     // ??= to support mocking
@@ -91,25 +88,22 @@ class AtAuthImpl implements AtAuth {
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');
-    var isPkamAuthenticated = false;
     pkamAuthenticator ??= PkamAuthenticator(atAuthRequest.atSign, atLookUp!);
+    AtAuthResponse pkamResponse;
     try {
-      var pkamResponse = (await pkamAuthenticator!
-          .authenticate(enrollmentId: enrollmentIdFromRequest));
-      isPkamAuthenticated = pkamResponse.isSuccessful;
-    } on AtException catch (e) {
-      _logger.severe('Caught $e');
-      throw AtAuthenticationException(
-          'Unable to authenticate | Cause: ${e.message}');
-    } on Exception catch (e) {
+      pkamResponse = (await pkamAuthenticator!
+          .authenticate(enrollmentId: atAuthKeys.enrollmentId));
+      pkamResponse.atAuthKeys = atAuthKeys;
+    } catch (e) {
+      _addProgress("authentication", "PKAM authentication failed for atSign: ${atAuthRequest.atSign}", ProgressEventType.error);
       throw AtAuthenticationException('Unable to authenticate | Cause: $e');
     }
-    _logger.finer(
-        'PKAM auth result: ${isPkamAuthenticated ? 'success' : 'failed'}');
-    return AtAuthResponse(atAuthRequest.atSign)
-      ..isSuccessful = isPkamAuthenticated
-      ..enrollmentId = enrollmentIdFromRequest
-      ..atAuthKeys = atAuthKeys;
+    if (!pkamResponse.isSuccessful) {
+      _addProgress("authentication", "PKAM authentication failed for atSign: ${atAuthRequest.atSign}", ProgressEventType.error);
+    }else{
+      _addProgress("authentication", "PKAM authentication successful for atSign: ${atAuthRequest.atSign}", ProgressEventType.success);
+    }
+    return pkamResponse;
   }
 
   /// Keep some state so callers can call [completeActivation] later
@@ -123,19 +117,30 @@ class AtAuthImpl implements AtAuth {
     bool autoCompleteActivation = true,
     String? publicKeyId,
   }) async {
-    _atOnboardingRequest = atOnboardingRequest;
-    var atKeysIo = atOnboardingRequest.atKeysIo;
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
     atLookUp ??= AtLookupImpl(
-        atOnboardingRequest.atSign,
-        atOnboardingRequest.rootDomain.rootDomain,
-        atOnboardingRequest.rootDomain.rootPort);
+      atOnboardingRequest.atSign,
+      atOnboardingRequest.rootDomain.rootDomain,
+      atOnboardingRequest.rootDomain.rootPort,
+    );
 
+    //If the user is providing atKeysIo, they might be onboarding via key file (qr code etc)
+    try {
+      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
+          _atOnboardingRequest
+              .atSign); //otherwise, we'll check the keychain, maybe it exists already
+    } catch (e, s) {
+      _logger.info(
+          'Failed to read keys for atSign: ${_atOnboardingRequest.atSign} | Cause: $e',
+          s); //swallow the error, we just want to know if keys exist or not
+    }
+    await _validateAtServerForOnboarding(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??=
         CramAuthenticator(atOnboardingRequest.atSign, cramSecret, atLookUp);
     var cramAuthResult = await cramAuthenticator!.authenticate();
     if (!cramAuthResult.isSuccessful) {
+      _addProgress("onboarding", "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.error);
       throw AtAuthenticationException(
           'Cram authentication failed. Please check the cram key'
           ' and try again (or) contact support@atsign.com');
@@ -144,6 +149,7 @@ class AtAuthImpl implements AtAuth {
     if (atOnboardingRequest.atKeys != null) {
       _atAuthKeys = atOnboardingRequest.atKeys!;
     } else {
+      var atKeysIo = atOnboardingRequest.atKeysIo;
       switch (atKeysIo) {
         // case GeneratedAtKeysIo():
         //   if (publicKeyId == null || publicKeyId.isEmpty) {
@@ -197,9 +203,11 @@ class AtAuthImpl implements AtAuth {
           .authenticate(enrollmentId: enrollmentIdFromServer);
       isPkamAuthenticated = pkamResponse.isSuccessful;
     } on UnAuthenticatedException catch (e) {
+      _addProgress("onboarding", "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.error);
       throw AtAuthenticationException('Pkam auth failed - $e ');
     }
     if (!isPkamAuthenticated) {
+      _addProgress("onboarding", "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.error);
       throw AtAuthenticationException('Pkam auth returned false');
     }
 
@@ -213,7 +221,7 @@ class AtAuthImpl implements AtAuth {
     atOnboardingResponse.isSuccessful = true;
     atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
     atOnboardingResponse.atAuthKeys = _atAuthKeys;
-
+    _addProgress("onboarding", "Onboarding successful for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.success);
     return atOnboardingResponse;
   }
 
@@ -284,5 +292,82 @@ class AtAuthImpl implements AtAuth {
           'initial enrollment is not approved. Status from server: $enrollmentStatus \n with $atEnrollmentResponse');
     }
     return enrollmentIdFromServer;
+  }
+
+  Future<void> _validateAtServerForOnboarding(
+      AtOnboardingRequest atOnboardingRequest) async {
+    AtServerStatus status = AtStatusImpl(
+        rootUrl: atOnboardingRequest.rootDomain.rootDomain,
+        rootPort: atOnboardingRequest.rootDomain.rootPort);
+    int retryCount = 1;
+    const int maxRetries = 10;
+    const Duration retryDelay = Duration(seconds: 3);
+
+    while (retryCount < maxRetries) {
+      try {
+        var atStatus = await status.get(atOnboardingRequest.atSign);
+        if (atStatus.rootStatus != RootStatus.found) {
+          throw AtException(
+              'Could not find root server: ${atOnboardingRequest.rootDomain.rootDomain}');
+        }
+        if (atStatus.atSignStatus == AtSignStatus.activated) {
+          throw AtException(
+              'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.');
+        }
+        break; // Exit loop if no exception occurs
+      } catch (e) {
+        _logger.severe('Error during onboarding atServer validation: $e');
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          throw AtException(
+              'Max retries reached while validating atSign server for onboarding. Last error: $e');
+        }
+        _logger.warning(
+            'Attempt $retryCount failed: $e. Retrying... $retryCount/$maxRetries');
+        await Future.delayed(retryDelay); // Wait before retrying
+      }
+    }
+  }
+
+  Future<void> _validateAtServerForAuthentication(
+      AtAuthRequest atAuthRequest) async {
+    AtServerStatus status = AtStatusImpl(
+        rootUrl: atAuthRequest.rootDomain.rootDomain,
+        rootPort: atAuthRequest.rootDomain.rootPort);
+    int retryCount = 1;
+    const int maxRetries = 10;
+    const Duration retryDelay = Duration(seconds: 3);
+
+    while (retryCount < maxRetries) {
+      try {
+        var atStatus = await status.get(atAuthRequest.atSign);
+        if (atStatus.rootStatus == RootStatus.notFound ||
+            atStatus.rootStatus == RootStatus.error) {
+          throw AtException(
+              'Could not find root server: ${atAuthRequest.rootDomain.rootDomain}');
+        }
+        if (atStatus.atSignStatus == AtSignStatus.notFound ||
+            atStatus.atSignStatus == AtSignStatus.teapot) {
+          throw AtException(
+              'atSign: ${atAuthRequest.atSign} has not been onboarded. Cannot perform Authentication.');
+        }
+        if (atStatus.serverStatus == ServerStatus.stopped ||
+            atStatus.serverStatus == ServerStatus.error) {
+          throw AtException(
+              'atSign: ${atAuthRequest.atSign} server is not running. Cannot perform Authentication.');
+        }
+        break; // Exit loop if no exception occurs
+      } catch (e) {
+        _logger.severe('Error during onboarding atServer validation: $e');
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          throw AtException(
+              'Max retries reached while validating atSign server for onboarding. Last error: $e');
+        }
+        _logger.warning(
+            'Attempt $retryCount failed: $e. Retrying... $retryCount/$maxRetries');
+        await Future.delayed(retryDelay); // Wait before retrying
+      }
+    }
   }
 }

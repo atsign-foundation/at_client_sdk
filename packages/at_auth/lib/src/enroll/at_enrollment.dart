@@ -1,14 +1,17 @@
+import 'dart:async';
+
+import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
-import 'package:at_auth/src/enroll/at_enrollment_response.dart';
-import 'package:at_auth/src/enroll/base_enrollment_request.dart';
-import 'package:at_auth/src/enroll/enrollment_request_decision.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_progress.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
-abstract class AtEnrollmentBase {
-  factory AtEnrollmentBase.create() {
+abstract class AtEnrollment {
+  factory AtEnrollment.create() {
     return AtEnrollmentImpl();
   }
+
+  Stream<ProgressEvent> get progressStream;
 
   /// Submits an enrollment request.
   ///
@@ -64,7 +67,7 @@ abstract class AtEnrollmentBase {
   /// result of the enrollment.
   ///
   Future<AtEnrollmentResponse> submit(
-      BaseEnrollmentRequest baseEnrollmentRequest, AtLookUp atLookUp);
+      EnrollmentRequest enrollmentRequest, AtLookUp atLookUp);
 
   /// Approves an enrollment request.
   ///
@@ -136,4 +139,31 @@ abstract class AtEnrollmentBase {
   /// ```
   Future<AtEnrollmentResponse> revoke(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+
+  ///Awaits for approval/deny of an enrollment request at regular intervals.
+  /// The polling continues until a final status is received or the maximum number of retries is reached.
+  ///The [logProgress] parameter, when set to true, enables logging of the progress during the polling process.
+  /// The [maxRetries] parameter specifies the maximum number of polling attempts before giving up.
+  /// The [retryInterval] parameter defines the duration to wait between each polling attempt.
+  ///
+  /// ```dart
+  /// AtEnrollment atEnrollment = AtEnrollment.create();
+  ///
+  /// AtEnrollmentResponse? atEnrollmentResponse =
+  ///         await atEnrollmentBase?.submit(dummyEnrollmentRequest, atLookUp!);
+  ///
+  /// try{
+  ///   await atEnrollment.waitForApproval(
+  ///     enrollmentResponse: atEnrollmentResponse!,
+  ///   );
+  /// }catch{
+  ///   // Handle errors
+  /// }
+  /// ```
+  Future<void> waitForApproval(
+    AtEnrollmentResponse enrollmentResponse, {
+    bool logProgress = false,
+    int maxRetries = 48,
+    Duration retryInterval = const Duration(minutes: 1),
+  });
 }
