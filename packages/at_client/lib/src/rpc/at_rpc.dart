@@ -40,6 +40,8 @@ class AtRpcClient implements AtRpcCallbacks {
       callbacks: this,
       allowList: {},
       allowAll: false,
+      isClient: true,
+      isServer: false,
     );
     rpc.start();
   }
