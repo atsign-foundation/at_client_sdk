@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeys;
-import 'package:at_client_flutter/src/at_client_data.dart';
-import 'package:at_client_flutter/src/keychain/keychain_storage.dart' show KeyChainStorage;
+import 'package:at_client_flutter/src/keychain/at_client_data.dart';
+import 'package:at_client_flutter/src/keychain/keychain_storage.dart'
+    show KeyChainStorage;
 import 'package:at_utils/at_logger.dart';
-import 'package:biometric_storage/biometric_storage.dart';
 
 const String enrollmentInfoKey = 'enrollmentInfo';
 
@@ -16,15 +15,8 @@ class KeyChainManager {
   static final _logger = AtSignLogger('KeyChainManager');
   KeyChainStorage keyChainStorage;
 
-  KeyChainManager._internal({KeyChainStorage? keyChain}) : keyChainStorage = keyChain ?? KeyChainStorage();
-
-  factory KeyChainManager({KeyChainStorage? keyChainStorage}) {
-    if (Platform.isWindows) {
-      // ignore: undefined_method
-      Win32BiometricStoragePlugin.registerWith();
-    }
-    return KeyChainManager._internal(keyChain: keyChainStorage);
-  }
+  KeyChainManager({KeyChainStorage? keyChainStorage})
+      : keyChainStorage = keyChainStorage ?? KeyChainStorage();
 
   /// Check app allow sharing atsign or not
   /// @returns 'null' if not define yet
@@ -35,7 +27,8 @@ class KeyChainManager {
   Future<void> initialSetup({required bool useSharedStorage}) async {
     if (useSharedStorage) {
       //Init shared storage if it not exiting
-      final data = await keyChainStorage.readAtClientData(useSharedStorage: true);
+      final data =
+          await keyChainStorage.readAtClientData(useSharedStorage: true);
       if (data == null) {
         keyChainStorage.saveAtClientData(
           data: AtClientData(
@@ -74,23 +67,30 @@ class KeyChainManager {
 
   /// Function to get all atsign item in keychain
   Future<List<AtKeys>> getAllAtSigns() async {
-    final atClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final atClientData =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    final data = await keyChainStorage.readAtClientData(useSharedStorage: useSharedStorage);
+    final data = await keyChainStorage.readAtClientData(
+        useSharedStorage: useSharedStorage);
     return data?.keys ?? [];
   }
 
   /// Function to add a new atsign to keychain
   Future<bool> putAtSign({required AtKeys atKeys}) async {
-    final internalAtClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
-    final useSharedStorage = internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData = await keyChainStorage.readAtClientData(useSharedStorage: useSharedStorage);
+    final internalAtClientData =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final useSharedStorage =
+        internalAtClientData?.config?.useSharedStorage ?? false;
+    final atClientData = await keyChainStorage.readAtClientData(
+        useSharedStorage: useSharedStorage);
     try {
       if (atClientData != null) {
         final atSigns = atClientData.keys;
-        atSigns.removeWhere((element) => element.metadata['atsign'] == atKeys.metadata['atsign']);
+        atSigns.removeWhere((element) =>
+            element.metadata['atsign'] == atKeys.metadata['atsign']);
         atSigns.add(atKeys);
-        await keyChainStorage.saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
+        await keyChainStorage.saveAtClientData(
+            data: atClientData, useSharedStorage: useSharedStorage);
         return true;
       }
     } catch (e, s) {
@@ -102,21 +102,26 @@ class KeyChainManager {
 
   /// Function to add new atsigns to keychain
   Future<bool> putAllAtSigns({required List<AtKeys> atSigns}) async {
-    final internalAtClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
-    final useSharedStorage = internalAtClientData?.config?.useSharedStorage ?? false;
-    final atClientData = await keyChainStorage.readAtClientData(useSharedStorage: useSharedStorage);
+    final internalAtClientData =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final useSharedStorage =
+        internalAtClientData?.config?.useSharedStorage ?? false;
+    final atClientData = await keyChainStorage.readAtClientData(
+        useSharedStorage: useSharedStorage);
     try {
       if (atClientData != null) {
         final oldAtSigns = atClientData.keys;
         //If have no account => make this account is default
         for (var atsign in atSigns) {
           if (atsign.metadata.containsKey('atsign')) {
-            oldAtSigns.removeWhere((element) => element.metadata['atsign'] == atsign.metadata['atsign']);
+            oldAtSigns.removeWhere((element) =>
+                element.metadata['atsign'] == atsign.metadata['atsign']);
             oldAtSigns.add(atsign);
           }
         }
         final newAtClientData = atClientData.copyWith(keys: oldAtSigns);
-        await keyChainStorage.saveAtClientData(data: newAtClientData, useSharedStorage: useSharedStorage);
+        await keyChainStorage.saveAtClientData(
+            data: newAtClientData, useSharedStorage: useSharedStorage);
         return true;
       }
     } catch (e, s) {
@@ -128,10 +133,14 @@ class KeyChainManager {
 
   /// Function to get default atsign from keychain
   Future<String?> getDefaultAtSign() async {
-    final atClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final atClientData =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
     final defaultAtsign = atClientData?.defaultAtsign;
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    final atsignKeys = (await keyChainStorage.readAtClientData(useSharedStorage: useSharedStorage))?.keys ?? [];
+    final atsignKeys = (await keyChainStorage.readAtClientData(
+                useSharedStorage: useSharedStorage))
+            ?.keys ??
+        [];
     for (var element in atsignKeys) {
       if (element.metadata.containsKey('atsign')) {
         if (element.metadata['atsign'] == defaultAtsign) {
@@ -145,10 +154,12 @@ class KeyChainManager {
 
   /// Function to make the atsign passed as primary
   Future<bool> setDefaultAtSign(String atsign) async {
-    final atClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final atClientData =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
     if (atClientData != null) {
       atClientData.defaultAtsign = atsign;
-      await keyChainStorage.saveAtClientData(data: atClientData, useSharedStorage: false);
+      await keyChainStorage.saveAtClientData(
+          data: atClientData, useSharedStorage: false);
       return true;
     } else {
       return false;
@@ -157,11 +168,14 @@ class KeyChainManager {
 
   /// Function to remove an atsign from list of atsigns and hence, from keychain
   Future<bool> deleteAtSign(String atsign) async {
-    final atClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final atClientData =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
     final useSharedStorage = atClientData?.config?.useSharedStorage ?? false;
-    atClientData?.keys.removeWhere((element) => element.metadata['atsign'] == atsign);
+    atClientData?.keys
+        .removeWhere((element) => element.metadata['atsign'] == atsign);
     if (atClientData != null) {
-      await keyChainStorage.saveAtClientData(data: atClientData, useSharedStorage: useSharedStorage);
+      await keyChainStorage.saveAtClientData(
+          data: atClientData, useSharedStorage: useSharedStorage);
       return true;
     } else {
       return false;
@@ -178,33 +192,44 @@ class KeyChainManager {
     AtClientData? atClientData;
 
     final useSharedStorage =
-        (await keyChainStorage.readAtClientData(useSharedStorage: false))?.config?.useSharedStorage;
+        (await keyChainStorage.readAtClientData(useSharedStorage: false))
+            ?.config
+            ?.useSharedStorage;
 
     if (useSharedStorage == true) {
-      final atClientDataShared = await keyChainStorage.readAtClientData(useSharedStorage: true);
+      final atClientDataShared =
+          await keyChainStorage.readAtClientData(useSharedStorage: true);
 
-      atClientDataShared?.keys.removeWhere((element) => element.metadata['atsign'] == atsign);
+      atClientDataShared?.keys
+          .removeWhere((element) => element.metadata['atsign'] == atsign);
 
-      atClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
+      atClientData =
+          await keyChainStorage.readAtClientData(useSharedStorage: false);
 
-      atClientData?.keys.removeWhere((element) => element.metadata['atsign'] == atsign);
+      atClientData?.keys
+          .removeWhere((element) => element.metadata['atsign'] == atsign);
 
       if (atClientData != null && atClientDataShared != null) {
-        await keyChainStorage.saveAtClientData(data: atClientData, useSharedStorage: false);
+        await keyChainStorage.saveAtClientData(
+            data: atClientData, useSharedStorage: false);
 
-        await keyChainStorage.saveAtClientData(data: atClientDataShared, useSharedStorage: true);
+        await keyChainStorage.saveAtClientData(
+            data: atClientDataShared, useSharedStorage: true);
 
         return true;
       } else {
         return false;
       }
     } else {
-      atClientData = await keyChainStorage.readAtClientData(useSharedStorage: false);
+      atClientData =
+          await keyChainStorage.readAtClientData(useSharedStorage: false);
 
-      atClientData?.keys.removeWhere((element) => element.metadata['atsign'] == atsign);
+      atClientData?.keys
+          .removeWhere((element) => element.metadata['atsign'] == atsign);
 
       if (atClientData != null) {
-        await keyChainStorage.saveAtClientData(data: atClientData, useSharedStorage: false);
+        await keyChainStorage.saveAtClientData(
+            data: atClientData, useSharedStorage: false);
         return true;
       } else {
         return false;
@@ -212,33 +237,22 @@ class KeyChainManager {
     }
   }
 
-  // Enrollment related functions
-  Future<void> writeToEnrollmentStore(String atSign, String data) async {
-    final store = await keyChainStorage.getEnrollmentStorage(atSign);
-    await keyChainStorage.writeDataToStore(store: store, data: data);
-  }
-
-  Future<String?> readFromEnrollmentStore(String atSign) async {
-    final store = await keyChainStorage.getEnrollmentStorage(atSign);
-    return await keyChainStorage.readDataFromStore(store: store);
-  }
-
-  Future<void> deleteEnrollmentStore(String atSign) async {
-    final store = await keyChainStorage.getEnrollmentStorage(atSign);
-    await store.delete();
-  }
-
   /// Change atsign data to internal store
   Future<bool> disableUsingSharedStorage() async {
-    final data = await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final data =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
     if (data != null) {
       if (data.config?.useSharedStorage == false) {
         return false;
       }
       final newConfig = data.config?.copyWith(useSharedStorage: false);
       var newData = data.copyWith(config: newConfig);
-      await keyChainStorage.saveAtClientData(data: newData, useSharedStorage: false);
-      final sharedAtsigns = (await keyChainStorage.readAtClientData(useSharedStorage: true))?.keys ?? [];
+      await keyChainStorage.saveAtClientData(
+          data: newData, useSharedStorage: false);
+      final sharedAtsigns =
+          (await keyChainStorage.readAtClientData(useSharedStorage: true))
+                  ?.keys ??
+              [];
       final result = await putAllAtSigns(atSigns: sharedAtsigns);
       return result;
     }
@@ -248,7 +262,8 @@ class KeyChainManager {
   /// Change atsign data to internal store
   Future<bool> enableUsingSharedStorage() async {
     //Init shared storage if it not exiting
-    final sharedData = await keyChainStorage.readAtClientData(useSharedStorage: true);
+    final sharedData =
+        await keyChainStorage.readAtClientData(useSharedStorage: true);
     if (sharedData == null) {
       await keyChainStorage.saveAtClientData(
         data: AtClientData(
@@ -261,15 +276,18 @@ class KeyChainManager {
       );
     }
     //
-    final data = await keyChainStorage.readAtClientData(useSharedStorage: false);
+    final data =
+        await keyChainStorage.readAtClientData(useSharedStorage: false);
     if (data != null) {
       final newConfig = data.config?.copyWith(useSharedStorage: true);
       var newData = data.copyWith(config: newConfig);
-      await keyChainStorage.saveAtClientData(data: newData, useSharedStorage: false);
+      await keyChainStorage.saveAtClientData(
+          data: newData, useSharedStorage: false);
       final result = await putAllAtSigns(atSigns: data.keys);
       if (result) {
         newData = newData.copyWith(keys: []);
-        await keyChainStorage.saveAtClientData(data: newData, useSharedStorage: false);
+        await keyChainStorage.saveAtClientData(
+            data: newData, useSharedStorage: false);
       }
       return result;
     }

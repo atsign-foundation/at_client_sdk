@@ -18,7 +18,7 @@ class MockBiometricStorage extends Mock implements BiometricStorage {}
 
 class MockAtLookUp extends Mock implements AtLookUp {}
 
-class MockAtEnrollmentBase extends Mock implements AtEnrollmentBase {}
+class MockAtEnrollmentBase extends Mock implements AtEnrollment {}
 
 class MockPackageInfo extends Mock implements PackageInfo {
   fromPlatform() {}
@@ -522,7 +522,8 @@ void main() {
             ..metadata = {'atsign': atSign}));
       AtAuthService atAuthService = AtAuthService.create(
           atClientPreference: atClientPreference,
-          keychainAtKeysIo: mockKeychainAtKeysIo, atLookUp: mockAtLookUp);
+          keychainAtKeysIo: mockKeychainAtKeysIo,
+          atLookUp: mockAtLookUp);
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
 
@@ -568,7 +569,8 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       AtAuthService atAuthService = AtAuthService.create(
           atClientPreference: atClientPreference,
-          atLookUp: mockAtLookup, keychainAtKeysIo: mockKeychainAtKeysIo);
+          atLookUp: mockAtLookup,
+          keychainAtKeysIo: mockKeychainAtKeysIo);
 
       AtAuthRequest atAuthRequest = AtAuthRequest(atSign)..enrollmentId = '123';
       atAuthRequest.atAuthKeys = atKeys;

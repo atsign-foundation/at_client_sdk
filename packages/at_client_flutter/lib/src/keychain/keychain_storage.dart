@@ -1,10 +1,14 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:at_client_flutter/src/at_client_data.dart';
+import 'package:at_client_flutter/src/keychain/at_client_data.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:biometric_storage/biometric_storage.dart'
-    show BiometricStorageFile, BiometricStorage, StorageFileInitOptions;
+    show
+        BiometricStorageFile,
+        BiometricStorage,
+        StorageFileInitOptions,
+        Win32BiometricStoragePlugin;
 import 'package:flutter/cupertino.dart';
 import 'package:package_info_plus/package_info_plus.dart' show PackageInfo;
 
@@ -19,8 +23,15 @@ class KeyChainStorage {
   @visibleForTesting
   BiometricStorage biometricStorage = BiometricStorage();
 
+  KeyChainStorage() {
+    if (Platform.isWindows) {
+      // ignore: undefined_method
+      Win32BiometricStoragePlugin.registerWith();
+    }
+  }
+
   // Functions to interact with AtClientData stored in BiometricStorage
-  
+
   /// Function to read client data
   /// Returns [AtClientData] if successful, null otherwise
   Future<AtClientData?> readAtClientData({
@@ -67,11 +78,7 @@ class KeyChainStorage {
     }
   }
 
-
-
   // Functions to interact with the actual data stored in the BiometricStorage (keychain)
-
-  
 
   /// The function write String data to BiometricStorageFile
   /// If Platform is Windows, data will separated into segments before save. Because in Window, BiometricStorage limit the data length saved
@@ -139,7 +146,6 @@ class KeyChainStorage {
     return null;
   }
 
-
   Future<BiometricStorageFile> _getAppStorage({
     bool useSharedStorage = false,
   }) async {
@@ -152,7 +158,9 @@ class KeyChainStorage {
     }
 
     final data = await biometricStorage.getStorage(
-      useSharedStorage ? '$_kDefaultKeystoreAccount:shared' : '$_kDefaultKeystoreAccount:$packageName',
+      useSharedStorage
+          ? '$_kDefaultKeystoreAccount:shared'
+          : '$_kDefaultKeystoreAccount:$packageName',
       options: StorageFileInitOptions(
         authenticationRequired: false,
       ),

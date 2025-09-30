@@ -2,7 +2,7 @@ import 'package:flutter/services.dart' show MethodChannel, MethodCall;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:at_client_flutter/src/keychain/keychain_storage.dart';
-import 'package:at_client_flutter/src/at_client_data.dart';
+import 'package:at_client_flutter/src/keychain/at_client_data.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockBiometricStorage extends Mock implements BiometricStorage {}

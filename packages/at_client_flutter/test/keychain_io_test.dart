@@ -1,5 +1,5 @@
 import 'package:at_auth/at_auth.dart' show AtKeys;
-import 'package:at_client_flutter/src/at_client_data.dart' show AtClientData;
+import 'package:at_client_flutter/src/keychain/at_client_data.dart' show AtClientData;
 import 'package:at_client_flutter/src/auth_constants.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
