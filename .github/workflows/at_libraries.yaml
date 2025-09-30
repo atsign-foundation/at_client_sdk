@@ -104,7 +104,7 @@ jobs:
         working-directory: tests/${{ matrix.package }}
         run: dart run check_docker_readiness.dart
 
-      - name: Sleep for 10 seconds
+      - name: Sleep for 10 seconds # to allow time for all atSigns to come up
         run: sleep 10s
         shell: bash
 
