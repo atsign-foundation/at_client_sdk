@@ -25,7 +25,7 @@ class NotificationService {
       _requestIOSPermissions();
     }
     initializePlatformSpecifics();
-    _logger.info('initialiazed notification service');
+    _logger.info('initialized notification service');
   }
 
   ///Gets called when user clicks on notification

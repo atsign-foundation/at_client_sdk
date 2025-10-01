@@ -21,7 +21,7 @@ class NotificationService {
       _requestIOSPermissions();
     }
     initializePlatformSpecifics();
-    print('initialiazed notification service');
+    print('initialized notification service');
   }
 
   setOnNotificationClick(Function onNotificationClick) async {
