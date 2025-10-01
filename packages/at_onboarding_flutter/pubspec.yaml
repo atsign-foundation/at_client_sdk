@@ -25,7 +25,7 @@ dependencies:
     sdk: flutter
   http: ^1.2.1
   image: ^4.1.7
-  intl: ^0.19.0
+  intl: ^0.20.2
   path_provider: ^2.1.2
   permission_handler: ^12.0.0
   pin_code_fields: ^8.0.1

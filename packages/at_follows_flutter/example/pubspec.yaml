@@ -26,7 +26,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_keychain: ^2.3.0
-  flutter_local_notifications: ^17.2.2
+  flutter_local_notifications: ^19.0.0
   path_provider: ^2.1.1
 
 dev_dependencies:
