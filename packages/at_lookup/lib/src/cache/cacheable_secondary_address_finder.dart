@@ -13,18 +13,32 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   final Map<String, SecondaryAddressCacheEntry> _map = {};
   final _logger = AtSignLogger('AtServerAddressCacheImpl');
 
-  final String _rootDomain;
-  final int _rootPort;
-  late SecondaryUrlFinder _secondaryFinder;
+  late final SecondaryUrlFinder secondaryFinder;
 
-  CacheableSecondaryAddressFinder(this._rootDomain, this._rootPort,
-      {SecondaryUrlFinder? secondaryFinder, SecureSocketConfig? socketConfig}) {
-    _secondaryFinder = secondaryFinder ??
-        SecondaryUrlFinder(_rootDomain, _rootPort, socketConfig: socketConfig);
+  CacheableSecondaryAddressFinder(
+    String domain,
+    int port, {
+    SecondaryUrlFinder? secondaryFinder,
+    AtLookupSecureSocketFactory? socketFactory,
+    SecureSocketConfig? socketConfig,
+    Proxies? proxies,
+    Duration? createSocketTimeout = AtLookUp.defaultCreateSocketTimeout,
+  }) {
+    this.secondaryFinder = secondaryFinder ??
+        SecondaryUrlFinder(domain, port,
+            socketConfig: socketConfig,
+            createSocketTimeout: createSocketTimeout,
+            proxies: proxies,
+            socketFactory: socketFactory);
   }
 
   bool cacheContains(String atSign) {
     return _map.containsKey(stripAtSignFromAtSign(atSign));
+  }
+
+  /// Clears the cache
+  void clear() {
+    _map.clear();
   }
 
   /// Returns the expiry time of this entry in millisecondsSinceEpoch, or null if this atSign is not in cache
@@ -88,7 +102,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
 
   Future<void> _updateCache(String atSign, Duration cacheFor) async {
     try {
-      String? secondaryUrl = await _secondaryFinder.findSecondaryUrl(atSign);
+      String? secondaryUrl = await secondaryFinder.findSecondaryUrl(atSign);
       if (secondaryUrl == null ||
           secondaryUrl.isEmpty ||
           secondaryUrl == 'data:null') {
@@ -130,16 +144,26 @@ class SecondaryAddressCacheEntry {
 /// (a) how many retries are done, and
 /// (b) the delay before each retry
 class SecondaryUrlFinder {
-  final String _rootDomain;
-  final int _rootPort;
-  late final AtLookupSecureSocketFactory _socketFactory;
-  late final SecureSocketConfig _socketConfig;
+  late final AtRootDomain rootDomain;
+  late final AtLookupSecureSocketFactory socketFactory;
+  late final SecureSocketConfig socketConfig;
+  final Duration? createSocketTimeout;
+  final Proxies? proxies;
 
-  SecondaryUrlFinder(this._rootDomain, this._rootPort,
-      {AtLookupSecureSocketFactory? socketFactory,
-      SecureSocketConfig? socketConfig}) {
-    _socketFactory = socketFactory ?? AtLookupSecureSocketFactory();
-    _socketConfig = socketConfig ?? SecureSocketConfig();
+  /// Set when we fall back to a proxy
+  SecondaryAddress? fallback;
+
+  SecondaryUrlFinder(
+    String domain,
+    int port, {
+    AtLookupSecureSocketFactory? socketFactory,
+    SecureSocketConfig? socketConfig,
+    this.createSocketTimeout = AtLookUp.defaultCreateSocketTimeout,
+    this.proxies,
+  }) {
+    this.socketFactory = socketFactory ?? AtLookupSecureSocketFactory();
+    this.socketConfig = socketConfig ?? SecureSocketConfig();
+    rootDomain = AtRootDomain(domain, port);
   }
 
   final _logger = AtSignLogger('AtServerUrlFinder');
@@ -150,13 +174,18 @@ class SecondaryUrlFinder {
   static List<int> retryDelaysMillis = [50, 100, 150, 200];
 
   Future<String?> findSecondaryUrl(String atSign) async {
-    if (_rootDomain.startsWith("proxy:")) {
+    if (rootDomain.isProxyAddress) {
       // In order to make it easy for clients to connect to a reverse proxy
       // instead of doing a root lookup,  we adopt the convention that:
       // if the rootDomain starts with 'proxy:'
       // then the secondary domain name will be deemed to be the portion of rootDomain after 'proxy:'
       // and the secondary port will be deemed to be the rootPort
-      return '${_rootDomain.substring("proxy:".length)}:$_rootPort';
+      return rootDomain.address;
+    }
+    // Once we've fallen back to a proxy, continue to do so.
+    if (fallback != null) {
+      _logger.info('Returning proxy $fallback as we have already fallen back');
+      return fallback!.toString();
     }
     String? address;
     String lastExceptionMsg = '';
@@ -171,8 +200,19 @@ class SecondaryUrlFinder {
               ' : will retry in ${retryDelaysMillis[i]} milliseconds');
           await Future.delayed(Duration(milliseconds: retryDelaysMillis[i]));
           continue;
+        } else {
+          // We've failed repeatedly - let's fall back to a proxy if we can
+          if (proxies != null) {
+            _logger.warning(
+                'findAtServer for $atSign: Repeated failures connecting to atDirectory: $e');
+            fallback = proxies!.next();
+            _logger.warning(
+                'findAtServer for $atSign: Falling back to using proxy $fallback');
+            return fallback.toString();
+          }
         }
-        _logger.severe('findAtServer for $atSign : $e');
+        _logger.severe('findAtServer for $atSign :'
+            ' Repeated failures connecting to atDirectory: $e');
         if (e is RootServerConnectivityException) {
           rethrow;
         }
@@ -193,11 +233,32 @@ class SecondaryUrlFinder {
       var prompt = false;
       var once = true;
 
-      socket = await _socketFactory.createSocket(
-        _rootDomain,
-        '$_rootPort',
-        _socketConfig,
-      );
+      try {
+        socket = await socketFactory.createSocket(
+          rootDomain.rootDomain,
+          '${rootDomain.rootPort}',
+          socketConfig,
+          createSocketTimeout: createSocketTimeout,
+        );
+      } on SocketException catch (e) {
+        _logger.finest('Caught $e - checking if this was an OS-level timeout');
+        // See https://github.com/dart-lang/sdk/issues/60161
+        // and https://github.com/dart-lang/sdk/commit/fa3461bfad2f03f179ba653af1e9910067eb89b8
+        // for an explanation of the following code:
+        if (proxies != null &&
+            e.osError != null &&
+            e.osError!.errorCode ==
+                (Platform.isWindows
+                    ? 10060 // WSAETIMEDOUT
+                    : 110)) {
+          _logger
+              .warning('OS timeout connecting to ${rootDomain.address} : $e');
+          fallback = proxies!.next();
+          _logger.warning('Falling back to using proxy $fallback');
+          return fallback.toString();
+        }
+        rethrow;
+      }
       _logger.finer('findAtServerUrl: connection to atDirectory established');
       // listen to the received data event stream
       socket.listen((List<int> event) async {
@@ -240,14 +301,14 @@ class SecondaryUrlFinder {
       socket.destroy();
       throw AtTimeoutException('AtLookup.findAtServer timed out');
     } on Exception catch (exception) {
-      var msg = 'Connecting to $_rootDomain:$_rootPort : $exception';
+      var msg = 'Connecting to ${rootDomain.address} : $exception';
       _logger.severe(msg);
       if (socket != null) {
         socket.destroy();
       }
       throw RootServerConnectivityException(msg);
     } catch (exception, stackTrace) {
-      var msg = 'Connecting to $_rootDomain:$_rootPort : $exception';
+      var msg = 'Connecting to ${rootDomain.address} : $exception';
       _logger.severe(msg);
       _logger.severe(stackTrace);
       if (socket != null) {
