@@ -54,18 +54,37 @@ class AtLookupImpl implements AtLookUp {
 
   AtChops? _atChops;
 
-  AtLookupImpl(String atSign, String rootDomain, int rootPort,
-      {this.privateKey,
-      this.cramSecret,
-      SecondaryAddressFinder? secondaryAddressFinder,
-      SecureSocketConfig? secureSocketConfig,
-      Map<String, dynamic>? clientConfig,
-      AtLookupSecureSocketFactory? secureSocketFactory,
-      AtLookupSecureSocketListenerFactory? socketListenerFactory,
-      AtLookupOutboundConnectionFactory? outboundConnectionFactory}) {
+  AtLookupImpl(
+    String atSign,
+    String rootDomain,
+    int rootPort, {
+    this.privateKey,
+    this.cramSecret,
+
+    /// When not supplied, we construct a [CacheableSecondaryAddressFinder]
+    SecondaryAddressFinder? secondaryAddressFinder,
+
+    /// if [secondaryAddressFinder] not supplied, use these proxies when
+    /// constructing our [CacheableSecondaryAddressFinder]
+    Proxies? proxies,
+
+    /// if [secondaryAddressFinder] not supplied, use this timeout when
+    /// constructing our [CacheableSecondaryAddressFinder]
+    Duration? createSocketTimeout,
+    SecureSocketConfig? secureSocketConfig,
+    Map<String, dynamic>? clientConfig,
+    AtLookupSecureSocketFactory? secureSocketFactory,
+    AtLookupSecureSocketListenerFactory? socketListenerFactory,
+    AtLookupOutboundConnectionFactory? outboundConnectionFactory,
+  }) {
     _currentAtSign = atSign;
     this.secondaryAddressFinder = secondaryAddressFinder ??
-        CacheableSecondaryAddressFinder(rootDomain, rootPort);
+        CacheableSecondaryAddressFinder(
+          rootDomain,
+          rootPort,
+          proxies: proxies,
+          createSocketTimeout: createSocketTimeout,
+        );
     _secureSocketConfig = secureSocketConfig ?? SecureSocketConfig();
     // Stores the client configurations.
     // If client configurations are not available, defaults to empty map
@@ -82,8 +101,11 @@ class AtLookupImpl implements AtLookUp {
       String atsign, String? rootDomain, int rootPort) async {
     // temporary change to preserve backward compatibility and change the callers later on to use
     // SecondaryAddressFinder.findSecondary
-    return (await CacheableSecondaryAddressFinder(rootDomain!, rootPort)
-            .findSecondary(atsign))
+    return (await CacheableSecondaryAddressFinder(
+      rootDomain!,
+      rootPort,
+      proxies: await Proxies.forDirectory(rootDomain),
+    ).findSecondary(atsign))
         .toString();
   }
 

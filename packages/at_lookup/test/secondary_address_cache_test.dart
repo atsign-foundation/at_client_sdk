@@ -14,9 +14,11 @@ import 'at_lookup_test_utils.dart';
 void main() async {
   group('this should be moved to functional tests', () {
     test('look up @cicd1 from root.atsign.wtf:64', () async {
-      var secondaryAddress =
-          await CacheableSecondaryAddressFinder('root.atsign.wtf', 64)
-              .findSecondary('@cicd1');
+      var secondaryAddress = await CacheableSecondaryAddressFinder(
+        'root.atsign.wtf',
+        64,
+        proxies: null,
+      ).findSecondary('@cicd1');
       expect(secondaryAddress.port, isNotNull);
       expect(secondaryAddress.host, isNotNull);
       print(secondaryAddress.toString());
@@ -56,13 +58,20 @@ void main() async {
                 invocation.positionalArguments.first));
       });
 
-      cache = CacheableSecondaryAddressFinder(rootDomain, rootPort,
-          secondaryFinder: mockSecondaryFinder);
+      cache = CacheableSecondaryAddressFinder(
+        rootDomain,
+        rootPort,
+        secondaryFinder: mockSecondaryFinder,
+        proxies: null,
+      );
     });
 
     test('test lookup of @alice on non-existent atDirectory', () async {
-      CacheableSecondaryAddressFinder cache =
-          CacheableSecondaryAddressFinder('root.no.no.no', 64);
+      CacheableSecondaryAddressFinder cache = CacheableSecondaryAddressFinder(
+        'root.no.no.no',
+        64,
+        proxies: null,
+      );
       expect(() async => await cache.findSecondary('@alice'),
           throwsA(predicate((e) => e is RootServerConnectivityException)));
     });
@@ -168,9 +177,12 @@ void main() async {
       mockSocketFactory = MockSecureSocketFactory();
 
       cachingAtServerFinder = CacheableSecondaryAddressFinder(
-          mockAtDirectoryHost, 64,
-          secondaryFinder: SecondaryUrlFinder(mockAtDirectoryHost, 64,
-              socketFactory: mockSocketFactory));
+        mockAtDirectoryHost,
+        64,
+        secondaryFinder: SecondaryUrlFinder(mockAtDirectoryHost, 64,
+            socketFactory: mockSocketFactory),
+        proxies: null,
+      );
 
       numSocketCreateCalls = 0;
       when(() =>
@@ -427,7 +439,11 @@ void main() async {
     late CacheableSecondaryAddressFinder csaf;
 
     setUp(() {
-      csaf = CacheableSecondaryAddressFinder(rootDomain, rootPort);
+      csaf = CacheableSecondaryAddressFinder(
+        rootDomain,
+        rootPort,
+        proxies: null,
+      );
     });
 
     test('test simple lookup for @registeredAtSign1', () async {
