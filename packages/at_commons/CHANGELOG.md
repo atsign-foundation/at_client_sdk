@@ -1,3 +1,7 @@
+## 5.6.2
+
+- feat: add `address` getter to `AtRootDomain`
+
 ## 5.6.1
 
 - chore: fix lint from the new `strict_top_level_inference` rule

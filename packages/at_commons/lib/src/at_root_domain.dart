@@ -49,4 +49,8 @@ class AtRootDomain {
   }
 
   bool get isProxyAddress => rootDomain.startsWith("proxy:");
+
+  String get address => isProxyAddress
+      ? '${rootDomain.substring("proxy:".length)}:$rootPort'
+      : '$rootDomain.$rootPort';
 }
