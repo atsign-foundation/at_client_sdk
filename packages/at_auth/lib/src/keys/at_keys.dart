@@ -17,12 +17,19 @@ class AtKeys {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
       auth_constants.apkamPrivateKey: apkamPrivateKey?.toString(),
-      auth_constants.defaultEncryptionPublicKey: defaultEncryptionPublicKey?.toString(),
-      auth_constants.defaultEncryptionPrivateKey: defaultEncryptionPrivateKey?.toString(),
-      auth_constants.defaultSelfEncryptionKey: defaultSelfEncryptionKey?.toString(),
+      auth_constants.defaultEncryptionPublicKey:
+          defaultEncryptionPublicKey?.toString(),
+      auth_constants.defaultEncryptionPrivateKey:
+          defaultEncryptionPrivateKey?.toString(),
+      auth_constants.defaultSelfEncryptionKey:
+          defaultSelfEncryptionKey?.toString(),
       auth_constants.apkamSymmetricKey: apkamSymmetricKey?.toString(),
-      'enrollmentId': enrollmentId
-      ///
+      'enrollmentId': enrollmentId,
+      'metadata': {
+        for (var entry in metadata.entries)
+          if (!auth_constants.keySchemaList.contains(entry.key))
+            entry.key: entry.value
+      }
     };
   }
 
@@ -31,25 +38,31 @@ class AtKeys {
       ..apkamPublicKey = _existsAndNotNull(json, auth_constants.apkamPublicKey)
           ? AtBytes.fromString(json[auth_constants.apkamPublicKey])
           : null
-      ..apkamPrivateKey = _existsAndNotNull(json, auth_constants.apkamPrivateKey)
-          ? AtBytes.fromString(json[auth_constants.apkamPrivateKey])
-          : null
-      ..defaultEncryptionPublicKey = _existsAndNotNull(json, auth_constants.defaultEncryptionPublicKey)
+      ..apkamPrivateKey =
+          _existsAndNotNull(json, auth_constants.apkamPrivateKey)
+              ? AtBytes.fromString(json[auth_constants.apkamPrivateKey])
+              : null
+      ..defaultEncryptionPublicKey = _existsAndNotNull(
+              json, auth_constants.defaultEncryptionPublicKey)
           ? AtBytes.fromString(json[auth_constants.defaultEncryptionPublicKey])
           : null
-      ..defaultEncryptionPrivateKey = _existsAndNotNull(json, auth_constants.defaultEncryptionPrivateKey)
+      ..defaultEncryptionPrivateKey = _existsAndNotNull(
+              json, auth_constants.defaultEncryptionPrivateKey)
           ? AtBytes.fromString(json[auth_constants.defaultEncryptionPrivateKey])
           : null
-      ..defaultSelfEncryptionKey = _existsAndNotNull(json, auth_constants.defaultSelfEncryptionKey)
+      ..defaultSelfEncryptionKey = _existsAndNotNull(
+              json, auth_constants.defaultSelfEncryptionKey)
           ? AtBytes.fromString(json[auth_constants.defaultSelfEncryptionKey])
           : null
-      ..apkamSymmetricKey = _existsAndNotNull(json, auth_constants.apkamSymmetricKey)
-          ? AtBytes.fromString(json[auth_constants.apkamSymmetricKey])
-          : null
-      ..enrollmentId = _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
+      ..apkamSymmetricKey =
+          _existsAndNotNull(json, auth_constants.apkamSymmetricKey)
+              ? AtBytes.fromString(json[auth_constants.apkamSymmetricKey])
+              : null
+      ..enrollmentId =
+          _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
     for (var entry in json.entries) {
       if (!keys.toJson().containsKey(entry.key)) {
-      keys.metadata[entry.key] = entry.value;
+        keys.metadata[entry.key] = entry.value;
       }
     }
     return keys;
@@ -59,9 +72,12 @@ class AtKeys {
     var keys = AtKeys()
       ..apkamPublicKey = other.apkamPublicKey ?? apkamPublicKey
       ..apkamPrivateKey = other.apkamPrivateKey ?? apkamPrivateKey
-      ..defaultEncryptionPublicKey = other.defaultEncryptionPublicKey ?? defaultEncryptionPublicKey
-      ..defaultEncryptionPrivateKey = other.defaultEncryptionPrivateKey ?? defaultEncryptionPrivateKey
-      ..defaultSelfEncryptionKey = other.defaultSelfEncryptionKey ?? defaultSelfEncryptionKey
+      ..defaultEncryptionPublicKey =
+          other.defaultEncryptionPublicKey ?? defaultEncryptionPublicKey
+      ..defaultEncryptionPrivateKey =
+          other.defaultEncryptionPrivateKey ?? defaultEncryptionPrivateKey
+      ..defaultSelfEncryptionKey =
+          other.defaultSelfEncryptionKey ?? defaultSelfEncryptionKey
       ..apkamSymmetricKey = other.apkamSymmetricKey ?? apkamSymmetricKey
       ..enrollmentId = other.enrollmentId ?? enrollmentId;
     if (other.metadata.isNotEmpty) {

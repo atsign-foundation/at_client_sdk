@@ -98,11 +98,9 @@ void main() {
           (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys'),
+        FileAtKeysIo(filePath: 'test/hello/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
-      atAuthRequest.atKeysIo =
-          FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
 
       expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtException>()));
@@ -117,7 +115,7 @@ void main() {
           (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys'),
+        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
@@ -150,7 +148,7 @@ void main() {
           (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys'),
+        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
@@ -175,7 +173,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys'),
+        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -193,7 +191,7 @@ void main() {
           .thenThrow(AtAuthenticationException('Unauthenticated'));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys'),
+        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 

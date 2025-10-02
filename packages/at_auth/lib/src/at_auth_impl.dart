@@ -28,10 +28,10 @@ class AtAuthImpl implements AtAuth {
   final String _defaultDeviceNameForOnboarding = 'firstDevice';
   final StreamController<ProgressEvent> _progressController =
       StreamController<ProgressEvent>.broadcast();
+  @override
   Stream<ProgressEvent> get progressStream => _progressController.stream;
   void _addProgress(String group, String message, ProgressEventType type) {
-    var progressEvent =
-        ProgressEvent(group: group, msg: message, type: type);
+    var progressEvent = ProgressEvent(group: group, msg: message, type: type);
     _progressController.add(progressEvent);
   }
 
@@ -75,7 +75,10 @@ class AtAuthImpl implements AtAuth {
     try {
       atAuthKeys ??= await atAuthRequest.atKeysIo.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
-      _addProgress("authentication", "Unable to read keys for atSign: ${atAuthRequest.atSign}", ProgressEventType.error);
+      _addProgress(
+          "authentication",
+          "Unable to read keys for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.error);
       throw AtAuthenticationException(
           'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}');
     }
@@ -95,13 +98,22 @@ class AtAuthImpl implements AtAuth {
           .authenticate(enrollmentId: atAuthKeys.enrollmentId));
       pkamResponse.atAuthKeys = atAuthKeys;
     } catch (e) {
-      _addProgress("authentication", "PKAM authentication failed for atSign: ${atAuthRequest.atSign}", ProgressEventType.error);
+      _addProgress(
+          "authentication",
+          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.error);
       throw AtAuthenticationException('Unable to authenticate | Cause: $e');
     }
     if (!pkamResponse.isSuccessful) {
-      _addProgress("authentication", "PKAM authentication failed for atSign: ${atAuthRequest.atSign}", ProgressEventType.error);
-    }else{
-      _addProgress("authentication", "PKAM authentication successful for atSign: ${atAuthRequest.atSign}", ProgressEventType.success);
+      _addProgress(
+          "authentication",
+          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.error);
+    } else {
+      _addProgress(
+          "authentication",
+          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.success);
     }
     return pkamResponse;
   }
@@ -140,7 +152,10 @@ class AtAuthImpl implements AtAuth {
         CramAuthenticator(atOnboardingRequest.atSign, cramSecret, atLookUp);
     var cramAuthResult = await cramAuthenticator!.authenticate();
     if (!cramAuthResult.isSuccessful) {
-      _addProgress("onboarding", "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.error);
+      _addProgress(
+          "onboarding",
+          "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+          ProgressEventType.error);
       throw AtAuthenticationException(
           'Cram authentication failed. Please check the cram key'
           ' and try again (or) contact support@atsign.com');
@@ -203,11 +218,17 @@ class AtAuthImpl implements AtAuth {
           .authenticate(enrollmentId: enrollmentIdFromServer);
       isPkamAuthenticated = pkamResponse.isSuccessful;
     } on UnAuthenticatedException catch (e) {
-      _addProgress("onboarding", "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.error);
+      _addProgress(
+          "onboarding",
+          "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+          ProgressEventType.error);
       throw AtAuthenticationException('Pkam auth failed - $e ');
     }
     if (!isPkamAuthenticated) {
-      _addProgress("onboarding", "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.error);
+      _addProgress(
+          "onboarding",
+          "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+          ProgressEventType.error);
       throw AtAuthenticationException('Pkam auth returned false');
     }
 
@@ -221,7 +242,10 @@ class AtAuthImpl implements AtAuth {
     atOnboardingResponse.isSuccessful = true;
     atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
     atOnboardingResponse.atAuthKeys = _atAuthKeys;
-    _addProgress("onboarding", "Onboarding successful for atSign: ${atOnboardingRequest.atSign}", ProgressEventType.success);
+    _addProgress(
+        "onboarding",
+        "Onboarding successful for atSign: ${atOnboardingRequest.atSign}",
+        ProgressEventType.success);
     return atOnboardingResponse;
   }
 
@@ -246,6 +270,11 @@ class AtAuthImpl implements AtAuth {
   }
 
   AtChops _createAtChops(AtKeys atKeysFile) {
+    if (atKeysFile.apkamPrivateKey == null ||
+        atKeysFile.defaultEncryptionPrivateKey == null) {
+      throw AtPrivateKeyNotFoundException(
+          'AtKeys is missing required keys to create AtChops instance');
+    }
     final atEncryptionKeyPair = AtEncryptionKeyPair.create(
         atKeysFile.defaultEncryptionPublicKey!.toString(),
         atKeysFile.defaultEncryptionPrivateKey!.toString());
