@@ -1,6 +1,10 @@
 import 'package:at_commons/at_commons.dart' show IllegalArgumentException;
 
 class AtRootDomain {
+  static const AtRootDomain atsignDomain = AtRootDomain('root.atsign.org', 64);
+  static const String atsignProxiesUri =
+      'https://raw.githubusercontent.com/atsign-foundation/atsign-foundation.github.io/refs/heads/add-proxies/platform/root.atsign.org/proxies.json';
+
   final String rootDomain;
   final int rootPort;
 
