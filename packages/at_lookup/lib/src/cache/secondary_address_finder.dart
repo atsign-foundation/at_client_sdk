@@ -46,6 +46,9 @@ class Proxies {
     if (addresses.isEmpty) {
       throw ArgumentError('Need at least one proxy');
     }
+    // Shuffle so we get a reasonably random use of proxies from run to run if
+    // we have more than one proxy available.
+    addresses.shuffle();
   }
 
   int _ix = 0;
