@@ -1,7 +1,8 @@
 ## 3.9.0
 
 - fix!: fixed a bug where at_rpc was adding the AtClientPreference's namespace
-  to the notifications used by at_rpc.
+  to the notifications used by at_rpc
+  (https://github.com/atsign-foundation/at_client_sdk/pull/1670).
 
 ## 3.8.0
 
