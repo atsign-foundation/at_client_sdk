@@ -283,7 +283,7 @@ class AtRpc {
   final Metadata _defaultMetaData = Metadata()
     ..isPublic = false
     ..isEncrypted = true
-    ..namespaceAware = false;
+    ..namespaceAware = false; // THIS IS SET TO FALSE FOR A REASON: https://github.com/atsign-foundation/at_client_sdk/pull/1670
 
   /// Not part of API, but visibleForTesting.
   /// Receives 'request' notifications, and
