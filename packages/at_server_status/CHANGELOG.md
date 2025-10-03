@@ -1,3 +1,7 @@
+## 1.2.0
+
+- feat: Take up new fallback-to-proxy feature from at_lookup 3.5.0
+
 ## 1.1.0
 
 - chore(deps): remove unused dependencies

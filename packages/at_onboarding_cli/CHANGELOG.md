@@ -1,3 +1,7 @@
+## 1.16.0
+
+- feat: Take up new fallback-to-proxy feature from at_lookup 3.5.0
+
 ## 1.15.0
 
 - feat: add `--root-server` option to specify root server domain

@@ -1,3 +1,7 @@
+## 3.9.0
+
+- feat: Take up new fallback-to-proxy feature from at_lookup 3.5.0
+
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
