@@ -3,6 +3,8 @@
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
   `getAtKeys` so that apps can ask to fetch directly from atServer rather
   than the local datastore.
+- fix: set `isClient` to true and `isServer` to false in AtRpcClient,
+  enabling same atSign communication of AtRpc clients and servers.
 
 ## 3.7.0
 
