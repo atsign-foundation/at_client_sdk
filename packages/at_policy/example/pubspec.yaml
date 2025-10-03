@@ -7,7 +7,7 @@ environment:
   sdk: ^3.0.6
 
 dependencies:
-  at_policy: ^1.2.0
+  at_policy: ^1.1.0
   at_cli_commons: ^1.2.1
   at_client: ^3.7.0
 
