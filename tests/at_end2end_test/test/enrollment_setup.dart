@@ -46,14 +46,14 @@ void main() {
       expect(atResponse.response, 'ok');
 
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentBase.create();
+      AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           currentAtSign,
           AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
           AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
 
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+      AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
           atSign: currentAtSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
@@ -80,11 +80,13 @@ void main() {
           await AtClientManager.getInstance()
               .atClient
               .enrollmentService
-              ?.approve(EnrollmentRequestDecision.approved(
-                  ApprovedRequestDecisionBuilder(
-                      enrollmentId: atEnrollmentResponse.enrollmentId,
-                      encryptedAPKAMSymmetricKey:
-                          enrollment.encryptedAPKAMSymmetricKey!)));
+              ?.approve(
+                EnrollmentRequestDecision.approved(
+                    enrollmentId: atEnrollmentResponse.enrollmentId,
+                    apkamSymmetricKey: AtBytes.fromString(
+                        enrollment.encryptedAPKAMSymmetricKey!),
+                    atSign: currentAtSign),
+              );
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
@@ -124,7 +126,7 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign);
+      AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign, FileAtKeysIo(filePath: '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys'));
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =

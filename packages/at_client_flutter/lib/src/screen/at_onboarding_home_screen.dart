@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/at_onboarding_status.dart';
-import 'package:at_client_flutter/src/auth_constants.dart';
+import 'package:at_client_flutter/src/keychain/auth_constants.dart';
 import 'package:at_client_flutter/src/localizations/generated/l10n.dart';
 import 'package:at_client_flutter/src/at_onboarding_status.dart';
 import 'package:at_client_flutter/src/screen/at_onboarding_activate_screen.dart';
