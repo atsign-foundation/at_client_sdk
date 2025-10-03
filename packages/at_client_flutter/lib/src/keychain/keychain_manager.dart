@@ -15,8 +15,11 @@ class KeyChainManager {
   static final _logger = AtSignLogger('KeyChainManager');
   KeyChainStorage keyChainStorage;
 
-  KeyChainManager({KeyChainStorage? keyChainStorage})
-      : keyChainStorage = keyChainStorage ?? KeyChainStorage();
+  KeyChainManager(
+      {KeyChainStorage? keyChainStorage, bool useSharedStorage = false})
+      : keyChainStorage = keyChainStorage ?? KeyChainStorage() {
+    initialSetup(useSharedStorage: useSharedStorage);
+  }
 
   /// Check app allow sharing atsign or not
   /// @returns 'null' if not define yet

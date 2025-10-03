@@ -23,11 +23,6 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
     return atsignKey;
   }
 
-  Future<List<AtKeys>> readAll() async {
-    final atsigns = await keychainManager.getAllAtSigns();
-    return atsigns;
-  }
-
   @override
   Future<void> write(String atSign, AtKeys? atKeys) async {
     atKeys ??= await keychainManager.getAtSign(name: atSign) ??
@@ -36,13 +31,5 @@ class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
     atKeys.metadata['hiveSecret'] ??=
         String.fromCharCodes(Hive.generateSecureKey());
     await keychainManager.putAtSign(atKeys: atKeys);
-  }
-
-  Future<void> deleteAllAtSigns() async {
-    List<AtKeys> atKeysList = await readAll();
-    for (AtKeys atKeys in atKeysList) {
-      String atsign = atKeys.metadata['atsign'] as String;
-      await keychainManager.deleteAtSign(atsign);
-    }
   }
 }

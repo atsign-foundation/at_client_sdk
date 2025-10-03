@@ -3,8 +3,14 @@ import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_utils/at_progress.dart';
 
 class AuthService {
-  final AtAuth _atAuth = AtAuth.create();
+  late final AtAuth _atAuth;
+  late final KeychainAtKeysIo _keychainAtKeysIo;
   Stream<ProgressEvent> get progressStream => _atAuth.progressStream;
+
+// DI to allow mocking in tests
+  AuthService({AtAuth? atAuth, KeychainAtKeysIo? keychainAtKeysIo})
+      : _atAuth = atAuth ?? AtAuth.create(),
+        _keychainAtKeysIo = keychainAtKeysIo ?? KeychainAtKeysIo();
 
   Future<AtOnboardingResponse> onboard(
       AtOnboardingRequest request, String cramSecret) async {
@@ -14,8 +20,8 @@ class AuthService {
       // Save the atAuthKeys in keychain if it hasn't already.
       if (atOnboardingResponse.isSuccessful &&
           request.atKeysIo is! KeychainAtKeysIo) {
-        var keychain = KeychainAtKeysIo();
-        await keychain.write(request.atSign, atOnboardingResponse.atAuthKeys);
+        await _keychainAtKeysIo.write(
+            request.atSign, atOnboardingResponse.atAuthKeys);
       }
     } catch (e) {
       rethrow;
@@ -30,8 +36,8 @@ class AuthService {
       // Save the atAuthKeys in keychain if it hasn't already.
       if (atAuthResponse.isSuccessful &&
           atAuthRequest.atKeysIo is! KeychainAtKeysIo) {
-        var keychain = KeychainAtKeysIo();
-        await keychain.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys);
+        await _keychainAtKeysIo.write(
+            atAuthRequest.atSign, atAuthResponse.atAuthKeys);
       }
     } catch (e) {
       rethrow;

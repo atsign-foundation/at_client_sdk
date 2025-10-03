@@ -129,58 +129,5 @@ void main() {
 
       expect(result, 'segment1segment2');
     });
-
-    // when(() => mockBiometricStorage.getStorage('${atSign}_enrollmentInfo', options: any(named: 'options')))
-    //     .thenAnswer((_) async => mockBiometricStorageEnrollmentFile);
-
-    // when(() => mockBiometricStorage.getStorage(any(that: startsWith('@atsigns')), options: any(named: 'options')))
-    //     .thenAnswer(
-    //   (_) async => mockBiometricStorageKeychainFile,
-    // );
-
-    // when(() => mockBiometricStorageKeychainFile.read())
-    //     .thenAnswer((_) => Future.value(mockBiometricStorageKeychainFile.dummyStorageFile['${atSign}_enrollmentInfo']));
-
-    // when(() => mockBiometricStorageKeychainFile.write(any(that: startsWith(''))))
-    //     .thenAnswer((Invocation invocation) async {
-    //   mockBiometricStorageKeychainFile.dummyStorageFile
-    //       .putIfAbsent('${atSign}_enrollmentInfo_keychain', () => invocation.positionalArguments[0]);
-    // });
-
-    // when(() => mockBiometricStorageEnrollmentFile.read()).thenAnswer((_) async {
-    //   String jsonEncodedEnrollmentInfo = await Future.value(jsonEncode(EnrollmentInfo(
-    //       '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-    //       AtKeys()
-    //         ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
-    //         ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
-    //         ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
-    //         ..apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key)
-    //         ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-    //       DateTime.now().microsecondsSinceEpoch,
-    //       {'wavi': 'rw'})));
-
-    //   mockBiometricStorageEnrollmentFile.dummyStorageFile
-    //       .putIfAbsent('${atSign}_enrollmentInfo', () => jsonEncodedEnrollmentInfo);
-
-    //   return jsonEncodedEnrollmentInfo;
-    // });
-
-    // when(() => mockBiometricStorageEnrollmentFile.write(any(that: startsWith('{"enrollmentId"'))))
-    //     .thenAnswer((Invocation invocation) async {
-    //   mockBiometricStorageEnrollmentFile.dummyStorageFile.putIfAbsent(
-    //       jsonEncode(
-    //         EnrollmentInfo(
-    //             '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-    //             AtKeys()
-    //               ..apkamPublicKey = AtBytes.fromString(pkamPublicKey)
-    //               ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKey)
-    //               ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey)
-    //               ..apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key)
-    //               ..enrollmentId = '010ad3dc-02ee-41c6-b74b-c82f5122b181',
-    //             DateTime.now().microsecondsSinceEpoch,
-    //             {'wavi': 'rw'}),
-    //       ),
-    //       () => invocation.positionalArguments[0]);
-    // });
   });
 }
