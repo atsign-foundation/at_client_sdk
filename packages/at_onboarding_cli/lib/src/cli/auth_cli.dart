@@ -1108,6 +1108,7 @@ AtOnboardingPreference prefFromArgResults(ArgResults ar) {
     ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
+    ..proxyFallbackEnabled = ar[AuthCliArgs.argNameProxyFallbackEnabled]
     ..hashingAlgoType =
         HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 }
