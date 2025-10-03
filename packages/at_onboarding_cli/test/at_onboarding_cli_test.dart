@@ -24,7 +24,7 @@ class FakeAtAuthRequest extends Fake implements AtAuthRequest {}
 
 class MockAtClient extends Mock implements AtClient {}
 
-class MockEnrollmentBase extends Mock implements AtEnrollmentBase {}
+class MockEnrollmentBase extends Mock implements AtEnrollment{}
 
 void main() {
   AtSignLogger.root_level = 'INFO';
@@ -88,7 +88,7 @@ void main() {
       registerFallbackValue(FakeAtAuthRequest());
       registerFallbackValue(EnrollVerbBuilder());
       registerFallbackValue(mockAtLookup);
-      registerFallbackValue(EnrollmentRequest(
+      registerFallbackValue(AtEnrollmentRequest(
           atSign: atsign,
           appName: 'appName',
           deviceName: 'deviceName',

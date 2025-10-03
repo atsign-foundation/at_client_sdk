@@ -2,7 +2,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_utils/at_progress.dart';
 import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';

@@ -1,6 +1,5 @@
 import 'package:at_auth/at_auth.dart' show KeyIOMixin, WrittenAtKeysIo, AtKeys;
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:hive/hive.dart' show Hive;
 
 /// Implementation of WrittenAtKeysIo using Keychain storage
@@ -8,7 +7,6 @@ import 'package:hive/hive.dart' show Hive;
 ///
 /// This is the main class to interact with keychain for storing and retrieving AtKeys
 class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
-  @visibleForTesting
   KeyChainManager keychainManager;
   KeychainAtKeysIo({KeyChainManager? keychainManager})
       : keychainManager = keychainManager ?? KeyChainManager();
