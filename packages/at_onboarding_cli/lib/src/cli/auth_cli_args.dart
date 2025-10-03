@@ -148,6 +148,15 @@ class AuthCliArgs {
       hide: true,
     );
 
+    p.addFlag(
+      argNameProxyFallbackEnabled,
+      help: 'If not using a proxy, fallback to a proxy if the atDirectory'
+          ' is unreachable',
+      defaultsTo: true,
+      negatable: true,
+      hide: true,
+    );
+
     for (final c in AuthCliCommand.values) {
       p.addCommand(c.name, createParserForCommand(c));
     }
@@ -295,7 +304,7 @@ class AuthCliArgs {
           ' is unreachable',
       defaultsTo: true,
       negatable: true,
-      hide: true,
+      hide: hide,
     );
     return p;
   }
