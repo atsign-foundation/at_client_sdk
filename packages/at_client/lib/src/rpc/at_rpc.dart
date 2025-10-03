@@ -283,7 +283,7 @@ class AtRpc {
   final Metadata _defaultMetaData = Metadata()
     ..isPublic = false
     ..isEncrypted = true
-    ..namespaceAware = true;
+    ..namespaceAware = false;
 
   /// Not part of API, but visibleForTesting.
   /// Receives 'request' notifications, and
