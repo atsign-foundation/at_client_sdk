@@ -152,6 +152,9 @@ Future<int> wrappedMain(List<String> arguments) async {
     return 0;
   }
 
+  Proxies.proxyFallbackEnabled =
+      topLevelResults[AuthCliArgs.argNameProxyFallbackEnabled];
+
   final AuthCliCommand cliCommand;
   try {
     cliCommand = AuthCliCommand.values.byName(arguments.first);

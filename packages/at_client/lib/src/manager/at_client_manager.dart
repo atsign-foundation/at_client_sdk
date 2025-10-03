@@ -69,12 +69,11 @@ class AtClientManager {
 
     _logger.info("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
+    Proxies.proxyFallbackEnabled = preference.proxyFallbackEnabled;
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
       preference.rootDomain,
       preference.rootPort,
-      proxies: (preference.proxyFallbackEnabled
-          ? await Proxies.forDirectory(preference.rootDomain)
-          : null),
+      proxies: await Proxies.forDirectory(preference.rootDomain),
       createSocketTimeout: preference.createSocketTimeout,
     );
     if (_currentAtClient != null &&

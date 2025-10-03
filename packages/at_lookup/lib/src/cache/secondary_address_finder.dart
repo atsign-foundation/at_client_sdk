@@ -42,6 +42,13 @@ class Proxies {
 
   final List<SecondaryAddress> addresses;
 
+  /// For now, we need a global boolean here, which should be set by
+  /// calling code, in order to ensure that disabling this feature is
+  /// consistently honoured. For example, the at_client package sets this to
+  /// the value of AtClientPreference.proxyFallbackEnabled, and the auth_cli
+  /// sets it to the value specified by the --proxy-fallback-enabled flag
+  static bool proxyFallbackEnabled = true;
+
   Proxies(this.addresses) {
     if (addresses.isEmpty) {
       throw ArgumentError('Need at least one proxy');
@@ -79,6 +86,10 @@ class Proxies {
   /// - ELse if [hostToUriMap] contains this [rootDomain], call [fetchFromUri]
   /// - Else return null
   static Future<Proxies?> forDirectory(String rootDomain) async {
+    if (! proxyFallbackEnabled) {
+      return null;
+    }
+
     if (hostToProxiesMap.containsKey(rootDomain)) {
       return hostToProxiesMap[rootDomain];
     }
