@@ -1,3 +1,8 @@
+## 3.9.0
+
+- fix!: fixed a bug where at_rpc was adding the AtClientPreference's namespace
+  to the notifications used by at_rpc.
+
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
