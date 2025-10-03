@@ -1,6 +1,7 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:meta/meta.dart';
 import 'package:version/version.dart';
 
@@ -38,6 +39,12 @@ class AtClientPreference {
 
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
+
+  /// When true, if the atDirectory is unreachable then we will fall back
+  /// to a proxy server, if configured.
+  ///
+  /// See [Proxies] for more detail.
+  bool proxyFallbackEnabled = true;
 
   /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
   int syncIntervalMins = 10;
@@ -110,6 +117,8 @@ class AtClientPreference {
 
   //hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
+
+  Duration createSocketTimeout = AtLookUp.defaultCreateSocketTimeout;
 }
 
 @Deprecated("Use SyncService")

@@ -41,7 +41,14 @@ class AtClientAuthenticator implements AtClientAuth {
   Future<bool> performInitialAuth(
       String atSign, AtClientPreference atClientPreference) async {
     var atLookupInitialAuth = AtLookupImpl(
-        atSign, atClientPreference.rootDomain, atClientPreference.rootPort);
+      atSign,
+      atClientPreference.rootDomain,
+      atClientPreference.rootPort,
+      proxies: atClientPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(atClientPreference.rootDomain)
+          : null,
+      createSocketTimeout: atClientPreference.createSocketTimeout,
+    );
     // get existing keys from keychain
     final atsign = await _keyChainManager.readAtsign(name: atSign);
     var publicKey = atsign?.pkamPublicKey;
@@ -113,7 +120,7 @@ class AtClientAuthenticator implements AtClientAuth {
         logger.finer('cram secret delete response : $deleteResponse');
       }
     }
-    // Close the connection on atLookupInitalAuth.
+    // Close the connection on atLookupInitialAuth.
     await atLookupInitialAuth.close();
     return true;
   }

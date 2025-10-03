@@ -70,7 +70,13 @@ class AtClientManager {
     _logger.info("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
-        preference.rootDomain, preference.rootPort);
+      preference.rootDomain,
+      preference.rootPort,
+      proxies: (preference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(preference.rootDomain)
+          : null),
+      createSocketTimeout: preference.createSocketTimeout,
+    );
     if (_currentAtClient != null &&
         _currentAtClient?.getCurrentAtSign() == atSign) {
       _logger.info(

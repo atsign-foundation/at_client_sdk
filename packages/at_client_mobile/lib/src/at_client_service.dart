@@ -233,8 +233,8 @@ class AtClientService {
       atChops = createAtChops(decryptedAtKeysMap);
       // Inside "_validateAtKeys", performs PKAM auth using atChops.
       // If PKAM auth fails, UnAuthenticatedException is returned which is handled in the caller method.
-      var isValidAtKeysFile = await _validateAtKeys(atChops, atsign,
-          atClientPreference.rootDomain, atClientPreference.rootPort);
+      var isValidAtKeysFile =
+          await _validateAtKeys(atChops, atsign, atClientPreference);
       if (!isValidAtKeysFile) {
         _logger.severe(
             'Authentication failed. Invalid atKeys file found for the atSign $atsign.');
@@ -329,8 +329,16 @@ class AtClientService {
   /// Performs PKAM auth on the cloud secondary.
   /// If atKeys are valid returns true; else, returns false.
   Future<bool> _validateAtKeys(AtChops atChops, String atSign,
-      String rootServerDomain, int rootServerPort) async {
-    _atLookUp ??= AtLookupImpl(atSign, rootServerDomain, rootServerPort);
+      AtClientPreference atClientPreference) async {
+    _atLookUp ??= AtLookupImpl(
+      atSign,
+      atClientPreference.rootDomain,
+      atClientPreference.rootPort,
+      proxies: atClientPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(atClientPreference.rootDomain)
+          : null,
+      createSocketTimeout: atClientPreference.createSocketTimeout,
+    );
     _atLookUp!.atChops = atChops;
     var isAuthSuccessful = await _atLookUp!.pkamAuthenticate();
     _atLookUp!.close();

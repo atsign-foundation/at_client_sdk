@@ -96,8 +96,12 @@ class AtStatusImpl implements AtServerStatus {
       atStatus.rootStatus = RootStatus.notFound;
     } else {
       // ignore: omit_local_variable_types
-      AtLookupImpl atLookupImpl =
-          AtLookupImpl(atSign!, _rootUrl!, _rootPort!);
+      AtLookupImpl atLookupImpl = AtLookupImpl(
+        atSign!,
+        _rootUrl!,
+        _rootPort!,
+        proxies: await Proxies.forDirectory(_rootUrl!),
+      );
       await atLookupImpl.scan(auth: false).then((keysList) async {
         if (keysList.isNotEmpty) {
           if (keysList.contains(testKey)) {
