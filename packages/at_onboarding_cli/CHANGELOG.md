@@ -1,20 +1,14 @@
-## 1.15.0
-
-- feat: add `--root-server` option to specify root server domain
-- feat: add `--license-key` alias for `--cramkey`
-- chore(deps): at_commons: ^5.6.0
-- chore(deps): args gkc/show-aliases-in-usage dependency override
-
-## 1.14.0
-
-- Added proxy support for: `at_activate onboard --rootServer proxy:<host>:<port>`
-- Added proxy support for: `at_activate enroll --rootServer proxy:<host>:<port>`
-
 ## 1.13.0
 
 - add a warning message before onboarding attempts to cut keys that presents a message explaining importance of backing up keys and prompting the user asking if they understand the risks of not backing up keys
 - made it so that passing `--cramkey` to the `onboard` command will skip the warning message inherently
 - add a `--yes` | `-y` flag to the `onboard` command to skip this warning message
+- Added proxy support for: `at_activate onboard --rootServer proxy:<host>:<port>`
+- Added proxy support for: `at_activate enroll --rootServer proxy:<host>:<port>`
+- feat: add `--root-server` option to specify root server domain
+- feat: add `--license-key` alias for `--cramkey`
+- chore(deps): at_commons: ^5.6.0
+- chore(deps): args gkc/show-aliases-in-usage dependency override
 
 ## 1.12.0
 
