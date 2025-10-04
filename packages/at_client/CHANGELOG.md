@@ -1,9 +1,3 @@
-## 3.9.0
-
-- fix!: fixed a bug where at_rpc was adding the AtClientPreference's namespace
-  to the notifications used by at_rpc
-  (https://github.com/atsign-foundation/at_client_sdk/pull/1670).
-
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
@@ -11,6 +5,9 @@
   than the local datastore.
 - fix: set `isClient` to true and `isServer` to false in AtRpcClient,
   enabling same atSign communication of AtRpc clients and servers.
+- fix!: fixed a bug where at_rpc was adding the AtClientPreference's namespace
+  to the notifications used by at_rpc
+  (https://github.com/atsign-foundation/at_client_sdk/pull/1670).
 
 ## 3.7.0
 
