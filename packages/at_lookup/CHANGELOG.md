@@ -1,3 +1,11 @@
+## 3.5.0
+
+- feat: `CacheableSecondaryAddressFinder` now supports automatic 
+  fallback to proxies if
+  - proxies were supplied at construction time
+  - and we are timing out when connecting to atDirectory
+  - or we've repeatedly failed to connect to it for non-timeout reasons
+
 ## 3.4.1
 
 - fix: revert breaking changes

@@ -257,7 +257,14 @@ class AtAuthServiceImpl implements AtAuthService {
           'Cannot submit new enrollment request until the pending enrollment request is fulfilled');
     }
     _atLookUp ??= AtLookupImpl(
-        _atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
+      _atSign,
+      _atClientPreference.rootDomain,
+      _atClientPreference.rootPort,
+      proxies: _atClientPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(_atClientPreference.rootDomain)
+          : null,
+      createSocketTimeout: _atClientPreference.createSocketTimeout,
+    );
     AtEnrollmentResponse atEnrollmentResponse =
         await atEnrollmentBase.submit(enrollmentRequest, _atLookUp!);
     await _atLookUp?.close();
@@ -373,7 +380,14 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<bool?> _performAPKAMAuthentication(
       EnrollmentInfo enrollmentInfo) async {
     _atLookUp ??= AtLookupImpl(
-        _atSign, _atClientPreference.rootDomain, _atClientPreference.rootPort);
+      _atSign,
+      _atClientPreference.rootDomain,
+      _atClientPreference.rootPort,
+      proxies: _atClientPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(_atClientPreference.rootDomain)
+          : null,
+      createSocketTimeout: _atClientPreference.createSocketTimeout,
+    );
     // Create the AtChops instance with the new APKAM keys to verify if enrollment
     // is approved.
     // If enrollment is approved, then apkam authentication will be successful.

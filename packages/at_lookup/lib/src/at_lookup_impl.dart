@@ -1,4 +1,4 @@
-// ignore_for_file: unused_field, deprecated_member_use_from_same_package
+// ignore_for_file: deprecated_member_use_from_same_package
 
 import 'dart:async';
 import 'dart:convert';
@@ -31,10 +31,6 @@ class AtLookupImpl implements AtLookUp {
 
   late String _currentAtSign;
 
-  late String _rootDomain;
-
-  late int _rootPort;
-
   @Deprecated("privateKey reference is no longer used")
   String? privateKey;
 
@@ -58,20 +54,37 @@ class AtLookupImpl implements AtLookUp {
 
   AtChops? _atChops;
 
-  AtLookupImpl(String atSign, String rootDomain, int rootPort,
-      {this.privateKey,
-      this.cramSecret,
-      SecondaryAddressFinder? secondaryAddressFinder,
-      SecureSocketConfig? secureSocketConfig,
-      Map<String, dynamic>? clientConfig,
-      AtLookupSecureSocketFactory? secureSocketFactory,
-      AtLookupSecureSocketListenerFactory? socketListenerFactory,
-      AtLookupOutboundConnectionFactory? outboundConnectionFactory}) {
+  AtLookupImpl(
+    String atSign,
+    String rootDomain,
+    int rootPort, {
+    this.privateKey,
+    this.cramSecret,
+
+    /// When not supplied, we construct a [CacheableSecondaryAddressFinder]
+    SecondaryAddressFinder? secondaryAddressFinder,
+
+    /// if [secondaryAddressFinder] not supplied, use these proxies when
+    /// constructing our [CacheableSecondaryAddressFinder]
+    Proxies? proxies,
+
+    /// if [secondaryAddressFinder] not supplied, use this timeout when
+    /// constructing our [CacheableSecondaryAddressFinder]
+    Duration? createSocketTimeout,
+    SecureSocketConfig? secureSocketConfig,
+    Map<String, dynamic>? clientConfig,
+    AtLookupSecureSocketFactory? secureSocketFactory,
+    AtLookupSecureSocketListenerFactory? socketListenerFactory,
+    AtLookupOutboundConnectionFactory? outboundConnectionFactory,
+  }) {
     _currentAtSign = atSign;
-    _rootDomain = rootDomain;
-    _rootPort = rootPort;
     this.secondaryAddressFinder = secondaryAddressFinder ??
-        CacheableSecondaryAddressFinder(rootDomain, rootPort);
+        CacheableSecondaryAddressFinder(
+          rootDomain,
+          rootPort,
+          proxies: proxies,
+          createSocketTimeout: createSocketTimeout,
+        );
     _secureSocketConfig = secureSocketConfig ?? SecureSocketConfig();
     // Stores the client configurations.
     // If client configurations are not available, defaults to empty map
@@ -88,8 +101,11 @@ class AtLookupImpl implements AtLookUp {
       String atsign, String? rootDomain, int rootPort) async {
     // temporary change to preserve backward compatibility and change the callers later on to use
     // SecondaryAddressFinder.findSecondary
-    return (await CacheableSecondaryAddressFinder(rootDomain!, rootPort)
-            .findSecondary(atsign))
+    return (await CacheableSecondaryAddressFinder(
+      rootDomain!,
+      rootPort,
+      proxies: await Proxies.forDirectory(rootDomain),
+    ).findSecondary(atsign))
         .toString();
   }
 
@@ -634,8 +650,11 @@ class AtLookupImpl implements AtLookUp {
   Future<bool> createOutBoundConnection(String host, String port,
       String toAtSign, SecureSocketConfig secureSocketConfig) async {
     try {
-      SecureSocket secureSocket =
-          await socketFactory.createSocket(host, port, secureSocketConfig);
+      SecureSocket secureSocket = await socketFactory.createSocket(
+        host,
+        port,
+        secureSocketConfig,
+      );
       _connection =
           outboundConnectionFactory.createOutboundConnection(secureSocket);
       if (outboundConnectionTimeout != null) {
@@ -688,8 +707,17 @@ class AtLookupImpl implements AtLookUp {
 
 class AtLookupSecureSocketFactory {
   Future<SecureSocket> createSocket(
-      String host, String port, SecureSocketConfig socketConfig) async {
-    return await SecureSocketUtil.createSecureSocket(host, port, socketConfig);
+    String host,
+    String port,
+    SecureSocketConfig socketConfig, {
+    Duration? createSocketTimeout = AtLookUp.defaultCreateSocketTimeout,
+  }) async {
+    return await SecureSocketUtil.createSecureSocket(
+      host,
+      port,
+      socketConfig,
+      createSocketTimeout: createSocketTimeout,
+    );
   }
 }
 

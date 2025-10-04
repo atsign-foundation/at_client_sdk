@@ -60,27 +60,33 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   /// Sends from: command if using proxy
   /// [context] - description of the operation for logging (defaults to 'sendFromCommand')
   /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
-  Future<bool> _sendFromCommandIfUsingProxy(AtLookUp atLookUp, {String context = 'sendFromCommand', String? atSign}) async {
+  Future<bool> _sendFromCommandIfUsingProxy(AtLookUp atLookUp,
+      {String context = 'sendFromCommand', String? atSign}) async {
     if (!_isUsingProxy) {
       return false;
     }
 
     String targetAtSign = atSign ?? _atSign;
     try {
-      String? fromResponse = await atLookUp.executeCommand('from:$targetAtSign\n', auth: false);
-      logger.info('$context: from: command successful for $targetAtSign, response: $fromResponse');
+      String? fromResponse =
+          await atLookUp.executeCommand('from:$targetAtSign\n', auth: false);
+      logger.info(
+          '$context: from: command successful for $targetAtSign, response: $fromResponse');
 
       if (fromResponse == null || fromResponse.isEmpty) {
-        logger.warning('$context: from: command returned empty response for $targetAtSign');
+        logger.warning(
+            '$context: from: command returned empty response for $targetAtSign');
         return false;
       }
       if (fromResponse.contains('error:')) {
-        logger.warning('$context: from: command returned error for $targetAtSign: $fromResponse');
+        logger.warning(
+            '$context: from: command returned error for $targetAtSign: $fromResponse');
         return false;
       }
       return true;
     } catch (e) {
-      logger.warning('$context: from: command failed for $targetAtSign: $e - continuing anyway');
+      logger.warning(
+          '$context: from: command failed for $targetAtSign: $e - continuing anyway');
       return false;
     }
   }
@@ -123,6 +129,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _atSign,
       atOnboardingPreference.rootDomain,
       atOnboardingPreference.rootPort,
+      proxies: atOnboardingPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(atOnboardingPreference.rootDomain)
+          : null,
+      createSocketTimeout: atOnboardingPreference.createSocketTimeout,
     );
 
     await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'onboard');
@@ -280,6 +290,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _atSign,
       atOnboardingPreference.rootDomain,
       atOnboardingPreference.rootPort,
+      proxies: atOnboardingPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(atOnboardingPreference.rootDomain)
+          : null,
+      createSocketTimeout: atOnboardingPreference.createSocketTimeout,
     );
 
     EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
@@ -290,8 +304,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    AtLookupImpl atLookUpImpl = AtLookupImpl(
+      _atSign,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+      proxies: atOnboardingPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(atOnboardingPreference.rootDomain)
+          : null,
+      createSocketTimeout: atOnboardingPreference.createSocketTimeout,
+    );
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
@@ -322,6 +343,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _atSign,
       atOnboardingPreference.rootDomain,
       atOnboardingPreference.rootPort,
+      proxies: atOnboardingPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(atOnboardingPreference.rootDomain)
+          : null,
+      createSocketTimeout: atOnboardingPreference.createSocketTimeout,
     );
 
     if (_isUsingProxy) {
@@ -705,21 +730,33 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   @override
   Future<bool> isOnboarded() async {
-
     if (_isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
-      AtLookUp atLookUp = AtLookupImpl(_atSign, atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      AtLookUp atLookUp = AtLookupImpl(
+        _atSign,
+        atOnboardingPreference.rootDomain,
+        atOnboardingPreference.rootPort,
+        proxies: atOnboardingPreference.proxyFallbackEnabled
+            ? await Proxies.forDirectory(atOnboardingPreference.rootDomain)
+            : null,
+        createSocketTimeout: atOnboardingPreference.createSocketTimeout,
+      );
       await _sendFromCommandIfUsingProxy(atLookUp, context: 'isOnboarded');
 
       try {
-        String? pkeyResponse = await _atLookUp!.executeCommand('lookup:publickey$_atSign\n', auth: false);
-        if (pkeyResponse != null && !pkeyResponse.contains('error:') && !pkeyResponse.contains('null') && pkeyResponse.trim().isNotEmpty) {
+        String? pkeyResponse = await _atLookUp!
+            .executeCommand('lookup:publickey$_atSign\n', auth: false);
+        if (pkeyResponse != null &&
+            !pkeyResponse.contains('error:') &&
+            !pkeyResponse.contains('null') &&
+            pkeyResponse.trim().isNotEmpty) {
           _isAtsignOnboarded = true;
           return true;
         }
         return false;
       } catch (e) {
-        logger.info('isOnboarded: lookup failed, trying alternative approach: $e');
+        logger.info(
+            'isOnboarded: lookup failed, trying alternative approach: $e');
         return false;
       }
     } else {
@@ -733,7 +770,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         return false;
       } catch (e) {
         stderr.writeln('${chalk.brightRed('[Error]')} $e');
-        throw AtActivateException('Could not determine atsign activation status: $e',
+        throw AtActivateException(
+            'Could not determine atsign activation status: $e',
             intent: Intent.fetchData);
       }
     }

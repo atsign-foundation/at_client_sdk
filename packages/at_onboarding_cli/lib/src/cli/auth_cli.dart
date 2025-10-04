@@ -31,38 +31,52 @@ void _showPreOnboardingKeyWarning() {
   stdout.writeln();
   stdout.writeln(chalk.yellow('⚠️  IMPORTANT - READ CAREFULLY ⚠️'));
   stdout.writeln();
-  stdout.writeln(chalk.bold('You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
-  stdout.writeln(chalk.bold('It is CRITICAL that you back up these keys to more than one place after onboarding.'));
+  stdout.writeln(chalk.bold(
+      'You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
+  stdout.writeln(chalk.bold(
+      'It is CRITICAL that you back up these keys to more than one place after onboarding.'));
   stdout.writeln();
   stdout.writeln(chalk.red('LOSING ACCESS TO THESE KEYS WILL RESULT IN:'));
-  stdout.writeln('• Loss of ability to authenticate into your atSign\'s atServer');
-  stdout.writeln('• Loss of ability to decrypt any data on your atSign\'s atServer');
-  stdout.writeln('• Loss of data access to any applications/devices that use these keys');
+  stdout.writeln(
+      '• Loss of ability to authenticate into your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of ability to decrypt any data on your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of data access to any applications/devices that use these keys');
   stdout.writeln();
-  stdout.writeln(chalk.bold('If you lose these keys, you will NOT be able to recover your atSign or its data.'));
-  stdout.writeln(chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
-  stdout.writeln(chalk.bold('You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
+  stdout.writeln(chalk.bold(
+      'If you lose these keys, you will NOT be able to recover your atSign or its data.'));
+  stdout.writeln(
+      chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
+  stdout.writeln(chalk.bold(
+      'You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
   stdout.writeln();
   stdout.writeln(chalk.blue('IMPORTANT:'));
-  stdout.writeln('• After onboarding, you MUST back up your .atKeys file to a secure location');
-  stdout.writeln('• Store it in multiple secure locations (cloud storage, external drives, etc.)');
+  stdout.writeln(
+      '• After onboarding, you MUST back up your .atKeys file to a secure location');
+  stdout.writeln(
+      '• Store it in multiple secure locations (cloud storage, external drives, etc.)');
   stdout.writeln('• Keep it safe from unauthorized access');
   stdout.writeln();
-  
+
   while (true) {
-    stdout.write(chalk.blue('[Action Required] ') + chalk.bold('Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
+    stdout.write(chalk.blue('[Action Required] ') +
+        chalk.bold(
+            'Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
     String? response = stdin.readLineSync();
-    
+
     if (response != null) {
       String normalized = response.trim().toLowerCase();
       if (normalized == 'y' || normalized == 'yes') {
         stdout.writeln();
-        stdout.writeln(chalk.green('✓ Acknowledged. Please remember to back up your keys securely!'));
+        stdout.writeln(chalk.green(
+            '✓ Acknowledged. Please remember to back up your keys securely!'));
         stdout.writeln();
         break;
       } else if (normalized == 'n' || normalized == 'no') {
         stdout.writeln();
-        stdout.writeln(chalk.red('Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
+        stdout.writeln(chalk.red(
+            'Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
         exit(0);
       } else {
         stdout.writeln(chalk.yellow('Please enter Y (yes) or N (no).'));
@@ -138,6 +152,9 @@ Future<int> wrappedMain(List<String> arguments) async {
     return 0;
   }
 
+  Proxies.proxyFallbackEnabled =
+      topLevelResults[AuthCliArgs.argNameProxyFallbackEnabled];
+
   final AuthCliCommand cliCommand;
   try {
     cliCommand = AuthCliCommand.values.byName(arguments.first);
@@ -208,8 +225,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.otp:
@@ -225,8 +241,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.interactive:
@@ -238,8 +253,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.list:
@@ -248,8 +262,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.fetch:
@@ -258,8 +271,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.approve:
@@ -268,8 +280,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.auto:
@@ -278,8 +289,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.deny:
@@ -288,8 +298,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.revoke:
@@ -298,8 +307,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.enroll:
@@ -316,8 +324,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.delete:
@@ -326,8 +333,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
     }
   } on ArgumentError catch (e) {
@@ -361,21 +367,17 @@ Future<int> wrappedMain(List<String> arguments) async {
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  
-  // rootServer is now an alias of root-server, ArgParser handles both automatically
-  String rootServer = ar[AuthCliArgs.argNameRootServer];
-  
-  // Parse rootServer using AtRootDomain
-  AtRootDomain rootDomain;
-  try {
-    rootDomain = AtRootDomain.parse(rootServer);
-  } catch (e) {
-    stderr.writeln('Error: Invalid root server domain "$rootServer": $e');
-    exit(1);
-  }
+
+  AtOnboardingPreference atOnboardingPreference = prefFromArgResults(ar);
 
   SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
-      rootDomain.rootDomain, rootDomain.rootPort);
+    atOnboardingPreference.rootDomain,
+    atOnboardingPreference.rootPort,
+    proxies: atOnboardingPreference.proxyFallbackEnabled
+        ? await Proxies.forDirectory(atOnboardingPreference.rootDomain)
+        : null,
+    createSocketTimeout: atOnboardingPreference.createSocketTimeout,
+  );
   try {
     await saf.findSecondary(atSign);
   } on SecondaryNotFoundException {
@@ -390,8 +392,13 @@ Future<int> status(ArgResults ar) async {
   try {
     AtLookUp al = AtLookupImpl(
       atSign,
-      rootDomain.rootDomain,
-      rootDomain.rootPort,
+      atOnboardingPreference.rootDomain,
+      atOnboardingPreference.rootPort,
+      secondaryAddressFinder: saf,
+      proxies: atOnboardingPreference.proxyFallbackEnabled
+          ? await Proxies.forDirectory(atOnboardingPreference.rootDomain)
+          : null,
+      createSocketTimeout: atOnboardingPreference.createSocketTimeout,
     );
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
@@ -425,8 +432,7 @@ Future<int> status(ArgResults ar) async {
 @visibleForTesting
 Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
   svc ??= createOnboardingService(argResults);
-  logger
-      .info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
+  logger.info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
       'Registrar url provided is ${argResults[AuthCliArgs.argNameRegistrarFqdn]}');
 
@@ -442,7 +448,8 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
     }
     // if  -y flag is not used and --cramkey is not provided, show back up key warning message
     // --cramkey implies --yes for backwards compatibility with automation scripts
-    if (!argResults[AuthCliArgs.argNameYes] && !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
+    if (!argResults[AuthCliArgs.argNameYes] &&
+        !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
       _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
@@ -1081,13 +1088,10 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
   stdout.writeln('Server response: $response');
 }
 
-@visibleForTesting
-AtOnboardingService createOnboardingService(ArgResults ar) {
-  String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  
+AtOnboardingPreference prefFromArgResults(ArgResults ar) {
   // rootServer is now an alias of root-server, ArgParser handles both automatically
   String rootServer = ar[AuthCliArgs.argNameRootServer];
-  
+
   // Parse rootServer using AtRootDomain
   AtRootDomain rootDomain;
   try {
@@ -1096,18 +1100,24 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     stderr.writeln('Error: Invalid root server domain "$rootServer": $e');
     throw ArgumentError('Invalid root server domain: $e');
   }
-  
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
+
+  return AtOnboardingPreference()
     ..rootDomain = rootDomain.rootDomain
     ..rootPort = rootDomain.rootPort
     ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
     ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
+    ..proxyFallbackEnabled = ar[AuthCliArgs.argNameProxyFallbackEnabled]
     ..hashingAlgoType =
         HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
+}
 
-  final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
+@visibleForTesting
+AtOnboardingService createOnboardingService(ArgResults ar) {
+  String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
+
+  final impl = AtOnboardingServiceImpl(atSign, prefFromArgResults(ar));
   String lastProgressEventType = '';
   int pad = 10;
   impl.subscribeProgress().listen((pe) {

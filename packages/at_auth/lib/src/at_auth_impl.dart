@@ -72,7 +72,11 @@ class AtAuthImpl implements AtAuth {
           exceptionScenario: ExceptionScenario.invalidValueProvided);
     }
     atLookUp ??= AtLookupImpl(
-        atAuthRequest.atSign, atAuthRequest.rootDomain, atAuthRequest.rootPort);
+      atAuthRequest.atSign,
+      atAuthRequest.rootDomain,
+      atAuthRequest.rootPort,
+      proxies: await Proxies.forDirectory(atAuthRequest.rootDomain),
+    );
     // ??= to support mocking
     atChops ??= _createAtChops(atAuthKeys);
     atLookUp!.atChops = atChops;
@@ -112,8 +116,12 @@ class AtAuthImpl implements AtAuth {
     _atOnboardingRequest = atOnboardingRequest;
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
     atEnrollmentBase = AtEnrollmentImpl(atOnboardingRequest.atSign);
-    atLookUp ??= AtLookupImpl(atOnboardingRequest.atSign,
-        atOnboardingRequest.rootDomain, atOnboardingRequest.rootPort);
+    atLookUp ??= AtLookupImpl(
+      atOnboardingRequest.atSign,
+      atOnboardingRequest.rootDomain,
+      atOnboardingRequest.rootPort,
+      proxies: await Proxies.forDirectory(atOnboardingRequest.rootDomain),
+    );
 
     //1. cram auth
     cramAuthenticator ??=

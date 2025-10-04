@@ -1,3 +1,7 @@
+## 2.5.0
+
+- feat: take up the fallback-to-proxy feature from at_lookup ^3.5.0
+
 ## 2.4.0
 
 - chore(deps): at_commons ^5.5.0

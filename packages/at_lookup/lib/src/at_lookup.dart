@@ -4,6 +4,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 abstract interface class AtLookUp {
+  static const Duration defaultCreateSocketTimeout = Duration(seconds: 10);
+
   /// update
   Future<bool> update(String key, String value,
       {String? sharedWith, Metadata? metadata});

@@ -24,8 +24,12 @@ void main(List<String> args) async {
           mandatory: false,
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
-    AtLookUp atLookUp =
-        AtLookupImpl(argResults['atsign'], argResults['rootDomain'], 64);
+    AtLookUp atLookUp = AtLookupImpl(
+      argResults['atsign'],
+      argResults['rootDomain'],
+      64,
+      proxies: await Proxies.forDirectory(argResults['rootDomain']),
+    );
 
     AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl(argResults['atsign']);
 

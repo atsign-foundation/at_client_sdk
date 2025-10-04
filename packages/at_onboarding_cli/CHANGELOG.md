@@ -1,3 +1,7 @@
+## 1.14.0
+
+- feat: Take up new fallback-to-proxy feature from at_lookup 3.5.0
+
 ## 1.13.0
 
 - add a warning message before onboarding attempts to cut keys that presents a message explaining importance of backing up keys and prompting the user asking if they understand the risks of not backing up keys

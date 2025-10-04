@@ -118,6 +118,7 @@ class AuthCliArgs {
   static const argNameMaxRetries = 'max-retries';
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
   static const argNameYes = 'yes';
+  static const argNameProxyFallbackEnabled = 'proxy-fallback-enabled';
 
   ArgParser get parser {
     return _aap;
@@ -144,6 +145,15 @@ class AuthCliArgs {
       argNameHelp,
       abbr: 'h',
       negatable: false,
+      hide: true,
+    );
+
+    p.addFlag(
+      argNameProxyFallbackEnabled,
+      help: 'If not using a proxy, fallback to a proxy if the atDirectory'
+          ' is unreachable',
+      defaultsTo: true,
+      negatable: true,
       hide: true,
     );
 
@@ -288,6 +298,14 @@ class AuthCliArgs {
         mandatory: false,
         defaultsTo: HashingAlgoType.argon2id.name,
         hide: hide);
+    p.addFlag(
+      argNameProxyFallbackEnabled,
+      help: 'If not using a proxy, fallback to a proxy if the atDirectory'
+          ' is unreachable',
+      defaultsTo: true,
+      negatable: true,
+      hide: hide,
+    );
     return p;
   }
 
