@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:args/args.dart';
 import 'package:at_cli_commons/at_cli_commons.dart';
 import 'package:at_client/at_client.dart';
 
@@ -11,7 +12,7 @@ import 'package:at_client/at_client.dart';
 /// - fetch it back as it is stored
 /// - fetch it back and decrypt it
 Future<void> main(List<String> args) async {
-  final parser = CLIBase.createArgsParser(
+  final ArgParser parser = CLIBase.createArgsParser(
       namespace: 'example', addLegacyRootDomainArg: false);
   try {
     AtClient atClient =
