@@ -1,3 +1,16 @@
+## 3.0.1
+
+- feat: Add support for legacy `-d` option. This will be added to the default
+  CLIBase ArgParser but, if you wish to use `-d` for some other purpose in your
+  program, you may specify `addLegacyRootDomainArg: false` when calling
+  `CLIBase.fromCommandLineArgs` or `CLIBase.createArgsParser`
+- feat: for better balance between backwards compatibility and forward-looking
+  feature, removed the `rootPort` field from CLIBase; instead CLIBase
+  constructor will accept *either* `rootDomain` (a String, backwards compatible)
+  or `atRootDomain` (an AtRootDomain) and will set CLIBase.atRootDomain (an
+  AtRootDomain) accordingly.
+- feat: updated the example programs
+
 ## 3.0.0
 
 - feat!: changed `-d` (root-domain) option to `-r`
