@@ -12,7 +12,6 @@ import 'package:logging/logging.dart';
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
 
-
   static const Set<String> hideableArgs = {
     'key-file',
     'home-dir',
@@ -50,9 +49,10 @@ class CLIBase {
   static ArgParser createArgsParser({
     String? namespace,
     Set<String> hide = const {},
+    bool addLegacyRootDomainArg = true,
   }) {
     int? usageLineLength = stdout.hasTerminal ? stdout.terminalColumns : null;
-    return ArgParser(usageLineLength: usageLineLength)
+    ArgParser p = ArgParser(usageLineLength: usageLineLength)
       ..addFlag('help', negatable: false, help: 'Usage instructions')
       ..addOption('atsign',
           abbr: 'a', mandatory: true, help: 'The atSign to use')
@@ -81,8 +81,8 @@ class CLIBase {
           aliases: const ['root-domain'],
           abbr: 'r',
           mandatory: false,
-          help: 'Root server domain (e.g., root.atsign.org)',
-          defaultsTo: 'root.atsign.org',
+          help: 'Root server (e.g., root.atsign.org:64)',
+          defaultsTo: 'root.atsign.org:64',
           hide: hide.contains('root-server'))
       ..addFlag('verbose', abbr: 'v', negatable: false, help: 'More logging')
       ..addFlag('never-sync',
@@ -101,6 +101,13 @@ class CLIBase {
               'Pass Phrase to encrypt/decrypt the password protected atKeys file',
           mandatory: false,
           hide: hide.contains('pass-phrase'));
+
+    p.addOption('legacy-root-domain',
+        abbr: addLegacyRootDomainArg ? 'd' : null,
+        mandatory: false,
+        help: 'Deprecated abbreviation option for --root-server',
+        hide: !addLegacyRootDomainArg);
+    return p;
   }
 
   /// An ArgParser which has all of the options and flags required by [CLIBase]
@@ -135,8 +142,13 @@ class CLIBase {
     ArgParser? parser,
     String? namespace,
     Set<String> hide = const {},
+    bool addLegacyRootDomainArg = true,
   }) async {
-    parser ??= createArgsParser(namespace: namespace, hide: hide);
+    parser ??= createArgsParser(
+      namespace: namespace,
+      hide: hide,
+      addLegacyRootDomainArg: addLegacyRootDomainArg,
+    );
     ArgResults parsedArgs = parser.parse(args);
 
     if (parsedArgs['help'] == true) {
@@ -144,16 +156,29 @@ class CLIBase {
       exit(0);
     }
 
-    // root-domain is now an alias of root-server, ArgParser handles both automatically
-    String finalRootDomain = parsedArgs['root-server'];
-    AtRootDomain parsedRootDomain = AtRootDomain.parse(finalRootDomain);
+    String rootDomainString;
+    // root-domain is now an alias of root-server, option abbreviation -r
+    // we also keep optional support for the previous abbreviation, -d
+    if (parsedArgs.wasParsed('legacy-root-domain')) {
+      rootDomainString = parsedArgs['legacy-root-domain'];
+    } else {
+      rootDomainString = parsedArgs['root-server'];
+    }
+    try {
+      AtRootDomain.parse(rootDomainString);
+    } catch (e) {
+      if (e is IllegalArgumentException) {
+        throw ArgumentError(e.message);
+      } else {
+        rethrow;
+      }
+    }
 
     CLIBase cliBase = CLIBase(
         atSign: parsedArgs['atsign'],
         atKeysFilePath: parsedArgs['key-file'],
         nameSpace: parsedArgs['namespace'],
-        rootDomain: parsedRootDomain.rootDomain,
-        rootPort: parsedRootDomain.rootPort,
+        rootDomain: rootDomainString,
         homeDir: getHomeDirectory(),
         storageDir: parsedArgs['storage-dir'],
         verbose: parsedArgs['verbose'],
@@ -168,8 +193,7 @@ class CLIBase {
 
   late final String atSign;
   final String nameSpace;
-  final String rootDomain;
-  final int rootPort;
+  late final AtRootDomain atRootDomain;
   final String? homeDir;
 
   final String? atKeysFilePath;
@@ -203,12 +227,12 @@ class CLIBase {
   ///     AtSignLogger.root_level = 'FINEST';
   ///     cliBase.logger.logger.level = Level.FINEST;
   /// ```
-  /// Throws an [IllegalArgumentException] if the parameters fail validation.
+  /// Throws an [ArgumentError] if the parameters fail validation.
   CLIBase(
       {required String atSign,
       required this.nameSpace,
-      required this.rootDomain,
-      required this.rootPort,
+      String? rootDomain,
+      AtRootDomain? atRootDomain,
       this.homeDir,
       this.verbose = false,
       this.atKeysFilePath,
@@ -220,17 +244,26 @@ class CLIBase {
     this.atSign = AtUtils.fixAtSign(atSign);
     if (homeDir == null) {
       if (atKeysFilePath == null) {
-        throw IllegalArgumentException(
+        throw ArgumentError(
             'homeDir must be provided when atKeysFilePath is not provided');
       }
       if (storageDir == null) {
-        throw IllegalArgumentException(
+        throw ArgumentError(
             'homeDir must be provided when storageDir is not provided');
       }
       if (downloadDir == null) {
-        throw IllegalArgumentException(
+        throw ArgumentError(
             'homeDir must be provided when downloadDir is not provided');
       }
+    }
+
+    if (atRootDomain != null) {
+      this.atRootDomain = atRootDomain;
+    } else if (rootDomain != null) {
+      this.atRootDomain = AtRootDomain.parse(rootDomain);
+    } else {
+      throw ArgumentError('You must supply either rootDomain (String)'
+          ' or atRootDomain (AtRootDomain)');
     }
 
     atKeysFilePathToUse =
@@ -276,8 +309,8 @@ class CLIBase {
       ..isLocalStoreRequired = true
       ..commitLogPath = '$localStoragePathToUse/commitLog'
           .replaceAll('/', Platform.pathSeparator)
-      ..rootDomain = rootDomain
-      ..rootPort = rootPort
+      ..rootDomain = atRootDomain.rootDomain
+      ..rootPort = atRootDomain.rootPort
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
       ..passPhrase = passPhrase;
