@@ -45,7 +45,10 @@ class CLIBase {
   /// CLIBase cliBase = await CLIBase.fromCommandLineArgs(args, parser: argsParser);
   /// ```
   ///
-  ///
+  /// If [addLegacyRootDomainArg] is true (the default) then an option called
+  /// `legacy-root-domain` is added with the `-d` abbreviation. If it is false
+  /// then the option is added but without the `-d` abbreviation so that `-d`
+  /// can be used by calling programs for different purposes.
   static ArgParser createArgsParser({
     String? namespace,
     Set<String> hide = const {},
@@ -137,6 +140,9 @@ class CLIBase {
   ///
   /// If [parser] is not supplied then we will call [createArgsParser] with
   /// the [namespace] and [hide] parameters
+  ///
+  /// See [createArgsParser] for explanation of the `addLegacyRootDomainArg`
+  /// parameter
   static Future<CLIBase> fromCommandLineArgs(
     List<String> args, {
     ArgParser? parser,
@@ -217,6 +223,9 @@ class CLIBase {
   /// Validation rules:
   /// - homeDir must be non-null when any of the atKeysFilePath, storageDir or
   ///   downloadDir parameters are null
+  /// - either `atRootDomain` or `rootDomain` parameters must be non-null. If
+  ///   `atRootDomain` is non-null then it is used, otherwise we parse
+  ///   `rootDomain` to create an [AtRootDomain] and we use that.
   ///
   /// <br/>
   /// Also configures the default AtSignLogger log level to be either INFO
