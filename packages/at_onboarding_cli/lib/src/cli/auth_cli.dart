@@ -1049,7 +1049,7 @@ Future<void> unrevoke(ArgResults ar, AtClient atClient) async {
 
   Map toUnRevoke = await _fetchOrListAndFilter(
     atLookup,
-    EnrollmentStatus.approved.name, // must be status approved
+    EnrollmentStatus.revoked.name, // must be status revoked
     eId: ar[AuthCliArgs.argNameEnrollmentId],
     arx: ar[AuthCliArgs.argNameAppNameRegex],
     drx: ar[AuthCliArgs.argNameDeviceNameRegex],
