@@ -11,11 +11,11 @@ const String enrollmentInfoKey = 'enrollmentInfo';
 const int _kDataSchemeVersion = 2;
 
 /// Service to manage keychain CRUD operations for atsigns
-class KeyChainManager {
+class KeyChainWrapper {
   static final _logger = AtSignLogger('KeyChainManager');
   KeyChainStorage keyChainStorage;
 
-  KeyChainManager(
+  KeyChainWrapper(
       {KeyChainStorage? keyChainStorage, bool useSharedStorage = false})
       : keyChainStorage = keyChainStorage ?? KeyChainStorage() {
     initialSetup(useSharedStorage: useSharedStorage);

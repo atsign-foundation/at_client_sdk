@@ -7,9 +7,9 @@ import 'package:hive/hive.dart' show Hive;
 ///
 /// This is the main class to interact with keychain for storing and retrieving AtKeys
 class KeychainAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
-  KeyChainManager keychainManager;
-  KeychainAtKeysIo({KeyChainManager? keychainManager})
-      : keychainManager = keychainManager ?? KeyChainManager();
+  KeyChainWrapper keychainManager;
+  KeychainAtKeysIo({KeyChainWrapper? keychainManager})
+      : keychainManager = keychainManager ?? KeyChainWrapper();
 
   @override
   Future<AtKeys> read(String atSign) async {

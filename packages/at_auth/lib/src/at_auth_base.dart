@@ -31,7 +31,10 @@ abstract interface class AtAuth {
   }
 
   /// Authenticate method is invoked when an atsign wants to authenticate to secondary server with an .atKeys file
-  /// Step 1. Read the keys from [atAuthRequest.atAuthKeys] or [atAuthRequest.atKeysFilePath]
+  /// 
+  /// Step 1. Read the keys from AtKeysIo implementation
+  /// - Can also be brought via AtAuthRequest.atAuthKeys
+  ///
   /// Step 2  Perform pkam authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest);
 

@@ -76,16 +76,22 @@ class AtAuthImpl implements AtAuth {
       atAuthKeys ??= await atAuthRequest.atKeysIo.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
       _addProgress(
-          "authentication",
-          "Unable to read keys for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.error);
+        "authentication",
+        "Unable to read keys for atSign: ${atAuthRequest.atSign}",
+        ProgressEventType.error,
+      );
       throw AtAuthenticationException(
-          'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}');
+        'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}',
+      );
     }
-    atAuthKeys.enrollmentId =
-        atAuthRequest.enrollmentId ?? atAuthKeys.enrollmentId;
-    atLookUp ??= AtLookupImpl(atAuthRequest.atSign,
-        atAuthRequest.rootDomain.rootDomain, atAuthRequest.rootDomain.rootPort);
+
+    //Setup atLookup for pkam auth
+    atAuthKeys.enrollmentId = atAuthRequest.enrollmentId;
+    atLookUp ??= AtLookupImpl(
+      atAuthRequest.atSign,
+      atAuthRequest.rootDomain.rootDomain,
+      atAuthRequest.rootDomain.rootPort,
+    );
     // ??= to support mocking
     atChops ??= _createAtChops(atAuthKeys);
     atLookUp!.atChops = atChops;
@@ -99,21 +105,24 @@ class AtAuthImpl implements AtAuth {
       pkamResponse.atAuthKeys = atAuthKeys;
     } catch (e) {
       _addProgress(
-          "authentication",
-          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.error);
+        "authentication",
+        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
+        ProgressEventType.error,
+      );
       throw AtAuthenticationException('Unable to authenticate | Cause: $e');
     }
     if (!pkamResponse.isSuccessful) {
       _addProgress(
-          "authentication",
-          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.error);
+        "authentication",
+        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
+        ProgressEventType.error,
+      );
     } else {
       _addProgress(
-          "authentication",
-          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.success);
+        "authentication",
+        "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
+        ProgressEventType.success,
+      );
     }
     return pkamResponse;
   }
@@ -139,12 +148,13 @@ class AtAuthImpl implements AtAuth {
     //If the user is providing atKeysIo, they might be onboarding via key file (qr code etc)
     try {
       atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
-          _atOnboardingRequest
-              .atSign); //otherwise, we'll check the keychain, maybe it exists already
+        _atOnboardingRequest.atSign,
+      ); //otherwise, we'll check the keychain, maybe it exists already
     } catch (e, s) {
       _logger.info(
-          'Failed to read keys for atSign: ${_atOnboardingRequest.atSign} | Cause: $e',
-          s); //swallow the error, we just want to know if keys exist or not
+        'Failed to read keys for atSign: ${_atOnboardingRequest.atSign} | Cause: $e',
+        s,
+      ); //swallow the error, we just want to know if keys exist or not
     }
     await _validateAtServerForOnboarding(atOnboardingRequest);
     //1. cram auth
@@ -153,12 +163,14 @@ class AtAuthImpl implements AtAuth {
     var cramAuthResult = await cramAuthenticator!.authenticate();
     if (!cramAuthResult.isSuccessful) {
       _addProgress(
-          "onboarding",
-          "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
-          ProgressEventType.error);
+        "onboarding",
+        "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+        ProgressEventType.error,
+      );
       throw AtAuthenticationException(
-          'Cram authentication failed. Please check the cram key'
-          ' and try again (or) contact support@atsign.com');
+        'Cram authentication failed. Please check the cram key'
+        ' and try again (or) contact support@atsign.com',
+      );
     }
     //2. generate key pairs
     if (atOnboardingRequest.atKeys != null) {
@@ -173,7 +185,6 @@ class AtAuthImpl implements AtAuth {
         //   _atAuthKeys = atKeysIo.generateKeys(publicKeyId);
         //   break;
         case WrittenAtKeysIo():
-          // if the atKeysIo is FileAtKeysIo, then generate keys and write to file.
           if (atKeysIo is FileAtKeysIo) {
             _atAuthKeys =
                 atKeysIo.generateKeyPairs(atSign: atOnboardingRequest.atSign);
@@ -182,7 +193,8 @@ class AtAuthImpl implements AtAuth {
           break;
         default:
           throw AtAuthenticationException(
-              'Unsupported AtKeysIO implementation: ${atKeysIo.runtimeType}');
+            'Unsupported AtKeysIO implementation: ${atKeysIo.runtimeType}',
+          );
       }
     }
 
@@ -194,7 +206,10 @@ class AtAuthImpl implements AtAuth {
     // server will update the apkam public key during enrollment.
     // So don't have to manually update apkam public key in this scenario.
     enrollmentIdFromServer = await _sendOnboardingEnrollment(
-        atOnboardingRequest, _atAuthKeys, atLookUp!);
+      atOnboardingRequest,
+      _atAuthKeys,
+      atLookUp!,
+    );
     _atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
     //4. Close connection to server
