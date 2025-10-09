@@ -1,6 +1,8 @@
 import 'package:at_commons/at_commons.dart' show IllegalArgumentException;
 
 class AtRootDomain {
+  static const AtRootDomain atsignDomain = AtRootDomain('root.atsign.org', 64);
+
   final String rootDomain;
   final int rootPort;
 
