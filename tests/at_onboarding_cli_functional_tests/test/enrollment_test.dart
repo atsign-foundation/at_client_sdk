@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/enroll/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
