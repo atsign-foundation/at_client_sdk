@@ -339,19 +339,18 @@ class AtAuthImpl implements AtAuth {
     return enrollmentIdFromServer;
   }
 
-  
   /// Validates the atSign server status depending on whether it's onboarding or authentication.
-  /// 
+  ///
   /// For onboarding, it checks that the root server is found, the secondary server is running,
   /// and the atSign is not already activated.
-  /// 
+  ///
   /// For authentication, it checks that the root server is found, the secondary server is running,
   /// and the atSign is already activated.
-  /// 
+  ///
   /// Throws an [AtException] if any of the checks fail.
-  /// Uses retry logic based on the [RetryOptions] provided in the [AtRequest].
+  /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
   /// This method is used internally before onboarding or authentication operations.
-  Future<void> _validateAtServer(AtRequest atRequest) async {
+  Future<void> _validateAtServer(AuthRequest atRequest) async {
     AtServerStatus status = AtStatusImpl(
       rootUrl: atRequest.rootDomain.rootDomain,
       rootPort: atRequest.rootDomain.rootPort,
@@ -362,13 +361,11 @@ class AtAuthImpl implements AtAuth {
       try {
         var atStatus = await status.get(atRequest.atSign);
 
-       
         // 3 Checks for onboarding:
         //   1. Root server should be found
         //   2. Secondary server should be running
         //   3. atSign should not be activated already
         if (atRequest is AtOnboardingRequest) {
-
           if (atStatus.rootStatus != RootStatus.found) {
             throw AtException(
                 'Could not find root server: ${atRequest.rootDomain.rootDomain}');
@@ -383,7 +380,7 @@ class AtAuthImpl implements AtAuth {
             throw AtException(
                 'atSign: ${atRequest.atSign} is already onboarded. Cannot perform onboarding again.');
           }
-        } 
+        }
 
         // 3 Checks for authentication:
         //   1. Root server should be found
@@ -396,12 +393,12 @@ class AtAuthImpl implements AtAuth {
                 'Could not find root server: ${atRequest.rootDomain.rootDomain}');
           }
           if (atStatus.serverStatus == ServerStatus.stopped ||
-              atStatus.serverStatus == ServerStatus.error || 
+              atStatus.serverStatus == ServerStatus.error ||
               atStatus.serverStatus == ServerStatus.unavailable) {
             throw AtException(
                 'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
           }
-          if (atStatus.atSignStatus == AtSignStatus.teapot || 
+          if (atStatus.atSignStatus == AtSignStatus.teapot ||
               atStatus.serverStatus == ServerStatus.teapot) {
             throw AtException(
                 'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');

@@ -3,11 +3,11 @@ import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
-sealed class AtRequest {
+sealed class AuthRequest {
   String atSign;
   AtRootDomain rootDomain;
 
-  AtRequest(this.atSign,
+  AuthRequest(this.atSign,
       {this.retryOptions = RetryOptions.defaultRetryOptions,
       this.rootDomain = AtRootDomain.atsignDomain});
 
@@ -21,11 +21,10 @@ sealed class AtRequest {
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 }
 
-
-class AtOnboardingRequest extends AtRequest {
+class AtOnboardingRequest extends AuthRequest {
   /// Constructor for [AtOnboardingRequest]
   /// [atSign] is the atSign for onboarding
-  /// 
+  ///
   /// optional:
   /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
   /// [appName] is the name of the app
@@ -49,11 +48,11 @@ class AtOnboardingRequest extends AtRequest {
   AtKeys? atKeys;
 }
 
-class AtAuthRequest extends AtRequest {
+class AtAuthRequest extends AuthRequest {
   /// Constructor for [AtAuthRequest]
   /// [atSign] is the atSign for authentication
   /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
-  /// 
+  ///
   /// optional:
   /// [atAuthKeys] are the keys for authentication of an atSign
   /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
@@ -68,7 +67,6 @@ class AtAuthRequest extends AtRequest {
   // Controls how the authentication is performed
   AtKeysIo atKeysIo;
 
-
   /// The enrollmentId for APKAM authentication
   String? enrollmentId;
 
@@ -79,13 +77,12 @@ class AtAuthRequest extends AtRequest {
   Map<String, dynamic>? encryptedKeysMap;
 }
 
-
 class RetryOptions {
-  static const defaultRetryOptions = RetryOptions(maxRetries: 10, retryDelay: Duration(seconds: 2));
-  
+  static const defaultRetryOptions =
+      RetryOptions(maxRetries: 10, retryDelay: Duration(seconds: 2));
+
   final int maxRetries;
   final Duration retryDelay;
 
-  const RetryOptions(
-      {required this.maxRetries, required this.retryDelay});
+  const RetryOptions({required this.maxRetries, required this.retryDelay});
 }
