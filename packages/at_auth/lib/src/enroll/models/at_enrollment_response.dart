@@ -27,9 +27,11 @@ class AtEnrollmentResponse {
   /// The status of the enrollment operation.
   EnrollmentStatus enrollStatus;
 
-  /// Optional authentication keys associated with the enrollment.
+  /// Optional atSign associated with the enrollment.
   String? atSign;
+  /// Optional root domain associated with the enrollment.
   AtRootDomain? rootDomain;
+  /// The authentication keys associated with the enrollment.
   AtKeys? atAuthKeys;
 
   /// Creates an instance of [AtEnrollmentResponse].

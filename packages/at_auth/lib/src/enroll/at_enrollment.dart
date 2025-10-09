@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
-import 'package:at_auth/src/enroll/at_enrollment_request.dart';
-import 'package:at_auth/src/enroll/at_enrollment_response.dart';
-import 'package:at_auth/src/enroll/enrollment_request_decision.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 

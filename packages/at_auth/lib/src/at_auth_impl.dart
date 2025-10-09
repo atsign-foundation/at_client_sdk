@@ -1,19 +1,17 @@
 import 'dart:async';
 
-import 'package:at_auth/src/at_auth_base.dart';
-import 'package:at_auth/src/auth/at_auth_request.dart';
-import 'package:at_auth/src/auth/at_auth_response.dart';
+import 'package:at_auth/src/at_auth.dart';
+import 'package:at_auth/src/auth/models/at_auth_requests.dart';
+import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
-import 'package:at_auth/src/enroll/at_enrollment_request.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
-import 'package:at_auth/src/enroll/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:at_auth/src/keys/at_keys_io_impl.dart';
-import 'package:at_auth/src/onboard/at_onboarding_request.dart';
-import 'package:at_auth/src/onboard/at_onboarding_response.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -24,10 +22,10 @@ import 'package:at_utils/at_progress.dart';
 
 class AtAuthImpl implements AtAuth {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
-  final String _defaultAppNameForOnboarding = 'firstApp';
-  final String _defaultDeviceNameForOnboarding = 'firstDevice';
   final StreamController<ProgressEvent> _progressController =
       StreamController<ProgressEvent>.broadcast();
+
+  ///Progress stream to listen to onboarding/authentication progress.
   @override
   Stream<ProgressEvent> get progressStream => _progressController.stream;
   void _addProgress(String group, String message, ProgressEventType type) {
@@ -42,7 +40,7 @@ class AtAuthImpl implements AtAuth {
 
   PkamAuthenticator? pkamAuthenticator;
 
-  AtEnrollment atEnrollmentBase;
+  AtEnrollment atEnrollment;
 
   @override
   AtLookUp? atLookUp;
@@ -52,8 +50,8 @@ class AtAuthImpl implements AtAuth {
       this.atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      AtEnrollment? atEnrollmentBase})
-      : atEnrollmentBase = atEnrollmentBase ?? AtEnrollment.create();
+      AtEnrollment? atEnrollment})
+      : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
   @override
 
@@ -61,17 +59,19 @@ class AtAuthImpl implements AtAuth {
   /// The AtAuthRequest must contain either:
   /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
   /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
-  /// - 3. atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
-  ///    contains keys in encrypted format
+  ///
+  /// If both are provided, atAuthRequest.atAuthKeys will be used.
   ///
   /// The AtAuthRequest may optionally contain:
   /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
   ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
+  /// - atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
+  ///    contains keys in encrypted format (LEGACY)
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    await _validateAtServerForAuthentication(atAuthRequest);
+    await _validateAtServer(atAuthRequest);
     try {
       atAuthKeys ??= await atAuthRequest.atKeysIo.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
@@ -131,6 +131,10 @@ class AtAuthImpl implements AtAuth {
   late AtKeys _atAuthKeys;
   late AtOnboardingRequest _atOnboardingRequest;
 
+  /// Onboard a new atSign using CRAM
+  /// Requires an AtOnboardingRequest and a cramSecret
+  ///
+  /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
   Future<AtOnboardingResponse> onboard(
     AtOnboardingRequest atOnboardingRequest,
@@ -145,18 +149,18 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.rootDomain.rootPort,
     );
 
-    //If the user is providing atKeysIo, they might be onboarding via key file (qr code etc)
+    //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
     try {
       atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
         _atOnboardingRequest.atSign,
-      ); //otherwise, we'll check the keychain, maybe it exists already
+      );
     } catch (e, s) {
       _logger.info(
         'Failed to read keys for atSign: ${_atOnboardingRequest.atSign} | Cause: $e',
         s,
       ); //swallow the error, we just want to know if keys exist or not
     }
-    await _validateAtServerForOnboarding(atOnboardingRequest);
+    await _validateAtServer(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??=
         CramAuthenticator(atOnboardingRequest.atSign, cramSecret, atLookUp);
@@ -192,8 +196,13 @@ class AtAuthImpl implements AtAuth {
           await atKeysIo.write(atOnboardingRequest.atSign, _atAuthKeys);
           break;
         default:
+          _addProgress(
+            "onboarding",
+            "Unsupported AtKeysIO implementation used in onboard(): ${atKeysIo.runtimeType}",
+            ProgressEventType.error,
+          );
           throw AtAuthenticationException(
-            'Unsupported AtKeysIO implementation: ${atKeysIo.runtimeType}',
+            'Unsupported AtKeysIO implementation used in onboard(): ${atKeysIo.runtimeType}',
           );
       }
     }
@@ -219,13 +228,8 @@ class AtAuthImpl implements AtAuth {
       _logger.severe('error while closing connection to server: $e');
     }
 
-    //5. Init _atLookUp again and attempt pkam auth
-    // atLookUp = AtLookupImpl(atOnboardingRequest.atSign,
-    //     atOnboardingRequest.rootDomain, atOnboardingRequest.rootPort);
-    atLookUp!.atChops = atChops;
-
-    var isPkamAuthenticated = false;
     //6. Do pkam auth
+    var isPkamAuthenticated = false;
     pkamAuthenticator ??=
         PkamAuthenticator(atOnboardingRequest.atSign, atLookUp!);
     try {
@@ -310,9 +314,6 @@ class AtAuthImpl implements AtAuth {
       AtOnboardingRequest atOnboardingRequest,
       AtKeys atAuthKeys,
       AtLookUp atLookup) async {
-    atOnboardingRequest.appName ??= _defaultAppNameForOnboarding;
-    atOnboardingRequest.deviceName ??= _defaultDeviceNameForOnboarding;
-
     _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
@@ -324,7 +325,7 @@ class AtAuthImpl implements AtAuth {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse =
-          await atEnrollmentBase.submit(firstEnrollmentRequest, atLookUp!);
+          await atEnrollment.submit(firstEnrollmentRequest, atLookUp!);
     } on AtEnrollmentException catch (e) {
       throw AtAuthenticationException('Enrollment error:${e.toString}');
     }
@@ -338,79 +339,87 @@ class AtAuthImpl implements AtAuth {
     return enrollmentIdFromServer;
   }
 
-  Future<void> _validateAtServerForOnboarding(
-      AtOnboardingRequest atOnboardingRequest) async {
+  
+  /// Validates the atSign server status depending on whether it's onboarding or authentication.
+  /// 
+  /// For onboarding, it checks that the root server is found, the secondary server is running,
+  /// and the atSign is not already activated.
+  /// 
+  /// For authentication, it checks that the root server is found, the secondary server is running,
+  /// and the atSign is already activated.
+  /// 
+  /// Throws an [AtException] if any of the checks fail.
+  /// Uses retry logic based on the [RetryOptions] provided in the [AtRequest].
+  /// This method is used internally before onboarding or authentication operations.
+  Future<void> _validateAtServer(AtRequest atRequest) async {
     AtServerStatus status = AtStatusImpl(
-        rootUrl: atOnboardingRequest.rootDomain.rootDomain,
-        rootPort: atOnboardingRequest.rootDomain.rootPort);
+      rootUrl: atRequest.rootDomain.rootDomain,
+      rootPort: atRequest.rootDomain.rootPort,
+    );
     int retryCount = 1;
-    const int maxRetries = 10;
-    const Duration retryDelay = Duration(seconds: 3);
 
-    while (retryCount < maxRetries) {
+    while (retryCount < atRequest.retryOptions.maxRetries) {
       try {
-        var atStatus = await status.get(atOnboardingRequest.atSign);
-        if (atStatus.rootStatus != RootStatus.found) {
-          throw AtException(
-              'Could not find root server: ${atOnboardingRequest.rootDomain.rootDomain}');
+        var atStatus = await status.get(atRequest.atSign);
+
+       
+        // 3 Checks for onboarding:
+        //   1. Root server should be found
+        //   2. Secondary server should be running
+        //   3. atSign should not be activated already
+        if (atRequest is AtOnboardingRequest) {
+
+          if (atStatus.rootStatus != RootStatus.found) {
+            throw AtException(
+                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
+          }
+          if (atStatus.serverStatus == ServerStatus.error ||
+              atStatus.serverStatus == ServerStatus.stopped ||
+              atStatus.atSignStatus == AtSignStatus.unavailable) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform onboarding.');
+          }
+          if (atStatus.atSignStatus == AtSignStatus.activated) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} is already onboarded. Cannot perform onboarding again.');
+          }
+        } 
+
+        // 3 Checks for authentication:
+        //   1. Root server should be found
+        //   2. Secondary server should be running
+        //   3. atSign should be activated already
+        else if (atRequest is AtAuthRequest) {
+          if (atStatus.rootStatus == RootStatus.notFound ||
+              atStatus.rootStatus == RootStatus.error) {
+            throw AtException(
+                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
+          }
+          if (atStatus.serverStatus == ServerStatus.stopped ||
+              atStatus.serverStatus == ServerStatus.error || 
+              atStatus.serverStatus == ServerStatus.unavailable) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
+          }
+          if (atStatus.atSignStatus == AtSignStatus.teapot || 
+              atStatus.serverStatus == ServerStatus.teapot) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');
+          }
         }
-        if (atStatus.atSignStatus == AtSignStatus.activated) {
-          throw AtException(
-              'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.');
-        }
+
         break; // Exit loop if no exception occurs
       } catch (e) {
-        _logger.severe('Error during onboarding atServer validation: $e');
+        _logger.severe('Error during atServer validation: $e');
         retryCount++;
-        if (retryCount >= maxRetries) {
+        if (retryCount >= atRequest.retryOptions.maxRetries) {
           throw AtException(
-              'Max retries reached while validating atSign server for onboarding. Last error: $e');
+              'Max retries reached while validating atSign server. Last error: $e');
         }
         _logger.warning(
-            'Attempt $retryCount failed: $e. Retrying... $retryCount/$maxRetries');
-        await Future.delayed(retryDelay); // Wait before retrying
-      }
-    }
-  }
-
-  Future<void> _validateAtServerForAuthentication(
-      AtAuthRequest atAuthRequest) async {
-    AtServerStatus status = AtStatusImpl(
-        rootUrl: atAuthRequest.rootDomain.rootDomain,
-        rootPort: atAuthRequest.rootDomain.rootPort);
-    int retryCount = 1;
-    const int maxRetries = 10;
-    const Duration retryDelay = Duration(seconds: 3);
-
-    while (retryCount < maxRetries) {
-      try {
-        var atStatus = await status.get(atAuthRequest.atSign);
-        if (atStatus.rootStatus == RootStatus.notFound ||
-            atStatus.rootStatus == RootStatus.error) {
-          throw AtException(
-              'Could not find root server: ${atAuthRequest.rootDomain.rootDomain}');
-        }
-        if (atStatus.atSignStatus == AtSignStatus.notFound ||
-            atStatus.atSignStatus == AtSignStatus.teapot) {
-          throw AtException(
-              'atSign: ${atAuthRequest.atSign} has not been onboarded. Cannot perform Authentication.');
-        }
-        if (atStatus.serverStatus == ServerStatus.stopped ||
-            atStatus.serverStatus == ServerStatus.error) {
-          throw AtException(
-              'atSign: ${atAuthRequest.atSign} server is not running. Cannot perform Authentication.');
-        }
-        break; // Exit loop if no exception occurs
-      } catch (e) {
-        _logger.severe('Error during onboarding atServer validation: $e');
-        retryCount++;
-        if (retryCount >= maxRetries) {
-          throw AtException(
-              'Max retries reached while validating atSign server for onboarding. Last error: $e');
-        }
-        _logger.warning(
-            'Attempt $retryCount failed: $e. Retrying... $retryCount/$maxRetries');
-        await Future.delayed(retryDelay); // Wait before retrying
+            'Attempt $retryCount failed: $e. Retrying... $retryCount/${atRequest.retryOptions.maxRetries}');
+        await Future.delayed(
+            atRequest.retryOptions.retryDelay); // Wait before retrying
       }
     }
   }

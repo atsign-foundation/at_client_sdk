@@ -1,11 +1,9 @@
 import 'package:at_auth/src/at_auth_impl.dart';
-import 'package:at_auth/src/auth/at_auth_request.dart';
-import 'package:at_auth/src/auth/at_auth_response.dart';
+import 'package:at_auth/src/auth/models/at_auth_requests.dart';
+import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
-import 'package:at_auth/src/onboard/at_onboarding_request.dart';
-import 'package:at_auth/src/onboard/at_onboarding_response.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
@@ -27,11 +25,11 @@ abstract interface class AtAuth {
         atChops: atChops,
         cramAuthenticator: cramAuthenticator,
         pkamAuthenticator: pkamAuthenticator,
-        atEnrollmentBase: atEnrollmentBase);
+        atEnrollment: atEnrollmentBase);
   }
 
   /// Authenticate method is invoked when an atsign wants to authenticate to secondary server with an .atKeys file
-  /// 
+  ///
   /// Step 1. Read the keys from AtKeysIo implementation
   /// - Can also be brought via AtAuthRequest.atAuthKeys
   ///

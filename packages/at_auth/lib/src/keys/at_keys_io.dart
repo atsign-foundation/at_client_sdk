@@ -7,18 +7,29 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
+
+/// An interface that defines methods for reading AtKeys.
+/// It can be implemented by classes that read AtKeys from different sources,
 sealed class AtKeysIo {
   FutureOr<AtKeys> read(String atSign);
 }
 
+/// An interface that defines methods for AtKeys that can be written.
+/// It can be implemented by classes that write AtKeys to different sources,
+/// such as file system or keychain.
 abstract class WrittenAtKeysIo implements AtKeysIo {
   Future write(String atSign, AtKeys atKeys);
 }
 
+/// An interface that defines methods for AtKeys that can be generated.
+/// It can be implemented by classes that generate AtKeys using different methods,
+/// such as secure element.
 abstract class GeneratedAtKeysIo implements AtKeysIo {
   AtKeys generateKeys(String publicKeyId);
 }
 
+
+/// A mixin that provides common functionality for encoding and decoding AtKeys.
 mixin KeyIOMixin on AtKeysIo {
   final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
 
