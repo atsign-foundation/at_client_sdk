@@ -24,6 +24,8 @@ export 'package:at_client/src/response/enrollment.dart';
 export 'package:at_client/src/rpc/at_rpc.dart';
 @experimental
 export 'package:at_client/src/rpc/at_rpc_types.dart';
+@experimental
+export 'package:at_client/src/rpc/at_rpc_remote.dart';
 export 'package:at_client/src/service/enrollment_service.dart';
 export 'package:at_client/src/service/notification_service.dart';
 export 'package:at_client/src/service/sync/sync_conflict.dart';
