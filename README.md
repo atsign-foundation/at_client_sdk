@@ -33,7 +33,7 @@ device with embedded storage and hardware trusted root keychain.
 
 ## Libraries
 
-[![Build Status](https://github.com/atsign-foundation/at_libraries/actions/workflows/at_libraries.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_libraries/actions/workflows/at_libraries.yaml)
+[![Build Status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_libraries.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_libraries.yaml)
 
 This repository also contains various atPlatform libraries for developers building
 their own atPlatform applications. (These libraries can also be found on
@@ -72,7 +72,7 @@ use the [atClient SDK](#SDKs)
 
 ## Flutter Packages
 
-[![Build Status](https://github.com/atsign-foundation/at_libraries/actions/workflows/at_widgets.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_libraries/actions/workflows/at_widgets.yaml)
+[![Build Status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_widgets.yml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_widgets.yml)
 
 This repository also contains various atPlatform widgets for developers building
 their own Flutter applications. (These libraries can also be found on
