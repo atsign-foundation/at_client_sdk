@@ -12,7 +12,8 @@ class EnrollmentService {
 
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
 
-  Future<AtEnrollmentResponse> enroll(EnrollmentRequest request) async {
+  Future<AtEnrollmentResponse> enroll(EnrollmentRequest request,
+      {bool waitForApproval = false}) async {
     AtEnrollmentResponse? atEnrollmentResponse;
     AtLookUp atLookup = AtLookupImpl(request.atSign,
         request.rootDomain.rootDomain, request.rootDomain.rootPort);
@@ -34,8 +35,9 @@ class EnrollmentService {
       await _enrollmentStore.writeToEnrollmentStore(
           request.atSign, enrollmentInfo);
     }
-    await _atEnrollment.waitForApproval(atEnrollmentResponse);
-
+    if (waitForApproval) {
+      await _atEnrollment.waitForApproval(atEnrollmentResponse);
+    }
     return atEnrollmentResponse;
   }
 
@@ -81,5 +83,9 @@ class EnrollmentService {
     }
     await atLookUp.close();
     return atEnrollmentResponse;
+  }
+
+  Future<void> waitForApproval(AtEnrollmentResponse response) async {
+    await _atEnrollment.waitForApproval(response);
   }
 }
