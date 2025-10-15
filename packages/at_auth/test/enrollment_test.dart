@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import 'package:at_auth/src/enroll/at_enrollment_base.dart';
+import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
-import 'package:at_auth/src/enroll/at_enrollment_response.dart';
-import 'package:at_auth/src/enroll/enrollment_request.dart';
-import 'package:at_auth/src/enroll/enrollment_request_decision.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
+import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -28,7 +28,7 @@ void main() {
       'A test to verify submitting enrollment to server and verify enrollment status is pending',
       () async {
     String atSign = '@alice🛠';
-    AtEnrollmentImpl atEnrollmentServiceImpl = AtEnrollmentImpl(atSign);
+    AtEnrollmentImpl atEnrollmentServiceImpl = AtEnrollmentImpl();
     AtLookUp mockAtLookUp = MockAtLookUp();
 
     String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
@@ -56,16 +56,16 @@ void main() {
                   'status': 'pending'
                 })}'));
 
-    when(()=>
+    when(() =>
         mockAtLookUp.executeCommand(
             any(
                 that: startsWith(
                     'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
             auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': (await atChopsImpl
-              .encryptString(encryptionPrivateKey, EncryptionKeyType.aes256,
-                  keyName: 'apkamSymmetricKey', iv: iv)
-      ).result
+          'value': (await atChopsImpl.encryptString(
+                  encryptionPrivateKey, EncryptionKeyType.aes256,
+                  keyName: 'apkamSymmetricKey', iv: iv))
+              .result
         })));
 
     when(() =>
@@ -74,10 +74,10 @@ void main() {
                 that: startsWith(
                     'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
             auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': (await atChopsImpl
-              .encryptString(selfEncryptionKey, EncryptionKeyType.aes256,
-                  keyName: 'apkamSymmetricKey', iv: iv)
-      ).result
+          'value': (await atChopsImpl.encryptString(
+                  selfEncryptionKey, EncryptionKeyType.aes256,
+                  keyName: 'apkamSymmetricKey', iv: iv))
+              .result
         })));
     when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
         .thenAnswer((_) => Future.value(true));
@@ -85,7 +85,8 @@ void main() {
     when(() => (mockAtLookUp as AtLookupImpl).close())
         .thenAnswer((_) async => ());
 
-    EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+    AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
+        atSign: atSign,
         appName: 'wavi',
         deviceName: 'pixel',
         otp: 'A123FE',
@@ -122,7 +123,7 @@ void main() {
 
       AtLookUp mockAtLookUp = MockAtLookUp();
 
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl(atSign);
+      AtEnrollment atEnrollmentBase = AtEnrollmentImpl();
 
       when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
 
@@ -134,9 +135,11 @@ void main() {
               })}'));
 
       EnrollmentRequestDecision enrollmentRequestDecision =
-          EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
-              enrollmentId: '4be2d358-074d-4e3b-99f3-64c4da01532f',
-              encryptedAPKAMSymmetricKey: encryptedAPKAMSymmetricKey));
+          EnrollmentRequestDecision.approved(
+        enrollmentId: '4be2d358-074d-4e3b-99f3-64c4da01532f',
+        apkamSymmetricKey: AtBytes.fromString(encryptedAPKAMSymmetricKey),
+        atSign: atSign,
+      );
 
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
           .approve(enrollmentRequestDecision, mockAtLookUp);
@@ -166,7 +169,7 @@ void main() {
 
       AtLookUp mockAtLookUp = MockAtLookUp();
 
-      AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl(atSign);
+      AtEnrollment atEnrollmentBase = AtEnrollmentImpl();
 
       when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
 
@@ -179,7 +182,7 @@ void main() {
 
       EnrollmentRequestDecision enrollmentRequestDecision =
           EnrollmentRequestDecision.denied(
-              '4be2d358-074d-4e3b-99f3-64c4da01532f');
+              '4be2d358-074d-4e3b-99f3-64c4da01532f', atSign);
 
       AtEnrollmentResponse atEnrollmentResponse =
           await atEnrollmentBase.deny(enrollmentRequestDecision, mockAtLookUp);

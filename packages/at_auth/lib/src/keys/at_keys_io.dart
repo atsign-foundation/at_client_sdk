@@ -1,25 +1,35 @@
 import 'dart:async';
 import 'dart:convert';
 
-
 import 'at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
+
+/// An interface that defines methods for reading AtKeys.
+/// It can be implemented by classes that read AtKeys from different sources,
 sealed class AtKeysIo {
   FutureOr<AtKeys> read(String atSign);
 }
 
-abstract class WrittenAtKeysIo implements AtKeysIo{
+/// An interface that defines methods for AtKeys that can be written.
+/// It can be implemented by classes that write AtKeys to different sources,
+/// such as file system or keychain.
+abstract class WrittenAtKeysIo implements AtKeysIo {
   Future write(String atSign, AtKeys atKeys);
 }
 
+/// An interface that defines methods for AtKeys that can be generated.
+/// It can be implemented by classes that generate AtKeys using different methods,
+/// such as secure element.
 abstract class GeneratedAtKeysIo implements AtKeysIo {
   AtKeys generateKeys(String publicKeyId);
 }
 
+
+/// A mixin that provides common functionality for encoding and decoding AtKeys.
 mixin KeyIOMixin on AtKeysIo {
   final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
 
@@ -60,7 +70,7 @@ mixin KeyIOMixin on AtKeysIo {
               .result);
     }
     securityKeys.apkamSymmetricKey =
-        AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey]);
+        AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey] ?? '');
     securityKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
     return securityKeys;
   }
@@ -118,8 +128,10 @@ mixin KeyIOMixin on AtKeysIo {
     var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
 
     //generate selfEncryptionKey
-    var selfEncryptionKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    var apkamSymmetricKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    var selfEncryptionKey =
+        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    var apkamSymmetricKey =
+        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     logger.info('Generating your encryption keys and .atKeys file\n');
 
     //generating pkamKeyPair only if authMode is keysFile
@@ -128,8 +140,9 @@ mixin KeyIOMixin on AtKeysIo {
       logger.info('Generating pkam keypair');
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
-      atKeysFile.apkamPrivateKey = AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
-      } 
+      atKeysFile.apkamPrivateKey = AtBytes.fromString(
+          apkamRsaKeypair.atPrivateKey.privateKey.toString());
+    }
     // else if (this is GeneratedAtKeysIo) {
     //   // get the public key from secure element
     //   if (atSign == null) {

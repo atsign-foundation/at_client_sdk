@@ -1,6 +1,8 @@
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_client_flutter/src/at_client_data.dart' show AtClientData;
+import 'package:at_client_flutter/src/keychain/at_client_data.dart'
+    show AtClientData;
 import 'package:at_client_flutter/src/keychain/keychain_storage.dart';
+import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:flutter/services.dart' show MethodChannel, MethodCall;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -15,7 +17,9 @@ void main() {
   late MockKeyChainStorage mockKeyChainStorage;
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(MethodChannel('dev.fluttercommunity.plus/package_info'), (MethodCall methodCall) async {
+      .setMockMethodCallHandler(
+          MethodChannel('dev.fluttercommunity.plus/package_info'),
+          (MethodCall methodCall) async {
     if (methodCall.method == 'getAll') {
       return {
         'appName': 'test',
@@ -33,7 +37,7 @@ void main() {
 
   group('A group of test getAtSign', () {
     test('A test to getAtSign when onboard disable shareAtSign', () async {
-      var keychainManager = KeyChainManager();
+      var keychainManager = KeyChainWrapper();
 
       when(
         () => mockKeyChainStorage.readAtClientData(),
@@ -42,14 +46,13 @@ void main() {
           "config": {"schemaVersion": 1, "useSharedAtsign": false},
           "keys": [
             {
-              "name": "@atSignTest",
-              "pkamPrivateKey": "",
-              "pkamPublicKey": "",
-              "encryptionPublicKey": "",
-              "encryptionPrivateKey": "",
-              "selfEncryptionKey": "",
+              "atsign": "@atSignTest",
+              auth_constants.apkamPrivateKey: "",
+              auth_constants.apkamPublicKey: "",
+              auth_constants.defaultEncryptionPublicKey: "",
+              auth_constants.defaultEncryptionPrivateKey: "",
+              auth_constants.defaultSelfEncryptionKey: "",
               "hiveSecret": null,
-              "secret": null
             }
           ],
           "defaultAtsign": null
@@ -62,7 +65,7 @@ void main() {
     });
 
     test('A test to getAtSign when onboard enable shareAtSign', () async {
-      var keychainManager = KeyChainManager();
+      var keychainManager = KeyChainWrapper();
 
       when(
         () => mockKeyChainStorage.readAtClientData(useSharedStorage: false),
@@ -70,12 +73,12 @@ void main() {
             "config": null,
             "keys": [
               {
-                "name": "@atSignTest",
-                "pkamPrivateKey": "",
-                "pkamPublicKey": "",
-                "encryptionPublicKey": "",
-                "encryptionPrivateKey": "",
-                "selfEncryptionKey": "",
+                "atsign": "@atSignTest",
+                auth_constants.apkamPrivateKey: "",
+                auth_constants.apkamPublicKey: "",
+                auth_constants.defaultEncryptionPublicKey: "",
+                auth_constants.defaultEncryptionPrivateKey: "",
+                auth_constants.defaultSelfEncryptionKey: "",
                 "hiveSecret": null,
                 "secret": null
               }

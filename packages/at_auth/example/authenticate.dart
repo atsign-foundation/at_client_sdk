@@ -1,6 +1,5 @@
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_commons/at_commons.dart' show AtRootDomain;
 
 /// Perform authentication for an onboarded atsign
@@ -16,11 +15,11 @@ void main(List<String> args) async {
       ..addOption('keysFilePath',
           abbr: 'k', help: 'Path of .atKeys file', mandatory: true);
     final argResults = parser.parse(args);
-    final atAuth = AtAuthImpl();
+    final atAuth = AtAuth.create();
     final atSign = argResults['atsign'];
-    final atAuthRequest = AtAuthRequest(atSign)
-      ..rootDomain = AtRootDomain('root.atsign.org', 64)
-      ..atKeysIo = FileAtKeysIo(filePath: argResults['keysFilePath']);
+    final atAuthRequest = AtAuthRequest(
+        atSign, FileAtKeysIo(filePath: argResults['keysFilePath']))
+      ..rootDomain = AtRootDomain('root.atsign.org', 64);
     final atAuthResponse = await atAuth.authenticate(atAuthRequest);
     print('atAuthResponse: $atAuthResponse');
   } on Exception catch (e, trace) {

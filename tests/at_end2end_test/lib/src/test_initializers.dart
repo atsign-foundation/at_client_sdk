@@ -32,9 +32,11 @@ class TestSuiteInitializer {
       bool apkam = authType.toLowerCase() == 'apkam';
 
       if (apkam) {
-        AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+        AtAuthRequest atAuthRequest = AtAuthRequest(
+          atSign, 
+          FileAtKeysIo(filePath: '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys'),
+        );
         atAuthRequest.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
-        atAuthRequest.atKeysIo = FileAtKeysIo(filePath: '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys');
         atAuthResponse = await authenticate(atAuthRequest);
         atChops = createAtChopsFromAtAuthKeys(atAuthResponse.atAuthKeys!);
 
@@ -52,7 +54,7 @@ class TestSuiteInitializer {
       atClientPreference ??= TestPreferences.getInstance().getPreference(atSign);
       // Create the atClientManager for the atSign
       var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atSign, namespace, atClientPreference,
-          atChops: atChops, enrollmentId: atAuthResponse?.enrollmentId);
+          atChops: atChops, enrollmentId: atAuthResponse?.atAuthKeys?.enrollmentId);
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance().setEncryptionKeys(atClientManager.atClient, atSign);
 

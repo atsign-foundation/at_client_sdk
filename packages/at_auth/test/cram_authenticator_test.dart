@@ -1,5 +1,5 @@
-import 'package:at_auth/src/auth/at_auth_response.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
+import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';

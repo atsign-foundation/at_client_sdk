@@ -24,7 +24,7 @@ class FakeAtAuthRequest extends Fake implements AtAuthRequest {}
 
 class MockAtClient extends Mock implements AtClient {}
 
-class MockEnrollmentBase extends Mock implements AtEnrollmentBase {}
+class MockEnrollmentBase extends Mock implements AtEnrollment{}
 
 void main() {
   AtSignLogger.root_level = 'INFO';
@@ -62,12 +62,12 @@ void main() {
           .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
             ..isSuccessful = true
             ..atAuthKeys = (AtKeys()
-              ..apkamPublicKey = AtBytes.fromString('dummy_apkam_public_key')
-              ..apkamPrivateKey = AtBytes.fromString('dummy_private_key')
-              ..defaultSelfEncryptionKey = AtBytes.fromString('dummy_self_encryption_key')
-              ..defaultEncryptionPrivateKey = AtBytes.fromString('dummy_enc_priv_key')
-              ..defaultEncryptionPublicKey = AtBytes.fromString('dummy_enc_pub_key')
-              ..apkamSymmetricKey = AtBytes.fromString('dummy_apkam_sym_key')
+              ..apkamPublicKey = AtBytes.fromString('dumm')
+              ..apkamPrivateKey = AtBytes.fromString('dumm')
+              ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
+              ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
+              ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
+              ..apkamSymmetricKey = AtBytes.fromString('dumm')
               ..enrollmentId = 'dummy_enroll_id')));
       when(() => mockAtAuth.atChops)
           .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
@@ -88,7 +88,8 @@ void main() {
       registerFallbackValue(FakeAtAuthRequest());
       registerFallbackValue(EnrollVerbBuilder());
       registerFallbackValue(mockAtLookup);
-      registerFallbackValue(EnrollmentRequest(
+      registerFallbackValue(AtEnrollmentRequest(
+          atSign: atsign,
           appName: 'appName',
           deviceName: 'deviceName',
           otp: 'otp',

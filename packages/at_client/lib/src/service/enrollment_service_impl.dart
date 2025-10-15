@@ -6,7 +6,7 @@ import 'package:at_commons/at_builders.dart';
 
 class EnrollmentServiceImpl implements EnrollmentService {
   final AtClient _atClient;
-  final AtEnrollmentBase _atEnrollmentImpl;
+  final AtEnrollment _atEnrollmentImpl;
 
   EnrollmentServiceImpl(this._atClient, this._atEnrollmentImpl);
 

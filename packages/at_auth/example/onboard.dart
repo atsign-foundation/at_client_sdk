@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/at_auth_impl.dart';
 
 /// Perform initial onboarding for an atsign
 /// 1. CRAM authentication
@@ -23,7 +22,7 @@ void main(List<String> args) async {
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
 
-    final atAuth = AtAuthImpl();
+    final atAuth = AtAuth.create();
     final atSign = argResults['atsign'];
     final atOnboardingRequest = AtOnboardingRequest(atSign)
       ..rootDomain = argResults['rootDomain']
