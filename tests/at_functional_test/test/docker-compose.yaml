@@ -1,7 +1,7 @@
 version: '2'
 services:
   virtualenv:
-    image: atsigncompany/virtualenv:dev_env
+    image: atsigncompany/virtualenv:vip
     ports:
       - "127.0.0.1:6379:6379"
       - "64:64"

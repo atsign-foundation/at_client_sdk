@@ -1,1 +1,0 @@
-Put cacert.pem, cert.pem, fullchain.pem and privkey.pem here from `https://github.com/atsign-foundation/at_services/tree/trunk/packages/at_secondary_proxy/certs`
