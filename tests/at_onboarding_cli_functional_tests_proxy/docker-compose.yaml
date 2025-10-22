@@ -17,8 +17,8 @@ services:
     command: "vip.ve.atsign.zone:443 vip.ve.atsign.zone:64 1443"
     ports:
       - '443:1443'
-    volumes:
-      - "./certs:/atsign/certs"
+    # volumes:
+    #   - "./certs:/atsign/certs"
     networks:
       - default
       - outside
