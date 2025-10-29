@@ -10,7 +10,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
-import 'package:at_onboarding_cli/src/util/print_full_parser_usage.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
@@ -19,7 +18,6 @@ import 'package:meta/meta.dart';
 
 import '../util/onboarding_util.dart';
 import 'auth_cli_arg_validation.dart';
-import 'auth_cli_args.dart';
 
 final AtSignLogger logger = AtSignLogger(' CLI ');
 
@@ -1050,7 +1048,7 @@ Future<void> unrevoke(ArgResults ar, AtClient atClient) async {
 
   Map toUnRevoke = await _fetchOrListAndFilter(
     atLookup,
-    EnrollmentStatus.approved.name, // must be status approved
+    EnrollmentStatus.revoked.name, // must be status revoked
     eId: ar[AuthCliArgs.argNameEnrollmentId],
     arx: ar[AuthCliArgs.argNameAppNameRegex],
     drx: ar[AuthCliArgs.argNameDeviceNameRegex],

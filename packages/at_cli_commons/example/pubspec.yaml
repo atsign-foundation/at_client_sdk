@@ -6,16 +6,11 @@ publish_to: none
 environment:
   sdk: ^3.0.6
 
-dependency_overrides:
-  at_client:
-    path: ../../at_client
-  at_cli_commons:
-    path: ..
-
 dependencies:
   at_cli_commons:
     path: ..
-  at_client: ^3.7.0
+  at_client: ^3.8.0
+  args: ^2.7.0
 
 dev_dependencies:
   lints: ^2.1.1
