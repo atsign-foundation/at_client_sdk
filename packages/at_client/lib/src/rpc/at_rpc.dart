@@ -358,11 +358,11 @@ class AtRpc {
       return;
     }
 
-    bool mutexFetched =
+    bool mutexAcquired =
         await _tryAcquireSessionMutex(requestId, notification.to);
-    if (!mutexFetched) {
+    if (!mutexAcquired) {
       var message =
-          'Ignoring request: could not acquire mutex with requestId $requestId';
+          'Ignoring request: could not acquire mutex for requestId $requestId';
       // send NACK
       await sendResponse(notification, request,
           AtRpcResp.nack(request: request, message: message));
@@ -390,8 +390,7 @@ class AtRpc {
     var mutexKey = AtKey.fromString('$requestId.session_mutexes.'
         '$domainNameSpace.$rpcsNameSpace.$baseNameSpace$atsign')
       ..metadata = (Metadata()
-        ..immutable =
-            true // ensures only the rpc of a specific service can do this for the said service
+        ..immutable = true // only one RPC client will succeed in doing this
         ..ttl =
             30000); // keeps the datastore clean + auto releases mutex after 30s
     PutRequestOptions pro = PutRequestOptions()
@@ -400,16 +399,16 @@ class AtRpc {
 
     try {
       await atClient.put(mutexKey, 'lock', putRequestOptions: pro);
-      logger
-          .shout('Will handle request from $atsign; acquired mutex $mutexKey');
+      logger.shout(
+          '😎 Will handle request from $atsign; acquired mutex $mutexKey');
       return true;
     } catch (err) {
       if (err.toString().toLowerCase().contains('immutable')) {
         logger.shout('Will not handle request from $atsign'
             '; could not acquire mutex $mutexKey');
       } else {
-        logger
-            .shout('Will not handle; could not acquire mutex $mutexKey : $err');
+        logger.shout(
+            '🤷‍♂️ Will not handle; could not acquire mutex $mutexKey : $err');
       }
       return false;
     }
