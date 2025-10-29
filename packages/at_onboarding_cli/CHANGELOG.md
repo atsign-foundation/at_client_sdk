@@ -1,3 +1,8 @@
+## 1.14.0
+
+- feat: export the PrintAllArgParserUsage mixin on ArgParser
+- feat: export AuthCliArgs
+
 ## 1.13.0
 
 - add a warning message before onboarding attempts to cut keys that presents a message explaining importance of backing up keys and prompting the user asking if they understand the risks of not backing up keys
