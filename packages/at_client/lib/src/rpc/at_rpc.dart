@@ -292,6 +292,8 @@ class AtRpc {
   /// - parses and validates
   /// - sends an [AtRpcRespType.nack] response if deserialization or validation fails
   /// - sends an [AtRpcRespType.nack] response otherwise
+  /// - tries to acquire mutex
+  /// - sends an [AtRpcRespType.nack] response if fails to acquire mutex
   /// - calls [AtRpcCallbacks.handleRequest]
   /// - calls [sendResponse] with the response from [AtRpcCallbacks.handleRequest]
   @visibleForTesting
@@ -356,6 +358,17 @@ class AtRpc {
       return;
     }
 
+    bool mutexFetched =
+      await _tryAcquireSessionMutex(requestId, notification.to);
+    if (!mutexFetched) {
+      var message =
+          'Ignoring request: could not acquire mutex with requestId $requestId';
+      // send NACK
+      await sendResponse(notification, request,
+          AtRpcResp.nack(request: request, message: message));
+      return;
+    }
+
     // send ACK
     await sendResponse(notification, request, AtRpcResp.ack(request: request));
 
@@ -370,6 +383,35 @@ class AtRpc {
       logger.warning(st);
       await sendResponse(notification, request,
           AtRpcResp.nack(request: request, message: message));
+    }
+  }
+
+  Future<bool> _tryAcquireSessionMutex(int requestId, String atsign) async {
+    var mutexKey = AtKey.fromString('$requestId.session_mutexes.'
+        '$domainNameSpace.$rpcsNameSpace.$baseNameSpace$atsign')
+      ..metadata = (Metadata()
+        ..immutable =
+            true // ensures only the rpc of a specific service can do this for the said service
+        ..ttl =
+            30000); // keeps the datastore clean + auto releases mutex after 30s
+    PutRequestOptions pro = PutRequestOptions()
+      ..shouldEncrypt = true
+      ..useRemoteAtServer = true;
+
+    try {
+      await atClient.put(mutexKey, 'lock', putRequestOptions: pro);
+      logger
+          .shout('Will handle request from $atsign; acquired mutex $mutexKey');
+      return true;
+    } catch (err) {
+      if (err.toString().toLowerCase().contains('immutable')) {
+        logger.shout('Will not handle request from $atsign'
+            '; could not acquire mutex $mutexKey');
+      } else {
+        logger
+            .shout('Will not handle; could not acquire mutex $mutexKey : $err');
+      }
+      return false;
     }
   }
 
