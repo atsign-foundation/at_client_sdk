@@ -182,12 +182,6 @@ class AtAuthImpl implements AtAuth {
     } else {
       var atKeysIo = atOnboardingRequest.atKeysIo;
       switch (atKeysIo) {
-        // case GeneratedAtKeysIo():
-        //   if (publicKeyId == null || publicKeyId.isEmpty) {
-        //     throw AtAuthenticationException('sim publicKeyId is required for sim auth mode');
-        //   }
-        //   _atAuthKeys = atKeysIo.generateKeys(publicKeyId);
-        //   break;
         case WrittenAtKeysIo():
           if (atKeysIo is FileAtKeysIo) {
             _atAuthKeys =
@@ -318,8 +312,8 @@ class AtAuthImpl implements AtAuth {
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
         atSign: atOnboardingRequest.atSign,
-        appName: atOnboardingRequest.appName!,
-        deviceName: atOnboardingRequest.deviceName!,
+        appName: atOnboardingRequest.appName,
+        deviceName: atOnboardingRequest.deviceName,
         apkamPublicKey: atAuthKeys.apkamPublicKey!.toString());
 
     AtEnrollmentResponse? atEnrollmentResponse;
