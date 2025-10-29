@@ -1,6 +1,7 @@
 ## 1.14.0
 
-- feat: export the PrintAllArgParserUsage mixin  
+- feat: export the PrintAllArgParserUsage mixin on ArgParser
+- feat: export AuthCliArgs
 
 ## 1.13.0
 
