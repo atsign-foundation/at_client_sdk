@@ -359,7 +359,7 @@ class AtRpc {
     }
 
     bool mutexFetched =
-      await _tryAcquireSessionMutex(requestId, notification.to);
+        await _tryAcquireSessionMutex(requestId, notification.to);
     if (!mutexFetched) {
       var message =
           'Ignoring request: could not acquire mutex with requestId $requestId';
