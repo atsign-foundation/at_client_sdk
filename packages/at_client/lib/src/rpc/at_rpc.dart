@@ -301,7 +301,7 @@ class AtRpc {
   /// - sends an [AtRpcRespType.nack] response if deserialization or validation fails
   /// - sends an [AtRpcRespType.nack] response otherwise
   /// - Acquires session mutex if [enableRequestMutex] is true
-  /// - sends an [AtRpcRespType.nack] response if fails to acquire mutex
+  /// - sends an [AtRpcRespType.nack] response if mutex cannot be acquired
   /// - calls [AtRpcCallbacks.handleRequest]
   /// - calls [sendResponse] with the response from [AtRpcCallbacks.handleRequest]
   @visibleForTesting
