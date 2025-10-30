@@ -35,15 +35,13 @@ class AtOnboardingRequest extends AuthRequest {
   AtOnboardingRequest(
     super.atSign, {
     super.rootDomain,
-    this.appName = "firstApp",
-    this.deviceName = "default-device",
     this.atKeysIo,
     this.atKeys,
   });
 
   // Default root domain and port
-  String? appName;
-  String? deviceName;
+  String appName = "firstApp";
+  String deviceName = "firstDevice";
   AtKeysIo? atKeysIo;
   AtKeys? atKeys;
 }

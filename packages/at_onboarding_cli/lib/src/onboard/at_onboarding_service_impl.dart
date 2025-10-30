@@ -178,8 +178,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-    atOnboardingRequest.appName = atOnboardingPreference.appName;
-    atOnboardingRequest.deviceName = atOnboardingPreference.deviceName;
     atOnboardingRequest.atKeysIo = FileAtKeysIo();
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
@@ -660,12 +658,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<bool> authenticate({String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
     var atAuthRequest = AtAuthRequest(
-        _atSign, FileAtKeysIo(filePath: atOnboardingPreference.atKeysFilePath))
+        _atSign,
+        FileAtKeysIo(
+            filePath: atOnboardingPreference.atKeysFilePath,
+            passPhrase: atOnboardingPreference.passPhrase))
       ..enrollmentId = enrollmentId
       ..rootDomain = AtRootDomain(
           atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-    (atAuthRequest.atKeysIo as FileAtKeysIo).passPhrase =
-        atOnboardingPreference.passPhrase;
     var atAuthResponse = await atAuth!.authenticate(atAuthRequest);
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&
