@@ -24,4 +24,4 @@ dev_dependencies:
   # example dependencies:
   dart_mcp: ^0.3.3
   args: ^2.6.0
-  at_cli_commons: ^2.2.0
+  at_cli_commons: ^3.0.0
