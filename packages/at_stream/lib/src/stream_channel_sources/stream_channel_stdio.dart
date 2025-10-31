@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_stream/src/util/common_transformers.dart';
+import 'package:at_stream/src/transformers/common_transformers.dart';
 import 'package:stream_channel/stream_channel.dart'
     show StreamChannelMixin, StreamChannel;
 

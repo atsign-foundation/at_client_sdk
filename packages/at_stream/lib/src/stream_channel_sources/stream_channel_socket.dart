@@ -1,7 +1,7 @@
 import 'dart:io' show Socket;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_stream/src/stream_channel_sources/common_transformers.dart'
+import 'package:at_stream/src/transformers/common_transformers.dart'
     show CommonTransformers;
 import 'package:stream_channel/stream_channel.dart';
 
