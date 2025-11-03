@@ -30,7 +30,7 @@ class KeyChainManager {
 
   KeyChainManager._internal();
 
-  static bool isWindows = true;
+  static bool isWindows = Platform.isWindows;
 
   factory KeyChainManager.getInstance() {
     if (Platform.isWindows) {
