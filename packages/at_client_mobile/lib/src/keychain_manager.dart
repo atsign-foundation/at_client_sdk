@@ -521,7 +521,7 @@ class KeyChainManager {
     if (!isWindows) {
       await store.write(data);
     } else {
-      log('WRITE: _writeDataToStore called', true);
+      // log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
       log('  => WRITE: Writing $segmentCountInfo to ${store.name}',
@@ -548,7 +548,7 @@ class KeyChainManager {
     if (!isWindows) {
       return await store.read();
     } else {
-      log('READ: _readDataFromStore called', true);
+      // log('READ: _readDataFromStore called', true);
       String? storedData = await store.read();
       log('  => READ: Fetched $storedData from ${store.name}', false);
       if (storedData == null) {
