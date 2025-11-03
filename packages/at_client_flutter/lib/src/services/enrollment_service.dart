@@ -52,7 +52,7 @@ class FlutterEnrollmentService {
         throw Exception('Invalid enrollment');
       }
       atEnrollmentResponse = await _atEnrollment.approve(request, atLookUp);
-      _keychainAtKeysIo.write(request.atSign, atEnrollmentResponse.atAuthKeys);
+      _keychainAtKeysIo.write(request.atSign, atEnrollmentResponse.atAuthKeys!);
       _keychainStorage.deleteEnrollmentData(request.atSign);
     } catch (e) {
       throw Exception('Enrollment failed: $e');

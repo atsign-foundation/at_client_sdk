@@ -183,10 +183,8 @@ class AtAuthImpl implements AtAuth {
       var atKeysIo = atOnboardingRequest.atKeysIo;
       switch (atKeysIo) {
         case WrittenAtKeysIo():
-          if (atKeysIo is FileAtKeysIo) {
             _atAuthKeys =
                 atKeysIo.generateKeyPairs(atSign: atOnboardingRequest.atSign);
-          }
           await atKeysIo.write(atOnboardingRequest.atSign, _atAuthKeys);
           break;
         default:
