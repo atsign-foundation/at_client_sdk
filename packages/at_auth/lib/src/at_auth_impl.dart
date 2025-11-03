@@ -71,7 +71,7 @@ class AtAuthImpl implements AtAuth {
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    await _validateAtServer(atAuthRequest);
+    await validateAtServer(atAuthRequest);
     try {
       atAuthKeys ??= await atAuthRequest.atKeysIo.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
@@ -97,12 +97,26 @@ class AtAuthImpl implements AtAuth {
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');
-    pkamAuthenticator ??= PkamAuthenticator(atAuthRequest.atSign, atLookUp!);
-    AtAuthResponse pkamResponse;
+    pkamAuthenticator ??= PkamAuthenticator();
+    var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
     try {
-      pkamResponse = (await pkamAuthenticator!
-          .authenticate(enrollmentId: atAuthKeys.enrollmentId));
+      pkamResponse.isSuccessful = (await pkamAuthenticator!.authenticate(
+          atAuthRequest.atSign, atLookUp!,
+          enrollmentId: atAuthKeys.enrollmentId));
       pkamResponse.atAuthKeys = atAuthKeys;
+      if (!pkamResponse.isSuccessful) {
+        _addProgress(
+          "authentication",
+          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.error,
+        );
+      } else {
+        _addProgress(
+          "authentication",
+          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.success,
+        );
+      }
     } catch (e) {
       _addProgress(
         "authentication",
@@ -111,19 +125,7 @@ class AtAuthImpl implements AtAuth {
       );
       throw AtAuthenticationException('Unable to authenticate | Cause: $e');
     }
-    if (!pkamResponse.isSuccessful) {
-      _addProgress(
-        "authentication",
-        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
-      );
-    } else {
-      _addProgress(
-        "authentication",
-        "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.success,
-      );
-    }
+
     return pkamResponse;
   }
 
@@ -160,12 +162,15 @@ class AtAuthImpl implements AtAuth {
         s,
       ); //swallow the error, we just want to know if keys exist or not
     }
-    await _validateAtServer(atOnboardingRequest);
+    await validateAtServer(atOnboardingRequest);
     //1. cram auth
-    cramAuthenticator ??=
-        CramAuthenticator(atOnboardingRequest.atSign, cramSecret, atLookUp);
-    var cramAuthResult = await cramAuthenticator!.authenticate();
-    if (!cramAuthResult.isSuccessful) {
+    cramAuthenticator ??= CramAuthenticator();
+    var cramAuthResult = await cramAuthenticator!.authenticate(
+      _atOnboardingRequest.atSign,
+      cramSecret,
+      atLookUp!,
+    );
+    if (!cramAuthResult) {
       _addProgress(
         "onboarding",
         "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
@@ -223,26 +228,24 @@ class AtAuthImpl implements AtAuth {
     }
 
     //6. Do pkam auth
-    var isPkamAuthenticated = false;
-    pkamAuthenticator ??=
-        PkamAuthenticator(atOnboardingRequest.atSign, atLookUp!);
+    pkamAuthenticator ??= PkamAuthenticator();
     try {
-      var pkamResponse = await pkamAuthenticator!
-          .authenticate(enrollmentId: enrollmentIdFromServer);
-      isPkamAuthenticated = pkamResponse.isSuccessful;
+      var pkamResponse = await pkamAuthenticator!.authenticate(
+          atOnboardingRequest.atSign, atLookUp!,
+          enrollmentId: enrollmentIdFromServer);
+      if (!pkamResponse) {
+        _addProgress(
+            "onboarding",
+            "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+            ProgressEventType.error);
+        throw AtAuthenticationException('Pkam auth returned false');
+      }
     } on UnAuthenticatedException catch (e) {
       _addProgress(
           "onboarding",
           "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
           ProgressEventType.error);
       throw AtAuthenticationException('Pkam auth failed - $e ');
-    }
-    if (!isPkamAuthenticated) {
-      _addProgress(
-          "onboarding",
-          "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
-          ProgressEventType.error);
-      throw AtAuthenticationException('Pkam auth returned false');
     }
 
     //7. If so specified (default behaviour) then
@@ -344,7 +347,7 @@ class AtAuthImpl implements AtAuth {
   /// Throws an [AtException] if any of the checks fail.
   /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
   /// This method is used internally before onboarding or authentication operations.
-  Future<void> _validateAtServer(AuthRequest atRequest) async {
+  Future<void> validateAtServer(AuthRequest atRequest) async {
     AtServerStatus status = AtStatusImpl(
       rootUrl: atRequest.rootDomain.rootDomain,
       rootPort: atRequest.rootDomain.rootPort,
