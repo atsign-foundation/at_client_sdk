@@ -169,6 +169,13 @@ class AtRpc {
   final bool isClient;
   final bool isServer;
 
+  /// Enables the mutex in [handleRequestNotification] to ensure redundancy
+  /// handling across all services that use [AtRpc].
+  ///
+  /// When enabled, it prevents multiple [AtRpc] responses from being sent for
+  /// the same request.
+  final bool enableRequestMutex;
+
   AtRpc({
     required this.atClient,
     required this.baseNameSpace,
@@ -179,6 +186,7 @@ class AtRpc {
     this.allowAll = false,
     this.isClient = true,
     this.isServer = true,
+    this.enableRequestMutex = false,
   }) {
     if (!isClient && !isServer) {
       throw IllegalArgumentException('isClient or isServer must be true');
@@ -292,8 +300,8 @@ class AtRpc {
   /// - parses and validates
   /// - sends an [AtRpcRespType.nack] response if deserialization or validation fails
   /// - sends an [AtRpcRespType.nack] response otherwise
-  /// - tries to acquire mutex
-  /// - sends an [AtRpcRespType.nack] response if fails to acquire mutex
+  /// - Acquires session mutex if [enableRequestMutex] is true
+  /// - sends an [AtRpcRespType.nack] response if mutex cannot be acquired
   /// - calls [AtRpcCallbacks.handleRequest]
   /// - calls [sendResponse] with the response from [AtRpcCallbacks.handleRequest]
   @visibleForTesting
@@ -358,9 +366,9 @@ class AtRpc {
       return;
     }
 
-    bool mutexAcquired =
+    bool mutexAcquired = enableRequestMutex &&
         await _tryAcquireSessionMutex(requestId, notification.to);
-    if (!mutexAcquired) {
+    if (enableRequestMutex && !mutexAcquired) {
       var message =
           'Ignoring request: could not acquire mutex for requestId $requestId';
       // send NACK
