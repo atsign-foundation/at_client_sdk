@@ -213,9 +213,6 @@ class KeychainStorage {
           value = _combineString(results);
         }
 
-        // final value = await _readDataFromStore(
-        //   biometricStoreName: keychainStoreName,
-        // );
         final json = jsonDecode(value ?? '{}');
         if (json is Map<String, dynamic>) {
           return AtKeysData.fromJson(json);
