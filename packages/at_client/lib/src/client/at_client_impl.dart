@@ -316,15 +316,15 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> delete(AtKey atKey,
       {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions}) {
-    // ignore: experimental_member_use
     _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
       AtTelemetryEvent('AtClient.delete called', {"key": atKey}),
     );
     // ignore: no_leading_underscores_for_local_identifiers
     var _deleteResult =
         _delete(atKey, deleteRequestOptions: deleteRequestOptions);
-    // ignore: experimental_member_use
     _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
       AtTelemetryEvent('AtClient.delete complete',
           {"key": atKey, "_deleteResult": _deleteResult}),
     );
@@ -461,8 +461,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false, PutRequestOptions? putRequestOptions}) async {
-    // ignore: experimental_member_use
     _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
       AtTelemetryEvent('AtClient.put called', {"key": atKey}),
     );
     // If the value is neither String nor List<int> throw exception
@@ -479,8 +479,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atResponse =
           await putBinary(atKey, value, putRequestOptions: putRequestOptions);
     }
-    // ignore: experimental_member_use
     _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
       AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}),
     );
     return atResponse.response.isNotEmpty;
