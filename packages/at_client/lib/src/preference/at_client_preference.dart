@@ -1,7 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
-import 'package:meta/meta.dart';
 import 'package:version/version.dart';
 
 /// Class to hold attributes for client preferences.
@@ -102,7 +101,6 @@ class AtClientPreference {
   @Deprecated('Will be removed in next major version')
   Version atProtocolEmitted = Version(2, 0, 0);
 
-  @experimental
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
   //signing algorithm to use for pkam authentication

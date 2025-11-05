@@ -1,3 +1,9 @@
+## 3.9.1
+
+- chore: removed `@experimental` annotation from AtRpc and AtCollection
+- chore: added `// ignore: experimental_member_use` for usages of the 
+  still-experimental AtTelemetry
+
 ## 3.9.0
 
 - feat: introduce single-responder mode in AtRpc enabling redundancy support in

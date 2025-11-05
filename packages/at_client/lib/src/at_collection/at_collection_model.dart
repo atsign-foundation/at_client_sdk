@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:at_client/src/at_collection/at_collection_model_factory.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 import 'at_json_collection_model.dart';
 import 'collections.dart';
@@ -10,7 +9,6 @@ import 'impl/at_collection_operations_impl.dart';
 import 'impl/at_collection_query_operations_impl.dart';
 import 'impl/at_collection_stream_operations_impl.dart';
 
-@experimental
 abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   static final _logger = AtSignLogger('AtCollectionModel');
 

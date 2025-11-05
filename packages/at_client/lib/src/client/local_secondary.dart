@@ -27,9 +27,6 @@ class LocalSecondary implements Secondary {
         .getSecondaryKeyStore();
   }
 
-  @experimental
-  AtTelemetryService? telemetry;
-
   // temporarily cache enrollmentDetails until we store in local secondary
   @visibleForTesting
   Enrollment? enrollment;
