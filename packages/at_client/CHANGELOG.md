@@ -1,3 +1,9 @@
+## 3.9.0
+
+- feat: introduce single-responder mode in AtRpc enabling redundancy support in
+  request-response services relying on AtRpc. This feature is coupled with
+  `enableRequestMutex` flag that controls it.
+  
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
