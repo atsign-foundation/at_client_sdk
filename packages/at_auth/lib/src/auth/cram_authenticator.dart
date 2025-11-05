@@ -1,24 +1,24 @@
-import 'package:at_auth/src/auth/models/at_auth_responses.dart';
+import 'dart:async';
+
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 
-class CramAuthenticator {
-  final String _cramSecret;
-  final String _atSign;
-  CramAuthenticator(this._atSign, this._cramSecret, this.atLookup);
+class CramAuthenticator{ 
+  CramAuthenticator();
 
-  AtLookUp? atLookup;
-
-  Future<AtAuthResponse> authenticate() async {
-    var authResult = AtAuthResponse(_atSign);
+  Future<bool> authenticate(
+    String atSign,
+    String cramSecret,
+    AtLookUp atLookUp, {
+    Duration retryInterval = const Duration(seconds: 2),
+    Duration timeout = const Duration(seconds: 30),
+    int maxRetries = 10,
+  }) async {
     try {
-      bool cramResult =
-          await (atLookup as AtLookupImpl).cramAuthenticate(_cramSecret);
-      authResult.isSuccessful = cramResult;
+      return await (atLookUp as AtLookupImpl).cramAuthenticate(cramSecret);
     } on UnAuthenticatedException catch (e) {
       throw UnAuthenticatedException(
-          'cram auth failed for $_atSign - ${e.toString()}');
+          'cram auth failed for $atSign - ${e.toString()}');
     }
-    return authResult;
   }
 }

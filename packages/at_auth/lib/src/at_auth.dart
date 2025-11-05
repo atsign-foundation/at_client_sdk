@@ -56,4 +56,10 @@ abstract interface class AtAuth {
   /// - Update encryption public key to server
   /// - Delete cram secret from server
   Future<void> completeActivation();
+
+  /// Validate atsign's secondary server status
+  /// - Check if atsign's secondary server is reachable in atDirectory
+  /// - AtOnboardingRequest: validates server for onboarding and looks for teapot
+  /// - AtAuthRequest: validates server for authentication
+  Future<void> validateAtServer(AtAuthRequest atAuthRequest);
 }

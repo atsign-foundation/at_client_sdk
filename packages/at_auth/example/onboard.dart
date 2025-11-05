@@ -25,16 +25,14 @@ void main(List<String> args) async {
     final atAuth = AtAuth.create();
     final atSign = argResults['atsign'];
     final atOnboardingRequest = AtOnboardingRequest(atSign)
-      ..rootDomain = argResults['rootDomain']
-      ..appName = 'wavi'
-      ..deviceName = 'iphone';
+      ..rootDomain = argResults['rootDomain'];
     final atOnboardingResponse =
         await atAuth.onboard(atOnboardingRequest, argResults['cramsecret']);
-    print('atOnboardingResponse: $atOnboardingResponse');
     if (atOnboardingResponse.isSuccessful) {
       await _generateAtKeysFile(atOnboardingResponse.enrollmentId,
           atOnboardingResponse.atAuthKeys!, atSign, argResults['keysFilePath']);
     }
+    print('atOnboardingResponse: $atOnboardingResponse');
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {

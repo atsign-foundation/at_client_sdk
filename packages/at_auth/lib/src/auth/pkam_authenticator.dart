@@ -1,22 +1,15 @@
-import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 class PkamAuthenticator {
-  final String _atSign;
-  final AtLookUp _atLookup;
-  PkamAuthenticator(this._atSign, this._atLookup);
+  PkamAuthenticator();
 
-  Future<AtAuthResponse> authenticate({String? enrollmentId}) async {
-    var authResult = AtAuthResponse(_atSign);
+  Future<bool> authenticate(String atSign, AtLookUp atLookup, {String? enrollmentId}) async {
     try {
-      bool pkamResult =
-          await _atLookup.pkamAuthenticate(enrollmentId: enrollmentId);
-      authResult.isSuccessful = pkamResult;
-    } on UnAuthenticatedException catch (e) {
+      return await atLookup.pkamAuthenticate(enrollmentId: enrollmentId);
+    } catch (e) {
       throw UnAuthenticatedException(
-          'pkam auth failed for $_atSign - ${e.toString()}');
+          'pkam auth failed for $atSign - ${e.toString()}');
     }
-    return authResult;
   }
 }

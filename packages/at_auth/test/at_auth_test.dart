@@ -53,10 +53,9 @@ void main() {
     test('Test authenticate() true with keys file', () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+              enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
@@ -72,10 +71,9 @@ void main() {
     test('Test authenticate() false with keys file', () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(false));
-      when(() => mockPkamAuthenticator.authenticate(
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
-          .thenAnswer((_) =>
-              Future.value(AtAuthResponse('@alice🛠')..isSuccessful = false));
+          .thenAnswer((_) => Future.value(false));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
@@ -91,10 +89,9 @@ void main() {
     test('Test authenticate() invalid keys file path', () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+              enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         FileAtKeysIo(filePath: 'test/hello/data/@alice🛠_key.atKeys'),
@@ -108,10 +105,9 @@ void main() {
     test('Test authenticate() with atAuthKeys set', () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+              enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
@@ -141,10 +137,9 @@ void main() {
         () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockPkamAuthenticator.authenticate(
-              enrollmentId: testEnrollmentId)).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+              enrollmentId: testEnrollmentId))
+          .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
@@ -185,7 +180,7 @@ void main() {
         () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenThrow(UnAuthenticatedException('Unauthenticated'));
-      when(() => mockPkamAuthenticator.authenticate(
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
           .thenThrow(AtAuthenticationException('Unauthenticated'));
       final atAuthRequest = AtAuthRequest(
@@ -209,8 +204,8 @@ void main() {
           .thenAnswer((_) => Future.value('data:2'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate()).thenAnswer(
-          (_) => Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
 
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
         ..rootDomain = AtRootDomain('test.atsign.com', 64);
@@ -232,9 +227,8 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(enrollmentId: "abc123"))
-          .thenAnswer((_) =>
-              Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
@@ -261,9 +255,8 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(enrollmentId: "abc123"))
-          .thenAnswer((_) =>
-              Future.value(AtAuthResponse('@alice🛠')..isSuccessful = true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
