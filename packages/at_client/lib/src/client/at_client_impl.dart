@@ -261,11 +261,11 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   /// Does nothing unless a telemetry service has been injected
   void _cascadeSetTelemetryService() {
-    if (telemetry != null) {
-      _encryptionService?.telemetry = telemetry;
-      _localSecondary?.telemetry = telemetry;
-      _remoteSecondary?.telemetry = telemetry;
-    }
+    // if (telemetry != null) {
+    //   _encryptionService?.telemetry = telemetry;
+    //   _localSecondary?.telemetry = telemetry;
+    //   _remoteSecondary?.telemetry = telemetry;
+    // }
   }
 
   Secondary getSecondary() {
@@ -316,13 +316,18 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> delete(AtKey atKey,
       {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions}) {
-    _telemetry?.controller.sink
-        .add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
+    // ignore: experimental_member_use
+    _telemetry?.controller.sink.add(
+      AtTelemetryEvent('AtClient.delete called', {"key": atKey}),
+    );
     // ignore: no_leading_underscores_for_local_identifiers
     var _deleteResult =
         _delete(atKey, deleteRequestOptions: deleteRequestOptions);
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',
-        {"key": atKey, "_deleteResult": _deleteResult}));
+    // ignore: experimental_member_use
+    _telemetry?.controller.sink.add(
+      AtTelemetryEvent('AtClient.delete complete',
+          {"key": atKey, "_deleteResult": _deleteResult}),
+    );
     return _deleteResult;
   }
 
@@ -456,8 +461,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false, PutRequestOptions? putRequestOptions}) async {
-    _telemetry?.controller.sink
-        .add(AtTelemetryEvent('AtClient.put called', {"key": atKey}));
+    // ignore: experimental_member_use
+    _telemetry?.controller.sink.add(
+      AtTelemetryEvent('AtClient.put called', {"key": atKey}),
+    );
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -472,8 +479,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atResponse =
           await putBinary(atKey, value, putRequestOptions: putRequestOptions);
     }
-    _telemetry?.controller.sink
-        .add(AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}));
+    // ignore: experimental_member_use
+    _telemetry?.controller.sink.add(
+      AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}),
+    );
     return atResponse.response.isNotEmpty;
   }
 
