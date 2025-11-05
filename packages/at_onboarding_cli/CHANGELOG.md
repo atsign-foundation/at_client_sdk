@@ -1,3 +1,7 @@
+## 1.14.1
+
+- build: remove the dependency override on the `args` package 
+
 ## 1.14.0
 
 - feat: export the PrintAllArgParserUsage mixin on ArgParser
