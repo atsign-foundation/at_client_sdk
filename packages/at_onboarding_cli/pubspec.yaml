@@ -33,12 +33,6 @@ dependencies:
   crypto: ^3.0.5
   chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
 
-dependency_overrides:
-  args:
-    git:
-      ref: gkc/show-aliases-in-usage
-      url: https://github.com/gkc/args
-
 dev_dependencies:
   at_persistence_secondary_server: ^4.2.0
   alfred: ^1.1.2+1
