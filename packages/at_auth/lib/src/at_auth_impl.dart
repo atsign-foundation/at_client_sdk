@@ -152,11 +152,11 @@ class AtAuthImpl implements AtAuth {
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
     try {
       atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
-        _atOnboardingRequest.atSign,
+        atOnboardingRequest.atSign,
       );
     } catch (e, s) {
       _logger.info(
-        'Failed to read keys for atSign: ${_atOnboardingRequest.atSign} | Cause: $e',
+        'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
         s,
       ); //swallow the error, we just want to know if keys exist or not
     }
@@ -183,8 +183,8 @@ class AtAuthImpl implements AtAuth {
       var atKeysIo = atOnboardingRequest.atKeysIo;
       switch (atKeysIo) {
         case WrittenAtKeysIo():
-            _atAuthKeys =
-                atKeysIo.generateKeyPairs(atSign: atOnboardingRequest.atSign);
+          _atAuthKeys =
+              atKeysIo.generateKeyPairs(atSign: atOnboardingRequest.atSign);
           await atKeysIo.write(atOnboardingRequest.atSign, _atAuthKeys);
           break;
         default:
@@ -363,7 +363,6 @@ class AtAuthImpl implements AtAuth {
                 'Could not find root server: ${atRequest.rootDomain.rootDomain}');
           }
           if (atStatus.serverStatus == ServerStatus.error ||
-              atStatus.serverStatus == ServerStatus.stopped ||
               atStatus.atSignStatus == AtSignStatus.unavailable) {
             throw AtException(
                 'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform onboarding.');
