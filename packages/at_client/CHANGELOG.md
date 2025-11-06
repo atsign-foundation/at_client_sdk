@@ -1,3 +1,7 @@
+## 3.9.2
+
+- fix: AtRpc - prevent NACK/ACK race when handling request mutex acquisition
+
 ## 3.9.1
 
 - chore: removed `@experimental` annotation from AtRpc and AtCollection
