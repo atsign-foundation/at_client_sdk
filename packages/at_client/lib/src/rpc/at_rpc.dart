@@ -367,11 +367,8 @@ class AtRpc {
     bool mutexAcquired = enableRequestMutex &&
         await _tryAcquireSessionMutex(requestId, notification.to);
     if (enableRequestMutex && !mutexAcquired) {
-      var message =
-          'Ignoring request: could not acquire mutex for requestId $requestId';
-      // send NACK
-      await sendResponse(notification, request,
-          AtRpcResp.nack(request: request, message: message));
+      logger.shout(
+          'Ignoring request: could not acquire mutex for requestId $requestId');
       return;
     }
 
