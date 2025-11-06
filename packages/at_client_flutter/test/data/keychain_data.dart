@@ -84,3 +84,23 @@ const legacyEnrollmentInfo = '''
       "keysFilePath": "/path/to/keysfile"
     }
     ''';
+
+bool checkSchemaEquality(KeychainData keychainData) {
+  Map<String, dynamic> jsonData = {};
+  if (keychainData is AtKeysData)
+  {
+    jsonData = jsonDecode(dummyAtKeysData);
+  } else if (keychainData is EnrollmentData) {
+    jsonData = jsonDecode(dummyEnrollmentData);
+  }
+  final keychainDataJson = keychainData.toJson();
+  if (keychainDataJson.length != jsonData.length) {
+    return false;
+  }
+  for (final key in keychainDataJson.keys) {
+    if (!jsonData.containsKey(key)) {
+      return false;
+    }
+  }
+  return true;
+}

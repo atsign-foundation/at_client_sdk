@@ -143,7 +143,7 @@ class KeychainStorage {
       final Map<String, dynamic> jsonData = jsonDecode(data);
       return EnrollmentData.fromJson(jsonData);
     }
-    throw Exception('Failed to read enrollment data');
+    return null; 
   }
 
   Future<void> writeEnrollmentData({
