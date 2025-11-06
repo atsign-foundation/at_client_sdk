@@ -98,6 +98,7 @@ class AtStatusImpl implements AtServerStatus {
       // ignore: omit_local_variable_types
       AtLookupImpl atLookupImpl =
           AtLookupImpl(atSign!, _rootUrl!, _rootPort!);
+      await atLookupImpl.executeCommand('from:$atSign\n');
       await atLookupImpl.scan(auth: false).then((keysList) async {
         if (keysList.isNotEmpty) {
           if (keysList.contains(testKey)) {
