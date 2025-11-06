@@ -15,7 +15,7 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
 
   @override
   Future<AtKeys> read(String atSign) async {
-    final atsignKey = await keychainStorage.getAtsign(atSign);
+    final AtKeys? atsignKey = await keychainStorage.getAtsign(atSign);
     if (atsignKey == null) {
       throw AtKeyException(
           'AtsignKey not found in keychain for atSign: $atSign');

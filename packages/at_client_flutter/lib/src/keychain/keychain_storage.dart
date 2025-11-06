@@ -24,13 +24,14 @@ class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
   static bool isWindows = Platform.isWindows;
   @visibleForTesting
-  BiometricStorage biometricStorage = BiometricStorage();
+  late BiometricStorage biometricStorage;
 
-  KeychainStorage() {
+  KeychainStorage({BiometricStorage? biometricStorage}) {
     if (isWindows) {
       // ignore: undefined_method
       Win32BiometricStoragePlugin.registerWith();
     }
+    this.biometricStorage = biometricStorage ?? BiometricStorage();
   }
 
   // All exposed methods for keychain storage operations
@@ -40,10 +41,11 @@ class KeychainStorage {
   /// Function to read AtKeysData from keychain
   Future<AtKeysData?> readAtKeysData() async {
     final data = await _read(keychainStoreName: (await AtKeysStore.getName()));
-    if (data is AtKeysData) {
-      return data;
+    if (data != null) {
+      final json = jsonDecode(data);
+      return AtKeysData.fromJson(json);
     }
-    throw Exception('Failed to read AtKeysData from keychain');
+    return null;
   }
 
   Future<AtKeys?> getAtsign(String atSign) async {
@@ -52,13 +54,33 @@ class KeychainStorage {
       throw AtKeyException('No atsign found in keychain');
     }
     for (int i = 0; i < atKeysData.keys.length; i++) {
+      // Check for both 'atsign' and legacy 'name' keys in metadata
       if (atKeysData.keys[i].metadata.containsKey('atsign')) {
         if (atKeysData.keys[i].metadata['atsign'] == atSign) {
           return atKeysData.keys[i];
         }
+      } else if (atKeysData.keys[i].metadata['name'] == atSign) {
+        return atKeysData.keys[i];
       }
     }
     return null;
+  }
+
+  Future<List<String>> getAllAtsigns() async {
+    final atKeysData = await readAtKeysData();
+    if (atKeysData == null) {
+      return [];
+    }
+    final atSigns = <String>{};
+    for (int i = 0; i < atKeysData.keys.length; i++) {
+      // Check for both 'atsign' and legacy 'name' keys in metadata
+      if (atKeysData.keys[i].metadata.containsKey('atsign')) {
+        atSigns.add(atKeysData.keys[i].metadata['atsign']);
+      } else if (atKeysData.keys[i].metadata['name']) {
+        atSigns.add(atKeysData.keys[i].metadata['name']);
+      }
+    }
+    return atSigns.toList();
   }
 
   Future<void> appendAtKeysToKeychain({
@@ -84,9 +106,10 @@ class KeychainStorage {
 
   Future<void> removeAtsignFromKeychain(String atSign) async {
     try {
-      final atKeysData =
+      final data =
           await _read(keychainStoreName: (await AtKeysStore.getName()));
-      if (atKeysData is AtKeysData) {
+      if (data != null) {
+        final atKeysData = AtKeysData.fromJson(jsonDecode(data));
         atKeysData.keys
             .removeWhere((element) => element.metadata['atsign'] == atSign);
         await _write(
@@ -114,10 +137,11 @@ class KeychainStorage {
 
   // Functions for EnrollmentStore CRUD operations
   Future<EnrollmentData?> readEnrollmentData(String atSign) async {
-    final data =
+    final String? data =
         await _read(keychainStoreName: EnrollmentStore(atSign).getName());
-    if (data is EnrollmentData) {
-      return data;
+    if (data != null) {
+      final Map<String, dynamic> jsonData = jsonDecode(data);
+      return EnrollmentData.fromJson(jsonData);
     }
     throw Exception('Failed to read enrollment data');
   }
@@ -160,7 +184,7 @@ class KeychainStorage {
     }
   }
 
-  Future<KeychainData?> _read({
+  Future<String?> _read({
     required String keychainStoreName,
   }) async {
     try {
@@ -169,11 +193,12 @@ class KeychainStorage {
       String? value;
       if (!isWindows) {
         value = await store.read();
+        return value;
       } else {
         // log('READ: _readDataFromStore called', true);
         String? storedData = await store.read();
-        log('  => READ: Fetched $storedData from ${store.name}', false);
-        if (storedData == null) {
+        log('  => READ: Fetched $storedData from $keychainStoreName', false);
+        if (storedData == null || storedData.isEmpty) {
           return null;
         }
 
@@ -198,33 +223,31 @@ class KeychainStorage {
               ', and inferred LEGACY, BUGGY segmentPrefix $segmentPrefix,'
               ' from storedData $storedData',
               false);
-          final results = <String>[];
-          for (int i = 0; i < segmentCount; i++) {
-            final segmentStore =
-                await _getBiometricStorageFile('${segmentPrefix}_$i');
-            String? segmentValue = await segmentStore.read();
-            log(
-                '  => READ: Fetched segment $i, length ${segmentValue?.length}'
-                ' from ${segmentStore.name}',
-                false);
-            // log('  => READ: segmentValue was $segmentValue', false);
-            results.add(segmentValue ?? '');
-          }
-          value = _combineString(results);
         }
+        final results = <String>[];
+        for (int i = 0; i < segmentCount; i++) {
+          final segmentStore =
+              await _getBiometricStorageFile('${segmentPrefix}_$i');
+          String? segmentValue = await segmentStore.read();
+          log(
+              '  => READ: Fetched segment $i, length ${segmentValue?.length}'
+              ' from $segmentPrefix',
+              false);
+          // log('  => READ: segmentValue was $segmentValue', false);
+          results.add(segmentValue ?? '');
+        }
+        value = _combineString(results);
 
-        final json = jsonDecode(value ?? '{}');
-        if (json is Map<String, dynamic>) {
-          return AtKeysData.fromJson(json);
-        }
+        return value;
       }
     } catch (e, s) {
-      _logger.severe('_getAtClientData failed with $e', e, s);
+      _logger.severe('_read failed with $e', e, s);
       print(s);
       _logger.severe('Removing data');
       await _write(
           biometricStoreName: keychainStoreName,
           keychainData: EmptyKeychainData());
+      rethrow;
     }
     return null;
   }
@@ -256,21 +279,9 @@ class KeychainStorage {
     }
   }
 
-  Future<String> getBiometricStoreName(KeychainStore keychainStore) async {
-    switch (keychainStore.runtimeType) {
-      case AtKeysStore _:
-        return await AtKeysStore.getName();
-      case EnrollmentStore _:
-        final EnrollmentStore store = keychainStore as EnrollmentStore;
-        return store.getName();
-      default:
-        throw Exception('Unsupported KeychainStore type');
-    }
-  }
-
   Future<BiometricStorageFile> _getBiometricStorageFile(
       String storeName) async {
-    return await BiometricStorage().getStorage(storeName,
+    return await biometricStorage.getStorage(storeName,
         options: StorageFileInitOptions(
           authenticationRequired: false,
         ));

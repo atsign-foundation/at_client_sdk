@@ -29,7 +29,7 @@ class AtKeysData extends KeychainData {
 
   @override
   Map<String, dynamic> toJson() => {
-        'keys': keys,
+        'keys': (keys).map((e) => e.toJson()).toList(),
         'defaultAtsign': defaultAtsign,
       };
 }
