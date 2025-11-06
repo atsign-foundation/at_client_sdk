@@ -1,3 +1,7 @@
+## 1.1.1
+
+- fix: Make this work properly with atServer proxy services
+
 ## 1.1.0
 
 - chore(deps): remove unused dependencies
