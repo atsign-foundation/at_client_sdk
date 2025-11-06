@@ -110,8 +110,7 @@ void main() {
           AtKeysData);
     });
 
-    test('saveAtKeys throws exception on biometricStorage failure',
-        () async {
+    test('saveAtKeys throws exception on biometricStorage failure', () async {
       final atKeys = AtKeys.fromJson({'key': 'value'});
       when(() => mockBiometricStorage.getStorage(any(),
               options: any(named: 'options')))
@@ -148,8 +147,8 @@ void main() {
 
     test('readAtKeysData combines data on Windows platform', () async {
       KeychainStorage.isWindows = true;
-      when(() => mockBiometricStorageFile.read())
-          .thenAnswer((_) async => '{"segmentCount": 2}'); // Simulate 2 segments
+      when(() => mockBiometricStorageFile.read()).thenAnswer(
+          (_) async => '{"segmentCount": 2}'); // Simulate 2 segments
       when(() => mockBiometricStorage.getStorage('@atsigns_test',
               options: any(named: 'options')))
           .thenAnswer((_) async => mockBiometricStorageFile);
@@ -175,6 +174,12 @@ void main() {
       final string = jsonEncode(result!.toJson());
       expect(string, equals(dummyAtKeysData));
     });
+
+    tearDown(() {
+      KeychainStorage.isWindows = false;
+      reset(mockBiometricStorage);
+      reset(mockBiometricStorageFile);
+    });
   });
 
   group("Legacy Keychain Support", () {
@@ -185,6 +190,7 @@ void main() {
     // Enrollment Schema hasn't changed, so no tests needed for that.
 
     setUp(() {
+      resetMocktailState();
       mockBiometricStorage = MockBiometricStorage();
       mockBiometricStorageFile = MockBiometricStorageFile();
       keyChainStorage = KeychainStorage();
