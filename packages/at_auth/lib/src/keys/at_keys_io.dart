@@ -17,14 +17,14 @@ sealed class AtKeysIo {
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
-abstract class WrittenAtKeysIo implements AtKeysIo {
+abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
   Future write(String atSign, AtKeys atKeys);
 }
 
 /// An interface that defines methods for AtKeys that can be generated.
 /// It can be implemented by classes that generate AtKeys using different methods,
 /// such as secure element.
-abstract class GeneratedAtKeysIo implements AtKeysIo {
+abstract class GeneratedAtKeysIo extends AtKeysIo with KeyIOMixin {
   AtKeys generateKeys(String publicKeyId);
 }
 

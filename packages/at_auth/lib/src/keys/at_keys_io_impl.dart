@@ -13,7 +13,7 @@ import 'package:at_auth/src/keys/at_keys_io.dart';
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
 /// If [filePath] is not provided, it defaults to a standard location based on the atSign.
 /// The [passPhrase] is used for atKeys files that are password protected.
-class FileAtKeysIo extends WrittenAtKeysIo with KeyIOMixin {
+class FileAtKeysIo extends WrittenAtKeysIo {
   @visibleForTesting
   String? filePath;
   String? passPhrase;

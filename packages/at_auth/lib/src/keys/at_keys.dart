@@ -25,11 +25,9 @@ class AtKeys {
           defaultSelfEncryptionKey?.toString(),
       auth_constants.apkamSymmetricKey: apkamSymmetricKey?.toString(),
       'enrollmentId': enrollmentId,
-      'metadata': {
-        for (var entry in metadata.entries)
-          if (!auth_constants.keySchemaList.contains(entry.key))
-            entry.key: entry.value
-      }
+      for (var entry in metadata.entries)
+        if (!auth_constants.keySchemaList.contains(entry.key))
+          entry.key: entry.value
     };
   }
 
@@ -61,7 +59,7 @@ class AtKeys {
       ..enrollmentId =
           _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
     for (var entry in json.entries) {
-      if (!keys.toJson().containsKey(entry.key)) {
+      if (!auth_constants.keySchemaList.contains(entry.key)) {
         keys.metadata[entry.key] = entry.value;
       }
     }

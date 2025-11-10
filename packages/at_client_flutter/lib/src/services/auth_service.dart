@@ -26,12 +26,6 @@ class AuthService {
     AtOnboardingResponse? atOnboardingResponse;
     try {
       atOnboardingResponse = await _atAuth.onboard(request, cramSecret);
-      // Save the atAuthKeys in keychain if we didn't onboard via keychain.
-      if (atOnboardingResponse.isSuccessful &&
-          request.atKeysIo is! KeychainAtKeysIo) {
-        await _keychainAtKeysIo.write(
-            request.atSign, atOnboardingResponse.atAuthKeys);
-      }
     } catch (e) {
       rethrow;
     }
@@ -51,7 +45,7 @@ class AuthService {
       if (atAuthResponse.isSuccessful &&
           atAuthRequest.atKeysIo is! KeychainAtKeysIo) {
         await _keychainAtKeysIo.write(
-            atAuthRequest.atSign, atAuthResponse.atAuthKeys);
+            atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
       }
     } catch (e) {
       rethrow;
