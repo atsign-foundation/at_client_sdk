@@ -589,7 +589,7 @@ Future<void> setSpp(ArgResults argResults, AtClient atClient) async {
 Future<void> outputOtp(ArgResults argResults, AtClient atClient) async {
   String? otpExpiry = argResults[AuthCliArgs.argNameExpiry];
   try {
-    String otp = await getEnrollOtp(atClient, otpExpiry: otpExpiry);
+    String otp = await requestEnrollOtp(atClient, otpExpiry: otpExpiry);
     stdout.writeln(otp);
   } catch (e) {
     stderr.writeln(e);
