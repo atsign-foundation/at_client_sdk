@@ -2,7 +2,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:duration/duration.dart';
 
-Future<String> requestEnrollOtp(AtClient atClient, {String? otpExpiry}) async {
+Future<String> requestEnrollmentOtp(AtClient atClient, {String? otpExpiry}) async {
   StringBuffer otpCommandBuffer = StringBuffer()..append('otp:get');
   if (otpExpiry != null && otpExpiry.isNotEmpty) {
     otpCommandBuffer.append(':ttl:${parseDuration(otpExpiry).inMilliseconds}');
