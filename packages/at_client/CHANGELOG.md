@@ -1,3 +1,9 @@
+## 3.10.0
+
+- feat: new AtBase mixin
+  - both ApkamSigning and AtClientBindings implement it.
+- feat: new EnvelopeSigning mixin on ApkamSigning
+
 ## 3.9.2
 
 - fix: AtRpc - prevent NACK/ACK race when handling request mutex acquisition

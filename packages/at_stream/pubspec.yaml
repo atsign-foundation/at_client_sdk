@@ -1,6 +1,6 @@
 name: at_stream
 description: Stream data over the atPlatform
-version: 0.1.0-dev.1
+version: 0.1.0-dev.2
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_stream
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -10,7 +10,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_client: ^3.7.0
+  at_client: ^3.10.0
   at_utils: ^3.0.19
   at_commons: ^5.5.0
   meta: ^1.16.0
