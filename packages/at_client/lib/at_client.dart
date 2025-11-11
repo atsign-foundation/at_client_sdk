@@ -20,6 +20,7 @@ export 'package:at_client/src/rpc/at_rpc.dart';
 export 'package:at_client/src/rpc/at_rpc_types.dart';
 export 'package:at_client/src/service/enrollment_service.dart';
 export 'package:at_client/src/service/enrollment_service_impl.dart';
+export 'package:at_auth/src/enroll/enrollment_request_decision.dart';
 export 'package:at_client/src/service/notification_service.dart';
 export 'package:at_client/src/service/sync/sync_conflict.dart';
 export 'package:at_client/src/service/sync/sync_result.dart';
