@@ -1,3 +1,7 @@
+## 3.9.3
+
+feat: re-export enrollment_service_impl, enrollment_request_decision, and at_enrollment_response from at_auth via at_client
+
 ## 3.9.2
 
 - fix: AtRpc - prevent NACK/ACK race when handling request mutex acquisition
