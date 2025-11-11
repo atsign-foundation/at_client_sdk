@@ -55,6 +55,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
     String deviceName,
     String otp,
     Map<String, String> namespaces, {
+    File? atKeysFile,
     Duration retryInterval = defaultApkamRetryInterval,
     int maxRetries = defaultMaxApkamRetries,
   });
