@@ -1,3 +1,7 @@
+## 1.14.2
+
+- feat: expose methods requestEnrollmentOtp(), createAtClient() to be used downstream
+
 ## 1.14.1
 
 - build: remove the dependency override on the `args` package 
