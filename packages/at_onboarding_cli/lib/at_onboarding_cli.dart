@@ -9,4 +9,3 @@ export 'src/util/auth_key_type.dart';
 export 'src/util/print_full_parser_usage.dart';
 export 'src/cli/auth_cli_args.dart';
 export 'src/util/request_enrollment_otp.dart';
-export 'src/util/create_at_client_cli.dart';

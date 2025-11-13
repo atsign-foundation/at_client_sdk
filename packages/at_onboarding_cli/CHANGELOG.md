@@ -1,6 +1,6 @@
 ## 1.14.2
 
-- feat: expose methods requestEnrollmentOtp(), createAtClient() to be used downstream
+- feat: expose method requestEnrollmentOtp() to be used downstream
 - feat: expose atKeysFile in OnboardingService.enroll() method signature
 
 ## 1.14.1
