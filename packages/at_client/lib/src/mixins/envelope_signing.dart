@@ -21,9 +21,11 @@ import 'package:at_client/at_client_mixins.dart' show ApkamSigning;
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException, AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting, experimental;
 
 // TODO(xavierchanth): write tests
+
+@experimental
 mixin EnvelopeSigning on ApkamSigning {
   /// How to handle caching of public keys used for verification
   ///
