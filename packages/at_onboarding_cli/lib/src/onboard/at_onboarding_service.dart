@@ -45,16 +45,24 @@ abstract class AtOnboardingService implements ProgressPublisher {
   /// [sendEnrollRequest], [awaitApproval] and [createAtKeysFile] in turn.
   ///
   /// [appName] - application name of the client e.g wavi,buzz, atmosphere etc.,
+  ///
   /// [deviceName] - device identifier from the requesting application e.g iphone,any unique ID that identifies the requesting client
+  ///
   /// [otp] - otp generated via an already enrolled app
+  ///
   /// [namespaces] - key-value pair of namespace-access of the requesting client e.g {"wavi":"rw","contacts":"r"}
+  ///
   /// [retryInterval] - how frequently to re-check if the request
   /// has been approved or denied.
+  ///
+  /// [atKeysFile] the file into which the atKeys generated for this enrollment
+  /// will be written
   Future<AtEnrollmentResponse> enroll(
     String appName,
     String deviceName,
     String otp,
     Map<String, String> namespaces, {
+    File? atKeysFile,
     Duration retryInterval = defaultApkamRetryInterval,
     int maxRetries = defaultMaxApkamRetries,
   });

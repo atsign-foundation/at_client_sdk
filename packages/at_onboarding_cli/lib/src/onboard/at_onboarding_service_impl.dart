@@ -610,7 +610,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await fileWriter.flush();
     await fileWriter.close();
     stdout.writeln(
-        '${chalk.green('[Success]')} Your .atKeys file saved at ${atOnboardingPreference.atKeysFilePath}\n');
+        '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');
 
     return atKeysFile;
   }

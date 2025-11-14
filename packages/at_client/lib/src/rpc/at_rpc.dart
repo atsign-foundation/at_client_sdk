@@ -367,8 +367,6 @@ class AtRpc {
     bool mutexAcquired = enableRequestMutex &&
         await _tryAcquireSessionMutex(requestId, notification.to);
     if (enableRequestMutex && !mutexAcquired) {
-      logger.shout(
-          'Ignoring request: could not acquire mutex for requestId $requestId');
       return;
     }
 
