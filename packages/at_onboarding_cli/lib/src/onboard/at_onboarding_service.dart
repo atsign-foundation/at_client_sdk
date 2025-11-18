@@ -25,6 +25,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
   });
 
   /// - Update encryption public key to server
+  ///
   /// - Delete cram secret from server
   Future<void> completeActivation();
 
@@ -39,6 +40,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
   /// Sends an enroll request to the server, and waits for the request to be
   /// approved. Apps that are already enrolled will receive
   /// notifications for this enroll request and can approve/deny the request.
+  ///
   /// If the request is denied, or times out, an exception will be thrown.
   ///
   /// Calling this method is exactly equivalent to calling
@@ -46,11 +48,13 @@ abstract class AtOnboardingService implements ProgressPublisher {
   ///
   /// [appName] - application name of the client e.g wavi,buzz, atmosphere etc.,
   ///
-  /// [deviceName] - device identifier from the requesting application e.g iphone,any unique ID that identifies the requesting client
+  /// [deviceName] - device identifier from the requesting application
+  /// e.g iphone,any unique ID that identifies the requesting client
   ///
   /// [otp] - otp generated via an already enrolled app
   ///
-  /// [namespaces] - key-value pair of namespace-access of the requesting client e.g {"wavi":"rw","contacts":"r"}
+  /// [namespaces] - key-value pair of namespace-access of the requesting client
+  /// e.g {"wavi":"rw","contacts":"r"}
   ///
   /// [retryInterval] - how frequently to re-check if the request
   /// has been approved or denied.
