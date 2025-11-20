@@ -11,7 +11,6 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -156,17 +155,16 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
         atOnboardingRequest.atSign,
       );
-    } catch (e, s) {
+    } catch (e, _) {
       _logger.info(
         'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
-        s,
       ); //swallow the error, we just want to know if keys exist or not
     }
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator();
     var cramAuthResult = await cramAuthenticator!.authenticate(
-      _atOnboardingRequest.atSign,
+      atOnboardingRequest.atSign,
       cramSecret,
       atLookUp!,
     );
@@ -260,6 +258,7 @@ class AtAuthImpl implements AtAuth {
         "onboarding",
         "Onboarding successful for atSign: ${atOnboardingRequest.atSign}",
         ProgressEventType.success);
+    _atOnboardingRequest = atOnboardingRequest;
     return atOnboardingResponse;
   }
 
@@ -345,6 +344,7 @@ class AtAuthImpl implements AtAuth {
   /// Throws an [AtException] if any of the checks fail.
   /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
   /// This method is used internally before onboarding or authentication operations.
+  @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
     AtServerStatus status = AtStatusImpl(
       rootUrl: atRequest.rootDomain.rootDomain,
@@ -366,9 +366,9 @@ class AtAuthImpl implements AtAuth {
                 'Could not find root server: ${atRequest.rootDomain.rootDomain}');
           }
           if (atStatus.serverStatus == ServerStatus.error ||
-              atStatus.atSignStatus == AtSignStatus.unavailable) {
+              atStatus.atSignStatus == AtSignStatus.notFound) {
             throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform onboarding.');
+                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform onboarding. ${atStatus.serverStatus} ${atStatus.atSignStatus}');
           }
           if (atStatus.atSignStatus == AtSignStatus.activated) {
             throw AtException(
