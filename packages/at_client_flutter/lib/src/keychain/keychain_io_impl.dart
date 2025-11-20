@@ -26,8 +26,6 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   @override
   Future<void> write(String atSign, AtKeys atKeys) async {
     atKeys.metadata['atsign'] = atSign;
-    atKeys.metadata['hiveSecret'] ??=
-        String.fromCharCodes(Hive.generateSecureKey());
     await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
   }
 }

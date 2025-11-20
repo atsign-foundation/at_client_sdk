@@ -24,7 +24,8 @@ class AuthService {
   Future<AtOnboardingResponse> onboard(
       AtOnboardingRequest request, String cramSecret) async {
     AtOnboardingResponse? atOnboardingResponse;
-    try {
+    try { 
+      request.atKeysIo ??= KeychainAtKeysIo();
       atOnboardingResponse = await _atAuth.onboard(request, cramSecret);
     } catch (e) {
       rethrow;

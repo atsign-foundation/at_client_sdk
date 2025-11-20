@@ -67,7 +67,7 @@ class RegistrarService {
     return true;
   }
 
-  Future<({String? cramkey, String? errorMessage})> verifyActivation({
+  Future<({String? cramkey, String? message})> verifyActivation({
     required String atsign,
     required String otp,
   }) async {
@@ -77,7 +77,7 @@ class RegistrarService {
     });
     if (res.statusCode != 200) {
       return (
-        errorMessage:
+        message:
             AtOnboardingLocalizations.current.error_server_unavailable,
         cramkey: null,
       );
@@ -85,9 +85,9 @@ class RegistrarService {
     var payload = jsonDecode(res.body);
     if (payload["message"] != "Verified") {
       // The toString is for typesafety & to prevent unexpected crashes
-      return (errorMessage: payload["message"].toString(), cramkey: null);
+      return (message: payload["message"].toString(), cramkey: null);
     }
     String cramkey = payload["cramkey"]?.split(':').last ?? '';
-    return (cramkey: cramkey, errorMessage: null);
+    return (cramkey: cramkey, message: null);
   }
 }

@@ -86,8 +86,13 @@ class KeychainStorage {
   Future<void> appendAtKeysToKeychain({
     required AtKeys keys,
   }) async {
-    final existingData =
+    String? existingData;
+    try{
+      existingData =
         await _read(keychainStoreName: (await AtKeysStore.getName()));
+    } catch (e) {
+      _logger.info('No existing atKeysData found in keychain. A new one will be created.');
+    }
     if (existingData == null) {
       final atKeysData = AtKeysData(keys: [keys]);
       await _write(
