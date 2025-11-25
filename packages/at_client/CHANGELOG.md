@@ -1,3 +1,7 @@
+## 3.9.3
+
+- build(deps): Updated archive dependency to ^4.0.7
+
 ## 3.9.2
 
 - fix: AtRpc - prevent NACK/ACK race when handling request mutex acquisition
