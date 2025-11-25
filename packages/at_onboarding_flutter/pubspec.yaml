@@ -12,9 +12,6 @@ environment:
   flutter: ">=3.29.2"
 resolution: workspace
 
-dependency_overrides:
-  archive: ^4.0.7
-
 dependencies:
   archive: ^4.0.7
   at_backupkey_flutter: ^4.0.18
