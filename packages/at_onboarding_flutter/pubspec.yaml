@@ -13,7 +13,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  archive: ^4.0.7
   at_backupkey_flutter: ^4.0.18
   at_client_mobile: ^3.3.0
   at_server_status: ^1.0.4

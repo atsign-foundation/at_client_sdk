@@ -9,9 +9,6 @@ environment:
   sdk: ^3.6.0
 resolution: workspace
 
-dependency_overrides:
-  archive: ^4.0.7
-
 dependencies:
   flutter:
     sdk: flutter
