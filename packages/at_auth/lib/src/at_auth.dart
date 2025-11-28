@@ -61,5 +61,5 @@ abstract interface class AtAuth {
   /// - Check if atsign's secondary server is reachable in atDirectory
   /// - AtOnboardingRequest: validates server for onboarding and looks for teapot
   /// - AtAuthRequest: validates server for authentication
-  Future<void> validateAtServer(AtAuthRequest atAuthRequest);
+  Future<void> validateAtServer(AuthRequest authRequest);
 }

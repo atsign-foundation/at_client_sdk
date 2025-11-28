@@ -28,10 +28,6 @@ void main(List<String> args) async {
       ..rootDomain = argResults['rootDomain'];
     final atOnboardingResponse =
         await atAuth.onboard(atOnboardingRequest, argResults['cramsecret']);
-    if (atOnboardingResponse.isSuccessful) {
-      await _generateAtKeysFile(atOnboardingResponse.enrollmentId,
-          atOnboardingResponse.atAuthKeys!, atSign, argResults['keysFilePath']);
-    }
     print('atOnboardingResponse: $atOnboardingResponse');
   } on Exception catch (e, trace) {
     print(trace);
@@ -41,10 +37,4 @@ void main(List<String> args) async {
   } finally {
     exit(0);
   }
-}
-
-Future<void> _generateAtKeysFile(String? enrollmentId, AtKeys atAuthKeys,
-    String atSign, String filePath) async {
-  var fileAtKeysIo = FileAtKeysIo(filePath: filePath);
-  await fileAtKeysIo.write(atSign, atAuthKeys);
 }
