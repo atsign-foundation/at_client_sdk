@@ -17,16 +17,6 @@ class AuthService {
         _keychainAtKeysIo = keychainAtKeysIo ?? KeychainAtKeysIo();
 
 
-  Future<bool> isActivated(String atsign) async {
-    var request = AtAuthRequest(atsign ,_keychainAtKeysIo, retryOptions: RetryOptions(maxRetries: 1, retryDelay: Duration(seconds: 1)));
-    try{
-      await _atAuth.validateAtServer(request);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  
   /// Onboarding an atSign for the first time
   ///
   ///   [request] - AtOnboardingRequest containing atSign, AtRootDomain and optional AtKeysIo
