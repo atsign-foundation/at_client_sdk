@@ -4,9 +4,22 @@ import 'package:at_auth/at_auth.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+
+/// A dialog widget that allows users to select a local atKey file for authentication.
+/// 
+/// Use `AtKeysFileDialog.show` to display the dialog and retrieve the selected file.
+/// 
+/// Returns:
+/// - A `FileAtKeysIo` instance representing the selected atKey file, or null if no file was selected.
 class AtKeysFileDialog extends StatelessWidget {
-  final String atsign;
-  const AtKeysFileDialog({super.key, required this.atsign});
+  const AtKeysFileDialog({super.key});
+
+  static Future<FileAtKeysIo?> show(BuildContext context) async {
+    return await showDialog<FileAtKeysIo>(
+      context: context,
+      builder: (context) => const AtKeysFileDialog(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +53,10 @@ class AtKeysFileDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            
+
             // Title
             Text(
-              'Authenticate $atsign',
+              'Authenticate',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w600,
@@ -51,8 +64,7 @@ class AtKeysFileDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            
-            
+
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -78,7 +90,8 @@ class AtKeysFileDialog extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Tooltip(
-                              message: 'Select a local atKey file for authentication.',
+                              message:
+                                  'Select a local atKey file for authentication.',
                               child: Icon(
                                 Icons.info_outline,
                                 size: 18,
@@ -103,13 +116,14 @@ class AtKeysFileDialog extends StatelessWidget {
                   OutlinedButton(
                     onPressed: () async {
                       var result = await FilePicker.platform.pickFiles(
-                        type: FileType.custom,
-                        initialDirectory: Directory.current.path,
-                        allowedExtensions: ['atKeys']);
+                          type: FileType.custom,
+                          initialDirectory: Directory.current.path,
+                          allowedExtensions: ['atKeys']);
                       if (result != null && result.files.isNotEmpty) {
                         File file = File(result.files.single.path!);
                         print('Selected atKey file: ${file.path}');
-                        FileAtKeysIo fileAtKeysIo = FileAtKeysIo(filePath: file.path);
+                        FileAtKeysIo fileAtKeysIo =
+                            FileAtKeysIo(filePath: file.path);
                         Navigator.of(context).pop(fileAtKeysIo);
                       }
                     },

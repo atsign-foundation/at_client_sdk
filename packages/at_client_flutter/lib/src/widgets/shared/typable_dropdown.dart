@@ -34,7 +34,7 @@ class _TypableDropdownState extends State<TypableDropdown> {
     super.initState();
     _controller = TextEditingController(text: widget.initialValue ?? '');
     _filteredItems = List.from(widget.items);
-    
+
     _focusNode.addListener(() {
       if (_focusNode.hasFocus) {
         _showOverlay();
@@ -70,7 +70,7 @@ class _TypableDropdownState extends State<TypableDropdown> {
 
   void _showOverlay() {
     if (_isOpen) return;
-    
+
     _overlayEntry = _createOverlayEntry();
     Overlay.of(context).insert(_overlayEntry!);
     setState(() {
@@ -143,7 +143,7 @@ class _TypableDropdownState extends State<TypableDropdown> {
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () {
-                                    print('Tapped: $item'); 
+                                    print('Tapped: $item');
                                     _selectItem(item);
                                   },
                                   child: Container(
@@ -188,10 +188,10 @@ class _TypableDropdownState extends State<TypableDropdown> {
         focusNode: _focusNode,
         decoration: widget.decoration ??
             InputDecoration(
-                hintText: widget.hintText ?? 'Type to search...',
-                hintStyle: TextStyle(fontSize: 12),
-                border: OutlineInputBorder(),
-                suffixIcon: PhosphorIcon(PhosphorIcons.caretDown()),
+              hintText: widget.hintText ?? 'Type to search...',
+              hintStyle: TextStyle(fontSize: 12),
+              border: OutlineInputBorder(),
+              suffixIcon: PhosphorIcon(PhosphorIcons.caretDown()),
             ),
         onChanged: (value) {
           _filterItems(value);

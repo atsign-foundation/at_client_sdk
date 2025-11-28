@@ -14,52 +14,51 @@ class LoadingDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Container(
+    return IntrinsicWidth(
+      child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 240),
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Loading indicator
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  themeData?.colorScheme.secondary ?? Colors.black87,
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Loading indicator
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    themeData?.colorScheme.secondary ?? Colors.black87,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // Title
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: themeData?.colorScheme.primary ?? Colors.black87,
+              // Title
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: themeData?.colorScheme.primary ?? Colors.black87,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-            // Description
-            Text(
-              description,
-              style: TextStyle(
-                fontSize: 14,
-                color: themeData?.colorScheme.secondary ?? Colors.black87,
-                height: 1.5,
+              // Description
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: themeData?.colorScheme.secondary ?? Colors.black87,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
