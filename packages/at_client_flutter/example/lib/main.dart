@@ -59,7 +59,7 @@ class MyHomePage extends StatelessWidget {
   
   final RegistrarService registrar = RegistrarService(
     registrarUrl: "my.atsign.com",
-    apiKey: "055fe540-65d9-46b2-bac3-5d20af4ef115",
+    apiKey: "my-api-key",
   );
 
   final KeychainStorage keychainStorage = KeychainStorage();
