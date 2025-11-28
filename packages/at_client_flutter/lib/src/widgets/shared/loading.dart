@@ -3,17 +3,13 @@ import 'package:flutter/material.dart';
 class LoadingDialog extends StatelessWidget {
   final String title;
   final String description;
-  final Color primaryColor;
-  final Color secondaryColor;
-  final Color? progressColor;
+  final ThemeData? themeData;
 
   const LoadingDialog({
     super.key,
     required this.title,
     required this.description,
-    this.primaryColor = Colors.black87,
-    this.secondaryColor = Colors.black87,
-    this.progressColor,
+    this.themeData,
   });
 
   @override
@@ -23,7 +19,7 @@ class LoadingDialog extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
+        constraints: const BoxConstraints(maxWidth: 240),
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -35,7 +31,7 @@ class LoadingDialog extends StatelessWidget {
               child: CircularProgressIndicator(
                 strokeWidth: 3,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  progressColor ?? primaryColor,
+                  themeData?.colorScheme.secondary ?? Colors.black87,
                 ),
               ),
             ),
@@ -47,7 +43,7 @@ class LoadingDialog extends StatelessWidget {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
-                color: primaryColor,
+                color: themeData?.colorScheme.primary ?? Colors.black87,
               ),
               textAlign: TextAlign.center,
             ),
@@ -58,7 +54,7 @@ class LoadingDialog extends StatelessWidget {
               description,
               style: TextStyle(
                 fontSize: 14,
-                color: secondaryColor,
+                color: themeData?.colorScheme.secondary ?? Colors.black87,
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
@@ -74,9 +70,7 @@ class LoadingDialog extends StatelessWidget {
     BuildContext context, {
     required String title,
     required String description,
-    Color primaryColor = Colors.black87,
-    Color secondaryColor = Colors.black87,
-    Color? progressColor,
+    ThemeData? themeData,
     bool barrierDismissible = false,
   }) {
     return showDialog(
@@ -85,9 +79,7 @@ class LoadingDialog extends StatelessWidget {
       builder: (context) => LoadingDialog(
         title: title,
         description: description,
-        primaryColor: primaryColor,
-        secondaryColor: secondaryColor,
-        progressColor: progressColor,
+        themeData: themeData,
       ),
     );
   }

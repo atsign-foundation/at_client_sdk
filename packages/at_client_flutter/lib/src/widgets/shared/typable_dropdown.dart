@@ -141,8 +141,9 @@ class _TypableDropdownState extends State<TypableDropdown> {
                               return MouseRegion(
                                 cursor: SystemMouseCursors.click,
                                 child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
                                   onTap: () {
-                                    print('Tapped: $item'); // Debug print
+                                    print('Tapped: $item'); 
                                     _selectItem(item);
                                   },
                                   child: Container(

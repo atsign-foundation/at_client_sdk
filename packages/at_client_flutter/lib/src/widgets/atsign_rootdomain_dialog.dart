@@ -3,41 +3,44 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/widgets/shared/typable_dropdown.dart';
 import 'package:flutter/material.dart';
 
+
+/// A dialog widget that allows users to select or input an atSign and optionally a root domain.
+/// 
+/// Use `AtSignSelectionDialog.show` to display the dialog and retrieve the user's selection.
 class AtSignSelectionDialog extends StatefulWidget {
+  final ThemeData themeData;
   final List<String>? existingAtSigns;
   final Map<String, AtRootDomain>? existingDomains;
-  final Color primaryColor;
-  final Color secondaryColor;
-  final Color accentTextColor;
   const AtSignSelectionDialog({
     super.key,
+    required this.themeData,
     this.existingAtSigns,
     this.existingDomains,
-    required this.primaryColor,
-    required this.secondaryColor,
-    required this.accentTextColor,
   });
 
   @override
   State<AtSignSelectionDialog> createState() =>
       _AtSignSelectionDialogState();
 
-  static Future<AtOnboardingRequest?> show(
+
+  /// Displays the AtSignSelectionDialog and returns an AuthRequest based on user input.
+  /// - [context]: BuildContext to display the dialog.
+  /// - [themeData]: ThemeData for styling the dialog.
+  /// - [existingAtSigns]: Inject atsigns via file or keychain storage so that user can select them from a dropdown.
+  /// - [existingDomains]: Inject root domains for selection (default: root.atsign.org:64).
+  static Future<AuthRequest?> show(
     BuildContext context, {
+    required ThemeData themeData,
     List<String>? existingAtSigns,
     Map<String, AtRootDomain>? existingDomains,
-    required Color primaryColor,
-    required Color secondaryColor,
-    required Color accentTextColor,
   }) {
-    return showDialog<AtOnboardingRequest>(
+    existingDomains ??= {'root.atsign.org': AtRootDomain.atsignDomain};
+    return showDialog<AuthRequest>(
       context: context,
       builder: (context) => AtSignSelectionDialog(
         existingAtSigns: existingAtSigns,
         existingDomains: existingDomains,
-        primaryColor: primaryColor,
-        secondaryColor: secondaryColor,
-        accentTextColor: accentTextColor,
+        themeData: themeData,
       ),
     );
   }
@@ -48,10 +51,8 @@ class _AtSignSelectionDialogState
   bool _isExpanded = false;
   String? _selectedAtSign;
   String? _selectedDomain;
-  String? _selectedPort;
   final TextEditingController _atSignTextController = TextEditingController();
   final TextEditingController _domainTextController = TextEditingController();
-  final TextEditingController _portTextController = TextEditingController();
 
   Widget _buildInfoIcon(String tooltipText) {
     return Tooltip(
@@ -65,22 +66,39 @@ class _AtSignSelectionDialogState
   }
 
  Widget _buildDropdownField({
-  required String hint,
   required TextEditingController controller,
+  required String hint,
+  required String infoText,
+  required String labelText,
   required List<String>? items,
   required Function(String?) onChanged,
 }) {
   return Container(
     decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey[300]!),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Column(children: [
+       Row(
+          children: [
+          Text(
+            labelText,
+            style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: widget.themeData.primaryColor,
+            ),
+          ),
+          const SizedBox(width: 6),
+          _buildInfoIcon(infoText),
+          ],
+        ),
+      const SizedBox(height: 16),
       TypableDropdown(
         items: items ?? [],
         hintText: hint,
         onChanged: onChanged,
       ),
+      const SizedBox(height: 16),
     ],
     ),
   );
@@ -92,7 +110,13 @@ class _AtSignSelectionDialogState
           _selectedAtSign!,
         );
         if (_selectedDomain != null && _selectedDomain!.isNotEmpty) {
-          request.rootDomain = AtRootDomain(_selectedDomain!, int.parse(_selectedPort ?? '64'));
+          var split = _selectedDomain!.split(':');
+          String rootDomain = split[0];
+          int rootPort = split.length > 1 ? int.parse(split[1]) : 64;
+          request.rootDomain = AtRootDomain(
+            rootDomain,
+            rootPort,
+          );
         }
         Navigator.of(context).pop(request);
     }
@@ -111,25 +135,11 @@ class _AtSignSelectionDialogState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            // Title with info icon
-            Row(
-              children: [
-              Text(
-                'Select atSign',
-                style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: widget.primaryColor,
-                ),
-              ),
-              const SizedBox(width: 6),
-              _buildInfoIcon("Select an atSign to proceed with onboarding."),
-              ],
-            ),
-            const SizedBox(height: 16),
-
+      
             // atSign Dropdown
             _buildDropdownField(
+              labelText: 'Type or select an atSign',
+              infoText: "Select an atSign to proceed with onboarding.",
               hint: 'Type atSign or select from existing',
               controller: _atSignTextController,
               items: widget.existingAtSigns,
@@ -138,13 +148,6 @@ class _AtSignSelectionDialogState
                 _selectedAtSign = value;
               });
               },
-            ),
-            const SizedBox(height: 16),
-            // Separator line
-            Divider(
-                height: 1,
-                thickness: 1,
-                color: Colors.grey.shade300,
             ),
             const SizedBox(height: 16),
             // Show/Hide Advanced Options
@@ -163,7 +166,7 @@ class _AtSignSelectionDialogState
                       ? Icons.keyboard_arrow_down
                       : Icons.keyboard_arrow_right,
                     size: 20,
-                    color: widget.primaryColor,
+                    color: widget.themeData.primaryColor,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -173,7 +176,7 @@ class _AtSignSelectionDialogState
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      color: widget.primaryColor,
+                      color: widget.themeData.primaryColor,
                     ),
                     ),
                   ],
@@ -190,59 +193,19 @@ class _AtSignSelectionDialogState
                 const SizedBox(height: 20),
 
                 // Domain Field
-                Row(
-                children: [
-                  Text(
-                  'Domain',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: widget.primaryColor,
-                  ),
-                  ),
-                  const SizedBox(width: 6),
-                  _buildInfoIcon("A custom root domain for custom environments. Don't set for production atSigns."),
-                ],
-                ),
-                const SizedBox(height: 10),
                 _buildDropdownField(
-                hint: 'Type domain or select from existing',
-                controller: _domainTextController,
-                items: widget.existingDomains?.values.map((domain) => domain.rootDomain).toList(),
-                onChanged: (value) {
-                  setState(() {
-                  _selectedDomain = value;
-                  });
-                },
+                  labelText: 'Type or select a domain',
+                  infoText: "Specify root domain if different from default. Only for custom implementations.",
+                  hint: 'Type domain or select from existing',
+                  controller: _domainTextController,
+                  items: widget.existingDomains?.values.map((domain) => "${domain.rootDomain}:${domain.rootPort}").toList(),
+                  onChanged: (value) {
+                    setState(() {
+                    _selectedDomain = value;
+                    });
+                  },
                 ),
                 const SizedBox(height: 20),
-
-                // Port Field
-                Row(
-                children: [
-                  Text(
-                  'Port',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: widget.primaryColor,
-                  ),
-                  ),
-                  const SizedBox(width: 6),
-                  _buildInfoIcon("A custom port for custom environments. Don't set for production atSigns."),
-                ],
-                ),
-                const SizedBox(height: 10),
-                _buildDropdownField(
-                hint: 'Type port or select from defaults',
-                controller: _portTextController,
-                items: widget.existingDomains?.values.map((domain) => domain.rootPort.toString()).toList(),
-                onChanged: (value) {
-                  setState(() {
-                  _selectedPort = value;
-                  });
-                },
-                ),
               ],
               ),
               crossFadeState: _isExpanded
@@ -251,15 +214,14 @@ class _AtSignSelectionDialogState
               duration: const Duration(milliseconds: 200),
             ),
 
-            // Optional: Add a submit button
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               height: 44,
               child: ElevatedButton(
               onPressed: (_selectedAtSign != null && _selectedAtSign!.isNotEmpty) ? _handleSubmit : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: widget.secondaryColor,
+                backgroundColor: widget.themeData.colorScheme.secondary,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: Colors.grey[300],
                 elevation: 0,
@@ -276,6 +238,7 @@ class _AtSignSelectionDialogState
               ),
               ),
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -286,7 +249,6 @@ class _AtSignSelectionDialogState
   void dispose() {
     _atSignTextController.dispose();
     _domainTextController.dispose();
-    _portTextController.dispose();
     super.dispose();
   }
 }

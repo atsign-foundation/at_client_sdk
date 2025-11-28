@@ -101,7 +101,7 @@ class KeychainStorage {
       );
       return;
     }
-    final atKeysData = existingData as AtKeysData;
+    final atKeysData = AtKeysData.fromJson(jsonDecode(existingData));
     atKeysData.keys.add(keys);
     await _write(
       biometricStoreName: (await AtKeysStore.getName()),
@@ -265,9 +265,10 @@ class KeychainStorage {
     BiometricStorageFile store =
         await _getBiometricStorageFile(biometricStoreName);
     if (!isWindows) {
+      log("WRITE: _writeDataToStore called", true);
       await store.write(data);
     } else {
-      // log('WRITE: _writeDataToStore called', true);
+      log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
       log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);

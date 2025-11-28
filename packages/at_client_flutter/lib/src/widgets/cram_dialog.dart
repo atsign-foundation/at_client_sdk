@@ -1,16 +1,15 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
+import 'package:at_client_flutter/src/widgets/shared/loading.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 
-class CramDialog extends StatefulWidget {
-  const CramDialog({super.key, required this.request, required this.cramKey});
+class CramDialog extends StatelessWidget {
+  CramDialog({super.key, required this.request, required this.cramKey});
 
   final AtOnboardingRequest request;
   final String cramKey;
-  @override
-  CramDialogState createState() => CramDialogState();
-
+  final AuthService _authService = AuthService();
 
   static Future<AtOnboardingResponse?> show(
     BuildContext context, {
@@ -22,25 +21,12 @@ class CramDialog extends StatefulWidget {
       builder: (context) => CramDialog(request: request, cramKey: cramKey),
     );
   }
-}
 
-
-class CramDialogState extends State<CramDialog> {
-  AtOnboardingRequest get request => widget.request;
-  String get cramKey => widget.cramKey;
-  final AuthService _authService = AuthService();
-  late Future<AtOnboardingResponse> future;
-
-  @override
-  void initState() {
-    super.initState();
-    future = _authService.onboard(request, cramKey);
-  }
 
   @override
   Widget build(BuildContext context) {
-    future.then((response) {
-      Navigator.of(context).pop(response);
+    _authService.onboard(request, cramKey).then((response) {
+      print(response.toString());
     });
     return AlertDialog(
       title: Text("Onboarding"),
@@ -49,15 +35,15 @@ class CramDialogState extends State<CramDialog> {
         children: [
           StreamBuilder(stream: _authService.progressStream, builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const CircularProgressIndicator();
+              return LoadingDialog(title: "Onboarding atSign via cram", description: "Authenticating ${request.atSign}, please wait...");
             }
             final progress = snapshot.data as ProgressEvent;
             if (progress.type == ProgressEventType.success) {
-              return SnackBar(content:  Text("Onboarding completed successfully!"));
+              return  Text("Onboarding Successful");
             } else if (progress.type == ProgressEventType.error) {
-              return SnackBar(content:  Text("Error during onboarding: ${progress.group}: ${progress.msg}"));
+              return Text("Error: ${progress.msg}");
             }else{
-              return SnackBar(content: Text("Onboarding ${progress.type}: ${progress.group}: ${progress.msg}"));
+              return Text("${progress.type} | ${progress.group} : ${progress.msg}");
             }
           }),
         ]

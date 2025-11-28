@@ -6,8 +6,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:http/http.dart';
 import 'package:http/io_client.dart';
 
-import '../localizations/generated/l10n.dart';
-
 // Type returned from a method below
 
 const apiBase = '/api/app/v4';
@@ -67,7 +65,7 @@ class RegistrarService {
     return true;
   }
 
-  Future<({String? cramkey, String? message})> verifyActivation({
+  Future<String?> verifyActivation({
     required String atsign,
     required String otp,
   }) async {
@@ -76,18 +74,14 @@ class RegistrarService {
       'otp': otp,
     });
     if (res.statusCode != 200) {
-      return (
-        message:
-            AtOnboardingLocalizations.current.error_server_unavailable,
-        cramkey: null,
-      );
+      throw Exception('Failed to verify activation: ${res.reasonPhrase} - ${res.body}');
     }
     var payload = jsonDecode(res.body);
     if (payload["message"] != "Verified") {
       // The toString is for typesafety & to prevent unexpected crashes
-      return (message: payload["message"].toString(), cramkey: null);
+      throw Exception('Verification failed: ${payload["message"].toString()}');
     }
     String cramkey = payload["cramkey"]?.split(':').last ?? '';
-    return (cramkey: cramkey, message: null);
+    return cramkey;
   }
 }

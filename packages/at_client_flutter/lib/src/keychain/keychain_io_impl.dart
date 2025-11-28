@@ -1,6 +1,5 @@
 import 'package:at_auth/at_auth.dart' show WrittenAtKeysIo, AtKeys;
 import 'package:at_commons/at_commons.dart';
-import 'package:hive/hive.dart' show Hive;
 
 import 'keychain_storage.dart';
 
