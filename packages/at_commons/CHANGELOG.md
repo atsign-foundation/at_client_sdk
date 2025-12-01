@@ -1,3 +1,7 @@
+## 5.6.3
+
+- feat: introduce `AtBytes` class for handling base64 encoded data
+
 ## 5.6.2
 
 - chore: remove `@experimental` annotation from `EnrollVerbBuilder.otp`
