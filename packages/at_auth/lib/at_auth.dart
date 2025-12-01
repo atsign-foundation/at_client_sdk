@@ -29,7 +29,9 @@ export 'src/exception/at_auth_exceptions.dart';
 export 'src/keys/at_auth_keys.dart';
 export 'src/onboard/at_onboarding_request.dart';
 export 'src/onboard/at_onboarding_response.dart';
-
+export 'src/keys/at_keys.dart';
+export 'src/keys/at_keys_io.dart';
+export 'src/keys/at_keys_io_impl.dart';
 /// Global constant to access [AtAuthInterface].
 ///
 /// Serves as the primary entry point to access public methods in at_auth package.
