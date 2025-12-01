@@ -204,7 +204,6 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                       });
                     },
                   ),
-                  const SizedBox(height: 20),
                 ],
               ),
               crossFadeState: _isExpanded
@@ -213,7 +212,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
               duration: const Duration(milliseconds: 200),
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               height: 44,

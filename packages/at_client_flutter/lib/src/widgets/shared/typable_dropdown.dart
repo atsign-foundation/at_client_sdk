@@ -95,7 +95,6 @@ class _TypableDropdownState extends State<TypableDropdown> {
   }
 
   void _selectItem(String item) {
-    print('Selecting item: $item'); // Debug print
     _controller.text = item;
     _controller.selection = TextSelection.fromPosition(
       TextPosition(offset: _controller.text.length),
@@ -138,32 +137,28 @@ class _TypableDropdownState extends State<TypableDropdown> {
                             itemCount: _filteredItems.length,
                             itemBuilder: (context, index) {
                               final item = _filteredItems[index];
-                              return MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    print('Tapped: $item');
-                                    _selectItem(item);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16.0,
-                                      vertical: 12.0,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      border: Border(
-                                        bottom: BorderSide(
-                                          color: Colors.grey.shade200,
-                                          width: 1,
-                                        ),
+                              return InkWell(
+                                onTap: () {
+                                  print('Tapped: $item');
+                                  _selectItem(item);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                    vertical: 12.0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.transparent,
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.grey.shade200,
+                                        width: 1,
                                       ),
                                     ),
-                                    child: Text(
-                                      item,
-                                      style: TextStyle(fontSize: 16),
-                                    ),
+                                  ),
+                                  child: Text(
+                                    item,
+                                    style: TextStyle(fontSize: 16),
                                   ),
                                 ),
                               );
