@@ -7,7 +7,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
-
 /// An interface that defines methods for reading AtKeys.
 /// It can be implemented by classes that read AtKeys from different sources,
 sealed class AtKeysIo {
@@ -28,7 +27,6 @@ abstract class GeneratedAtKeysIo extends AtKeysIo with KeyIOMixin {
   AtKeys generateKeys(String publicKeyId);
 }
 
-
 /// A mixin that provides common functionality for encoding and decoding AtKeys.
 mixin KeyIOMixin on AtKeysIo {
   final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
@@ -41,21 +39,21 @@ mixin KeyIOMixin on AtKeysIo {
         AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
     securityKeys.defaultSelfEncryptionKey = AtBytes.fromString(decryptionKey);
     securityKeys.defaultEncryptionPublicKey = AtBytes.fromString(
-        (await atChops.decryptString(
+        (atChops.decryptString(
                 jsonData[auth_constants.defaultEncryptionPublicKey],
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
                 iv: AtChopsUtil.generateIVLegacy()))
             .result);
     securityKeys.defaultEncryptionPrivateKey = AtBytes.fromString(
-        (await atChops.decryptString(
+        (atChops.decryptString(
                 jsonData[auth_constants.defaultEncryptionPrivateKey],
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
                 iv: AtChopsUtil.generateIVLegacy()))
             .result);
     securityKeys
-        .apkamPublicKey = AtBytes.fromString((await atChops.decryptString(
+        .apkamPublicKey = AtBytes.fromString((atChops.decryptString(
             jsonData[auth_constants.apkamPublicKey], EncryptionKeyType.aes256,
             keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
         .result);
@@ -63,7 +61,7 @@ mixin KeyIOMixin on AtKeysIo {
     // decrypt the private key only when auth mode is keysFile
     if (authMode == PkamAuthMode.keysFile) {
       securityKeys.apkamPrivateKey = AtBytes.fromString(
-          (await atChops.decryptString(jsonData[auth_constants.apkamPrivateKey],
+          (atChops.decryptString(jsonData[auth_constants.apkamPrivateKey],
                   EncryptionKeyType.aes256,
                   keyName: 'selfEncryptionKey',
                   iv: AtChopsUtil.generateIVLegacy()))
@@ -85,7 +83,7 @@ mixin KeyIOMixin on AtKeysIo {
       ..selfEncryptionKey =
           AESKey(atKeys.defaultSelfEncryptionKey!.toString()));
     atKeysMap[auth_constants.defaultEncryptionPublicKey] =
-        (await atChops.encryptString(
+        (atChops.encryptString(
                 atKeys.defaultEncryptionPublicKey.toString(),
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
@@ -93,7 +91,7 @@ mixin KeyIOMixin on AtKeysIo {
             .result;
 
     atKeysMap[auth_constants.defaultEncryptionPrivateKey] =
-        (await atChops.encryptString(
+        (atChops.encryptString(
                 atKeys.defaultEncryptionPrivateKey.toString(),
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
@@ -143,29 +141,8 @@ mixin KeyIOMixin on AtKeysIo {
       atKeysFile.apkamPrivateKey = AtBytes.fromString(
           apkamRsaKeypair.atPrivateKey.privateKey.toString());
     }
-    // else if (this is GeneratedAtKeysIo) {
-    //   // get the public key from secure element
-    //   if (atSign == null) {
-    //     throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
-    //   }
-    //   String? publicKeyId = (this as SimAtKeysIo).publicKeyMap[atSign];
-    //   if (publicKeyId == null) {
-    //     throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
-    //   }
-    //   pkamPublicKey = atChops.readPublicKey(publicKeyId);
-    //   logger.info('pkam  public key from sim: $pkamPublicKey');
 
-    //   // encryption key pair and self encryption symmetric key
-    //   // are not available to injected at_chops. Set it here
-    //   atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-    //   atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-    //   atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-    // }
     atKeysFile.apkamPublicKey = AtBytes.fromString(pkamPublicKey.toString());
-    //Standard order of an atKeys file is ->
-    // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->
-    // @sign: selfEncryptionKey[self encryption key again]
-    // note: "->" stands for "followed by"
     atKeysFile.defaultEncryptionPublicKey = AtBytes.fromString(
         atEncryptionKeyPair.atPublicKey.publicKey.toString());
     atKeysFile.defaultEncryptionPrivateKey = AtBytes.fromString(
@@ -180,8 +157,8 @@ mixin KeyIOMixin on AtKeysIo {
   Future<Map<String, dynamic>> decodeAtKeys(
       Map<String, dynamic> decodedAtKeysData,
       {String? passPhrase}) async {
-    // If it contains "iv(InitializationVector)", it means the data is encrypted with a
-    // passphrase. Decrypt it.
+    // If the atKeys map contains "iv(InitializationVector)", it indicates that
+    // the keysFile is passphrase encrypted. Decrypt it.
     if (decodedAtKeysData.containsKey('iv') && passPhrase.isNullOrEmpty) {
       throw AtDecryptionException(
           'Pass Phrase is required for password protected atKeys file');

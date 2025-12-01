@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_cli_commons/at_cli_commons.dart' show getDefaultAtKeysFilePath, getHomeDirectory;
+import 'package:at_cli_commons/at_cli_commons.dart'
+    show getDefaultAtKeysFilePath, getHomeDirectory;
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 
@@ -24,25 +25,28 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// The method returns a Future that resolves to an instance of [AtKeys].
   @override
   Future<AtKeys> read(String atSign) async {
-    Map<String, dynamic> decodedAtKeysData = {};
     filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
-    if (filePath != null) {
-      if (!File(filePath!).existsSync()) {
-        throw AtException('provided keys file does not exist. Please check whether the file path $filePath is valid');
-      }
-      String atAuthData = await File(filePath!).readAsString();
-      decodedAtKeysData = jsonDecode(atAuthData);
-      decodedAtKeysData = await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
-    } else {
+    if (filePath == null) {
       throw AtException('atKeys filePath is required to read from file');
     }
-    return decryptAtKeysWithSelfEncKey(decodedAtKeysData, PkamAuthMode.keysFile);
+    if (!File(filePath!).existsSync()) {
+      throw AtException(
+          'provided keys file does not exist. Please check whether the file path $filePath is valid');
+    }
+    String atAuthData = await File(filePath!).readAsString();
+    final jsonData = jsonDecode(atAuthData);
+    Map<String, dynamic> decodedAtKeysData =
+        await decodeAtKeys(jsonData, passPhrase: passPhrase);
+
+    return decryptAtKeysWithSelfEncKey(
+        decodedAtKeysData, PkamAuthMode.keysFile);
   }
 
   @override
   Future write(String atSign, AtKeys atKeys) async {
     filePath ??= getDefaultAtKeysFilePath(getHomeDirectory()!, atSign);
-    String atKeysData = await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
+    String atKeysData =
+        await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     return File(filePath!).writeAsString(atKeysData);
   }
 }
