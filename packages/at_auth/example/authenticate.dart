@@ -1,7 +1,6 @@
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart' show AtRootDomain;
-import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
 /// Perform authentication for an onboarded atsign
@@ -10,7 +9,6 @@ import 'package:at_utils/at_progress.dart';
 /// 3. Listening to new enrollment notifications
 /// Usage: `dart authenticate.dart -a <atsign> -k <path_to_atkeys_file>`
 void main(List<String> args) async {
-  AtSignLogger.root_level = "FINER";
   try {
     final parser = ArgParser()
       ..addOption('atsign',
