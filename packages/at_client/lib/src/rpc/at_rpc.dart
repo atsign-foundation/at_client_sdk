@@ -14,7 +14,6 @@ abstract class AtRpcCallbacks {
   Future<void> handleResponse(AtRpcResp response);
 }
 
-@experimental
 class AtRpcClient implements AtRpcCallbacks {
   static final AtSignLogger logger = AtSignLogger(' AtRpcClient ',
       loggingHandler: AtSignLogger.stdErrLoggingHandler);
@@ -105,7 +104,6 @@ class AtRpcClient implements AtRpcCallbacks {
 /// - Responder:
 /// ```
 /// ```
-@experimental
 class AtRpc {
   static final AtSignLogger logger = AtSignLogger('AtRpc');
 
@@ -169,6 +167,13 @@ class AtRpc {
   final bool isClient;
   final bool isServer;
 
+  /// Enables the mutex in [handleRequestNotification] to ensure redundancy
+  /// handling across all services that use [AtRpc].
+  ///
+  /// When enabled, it prevents multiple [AtRpc] responses from being sent for
+  /// the same request.
+  final bool enableRequestMutex;
+
   AtRpc({
     required this.atClient,
     required this.baseNameSpace,
@@ -179,6 +184,7 @@ class AtRpc {
     this.allowAll = false,
     this.isClient = true,
     this.isServer = true,
+    this.enableRequestMutex = false,
   }) {
     if (!isClient && !isServer) {
       throw IllegalArgumentException('isClient or isServer must be true');
@@ -292,6 +298,8 @@ class AtRpc {
   /// - parses and validates
   /// - sends an [AtRpcRespType.nack] response if deserialization or validation fails
   /// - sends an [AtRpcRespType.nack] response otherwise
+  /// - Acquires session mutex if [enableRequestMutex] is true
+  /// - sends an [AtRpcRespType.nack] response if mutex cannot be acquired
   /// - calls [AtRpcCallbacks.handleRequest]
   /// - calls [sendResponse] with the response from [AtRpcCallbacks.handleRequest]
   @visibleForTesting
@@ -356,6 +364,12 @@ class AtRpc {
       return;
     }
 
+    bool mutexAcquired = enableRequestMutex &&
+        await _tryAcquireSessionMutex(requestId, notification.to);
+    if (enableRequestMutex && !mutexAcquired) {
+      return;
+    }
+
     // send ACK
     await sendResponse(notification, request, AtRpcResp.ack(request: request));
 
@@ -370,6 +384,34 @@ class AtRpc {
       logger.warning(st);
       await sendResponse(notification, request,
           AtRpcResp.nack(request: request, message: message));
+    }
+  }
+
+  Future<bool> _tryAcquireSessionMutex(int requestId, String atsign) async {
+    var mutexKey = AtKey.fromString('$requestId.session_mutexes.'
+        '$domainNameSpace.$rpcsNameSpace.$baseNameSpace$atsign')
+      ..metadata = (Metadata()
+        ..immutable = true // only one RPC client will succeed in doing this
+        ..ttl =
+            30000); // keeps the datastore clean + auto releases mutex after 30s
+    PutRequestOptions pro = PutRequestOptions()
+      ..shouldEncrypt = true
+      ..useRemoteAtServer = true;
+
+    try {
+      await atClient.put(mutexKey, 'lock', putRequestOptions: pro);
+      logger.shout(
+          '😎 Will handle request from $atsign; acquired mutex $mutexKey');
+      return true;
+    } catch (err) {
+      if (err.toString().toLowerCase().contains('immutable')) {
+        logger.shout('Will not handle request from $atsign'
+            '; could not acquire mutex $mutexKey');
+      } else {
+        logger.shout(
+            '🤷‍♂️ Will not handle; could not acquire mutex $mutexKey : $err');
+      }
+      return false;
     }
   }
 

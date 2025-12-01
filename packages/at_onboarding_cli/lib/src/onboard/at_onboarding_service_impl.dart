@@ -23,7 +23,9 @@ import 'package:zxing2/qrcode.dart';
 import '../util/home_directory_util.dart';
 import '../util/onboarding_util.dart';
 
-///class containing service that can onboard/activate/authenticate @signs
+/// Service implementation responsible for onboarding and authenticating atSigns.
+///
+/// Also has implementation to create, approve, deny and revoke enrollments.
 class AtOnboardingServiceImpl implements AtOnboardingService {
   late final String _atSign;
   bool _isAtsignOnboarded = false;
@@ -33,6 +35,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// The object which controls what types of AtClients, NotificationServices
   /// and SyncServices get created when we call [AtClientManager.setCurrentAtSign].
+  ///
   /// If [atServiceFactory] is not set, AtClientManager.setCurrentAtSign will use
   /// a [DefaultAtServiceFactory]
   AtServiceFactory? atServiceFactory;
@@ -58,7 +61,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   bool get _isUsingProxy => atOnboardingPreference.isUsingProxy;
 
   /// Sends from: command if using proxy
+  ///
   /// [context] - description of the operation for logging (defaults to 'sendFromCommand')
+  ///
   /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
   Future<bool> _sendFromCommandIfUsingProxy(AtLookUp atLookUp,
       {String context = 'sendFromCommand', String? atSign}) async {
@@ -482,7 +487,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return (selfEncryptionKeyFromServer, selfEncryptionKeyIV);
   }
 
-  /// Pkam auth will be retried until server approves/denies/expires the enrollment
+  /// Retries PKAM auth until an enrollment is approved/denied/expired
   Future<void> _waitForPkamAuthSuccess(
     AtLookUp atLookUp,
     String enrollmentIdFromServer,
@@ -552,7 +557,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  ///write newly created encryption keypairs into atKeys file
+  /// Write newly created encryption key-pairs into atKeys file
   Future<File> _generateAtKeysFile(
     AtKeys atAuthKeys, {
     String? enrollmentId,
@@ -620,19 +625,21 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await fileWriter.flush();
     await fileWriter.close();
     stdout.writeln(
-        '${chalk.green('[Success]')} Your .atKeys file saved at ${atOnboardingPreference.atKeysFilePath}\n');
+        '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');
 
     return atKeysFile;
   }
 
-  ///back-up encryption keys to local secondary
+  /// Back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
   Future<void> _persistKeysLocalSecondary(AtKeys atAuthKeys) async {
     //backup keys into local secondary
     bool? response = await atClient?.getLocalSecondary()?.putValue(
         AtConstants.atPkamPublicKey, atAuthKeys.apkamPublicKey!.toString());
     logger.finer('PkamPublicKey persist to localSecondary: status $response');
-    // save pkam private key only when auth mode is keyFile. if auth mode is sim/any other secure element private key cannot be read and hence will not be part of keys file
+    // Save the PKAM private key only when the auth mode is keyFile.
+    // In SIM or other secure element modes, the private key cannot be
+    // read and therefore won't be included in the keys file.
     if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
       response = await atClient?.getLocalSecondary()?.putValue(
           AtConstants.atPkamPrivateKey, atAuthKeys.apkamPrivateKey!.toString());
@@ -678,8 +685,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return atAuthResponse.isSuccessful;
   }
 
-  ///method to read and return data from .atKeysFile
-  ///returns map containing encryption keys
+  /// Method to read and return data from .atKeysFile
+  ///
+  /// Returns map containing encryption keys
   @visibleForTesting
   Future<Map<String, String>> readAtKeysFile(String? atKeysFilePath) async {
     if (atKeysFilePath == null || atKeysFilePath.isEmpty) {
@@ -694,17 +702,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return jsonData;
   }
 
-  ///generates random RSA keypair
+  /// Generates a random RSA keypair
   RSAKeypair generateRsaKeypair() {
     return RSAKeypair.fromRandom();
   }
 
-  ///generate random AES key
+  /// Generate a random AES key
   String generateAESKey() {
     return AES(Key.fromSecureRandom(32)).key.base64;
   }
 
-  ///returns secondary server status
+  /// Returns secondary server status
   Future<AtStatus> getServerStatus() async {
     AtServerStatus atServerStatus = AtStatusImpl(
         rootUrl: atOnboardingPreference.rootDomain,
@@ -754,7 +762,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  ///extracts cram secret from qrCode
+  // Extracts cram secret from qrCode
   @Deprecated('qr_code based cram authentication not supported anymore')
   static String? getSecretFromQr(String? path) {
     if (path == null) {

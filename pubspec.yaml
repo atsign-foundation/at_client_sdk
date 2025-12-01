@@ -46,7 +46,7 @@ dependencies:
   flutter:
     sdk: flutter
   # normal dependencies
-  archive: ^3.6.1
+  archive: ^4.0.7
   args: ^2.6.0
   asn1lib: ^1.5.3
   async: ^2.9.0

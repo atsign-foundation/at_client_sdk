@@ -10,7 +10,6 @@ import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:meta/meta.dart';
 
 class EncryptionService {
   RemoteSecondary? remoteSecondary;
@@ -20,9 +19,6 @@ class EncryptionService {
   late final String atSign;
 
   late final AtSignLogger logger;
-
-  @experimental
-  AtTelemetryService? telemetry;
 
   EncryptionService(this.atSign) {
     logger = AtSignLogger('EncryptionService ($atSign)');

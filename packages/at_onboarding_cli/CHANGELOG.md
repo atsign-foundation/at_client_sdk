@@ -1,4 +1,4 @@
-## 1.16.0 (unreleased tech-debt-removal branch changes)
+## 1.16.0
 
 - chore(deps): at_chops ^3.0.0
 
@@ -8,6 +8,12 @@
 - feat: add `--license-key` alias for `--cramkey`
 - chore(deps): at_commons: ^5.6.0
 - chore(deps): args gkc/show-aliases-in-usage dependency override
+
+## 1.14.1
+
+- build: remove the dependency override on the `args` package
+- feat: export method requestEnrollmentOtp() to be used downstream
+- feat: expose atKeysFile in OnboardingService.enroll() method signature
 
 ## 1.14.0
 

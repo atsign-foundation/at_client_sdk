@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:at_commons/src/enroll/enrollment.dart';
 import 'package:at_commons/src/verb/abstract_verb_builder.dart';
 import 'package:at_commons/src/verb/enroll_params.dart';
-import 'package:meta/meta.dart';
 
 import 'operation_enum.dart';
 
@@ -24,7 +23,6 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
   String? apkamPublicKey;
 
   /// otp for the enroll request. otp must be fetched from an already enrolled app.
-  @experimental
   String? otp;
 
   Map<String, String>? namespaces;

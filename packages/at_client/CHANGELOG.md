@@ -1,6 +1,26 @@
-## 3.9.0 (unreleased tech-debt-removal branch changes)
+## 3.10.0
 
 - chore(deps): at_chops ^3.0.0
+
+## 3.9.3
+
+- build(deps): Updated archive dependency to ^4.0.7
+
+## 3.9.2
+
+- fix: AtRpc - prevent NACK/ACK race when handling request mutex acquisition
+
+## 3.9.1
+
+- chore: removed `@experimental` annotation from AtRpc and AtCollection
+- chore: added `// ignore: experimental_member_use` for usages of the 
+  still-experimental AtTelemetry
+
+## 3.9.0
+
+- feat: introduce single-responder mode in AtRpc enabling redundancy support in
+  request-response services relying on AtRpc. This feature is coupled with
+  `enableRequestMutex` flag that controls it.
 
 ## 3.8.0
 
