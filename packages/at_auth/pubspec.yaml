@@ -10,6 +10,8 @@ environment:
 resolution: workspace
 
 dependencies:
+  at_cli_commons: ^3.0.1
+  at_server_status: ^1.1.0
   at_commons: ^5.5.0
   at_lookup: ^3.0.49
   at_chops: ^3.0.0

@@ -86,8 +86,13 @@ class KeychainStorage {
   Future<void> appendAtKeysToKeychain({
     required AtKeys keys,
   }) async {
-    final existingData =
+    String? existingData;
+    try{
+      existingData =
         await _read(keychainStoreName: (await AtKeysStore.getName()));
+    } catch (e) {
+      _logger.info('No existing atKeysData found in keychain. A new one will be created.');
+    }
     if (existingData == null) {
       final atKeysData = AtKeysData(keys: [keys]);
       await _write(
@@ -96,7 +101,7 @@ class KeychainStorage {
       );
       return;
     }
-    final atKeysData = existingData as AtKeysData;
+    final atKeysData = AtKeysData.fromJson(jsonDecode(existingData));
     atKeysData.keys.add(keys);
     await _write(
       biometricStoreName: (await AtKeysStore.getName()),
@@ -260,9 +265,10 @@ class KeychainStorage {
     BiometricStorageFile store =
         await _getBiometricStorageFile(biometricStoreName);
     if (!isWindows) {
+      log("WRITE: _writeDataToStore called", true);
       await store.write(data);
     } else {
-      // log('WRITE: _writeDataToStore called', true);
+      log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
       log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);

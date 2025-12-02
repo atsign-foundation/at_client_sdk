@@ -31,111 +31,54 @@ This package is available on [pub.dev](https://pub.dev) at https://pub.dev/packa
 
 ## Usage
 
-- Get `KeyChainManager` instance to manage your keys while switching between atSigns.
+See at_client_flutter/example for more details regarding all workflows.
 
-```dart
-import 'package:at_client_flutter/at_client_flutter.dart';
+Package provides Flutter Dialogs for the following workflows:
+ 1. Onboarding via Registrar / Cram
+ 2. Authentication via File
+ 3. Authentication via Keychain
 
-static final KeyChainManager _keyChainManager = KeyChainManager.getInstance();
-
-/// Fetch atsign from the keychain manager
-String atSign = await _keyChainManager.getAtSign();
+#### Atsign / RootDomain Selection Dialog
 ```
-
-- Delete atSign from the keychain manager
-
-```dart
-await _keyChainManager.deleteAtSignFromKeychain(atsign);
-```
-
-- Fetch List of atSigns from the keychain manager.
-
-```dart
-List<String>? atSignsList = await _keyChainManager.getAtSignListFromKeychain();
-```
-
-- Make an atSign primary in device storage.
-
-```dart
-AtClientManager.getInstance().setCurrentAtSign(atsign, AppConstants.appNamespace, AtClientPreference());
-
-bool isAtsignSetPrimary = await _keyChainManager.makeAtSignPrimary(atsign);
-
-print(isAtsignSetPrimary); // Prints true if set primary.
-```
-
-- Get atSign status from device storage.
-
-```dart
-Map<String, bool?> atSignsWithState = await _keyChainManager.getAtsignsWithStatus();
-
-print(atSignsWithState); // Prints a map of atSigns with their status.
-
-/// Output:
-/// {
-///   "@atSign1": true, // atSign1 is set as primary
-///   "@atSign2": false,
-///   "@atSign3": false
-/// }
-```
-
-- Reset atSigns from device storage.
-
-```dart
-for (String atsign in atSignsList) {
-    await _keyChainManager.resetAtSignFromKeychain(atsign);
-}
-```
-
-- Get `AtClientService` instance to manage your atSigns.
-> `OnboardingWidgetService` is used to onboard your atSigns. Ckeck out the [at_onboarding_flutter](https://pub.dev/packages/at_onboarding_flutter) for more details.
-
-```dart
-Map<String?, AtClientService> atClientServiceMap = {};
-
-/// Onboarding widget
-OnboardingWidgetService().onboarding(
-    fistTimeAuthNextScreen: FirstTimeScreen(),
-    nextScreen: null,
-    atsign: myAtSign,
-    onboard: (value, atsign) async {
-        atClientServiceMap = value;
-    //... YOUR CODE ...//
-    },
-    onError: (error) {
-        print(error);
-    },
+AuthRequest? authRequest = await AtSignSelectionDialog.show(
+    context,
 );
 ```
 
-- Remove an atSign from the AtClientService.
-
-```dart
-await _keyChainManager.deleteAtSignFromKeychain(atsign);
-atClientServiceMap.remove(atsign);
+#### Registrar Cram Dialog
+```
+RegistrarService registrar = RegistrarService("registarURL" "apiKey");
+String cramKey = await RegistrarCramDialog.show(
+    context,
+    atOnboardingRequest,
+    registrar: registrar,
+);
 ```
 
-- Check if an atSign is onboarded.
-
-```dart
-bool isOnboarded = atClientServiceMap.containsKey(atsign);
-print(isOnboarded); // Prints true if onboarded.
+#### Cram Onboarding Dialog
+```
+AtOnboardingResponse response = await CramDialog.show(
+    context, 
+    request: authRequest, 
+    cramKey: cramKey,
+    progressBuilder: progressBuilder,
+    onOnboardingComplete: onOnboardingComplete,
+    title: title,
+    description: description,
+);
 ```
 
-- Format of the .env file
+#### Pkam Onboarding Dialog
+```
+AtAuthRequest request = AtAuthRequest(
+    authRequest.atSign,
+    atKeysIo,
+    rootDomain: authRequest.rootDomain,
+);
 
-```yaml
-NAMESPACE = "at_client_demo"
-ROOT_DOMAIN = "root.atsign.org"
+AtAuthResponse response = await PkamDialog.show(context, request: request);
 ```
 
-- Adding the .env file to pubspec.yaml
-
-```yaml
-flutter:
-  assets: 
-    - .env
-```
 
 - If your app supports windows platform then add `biometric_storage` in app's dependencies
 
@@ -146,4 +89,5 @@ dependencies:
 
 ## Example
 
-We have a good example with explanation in the [at_client_flutter](https://pub.dev/packages/at_client_flutter/example) package.
+More details in the example
+`at_client_flutter/example/main.dart`

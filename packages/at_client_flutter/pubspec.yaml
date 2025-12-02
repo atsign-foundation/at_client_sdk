@@ -26,6 +26,9 @@ dependencies:
   encrypt: ^5.0.3
   at_persistence_secondary_server: ^4.2.0
   flutter_riverpod: ^3.0.0
+  phosphor_flutter: ^2.1.0
+  intl: ^0.20.2
+  file_picker: ^10.3.7
 
 dev_dependencies:
   path: ^1.9.0

@@ -7,9 +7,9 @@ class PkamAuthenticator {
   Future<bool> authenticate(String atSign, AtLookUp atLookup, {String? enrollmentId}) async {
     try {
       return await atLookup.pkamAuthenticate(enrollmentId: enrollmentId);
-    } catch (e) {
+    } catch (e, s) {
       throw UnAuthenticatedException(
-          'pkam auth failed for $atSign - ${e.toString()}');
+          'pkam auth failed for $atSign - ${e.toString()} \n $s');
     }
   }
 }

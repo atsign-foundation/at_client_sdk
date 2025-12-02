@@ -1,6 +1,5 @@
 import 'package:at_auth/at_auth.dart' show WrittenAtKeysIo, AtKeys;
 import 'package:at_commons/at_commons.dart';
-import 'package:hive/hive.dart' show Hive;
 
 import 'keychain_storage.dart';
 
@@ -26,8 +25,6 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   @override
   Future<void> write(String atSign, AtKeys atKeys) async {
     atKeys.metadata['atsign'] = atSign;
-    atKeys.metadata['hiveSecret'] ??=
-        String.fromCharCodes(Hive.generateSecureKey());
     await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
   }
 }

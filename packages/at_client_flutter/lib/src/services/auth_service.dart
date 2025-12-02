@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_utils/at_progress.dart';
@@ -14,6 +16,7 @@ class AuthService {
       : _atAuth = atAuth ?? AtAuth.create(),
         _keychainAtKeysIo = keychainAtKeysIo ?? KeychainAtKeysIo();
 
+
   /// Onboarding an atSign for the first time
   ///
   ///   [request] - AtOnboardingRequest containing atSign, AtRootDomain and optional AtKeysIo
@@ -24,7 +27,8 @@ class AuthService {
   Future<AtOnboardingResponse> onboard(
       AtOnboardingRequest request, String cramSecret) async {
     AtOnboardingResponse? atOnboardingResponse;
-    try {
+    try { 
+      request.atKeysIo ??= KeychainAtKeysIo();
       atOnboardingResponse = await _atAuth.onboard(request, cramSecret);
     } catch (e) {
       rethrow;
