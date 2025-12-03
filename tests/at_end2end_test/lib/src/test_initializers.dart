@@ -34,7 +34,7 @@ class TestSuiteInitializer {
       if (apkam) {
         AtAuthRequest atAuthRequest = AtAuthRequest(
           atSign, 
-          FileAtKeysIo(filePath: '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys'),
+          FileAtKeysIo(filePath: (_) => '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys'),
         );
         atAuthRequest.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
         atAuthResponse = await authenticate(atAuthRequest);

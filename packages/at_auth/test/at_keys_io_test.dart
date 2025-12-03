@@ -12,7 +12,7 @@ void main() {
 
   group('FileAtKeysIo tests', () {
     test('Test read() with valid atKeys file path', () async {
-      final fileAtKeysIo = FileAtKeysIo(filePath: keyFilePath);
+      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       final atKeys = await fileAtKeysIo.read(atSign);
 
       expect(atKeys.apkamPrivateKey, isNotNull);
@@ -25,7 +25,7 @@ void main() {
 
     test('Test read() with invalid atKeys file path', () async {
       final fileAtKeysIo =
-          FileAtKeysIo(filePath: 'test/data/hello/@alice🛠_key.atKeys');
+          FileAtKeysIo(filePath: (_) => 'test/data/hello/@alice🛠_key.atKeys');
 
       expect(() async => await fileAtKeysIo.read(atSign),
           throwsA(isA<AtException>()));
@@ -44,7 +44,7 @@ void main() {
     });
 
     test('Test write()', () async {
-      final fileAtKeysIo = FileAtKeysIo(filePath: keyFilePath);
+      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       final atKeys = AtKeys()
         ..apkamPublicKey =
             AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
@@ -59,7 +59,7 @@ void main() {
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
       await fileAtKeysIo.write(atSign, atKeys);
 
-      expect(await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!), true);
+      expect(await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign)), true);
     });
   });
 
@@ -69,7 +69,7 @@ void main() {
 }
 
 Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) async {
-  final fileAtKeysIo = FileAtKeysIo(filePath: filePath);
+  final fileAtKeysIo = FileAtKeysIo(filePath: (_) => filePath);
   final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
   var decryptedAtKeysMap = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
       encryptedAtKeysMap, PkamAuthMode.keysFile);

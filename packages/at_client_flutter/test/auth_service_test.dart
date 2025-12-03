@@ -54,7 +54,7 @@ void main() {
         ..isSuccessful = true
         ..atAuthKeys = fakeAtKeys);
       when(() => mockFileAtKeysIo.read(any())).thenAnswer((_) async => fakeAtKeys);
-      AuthService authService = AuthService(atAuth: mockAtAuth, keychainAtKeysIo: mockKeychainAtKeysIo);
+      AuthService authService = AuthService(atAuth: mockAtAuth);
       AtAuthRequest atAuthRequest = AtAuthRequest("@alice", mockFileAtKeysIo);
 
       //regardless of atKeysIo used in AtAuthRequest, keys should be saved to keychain
@@ -70,7 +70,7 @@ void main() {
       when(() => mockAtAuth.onboard(any(), any())).thenAnswer((_) async => AtOnboardingResponse('@alice')
         ..isSuccessful = true
         ..atAuthKeys = fakeAtKeys);
-      AuthService authService = AuthService(atAuth: mockAtAuth, keychainAtKeysIo: mockKeychainAtKeysIo);
+      AuthService authService = AuthService(atAuth: mockAtAuth);
       AtOnboardingRequest atOnboardingRequest = AtOnboardingRequest("@alice", atKeysIo: mockFileAtKeysIo);
 
       //regardless of atKeysIo used in AtOnboardingRequest, keys should be saved to keychain

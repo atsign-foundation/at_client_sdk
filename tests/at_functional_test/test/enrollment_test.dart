@@ -53,7 +53,7 @@ void main() {
         ..deviceName = 'pixel1'
         ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
         ..atKeysIo =
-            FileAtKeysIo(filePath: 'test/testData/$apkamAtSign.atKeys');
+            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
       // onboard with enable enrollment set
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
@@ -71,7 +71,7 @@ void main() {
       // auth using generated keysFile
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
         apkamAtSign,
-        FileAtKeysIo(filePath: 'test/testData/$apkamAtSign.atKeys'),
+        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atSign.atKeys'),
       )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
@@ -368,7 +368,7 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        FileAtKeysIo(filePath: 'test/testData/$atSign.atKeys'),
+        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -464,7 +464,7 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        FileAtKeysIo(filePath: 'test/testData/$atSign.atKeys'),
+        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;

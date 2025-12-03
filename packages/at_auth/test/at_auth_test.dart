@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
-import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
@@ -37,12 +36,14 @@ void main() {
   late MockAtLookUp mockAtLookUp;
   late MockPkamAuthenticator mockPkamAuthenticator;
   late AtEnrollment mockAtEnrollment;
+	late FileAtKeysIo fileAtKeysIo;
   final String testEnrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
 
   setUp(() {
     mockAtLookUp = MockAtLookUp();
     mockPkamAuthenticator = MockPkamAuthenticator();
     mockAtEnrollment = MockAtEnrollment();
+		fileAtKeysIo = FileAtKeysIo(filePath: (atsign) => 'test/data/${atsign}_key.atKeys');
     atAuth = AtAuthImpl(
         atLookUp: mockAtLookUp,
         pkamAuthenticator: mockPkamAuthenticator,
@@ -58,7 +59,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
+        fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -76,7 +77,7 @@ void main() {
           .thenAnswer((_) => Future.value(false));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
+        fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -94,7 +95,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/hello/data/@alice🛠_key.atKeys'),
+        FileAtKeysIo(filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -110,7 +111,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
+        fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
@@ -142,7 +143,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
+        fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
@@ -167,7 +168,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
+        fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -185,7 +186,7 @@ void main() {
           .thenThrow(AtAuthenticationException('Unauthenticated'));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: 'test/data/@alice🛠_key.atKeys'),
+        fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 

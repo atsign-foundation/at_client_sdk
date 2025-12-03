@@ -123,7 +123,7 @@ class AtKeysFileDialog extends StatelessWidget {
                         File file = File(result.files.single.path!);
                         print('Selected atKey file: ${file.path}');
                         FileAtKeysIo fileAtKeysIo =
-                            FileAtKeysIo(filePath: file.path);
+                            FileAtKeysIo(filePath:(_) => file.path);
                         Navigator.of(context).pop(fileAtKeysIo);
                       }
                     },
