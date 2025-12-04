@@ -166,8 +166,8 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                     const SizedBox(width: 4),
                     Text(
                       _isExpanded
-                          ? 'Hide Advanced Options'
-                          : 'Show Advanced Options',
+                          ? 'Hide advanced options'
+                          : 'Show advanced options',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -189,10 +189,10 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
 
                   // Domain Field
                   _buildDropdownField(
-                    labelText: 'Type or select a domain',
+                    labelText: 'Type or select a root domain',
                     infoText:
-                        "Specify root domain if different from default. Only for custom implementations.",
-                    hint: 'Type domain or select from existing',
+                        "Only for custom implementations. Specify a root domain.",
+                    hint: 'Type a root domain or select from existing',
                     controller: _domainTextController,
                     items: widget.existingDomains?.values
                         .map((domain) =>

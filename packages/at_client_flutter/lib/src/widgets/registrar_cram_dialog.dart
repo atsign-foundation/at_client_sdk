@@ -202,7 +202,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                 children: [
                   TextSpan(
                     text:
-                        'A 4 symbol verification code has sent to the email associated with ',
+                        'A 4-symbol verification code was sent to the email associated with ',
                     style: TextStyle(
                       fontSize: 14,
                       color: widget.themeData.colorScheme.secondary,

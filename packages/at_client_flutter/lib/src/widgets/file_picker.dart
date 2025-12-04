@@ -34,26 +34,6 @@ class AtKeysFileDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Back button
-            InkWell(
-              onTap: () => Navigator.pop(context),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.arrow_back, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'Use a different atSign',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
             // Title
             Text(
               'Authenticate',
@@ -102,7 +82,7 @@ class AtKeysFileDialog extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Drag and Drop or select\na local .atkey file',
+                          'Select a local .atKeys file',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
