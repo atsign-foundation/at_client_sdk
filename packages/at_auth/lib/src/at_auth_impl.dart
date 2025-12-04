@@ -84,11 +84,7 @@ class AtAuthImpl implements AtAuth {
       );
     }
 
-    //Setup atLookup for pkam auth
-    if (atAuthRequest.enrollmentId == null && atAuthKeys.enrollmentId == null) {
-      atAuthRequest.enrollmentId = "__manage";
-    }
-    atAuthKeys.enrollmentId ??= atAuthRequest.enrollmentId;
+		atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
     atLookUp ??= AtLookupImpl(
       atAuthRequest.atSign,
       atAuthRequest.rootDomain.rootDomain,
@@ -104,7 +100,7 @@ class AtAuthImpl implements AtAuth {
     try {
       pkamResponse.isSuccessful = (await pkamAuthenticator!.authenticate(
           atAuthRequest.atSign, atLookUp!,
-          enrollmentId: atAuthKeys.enrollmentId));
+          enrollmentId: atAuthRequest.enrollmentId));
       pkamResponse.atAuthKeys = atAuthKeys;
       if (!pkamResponse.isSuccessful) {
         _addProgress(

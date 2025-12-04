@@ -1,29 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
-// ignore: implementation_imports
+import 'package:at_auth/src/registrar/registrar.dart';
+import 'package:at_auth/src/at_auth.dart';
+
 import 'package:http/http.dart';
 import 'package:http/io_client.dart';
 
-// Type returned from a method below
-
 const apiBase = '/api/app/v4';
 
-enum ActivateApiEndpoint {
-  login('$apiBase/authenticate/atsign'),
-  validate('$apiBase/authenticate/atsign/activate');
-
-  final String path;
-  const ActivateApiEndpoint(this.path);
-}
-
-class RegistrarService {
-  final String registrarUrl;
-  final String apiKey;
-
+class RegistrarService implements Registrar{
+	@override
+	final String registrarUrl;
+	@override
+	final String apiKey;
   late final IOClient _http;
-
   RegistrarService({
     required this.registrarUrl,
     required this.apiKey,
@@ -34,12 +25,13 @@ class RegistrarService {
         (X509Certificate cert, String host, int port) => true;
     _http = IOClient(innerClient);
   }
-
+	
+	@override
   Future<Response> registrarApiRequest(
     ActivateApiEndpoint endpoint,
     Map<String, String?> data,
   ) async {
-    Uri url = Uri.https(registrarUrl, endpoint.path);
+    Uri url = Uri.https(registrarUrl, "$apiBase${endpoint.path}");
 
     return _http.post(
       url,
@@ -51,6 +43,7 @@ class RegistrarService {
     );
   }
 
+	@override
   Future<bool> sendActivationOtp(String atsign) async {
     var res = await registrarApiRequest(ActivateApiEndpoint.login, {
       'atsign': atsign,
@@ -65,12 +58,13 @@ class RegistrarService {
     return true;
   }
 
+	@override
   Future<String?> verifyActivation({
-    required String atsign,
+    required String atSign,
     required String otp,
   }) async {
     var res = await registrarApiRequest(ActivateApiEndpoint.validate, {
-      'atsign': atsign,
+      'atsign': atSign,
       'otp': otp,
     });
     if (res.statusCode != 200) {

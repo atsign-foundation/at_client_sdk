@@ -21,7 +21,6 @@ import 'package:meta/meta.dart';
 import 'package:zxing2/qrcode.dart';
 
 import '../util/home_directory_util.dart';
-import '../util/onboarding_util.dart';
 
 /// Service implementation responsible for onboarding and authenticating atSigns.
 ///
@@ -667,7 +666,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atAuthRequest = AtAuthRequest(
         _atSign,
         FileAtKeysIo(
-            filePath: atOnboardingPreference.atKeysFilePath,
+            filePath: atOnboardingPreference.atKeysFilePath.isNull ? (_) => atOnboardingPreference.atKeysFilePath! : null,
             passPhrase: atOnboardingPreference.passPhrase))
       ..enrollmentId = enrollmentId
       ..rootDomain = AtRootDomain(

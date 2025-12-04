@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client_flutter/src/services/registrar_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -294,7 +293,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                               _isLoading = true;
                             });
                             var cram = await widget.registrar.verifyActivation(
-                              atsign: widget.request.atSign,
+                              atSign: widget.request.atSign,
                               otp: otp,
                             );
                             Navigator.of(context).pop(cram);

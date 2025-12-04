@@ -12,7 +12,9 @@ import 'package:at_auth/src/keys/at_keys_io.dart';
 /// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
 /// This implementation uses a mixin [KeyIOMixin] to provide common functionality for encoding and decoding AtKeys.
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
-/// If [filePath] is not provided, it defaults to a standard location based on the atSign.
+///
+/// Optional Parameters:
+/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys 
 /// The [passPhrase] is used for atKeys files that are password protected.
 class FileAtKeysIo extends WrittenAtKeysIo {
   @visibleForTesting
