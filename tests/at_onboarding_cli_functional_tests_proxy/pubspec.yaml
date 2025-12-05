@@ -9,8 +9,7 @@ resolution: workspace
 
 dependencies:
   at_demo_data: ^1.2.0
-  at_onboarding_cli:
-    path: ../../packages/at_onboarding_cli
+  at_onboarding_cli: ^1.15.0
   uuid: ^4.5.1
 
 dev_dependencies:
