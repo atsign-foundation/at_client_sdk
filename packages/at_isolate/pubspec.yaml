@@ -1,0 +1,27 @@
+name: at_isolate
+description: Spawn AtClient's in their own private isolate
+version: 0.1.0
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_isolate
+homepage: https://atsign.com
+documentation: https://docs.atsign.com/
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  at_auth: ^2.4.0
+  at_chops: ^3.0.0
+  at_client: ^3.9.3
+  json_annotation: ^4.9.0
+  meta: ^1.16.0
+  mutex: ^3.1.0
+  uuid: ^4.0.0
+
+dev_dependencies:
+  args: ^2.7.0
+  build_runner: ^2.4.13
+  json_serializable: ^6.9.0
+  lints: ^6.0.0
+  test: ^1.25.0
+  test_process: ^2.1.0
