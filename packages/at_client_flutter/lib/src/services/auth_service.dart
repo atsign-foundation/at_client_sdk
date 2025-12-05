@@ -36,11 +36,20 @@ class AuthService {
   /// Authenticate an atSign with secondary server
   ///
   ///   [atAuthRequest] - AtAuthRequest containing atSign, AtRootDomain, AtKeysIo.
+	///
+	///		[backupOnKeychain] -  
+	///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest, {bool backupOnKeychain = false}) async {
     AtAuthResponse? atAuthResponse;
     try {
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);
+			if(backupOnKeychain
+			&& atAuthRequest.atKeysIo is! KeychainAtKeysIo 
+			&& atAuthResponse.isSuccessful){
+				var kaki = KeychainAtKeysIo();
+				kaki.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
+			}
     } catch (e) {
       rethrow;
     }
