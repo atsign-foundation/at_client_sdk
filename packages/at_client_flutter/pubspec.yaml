@@ -20,9 +20,9 @@ dependencies:
   at_commons: ^5.5.0
   at_utils: ^3.0.19
   at_chops: ^3.0.0
-  at_lookup: ^3.0.51
-  at_client: ^3.7.0
-  at_auth: ^2.1.0
+  at_lookup: ^3.4.2
+  at_client: ^3.10.0
+  at_auth: ^3.0.0
   encrypt: ^5.0.3
   at_persistence_secondary_server: ^4.2.0
   flutter_riverpod: ^3.0.0

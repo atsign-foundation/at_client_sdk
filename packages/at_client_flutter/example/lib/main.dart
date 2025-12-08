@@ -1,12 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:at_client_flutter/src/widgets/atsign_rootdomain_dialog.dart';
-import 'package:at_client_flutter/src/services/registrar_service.dart';
-import 'package:at_client_flutter/src/widgets/registrar_cram_dialog.dart';
-import 'package:at_client_flutter/src/keychain/keychain_storage.dart';
-import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
-import 'package:at_client_flutter/src/widgets/cram_dialog.dart';
-import 'package:at_client_flutter/src/widgets/file_picker.dart';
-import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_auth/at_auth.dart';
 
 void main() {
