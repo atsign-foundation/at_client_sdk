@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/src/widgets/atsign_rootdomain_dialog.dart';
-import 'package:at_client_flutter/src/services/registrar_service.dart';
 import 'package:at_client_flutter/src/widgets/registrar_cram_dialog.dart';
 import 'package:at_client_flutter/src/keychain/keychain_storage.dart';
 import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
@@ -160,7 +159,7 @@ class MyHomePage extends StatelessWidget {
                   rootDomain: authRequest.rootDomain,
                 );
                 // c. Show PkamDialog to complete authentication
-                var response = await PkamDialog.show(context, request: request);
+                var response = await PkamDialog.show(context, request: request, backupKeys: [KeychainAtKeysIo()]);
                 print('Authentication response: $response');
               },
               child: const Text("Authenticate/PKAM via File Picker"),

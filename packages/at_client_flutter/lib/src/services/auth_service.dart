@@ -37,18 +37,19 @@ class AuthService {
   ///
   ///   [atAuthRequest] - AtAuthRequest containing atSign, AtRootDomain, AtKeysIo.
 	///
-	///		[backupOnKeychain] -  
+	///		[backupKeys] - Optional Parameter allowing for your keys to be backed up via provided WrittenAtKeysIo implementations
 	///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest, {bool backupOnKeychain = false}) async {
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest, {List<WrittenAtKeysIo>? backupKeys}) async {
     AtAuthResponse? atAuthResponse;
     try {
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);
-			if(backupOnKeychain
-			&& atAuthRequest.atKeysIo is! KeychainAtKeysIo 
+			if(backupKeys != null 
+			&& atAuthResponse.atAuthKeys != null
 			&& atAuthResponse.isSuccessful){
-				var kaki = KeychainAtKeysIo();
-				kaki.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
+				for(var atKeysIo in backupKeys){
+					atKeysIo.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
+				}
 			}
     } catch (e) {
       rethrow;
