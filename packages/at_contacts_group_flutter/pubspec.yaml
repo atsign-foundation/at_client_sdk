@@ -12,7 +12,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_client_mobile: ^3.3.0
   at_common_flutter: ^2.1.0
   at_commons: ^5.5.0
   at_contact: ^3.0.9
