@@ -13,7 +13,7 @@ Package for onboarding and authentication to an atsign's secondary server
 
 Onboard an atsign
 ```dart
-final atAuth = AtAuthCreate();
+final atAuth = AtAuth.create();
 final atOnboardingRequest = AtOnboardingRequest('@alice')
   ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
   ..appName = 'wavi'

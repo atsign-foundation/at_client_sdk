@@ -50,8 +50,8 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 }
 
-/// Taken from at_cli_commons, but I can't import it due to circular dependencies
-/// at_cli_commons depends on at_onboarding_cli....
+// Taken from at_cli_commons, but I can't import it due to circular dependencies
+// at_cli_commons depends on at_onboarding_cli....
 String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
   return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
       .replaceAll('/', Platform.pathSeparator);
