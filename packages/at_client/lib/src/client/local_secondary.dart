@@ -90,6 +90,8 @@ class LocalSecondary implements Secondary {
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
+      // If we've already sent to remote atServer, update the commit log so we
+      // don't send the update again via the sync process
       return 'data:$updateResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in local update:${e.toString()}');

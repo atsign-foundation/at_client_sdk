@@ -345,12 +345,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<String?> executeVerb(
       VerbBuilder builder, RemoteLocalPref prefForOp) async {
     switch (prefForOp) {
-      case RemoteLocalPref.localFirst:
+      case RemoteLocalPref.localOnly:
         return await localSecondary!.executeVerb(builder, sync: true);
-      case RemoteLocalPref.remoteFirst:
-        var retVal = await _remoteSecondary!.executeVerb(builder);
-        await localSecondary!.executeVerb(builder);
-        return retVal;
       case RemoteLocalPref.remoteOnly:
         return await _remoteSecondary!.executeVerb(builder);
     }

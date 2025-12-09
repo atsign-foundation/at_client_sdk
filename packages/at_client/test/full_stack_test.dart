@@ -129,7 +129,7 @@ void main() {
       await localStore.remove(vicsCopySymKeyName);
 
       atClient.localSecondary = localSecondary;
-      fullStackPrefs.remoteLocalPref = RemoteLocalPref.localFirst;
+      fullStackPrefs.remoteLocalPref = RemoteLocalPref.localOnly;
       remoteSecondaryAvailable = true;
 
       remotePLookupMap = {};
@@ -545,12 +545,8 @@ void main() {
         } else {
           // useRemoteAtServer is null
           switch (remoteLocalPref) {
-            case RemoteLocalPref.localFirst:
+            case RemoteLocalPref.localOnly:
               expect(executedRemotely, false);
-              expect(executedLocally, true);
-              expect(retVal, true);
-            case RemoteLocalPref.remoteFirst:
-              expect(executedRemotely, true);
               expect(executedLocally, true);
               expect(retVal, true);
             case RemoteLocalPref.remoteOnly:
@@ -563,20 +559,17 @@ void main() {
 
       test('put behaviour when PutRequestOptions.useRemoteAtServer is true',
           () async {
-        await checkPutBehaviour(true, RemoteLocalPref.localFirst);
-        await checkPutBehaviour(true, RemoteLocalPref.remoteFirst);
+        await checkPutBehaviour(true, RemoteLocalPref.localOnly);
         await checkPutBehaviour(true, RemoteLocalPref.remoteOnly);
       });
       test('put behaviour when PutRequestOptions.useRemoteAtServer is false',
           () async {
-        await checkPutBehaviour(false, RemoteLocalPref.localFirst);
-        await checkPutBehaviour(false, RemoteLocalPref.remoteFirst);
+        await checkPutBehaviour(false, RemoteLocalPref.localOnly);
         await checkPutBehaviour(false, RemoteLocalPref.remoteOnly);
       });
       test('put behaviour when PutRequestOptions.useRemoteAtServer is null',
           () async {
-        await checkPutBehaviour(null, RemoteLocalPref.localFirst);
-        await checkPutBehaviour(null, RemoteLocalPref.remoteFirst);
+        await checkPutBehaviour(null, RemoteLocalPref.localOnly);
         await checkPutBehaviour(null, RemoteLocalPref.remoteOnly);
       });
     });
@@ -649,12 +642,8 @@ void main() {
         } else {
           // useRemoteAtServer is null
           switch (remoteLocalPref) {
-            case RemoteLocalPref.localFirst:
+            case RemoteLocalPref.localOnly:
               expect(executedRemotely, false);
-              expect(executedLocally, true);
-              expect(retVal, true);
-            case RemoteLocalPref.remoteFirst:
-              expect(executedRemotely, true);
               expect(executedLocally, true);
               expect(retVal, true);
             case RemoteLocalPref.remoteOnly:
@@ -668,22 +657,19 @@ void main() {
       test(
           'delete behaviour when DeleteRequestOptions.useRemoteAtServer is true',
           () async {
-        await checkDeleteBehaviour(true, RemoteLocalPref.localFirst);
-        await checkDeleteBehaviour(true, RemoteLocalPref.remoteFirst);
+        await checkDeleteBehaviour(true, RemoteLocalPref.localOnly);
         await checkDeleteBehaviour(true, RemoteLocalPref.remoteOnly);
       });
       test(
           'delete behaviour when DeleteRequestOptions.useRemoteAtServer is false',
           () async {
-        await checkDeleteBehaviour(false, RemoteLocalPref.localFirst);
-        await checkDeleteBehaviour(false, RemoteLocalPref.remoteFirst);
+        await checkDeleteBehaviour(false, RemoteLocalPref.localOnly);
         await checkDeleteBehaviour(false, RemoteLocalPref.remoteOnly);
       });
       test(
           'delete behaviour when DeleteRequestOptions.useRemoteAtServer is null',
           () async {
-        await checkDeleteBehaviour(null, RemoteLocalPref.localFirst);
-        await checkDeleteBehaviour(null, RemoteLocalPref.remoteFirst);
+        await checkDeleteBehaviour(null, RemoteLocalPref.localOnly);
         await checkDeleteBehaviour(null, RemoteLocalPref.remoteOnly);
       });
     });
@@ -720,14 +706,9 @@ void main() {
           executedRemotely = true;
           return 'data:[]';
         });
-        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localFirst;
+        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localOnly;
         await atClient.getAtKeys();
         expect(executedRemotely, false);
-
-        atClient.getPreferences()!.remoteLocalPref =
-            RemoteLocalPref.remoteFirst;
-        await atClient.getAtKeys();
-        expect(executedRemotely, true);
 
         atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
         await atClient.getAtKeys();
@@ -765,7 +746,7 @@ void main() {
 
         dynamic caught;
 
-        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localFirst;
+        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localOnly;
         caught = null;
         try {
           await atClient.get(atKey, getRequestOptions: null);
@@ -774,17 +755,6 @@ void main() {
         }
         expect(caught, isA<AtKeyNotFoundException>());
         expect(executedRemotely, false);
-
-        atClient.getPreferences()!.remoteLocalPref =
-            RemoteLocalPref.remoteFirst;
-        caught = null;
-        try {
-          await atClient.get(atKey, getRequestOptions: null);
-        } catch (e) {
-          caught = e;
-        }
-        expect(caught, isNull);
-        expect(executedRemotely, true);
 
         atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
         caught = null;
@@ -808,20 +778,7 @@ void main() {
 
         dynamic caught;
 
-        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localFirst;
-        caught = null;
-        try {
-          await atClient.get(atKey,
-              getRequestOptions: GetRequestOptions()
-                ..useRemoteAtServer = false);
-        } catch (e) {
-          caught = e;
-        }
-        expect(caught, isA<AtKeyNotFoundException>());
-        expect(executedRemotely, false);
-
-        atClient.getPreferences()!.remoteLocalPref =
-            RemoteLocalPref.remoteFirst;
+        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localOnly;
         caught = null;
         try {
           await atClient.get(atKey,

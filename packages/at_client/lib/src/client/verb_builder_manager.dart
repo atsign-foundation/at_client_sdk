@@ -50,7 +50,7 @@ class LookUpBuilderManager {
 
 class SecondaryManager {
   /// - If [useRemoteAtServer] is true, return RemoteLocalPref.remoteOnly
-  /// - Else return [remoteLocalPref], or [RemoteLocalPref.localFirst]
+  /// - Else return [remoteLocalPref], or [RemoteLocalPref.localOnly]
   /// if [remoteLocalPref] is null
   static RemoteLocalPref getRemoteLocalPrefForOp(
     bool? useRemoteAtServer,
@@ -59,9 +59,9 @@ class SecondaryManager {
     if (useRemoteAtServer == true) {
       return RemoteLocalPref.remoteOnly;
     } else if (useRemoteAtServer == false) {
-      return RemoteLocalPref.localFirst;
+      return RemoteLocalPref.localOnly;
     } else {
-      return remoteLocalPref ?? RemoteLocalPref.localFirst;
+      return remoteLocalPref ?? RemoteLocalPref.localOnly;
     }
   }
 
@@ -82,10 +82,8 @@ class SecondaryManager {
     }
 
     switch (prefForOp) {
-      case RemoteLocalPref.localFirst:
+      case RemoteLocalPref.localOnly:
         return atClient.getLocalSecondary()!;
-      case RemoteLocalPref.remoteFirst:
-        return atClient.getRemoteSecondary()!;
       case RemoteLocalPref.remoteOnly:
         return atClient.getRemoteSecondary()!;
     }

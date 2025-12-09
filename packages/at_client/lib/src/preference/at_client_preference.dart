@@ -112,7 +112,7 @@ class AtClientPreference {
   /// Set this to [RemoteLocalPref.remoteFirst] or [RemoteLocalPref.remoteOnly]
   /// if you require all data operations (get / put / delete) to be performed
   /// on the remote atServer first.
-  RemoteLocalPref remoteLocalPref = RemoteLocalPref.localFirst;
+  RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
 }
 
 /// Default preference on how to handle get, put and delete requests with
@@ -120,14 +120,16 @@ class AtClientPreference {
 enum RemoteLocalPref {
   /// The default - operate on local storage, and rely on the background
   /// sync processing to push changes to the remote atServer.
-  localFirst,
+  localOnly,
 
-  /// Operate on remote first. If there is an exception, rethrow it back to
-  /// application code. If remote operation was successful, then perform the
-  /// operation on local storage.
-  remoteFirst,
-
+  // /// Operate on remote first. If there is an exception, rethrow it back to
+  // /// application code. If remote operation was successful, then perform the
+  // /// operation on local storage.
+  // remoteFirst,
+  //
   /// Operate on remote only - i.e. do not interact with local storage at all.
+  /// Note that if the application is syncing, then the change will be pulled
+  /// to local from remote as part of the sync process.
   remoteOnly,
 }
 
