@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_cli_commons/at_cli_commons.dart'
-    show getDefaultAtKeysFilePath, getHomeDirectory;
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 
@@ -52,5 +50,40 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 }
 
-//TODO: future add simAtKeysIo
-// class SimAtKeysIo extends GeneratedAtKeysIo with KeyIOMixin {
+// Taken from at_cli_commons, but I can't import it due to circular dependencies
+// at_cli_commons depends on at_onboarding_cli....
+String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
+  return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
+      .replaceAll('/', Platform.pathSeparator);
+}
+
+
+String? getHomeDirectory({bool throwIfNull = false}) {
+  String? homeDir;
+  switch (Platform.operatingSystem) {
+    case 'linux':
+    case 'macos':
+      homeDir = Platform.environment['HOME'];
+      break;
+
+    case 'windows':
+      homeDir = Platform.environment['USERPROFILE'];
+      break;
+
+    case 'android':
+      // Probably want internal storage.
+      homeDir = '/storage/sdcard0';
+      break;
+
+    case 'ios':
+    // iOS doesn't really have a home directory.
+    case 'fuchsia':
+    // I have no idea.
+    default:
+      homeDir = null;
+  }
+  if (throwIfNull && homeDir == null) {
+    throw ('\nUnable to determine your home directory: please set environment variable\n\n');
+  }
+  return homeDir;
+}

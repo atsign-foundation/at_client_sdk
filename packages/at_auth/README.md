@@ -13,10 +13,9 @@ Package for onboarding and authentication to an atsign's secondary server
 
 Onboard an atsign
 ```dart
-final atAuth = AtAuthImpl();
+final atAuth = AtAuth.create();
 final atOnboardingRequest = AtOnboardingRequest('@alice')
-  ..rootDomain = 'vip.ve.atsign.zone'
-  ..enableEnrollment = true
+  ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
   ..appName = 'wavi'
   ..deviceName = 'iphone';
 final atOnboardingResponse = await atAuth.onboard(atOnboardingRequest, <cram_secret>);
@@ -24,9 +23,9 @@ final atOnboardingResponse = await atAuth.onboard(atOnboardingRequest, <cram_sec
 
 Authenticate an atsign
 ```dart
-final atAuth = AtAuthImpl();
+final atAuth = AtAuth.create();
 final atAuthRequest = AtAuthRequest('@alice')
-    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
     ..atKeysFilePath = args[1];
 final atAuthResponse = await atAuth.authenticate(atAuthRequest);
 ```

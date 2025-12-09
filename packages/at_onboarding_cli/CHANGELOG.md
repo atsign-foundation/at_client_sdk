@@ -8,6 +8,9 @@
 - feat: add `--license-key` alias for `--cramkey`
 - chore(deps): at_commons: ^5.6.0
 - chore(deps): args gkc/show-aliases-in-usage dependency override
+## 1.14.2
+
+ - chore: export createAtClientCli() to be used downstream
 
 ## 1.14.1
 
