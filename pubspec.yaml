@@ -13,7 +13,6 @@ workspace:
   - packages/at_cli_commons
   - packages/at_client
   - packages/at_client_flutter
-  - packages/at_client_mobile
   - packages/at_commons
   - packages/at_common_flutter
   - packages/at_contact
@@ -27,7 +26,6 @@ workspace:
   - packages/at_lookup
   - packages/at_notify_flutter
   - packages/at_onboarding_cli
-  - packages/at_onboarding_flutter
   - packages/at_policy
   - packages/at_server_status
   - packages/at_sync_ui_flutter

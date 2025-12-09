@@ -11,8 +11,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_client_mobile: ^3.3.0
-  at_common_flutter: ^2.1.0
   at_utils: ^3.0.19
   flutter:
     sdk: flutter
