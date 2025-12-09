@@ -324,7 +324,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   Future<bool> _delete(AtKey atKey,
       {DeleteRequestOptions? deleteRequestOptions}) async {
-    deleteRequestOptions ??= DeleteRequestOptions();
     atKey.sharedBy ??= _atSign;
     // When namespace is not set in AtKey.namespace, default it to namespace from
     // AtClientPreferences
@@ -336,7 +335,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     var deleteResult = await executeVerb(
         builder,
         SecondaryManager.getRemoteLocalPrefForOp(
-          deleteRequestOptions.useRemoteAtServer,
+          deleteRequestOptions?.useRemoteAtServer,
           preference?.remoteLocalPref,
         ));
 
@@ -360,7 +359,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<AtValue> get(AtKey atKey,
       {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
-    getRequestOptions ??= GetRequestOptions();
     Secondary? secondary;
     try {
       // validate the get request.
@@ -369,14 +367,14 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      if (getRequestOptions.useRemoteAtServer) {
+      if (getRequestOptions?.useRemoteAtServer == true) {
         secondary = getRemoteSecondary()!;
       } else {
         secondary = SecondaryManager.getSecondary(
             this,
             verbBuilder,
             SecondaryManager.getRemoteLocalPrefForOp(
-              getRequestOptions.useRemoteAtServer,
+              getRequestOptions?.useRemoteAtServer,
               preference?.remoteLocalPref,
             ));
       }
@@ -417,7 +415,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     String? sharedBy,
     String? sharedWith,
     bool showHiddenKeys = false,
-    bool useRemoteAtServer = false,
+    bool? useRemoteAtServer,
   }) async {
     var scanBuilder = ScanVerbBuilder()
       ..sharedWith = sharedWith
@@ -426,7 +424,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       ..showHiddenKeys = showHiddenKeys
       ..auth = true;
     Secondary secondary;
-    if (useRemoteAtServer) {
+    if (useRemoteAtServer == true) {
       secondary = getRemoteSecondary()!;
     } else {
       secondary = SecondaryManager.getSecondary(
@@ -453,7 +451,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     String? sharedBy,
     String? sharedWith,
     bool showHiddenKeys = false,
-    bool useRemoteAtServer = false,
+    bool? useRemoteAtServer,
   }) async {
     var getKeysResult = await getKeys(
       regex: regex,
@@ -547,7 +545,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   Future<AtResponse> _putInternal(
       AtKey atKey, dynamic value, PutRequestOptions? putRequestOptions) async {
-    putRequestOptions ??= PutRequestOptions();
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -612,7 +609,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     var putResponse = await executeVerb(
         putBuilder,
         SecondaryManager.getRemoteLocalPrefForOp(
-          putRequestOptions.useRemoteAtServer,
+          putRequestOptions?.useRemoteAtServer,
           preference?.remoteLocalPref,
         ));
 
@@ -651,7 +648,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> putMeta(AtKey atKey,
       {PutRequestOptions? putRequestOptions}) async {
-    putRequestOptions ??= PutRequestOptions();
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = atKey
@@ -660,7 +656,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     var updateMetaResult = await executeVerb(
         builder,
         SecondaryManager.getRemoteLocalPrefForOp(
-          putRequestOptions.useRemoteAtServer,
+          putRequestOptions?.useRemoteAtServer,
           preference?.remoteLocalPref,
         ));
     return updateMetaResult != null;

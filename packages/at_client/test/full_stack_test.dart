@@ -458,12 +458,15 @@ void main() {
         expect(pro.useRemoteAtServer, false);
       });
       checkPutBehaviour(
-        bool useRemoteAtServer,
+        bool? useRemoteAtServer,
         RemoteLocalPref remoteLocalPref,
       ) async {
         bool executedRemotely = false;
         bool executedLocally = false;
-        var atKey = (AtKey.shared('test_put')..sharedWith('@bob')).build();
+        var atKey = (AtKey.shared('test_put')
+              ..sharedWith('@alice')
+              ..sharedBy('@alice'))
+            .build();
 
         MockLocalSecondary mockLocalSecondary =
             atClient.localSecondary = MockLocalSecondary();
@@ -476,8 +479,6 @@ void main() {
             // print('mockLocalSecondary.executeVerb with UpdateVerbBuilder'
             //     ' for ${builder.atKey.toString()} as expected');
             executedLocally = true;
-            return 'data:20';
-          } else if (builder.atKey.toString() == '@bob:shared_key@alice') {
             return 'data:20';
           } else {
             print(builder.buildCommand());
@@ -504,18 +505,45 @@ void main() {
           }
         });
 
+        var selfEncryptionKeyID = AtKey()
+          ..key =
+              '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
+          ..sharedBy = atKey.sharedBy;
+
+        when(() => mockLocalSecondary
+                .executeVerb(any(that: isA<LLookupVerbBuilder>())))
+            .thenAnswer((invocation) async {
+          remoteLLookupRequestCount++;
+          var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+          print('LLookupVerbBuilder : ${builder.buildCommand()}');
+          if (builder.atKey.toString() == selfEncryptionKeyID.toString()) {
+            return 'data:$selfEncryptionKey';
+          } else {
+            throw KeyNotFoundException(
+                'No value in mock local for LLookup: ${builder.buildCommand()}');
+          }
+        });
+
         atClient.getPreferences()!.remoteLocalPref = remoteLocalPref;
 
+        PutRequestOptions? putRequestOptions;
+        if (useRemoteAtServer != null) {
+          putRequestOptions = PutRequestOptions()
+            ..useRemoteAtServer = useRemoteAtServer;
+        }
         var retVal = await atClient.put(atKey, clearText,
-            putRequestOptions: PutRequestOptions()
-              ..useRemoteAtServer = useRemoteAtServer
-              ..shouldEncrypt = false);
+            putRequestOptions: putRequestOptions);
 
-        if (useRemoteAtServer) {
+        if (useRemoteAtServer == true) {
           expect(executedRemotely, true);
           expect(executedLocally, false);
           expect(retVal, true);
+        } else if (useRemoteAtServer == false) {
+          expect(executedRemotely, false);
+          expect(executedLocally, true);
+          expect(retVal, true);
         } else {
+          // useRemoteAtServer is null
           switch (remoteLocalPref) {
             case RemoteLocalPref.localFirst:
               expect(executedRemotely, false);
@@ -533,15 +561,23 @@ void main() {
         }
       }
 
-      test('put behaviour when useRemoteAtServer set to true', () async {
+      test('put behaviour when PutRequestOptions.useRemoteAtServer is true',
+          () async {
         await checkPutBehaviour(true, RemoteLocalPref.localFirst);
         await checkPutBehaviour(true, RemoteLocalPref.remoteFirst);
         await checkPutBehaviour(true, RemoteLocalPref.remoteOnly);
       });
-      test('put behaviour when useRemoteAtServer set to false', () async {
+      test('put behaviour when PutRequestOptions.useRemoteAtServer is false',
+          () async {
         await checkPutBehaviour(false, RemoteLocalPref.localFirst);
         await checkPutBehaviour(false, RemoteLocalPref.remoteFirst);
         await checkPutBehaviour(false, RemoteLocalPref.remoteOnly);
+      });
+      test('put behaviour when PutRequestOptions.useRemoteAtServer is null',
+          () async {
+        await checkPutBehaviour(null, RemoteLocalPref.localFirst);
+        await checkPutBehaviour(null, RemoteLocalPref.remoteFirst);
+        await checkPutBehaviour(null, RemoteLocalPref.remoteOnly);
       });
     });
 
@@ -551,7 +587,7 @@ void main() {
         expect(dro.useRemoteAtServer, false);
       });
       checkDeleteBehaviour(
-        bool useRemoteAtServer,
+        bool? useRemoteAtServer,
         RemoteLocalPref remoteLocalPref,
       ) async {
         bool executedRemotely = false;
@@ -595,14 +631,23 @@ void main() {
           }
         });
         atClient.getPreferences()!.remoteLocalPref = remoteLocalPref;
+        DeleteRequestOptions? deleteRequestOptions;
+        if (useRemoteAtServer != null) {
+          deleteRequestOptions = DeleteRequestOptions()
+            ..useRemoteAtServer = useRemoteAtServer;
+        }
         var retVal = await atClient.delete(atKey,
-            deleteRequestOptions: DeleteRequestOptions()
-              ..useRemoteAtServer = useRemoteAtServer);
-        if (useRemoteAtServer) {
+            deleteRequestOptions: deleteRequestOptions);
+        if (useRemoteAtServer == true) {
           expect(executedRemotely, true);
           expect(executedLocally, false);
           expect(retVal, true);
+        } else if (useRemoteAtServer == false) {
+          expect(executedRemotely, false);
+          expect(executedLocally, true);
+          expect(retVal, true);
         } else {
+          // useRemoteAtServer is null
           switch (remoteLocalPref) {
             case RemoteLocalPref.localFirst:
               expect(executedRemotely, false);
@@ -620,15 +665,26 @@ void main() {
         }
       }
 
-      test('delete behaviour when useRemoteAtServer set to true', () async {
+      test(
+          'delete behaviour when DeleteRequestOptions.useRemoteAtServer is true',
+          () async {
         await checkDeleteBehaviour(true, RemoteLocalPref.localFirst);
         await checkDeleteBehaviour(true, RemoteLocalPref.remoteFirst);
         await checkDeleteBehaviour(true, RemoteLocalPref.remoteOnly);
       });
-      test('delete behaviour when useRemoteAtServer set to false', () async {
+      test(
+          'delete behaviour when DeleteRequestOptions.useRemoteAtServer is false',
+          () async {
         await checkDeleteBehaviour(false, RemoteLocalPref.localFirst);
         await checkDeleteBehaviour(false, RemoteLocalPref.remoteFirst);
         await checkDeleteBehaviour(false, RemoteLocalPref.remoteOnly);
+      });
+      test(
+          'delete behaviour when DeleteRequestOptions.useRemoteAtServer is null',
+          () async {
+        await checkDeleteBehaviour(null, RemoteLocalPref.localFirst);
+        await checkDeleteBehaviour(null, RemoteLocalPref.remoteFirst);
+        await checkDeleteBehaviour(null, RemoteLocalPref.remoteOnly);
       });
     });
 
@@ -685,7 +741,7 @@ void main() {
       });
 
       test(
-          'get self key useRemoteAtServer false, various remoteLocalPref values',
+          'get self key useRemoteAtServer null, various remoteLocalPref values',
           () async {
         bool executedRemotely = false;
         // Make a self key - by default, this will be looked up locally using
@@ -712,6 +768,49 @@ void main() {
         atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localFirst;
         caught = null;
         try {
+          await atClient.get(atKey, getRequestOptions: null);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught, isA<AtKeyNotFoundException>());
+        expect(executedRemotely, false);
+
+        atClient.getPreferences()!.remoteLocalPref =
+            RemoteLocalPref.remoteFirst;
+        caught = null;
+        try {
+          await atClient.get(atKey, getRequestOptions: null);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught, isNull);
+        expect(executedRemotely, true);
+
+        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
+        caught = null;
+        try {
+          await atClient.get(atKey, getRequestOptions: null);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught, isNull);
+        expect(executedRemotely, true);
+      });
+
+      test(
+          'get self key useRemoteAtServer false, various remoteLocalPref values',
+          () async {
+        bool executedRemotely = false;
+
+        var atKey = AtKey.fromString('test_get_self_key_when_remote_is_false'
+            '.${atClient.getPreferences()!.namespace!}'
+            '${atClient.getCurrentAtSign()!}');
+
+        dynamic caught;
+
+        atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.localFirst;
+        caught = null;
+        try {
           await atClient.get(atKey,
               getRequestOptions: GetRequestOptions()
                 ..useRemoteAtServer = false);
@@ -731,8 +830,8 @@ void main() {
         } catch (e) {
           caught = e;
         }
-        expect(caught, isNull);
-        expect(executedRemotely, true);
+        expect(caught, isA<AtKeyNotFoundException>());
+        expect(executedRemotely, false);
 
         atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
         caught = null;
@@ -743,8 +842,8 @@ void main() {
         } catch (e) {
           caught = e;
         }
-        expect(caught, isNull);
-        expect(executedRemotely, true);
+        expect(caught, isA<AtKeyNotFoundException>());
+        expect(executedRemotely, false);
       });
 
       test('get self key when useRemoteAtServer set to true', () async {

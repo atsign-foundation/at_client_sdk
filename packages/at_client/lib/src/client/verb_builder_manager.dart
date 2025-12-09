@@ -53,11 +53,13 @@ class SecondaryManager {
   /// - Else return [remoteLocalPref], or [RemoteLocalPref.localFirst]
   /// if [remoteLocalPref] is null
   static RemoteLocalPref getRemoteLocalPrefForOp(
-    bool useRemoteAtServer,
+    bool? useRemoteAtServer,
     RemoteLocalPref? remoteLocalPref,
   ) {
-    if (useRemoteAtServer) {
+    if (useRemoteAtServer == true) {
       return RemoteLocalPref.remoteOnly;
+    } else if (useRemoteAtServer == false) {
+      return RemoteLocalPref.localFirst;
     } else {
       return remoteLocalPref ?? RemoteLocalPref.localFirst;
     }
