@@ -36,7 +36,7 @@ class AtSignSelectionDialog extends StatefulWidget {
       builder: (context) => AtSignSelectionDialog(
         existingAtSigns: existingAtSigns,
         existingDomains: existingDomains,
-        themeData: Theme.of(context),  
+        themeData: Theme.of(context),
       ),
     );
   }
