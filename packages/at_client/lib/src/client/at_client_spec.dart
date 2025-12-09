@@ -174,7 +174,7 @@ abstract class AtClient {
   ///   putMeta(key);
   /// ```
   /// If you want to set both value and metadata please use [put]
-  Future<bool> putMeta(AtKey key);
+  Future<bool> putMeta(AtKey key, {PutRequestOptions? putRequestOptions});
 
   /// Get the value of [AtKey.key] from user's cloud secondary if [AtKey.sharedBy] is set. Otherwise looks up the key from local secondary.
   /// If the key was stored with public access, set [AtKey.metadata.isPublic] to true. If the key was shared with another atSign set [AtKey.sharedWith]
