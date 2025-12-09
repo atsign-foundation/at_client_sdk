@@ -30,6 +30,7 @@ class PkamDialog extends StatelessWidget {
     this.onAuthenticationComplete,
     this.title,
     this.description,
+		this.backupKeys,
   });
   final AuthService auth = AuthService();
   final AtAuthRequest request;
@@ -37,6 +38,7 @@ class PkamDialog extends StatelessWidget {
   final void Function(AtAuthRequest)? onAuthenticationComplete;
   final String? title;
   final String? description;
+	final List<WrittenAtKeysIo>? backupKeys;
 
   static Future<AtAuthResponse?> show(
     BuildContext context, {
@@ -45,6 +47,7 @@ class PkamDialog extends StatelessWidget {
     dynamic Function(AtAuthRequest)? onAuthenticationComplete,
     String? title,
     String? description,
+		List<WrittenAtKeysIo>? backupKeys,
   }) async {
     return showDialog<AtAuthResponse>(
       context: context,
@@ -54,13 +57,14 @@ class PkamDialog extends StatelessWidget {
         onAuthenticationComplete: onAuthenticationComplete,
         title: title,
         description: description,
+				backupKeys: backupKeys,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    auth.authenticate(request).then((response) {
+    auth.authenticate(request, backupKeys: backupKeys).then((response) {
       if (onAuthenticationComplete != null) {
         onAuthenticationComplete!(request);
       } else {

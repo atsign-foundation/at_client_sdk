@@ -36,11 +36,21 @@ class AuthService {
   /// Authenticate an atSign with secondary server
   ///
   ///   [atAuthRequest] - AtAuthRequest containing atSign, AtRootDomain, AtKeysIo.
+	///
+	///		[backupKeys] - Optional Parameter allowing for your keys to be backed up via provided WrittenAtKeysIo implementations
+	///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest, {List<WrittenAtKeysIo>? backupKeys}) async {
     AtAuthResponse? atAuthResponse;
     try {
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);
+			if(backupKeys != null 
+			&& atAuthResponse.atAuthKeys != null
+			&& atAuthResponse.isSuccessful){
+				for(var atKeysIo in backupKeys){
+					atKeysIo.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
+				}
+			}
     } catch (e) {
       rethrow;
     }
