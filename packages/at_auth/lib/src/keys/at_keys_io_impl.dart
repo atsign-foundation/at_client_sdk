@@ -38,14 +38,13 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     decodedAtKeysData = jsonDecode(atAuthData);
     decodedAtKeysData =
         await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
-    return decryptAtKeysWithSelfEncKey(
-        decodedAtKeysData, PkamAuthMode.keysFile);
+    return decryptAtKeysWithSelfEncKey(decodedAtKeysData);
   }
 
   @override
   Future write(String atSign, AtKeys atKeys) async {
     String atKeysData =
-        await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
+        await encryptAtKeysWithSelfEncKey(atKeys);
     return File(filePath!(atSign)).writeAsString(atKeysData);
   }
 }

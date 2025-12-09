@@ -17,6 +17,7 @@ dependencies:
   biometric_storage: ^5.0.0
   hive: ^2.2.3
   crypton: ^2.2.1
+  file_picker: ^10.3.7
   at_commons: ^5.5.0
   at_utils: ^3.0.19
   at_chops: ^3.0.0
@@ -28,7 +29,6 @@ dependencies:
   flutter_riverpod: ^3.0.0
   phosphor_flutter: ^2.1.0
   intl: ^0.20.2
-  file_picker: ^10.3.7
 
 dev_dependencies:
   path: ^1.9.0

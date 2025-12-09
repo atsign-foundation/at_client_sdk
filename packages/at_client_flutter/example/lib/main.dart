@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
+import './snippets/at_backup_key.dart';
 import 'package:at_auth/at_auth.dart';
 
 void main() {
@@ -153,7 +154,7 @@ class MyHomePage extends StatelessWidget {
                   rootDomain: authRequest.rootDomain,
                 );
                 // c. Show PkamDialog to complete authentication
-                var response = await PkamDialog.show(context, request: request);
+                var response = await PkamDialog.show(context, request: request, backupKeys: [KeychainAtKeysIo()]);
                 print('Authentication response: $response');
               },
               child: const Text("Authenticate/PKAM via File Picker"),
@@ -186,7 +187,7 @@ class MyHomePage extends StatelessWidget {
                 //  i) ensure providing KeychainAtKeysIo for the AuthRequest
                 var authRequest = AtAuthRequest(
                   request.atSign,
-                  KeychainAtKeysIo(),
+								  KeychainAtKeysIo(),
                   rootDomain: request.rootDomain,
                 );
                 // c. Show PkamDialog to complete authentication
@@ -200,6 +201,10 @@ class MyHomePage extends StatelessWidget {
             ),
 
             const SizedBox(height: 20),
+						ElevatedButton(
+							child: const Text("backup"),
+							onPressed: () => BackupKeyWidget(atsign: "@chess69").showBackupDialog(context),
+						),
           ],
         ),
       ),

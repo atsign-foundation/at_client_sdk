@@ -34,7 +34,7 @@ mixin KeyIOMixin on AtKeysIo {
   final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
 
   FutureOr<AtKeys> decryptAtKeysWithSelfEncKey(
-      Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
+      Map<String, dynamic> jsonData) async {
     var securityKeys = AtKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey];
     var atChops =
@@ -59,16 +59,12 @@ mixin KeyIOMixin on AtKeysIo {
             jsonData[auth_constants.apkamPublicKey], EncryptionKeyType.aes256,
             keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
         .result);
-    // pkam private key will not be saved in keyfile if auth mode is sim/any other secure element.
-    // decrypt the private key only when auth mode is keysFile
-    if (authMode == PkamAuthMode.keysFile) {
       securityKeys.apkamPrivateKey = AtBytes.fromString(
           (await atChops.decryptString(jsonData[auth_constants.apkamPrivateKey],
                   EncryptionKeyType.aes256,
                   keyName: 'selfEncryptionKey',
                   iv: AtChopsUtil.generateIVLegacy()))
               .result);
-    }
     securityKeys.apkamSymmetricKey =
         AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey] ?? '');
     securityKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
@@ -76,7 +72,7 @@ mixin KeyIOMixin on AtKeysIo {
   }
 
   FutureOr<String> encryptAtKeysWithSelfEncKey(
-      AtKeys atKeys, PkamAuthMode authMode) async {
+      AtKeys atKeys) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
       throw AtException('selfEncryptionKey is required to encrypt the atKeys');
@@ -105,13 +101,12 @@ mixin KeyIOMixin on AtKeysIo {
             keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
         .result;
 
-    if (authMode == PkamAuthMode.keysFile) {
-      atKeysMap[auth_constants.apkamPrivateKey] = (await atChops.encryptString(
-              atKeys.apkamPrivateKey.toString(), EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
-          .result;
-    }
-
+    
+		atKeysMap[auth_constants.apkamPrivateKey] = (await atChops.encryptString(
+			      atKeys.apkamPrivateKey.toString(), EncryptionKeyType.aes256,
+            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+        .result;
+    
     atKeysMap[auth_constants.apkamSymmetricKey] =
         atKeys.apkamSymmetricKey.toString();
     atKeysMap[auth_constants.defaultSelfEncryptionKey] =

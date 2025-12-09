@@ -72,7 +72,7 @@ Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) asy
   final fileAtKeysIo = FileAtKeysIo(filePath: (_) => filePath);
   final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
   var decryptedAtKeysMap = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
-      encryptedAtKeysMap, PkamAuthMode.keysFile);
+      encryptedAtKeysMap);
   return decryptedAtKeys.apkamPrivateKey.toString() ==
           decryptedAtKeysMap.toString() &&
       decryptedAtKeys.apkamPublicKey.toString() ==
