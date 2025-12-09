@@ -37,12 +37,13 @@ void main() {
         ..defaultSelfEncryptionKey = AtBytes.fromString('dummykey')
         ..metadata = {'atsign': '@alice'};
 
-      when(() => mockKeychainAtKeysIo.write(any(), any()))
-          .thenAnswer((_) async => atKeysList[_.positionalArguments[0]] = fakeAtKeys);
+      when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer(
+          (_) async => atKeysList[_.positionalArguments[0]] = fakeAtKeys);
       when(() => mockKeychainAtKeysIo.read(any())).thenAnswer((atSign) async {
         final result = atKeysList[atSign.positionalArguments[0]];
         if (result == null) {
-          throw Exception('AtKeys not found for ${atSign.positionalArguments[0]}');
+          throw Exception(
+              'AtKeys not found for ${atSign.positionalArguments[0]}');
         }
         return result;
       });
@@ -50,10 +51,12 @@ void main() {
   );
   group('AuthService', () {
     test('assert authenticate() saves keys to keychain', () async {
-      when(() => mockAtAuth.authenticate(any())).thenAnswer((_) async => AtAuthResponse('@alice')
-        ..isSuccessful = true
-        ..atAuthKeys = fakeAtKeys);
-      when(() => mockFileAtKeysIo.read(any())).thenAnswer((_) async => fakeAtKeys);
+      when(() => mockAtAuth.authenticate(any()))
+          .thenAnswer((_) async => AtAuthResponse('@alice')
+            ..isSuccessful = true
+            ..atAuthKeys = fakeAtKeys);
+      when(() => mockFileAtKeysIo.read(any()))
+          .thenAnswer((_) async => fakeAtKeys);
       AuthService authService = AuthService(atAuth: mockAtAuth);
       AtAuthRequest atAuthRequest = AtAuthRequest("@alice", mockFileAtKeysIo);
 
@@ -67,14 +70,19 @@ void main() {
     });
 
     test('assert onboard()', () {
-      when(() => mockAtAuth.onboard(any(), any())).thenAnswer((_) async => AtOnboardingResponse('@alice')
-        ..isSuccessful = true
-        ..atAuthKeys = fakeAtKeys);
+      when(() => mockAtAuth.onboard(any(), any()))
+          .thenAnswer((_) async => AtOnboardingResponse('@alice')
+            ..isSuccessful = true
+            ..atAuthKeys = fakeAtKeys);
       AuthService authService = AuthService(atAuth: mockAtAuth);
-      AtOnboardingRequest atOnboardingRequest = AtOnboardingRequest("@alice", atKeysIo: mockFileAtKeysIo);
+      AtOnboardingRequest atOnboardingRequest =
+          AtOnboardingRequest("@alice", atKeysIo: mockFileAtKeysIo);
 
       //regardless of atKeysIo used in AtOnboardingRequest, keys should be saved to keychain
-      expect(() async => await authService.onboard(atOnboardingRequest, 'cramSecret'), returnsNormally);
+      expect(
+          () async =>
+              await authService.onboard(atOnboardingRequest, 'cramSecret'),
+          returnsNormally);
     });
   });
 }

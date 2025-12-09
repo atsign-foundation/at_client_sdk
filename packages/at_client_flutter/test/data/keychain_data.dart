@@ -87,8 +87,7 @@ const legacyEnrollmentInfo = '''
 
 bool checkSchemaEquality(KeychainData keychainData) {
   Map<String, dynamic> jsonData = {};
-  if (keychainData is AtKeysData)
-  {
+  if (keychainData is AtKeysData) {
     jsonData = jsonDecode(dummyAtKeysData);
   } else if (keychainData is EnrollmentData) {
     jsonData = jsonDecode(dummyEnrollmentData);

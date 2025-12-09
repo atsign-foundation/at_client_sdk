@@ -87,11 +87,12 @@ class KeychainStorage {
     required AtKeys keys,
   }) async {
     String? existingData;
-    try{
+    try {
       existingData =
-        await _read(keychainStoreName: (await AtKeysStore.getName()));
+          await _read(keychainStoreName: (await AtKeysStore.getName()));
     } catch (e) {
-      _logger.info('No existing atKeysData found in keychain. A new one will be created.');
+      _logger.info(
+          'No existing atKeysData found in keychain. A new one will be created.');
     }
     if (existingData == null) {
       final atKeysData = AtKeysData(keys: [keys]);
@@ -148,7 +149,7 @@ class KeychainStorage {
       final Map<String, dynamic> jsonData = jsonDecode(data);
       return EnrollmentData.fromJson(jsonData);
     }
-    return null; 
+    return null;
   }
 
   Future<void> writeEnrollmentData({
