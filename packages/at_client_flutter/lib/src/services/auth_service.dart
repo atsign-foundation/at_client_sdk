@@ -11,8 +11,7 @@ class AuthService {
   Stream<ProgressEvent> get progressStream => _atAuth.progressStream;
 
 // DI to allow mocking in tests
-  AuthService({AtAuth? atAuth})
-      : _atAuth = atAuth ?? AtAuth.create();
+  AuthService({AtAuth? atAuth}) : _atAuth = atAuth ?? AtAuth.create();
 
   /// Onboarding an atSign for the first time
   ///
@@ -24,7 +23,7 @@ class AuthService {
   Future<AtOnboardingResponse> onboard(
       AtOnboardingRequest request, String cramSecret) async {
     AtOnboardingResponse? atOnboardingResponse;
-    try { 
+    try {
       request.atKeysIo ??= KeychainAtKeysIo();
       atOnboardingResponse = await _atAuth.onboard(request, cramSecret);
     } catch (e) {
@@ -36,21 +35,22 @@ class AuthService {
   /// Authenticate an atSign with secondary server
   ///
   ///   [atAuthRequest] - AtAuthRequest containing atSign, AtRootDomain, AtKeysIo.
-	///
-	///		[backupKeys] - Optional Parameter allowing for your keys to be backed up via provided WrittenAtKeysIo implementations
-	///
+  ///
+  ///		[backupKeys] - Optional Parameter allowing for your keys to be backed up via provided WrittenAtKeysIo implementations
+  ///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest, {List<WrittenAtKeysIo>? backupKeys}) async {
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest,
+      {List<WrittenAtKeysIo>? backupKeys}) async {
     AtAuthResponse? atAuthResponse;
     try {
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);
-			if(backupKeys != null 
-			&& atAuthResponse.atAuthKeys != null
-			&& atAuthResponse.isSuccessful){
-				for(var atKeysIo in backupKeys){
-					atKeysIo.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
-				}
-			}
+      if (backupKeys != null &&
+          atAuthResponse.atAuthKeys != null &&
+          atAuthResponse.isSuccessful) {
+        for (var atKeysIo in backupKeys) {
+          atKeysIo.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
+        }
+      }
     } catch (e) {
       rethrow;
     }

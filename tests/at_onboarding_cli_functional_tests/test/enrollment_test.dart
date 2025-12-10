@@ -301,9 +301,9 @@ void main() {
       String appName = 'test_app_name';
       String deviceName = 'functional_test_1';
       Map<String, String> namespaces = {'wavi': 'rw'};
-      String masterKeysFilePath = '$storageDir/keys/${atSign6}_key.atKeys';
+      String masterKeysFilePath = '${Platform.environment['HOME']}/keys/${atSign6}_key.atKeys';
       String enrollmentAtKeysFilePath =
-          '$storageDir/keys/${atSign6}_wavi_key.atKeys';
+          '${Platform.environment['HOME']}/keys/${atSign6}_wavi_key.atKeys';
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
