@@ -255,7 +255,6 @@ class KeychainStorage {
           keychainData: EmptyKeychainData());
       rethrow;
     }
-    return null;
   }
 
   Future<void> _write({
