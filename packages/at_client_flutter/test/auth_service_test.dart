@@ -38,7 +38,7 @@ void main() {
         ..metadata = {'atsign': '@alice'};
 
       when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer(
-          (_) async => atKeysList[_.positionalArguments[0]] = fakeAtKeys);
+          (args) async => atKeysList[args.positionalArguments[0]] = fakeAtKeys);
       when(() => mockKeychainAtKeysIo.read(any())).thenAnswer((atSign) async {
         final result = atKeysList[atSign.positionalArguments[0]];
         if (result == null) {

@@ -1,4 +1,4 @@
-library at_client_flutter;
+library;
 
 export 'package:at_client/at_client.dart';
 

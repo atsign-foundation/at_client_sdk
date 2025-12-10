@@ -1,6 +1,6 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
+import 'package:at_client_flutter/src/services/auth_service.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 
