@@ -46,7 +46,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future write(String atSign, AtKeys atKeys) async {
     String atKeysData =
         await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
-    return File(filePath!(atSign)).writeAsString(atKeysData);
+    await File(filePath!(atSign)).writeAsString(atKeysData);
   }
 }
 

@@ -254,7 +254,16 @@ class AtAuthImpl implements AtAuth {
         throw AtAuthenticationException(
           'Unable to store keys for atSign: ${atOnboardingRequest.atSign} | Cause: ${e.message}',
         );
-      }
+      } catch (e) {
+				_addProgress(
+					"onboarding",
+					e.toString(),
+					ProgressEventType.error,
+				);
+				throw AtAuthenticationException(
+					'Unable to write keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
+				);
+			}
     }
 
     //7. If so specified (default behaviour) then
