@@ -10,9 +10,13 @@ class MockAtAuth extends Mock implements AtAuth {}
 
 class MockKeychainAtKeysIo extends Mock implements KeychainAtKeysIo {}
 
+class FakeAtKeys extends Fake implements AtKeys {}
+
 class FakeAtAuthRequest extends Fake implements AtAuthRequest {}
 
 class MockFileAtKeysIo extends Mock implements FileAtKeysIo {}
+
+class FakeAtOnboardingRequest extends Fake implements AtOnboardingRequest {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +32,8 @@ void main() {
       mockFileAtKeysIo = MockFileAtKeysIo();
       registerFallbackValue(FakeAtAuthRequest());
       registerFallbackValue(MockFileAtKeysIo());
+			registerFallbackValue(FakeAtKeys());
+			registerFallbackValue(FakeAtOnboardingRequest());
 
       fakeAtKeys = AtKeys()
         ..apkamPrivateKey = AtBytes.fromString('dummykey')
@@ -40,12 +46,7 @@ void main() {
       when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer(
           (args) async => atKeysList[args.positionalArguments[0]] = fakeAtKeys);
       when(() => mockKeychainAtKeysIo.read(any())).thenAnswer((atSign) async {
-        final result = atKeysList[atSign.positionalArguments[0]];
-        if (result == null) {
-          throw Exception(
-              'AtKeys not found for ${atSign.positionalArguments[0]}');
-        }
-        return result;
+         return fakeAtKeys;
       });
     },
   );
