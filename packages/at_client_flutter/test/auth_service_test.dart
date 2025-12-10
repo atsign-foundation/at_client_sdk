@@ -32,8 +32,8 @@ void main() {
       mockFileAtKeysIo = MockFileAtKeysIo();
       registerFallbackValue(FakeAtAuthRequest());
       registerFallbackValue(MockFileAtKeysIo());
-			registerFallbackValue(FakeAtKeys());
-			registerFallbackValue(FakeAtOnboardingRequest());
+      registerFallbackValue(FakeAtKeys());
+      registerFallbackValue(FakeAtOnboardingRequest());
 
       fakeAtKeys = AtKeys()
         ..apkamPrivateKey = AtBytes.fromString('dummykey')
@@ -46,7 +46,7 @@ void main() {
       when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer(
           (args) async => atKeysList[args.positionalArguments[0]] = fakeAtKeys);
       when(() => mockKeychainAtKeysIo.read(any())).thenAnswer((atSign) async {
-         return fakeAtKeys;
+        return fakeAtKeys;
       });
     },
   );

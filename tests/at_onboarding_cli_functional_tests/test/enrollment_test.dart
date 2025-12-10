@@ -294,6 +294,10 @@ void main() {
   });
 
   group('tests to validate enrollment access control', () {
+		setUp(() async {
+			await Directory('$storageDir/keys/').create(recursive: true);
+		});
+
     test('validate enrollment only has access to approved namespaces',
         () async {
       // creates an enrollment with rw access to wavi namespace. Then validate
@@ -301,9 +305,9 @@ void main() {
       String appName = 'test_app_name';
       String deviceName = 'functional_test_1';
       Map<String, String> namespaces = {'wavi': 'rw'};
-      String masterKeysFilePath = '${Platform.environment['HOME']}/keys/${atSign6}_key.atKeys';
+      String masterKeysFilePath = '$storageDir/keys/${atSign6}_key.atKeys';
       String enrollmentAtKeysFilePath =
-          '${Platform.environment['HOME']}/keys/${atSign6}_wavi_key.atKeys';
+          '$storageDir/keys/${atSign6}_wavi_key.atKeys';
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
