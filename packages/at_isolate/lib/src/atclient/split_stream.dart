@@ -1,18 +1,19 @@
 import 'dart:async' show Completer, StreamController;
 
 Future<(List<T>, Stream<T>, void Function())> takeFromStream<T>(
-  int count, Stream<T> stream, {
+  int count,
+  Stream<T> stream, {
   void Function(T message, void Function() close)? handleMsg,
-}) async{
+}) async {
   final completer = Completer<void>();
   final recvController = StreamController<T>();
 
-  final taken = <T>[]; 
+  final taken = <T>[];
   stream.listen(
     (msg) {
       if (count-- > 0) {
         taken.add(msg);
-        if(count == 0) completer.complete();
+        if (count == 0) completer.complete();
       } else {
         recvController.sink.add(msg);
       }

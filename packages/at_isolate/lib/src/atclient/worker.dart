@@ -1,11 +1,13 @@
 part of '../isolated_atclient.dart';
 
-class _AtClientWorker {
+class AtClientWorker {
   static void main(SendPort send) async {
     final recv = ReceivePort();
     send.send(recv.sendPort);
 
-    final (taken, recvStream, closeRecvStream) = await takeFromStream(3, recv);
+    final (taken, recvStream, closeRecvStream) = await takeFromStream(4, recv);
+
+    final atKeys = AtKeys.fromJson(jsonDecode(taken[2]));
 
     final atAuth = AtAuth.create();
     try {
@@ -13,7 +15,7 @@ class _AtClientWorker {
         taken[0],
         FileAtKeysIo(),
         rootDomain: AtRootDomain.parse(taken[1]),
-        atAuthKeys: AtKeys.fromJson(jsonDecode(taken[2])),
+        atAuthKeys: atKeys,
       );
 
       final res = await atAuth.authenticate(req);
@@ -25,18 +27,32 @@ class _AtClientWorker {
 
     final AtClient atClient;
     try {
+      final preferenceMap = taken[3] as Map;
+      final preference = AtClientPreference()
+        ..namespace = preferenceMap['namespace']
+        ..isLocalStoreRequired = preferenceMap['isLocalStoreRequired']
+        ..hiveStoragePath = preferenceMap['hiveStoragePath']
+        ..commitLogPath = preferenceMap['commitLogPath']
+        ..rootDomain = preferenceMap['rootDomain']
+        ..rootPort = preferenceMap['rootPort'];
+
       atClient = await AtClientImpl.create(
         taken[0],
-        "noports",
-        AtClientPreference()..isLocalStoreRequired = false,
+        preference.namespace ?? "noports",
+        preference,
       );
+
+      // Initialize AtChops for the client
+      final atChops = _createAtChops(atKeys);
+      atClient.atChops = atChops;
+
       send.send(true);
     } catch (e) {
       send.send(e.toString());
       return;
     }
 
-    handle(
+    AtClientWorker.handle(
         send: send,
         atClient: atClient,
         recv: recvStream,
@@ -283,5 +299,28 @@ class _AtClientWorker {
         return;
       }
     });
+  }
+
+  // Helper function to create AtChops from AtKeys
+  static AtChops _createAtChops(AtKeys atKeysFile) {
+    if (atKeysFile.apkamPrivateKey == null ||
+        atKeysFile.defaultEncryptionPrivateKey == null) {
+      throw AtPrivateKeyNotFoundException(
+          'AtKeys is missing required keys to create AtChops instance');
+    }
+    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
+        atKeysFile.defaultEncryptionPublicKey!.toString(),
+        atKeysFile.defaultEncryptionPrivateKey!.toString());
+    final atPkamKeyPair = AtPkamKeyPair.create(
+        atKeysFile.apkamPublicKey!.toString(),
+        atKeysFile.apkamPrivateKey!.toString());
+    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    if (atKeysFile.apkamSymmetricKey != null) {
+      atChopsKeys.apkamSymmetricKey =
+          AESKey(atKeysFile.apkamSymmetricKey!.toString());
+    }
+    atChopsKeys.selfEncryptionKey =
+        AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
+    return AtChopsImpl(atChopsKeys);
   }
 }

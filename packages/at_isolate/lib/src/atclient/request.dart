@@ -1,4 +1,3 @@
-
 part of '../isolated_atclient.dart';
 
 // Request typedefs for isolate communication
@@ -121,4 +120,3 @@ typedef _AtKeyRecord = ({
   // Full metadata
   _MetadataRecord metadata,
 });
-

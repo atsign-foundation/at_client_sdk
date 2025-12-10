@@ -35,12 +35,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     );
     _WorkerRequest<_DeleteRequest> req = (request: "delete", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _DeleteResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _DeleteResponse) {
+        throw result;
+      }
+      return result.success;
+    } finally {
+      _mutex.release();
     }
-    return result.success;
   }
 
   @override
@@ -54,16 +58,20 @@ class _IsolatedAtClient implements IsolatedAtClient {
     );
     _WorkerRequest<_GetRequest> req = (request: "get", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _GetResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _GetResponse) {
+        throw result;
+      }
+      return AtValue()
+        ..value = result.value
+        ..metadata = result.metadata != null
+            ? _metadataFromRecord(result.metadata!)
+            : null;
+    } finally {
+      _mutex.release();
     }
-    return AtValue()
-      ..value = result.value
-      ..metadata = result.metadata != null
-          ? _metadataFromRecord(result.metadata!)
-          : null;
   }
 
   @override
@@ -83,12 +91,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     _WorkerRequest<_GetAtKeysRequest> req =
         (request: "getAtKeys", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _GetAtKeysResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _GetAtKeysResponse) {
+        throw result;
+      }
+      return result.atKeys.map((key) => AtKey.fromString(key)).toList();
+    } finally {
+      _mutex.release();
     }
-    return result.atKeys.map((key) => AtKey.fromString(key)).toList();
   }
 
   @override
@@ -110,12 +122,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     );
     _WorkerRequest<_GetKeysRequest> req = (request: "getKeys", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _GetKeysResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _GetKeysResponse) {
+        throw result;
+      }
+      return result.keys;
+    } finally {
+      _mutex.release();
     }
-    return result.keys;
   }
 
   @override
@@ -123,26 +139,34 @@ class _IsolatedAtClient implements IsolatedAtClient {
     _GetMetaRequest params = (atKey: _atKeyToRecord(key));
     _WorkerRequest<_GetMetaRequest> req = (request: "getMeta", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _GetMetaResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _GetMetaResponse) {
+        throw result;
+      }
+      return result.metadata != null
+          ? _metadataFromRecord(result.metadata!)
+          : null;
+    } finally {
+      _mutex.release();
     }
-    return result.metadata != null
-        ? _metadataFromRecord(result.metadata!)
-        : null;
   }
 
   @override
   Future<AtResponse> getOTP() async {
     _WorkerRequest<void> req = (request: "getOTP", params: null);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _GetOTPResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _GetOTPResponse) {
+        throw result;
+      }
+      return AtResponse().fromJson(result.atResponse);
+    } finally {
+      _mutex.release();
     }
-    return AtResponse().fromJson(result.atResponse);
   }
 
   @override
@@ -153,12 +177,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     _WorkerRequest<_NotifyListRequest> req =
         (request: "notifyList", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _NotifyListResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _NotifyListResponse) {
+        throw result;
+      }
+      return result.result;
+    } finally {
+      _mutex.release();
     }
-    return result.result;
   }
 
   @override
@@ -167,12 +195,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     _WorkerRequest<_NotifyStatusRequest> req =
         (request: "notifyStatus", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _NotifyStatusResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _NotifyStatusResponse) {
+        throw result;
+      }
+      return result.status;
+    } finally {
+      _mutex.release();
     }
-    return result.status;
   }
 
   @override
@@ -189,12 +221,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     );
     _WorkerRequest<_PutRequest> req = (request: "put", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _PutResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _PutResponse) {
+        throw result;
+      }
+      return result.success;
+    } finally {
+      _mutex.release();
     }
-    return result.success;
   }
 
   @override
@@ -211,12 +247,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     _WorkerRequest<_PutBinaryRequest> req =
         (request: "putBinary", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _PutBinaryResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _PutBinaryResponse) {
+        throw result;
+      }
+      return AtResponse().fromJson(result.atResponse);
+    } finally {
+      _mutex.release();
     }
-    return AtResponse().fromJson(result.atResponse);
   }
 
   @override
@@ -224,12 +264,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     _PutMetaRequest params = (atKey: _atKeyToRecord(key));
     _WorkerRequest<_PutMetaRequest> req = (request: "putMeta", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _PutMetaResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _PutMetaResponse) {
+        throw result;
+      }
+      return result.success;
+    } finally {
+      _mutex.release();
     }
-    return result.success;
   }
 
   @override
@@ -245,12 +289,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     );
     _WorkerRequest<_PutTextRequest> req = (request: "putText", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _PutTextResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _PutTextResponse) {
+        throw result;
+      }
+      return AtResponse().fromJson(result.atResponse);
+    } finally {
+      _mutex.release();
     }
-    return AtResponse().fromJson(result.atResponse);
   }
 
   @override
@@ -258,12 +306,16 @@ class _IsolatedAtClient implements IsolatedAtClient {
     _SetSPPRequest params = (otp: otp);
     _WorkerRequest<_SetSPPRequest> req = (request: "setSPP", params: params);
     await _mutex.acquire();
-    _send.send(req);
-    var result = await _recv.take(1).single;
-    if (result is! _SetSPPResponse) {
-      throw result;
+    try {
+      _send.send(req);
+      var result = await _recv.take(1).single;
+      if (result is! _SetSPPResponse) {
+        throw result;
+      }
+      return AtResponse().fromJson(result.atResponse);
+    } finally {
+      _mutex.release();
     }
-    return AtResponse().fromJson(result.atResponse);
   }
   // END SECTION: AtClient API
 
@@ -320,7 +372,7 @@ class _IsolatedAtClient implements IsolatedAtClient {
   }
   // END SECTION: UTILITY
 
-  // BEGIN SECTION: INTENTIONALLY UNIMPLEMENTED
+  // BEGIN SECTION: UNIMPLEMENTED
   // Implementing these may be useful, but not worth the effort unless there's
   // a clear need.
 
@@ -384,7 +436,7 @@ class _IsolatedAtClient implements IsolatedAtClient {
 
   @override
   Future<void> stopCompactionJob() => throw UnimplementedError();
-  // END SECTION: INTENTIONALLY UNIMPLEMENTED
+  // END SECTION: UNIMPLEMENTED
 
   // BEGIN SECTION: DEPRECATED MEMBERS
   // No point in implementing deprecated members of AtClient
