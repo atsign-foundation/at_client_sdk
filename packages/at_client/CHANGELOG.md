@@ -5,6 +5,8 @@
 ## 3.9.3
 
 - build(deps): Updated archive dependency to ^4.0.7
+- feat: Add RemoteLocalPref enum and AtClientPreference.remoteLocalPref field
+  to enable apps to easily default to using the remote atServer
 
 ## 3.9.2
 
