@@ -182,7 +182,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-    atOnboardingRequest.atKeysIo = FileAtKeysIo();
+    atOnboardingRequest.atKeysIo = FileAtKeysIo(
+      filePath: atOnboardingPreference.atKeysFilePath != null
+          ? (_) => atOnboardingPreference.atKeysFilePath!
+          : null,
+    );
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,
@@ -666,7 +670,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atAuthRequest = AtAuthRequest(
         _atSign,
         FileAtKeysIo(
-            filePath: atOnboardingPreference.atKeysFilePath.isNull ? (_) => atOnboardingPreference.atKeysFilePath! : null,
+            filePath: !atOnboardingPreference.atKeysFilePath.isNull
+                ? (_) => atOnboardingPreference.atKeysFilePath!
+                : null,
             passPhrase: atOnboardingPreference.passPhrase))
       ..enrollmentId = enrollmentId
       ..rootDomain = AtRootDomain(

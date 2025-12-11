@@ -55,8 +55,6 @@ class MyApp extends StatelessWidget {
 ///
 /// See the individual widgets for more details on their usage.
 class MyHomePage extends StatelessWidget {
-  
-  
   final RegistrarService registrar = RegistrarService(
     registrarUrl: "my.atsign.com",
     apiKey: "c5df0db6-952f-4acc-9e6a-dadbeec021f7",
@@ -160,7 +158,11 @@ class MyHomePage extends StatelessWidget {
                   rootDomain: authRequest.rootDomain,
                 );
                 // c. Show PkamDialog to complete authentication
-                var response = await PkamDialog.show(context, request: request, backupKeys: [KeychainAtKeysIo()]);
+                var response = await PkamDialog.show(
+                  context,
+                  request: request,
+                  backupKeys: [KeychainAtKeysIo()],
+                );
                 print('Authentication response: $response');
               },
               child: const Text("Authenticate/PKAM via File Picker"),

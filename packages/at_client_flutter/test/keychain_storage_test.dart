@@ -182,7 +182,6 @@ void main() {
     });
   });
 
-
   group('EnrollmentData Tests', () {
     late KeychainStorage keyChainStorage;
     late MockBiometricStorage mockBiometricStorage;

@@ -36,7 +36,7 @@ class TestSuiteInitializer {
           atSign, 
           FileAtKeysIo(filePath: (_) => '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys'),
         );
-        atAuthRequest.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
+        atAuthRequest.rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'], 64);
         atAuthResponse = await authenticate(atAuthRequest);
         atChops = createAtChopsFromAtAuthKeys(atAuthResponse.atAuthKeys!);
 
@@ -64,11 +64,11 @@ class TestSuiteInitializer {
 
       // verify if the public key is in the local secondary
       var result = await atClientManager.atClient.getLocalSecondary()!.getEncryptionPublicKey(atSign);
-      assert(result == AtCredentials.credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
+      assert(result == AtCredentials.credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY].toString());
 
       // verify if the private key is in the local secondary
       result = await atClientManager.atClient.getLocalSecondary()!.getEncryptionPrivateKey();
-      assert(result == AtCredentials.credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY]);
+      assert(result == AtCredentials.credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY].toString());
     } on Exception catch (e) {
       print('Exception in setting the encryption: $e');
     }

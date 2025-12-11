@@ -80,7 +80,10 @@ class CramDialog extends StatelessWidget {
             stream: _authService.progressStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return LoadingDialog(title: title ?? "Onboarding atSign via cram", description: description ?? "Authenticating, please wait...");
+                return LoadingDialog(
+                    title: title ?? "Onboarding atSign via cram",
+                    description:
+                        description ?? "Authenticating, please wait...");
               }
               final progress = snapshot.data as ProgressEvent;
               if (progressBuilder == null) {
