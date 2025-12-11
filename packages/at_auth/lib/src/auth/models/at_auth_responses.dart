@@ -1,9 +1,11 @@
 import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_client/at_client.dart';
 
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
   AtKeys? atAuthKeys;
+	AtClient? atClient;
 
   AuthResponse(this.atSign);
 }
