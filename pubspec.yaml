@@ -21,6 +21,7 @@ workspace:
   - packages/at_events_flutter
   - packages/at_follows_flutter
   - packages/at_invitation_flutter
+  - packages/at_isolate
   - packages/at_location_flutter
   - packages/at_login_flutter
   - packages/at_lookup

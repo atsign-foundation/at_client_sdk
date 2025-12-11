@@ -51,4 +51,9 @@ class AtRootDomain {
   }
 
   bool get isProxyAddress => rootDomain.startsWith("proxy:");
+
+  @override
+  String toString() {
+    return "$rootDomain:$rootPort";
+  }
 }
