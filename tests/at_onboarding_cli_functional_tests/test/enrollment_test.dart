@@ -294,6 +294,10 @@ void main() {
   });
 
   group('tests to validate enrollment access control', () {
+		setUp(() async {
+			await Directory('$storageDir/keys/').create(recursive: true);
+		});
+
     test('validate enrollment only has access to approved namespaces',
         () async {
       // creates an enrollment with rw access to wavi namespace. Then validate

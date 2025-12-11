@@ -4,11 +4,10 @@ import 'package:at_auth/at_auth.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-
 /// A dialog widget that allows users to select a local atKey file for authentication.
-/// 
+///
 /// Use `AtKeysFileDialog.show` to display the dialog and retrieve the selected file.
-/// 
+///
 /// Returns:
 /// - A `FileAtKeysIo` instance representing the selected atKey file, or null if no file was selected.
 class AtKeysFileDialog extends StatelessWidget {
@@ -103,7 +102,7 @@ class AtKeysFileDialog extends StatelessWidget {
                         File file = File(result.files.single.path!);
                         print('Selected atKey file: ${file.path}');
                         FileAtKeysIo fileAtKeysIo =
-                            FileAtKeysIo(filePath:(_) => file.path);
+                            FileAtKeysIo(filePath: (_) => file.path);
                         Navigator.of(context).pop(fileAtKeysIo);
                       }
                     },

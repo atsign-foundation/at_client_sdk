@@ -182,7 +182,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-    atOnboardingRequest.atKeysIo = FileAtKeysIo();
+    atOnboardingRequest.atKeysIo = FileAtKeysIo(
+      filePath: atOnboardingPreference.atKeysFilePath != null
+          ? (_) => atOnboardingPreference.atKeysFilePath!
+          : null,
+    );
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,
@@ -666,11 +670,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atAuthRequest = AtAuthRequest(
         _atSign,
         atKeysIo: FileAtKeysIo(
-            filePath: atOnboardingPreference.atKeysFilePath.isNull ? (_) => atOnboardingPreference.atKeysFilePath! : null,
-            passPhrase: atOnboardingPreference.passPhrase),
-        rootDomain: AtRootDomain(
-          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort))
-				..enrollmentId = enrollmentId;
+            filePath: !atOnboardingPreference.atKeysFilePath.isNull
+                ? (_) => atOnboardingPreference.atKeysFilePath!
+                : null,
+            passPhrase: atOnboardingPreference.passPhrase))
+      ..enrollmentId = enrollmentId
+      ..rootDomain = AtRootDomain(
+          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     var atAuthResponse = await atAuth!.authenticate(atAuthRequest);
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&

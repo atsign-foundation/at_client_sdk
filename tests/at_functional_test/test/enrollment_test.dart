@@ -61,17 +61,11 @@ void main() {
       expect(atOnboardingResponse.atAuthKeys, isNotNull);
       expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
       expect(atOnboardingResponse.enrollmentId, isNotEmpty);
-      // generate keys file
-      await _generateAtKeysFile(
-          apkamAtSign,
-          atOnboardingResponse.enrollmentId,
-          atOnboardingResponse.atAuthKeys!,
-          'test/testData/$apkamAtSign.atKeys');
 
       // auth using generated keysFile
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
         apkamAtSign,
-        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atSign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
