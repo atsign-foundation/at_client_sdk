@@ -20,6 +20,45 @@ final Uuid _uuid = Uuid();
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 
 void main() {
+	group('System Readiness', () {
+    test('fresh docker environment setup', () async {
+      logger.info('Checking current docker state...');
+
+      // Check if docker compose services are running
+      bool composeRunning = await isDockerComposeRunning();
+
+      // Check if specific containers are running
+      bool containersRunning = await areContainersRunning(['at_proxyserver', 'at_virtualenv']);
+
+      if (composeRunning || containersRunning) {
+        logger.info('Found running containers/services, cleaning up...');
+        try {
+          if (composeRunning) {
+            logger.info('Stopping Docker Compose services...');
+            await runDockerComposeDown();
+          }
+
+          if (containersRunning) {
+            logger.info('Removing specific containers...');
+            await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
+          }
+        } catch (e) {
+          logger.warning('Error during cleanup: $e');
+        }
+      } else {
+        logger.info('No running containers found, skipping cleanup');
+      }
+
+      logger.info('Starting fresh Docker Compose services...');
+      bool restartSuccess = await restartDockerCompose();
+      expect(restartSuccess, isTrue, reason: 'Docker Compose restart should succeed');
+
+      logger.info('Checking system readiness...');
+      bool isReady = await checkDockerContainers();
+      expect(isReady, isTrue, reason: 'System should be ready with fresh Docker Compose');
+    });
+  });
+
   group('Enrollment Workflow Tests', () {
     late String atSign;
     late String masterKeyFile;
