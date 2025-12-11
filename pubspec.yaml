@@ -7,7 +7,6 @@ environment:
 
 workspace:
   - packages/at_auth
-  - packages/at_backupkey_flutter
   - packages/at_chat_flutter
   - packages/at_chops
   - packages/at_cli_commons

@@ -8,7 +8,6 @@ documentation: https://docs.atsign.com/
 environment:
   sdk: ^3.6.0
   flutter: ">=3.29.2"
-resolution: workspace
 
 dependencies:
   at_client: ^3.7.0
@@ -22,6 +21,7 @@ dependencies:
   flutter_qr_reader: ^1.0.5
   permission_handler: ^12.0.0
   crypton: ^2.1.0
+  at_client_mobile: ^3.3.0
 
 dev_dependencies:
   path_provider: ^2.1.1
