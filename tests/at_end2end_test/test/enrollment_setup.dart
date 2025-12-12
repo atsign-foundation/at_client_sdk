@@ -126,7 +126,11 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign, FileAtKeysIo(filePath: (_) => '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys'));
+      AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign,
+          atKeysIo: FileAtKeysIo(
+            filePath: (_) =>
+                '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys',
+          ));
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =

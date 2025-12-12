@@ -154,7 +154,7 @@ class MyHomePage extends StatelessWidget {
                 }
                 var request = AtAuthRequest(
                   authRequest.atSign,
-                  atKeysIo,
+                  atKeysIo: atKeysIo,
                   rootDomain: authRequest.rootDomain,
                 );
                 // c. Show PkamDialog to complete authentication
@@ -195,7 +195,7 @@ class MyHomePage extends StatelessWidget {
                 //  i) ensure providing KeychainAtKeysIo for the AuthRequest
                 var authRequest = AtAuthRequest(
                   request.atSign,
-                  KeychainAtKeysIo(),
+                  atKeysIo: KeychainAtKeysIo(),
                   rootDomain: request.rootDomain,
                 );
                 // c. Show PkamDialog to complete authentication

@@ -669,7 +669,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atAuth ??= AtAuth.create();
     var atAuthRequest = AtAuthRequest(
         _atSign,
-        FileAtKeysIo(
+        atKeysIo: FileAtKeysIo(
             filePath: !atOnboardingPreference.atKeysFilePath.isNull
                 ? (_) => atOnboardingPreference.atKeysFilePath!
                 : null,

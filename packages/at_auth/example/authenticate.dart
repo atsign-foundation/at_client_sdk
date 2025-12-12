@@ -22,8 +22,10 @@ void main(List<String> args) async {
     });
     final atSign = argResults['atsign'];
     final atAuthRequest = AtAuthRequest(
-        atSign, FileAtKeysIo(filePath: (_) => argResults['keysFilePath']))
-      ..rootDomain = AtRootDomain('root.atsign.org', 64);
+      atSign,
+			atKeysIo: FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
+			rootDomain: AtRootDomain('root.atsign.org', 64)
+		);
     final atAuthResponse = await atAuth.authenticate(atAuthRequest);
     print('atAuthResponse: $atAuthResponse');
   } on Exception catch (e, trace) {

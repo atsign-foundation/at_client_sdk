@@ -18,6 +18,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
+import 'package:at_client/at_client.dart' show AtClientImpl, AtClientPreference;
 
 class AtAuthImpl implements AtAuth {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
@@ -72,7 +73,7 @@ class AtAuthImpl implements AtAuth {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
     await validateAtServer(atAuthRequest);
     try {
-      atAuthKeys ??= await atAuthRequest.atKeysIo.read(atAuthRequest.atSign);
+      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
       _addProgress(
         "authentication",
@@ -123,7 +124,16 @@ class AtAuthImpl implements AtAuth {
       );
       throw AtAuthenticationException('Unable to authenticate | Cause: $e \n $s');
     } 
-
+		AtClientPreference acp = AtClientPreference()
+			..rootDomain = atAuthRequest.rootDomain.rootDomain
+			..rootPort = atAuthRequest.rootDomain.rootPort;
+		pkamResponse.atClient = await AtClientImpl.create(
+			atAuthRequest.atSign,
+			atAuthRequest.namespace,
+			acp,
+			atChops: atChops,
+			atLookUp: atLookUp,
+		);
     return pkamResponse;
   }
 
@@ -274,6 +284,15 @@ class AtAuthImpl implements AtAuth {
       await completeActivation();
     }
 
+		AtClientPreference acp = AtClientPreference()
+			..rootDomain = atOnboardingRequest.rootDomain.rootDomain
+			..rootPort = atOnboardingRequest.rootDomain.rootPort;
+
+		atOnboardingResponse.atClient = await AtClientImpl.create(
+			atOnboardingRequest.atSign,
+			atOnboardingRequest.namespace,
+			acp
+		);
     atOnboardingResponse.isSuccessful = true;
     atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
     atOnboardingResponse.atAuthKeys = _atAuthKeys;

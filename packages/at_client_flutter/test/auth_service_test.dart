@@ -59,7 +59,10 @@ void main() {
       when(() => mockFileAtKeysIo.read(any()))
           .thenAnswer((_) async => fakeAtKeys);
       AuthService authService = AuthService(atAuth: mockAtAuth);
-      AtAuthRequest atAuthRequest = AtAuthRequest("@alice", mockFileAtKeysIo);
+      AtAuthRequest atAuthRequest = AtAuthRequest(
+        "@alice",
+        atKeysIo: mockFileAtKeysIo,
+      );
 
       //regardless of atKeysIo used in AtAuthRequest, keys should be saved to keychain
       AtAuthResponse _ = await authService.authenticate(atAuthRequest);

@@ -65,7 +65,7 @@ void main() {
       // auth using generated keysFile
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
         apkamAtSign,
-        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
@@ -362,7 +362,7 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -458,7 +458,7 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -555,7 +555,7 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(atSign, FileAtKeysIo());
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =

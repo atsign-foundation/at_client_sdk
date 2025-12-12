@@ -59,7 +59,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        fileAtKeysIo,
+        atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -77,7 +77,7 @@ void main() {
           .thenAnswer((_) => Future.value(false));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        fileAtKeysIo,
+        atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -95,7 +95,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        FileAtKeysIo(filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -111,7 +111,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        fileAtKeysIo,
+        atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
@@ -143,7 +143,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        fileAtKeysIo,
+        atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
@@ -168,7 +168,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        fileAtKeysIo,
+        atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
@@ -186,7 +186,7 @@ void main() {
           .thenThrow(AtAuthenticationException('Unauthenticated'));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        fileAtKeysIo,
+        atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
