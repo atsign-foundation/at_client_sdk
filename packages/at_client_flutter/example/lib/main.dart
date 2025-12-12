@@ -201,10 +201,7 @@ class MyHomePage extends StatelessWidget {
             ),
 
             const SizedBox(height: 20),
-						ElevatedButton(
-							child: const Text("backup"),
-							onPressed: () => BackupKeyWidget(atsign: "@chess69").showBackupDialog(context),
-						),
+						BackupKeyWidget(atsign: "@chess69"),
           ],
         ),
       ),

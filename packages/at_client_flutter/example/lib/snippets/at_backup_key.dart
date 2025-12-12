@@ -11,14 +11,10 @@ import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:showcaseview/showcaseview.dart';
 
 ///Please edit these Strings to customize your widget
 class Strings {
-  static const String titleText = "Backup AtKeys";
-  static const String descriptionText = "Example Description";
-  static const String backupButtonText = "backup";
-  static const String cancelButtonText = "cancel";
+  static const String buttonText = "Backup AtKeys";
 
   // controls the keyFile that is stored
   // experimental: change only for extremely custom installs
@@ -33,17 +29,8 @@ class BackupKeyWidget extends StatelessWidget {
   ///required to provide backup keys for `atsign` to save.
   final String atsign;
 
-  ///set to `true` for using widget as a button.
-  final bool isButton;
-
-  ///set to `true` for using widget as an icon.
-  final bool? isIcon;
-
   ///takes a `String` and displays on button. set [isButton] to `true` to use this.
-  final String? buttonText;
-
-  ///Color of the icon can be set if [isIcon] is set as `true`.
-  final Color? iconColor;
+  final String buttonText;
 
   ///any double value for customizing width of button if [isButton] sets to `true`.
   final double? buttonWidth;
@@ -51,62 +38,29 @@ class BackupKeyWidget extends StatelessWidget {
   ///any double value for customizing height of a button if [isButton] sets to `true`.
   final double? buttonHeight;
 
-  ///any double value for customizing size of the icon if [isIcon] sets to `true`.
-  final double? iconSize;
-
   ///Customize the button color if [isButton] sets to `true`.
   final Color? buttonColor;
 
   BackupKeyWidget({
     super.key,
     required this.atsign,
-    this.isButton = false,
-    this.isIcon,
-    this.buttonText,
-    this.iconColor,
+    this.buttonText = "Backup AtKeys",
     this.buttonWidth,
     this.buttonHeight,
     this.buttonColor,
-    this.iconSize,
   });
 
   @override
   Widget build(BuildContext context) {
-    return isButton
-        ? GestureDetector(
-            onTap: () async {
-              var result = await onBackup(context);
-              if (result == false && context.mounted) {
-                _showAlertDialog(context);
-              }
-            },
-            child: Container(
-              width: buttonWidth,
-              height: buttonHeight,
-              padding: EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(30),
-                color: buttonColor ?? Colors.black,
-              ),
-              child: Center(
-                child: Text(
-                  buttonText!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          )
-        : IconButton(
-            icon: Icon(Icons.file_copy, color: iconColor),
-            onPressed: () {
-              showBackupDialog(context);
-            },
-          );
+    return ElevatedButton(
+      onPressed: () async {
+        var result = await onBackup(context);
+        if (result == false && context.mounted) {
+          _showAlertDialog(context);
+        }
+      },
+      child: Text(buttonText),
+    );
   }
 
   _showAlertDialog(BuildContext context) {
@@ -141,120 +95,6 @@ class BackupKeyWidget extends StatelessWidget {
     );
   }
 
-  showBackupDialog(BuildContext context) {
-    GlobalKey key = GlobalKey();
-    BuildContext? myContext;
-    showDialog(
-      context: context,
-      builder: (BuildContext ctxt) {
-        return ShowCaseWidget(
-          builder: (context) {
-            myContext = context;
-            return Dialog(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                width:
-                    (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
-                    ? 600
-                    : null,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Center(
-                            child: Showcase(
-                              key: key,
-                              description:
-                                  'Each atSign has a unique key used to verify ownership and encrypt your data. You will get this key when you first activate your atSign, and you will need it to pair your atSign with other devices and all atPlatform apps.'
-                                  '\n\n'
-                                  'PLEASE SECURELY SAVE YOUR KEYS. WE DO NOT HAVE ACCESS TO THEM AND CANNOT CREATE A BACKUP OR RESET THEM.',
-                              targetShapeBorder: const CircleBorder(),
-                              disableMovingAnimation: true,
-                              targetBorderRadius: const BorderRadius.all(
-                                Radius.circular(40),
-                              ),
-                              showArrow: false,
-                              targetPadding: const EdgeInsets.all(5),
-                              blurValue: 2,
-                              child: Text(
-                                Strings.titleText,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            ShowCaseWidget.of(myContext!).startShowCase([key]);
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(50),
-                            ),
-                            margin: const EdgeInsets.all(0),
-                            height: 20,
-                            width: 20,
-                            child: const Icon(Icons.question_mark, size: 15),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          Strings.descriptionText,
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: 20),
-                        Row(
-                          children: [
-                            TextButton(
-                              child: const Text(
-                                Strings.backupButtonText,
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () async {
-                                var result = await onBackup(context);
-                                if (context.mounted) {
-                                  Navigator.pop(ctxt);
-                                }
-                                if (result == false && context.mounted) {
-                                  _showAlertDialog(context);
-                                }
-                              },
-                            ),
-                            const Spacer(),
-                            TextButton(
-                              child: const Text(
-                                Strings.cancelButtonText,
-                                style: TextStyle(),
-                              ),
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 
   onBackup(BuildContext context) async {
     try {
@@ -301,11 +141,7 @@ class BackupKeyWidget extends StatelessWidget {
                           try {
                             if (await File(newPath).exists()) {
                               if (context.mounted) {
-                                Navigator.of(context).pop();
-                                showSnackBar(
-                                  context: context,
-                                  content: "File exists!",
-                                );
+                                throw Exception("File already exists");
                               }
                             } else {
                               final encryptedKeysFile = await File(
@@ -314,11 +150,7 @@ class BackupKeyWidget extends StatelessWidget {
                               var keyString = jsonEncode(aesEncryptedKeys);
                               encryptedKeysFile.writeAsStringSync(keyString);
                               if (context.mounted) {
-                                Navigator.of(context).pop();
-                                showSnackBar(
-                                  context: context,
-                                  content: 'File saved successfully',
-                                );
+                                Navigator.of(context).pop(true);
                               }
                             }
                           } catch (e) {
@@ -380,7 +212,7 @@ class BackupKeyWidget extends StatelessWidget {
         final file = XFile(tempFilePath);
         await file.saveTo(path);
         if (context.mounted) {
-          showSnackBar(context: context, content: 'File saved successfully');
+					Navigator.of(context).pop(true);
         }
       }
     } on Exception catch (ex, s) {
@@ -432,12 +264,6 @@ class BackupKeyWidget extends StatelessWidget {
         );
       }
     });
-  }
-
-  void showSnackBar({required BuildContext context, String content = ''}) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(content)));
   }
 
   static Future<String?> getDownloadPath() async {
