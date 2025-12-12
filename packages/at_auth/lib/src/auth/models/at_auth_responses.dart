@@ -5,7 +5,7 @@ sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
   AtKeys? atAuthKeys;
-	AtClient? atClient;
+  AtClient? atClient;
 
   AuthResponse(this.atSign);
 }
@@ -16,7 +16,6 @@ class AtOnboardingResponse extends AuthResponse {
 
   /// Constructor for [AtOnboardingResponse]
   /// [atSign] is the atSign for onboarding
-  /// 
   AtOnboardingResponse(super.atSign);
 
   @override
