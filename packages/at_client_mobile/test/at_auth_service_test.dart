@@ -473,8 +473,8 @@ void main() {
     String atSign = '@alice';
     AtClientPreference atClientPreference = AtClientPreference()
       ..namespace = 'me'
-			..hiveStoragePath = 'test/hive'
-			..commitLogPath = 'test/hive/commit';
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/commit';
 
     test(
         'A test to verify AtClient initializes successfully in offline mode upon network failure when keychain manager contains keys',

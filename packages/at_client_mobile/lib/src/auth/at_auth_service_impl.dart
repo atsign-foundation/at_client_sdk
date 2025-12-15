@@ -230,10 +230,13 @@ class AtAuthServiceImpl implements AtAuthService {
   Future<void> _initAtClient(AtChops atChops, {String? enrollmentId}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
     await atClientManager.setCurrentAtSign(
-        _atSign, _atClientPreference.namespace, _atClientPreference,
-        atChops: atChops,
-        serviceFactory: atServiceFactory,
-        enrollmentId: enrollmentId);
+      _atSign,
+      _atClientPreference.namespace,
+      _atClientPreference,
+      atChops: atChops,
+      serviceFactory: atServiceFactory,
+      enrollmentId: enrollmentId,
+    );
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
     _atLookUp?.enrollmentId = enrollmentId;
