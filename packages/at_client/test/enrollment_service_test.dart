@@ -122,11 +122,10 @@ void main() {
           mockRemoteSecondary.executeCommand(enrollListCommand,
               auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
-			AtClientPreference pref = AtClientPreference()
-				..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
-      AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'buzz', AtClientPreference(),
+      AtClientPreference pref = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/commit';
+      AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
