@@ -18,7 +18,7 @@ class AtClientPreference {
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
-  bool isLocalStoreRequired = false;
+  bool isLocalStoreRequired = true;
 
   /// Shared secret of the atSign
   String? cramSecret;
