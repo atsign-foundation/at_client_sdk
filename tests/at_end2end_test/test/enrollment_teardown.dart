@@ -30,7 +30,7 @@ void main() {
         for (Enrollment enrollment in pendingEnrollments) {
           print('Denying the enrollment permission for id: $enrollment');
           await AtClientManager.getInstance().atClient.enrollmentService?.deny(
-              EnrollmentRequestDecision.denied(enrollment.enrollmentId!));
+              EnrollmentRequestDecision.denied(enrollment.enrollmentId!, currentAtSign));
         }
       }
 
@@ -51,6 +51,7 @@ void main() {
               .enrollmentService
               ?.revoke(EnrollmentRequestDecision.revoked(
                   enrollment.enrollmentId!,
+                  currentAtSign,
                   force: true));
         }
       }

@@ -40,7 +40,7 @@ class EnrollmentOperations {
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
     EnrollmentService enrollmentService = EnrollmentServiceImpl(
-        onboardingService.atClient!, atAuthBase.atEnrollment(atsign));
+        onboardingService.atClient!, AtEnrollment.create());
 
     // when enrollmentId is not provided. Fetches all enrollment requests for
     // the given appName and deviceName and uses the data of the first request
@@ -55,9 +55,10 @@ class EnrollmentOperations {
       encApkamSymmetricKey = enrollment.encryptedAPKAMSymmetricKey;
     }
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
-        ApprovedRequestDecisionBuilder(
-            enrollmentId: enrollmentId!,
-            encryptedAPKAMSymmetricKey: encApkamSymmetricKey!));
+      enrollmentId: enrollmentId!,
+      atSign: atsign,
+      apkamSymmetricKey: AtBytes.fromString(encApkamSymmetricKey!),
+    );
     AtEnrollmentResponse? enrollmentResponse =
         await enrollmentService.approve(decision);
     print('Enroll Approve Response: $enrollmentResponse');
@@ -75,7 +76,7 @@ class EnrollmentOperations {
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
     EnrollmentService enrollmentService = EnrollmentServiceImpl(
-        onboardingService.atClient!, atAuthBase.atEnrollment(atsign));
+        onboardingService.atClient!, AtEnrollment.create());
 
     // when enrollmentId is not provided. Fetches all enrollment requests for
     // the given appName and deviceName and uses the data of the first request
@@ -89,7 +90,7 @@ class EnrollmentOperations {
       enrollmentId = enrollment.enrollmentId;
     }
     EnrollmentRequestDecision decision =
-        EnrollmentRequestDecision.denied(enrollmentId!);
+        EnrollmentRequestDecision.denied(enrollmentId!, atsign);
     AtEnrollmentResponse? enrollmentResponse =
         await enrollmentService.deny(decision);
     print('Enroll Approve Response: $enrollmentResponse');
@@ -108,13 +109,14 @@ class EnrollmentOperations {
       ..deviceName = deviceName
       ..enrollmentListFilter = [EnrollmentStatus.pending];
 
-    List<Enrollment> enrollments = await enrollmentService.fetchEnrollmentRequests(
-        enrollmentListParams: requestParam);
-    
+    List<Enrollment> enrollments = await enrollmentService
+        .fetchEnrollmentRequests(enrollmentListParams: requestParam);
+
     if (enrollments.isEmpty) {
-      throw Exception('No pending enrollment requests found for appName: $appName, deviceName: $deviceName');
+      throw Exception(
+          'No pending enrollment requests found for appName: $appName, deviceName: $deviceName');
     }
-    
+
     return enrollments[0];
   }
 

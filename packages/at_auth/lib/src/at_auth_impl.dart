@@ -1,23 +1,38 @@
-import 'dart:convert';
-import 'dart:io';
+import 'dart:async';
 
-import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/at_auth.dart';
+import 'package:at_auth/src/auth/models/at_auth_requests.dart';
+import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
-import 'package:at_auth/src/enroll/first_enrollment_request.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
+import 'package:at_auth/src/enroll/at_enrollment.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-
-import 'enroll/at_enrollment_impl.dart';
+import 'package:at_utils/at_progress.dart';
+import 'package:at_client/at_client.dart' show AtClientImpl, AtClientPreference;
 
 class AtAuthImpl implements AtAuth {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
-  final String _defaultAppNameForOnboarding = 'firstApp';
-  final String _defaultDeviceNameForOnboarding = 'firstDevice';
+  final StreamController<ProgressEvent> _progressController =
+      StreamController<ProgressEvent>.broadcast();
+
+  ///Progress stream to listen to onboarding/authentication progress.
+  @override
+  Stream<ProgressEvent> get progressStream => _progressController.stream;
+  void _addProgress(String group, String message, ProgressEventType type) {
+    var progressEvent = ProgressEvent(group: group, msg: message, type: type);
+    _progressController.add(progressEvent);
+  }
+
   @override
   AtChops? atChops;
 
@@ -25,7 +40,7 @@ class AtAuthImpl implements AtAuth {
 
   PkamAuthenticator? pkamAuthenticator;
 
-  AtEnrollmentBase? atEnrollmentBase;
+  AtEnrollment atEnrollment;
 
   @override
   AtLookUp? atLookUp;
@@ -35,99 +50,159 @@ class AtAuthImpl implements AtAuth {
       this.atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      this.atEnrollmentBase});
+      AtEnrollment? atEnrollment})
+      : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
   @override
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    if (atAuthRequest.atKeysFilePath == null &&
-        atAuthRequest.atAuthKeys == null &&
-        atAuthRequest.encryptedKeysMap == null) {
-      throw AtAuthenticationException(
-          'Keyfile path or atAuthKeys object has to be set in atAuthRequest');
-    }
-    // decrypts all the keys in .atKeysFile using the SelfEncryptionKey
-    // and stores the keys in a map
-    AtAuthKeys? atAuthKeys;
-    var enrollmentIdFromRequest = atAuthRequest.enrollmentId;
-    if (atAuthRequest.atKeysFilePath != null) {
-      atAuthKeys = await _prepareAtAuthKeysFromFilePath(atAuthRequest);
-    } else if (atAuthRequest.encryptedKeysMap != null) {
-      atAuthKeys = _decryptAtKeysWithSelfEncKey(
-          atAuthRequest.encryptedKeysMap!, PkamAuthMode.keysFile);
-    } else {
-      atAuthKeys = atAuthRequest.atAuthKeys;
-    }
-    if (atAuthKeys == null) {
-      throw AtAuthenticationException(
-          'keys either were not provided in the AtAuthRequest,'
-          ' or could not be read from provided keys file');
-    }
-    enrollmentIdFromRequest ??= atAuthKeys.enrollmentId;
-    var pkamPrivateKey = atAuthKeys.apkamPrivateKey;
 
-    if (atAuthRequest.authMode == PkamAuthMode.keysFile &&
-        pkamPrivateKey == null) {
-      throw AtPrivateKeyNotFoundException(
-          'Unable to read PkamPrivateKey from provided atKeys file/atAuthKeys object',
-          exceptionScenario: ExceptionScenario.invalidValueProvided);
+  /// Authenticate using PKAM
+  /// The AtAuthRequest must contain either:
+  /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
+  /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
+  ///
+  /// If both are provided, atAuthRequest.atAuthKeys will be used.
+  ///
+  /// The AtAuthRequest may optionally contain:
+  /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
+  ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
+  /// - atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
+  ///    contains keys in encrypted format (LEGACY)
+  ///
+  /// returns an `AtAuthResponse` indicating success or failure of authentication
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
+    AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
+    await validateAtServer(atAuthRequest);
+    try {
+      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
+    } on AtKeyException catch (e) {
+      _addProgress(
+        "authentication",
+        "Unable to read keys for atSign: ${atAuthRequest.atSign}",
+        ProgressEventType.error,
+      );
+      throw AtAuthenticationException(
+        'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}',
+      );
     }
+
+		atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
     atLookUp ??= AtLookupImpl(
-        atAuthRequest.atSign, atAuthRequest.rootDomain, atAuthRequest.rootPort);
+      atAuthRequest.atSign,
+      atAuthRequest.rootDomain.rootDomain,
+      atAuthRequest.rootDomain.rootPort,
+    );
     // ??= to support mocking
     atChops ??= _createAtChops(atAuthKeys);
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');
-    var isPkamAuthenticated = false;
-    pkamAuthenticator ??= PkamAuthenticator(atAuthRequest.atSign, atLookUp!);
+    pkamAuthenticator ??= PkamAuthenticator();
+    var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
     try {
-      var pkamResponse = (await pkamAuthenticator!
-          .authenticate(enrollmentId: enrollmentIdFromRequest));
-      isPkamAuthenticated = pkamResponse.isSuccessful;
-    } on AtException catch (e) {
-      _logger.severe('Caught $e');
-      throw AtAuthenticationException(
-          'Unable to authenticate | Cause: ${e.message}');
-    } on Exception catch (e) {
-      throw AtAuthenticationException('Unable to authenticate | Cause: $e');
-    }
-    _logger.finer(
-        'PKAM auth result: ${isPkamAuthenticated ? 'success' : 'failed'}');
-    return AtAuthResponse(atAuthRequest.atSign)
-      ..isSuccessful = isPkamAuthenticated
-      ..enrollmentId = enrollmentIdFromRequest
-      ..atAuthKeys = atAuthKeys;
+      pkamResponse.isSuccessful = (await pkamAuthenticator!.authenticate(
+          atAuthRequest.atSign, atLookUp!,
+          enrollmentId: atAuthRequest.enrollmentId));
+      pkamResponse.atAuthKeys = atAuthKeys;
+      if (!pkamResponse.isSuccessful) {
+        _addProgress(
+          "authentication",
+          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.error,
+        );
+      } else {
+        _addProgress(
+          "authentication",
+          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
+          ProgressEventType.success,
+        );
+      }
+    } catch (e, s) {
+      _addProgress(
+        "authentication",
+        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
+        ProgressEventType.error,
+      );
+      throw AtAuthenticationException('Unable to authenticate | Cause: $e \n $s');
+    } 
+		AtClientPreference acp = AtClientPreference()
+			..rootDomain = atAuthRequest.rootDomain.rootDomain
+			..rootPort = atAuthRequest.rootDomain.rootPort;
+		pkamResponse.atClient = await AtClientImpl.create(
+			atAuthRequest.atSign,
+			atAuthRequest.namespace,
+			acp,
+			atChops: atChops,
+			atLookUp: atLookUp,
+		);
+    return pkamResponse;
   }
 
   /// Keep some state so callers can call [completeActivation] later
-  late AtAuthKeys _atAuthKeys;
+  late AtKeys _atAuthKeys;
   late AtOnboardingRequest _atOnboardingRequest;
 
+  /// Onboard a new atSign using CRAM
+  /// Requires an AtOnboardingRequest and a cramSecret
+  ///
+  /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
   Future<AtOnboardingResponse> onboard(
     AtOnboardingRequest atOnboardingRequest,
     String cramSecret, {
     bool autoCompleteActivation = true,
+    String? publicKeyId,
   }) async {
-    _atOnboardingRequest = atOnboardingRequest;
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
-    atEnrollmentBase = AtEnrollmentImpl(atOnboardingRequest.atSign);
-    atLookUp ??= AtLookupImpl(atOnboardingRequest.atSign,
-        atOnboardingRequest.rootDomain, atOnboardingRequest.rootPort);
+    atLookUp ??= AtLookupImpl(
+      atOnboardingRequest.atSign,
+      atOnboardingRequest.rootDomain.rootDomain,
+      atOnboardingRequest.rootDomain.rootPort,
+    );
 
-    //1. cram auth
-    cramAuthenticator ??=
-        CramAuthenticator(atOnboardingRequest.atSign, cramSecret, atLookUp);
-    var cramAuthResult = await cramAuthenticator!.authenticate();
-    if (!cramAuthResult.isSuccessful) {
+    //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
+    try {
+      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
+        atOnboardingRequest.atSign,
+      );
       throw AtAuthenticationException(
-          'Cram authentication failed. Please check the cram key'
-          ' and try again (or) contact support@atsign.com');
+        'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
+      );
+    } catch (e, _) {
+      _logger.info(
+        'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
+      ); //swallow the error, we just want to know if keys exist or not
+    }
+    await validateAtServer(atOnboardingRequest);
+    //1. cram auth
+    cramAuthenticator ??= CramAuthenticator();
+    var cramAuthResult = await cramAuthenticator!.authenticate(
+      atOnboardingRequest.atSign,
+      cramSecret,
+      atLookUp!,
+    );
+    if (!cramAuthResult) {
+      _addProgress(
+        "onboarding",
+        "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+        ProgressEventType.error,
+      );
+      throw AtAuthenticationException(
+        'Cram authentication failed. Please check the cram key'
+        ' and try again (or) contact support@atsign.com',
+      );
     }
     //2. generate key pairs
-    _atAuthKeys = _generateKeyPairs(atOnboardingRequest.authMode,
-        publicKeyId: atOnboardingRequest.publicKeyId);
-
+    if (atOnboardingRequest.atKeys != null) {
+      _atAuthKeys = atOnboardingRequest.atKeys!;
+    } else {
+      switch (atOnboardingRequest.atKeysIo) {
+        case WrittenAtKeysIo writtenKeys:
+          _atAuthKeys = writtenKeys.generateKeyPairs(atSign: atOnboardingRequest.atSign);
+        default:
+          throw AtAuthenticationException(
+          'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
+      }
+    }
     atChops ??= _createAtChops(_atAuthKeys);
     atLookUp!.atChops = atChops;
 
@@ -136,7 +211,10 @@ class AtAuthImpl implements AtAuth {
     // server will update the apkam public key during enrollment.
     // So don't have to manually update apkam public key in this scenario.
     enrollmentIdFromServer = await _sendOnboardingEnrollment(
-        atOnboardingRequest, _atAuthKeys, atLookUp!);
+      atOnboardingRequest,
+      _atAuthKeys,
+      atLookUp!,
+    );
     _atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
     //4. Close connection to server
@@ -146,37 +224,82 @@ class AtAuthImpl implements AtAuth {
       _logger.severe('error while closing connection to server: $e');
     }
 
-    //5. Init _atLookUp again and attempt pkam auth
-    // atLookUp = AtLookupImpl(atOnboardingRequest.atSign,
-    //     atOnboardingRequest.rootDomain, atOnboardingRequest.rootPort);
-    atLookUp!.atChops = atChops;
-
-    var isPkamAuthenticated = false;
     //6. Do pkam auth
-    pkamAuthenticator ??=
-        PkamAuthenticator(atOnboardingRequest.atSign, atLookUp!);
+    pkamAuthenticator ??= PkamAuthenticator();
     try {
-      var pkamResponse = await pkamAuthenticator!
-          .authenticate(enrollmentId: enrollmentIdFromServer);
-      isPkamAuthenticated = pkamResponse.isSuccessful;
+      var pkamResponse = await pkamAuthenticator!.authenticate(
+          atOnboardingRequest.atSign, atLookUp!,
+          enrollmentId: enrollmentIdFromServer);
+      if (!pkamResponse) {
+        _addProgress(
+            "onboarding",
+            "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+            ProgressEventType.error);
+        throw AtAuthenticationException('Pkam auth returned false');
+      }
     } on UnAuthenticatedException catch (e) {
+      _addProgress(
+          "onboarding",
+          "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
+          ProgressEventType.error);
       throw AtAuthenticationException('Pkam auth failed - $e ');
     }
-    if (!isPkamAuthenticated) {
-      throw AtAuthenticationException('Pkam auth returned false');
+
+    //6b. Store the keys
+    if( atOnboardingRequest.atKeysIo is WrittenAtKeysIo){
+      try {
+        await (atOnboardingRequest.atKeysIo as WrittenAtKeysIo).write(
+          atOnboardingRequest.atSign,
+          _atAuthKeys,
+        );
+        _logger.info(
+          'Successfully stored keys for atSign: ${atOnboardingRequest.atSign}',
+        );
+      } on AtKeyException catch (e) {
+        _addProgress(
+          "onboarding",
+          "Unable to store keys for atSign: ${atOnboardingRequest.atSign}",
+          ProgressEventType.error,
+        );
+        throw AtAuthenticationException(
+          'Unable to store keys for atSign: ${atOnboardingRequest.atSign} | Cause: ${e.message}',
+        );
+      } catch (e) {
+				_addProgress(
+					"onboarding",
+					e.toString(),
+					ProgressEventType.error,
+				);
+				throw AtAuthenticationException(
+					'Unable to write keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
+				);
+			}
     }
 
     //7. If so specified (default behaviour) then
     // - set the public encryption key
     // - delete the cram secret from the keystore
+    _atOnboardingRequest = atOnboardingRequest;
     if (autoCompleteActivation) {
       await completeActivation();
     }
 
+		AtClientPreference acp = AtClientPreference()
+			..rootDomain = atOnboardingRequest.rootDomain.rootDomain
+			..rootPort = atOnboardingRequest.rootDomain.rootPort;
+
+		atOnboardingResponse.atClient = await AtClientImpl.create(
+			atOnboardingRequest.atSign,
+			atOnboardingRequest.namespace,
+			acp
+		);
     atOnboardingResponse.isSuccessful = true;
     atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
     atOnboardingResponse.atAuthKeys = _atAuthKeys;
-
+    _addProgress(
+        "onboarding",
+        "Onboarding successful for atSign: ${atOnboardingRequest.atSign}",
+        ProgressEventType.success);
     return atOnboardingResponse;
   }
 
@@ -200,176 +323,136 @@ class AtAuthImpl implements AtAuth {
     _logger.info('Cram secret delete response : $deleteResponse');
   }
 
-  AtChops _createAtChops(AtAuthKeys atKeysFile) {
+  AtChops _createAtChops(AtKeys atKeysFile) {
+    if (atKeysFile.apkamPrivateKey == null ||
+        atKeysFile.defaultEncryptionPrivateKey == null) {
+      throw AtPrivateKeyNotFoundException(
+          'AtKeys is missing required keys to create AtChops instance');
+    }
     final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        atKeysFile.defaultEncryptionPublicKey!,
-        atKeysFile.defaultEncryptionPrivateKey!);
+        atKeysFile.defaultEncryptionPublicKey!.toString(),
+        atKeysFile.defaultEncryptionPrivateKey!.toString());
     final atPkamKeyPair = AtPkamKeyPair.create(
-        atKeysFile.apkamPublicKey!, atKeysFile.apkamPrivateKey!);
+        atKeysFile.apkamPublicKey!.toString(),
+        atKeysFile.apkamPrivateKey!.toString());
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     if (atKeysFile.apkamSymmetricKey != null) {
-      atChopsKeys.apkamSymmetricKey = AESKey(atKeysFile.apkamSymmetricKey!);
+      atChopsKeys.apkamSymmetricKey =
+          AESKey(atKeysFile.apkamSymmetricKey!.toString());
     }
     atChopsKeys.selfEncryptionKey =
-        AESKey(atKeysFile.defaultSelfEncryptionKey!);
+        AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
     return AtChopsImpl(atChopsKeys);
   }
 
   Future<String> _sendOnboardingEnrollment(
       AtOnboardingRequest atOnboardingRequest,
-      AtAuthKeys atAuthKeys,
+      AtKeys atAuthKeys,
       AtLookUp atLookup) async {
-    atOnboardingRequest.appName ??= _defaultAppNameForOnboarding;
-    atOnboardingRequest.deviceName ??= _defaultDeviceNameForOnboarding;
-
     _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
-        appName: atOnboardingRequest.appName!,
-        deviceName: atOnboardingRequest.deviceName!,
-        apkamPublicKey: atAuthKeys.apkamPublicKey!);
+        atSign: atOnboardingRequest.atSign,
+        appName: atOnboardingRequest.appName,
+        deviceName: atOnboardingRequest.deviceName,
+        apkamPublicKey: atAuthKeys.apkamPublicKey!.toString());
 
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse =
-          await atEnrollmentBase?.submit(firstEnrollmentRequest, atLookUp!);
+          await atEnrollment.submit(firstEnrollmentRequest, atLookUp!);
     } on AtEnrollmentException catch (e) {
       throw AtAuthenticationException('Enrollment error:${e.toString}');
     }
     _logger.finer('enrollment response: ${atEnrollmentResponse.toString()}');
-    var enrollmentIdFromServer = atEnrollmentResponse?.enrollmentId;
-    var enrollmentStatus = atEnrollmentResponse?.enrollStatus;
+    var enrollmentIdFromServer = atEnrollmentResponse.enrollmentId;
+    var enrollmentStatus = atEnrollmentResponse.enrollStatus;
     if (enrollmentStatus != EnrollmentStatus.approved) {
       throw AtAuthenticationException(
-          'initial enrollment is not approved. Status from server: $enrollmentStatus');
+          'initial enrollment is not approved. Status from server: $enrollmentStatus \n with $atEnrollmentResponse');
     }
-    return enrollmentIdFromServer!;
+    return enrollmentIdFromServer;
   }
 
-  AtAuthKeys _decryptAtKeysWithSelfEncKey(
-      Map<String, dynamic> jsonData, PkamAuthMode authMode) {
-    var securityKeys = AtAuthKeys();
-    String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey]!;
-    var atChops =
-        AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
-    securityKeys.defaultEncryptionPublicKey = atChops
-        .decryptString(jsonData[auth_constants.defaultEncryptionPublicKey]!,
-            EncryptionKeyType.aes256,
-            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-        .result;
-    securityKeys.defaultEncryptionPrivateKey = atChops
-        .decryptString(jsonData[auth_constants.defaultEncryptionPrivateKey]!,
-            EncryptionKeyType.aes256,
-            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-        .result;
-    securityKeys.defaultSelfEncryptionKey = decryptionKey;
-    securityKeys.apkamPublicKey = atChops
-        .decryptString(
-            jsonData[auth_constants.apkamPublicKey]!, EncryptionKeyType.aes256,
-            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-        .result;
-    // pkam private key will not be saved in keyfile if auth mode is sim/any other secure element.
-    // decrypt the private key only when auth mode is keysFile
-    if (authMode == PkamAuthMode.keysFile) {
-      securityKeys.apkamPrivateKey = atChops
-          .decryptString(jsonData[auth_constants.apkamPrivateKey]!,
-              EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy())
-          .result;
-    }
-    securityKeys.apkamSymmetricKey = jsonData[auth_constants.apkamSymmetricKey];
-    securityKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
-    return securityKeys;
-  }
+  /// Validates the atSign server status depending on whether it's onboarding or authentication.
+  ///
+  /// For onboarding, it checks that the root server is found, the secondary server is running,
+  /// and the atSign is not already activated.
+  ///
+  /// For authentication, it checks that the root server is found, the secondary server is running,
+  /// and the atSign is already activated.
+  ///
+  /// Throws an [AtException] if any of the checks fail.
+  /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
+  /// This method is used internally before onboarding or authentication operations.
+  @override
+  Future<void> validateAtServer(AuthRequest atRequest) async {
+    AtServerStatus status = AtStatusImpl(
+      rootUrl: atRequest.rootDomain.rootDomain,
+      rootPort: atRequest.rootDomain.rootPort,
+    );
+    int retryCount = 0;
 
-  ///method to read and return data from .atKeysFile
-  ///returns map containing encryption keys
-  Future<AtAuthKeys> _prepareAtAuthKeysFromFilePath(
-      AtAuthRequest atAuthRequest) async {
-    if (atAuthRequest.atKeysFilePath == null ||
-        atAuthRequest.atKeysFilePath!.isEmpty) {
-      throw AtException(
-          'atKeys filePath is empty. atKeysFile is required to authenticate');
-    }
-    if (!File(atAuthRequest.atKeysFilePath!).existsSync()) {
-      throw AtException(
-          'provided keys file does not exist. Please check whether the file path ${atAuthRequest.atKeysFilePath} is valid');
-    }
+    while (retryCount < atRequest.retryOptions.maxRetries) {
+      try {
+        var atStatus = await status.get(atRequest.atSign);
 
-    String atAuthData =
-        await File(atAuthRequest.atKeysFilePath!).readAsString();
-    Map<String, dynamic> decodedAtKeysData = jsonDecode(atAuthData);
-    // If it contains "iv(InitializationVector)", it means the data is encrypted with a
-    // passphrase. Decrypt it.
-    if (decodedAtKeysData.containsKey('iv') &&
-        atAuthRequest.passPhrase.isNullOrEmpty) {
-      throw AtDecryptionException(
-          'Pass Phrase is required for password protected atKeys file');
-    }
-    if (decodedAtKeysData.containsKey('iv')) {
-      _logger.info(
-          'Found encrypted atKeys files. Decrypting with the given pass-phrase');
-      AtEncrypted atEncrypted = AtEncrypted.fromJson(decodedAtKeysData);
+        // 3 Checks for onboarding:
+        //   1. Root server should be found
+        //   2. Secondary server should be running
+        //   3. atSign should not be activated already
+        if (atRequest is AtOnboardingRequest) {
+          if (atStatus.rootStatus != RootStatus.found) {
+            throw AtException(
+                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
+          }
+          if (atStatus.serverStatus == ServerStatus.error ||
+              atStatus.atSignStatus == AtSignStatus.notFound) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform onboarding. ${atStatus.serverStatus} ${atStatus.atSignStatus}');
+          }
+          if (atStatus.atSignStatus == AtSignStatus.activated) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} is already onboarded. Cannot perform onboarding again.');
+          }
+        }
 
-      if (atEncrypted.hashingAlgoType == null) {
-        throw AtDecryptionException(
-            'Hashing algo type is required for decryption of password protected atKeys file');
+        // 3 Checks for authentication:
+        //   1. Root server should be found
+        //   2. Secondary server should be running
+        //   3. atSign should be activated already
+        else if (atRequest is AtAuthRequest) {
+          if (atStatus.rootStatus == RootStatus.notFound ||
+              atStatus.rootStatus == RootStatus.error) {
+            throw AtException(
+                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
+          }
+          if (atStatus.serverStatus == ServerStatus.stopped ||
+              atStatus.serverStatus == ServerStatus.error ||
+              atStatus.serverStatus == ServerStatus.unavailable) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
+          }
+          if (atStatus.atSignStatus == AtSignStatus.teapot ||
+              atStatus.serverStatus == ServerStatus.teapot) {
+            throw AtException(
+                'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');
+          }
+        }
+
+        break; // Exit loop if no exception occurs
+      } catch (e) {
+        _logger.severe('Error during atServer validation: $e');
+        retryCount++;
+        if (retryCount >= atRequest.retryOptions.maxRetries) {
+          throw AtException(
+              'Max retries reached while validating atSign server. Last error: $e');
+        }
+        _logger.warning(
+            'Attempt $retryCount failed: $e. Retrying... $retryCount/${atRequest.retryOptions.maxRetries}');
+        await Future.delayed(
+            atRequest.retryOptions.retryDelay); // Wait before retrying
       }
-
-      String decryptedAtKeys =
-          await AtKeysCrypto.fromHashingAlgorithm(atEncrypted.hashingAlgoType!)
-              .decrypt(atEncrypted, atAuthRequest.passPhrase!);
-      decodedAtKeysData = jsonDecode(decryptedAtKeys);
     }
-    // This is to decrypt the atKeys encrypted with self Encryption key.
-    return _decryptAtKeysWithSelfEncKey(
-        decodedAtKeysData, atAuthRequest.authMode);
-  }
-
-  AtAuthKeys _generateKeyPairs(PkamAuthMode authMode, {String? publicKeyId}) {
-    // generate user encryption keypair
-    _logger.info('Generating encryption keypair');
-    var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
-
-    //generate selfEncryptionKey
-    var selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    var apkamSymmetricKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    var atKeysFile = AtAuthKeys();
-    _logger.info(
-        '[Information] Generating your encryption keys and .atKeys file\n');
-    //generating pkamKeyPair only if authMode is keysFile
-    String? pkamPublicKey;
-    if (authMode == PkamAuthMode.keysFile) {
-      _logger.info('Generating pkam keypair');
-      var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
-      pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
-      atKeysFile.apkamPrivateKey =
-          apkamRsaKeypair.atPrivateKey.privateKey.toString();
-    } else if (authMode == PkamAuthMode.sim) {
-      // get the public key from secure element
-      pkamPublicKey = atChops!.readPublicKey(publicKeyId!);
-      _logger.info('pkam  public key from sim: ${atKeysFile.apkamPublicKey}');
-
-      // encryption key pair and self encryption symmetric key
-      // are not available to injected at_chops. Set it here
-      atChops!.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-      atChops!.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-      atChops!.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-    }
-    atKeysFile.apkamPublicKey = pkamPublicKey;
-    //Standard order of an atKeys file is ->
-    // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->
-    // @sign: selfEncryptionKey[self encryption key again]
-    // note: "->" stands for "followed by"
-    atKeysFile.defaultEncryptionPublicKey =
-        atEncryptionKeyPair.atPublicKey.publicKey.toString();
-    atKeysFile.defaultEncryptionPrivateKey =
-        atEncryptionKeyPair.atPrivateKey.privateKey.toString();
-    atKeysFile.defaultSelfEncryptionKey = selfEncryptionKey.key;
-    atKeysFile.apkamSymmetricKey = apkamSymmetricKey.key;
-
-    return atKeysFile;
   }
 }

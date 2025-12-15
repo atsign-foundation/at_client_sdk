@@ -1,3 +1,7 @@
+## 2.5.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
 ## 2.4.0
 
 - chore(deps): at_commons ^5.5.0

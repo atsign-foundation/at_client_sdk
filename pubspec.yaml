@@ -7,30 +7,17 @@ environment:
 
 workspace:
   - packages/at_auth
-  - packages/at_backupkey_flutter
-  - packages/at_chat_flutter
-  # - packages/at_chops # omit until at_chops 3.0.0 is published
+  - packages/at_chops
   - packages/at_cli_commons
   - packages/at_client
-  - packages/at_client_mobile
+  - packages/at_client_flutter
   - packages/at_commons
   - packages/at_common_flutter
   - packages/at_contact
-  - packages/at_contacts_flutter
-  - packages/at_contacts_group_flutter
-  - packages/at_events_flutter
-  - packages/at_follows_flutter
-  - packages/at_invitation_flutter
-  - packages/at_location_flutter
-  - packages/at_login_flutter
   - packages/at_lookup
-  - packages/at_notify_flutter
   - packages/at_onboarding_cli
-  - packages/at_onboarding_flutter
   - packages/at_policy
   - packages/at_server_status
-  - packages/at_sync_ui_flutter
-  - packages/at_theme_flutter
   - packages/at_utils
   - tests/at_end2end_test
   - tests/at_functional_test

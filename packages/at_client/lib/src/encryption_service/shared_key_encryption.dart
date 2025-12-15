@@ -33,7 +33,7 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
         iV = AtChopsUtil.generateIVLegacy();
       }
       var encryptionAlgo = AESEncryptionAlgo(AESKey(sharedKey));
-      encryptionResultFromAtChops = _atClient.atChops!.encryptString(
+      encryptionResultFromAtChops = await _atClient.atChops!.encryptString(
           value, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
     } on AtEncryptionException catch (e) {

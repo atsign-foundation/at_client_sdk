@@ -1,22 +1,26 @@
 import 'package:at_commons/at_commons.dart';
 
 /// A fully qualified atSign (e.g. @alice)
-typedef Atsign = String;
+///
+/// Call String.toAtsign() to create this type
+extension type Atsign._(String str) implements String {
+  /// Format and validate string to an atSign without the "@" prefix
+  /// throws [InvalidAtSignException] on failed validation
+  AtsignWithoutAt withoutAt() {
+    return AtsignWithoutAt._(substring(1));
+  }
+}
 
 /// An atSign without the "@" (e.g. alice)
-typedef AtsignWithoutAt = String;
+///
+/// Call String.toAtsign().withoutAt() to create this type.
+extension type AtsignWithoutAt._(String str) implements String {}
 
 extension AtsignString on String {
   /// Format and validate string to a fully qualified atSign
   /// throws [InvalidAtSignException] on failed validation
   Atsign toAtsign() {
     return _fixAtSign(this);
-  }
-
-  /// Format and validate string to an atSign without the "@" prefix
-  /// throws [InvalidAtSignException] on failed validation
-  AtsignWithoutAt withoutAt() {
-    return toAtsign().substring(1);
   }
 }
 
@@ -69,5 +73,5 @@ Atsign _fixAtSign(String atSign) {
   if (atSign.contains(RegExp(r'[\u2400-\u241F\u2400\u2421\u2424\u2425]'))) {
     throw InvalidAtSignException(AtMessage.controlCharacter.text);
   }
-  return atSign;
+  return Atsign._(atSign);
 }
