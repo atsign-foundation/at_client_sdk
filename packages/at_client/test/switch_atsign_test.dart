@@ -35,7 +35,9 @@ void main() {
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference);
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
-      final bobPreference = AtClientPreference();
+      final bobPreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       final bobAtSign = '@bob';
       await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
