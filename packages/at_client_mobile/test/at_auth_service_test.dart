@@ -61,7 +61,9 @@ void main() {
   group('A group of tests related to submission of enrollment request', () {
     String atSign = '@alice';
     AtClientPreference atClientPreference = AtClientPreference()
-      ..namespace = 'me';
+      ..namespace = 'me'
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/commit';
 
     late AtAuthServiceImpl authServiceImpl;
     MockAtEnrollmentBase mockAtEnrollmentBase;
@@ -470,7 +472,9 @@ void main() {
   group('A group of tests related to authenticate an atSign', () {
     String atSign = '@alice';
     AtClientPreference atClientPreference = AtClientPreference()
-      ..namespace = 'me';
+      ..namespace = 'me'
+			..hiveStoragePath = 'test/hive'
+			..commitLogPath = 'test/hive/commit';
 
     test(
         'A test to verify AtClient initializes successfully in offline mode upon network failure when keychain manager contains keys',
