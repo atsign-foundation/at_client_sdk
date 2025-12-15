@@ -73,7 +73,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -88,7 +88,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -102,7 +102,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -119,7 +119,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -135,7 +135,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -155,7 +155,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -176,7 +176,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -202,7 +202,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -229,7 +229,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -255,7 +255,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -286,7 +286,7 @@ void main() {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive'
-				..commitLogPath = 'test/hive/commit';
+        ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
@@ -322,7 +322,7 @@ void main() {
       ..syncRegex = '.$namespace'
       ..hiveStoragePath =
           '*&@should not be used by these tests, we will mock local storage'
-			..commitLogPath = 'test/hive/commit';
+      ..commitLogPath = 'test/hive/commit';
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
 

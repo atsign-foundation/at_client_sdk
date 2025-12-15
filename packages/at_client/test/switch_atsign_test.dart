@@ -12,8 +12,8 @@ void main() {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
-			..hiveStoragePath = 'test/hive'
-			..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       final mockAtLookUp = MockAtLookUp();
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference,
@@ -30,8 +30,8 @@ void main() {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
-			..hiveStoragePath = 'test/hive'
-			..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference);
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
@@ -51,8 +51,8 @@ void main() {
       atClientManager.atClient.syncService
           .addProgressListener(AliceSyncProgressListener());
       final bobPreference = AtClientPreference()
-			..hiveStoragePath = 'test/hive'
-			..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       final bobAtSign = '@bob';
       await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
       atClientManager.atClient.syncService
