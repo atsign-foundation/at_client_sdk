@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:at_auth/at_auth.dart';
 import 'package:meta/meta.dart';
 
 import 'package:at_commons/at_commons.dart';
@@ -12,7 +13,7 @@ import 'package:at_auth/src/keys/at_keys_io.dart';
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
 ///
 /// Optional Parameters:
-/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys 
+/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys
 /// The [passPhrase] is used for atKeys files that are password protected.
 class FileAtKeysIo extends WrittenAtKeysIo {
   @visibleForTesting
@@ -27,17 +28,32 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// The [atSign] parameter is used to determine the file path if not provided during instantiation.
   /// The method returns a Future that resolves to an instance of [AtKeys].
   @override
-  Future<AtKeys> read(String atSign) async {
+  Future<AtKeys> read(String atSign,
+      {IOSink? askPasswordSink, Stream<List<int>>? readPasswordStream}) async {
     Map<String, dynamic> decodedAtKeysData = {};
     String file = filePath!(atSign);
+
     if (!File(file).existsSync()) {
       throw AtException(
           'provided keys file does not exist. Please check whether the file path $file is valid');
     }
+
     String atAuthData = await File(file).readAsString();
     decodedAtKeysData = jsonDecode(atAuthData);
-    decodedAtKeysData =
-        await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
+    try {
+      decodedAtKeysData =
+          await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
+    } on AtPasswordRequiredException {
+      // fallback: prompt for passphrase when not provided through args
+      if (askPasswordSink == null || readPasswordStream == null) rethrow;
+
+      askPasswordSink.write('Please provide passphrase for $filePath: ');
+      final promptedPass = utf8.decode(await readPasswordStream.first);
+      if (promptedPass.isNullOrEmpty) rethrow;
+
+      decodedAtKeysData =
+          await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
+    }
     return decryptAtKeysWithSelfEncKey(
         decodedAtKeysData, PkamAuthMode.keysFile);
   }
@@ -56,7 +72,6 @@ String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
   return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
       .replaceAll('/', Platform.pathSeparator);
 }
-
 
 String? getHomeDirectory({bool throwIfNull = false}) {
   String? homeDir;
