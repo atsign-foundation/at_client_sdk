@@ -226,6 +226,9 @@ void main() {
   group('AtClientImpl.ensureLowerCase() functionality checks', () {
     late AtClientManager manager;
     late AtClientImpl client;
+    AtClientPreference pref = AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/path';
     test('Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
         () async {
       AtKey key = AtKey()
@@ -234,7 +237,7 @@ void main() {
         ..sharedWith = '@receiver';
 
       manager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@sender', null, AtClientPreference());
+          .setCurrentAtSign('@sender', null, pref);
       client = manager.atClient as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
@@ -278,13 +281,13 @@ void main() {
   });
 
   group('A group of tests related to apkam/enrollments', () {
+    AtClientPreference pref = AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/path';
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
         () async {
       final testEnrollmentId = 'abc123';
-      AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign('@alice', 'wavi', pref,
               enrollmentId: testEnrollmentId);
@@ -312,8 +315,7 @@ void main() {
               auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
-      AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'buzz', AtClientPreference(),
+      AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
