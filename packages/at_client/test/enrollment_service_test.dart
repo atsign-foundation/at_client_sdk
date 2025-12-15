@@ -91,8 +91,11 @@ void main() {
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
         () async {
+			var pref = AtClientPreference()
+				..hiveStoragePath = "test/hive"
+				..commitLogPath = "test/hive/commit";
       var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', AtClientPreference(),
+          .setCurrentAtSign('@alice', 'wavi', pref,
               enrollmentId: enrollmentId);
       expect(atClientManager.atClient.enrollmentId, enrollmentId);
     });
@@ -173,8 +176,11 @@ void main() {
           EnrollmentStatus.pending,
           EnrollmentStatus.approved
         ];
+			AtClientPreference pref = AtClientPreference()
+				..hiveStoragePath = 'test/hive'
+				..commitLogPath = 'test/hive/commit';
       AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'random_namespace', AtClientPreference(),
+          currentAtsign, 'random_namespace', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
@@ -216,8 +222,11 @@ void main() {
 
       EnrollmentListRequestParam listRequestParam = EnrollmentListRequestParam()
         ..enrollmentListFilter = [EnrollmentStatus.approved];
+			AtClientPreference pref = AtClientPreference()
+				..hiveStoragePath = 'test/hive'
+				..commitLogPath = 'test/hive/commit';
       AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'random_namespace_1', AtClientPreference(),
+          currentAtsign, 'random_namespace_1', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
