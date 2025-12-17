@@ -51,7 +51,9 @@ void main() {
     registerFallbackValue(FakeUpdateVerbBuilder());
     registerFallbackValue(FakeAtClientPreferences());
 
-    atClientPreference = AtClientPreference();
+    atClientPreference = AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/commit';
     mockAtLookupImpl = MockAtLookupImpl();
     mockKeyChainManager = MockKeyChainManager();
     mockAtClientManager = MockAtClientManager();
@@ -189,7 +191,9 @@ void main() {
     test('A test to verify when cram secret is populated', () async {
       String pkamPrivateKey = '';
       AtClientPreference atClientPreference = AtClientPreference()
-        ..cramSecret = '123';
+        ..cramSecret = '123'
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/storage';
       when(() => mockAtClientAuthenticator.performInitialAuth(
           any(), atClientPreference)).thenAnswer((_) {
         pkamPrivateKey = 'dummy_private_key';
@@ -320,7 +324,9 @@ void main() {
     test(
         'A test to verify false is returned when empty atSign is passed to authenticate method',
         () async {
-      AtClientPreference atClientPreference = AtClientPreference();
+      AtClientPreference atClientPreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/storage';
       var atClientService = AtClientService();
       var authResult =
           await atClientService.authenticate('', atClientPreference);
