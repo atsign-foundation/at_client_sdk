@@ -13,8 +13,6 @@ class AtSignLogger {
 
   static final ConsoleLoggingHandler consoleLoggingHandler =
       ConsoleLoggingHandler();
-  static final StdErrLoggingHandler stdErrLoggingHandler =
-      StdErrLoggingHandler();
 
   /// The default logging handler to log events.
   ///
@@ -62,11 +60,13 @@ class AtSignLogger {
       _hierarchicalLoggingEnabled = true;
       logging.hierarchicalLoggingEnabled = _hierarchicalLoggingEnabled;
     }
-    _level = value;
-    logger.level = LogLevel.level[_level!];
+
+    _level = value?.toLowerCase();
+    logger.level = LogLevel.level[_level];
   }
 
-  bool isLoggable(String value) => (LogLevel.level[value]! >= logger.level);
+  bool isLoggable(String value) =>
+      (LogLevel.level[value.toLowerCase()]! >= logger.level);
 
   // ignore: unnecessary_getters_setters
   bool get hierarchicalLoggingEnabled {
