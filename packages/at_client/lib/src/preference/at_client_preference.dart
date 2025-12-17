@@ -18,6 +18,8 @@ class AtClientPreference {
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
+	/// [Deprecated] LocalSecondary will be required as default
+	@Deprecated("LocalSecondary will be required as default") 
   bool isLocalStoreRequired = true;
 
   /// Shared secret of the atSign
