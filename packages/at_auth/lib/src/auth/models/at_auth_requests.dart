@@ -42,6 +42,7 @@ class AtOnboardingRequest extends AuthRequest {
   AtOnboardingRequest(
     super.atSign, {
     super.rootDomain,
+    super.useLocal,
     super.namespace,
     this.atKeysIo,
     this.atKeys,
@@ -72,6 +73,7 @@ class AtAuthRequest extends AuthRequest {
     super.atSign, {
     super.namespace,
     super.rootDomain,
+    super.useLocal,
     super.retryOptions,
     this.atKeysIo,
     this.atAuthKeys,
