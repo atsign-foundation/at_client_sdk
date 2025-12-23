@@ -33,7 +33,9 @@ Future<void> main() async {
       test('toString', () {
         final String toStringOutput = resp.toString();
         final String expectedStringOutput = 
-          '{"reqId":1,"respType":"success","payload":{"key":"value","key2":42,"key3":true,"key4":null,"key5":3.14,"key6":[]},"message":"Test message"}';
+          '{"reqId":1,"respType":"success","payload":{"key":"value","key2":'
+          '42,"key3":true,"key4":null,"key5":3.14,"key6":[]},"message":"Test'
+          'message"}';
         expect(toStringOutput, equals(expectedStringOutput));
       });
     });
@@ -68,7 +70,9 @@ Future<void> main() async {
       test('toString', () {
         final String toStringOutput = resp.toString();
         final String expectedStringOutput = 
-          '{"reqId":2,"respType":"success","payload":{"level1":{"level2":{"level3":{"key":"deepValue","list":[1,2,3,{"nestedKey":"nestedValue"}]}}}},"message":"Deep payload test"}';
+          '{"reqId":2,"respType":"success","payload":{"level1":{"level2":'
+          '{"level3":{"key":"deepValue","list":[1,2,3,{"nestedKey":"nestedV'
+          'alue"}]}}}},"message":"Deep payload test"}';
         expect(toStringOutput, equals(expectedStringOutput));
       });
     });
@@ -100,7 +104,8 @@ Future<void> main() async {
       test('toString', () {
         final String toStringOutput = req.toString();
         final String expectedStringOutput = 
-          '{"reqId":10,"payload":{"param1":"value1","param2":100,"param3":false,"param4":null,"param5":2.71,"param6":[]}}';
+          '{"reqId":10,"payload":{"param1":"value1","param2":100,"param3":'
+          'false,"param4":null,"param5":2.71,"param6":[]}}';
         expect(toStringOutput, equals(expectedStringOutput));
       });
     });
@@ -131,7 +136,8 @@ Future<void> main() async {
       test('toString', () {
         final String toStringOutput = req.toString();
         final String expectedStringOutput = 
-          '{"reqId":20,"payload":{"config":{"settings":{"optionA":true,"optionB":{"subOption1":"subValue1","subOption2":[10,20,30]}}}}}';
+          '{"reqId":20,"payload":{"config":{"settings":{"optionA":true,'
+          '"optionB":{"subOption1":"subValue1","subOption2":[10,20,30]}}}}}';
         expect(toStringOutput, equals(expectedStringOutput));
       }); 
     });
