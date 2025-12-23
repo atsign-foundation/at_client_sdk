@@ -1,6 +1,6 @@
 ## 3.4.0
 - feat: Introduce CLILoggingHandler for command-line applications
-- fix: AtLogger.level setter is now case-insensitive
+- fix: made AtSignLogger.level setter case-insensitive
 ## 3.3.0
 - chore(deps): at_commons ^5.5.0
 - chore(deps): chalkdart ">=2.0.9<4.0.0"
