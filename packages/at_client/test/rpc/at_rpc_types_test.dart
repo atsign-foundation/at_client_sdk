@@ -40,8 +40,7 @@ Future<void> main() async {
         expect(toStringOutput, equals(expectedStringOutput));
 
         // now try parsing it and reading values
-        final Map<String, dynamic> parsedJson =
-            jsonDecode(toStringOutput);
+        final Map<String, dynamic> parsedJson = jsonDecode(toStringOutput);
 
         expect(parsedJson['reqId'], equals(1));
         expect(parsedJson['respType'], equals('success'));
@@ -95,22 +94,19 @@ Future<void> main() async {
         expect(toStringOutput, equals(expectedStringOutput));
 
         // now try parsing it and reading values
-        final Map<String, dynamic> parsedJson =
-            jsonDecode(toStringOutput);
+        final Map<String, dynamic> parsedJson = jsonDecode(toStringOutput);
         expect(parsedJson['reqId'], equals(2));
         expect(parsedJson['respType'], equals('success'));
         expect(parsedJson['payload']['level1']['level2']['level3']['key'],
             equals('deepValue'));
-        expect(
-            parsedJson['payload']['level1']['level2']['level3']['list'][0],
+        expect(parsedJson['payload']['level1']['level2']['level3']['list'][0],
             equals(1));
-        expect(
-            parsedJson['payload']['level1']['level2']['level3']['list'][1],
+        expect(parsedJson['payload']['level1']['level2']['level3']['list'][1],
             equals(2));
-        expect(
-            parsedJson['payload']['level1']['level2']['level3']['list'][2],
+        expect(parsedJson['payload']['level1']['level2']['level3']['list'][2],
             equals(3));
-        expect(parsedJson['payload']['level1']['level2']['level3']['list'][3]
+        expect(
+            parsedJson['payload']['level1']['level2']['level3']['list'][3]
                 ['nestedKey'],
             equals('nestedValue'));
         expect(parsedJson['message'], equals('Deep payload test'));
@@ -146,8 +142,7 @@ Future<void> main() async {
         expect(toStringOutput, equals(expectedStringOutput));
 
         // now try parsing it and reading values
-        final Map<String, dynamic> parsedJson =
-            jsonDecode(toStringOutput);
+        final Map<String, dynamic> parsedJson = jsonDecode(toStringOutput);
         expect(parsedJson['reqId'], equals(10));
         expect(parsedJson['payload']['param1'], equals('value1'));
         expect(parsedJson['payload']['param2'], equals(100));
@@ -190,20 +185,21 @@ Future<void> main() async {
         expect(parsedJson['reqId'], equals(20));
         expect(parsedJson['payload']['config']['settings']['optionA'],
             equals(true));
-        expect(parsedJson['payload']['config']['settings']['optionB']
+        expect(
+            parsedJson['payload']['config']['settings']['optionB']
                 ['subOption1'],
             equals('subValue1'));
         expect(
-          parsedJson['payload']['config']['settings']['optionB']
-            ['subOption2'][0],
+            parsedJson['payload']['config']['settings']['optionB']['subOption2']
+                [0],
             equals(10));
         expect(
-          parsedJson['payload']['config']['settings']['optionB']
-            ['subOption2'][1],
+            parsedJson['payload']['config']['settings']['optionB']['subOption2']
+                [1],
             equals(20));
         expect(
-          parsedJson['payload']['config']['settings']['optionB']
-            ['subOption2'][2],
+            parsedJson['payload']['config']['settings']['optionB']['subOption2']
+                [2],
             equals(30));
       });
     });
