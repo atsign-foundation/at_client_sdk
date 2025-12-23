@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
@@ -39,7 +41,8 @@ Future<void> main() async {
 
         // now try parsing it and reading values
         final Map<String, dynamic> parsedJson =
-            resp.toJson(); // Using toJson for parsing
+            jsonDecode(toStringOutput);
+
         expect(parsedJson['reqId'], equals(1));
         expect(parsedJson['respType'], equals('success'));
         expect(parsedJson['payload']['key'], equals('value'));
@@ -93,7 +96,7 @@ Future<void> main() async {
 
         // now try parsing it and reading values
         final Map<String, dynamic> parsedJson =
-            resp.toJson(); // Using toJson for parsing
+            jsonDecode(toStringOutput);
         expect(parsedJson['reqId'], equals(2));
         expect(parsedJson['respType'], equals('success'));
         expect(parsedJson['payload']['level1']['level2']['level3']['key'],
@@ -144,7 +147,7 @@ Future<void> main() async {
 
         // now try parsing it and reading values
         final Map<String, dynamic> parsedJson =
-            req.toJson(); // Using toJson for parsing
+            jsonDecode(toStringOutput);
         expect(parsedJson['reqId'], equals(10));
         expect(parsedJson['payload']['param1'], equals('value1'));
         expect(parsedJson['payload']['param2'], equals(100));
@@ -183,8 +186,7 @@ Future<void> main() async {
         expect(toStringOutput, equals(expectedStringOutput));
 
         // now try parsing it and reading values
-        final Map<String, dynamic> parsedJson =
-            req.toJson(); // Using toJson for parsing
+        final Map<String, dynamic> parsedJson = jsonDecode(toStringOutput);
         expect(parsedJson['reqId'], equals(20));
         expect(parsedJson['payload']['config']['settings']['optionA'],
             equals(true));
