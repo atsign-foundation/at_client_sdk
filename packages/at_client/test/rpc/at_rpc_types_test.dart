@@ -34,7 +34,7 @@ Future<void> main() async {
         final String expectedStringOutput =
             '{"reqId":1,"respType":"success","payload":{"key":"value","key2":'
             '42,"key3":true,"key4":null,"key5":3.14,"key6":[]},"message":"Test'
-            'message"}';
+            ' message"}';
         expect(toStringOutput, equals(expectedStringOutput));
       });
     });
