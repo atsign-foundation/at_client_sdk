@@ -92,11 +92,11 @@ class AtRpcResp {
   }
 
   Map<String, dynamic> toJson() => {
-    'reqId': reqId,
-    'respType': respType.name,
-    'payload': payload,
-    'message': message
-  };
+        'reqId': reqId,
+        'respType': respType.name,
+        'payload': payload,
+        'message': message
+      };
 
   @override
   String toString() => jsonEncode(toJson());
