@@ -15,6 +15,18 @@ dependencies:
   at_client: ^3.7.0
   at_utils: ^3.2.0
 
+dependency_overrides:
+  at_auth:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_auth
+      ref: at_auth_faster_aes_changes
+  at_chops:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_chops
+      ref: at_chops_faster_aes
+
 dev_dependencies:
   test: ^1.25.0
   lints: ^6.0.0

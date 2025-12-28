@@ -21,6 +21,18 @@ dependencies:
   at_persistence_secondary_server: ^4.2.0
   version: ^3.0.2
 
+dependency_overrides:
+  at_auth:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_auth
+      ref: at_auth_faster_aes_changes
+  at_chops:
+    git:
+      url: https://github.com/atsign-foundation/at_libraries.git
+      path: packages/at_chops
+      ref: at_chops_faster_aes
+
 dev_dependencies:
   test: ^1.25.0
   lints: ^6.0.0
