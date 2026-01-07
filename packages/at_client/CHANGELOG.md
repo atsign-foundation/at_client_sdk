@@ -3,6 +3,8 @@
 - build(deps): Updated archive dependency to ^4.0.7
 - feat: Add RemoteLocalPref enum and AtClientPreference.remoteLocalPref field
   to enable apps to easily default to using the remote atServer
+- fix: ensure AtRpcResp and AtRpcReq `.toString()` methods are JSON serialized
+  strings
 
 ## 3.9.2
 
