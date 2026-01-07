@@ -396,12 +396,8 @@ void main() {
       });
 
       atClientPreference.monitorHeartbeatResponseTimeout =
-          Duration(milliseconds: 10);
-      atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 50);
-      Duration timedOutDuration =
-          (atClientPreference.monitorHeartbeatResponseTimeout +
-                  atClientPreference.monitorHeartbeatInterval) *
-              1.1;
+          Duration(milliseconds: 20);
+      atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 60);
 
       monitor.logger.level = 'info';
       await monitor.start();
@@ -420,7 +416,9 @@ void main() {
 
       // Wait for the heartbeat timeout
       print('*** Waiting for heartbeat to timeout');
-      await Future.delayed(timedOutDuration);
+      await Future.delayed((atClientPreference.monitorHeartbeatResponseTimeout +
+                  atClientPreference.monitorHeartbeatInterval) *
+              1.2);
 
       // Status should be "notConnected"
       print('*** State should be "notConnected"');
