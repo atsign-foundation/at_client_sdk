@@ -74,10 +74,9 @@ void main() {
 
       // create atclient instance
       var atClientPreference = AtClientPreference()
-        ..rootDomain = 'vip.ve.atsign.zone'
         ..commitLogPath = 'test/hive/commit/'
         ..hiveStoragePath = 'test/hive/client'
-        ..isLocalStoreRequired = true;
+        ..rootDomain = 'vip.ve.atsign.zone';
 
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
@@ -663,7 +662,6 @@ AtClientPreference getClient2Preferences() {
   return AtClientPreference()
     ..commitLogPath = 'test/hive/client_2/commit'
     ..hiveStoragePath = 'test/hive/client_2'
-    ..isLocalStoreRequired = true
     ..rootDomain = 'vip.ve.atsign.zone';
 }
 
