@@ -109,14 +109,14 @@ void main() {
     when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
 
     const List<Duration> testConnectDelays = [
-      Duration(milliseconds: 10),
-      Duration(milliseconds: 20),
-      Duration(milliseconds: 30),
-      Duration(milliseconds: 50),
-      Duration(milliseconds: 80),
-      Duration(milliseconds: 130),
-      Duration(milliseconds: 210),
-      Duration(milliseconds: 340),
+      Duration(milliseconds: 100),
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 300),
+      Duration(milliseconds: 500),
+      Duration(milliseconds: 800),
+      Duration(milliseconds: 1300),
+      Duration(milliseconds: 2100),
+      Duration(milliseconds: 3400),
     ];
     allFromMonitor = '';
     monitor = Monitor(
@@ -410,22 +410,8 @@ void main() {
       expect(numHeartbeatsSent, 2);
       print('*** Got two heartbeat successes');
 
-      // Let's NOT send a response to the next heartbeat(s).
-      print('*** Stopping heartbeat responses');
-      sendHeartbeatResponse = false;
-
-      // Wait for the heartbeat timeout
-      print('*** Waiting for heartbeat to timeout');
-      await Future.delayed((atClientPreference.monitorHeartbeatResponseTimeout +
-                  atClientPreference.monitorHeartbeatInterval) *
-              1.2);
-
-      // Status should be "notConnected"
-      print('*** State should be "notConnected"');
-      expect(monitor.currentState, MonitorState.notConnected);
-
-      // Let's make the reconnect fail
-      print('*** Make the reconnect fail');
+      // Let's make reconnects fail, then stop heartbeat responses
+      print('*** Make reconnects fail');
       when(() => mockMonitorOutboundConnectionFactory.createConnection(
           fakeSecondaryAddress,
           decryptPackets: true,
@@ -433,6 +419,20 @@ void main() {
           pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
         throw AtConnectException('Mock - connection failed');
       });
+
+      // Let's NOT send a response to the next heartbeat(s).
+      print('*** Stopping heartbeat responses');
+      sendHeartbeatResponse = false;
+
+      // Wait for the heartbeat timeout
+      print('*** Waiting for heartbeat to timeout');
+      await Future.delayed((atClientPreference.monitorHeartbeatResponseTimeout +
+              atClientPreference.monitorHeartbeatInterval) *
+          1.2);
+
+      // Status should be "notConnected"
+      print('*** State should be "notConnected"');
+      expect(monitor.currentState, MonitorState.notConnected);
 
       // Wait for the first delay timeout
       print('*** Wait for the reconnect delay timeout');
