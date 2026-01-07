@@ -17,10 +17,10 @@ class AtClientPreference {
   @Deprecated("Use [SyncService]")
   SyncStrategy? syncStrategy;
 
-  /// Specify whether local store is required
-  /// [Deprecated] LocalSecondary will be required as default
-  @Deprecated("LocalSecondary will be required as default")
-  bool isLocalStoreRequired = true;
+  bool _isLocalStoreRequired = true;
+  bool get isLocalStoreRequired => _isLocalStoreRequired;
+  @Deprecated("LocalStore is always required")
+  set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
 
   /// Shared secret of the atSign
   String? cramSecret;

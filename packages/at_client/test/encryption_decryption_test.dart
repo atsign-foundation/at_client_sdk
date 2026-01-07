@@ -21,7 +21,6 @@ void main() {
 
   setUp(() async {
     AtClientPreference atClientPreference = AtClientPreference()
-      ..isLocalStoreRequired = true
       ..hiveStoragePath = 'test/unit_test_storage/hive'
       ..commitLogPath = 'test/unit_test_storage/commit';
 
@@ -126,7 +125,7 @@ void main() {
       // during decryption.
       sharedKey.metadata.pubKeyCS = null;
       expect(sharedKey.metadata.pubKeyCS, null);
-      // Explicity changing the publicKeyHash value to mimic change in publicKeyHash
+      // Explicitly changing the publicKeyHash value to mimic change in publicKeyHash
       // value.
       sharedKey.metadata.pubKeyHash =
           PublicKeyHash('dummy_hash_value', HashingAlgoType.sha512.name);

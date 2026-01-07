@@ -251,7 +251,9 @@ void main() {
       expect(await monitor.currentStateStream.first, MonitorState.notConnected);
     });
 
-    test('start, secondary OK, socket OK, socket closed, reconnects immediately', () async {
+    test(
+        'start, secondary OK, socket OK, socket closed, reconnects immediately',
+        () async {
       await monitor.start();
 
       expect(await monitor.currentStateStream.first, MonitorState.connected);
@@ -264,7 +266,9 @@ void main() {
       expect(await monitor.currentStateStream.first, MonitorState.connected);
     });
 
-    test('start, secondary OK, socket OK, socket closed, reconnects on third attempt', () async {
+    test(
+        'start, secondary OK, socket OK, socket closed, reconnects on third attempt',
+        () async {
       await monitor.start();
 
       expect(await monitor.currentStateStream.first, MonitorState.connected);
@@ -285,9 +289,11 @@ void main() {
         throw AtConnectException('Mock - connection failed');
       });
 
-      print('*** ${DateTime.now().toUtc()} : Sleeping for ${monitor.connectDelays[0]}');
+      print(
+          '*** ${DateTime.now().toUtc()} : Sleeping for ${monitor.connectDelays[0]}');
       await Future.delayed(monitor.connectDelays[0]);
-      print('*** ${DateTime.now().toUtc()} : Sleeping for ${monitor.connectDelays[1]}');
+      print(
+          '*** ${DateTime.now().toUtc()} : Sleeping for ${monitor.connectDelays[1]}');
       await Future.delayed(monitor.connectDelays[1]);
 
       await Future.delayed(Duration(milliseconds: 50)); // fudge factor
@@ -295,10 +301,10 @@ void main() {
       // make connections succeed again
       print('*** ${DateTime.now().toUtc()} : making connections succeed');
       when(() => mockMonitorOutboundConnectionFactory.createConnection(
-          fakeSecondaryAddress,
-          decryptPackets: true,
-          tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation))
+              fakeSecondaryAddress,
+              decryptPackets: true,
+              tlsKeysSavePath: fakeTlsKeysSavePath,
+              pathToCerts: fakeCertsLocation))
           .thenAnswer((_) async => mockOutboundConnection);
 
       expect(await monitor.currentStateStream.first, MonitorState.connected);
@@ -367,19 +373,17 @@ void main() {
       expect(numHeartbeatAttempts, 1);
     });
 
-    test(
-        'Test when monitor heartbeat response not received',
-        () async {
-          // Do one successful heartbeat
-          // Then fake a timeout on the next one
-          // When the timeout occurs, socket as marked done
-          // When the socket is marked done, monitor state changes
-          // There is then a brief delay before the next connect attempt
-          // We will make the first reconnect attempt fail
-          // We will make the second reconnect attempt succeed
-          // So we need to verify (1) monitor state changes to "notConnected"
-          // and then (2) monitor state changes back to "connected" after the
-          // reconnect, and then (3) we get another heartbeat
+    test('Test when monitor heartbeat response not received', () async {
+      // Do one successful heartbeat
+      // Then fake a timeout on the next one
+      // When the timeout occurs, socket as marked done
+      // When the socket is marked done, monitor state changes
+      // There is then a brief delay before the next connect attempt
+      // We will make the first reconnect attempt fail
+      // We will make the second reconnect attempt succeed
+      // So we need to verify (1) monitor state changes to "notConnected"
+      // and then (2) monitor state changes back to "connected" after the
+      // reconnect, and then (3) we get another heartbeat
       int numHeartbeatsSent = 0;
       bool sendHeartbeatResponse = true;
       when(() => mockOutboundConnection.write("noop:0\n"))
@@ -391,11 +395,13 @@ void main() {
         }
       });
 
-      atClientPreference.monitorHeartbeatResponseTimeout = Duration(milliseconds: 10);
+      atClientPreference.monitorHeartbeatResponseTimeout =
+          Duration(milliseconds: 10);
       atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 50);
       Duration timedOutDuration =
-      (atClientPreference.monitorHeartbeatResponseTimeout +
-              atClientPreference.monitorHeartbeatInterval) * 1.1;
+          (atClientPreference.monitorHeartbeatResponseTimeout +
+                  atClientPreference.monitorHeartbeatInterval) *
+              1.1;
 
       monitor.logger.level = 'info';
       await monitor.start();
@@ -463,7 +469,8 @@ void main() {
       int lastHeartbeatCount = numHeartbeatsSent;
       int additionalHeartbeatsToSend = 3;
       await Future.delayed(atClientPreference.monitorHeartbeatInterval * 3.5);
-      int expectedHeartbeatCount = lastHeartbeatCount + additionalHeartbeatsToSend;
+      int expectedHeartbeatCount =
+          lastHeartbeatCount + additionalHeartbeatsToSend;
       expect(numHeartbeatsSent >= expectedHeartbeatCount, true);
       expect(monitor.currentState, MonitorState.connected);
     });

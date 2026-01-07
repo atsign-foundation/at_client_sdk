@@ -30,7 +30,6 @@ void main() {
         currentAtSign,
         'wavi',
         AtClientPreference()
-          ..isLocalStoreRequired = true
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/commit',
         enrollmentId: enrollmentId,
@@ -74,12 +73,12 @@ void main() {
           ..data =
               atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey);
 
-    // Store cached sharedkey
+    // Store cached shared_key
     await atClient.getLocalSecondary()?.keyStore?.put(
         'cached:@alice:shared_key@bob',
         AtData()..data = atEncryptionResult?.result);
 
-    // Store cached sharedkey
+    // Store cached shared_key
     await atClient.getLocalSecondary()?.keyStore?.put(
         'public:publickey@alice',
         AtData()
