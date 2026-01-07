@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/preference/monitor_preference.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/response/response.dart' show AtResponse;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
@@ -15,249 +14,312 @@ import 'package:meta/meta.dart';
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
 ///
+/// When [start] is called, the expectation is that the Monitor will run
+/// constantly, reconnecting as required by network weather, until [stop] is
+/// called.
+///
+/// There are two statuses:
+/// [currentState] : the current status (connected / unconnected)
+/// [targetState] : the target status (connected / unconnected)
 class Monitor {
-  // Regex on with what the monitor is started
-  String? _regex;
-
   /// Capacity is represented in bytes.
   /// Throws [BufferOverFlowException] if data size exceeds 10MB.
   final _buffer = ByteBuffer(capacity: 10240000);
 
-  // Time epoch milliseconds of the last notification received on this monitor
-  int? _lastNotificationTime;
+  // Monitor connection status
+  MonitorState _currentState = MonitorState.notConnected;
+  MonitorState _targetState = MonitorState.notConnected;
 
-  final _monitorVerbResponseQueue = Queue();
+  MonitorState get currentState => _currentState;
 
-  // Status on the monitor
-  MonitorStatus status = MonitorStatus.notStarted;
+  MonitorState get targetState => _targetState;
 
-  late final AtSignLogger _logger;
+  StreamController<MonitorState> currentStateStreamController =
+      StreamController.broadcast();
 
-  bool _keepAlive = false;
+  Stream<MonitorState> get currentStateStream =>
+      currentStateStreamController.stream;
+  late final AtSignLogger logger;
 
-  late String _atSign;
+  final String atSign;
 
-  late Function _onError;
+  Future<void> Function(String jsonEncoded) handleNotification;
 
-  late Function _onResponse;
+  Future<int?> Function() getLastNotificationTime;
 
-  late Function _retryCallBack;
+  SecondaryAddressFinder secondaryAddressFinder;
 
-  late AtClientPreference _preference;
+  late AtClientPreference atClientPreference;
 
   OutboundConnection? _monitorConnection;
-
-  late RemoteSecondary _remoteSecondary;
+  Completer? _connectionDoneCompleter;
 
   final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
 
-  late MonitorOutboundConnectionFactory _monitorOutboundConnectionFactory;
-
-  bool _closeOpInProgress = false;
-
-  /// The time (milliseconds since epoch) that the last heartbeat message was sent
-  int _lastHeartbeatSentTime = 0;
-
-  int get lastHeartbeatSentTime => _lastHeartbeatSentTime;
-
-  /// The time (milliseconds since epoch) that the last heartbeat response was received
-  int _lastHeartbeatResponseTime = 0;
-
-  int get lastHeartbeatResponseTime => _lastHeartbeatResponseTime;
-
-  /// Monitor will send heartbeat 'no-op' messages periodically.
-  /// First heartbeat will be sent [_heartbeatInterval] after monitor has entered
-  /// [MonitorStatus.started] state, if it is still in the started state.
-  /// Subsequent heartbeats will be sent every [_heartbeatInterval] if the monitor
-  /// is still in started state.
-  /// If a heartbeat message doesn't get a response within one third of [_heartbeatInterval],
-  /// the monitor will set an errored state, destroy the socket, and call the
-  /// retryCallback
-  late Duration _heartbeatInterval;
-
-  Duration get heartbeatInterval => _heartbeatInterval;
+  late final MonitorOutboundConnectionFactory monitorOutboundConnectionFactory;
 
   final AtChops? atChops;
 
-  String? _enrollmentId;
+  final String? enrollmentId;
 
   final int newLineCodeUnit = 10;
   final int atCharCodeUnit = 64;
 
-  ///
-  /// Creates a [Monitor] object.
-  ///
-  /// [onResponse] function is called when a new batch of notifications are received from the server.
-  /// This cannot be null.
-  /// Example [onResponse] callback
-  /// ```
-  /// void onResponse(String notificationResponse) {
-  /// // add your notification processing logic
-  ///}
-  ///```
-  /// [onError] function is called when is some thing goes wrong with the processing.
-  /// For example this could be:
-  ///    - Unavailability of the network
-  ///    - Exception while running the code
-  /// This cannot be null.
-  /// Example [onError] callback
-  /// ```
-  /// void onError(Monitor monitor, Exception e) {
-  ///  // add your error handling logic
-  /// }
-  /// ```
-  /// After calling [onError] monitor would stop sending any more notifications. If the error is recoverable
-  /// and if [retry] is true the [Monitor] would continue and waits to recover from the error condition and not call [onError].
-  ///
-  /// For example if the app loses internet connection then [Monitor] would wait till the internet comes back and not call
-  /// [onError]
-  ///
-  /// When the [regex] is passed only those notifications matching the [regex] will be notified
-  /// When the [lastNotificationTime] is passed only those notifications AFTER the time value are notified.
-  /// This is expressed as EPOCH time milliseconds.
-  /// When [retry] is true
-  ////
-  Monitor(
-      Function onResponse,
-      Function onError,
-      String atSign,
-      AtClientPreference preference,
-      MonitorPreference monitorPreference,
-      Function retryCallBack,
-      {RemoteSecondary? remoteSecondary,
-      MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
-      Duration? monitorHeartbeatInterval,
-      this.atChops,
-      String? enrollmentId}) {
-    _logger = AtSignLogger('Monitor ($atSign)');
-    _onResponse = onResponse;
-    _onError = onError;
-    _preference = preference;
-    _atSign = atSign;
-    _regex = monitorPreference.regex;
-    _keepAlive = monitorPreference.keepAlive;
-    _lastNotificationTime = monitorPreference.lastNotificationTime;
-    _enrollmentId = enrollmentId;
-    _logger.finer('enrollmentId: $_enrollmentId');
-    _remoteSecondary = remoteSecondary ??
-        RemoteSecondary(atSign, preference,
-            atChops: atChops, enrollmentId: enrollmentId);
-    _retryCallBack = retryCallBack;
-    _monitorOutboundConnectionFactory =
+  Timer? heartbeatTimer;
+
+  static const defaultCommandTimeout = Duration(milliseconds: 2500);
+
+  static const List<Duration> defaultConnectDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+    Duration(seconds: 34),
+  ];
+
+  List<Duration> connectDelays;
+  int delayIx = 0;
+
+  Monitor({
+    required this.atSign,
+    required this.atClientPreference,
+    required this.atChops,
+    required this.enrollmentId,
+    required this.secondaryAddressFinder,
+    required this.handleNotification,
+    required this.getLastNotificationTime,
+    this.connectDelays = defaultConnectDelays,
+    MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
+  }) {
+    logger = AtSignLogger('Monitor ($atSign)');
+    logger.finer('enrollmentId: $enrollmentId');
+    this.monitorOutboundConnectionFactory =
         monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
-    _heartbeatInterval =
-        monitorHeartbeatInterval ?? preference.monitorHeartbeatInterval;
   }
 
-  /// Starts the monitor by establishing a new TCP/IP connection with the secondary server
-  /// If [lastNotificationTime] expressed as EPOCH milliseconds is passed, only those notifications occurred after
-  /// that time are notified.
-  /// Calling start on already started monitor would not cause any exceptions and it will have no side affects.
-  /// Calling start on monitor that is not started or erred will be started again.
-  /// Calling [Monitor#getStatus] would return the status of the [Monitor]
-  Future<void> start({int? lastNotificationTime}) async {
-    if (status == MonitorStatus.started) {
-      // Monitor already started
-      _logger.finer('Monitor is already running');
+  /// - Sets [targetState] to `connected`. Throws a [StateError] if
+  /// [targetState] is already `connected`, or [currentState] is already `connected`
+  ///
+  /// - Start a keep alive loop as follows:
+  /// - while [targetState] is `connected`
+  ///   - connect
+  ///   - startHeartbeat
+  ///   - wait for done
+  ///   - stopHeartbeat
+  ///   - if [targetState] is still `connected`, wait for a little time, with
+  ///     exponential backoff 1, 2, 3, 5, 8, 13, 21, 34 seconds and then 34
+  ///     seconds each time, resetting to 1 once a connection is successful.
+  Future<void> start() async {
+    if (targetState == MonitorState.connected) {
+      logger.shout('start() called, but targetStatus is already "connected"');
       return;
     }
-    // This enables start method to be called with lastNotificationTime on the same instance of Monitor
-    if (lastNotificationTime != null) {
-      _logger.info(
-          'starting monitor for $_atSign with lastNotificationTime: $lastNotificationTime');
-      _lastNotificationTime = lastNotificationTime;
-    }
-    try {
-      //1. Get a new outbound connection dedicated to monitor verb.
-      _monitorConnection = await _createNewConnection(
-          _atSign, _preference.rootDomain, _preference.rootPort);
-      runZonedGuarded(() {
-        _monitorConnection!.getSocket().listen(_messageHandler, onDone: () {
-          _logger.info(
-              'socket.listen onDone called. Will destroy socket, set status stopped, call retryCallback');
-          _callCloseStopAndRetry();
-        }, onError: (error) {
-          _logger.warning('socket.listen onError called with: $error');
-          _handleError(error);
-        });
-      }, (Object error, StackTrace stackTrace) {
-        _logger.warning(
-            'runZonedGuarded received socket error $error - calling _handleError');
-        _handleError(error);
-      });
-      await _authenticateConnection();
-      String cmd = _buildMonitorCommand();
-      _logger.info('SENDING: $cmd');
-      await _monitorConnection!.write(cmd);
-      status = MonitorStatus.started;
-      _logger.info(
-          'monitor started for $_atSign with last notification time: $_lastNotificationTime');
 
-      _scheduleHeartbeat();
-      return;
-    } catch (e) {
-      _handleError(e);
+    _targetState = MonitorState.connected;
+
+    unawaited(Future.delayed(Duration(milliseconds: 1), () {
+      stayConnected();
+    }));
+  }
+
+  @visibleForTesting
+  Future<void> closeConnection() async {
+    // stop heartbeat
+    stopHeartbeat();
+
+    if (_monitorConnection != null) {
+      await _monitorConnection!.close();
+
+      _monitorConnection = null;
+    }
+
+    if (_connectionDoneCompleter != null &&
+        !_connectionDoneCompleter!.isCompleted) {
+      _connectionDoneCompleter!.complete();
+    }
+
+    _currentState = MonitorState.notConnected;
+    currentStateStreamController.add(_currentState);
+  }
+
+  /// Stops the monitor. Call [Monitor#start] to start it again.
+  /// - If [currentState] is already `unconnected`, return
+  /// - If there's a heartbeatTimer running, cancel it
+  /// - close the [_monitorConnection]
+  /// - set [currentState] to `unconnected`
+  /// - set [targetState] to `unconnected`
+  void stop() {
+    _targetState = MonitorState.notConnected;
+
+    closeConnection();
+  }
+
+  void startHeartbeat() {
+    if (heartbeatTimer != null) {
+      logger.warning('startHeartbeat called but heartbeatTimer exists');
+      logger.warning('cancelling timer and restarting');
+      stopHeartbeat();
+    }
+    logger.info('Starting heartbeat');
+
+    heartbeatTimer = Timer(
+      atClientPreference.monitorHeartbeatInterval,
+      _sendHeartbeat,
+    );
+  }
+
+  void stopHeartbeat() {
+    if (heartbeatTimer != null) {
+      logger.info('Stopping heartbeat');
+      heartbeatTimer!.cancel();
+      heartbeatTimer = null;
     }
   }
 
-  /// Creates a delayed Future for the heartbeat to be sent [_heartbeatInterval] from now.
-  /// If the monitor status is not still 'started' when the Future executes, then the
-  /// heartbeat will not be sent.
-  /// If the heartbeat is sent when the Future executes, then
-  /// (1) a delayed Future is created to check, in [heartbeatInterval / 3] from now,
-  /// that a heartbeat response has been received, and
-  /// (2) we call _scheduleHeartbeat() again to schedule the next one to be sent
-  void _scheduleHeartbeat() {
-    if (status != MonitorStatus.started) {
-      _logger.info("status is $status : not scheduling next heartbeat");
-      return;
-    }
-    Future.delayed(_heartbeatInterval, () async {
-      if (status != MonitorStatus.started) {
-        _logger.info("status is $status : heartbeat will not be sent");
-      } else {
-        _lastHeartbeatSentTime = DateTime.now().millisecondsSinceEpoch;
-        // schedule a future to check if a timely heartbeat response is received
-        Future.delayed(
-            Duration(
-                milliseconds: (_heartbeatInterval.inMilliseconds / 3).floor()),
-            () async {
-          if (_lastHeartbeatResponseTime < _lastHeartbeatSentTime) {
-            _logger.warning(
-                'Heartbeat response not received within expected duration. '
-                'Heartbeat was sent at $_lastHeartbeatSentTime, '
-                'it is now ${DateTime.now().millisecondsSinceEpoch}, '
-                'last heartbeat response was received at $_lastHeartbeatResponseTime. '
-                'Will close connection, set status stopped, call retryCallback');
-            _callCloseStopAndRetry();
+  /// - while [targetState] is `connected`
+  ///   - connect, authenticate, issue monitor command
+  ///   - startHeartbeat
+  ///   - wait for done
+  ///   - stopHeartbeat
+  ///   - if [targetState] is still `connected`, wait for a little time, with
+  ///     exponential backoff 1, 2, 3, 5, 8, 13, 21, 34 seconds and then 34
+  ///     seconds each time, resetting to 1 once a connection is successful.
+  @visibleForTesting
+  Future<void> stayConnected() async {
+    while (targetState == MonitorState.connected) {
+      if (_monitorConnection != null) {
+        throw StateError('_monitorConnection should be null');
+      }
+      if (_connectionDoneCompleter != null) {
+        throw StateError('_connectionDoneCompleter should be null');
+      }
+      try {
+        logger.info('Connecting');
+        _connectionDoneCompleter = Completer();
+        // connect
+        _monitorConnection =
+            await monitorOutboundConnectionFactory.createConnection(
+                await secondaryAddressFinder.findSecondary(atSign),
+                decryptPackets: atClientPreference.decryptPackets,
+                pathToCerts: atClientPreference.pathToCerts,
+                tlsKeysSavePath: atClientPreference.tlsKeysSavePath);
+
+        runZonedGuarded(() {
+          _monitorConnection!.getSocket().listen(
+            _messageHandler,
+            onDone: () {
+              if (_connectionDoneCompleter != null &&
+                  !_connectionDoneCompleter!.isCompleted) {
+                _connectionDoneCompleter!.complete();
+              }
+            },
+            onError: (e) {
+              if (_connectionDoneCompleter != null &&
+                  !_connectionDoneCompleter!.isCompleted) {
+                _connectionDoneCompleter!.complete();
+              }
+            },
+          );
+        }, (Object error, StackTrace st) {
+          logger.shout('runZonedGuarded onError $error\nStack Trace:\n$st');
+          if (_connectionDoneCompleter != null &&
+              !_connectionDoneCompleter!.isCompleted) {
+            logger.shout('runZonedGuarded onError - completing doneCompleter');
+            _connectionDoneCompleter!.complete();
           }
         });
 
-        _logger.finest("sending heartbeat");
-        try {
-          // actually send the heartbeat
-          await _monitorConnection!.write("noop:0\n");
-          // schedule the next heartbeat to be sent
-          _scheduleHeartbeat();
-        } catch (e) {
-          _logger.warning("Exception sending heartbeat: $e");
-        }
+        int? lastNotificationTime = await getLastNotificationTime();
+        logger.info('Attempting connect with lastNotificationTime:'
+            ' $lastNotificationTime');
+
+        // authenticate
+        await _authenticateConnection();
+
+        // issue monitor command
+        var cmd = (MonitorVerbBuilder()
+              ..selfNotificationsEnabled = (true)
+              ..regex = (null)
+              ..lastNotificationTime = lastNotificationTime)
+            .buildCommand();
+        logger.info('SENDING: $cmd');
+        await _monitorConnection!.write(cmd);
+
+        logger.info(
+            'monitor started, last notification time: $lastNotificationTime');
+
+        _currentState = MonitorState.connected;
+        currentStateStreamController.add(_currentState);
+      } on SocketException catch (e) {
+        logger.shout('Failed to connect: ${e.message}');
+        await closeConnection();
+        _connectionDoneCompleter = null;
+      } catch (e) {
+        logger.shout('Failed to connect: $e');
+        await closeConnection();
+        _connectionDoneCompleter = null;
       }
-    });
+
+      if (currentState == MonitorState.connected) {
+        delayIx = 0;
+
+        // start heartbeat
+        startHeartbeat();
+
+        // wait for connection done
+        logger.info('stayConnected(): Waiting for Socket done');
+        await _connectionDoneCompleter!.future;
+        _connectionDoneCompleter = null;
+        logger.shout('stayConnected() : Socket done');
+
+        await closeConnection(); // also stops heartbeat
+      }
+
+      // if [targetStatus] is still `connected`, wait before continuing
+      if (targetState == MonitorState.connected) {
+        logger.shout('Will attempt reconnect in ${connectDelays[delayIx]}');
+        await Future.delayed(connectDelays[delayIx]);
+        if (delayIx < (connectDelays.length - 1)) {
+          delayIx++;
+        }
+      } else {
+        logger.info('targetState is $targetState - will not auto reconnect');
+      }
+    }
+
+    logger.shout('stayConnected() complete');
   }
 
-  void _callCloseStopAndRetry() {
-    if (_closeOpInProgress) {
-      _logger.info('Another closeStopAndRetry operation is in progress');
-      return;
-    }
-    try {
-      _closeOpInProgress = true;
-      status = MonitorStatus.stopped;
-      _monitorConnection!.close();
-      _retryCallBack();
-    } finally {
-      _closeOpInProgress = false;
+  /// - Send a heartbeat on the connection, wait for response
+  /// - If response received
+  ///   - set the Timer for the next heartbeat
+  /// - else
+  ///   - close the connection
+  void _sendHeartbeat() async {
+    if (currentState != MonitorState.connected) {
+      logger.shout("status is $currentState : heartbeat will not be sent");
+    } else {
+      logger.info("sending heartbeat");
+      try {
+        final AtResponse r = await sendCommand("noop:0\n",
+            timeout: atClientPreference.monitorHeartbeatResponseTimeout);
+        logger.info('Received heartbeat response: ${r.response}');
+        heartbeatTimer = Timer(
+          atClientPreference.monitorHeartbeatInterval,
+          _sendHeartbeat,
+        );
+      } on TimeoutException {
+        logger.shout('No heartbeat response after'
+            ' ${atClientPreference.monitorHeartbeatResponseTimeout}'
+            ' - closing unresponsive connection to atServer');
+        await closeConnection();
+      } catch (e) {
+        logger.shout('Heartbeat exception $e - closing connection to atServer');
+        await closeConnection();
+      }
     }
   }
 
@@ -266,130 +328,80 @@ class Monitor {
       throw AtClientException.message(
           'cannot authenticate monitor connection without at_chops set');
     }
-    await _monitorConnection!.write('from:$_atSign\n');
-    var fromResponse = await getQueueResponse();
-    if (fromResponse.isEmpty) {
-      throw UnAuthenticatedException('From response is empty');
+    AtResponse fromResponse = await sendCommand('from:$atSign\n');
+
+    if (fromResponse.isError) {
+      throw UnAuthenticatedException('Bad "from" response: $fromResponse');
     }
-    _logger.finer(
-        'Authenticating the monitor connection: from result:$fromResponse');
-    _logger.finer('Using AtChops to do the PKAM signing');
-    final atSigningInput = AtSigningInput(fromResponse)
-      ..signingAlgoType = _preference.signingAlgoType
-      ..hashingAlgoType = _preference.hashingAlgoType
+
+    final atSigningInput = AtSigningInput(fromResponse.response)
+      ..signingAlgoType = atClientPreference.signingAlgoType
+      ..hashingAlgoType = atClientPreference.hashingAlgoType
       ..signingMode = AtSigningMode.pkam;
+
     var signingResult = atChops!.sign(atSigningInput);
+
     var pkamBuilder = PkamVerbBuilder()
-      ..signingAlgo = _preference.signingAlgoType.name
-      ..hashingAlgo = _preference.hashingAlgoType.name
-      ..enrollmentlId = _enrollmentId
+      ..signingAlgo = atClientPreference.signingAlgoType.name
+      ..hashingAlgo = atClientPreference.hashingAlgoType.name
+      ..enrollmentlId = enrollmentId
       ..signature = signingResult.result;
-    var pkamCommand = pkamBuilder.buildCommand();
-    _logger.finer('Sending command $pkamCommand');
-    await _monitorConnection!.write(pkamCommand);
 
-    var pkamResponse = await getQueueResponse();
-    if (!pkamResponse.contains('success')) {
-      throw UnAuthenticatedException(
-          'Monitor connection authentication failed');
-    }
-    _logger.finer('Monitor connection authentication successful');
-  }
-
-  Future<OutboundConnection> _createNewConnection(
-      String toAtSign, String rootDomain, int rootPort) async {
-    //1. look up the secondary url for this atsign
-    var secondaryUrl = await _remoteSecondary.findSecondaryUrl();
-    if (secondaryUrl == null) {
-      throw Exception('Secondary url not found');
+    AtResponse pkamResponse = await sendCommand(pkamBuilder.buildCommand());
+    if (pkamResponse.isError || pkamResponse.response != 'success') {
+      throw UnAuthenticatedException('Bad "pkam" response: $fromResponse');
     }
 
-    //2. create a connection to secondary server
-    var outboundConnection =
-        await _monitorOutboundConnectionFactory.createConnection(secondaryUrl,
-            decryptPackets: _preference.decryptPackets,
-            pathToCerts: _preference.pathToCerts,
-            tlsKeysSavePath: _preference.tlsKeysSavePath);
-    return outboundConnection;
+    logger.info('Monitor connection authentication successful');
   }
 
-  ///Returns the response of the monitor verb queue.
   @visibleForTesting
-  Future<String> getQueueResponse({int maxWaitTimeInMillis = 30000}) async {
-    dynamic monitorResponse;
+  Completer<AtResponse>? requestCompleter;
 
-    var checkDelayMillis = 5;
-    var checkDelayDuration = Duration(milliseconds: checkDelayMillis);
-    var checkCount = maxWaitTimeInMillis / checkDelayMillis;
-    for (var i = 0; i < checkCount; i++) {
-      if (_monitorVerbResponseQueue.isNotEmpty) {
-        // result from another secondary is either data or a @<atSign>@ denoting complete
-        // of the handshake
-        monitorResponse = _defaultResponseParser
-            .parse(_monitorVerbResponseQueue.removeFirst());
-        break;
-      }
-      await Future.delayed(checkDelayDuration);
+  @visibleForTesting
+  Future<AtResponse> sendCommand(
+    String command, {
+    Duration timeout = defaultCommandTimeout,
+  }) async {
+    if (requestCompleter != null) {
+      throw StateError('Cannot send command,'
+          ' still waiting for response from previous command');
     }
-    if (monitorResponse == null) {
-      throw AtTimeoutException(
-          'Waited for $maxWaitTimeInMillis milliseconds and no response received');
+    if (_monitorConnection == null) {
+      throw StateError('No connection, cannot send command');
     }
-    // If monitor response contains error, return error
-    if (monitorResponse.isError) {
-      return '${monitorResponse.errorCode}: ${monitorResponse.errorDescription}';
+    if (!command.endsWith('\n')) {
+      throw ArgumentError('Commands must be terminated with \\n');
     }
-    return monitorResponse.response;
-  }
+    logger.info('Sending: ${command.trim()}');
 
-  String _buildMonitorCommand() {
-    var monitorVerbBuilder = MonitorVerbBuilder()
-      ..selfNotificationsEnabled = true;
-    if (_regex != null && _regex!.isNotEmpty) {
-      monitorVerbBuilder.regex = _regex;
-    }
-    if (_lastNotificationTime != null) {
-      monitorVerbBuilder.lastNotificationTime = _lastNotificationTime;
-    }
-    return monitorVerbBuilder.buildCommand();
-  }
+    requestCompleter = Completer();
 
-  /// Stops the monitor. Call [Monitor#start] to start it again.
-  void stop() {
-    status = MonitorStatus.stopped;
-    if (_monitorConnection != null) {
-      _monitorConnection!.close();
-    }
-  }
+    await _monitorConnection!.write(command);
 
-// Stops the monitor from receiving notification
-  MonitorStatus getStatus() {
-    return status;
+    try {
+      return await requestCompleter!.future.timeout(timeout);
+    } finally {
+      requestCompleter = null;
+    }
   }
 
   void _handleResponse(String response, Function callback) {
-    _logger.finer('received response on monitor: $response');
-    if (response.toString().startsWith('notification')) {
-      callback(response);
-    } else if (response.toString() == 'data:ok' ||
-        response.toString() == '@ok') {
-      _lastHeartbeatResponseTime = DateTime.now().millisecondsSinceEpoch;
-    } else {
-      _monitorVerbResponseQueue.add(response);
-    }
-  }
-
-  void _handleError(dynamic e) {
-    _monitorConnection?.close();
-    status = MonitorStatus.errored;
-    // Pass monitor and error
-    if (_keepAlive) {
-      _logger.info('Monitor error $e - calling the retryCallback');
-      _retryCallBack();
-    } else {
-      _logger.severe(
-          'Monitor error $e - but _keepAlive is false so monitor will NOT call the retryCallback');
-      _onError(e);
+    try {
+      logger.finer('received response on monitor: $response');
+      if (response.toString().startsWith('notification:')) {
+        callback(response);
+      } else {
+        if (requestCompleter != null && !requestCompleter!.isCompleted) {
+          requestCompleter!.complete(_defaultResponseParser.parse(response));
+        } else {
+          logger.shout('Received response on monitor: $response'
+              ' but have nowhere to send it');
+        }
+      }
+    } catch (e, st) {
+      logger.shout('Caught $e while handling received message $response');
+      logger.shout('Stack Trace:\n$st');
     }
   }
 
@@ -415,12 +427,12 @@ class Monitor {
 
           doing = '_messageHandler:_stripPrompt';
           result = _stripPrompt(result);
-          _logger.finer('RECEIVED $result');
+          logger.finer('RECEIVED $result');
 
           doing = '_messageHandler:_handleResponse';
-          _handleResponse(result, _onResponse);
+          _handleResponse(result, handleNotification);
         } catch (e) {
-          _logger.shout('$e from $doing while handling $result');
+          logger.shout('$e from $doing while handling $result');
         } finally {
           _buffer.clear();
         }
@@ -452,41 +464,20 @@ class Monitor {
     }
     return '$responsePrefix$response';
   }
-
-  /// NOT a part of API.
-  /// Used to populate data into the monitorVerbResponseQueue for unit testing
-  @visibleForTesting
-  void addMonitorResponseToQueue(String data) {
-    _monitorVerbResponseQueue.add(data);
-  }
 }
 
-enum MonitorStatus { notStarted, started, stopped, errored }
+enum MonitorState { connected, notConnected }
 
 class MonitorOutboundConnectionFactory {
-  Future<OutboundConnection> createConnection(String secondaryUrl,
+  Future<OutboundConnection> createConnection(SecondaryAddress address,
       {decryptPackets, pathToCerts, tlsKeysSavePath}) async {
-    var secondaryInfo = _getSecondaryInfo(secondaryUrl);
-    var host = secondaryInfo[0];
-    var port = secondaryInfo[1];
-
     SecureSocketConfig secureSocketConfig = SecureSocketConfig();
     secureSocketConfig.decryptPackets = decryptPackets;
     secureSocketConfig.pathToCerts = pathToCerts;
     secureSocketConfig.tlsKeysSavePath = tlsKeysSavePath;
 
     SecureSocket secureSocket = await SecureSocketUtil.createSecureSocket(
-        host, port, secureSocketConfig);
+        address.host, address.port.toString(), secureSocketConfig);
     return OutboundConnectionImpl(secureSocket);
-  }
-
-  List<String> _getSecondaryInfo(String url) {
-    var result = <String>[];
-    if (url.contains(':')) {
-      var arr = url.split(':');
-      result.add(arr[0]);
-      result.add(arr[1]);
-    }
-    return result;
   }
 }

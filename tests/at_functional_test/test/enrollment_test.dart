@@ -616,8 +616,8 @@ void main() {
           .listen((_) {});
       while ((atClientManager.atClient.notificationService
                   as NotificationServiceImpl)
-              .getMonitorStatus() !=
-          MonitorStatus.started) {
+              .monitor.currentState !=
+          MonitorState.connected) {
         await Future.delayed(Duration(milliseconds: 100));
       }
 

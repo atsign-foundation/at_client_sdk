@@ -65,7 +65,8 @@ class AtClientPreference {
   // Default chunk size for file encryption and decryption
   int fileEncryptionChunkSize = 4096;
 
-  Duration monitorHeartbeatInterval = Duration(seconds: 10);
+  Duration monitorHeartbeatInterval = Duration(seconds: 1);
+  Duration monitorHeartbeatResponseTimeout = Duration(seconds: 5);
 
   /// Time interval for the scheduled task that removes expired keys from local keyStore
   ///
