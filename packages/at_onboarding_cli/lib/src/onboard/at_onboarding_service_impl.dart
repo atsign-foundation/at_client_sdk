@@ -53,7 +53,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atOnboardingPreference.hiveStoragePath ??=
         HomeDirectoryUtil.getHiveStoragePath(_atSign,
             enrollmentId: enrollmentId);
-    atOnboardingPreference.isLocalStoreRequired = true;
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
@@ -571,7 +570,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
 
     if (atKeysFile.existsSync() && !allowOverwrite) {
-      throw StateError('atKeys file ${atKeysFile.path} already exists');
+      throw AtKeysFileExistsException(
+          'atKeys file ${atKeysFile.path} already exists');
     }
 
     logger.finer('Generating keys file at ${atKeysFile.path}'
