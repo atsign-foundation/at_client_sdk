@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Simple data structure whose JSON is transmitted as the payload of the
 /// notification which is sent from the requester to the responder
 class AtRpcReq {
@@ -22,7 +24,7 @@ class AtRpcReq {
   }
 
   @override
-  String toString() => toJson().toString();
+  String toString() => jsonEncode(toJson());
 }
 
 /// The types of responses which the responder can send back to the requester
@@ -97,5 +99,5 @@ class AtRpcResp {
       };
 
   @override
-  String toString() => toJson().toString();
+  String toString() => jsonEncode(toJson());
 }
