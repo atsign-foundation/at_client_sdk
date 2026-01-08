@@ -39,19 +39,15 @@ class AtEnrollmentImpl implements AtEnrollment {
     AtEnrollmentResponse atEnrollmentResponse;
     switch (enrollmentRequest) {
       case FirstEnrollmentRequest _:
-        atEnrollmentResponse =
-            await _handleFirstEnrollmentRequest(enrollmentRequest, atLookUp);
+        atEnrollmentResponse = await _handleFirstEnrollmentRequest(enrollmentRequest, atLookUp);
         break;
       case AtEnrollmentRequest _:
-        atEnrollmentResponse =
-            await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
+        atEnrollmentResponse = await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
       default:
-        _addProgress('enrollment', 'Invalid Enrollment request received',
-            ProgressEventType.error);
+        _addProgress('enrollment', 'Invalid Enrollment request received', ProgressEventType.error);
         throw InvalidRequestException('Invalid Enrollment request received');
     }
-    _addProgress('enrollment', 'Enrollment request submitted',
-        ProgressEventType.success);
+    _addProgress('enrollment', 'Enrollment request submitted', ProgressEventType.success);
     return atEnrollmentResponse;
   }
 

@@ -48,12 +48,12 @@ void main() {
         () async {
       var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
       var atAuth = AtAuth.create();
-      final onBoardingRequest = AtOnboardingRequest(apkamAtSign,
-          rootDomain: AtRootDomain('vip.ve.atsign.zone', 64),
-          atKeysIo: FileAtKeysIo(
-              filePath: (atsign) => 'test/testData/$atsign.atKeys'))
+      final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
-        ..deviceName = 'pixel1';
+        ..deviceName = 'pixel1'
+        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
+        ..atKeysIo =
+            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
       // onboard with enable enrollment set
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
@@ -63,19 +63,28 @@ void main() {
       expect(atOnboardingResponse.enrollmentId, isNotEmpty);
 
       // auth using generated keysFile
-      var atAuthResponse = await atAuth.authenticate(AtAuthRequest(apkamAtSign,
-          atKeysIo: FileAtKeysIo(
-              filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-          rootDomain: AtRootDomain('vip.ve.atsign.zone', 64)));
-
+      var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
+        apkamAtSign,
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
-      AtClient? atClient = atAuthResponse.atClient!;
+      // create atclient instance
+      var atClientPreference = AtClientPreference()
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..commitLogPath = 'test/hive/commit/'
+        ..hiveStoragePath = 'test/hive/client'
+        ..isLocalStoreRequired = true;
 
-      var scanResult = await atClient
+      final atClientManager = await AtClientManager(apkamAtSign)
+          .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
+              atChops: atAuth.atChops);
+      //var scanResult = await atClientManager.atClient.getKeys();
+      var scanResult = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand('scan\n', auth: true);
+      final atClient = atClientManager.atClient;
       // check for keys in __manage namespace
       expect(
           scanResult?.contains(
@@ -338,12 +347,22 @@ void main() {
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
 
+      // Get AtChops from the AtAuthKeys
+      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+          encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
+      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
+      AtChopsKeys atChopsKeys =
+          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
+      AtChops atChops = AtChopsImpl(atChopsKeys);
+
       // Authenticate the atSign
-      AtAuth atAuth = AtAuth.create();
+      AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        namespace: 'wavi',
-        atAuthKeys: atEnrollmentResponse.atAuthKeys!,
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -356,19 +375,30 @@ void main() {
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
 
-      AtClient atClient = atAuthResponse.atClient!;
+      // After authentication is successful, create an instance of atClient with enrollment Id
+      // to perform put operation.
+      await AtClientManager.getInstance().setCurrentAtSign(
+          atSign, namespace, TestUtils.getPreference(atSign),
+          atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
       AtKey atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
-      String value = '12345';
-      AtResponse atResponse = await atClient.putText(atKey, value);
+      String value = '123';
+      AtResponse atResponse =
+          await AtClientManager.getInstance().atClient.putText(atKey, value);
       expect(atResponse.response, isNotEmpty);
 
       // Insert key which DO NOT have access to namespace authorized by enrollment.
       atKey = AtKey.self('phone', namespace: 'buzz', sharedBy: atSign).build();
-      expect(() async => await atClient.putText(atKey, value),
-          throwsA(predicate((dynamic e) => e is AtClientException)));
+      expect(
+          () async => await AtClientManager.getInstance()
+              .atClient
+              .putText(atKey, value),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message ==
+                  'Cannot perform update on phone.buzz@alice🛠 due to insufficient privilege')));
     });
 
     test(
@@ -428,8 +458,7 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        atKeysIo:
-            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -454,10 +483,9 @@ void main() {
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
-        atSign,
-        atClientManager.atClient.getPreferences()!.rootDomain,
-        atClientManager.atClient.getPreferences()!.rootPort,
-      );
+          atSign,
+          atClientManager.atClient.getPreferences()!.rootDomain,
+          atClientManager.atClient.getPreferences()!.rootPort);
 
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
           atSign: atSign,
@@ -496,18 +524,40 @@ void main() {
       // Insert a key with wavi and buzz namespace for atClient.get to fetch the data
       // Run AtClient.get before authenticating with enrollment because enrollment has only
       // read access.
+      AtKey atKey =
+          AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
+      String value = '12345';
+      AtResponse putWaviKeyResponse =
+          await AtClientManager.getInstance().atClient.putText(atKey, value);
+      expect(putWaviKeyResponse.response, isNotEmpty);
+
+      // Put key with buzz namespace
+      atKey = AtKey.self('mobile', namespace: 'buzz', sharedBy: atSign).build();
+      value = '99899';
+      AtResponse putBuzzKeyResponse =
+          await AtClientManager.getInstance().atClient.putText(atKey, value);
+      expect(putBuzzKeyResponse.response, isNotEmpty);
+
+      // Set AtClient to null and authenticate with the new auth keys generated for enrollment
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
 
-      // Authenticate the atSign
-      AtAuth atAuth = AtAuth.create();
-      AtAuthRequest atAuthRequest = AtAuthRequest(
-        atSign,
-        namespace: 'wavi',
-        atAuthKeys: atEnrollmentResponse.atAuthKeys!,
-      );
+      // Get AtChops from the AtAuthKeys
+      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+          encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
+      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
+      AtChopsKeys atChopsKeys =
+          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+      // atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
+      AtChops atChops = AtChopsImpl(atChopsKeys);
 
+      // Authenticate the atSign
+      AtAuth atAuth = AtAuth.create(atChops: atChops);
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
+      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
@@ -516,29 +566,45 @@ void main() {
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
-      AtClient atClient = atAuthResponse.atClient!;
+
+      // After authentication is successful, create an instance of atClient with enrollment Id
+      // to perform put operation.
+      await AtClientManager.getInstance().setCurrentAtSign(
+          atSign, namespace, TestUtils.getPreference(atSign),
+          atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
       // Since the enrollment has only read access, should throw an exception.
-			//TODO 2025-12-19: fix these tests, other tests are interfering. 
       AtKey putAtKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
 
-      expect(() async => await atClient.putText(putAtKey, '123'),
-          throwsA(predicate((dynamic e) => e is AtClientException)));
+      expect(
+          () async => await AtClientManager.getInstance()
+              .atClient
+              .putText(putAtKey, '123'),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message.contains(
+                  'Cannot perform update on phone.wavi$atSign due to insufficient privilege'))));
 
       // Get the key which does not have access to namespace and should throw an exception.
-      AtKey getBuzzKey =
+      AtKey getBuzzKey = atKey =
           AtKey.self('mobile', namespace: 'buzz', sharedBy: atSign).build();
 
-      expect(() async => await atClient.get(getBuzzKey),
-          throwsA(predicate((dynamic e) => e is AtClientException)));
+      expect(
+          () async =>
+              await AtClientManager.getInstance().atClient.get(getBuzzKey),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message.contains(
+                  'Cannot perform llookup on mobile.buzz$atSign due to insufficient privilege'))));
 
       // Get the key which has access to namespace
-      AtKey getWaviKey =
+      AtKey getWaviKey = atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
 
-      AtValue atValue = await atClient.get(getWaviKey);
+      AtValue atValue =
+          await AtClientManager.getInstance().atClient.get(getWaviKey);
       expect(atValue.value, '12345');
     });
   });
