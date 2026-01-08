@@ -18,3 +18,8 @@ class InvalidResourceException extends AtOnboardingException {
   InvalidResourceException(super.message,
       {super.intent, super.exceptionScenario});
 }
+
+class AtKeysFileExistsException extends AtOnboardingException {
+  AtKeysFileExistsException(super.message,
+      {super.intent, super.exceptionScenario});
+}
