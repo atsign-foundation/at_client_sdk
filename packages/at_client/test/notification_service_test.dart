@@ -11,10 +11,10 @@ import 'package:at_client/src/transformer/request_transformer/notify_request_tra
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    hide AtNotification;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:uuid/uuid.dart';
 
@@ -45,23 +45,23 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
 
 class FakeMonitor extends Fake implements Monitor {
   @override
-  MonitorState currentState = MonitorState.notConnected;
+  NotificationListenerState currentState =
+      NotificationListenerState.notConnected;
 
   @override
-  MonitorState targetState = MonitorState.notConnected;
+  NotificationListenerState targetState =
+      NotificationListenerState.notConnected;
 
   @override
   Future<void> start() async {
-    print('FakeMonitor started');
-    currentState = MonitorState.connected;
-    targetState = MonitorState.connected;
+    currentState = NotificationListenerState.listening;
+    targetState = NotificationListenerState.listening;
   }
 
   @override
   Future<void> stop() async {
-    print('FakeMonitor started');
-    currentState = MonitorState.notConnected;
-    targetState = MonitorState.notConnected;
+    currentState = NotificationListenerState.notConnected;
+    targetState = NotificationListenerState.notConnected;
   }
 }
 
@@ -106,7 +106,7 @@ void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   SharedKeyDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
   AtClientManager mockAtClientManager = MockAtClientManager();
-  FakeMonitor mockMonitor = FakeMonitor();
+  FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   AtKeyEncryptionManager mockAtKeyEncryptionManager =
@@ -505,7 +505,7 @@ void main() {
         'A test to verify notification text is decrypted when isEncrypted is set to true',
         () async {
       var isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:encryptedValue',
           '@alice',
@@ -531,7 +531,7 @@ void main() {
         'A test to verify notification text is not decrypted when isEncrypted is set to false',
         () async {
       var isEncrypted = false;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:encryptedValue',
           '@alice',
@@ -557,7 +557,7 @@ void main() {
         'A test to verify notification value is decrypted when isEncrypted is set to null',
         () async {
       bool? isEncrypted;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           'key-1',
           '@alice',
@@ -583,7 +583,7 @@ void main() {
         'A test to verify notification value is decrypted when isEncrypted is set to true',
         () async {
       bool isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           'key-1',
           '@alice',
@@ -609,7 +609,7 @@ void main() {
         'A test to verify notification value is not decrypted when isEncrypted is set to false',
         () async {
       var isEncrypted = false;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           'key-1',
           '@alice',
@@ -635,7 +635,7 @@ void main() {
         'A test to verify notification value is not decrypted when isEncrypted is set to true and should decrypt is false',
         () async {
       var isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           'key-1',
           '@alice',
@@ -659,7 +659,7 @@ void main() {
 
     test('A test to verify notification is returned as is', () async {
       var isEncrypted = false;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           'key-1',
           '@alice',
@@ -681,7 +681,7 @@ void main() {
 
     test('A test to verify the reserved key is not decrypted', () async {
       var isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:shared_key@alice',
           '@alice',
@@ -741,7 +741,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.atKeyEncryptionManager =
           mockAtKeyEncryptionManager;
@@ -783,7 +783,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.atKeyEncryptionManager =
           mockAtKeyEncryptionManager;
@@ -803,7 +803,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => AtClientPreference()..maxDataSize = 1);
@@ -835,7 +835,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       NotificationParams notificationParams =
           NotificationParams.forText('Hello bob', '@bob');
@@ -862,7 +862,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
@@ -877,13 +877,89 @@ void main() {
     });
   });
 
+  group('Verify basic monitor interactions', () {
+    setUp(() {
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = false
+            ..monitorAutoStart = false);
+
+      registerFallbackValue(AtKey());
+      when(() => mockAtClientImpl.put(any(), any()))
+          .thenAnswer((_) async => true);
+    });
+
+    test('Verify lastReceipt', () async {
+      DateTime testStartTime = DateTime.now().toUtc();
+
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+
+      var atNotification = AtNotification(
+          '124',
+          '@bob:some.thing.lolz.app@alice',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          false,
+          value: 'Got it');
+
+      String fromAtServer =
+          'notification: ${jsonEncode(atNotification.toJson())}\n'
+          '@${mockAtClientImpl.getCurrentAtSign()}@';
+      ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+
+      expect(ns.lastReceipt, isNotNull);
+      expect(ns.lastReceipt!.microsecondsSinceEpoch,
+          lessThan(DateTime.now().microsecondsSinceEpoch));
+      expect(ns.lastReceipt!.microsecondsSinceEpoch,
+          greaterThan(testStartTime.microsecondsSinceEpoch));
+    });
+
+    test('Verify monitor delivers notification', () async {
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+
+      var atNotification = AtNotification(
+          '124',
+          '@bob:some.thing.lolz.app@alice',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          false,
+          value: 'Got it');
+
+      List<AtNotification> received = [];
+      var notificationStream =
+          ns.subscribe(regex: '.lolz.app', shouldDecrypt: false);
+      notificationStream.listen((AtNotification n) async {
+        received.add(n);
+      });
+
+      String fromAtServer =
+          'notification: ${jsonEncode(atNotification.toJson())}\n'
+          '@${mockAtClientImpl.getCurrentAtSign()}@';
+      ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+
+      await Future.delayed(Duration(milliseconds: 1));
+      expect(received, isNotEmpty);
+      expect(received[0].value, 'Got it');
+    });
+  });
+
   group('A group of tests to validate notification subscribe method', () {
     test('NotificationService subscribe returns a new stream for a new regex',
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
           regex: '.wavi', shouldDecrypt: false);
@@ -906,7 +982,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
           regex: '.wavi', shouldDecrypt: false);
@@ -930,7 +1006,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -957,7 +1033,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -997,7 +1073,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -1021,7 +1097,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -1063,7 +1139,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.stopAllSubscriptions();
       expect(await notificationServiceImpl.getLastNotificationTime(), null);
@@ -1087,7 +1163,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1114,13 +1190,13 @@ void main() {
             ..fetchOfflineNotifications = true);
 
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
@@ -1153,13 +1229,13 @@ void main() {
         () async {
       registerFallbackValue(FakeAtKey());
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
@@ -1192,13 +1268,13 @@ void main() {
 
       registerFallbackValue(lastNotificationAtKey);
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
@@ -1247,24 +1323,6 @@ void main() {
       expect(lastReceivedNotification.toString(),
           service.lastReceivedNotificationAtKey.toString());
       expect(lastReceivedNotification.isLocal, true);
-    });
-  });
-
-  group('Tests for monitorRetry', () {
-    setUpAll(() {
-      when(() => mockAtClientManager.atClient)
-          .thenAnswer((_) => mockAtClientImpl);
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
-
-      registerFallbackValue(FakeAtKey());
-      when(() => mockAtClientImpl.get(any()))
-          .thenAnswer((_) async => Future.value(AtValue()));
-
-      when(() => mockAtClientImpl.put(any(), any()))
-          .thenAnswer((_) async => true);
     });
   });
 }

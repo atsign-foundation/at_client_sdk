@@ -21,8 +21,8 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:version/version.dart';
 
-class NotificationServiceImpl
-    implements NotificationService, AtSignChangeListener {
+class NotificationServiceImpl extends NotificationService
+    implements AtSignChangeListener {
   final Map<NotificationConfig, StreamController> _streamListeners =
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
@@ -36,6 +36,7 @@ class NotificationServiceImpl
   final AtClient atClient;
   late final Monitor monitor;
   late final AtSignLogger logger;
+  DateTime? _lastReceipt;
 
   @visibleForTesting
   late AtKeyEncryptionManager atKeyEncryptionManager;
@@ -49,12 +50,14 @@ class NotificationServiceImpl
   /// Returns the currentAtSign associated with the NotificationService
   String get atSign => atClient.getCurrentAtSign()!;
 
-  static Future<NotificationService> create(AtClient atClient,
-      {required AtClientManager atClientManager, Monitor? monitor}) async {
+  /// - [monitor] is providable for unit test purposes
+  static Future<NotificationService> create(
+    AtClient atClient, {
+    required AtClientManager atClientManager,
+    Monitor? monitor,
+  }) async {
     final notificationService = NotificationServiceImpl._(
         atClientManager: atClientManager, atClient: atClient, monitor: monitor);
-    // We used to call _init() at this point which would start the monitor, but now we
-    // call _init() from the [subscribe] method
     return notificationService;
   }
 
@@ -65,14 +68,13 @@ class NotificationServiceImpl
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
-    logger.finer('enrollmentId: ${atClient.enrollmentId}');
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,
           atClientPreference: atClient.getPreferences()!,
           atChops: atClient.atChops,
           enrollmentId: atClient.enrollmentId,
-          handleNotification: _internalNotificationCallback,
+          handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
           secondaryAddressFinder: atClientManager.secondaryAddressFinder!,
         );
@@ -82,32 +84,6 @@ class NotificationServiceImpl
             namespace: atClient.getPreferences()!.namespace)
         .build();
     atKeyEncryptionManager = AtKeyEncryptionManager(atClient);
-  }
-
-  /// Simple state to prevent _init() running more than once *concurrently*
-  bool _initializing = false;
-
-  Future<void> _init() async {
-    // Note that it is safe to call _init() more than once, sequentially, because it only does two things,
-    // and both of those things are safe guarded:
-    // (1) calls _startMonitor() - which won't do anything if the monitor is already started
-    // (2) creates a connectivity listener and subscription - but only if _connectivityListener is currently null
-    if (_initializing) {
-      return;
-    }
-    try {
-      _initializing = true;
-      logger.finer('notification service _init()');
-
-      if (monitor.targetState != MonitorState.connected) {
-        await monitor.start();
-      }
-
-      logger.finer('monitor targetState: ${monitor.targetState}'
-          ' currentState: ${monitor.currentState}');
-    } finally {
-      _initializing = false;
-    }
   }
 
   /// Return the last received notification DateTime in epochMillis when
@@ -192,23 +168,27 @@ class NotificationServiceImpl
   }
 
   @override
-  void stopAllSubscriptions() {
-    logger.finer(
-        'stopAllSubscriptions() called - stopping monitor, closing streams');
-    monitor.stop();
+  void stopAllSubscriptions({bool stopNotificationsListener = true}) {
+    if (stopNotificationsListener) {
+      monitor.stop();
+    }
+
     _streamListeners.forEach((regex, streamController) {
       if (!streamController.isClosed) () => streamController.close();
     });
     _streamListeners.clear();
   }
 
-  Future<void> _internalNotificationCallback(String notificationJSON) async {
+  final notificationParser = NotificationResponseParser();
+
+  @visibleForTesting
+  Future<void> handleNotificationReceipt(String notificationJSON) async {
     try {
       logger.finest('DEBUG: $notificationJSON');
 
-      final notificationParser = NotificationResponseParser();
-      final atNotifications = await notificationParser
+      final atNotifications = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
+      _lastReceipt = DateTime.now().toUtc();
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
@@ -435,10 +415,18 @@ class NotificationServiceImpl
     // statsNotification message is received, and a sync request is queued.
     // In order to compensate for that, the SyncServiceImpl itself now queues a sync request
     // when it is initialized.
-    if (regex == 'statsNotification') {
-      Future.delayed(Duration(seconds: 30), () async => _init());
-    } else {
-      _init();
+    //
+    // Additionally, in order to give application code full control over the
+    // lifecycle of the notifications listener, we will only start the monitor
+    // for subscriptions when AtClientPreference.autoStartMonitor] is true,
+    // which it is by default (legacy behaviour). This gives application code
+    // much better clear control over the notification listening lifecycle.
+    if (atClient.getPreferences()?.monitorAutoStart == true) {
+      if (regex == 'statsNotification') {
+        Future.delayed(Duration(seconds: 30), () async => startListening());
+      } else {
+        startListening();
+      }
     }
     return atNotificationStream.stream as Stream<AtNotification>;
   }
@@ -546,4 +534,38 @@ class NotificationServiceImpl
       ..expiresAtInEpochMillis =
           DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
   }
+
+  @override
+  void startListening() async {
+    if (monitor.targetState != NotificationListenerState.listening) {
+      logger.info('startListening() called: starting notification listener');
+      await monitor.start();
+    } else {
+      logger.info('startListening() called, but already listening');
+    }
+  }
+
+  @override
+  void stopListening() {
+    if (monitor.targetState != NotificationListenerState.notConnected) {
+      logger.info('stopListening() called: stopping notification listener');
+      monitor.stop();
+    } else {
+      logger.info('stopListening() called, but'
+          ' target state is already ${monitor.targetState}');
+    }
+  }
+
+  @override
+  NotificationListenerState get currentListenerState => monitor.currentState;
+
+  @override
+  NotificationListenerState get targetListenerState => monitor.targetState;
+
+  @override
+  DateTime? get lastReceipt => _lastReceipt;
+
+  @override
+  Stream<NotificationListenerState> get currentListenerStateStream =>
+      monitor.currentStateStream;
 }

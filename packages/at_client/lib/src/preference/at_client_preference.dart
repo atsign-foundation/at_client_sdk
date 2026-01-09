@@ -81,6 +81,15 @@ class AtClientPreference {
   /// See also [monitorHeartbeatInterval]
   Duration monitorHeartbeatResponseTimeout = Duration(seconds: 10);
 
+  /// - when true, then the notifications monitor will be started either the
+  /// first time that [NotificationService.subscribe] is called by the
+  /// application code, or 30 seconds after creation of the
+  /// [NotificationService] if there have been no subscriptions.
+  /// - when false, then the notifications monitor
+  /// will not be started until explicitly requested to do so by the
+  /// application calling [NotificationService.startListening]
+  bool monitorAutoStart = true;
+
   /// Time interval for the scheduled task that removes expired keys from local keyStore
   ///
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]

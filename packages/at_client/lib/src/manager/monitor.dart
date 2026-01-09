@@ -27,17 +27,19 @@ class Monitor {
   final _buffer = ByteBuffer(capacity: 10240000);
 
   // Monitor connection status
-  MonitorState _currentState = MonitorState.notConnected;
-  MonitorState _targetState = MonitorState.notConnected;
+  NotificationListenerState _currentState =
+      NotificationListenerState.notConnected;
+  NotificationListenerState _targetState =
+      NotificationListenerState.notConnected;
 
-  MonitorState get currentState => _currentState;
+  NotificationListenerState get currentState => _currentState;
 
-  MonitorState get targetState => _targetState;
+  NotificationListenerState get targetState => _targetState;
 
-  StreamController<MonitorState> currentStateStreamController =
+  StreamController<NotificationListenerState> currentStateStreamController =
       StreamController.broadcast();
 
-  Stream<MonitorState> get currentStateStream =>
+  Stream<NotificationListenerState> get currentStateStream =>
       currentStateStreamController.stream;
   late final AtSignLogger logger;
 
@@ -66,6 +68,8 @@ class Monitor {
   final int atCharCodeUnit = 64;
 
   Timer? heartbeatTimer;
+  DateTime? lastReceipt;
+  DateTime? connectedAt;
 
   static const defaultCommandTimeout = Duration(milliseconds: 2500);
 
@@ -113,12 +117,12 @@ class Monitor {
   ///     exponential backoff 1, 2, 3, 5, 8, 13, 21, 34 seconds and then 34
   ///     seconds each time, resetting to 1 once a connection is successful.
   Future<void> start() async {
-    if (targetState == MonitorState.connected) {
+    if (targetState == NotificationListenerState.listening) {
       logger.shout('start() called, but targetStatus is already "connected"');
       return;
     }
 
-    _targetState = MonitorState.connected;
+    _targetState = NotificationListenerState.listening;
 
     unawaited(Future.delayed(Duration(milliseconds: 1), () {
       stayConnected();
@@ -141,8 +145,9 @@ class Monitor {
       _connectionDoneCompleter!.complete();
     }
 
-    _currentState = MonitorState.notConnected;
+    _currentState = NotificationListenerState.notConnected;
     currentStateStreamController.add(_currentState);
+    connectedAt = null;
   }
 
   /// Stops the monitor. Call [Monitor#start] to start it again.
@@ -152,7 +157,7 @@ class Monitor {
   /// - set [currentState] to `unconnected`
   /// - set [targetState] to `unconnected`
   void stop() {
-    _targetState = MonitorState.notConnected;
+    _targetState = NotificationListenerState.notConnected;
 
     closeConnection();
   }
@@ -167,7 +172,7 @@ class Monitor {
 
     heartbeatTimer = Timer(
       atClientPreference.monitorHeartbeatInterval,
-      _sendHeartbeat,
+      _heartbeat,
     );
   }
 
@@ -189,7 +194,7 @@ class Monitor {
   ///     seconds each time, resetting to 1 once a connection is successful.
   @visibleForTesting
   Future<void> stayConnected() async {
-    while (targetState == MonitorState.connected) {
+    while (targetState == NotificationListenerState.listening) {
       if (_monitorConnection != null) {
         throw StateError('_monitorConnection should be null');
       }
@@ -209,7 +214,7 @@ class Monitor {
 
         runZonedGuarded(() {
           _monitorConnection!.getSocket().listen(
-            _messageHandler,
+            onSocketDataReceipt,
             onDone: () {
               if (_connectionDoneCompleter != null &&
                   !_connectionDoneCompleter!.isCompleted) {
@@ -233,8 +238,6 @@ class Monitor {
         });
 
         int? lastNotificationTime = await getLastNotificationTime();
-        logger.info('Attempting connect with lastNotificationTime:'
-            ' $lastNotificationTime');
 
         // authenticate
         await _authenticateConnection();
@@ -245,25 +248,26 @@ class Monitor {
               ..regex = (null)
               ..lastNotificationTime = lastNotificationTime)
             .buildCommand();
-        logger.info('SENDING: $cmd');
+        logger.info('SENDING: ${cmd.trim()}');
         await _monitorConnection!.write(cmd);
 
         logger.info(
             'monitor started, last notification time: $lastNotificationTime');
 
-        _currentState = MonitorState.connected;
+        _currentState = NotificationListenerState.listening;
         currentStateStreamController.add(_currentState);
+        connectedAt = DateTime.now();
       } on SocketException catch (e) {
-        logger.shout('Failed to connect: ${e.message}');
+        logger.info('Failed to connect: ${e.message}');
         await closeConnection();
         _connectionDoneCompleter = null;
       } catch (e) {
-        logger.shout('Failed to connect: $e');
+        logger.info('Failed to connect: $e');
         await closeConnection();
         _connectionDoneCompleter = null;
       }
 
-      if (currentState == MonitorState.connected) {
+      if (currentState == NotificationListenerState.listening) {
         delayIx = 0;
 
         // start heartbeat
@@ -273,14 +277,14 @@ class Monitor {
         logger.info('stayConnected(): Waiting for Socket done');
         await _connectionDoneCompleter!.future;
         _connectionDoneCompleter = null;
-        logger.shout('stayConnected() : Socket done');
+        logger.info('stayConnected() : Socket done');
 
         await closeConnection(); // also stops heartbeat
       }
 
       // if [targetStatus] is still `connected`, wait before continuing
-      if (targetState == MonitorState.connected) {
-        logger.shout('Will attempt reconnect in ${connectDelays[delayIx]}');
+      if (targetState == NotificationListenerState.listening) {
+        logger.info('Will attempt reconnect in ${connectDelays[delayIx]}');
         await Future.delayed(connectDelays[delayIx]);
         if (delayIx < (connectDelays.length - 1)) {
           delayIx++;
@@ -290,34 +294,53 @@ class Monitor {
       }
     }
 
-    logger.shout('stayConnected() complete');
+    logger.info('stayConnected() complete');
   }
 
+  final Duration aMinute = const Duration(seconds: 60);
+
+  /// Heartbeat checking
+  ///
   /// - Send a heartbeat on the connection, wait for response
   /// - If response received
+  ///   - if we've been connected for >= 60 seconds, verify we've received a
+  ///   notification within that time. (Server currently always sends
+  ///   statsNotifications - in future it will send small heartbeat
+  ///   notifications once every 30 seconds)
   ///   - set the Timer for the next heartbeat
   /// - else
   ///   - close the connection
-  void _sendHeartbeat() async {
-    if (currentState != MonitorState.connected) {
-      logger.shout("status is $currentState : heartbeat will not be sent");
+  void _heartbeat() async {
+    if (currentState != NotificationListenerState.listening) {
+      logger.info("status is $currentState : heartbeat will not be sent");
     } else {
-      logger.info("sending heartbeat");
+      logger.finer("sending heartbeat");
       try {
         final AtResponse r = await sendCommand("noop:0\n",
             timeout: atClientPreference.monitorHeartbeatResponseTimeout);
-        logger.info('Received heartbeat response: ${r.response}');
+        logger.finer('Received heartbeat response: ${r.response}');
+
+        DateTime now = DateTime.now().toUtc();
+        if (connectedAt != null && now.difference(connectedAt!) > aMinute) {
+          if (lastReceipt == null || now.difference(lastReceipt!) > aMinute) {
+            logger.shout('No notification received in past minute'
+                ' - closing possibly misbehaving connection to atServer');
+            await closeConnection();
+          } else {
+            logger.info('All is well: lastReceipt was $lastReceipt');
+          }
+        }
         heartbeatTimer = Timer(
           atClientPreference.monitorHeartbeatInterval,
-          _sendHeartbeat,
+          _heartbeat,
         );
       } on TimeoutException {
-        logger.shout('No heartbeat response after'
+        logger.info('No heartbeat response after'
             ' ${atClientPreference.monitorHeartbeatResponseTimeout}'
             ' - closing unresponsive connection to atServer');
         await closeConnection();
       } catch (e) {
-        logger.shout('Heartbeat exception $e - closing connection to atServer');
+        logger.info('Heartbeat exception $e - closing connection to atServer');
         await closeConnection();
       }
     }
@@ -373,7 +396,7 @@ class Monitor {
     if (!command.endsWith('\n')) {
       throw ArgumentError('Commands must be terminated with \\n');
     }
-    logger.info('Sending: ${command.trim()}');
+    logger.finer('Sending: ${command.trim()}');
 
     requestCompleter = Completer();
 
@@ -386,11 +409,12 @@ class Monitor {
     }
   }
 
-  void _handleResponse(String response, Function callback) {
+  void handleAtServerResponse(String response) {
     try {
       logger.finer('received response on monitor: $response');
       if (response.toString().startsWith('notification:')) {
-        callback(response);
+        lastReceipt = DateTime.now().toUtc();
+        handleNotification(response);
       } else {
         if (requestCompleter != null && !requestCompleter!.isCompleted) {
           requestCompleter!.complete(_defaultResponseParser.parse(response));
@@ -408,7 +432,8 @@ class Monitor {
   /// Handles messages on the inbound client's connection.
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
-  Future<void> _messageHandler(dynamic data) async {
+  @visibleForTesting
+  void onSocketDataReceipt(dynamic data) {
     // check buffer overflow
     _checkBufferOverFlow(data);
 
@@ -430,7 +455,7 @@ class Monitor {
           logger.finer('RECEIVED $result');
 
           doing = '_messageHandler:_handleResponse';
-          _handleResponse(result, handleNotification);
+          handleAtServerResponse(result);
         } catch (e) {
           logger.shout('$e from $doing while handling $result');
         } finally {
@@ -465,8 +490,6 @@ class Monitor {
     return '$responsePrefix$response';
   }
 }
-
-enum MonitorState { connected, notConnected }
 
 class MonitorOutboundConnectionFactory {
   Future<OutboundConnection> createConnection(SecondaryAddress address,

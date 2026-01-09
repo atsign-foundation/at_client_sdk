@@ -57,7 +57,7 @@ void main() {
   atClientPreference.pathToCerts = fakeCertsLocation;
   late AtSigningResult mockSigningResult;
 
-  List<(DateTime, MonitorState)> monitorStateHistory = [];
+  List<(DateTime, NotificationListenerState)> monitorStateHistory = [];
 
   late Monitor monitor;
   String allFromMonitor = '';
@@ -159,7 +159,8 @@ void main() {
       ];
 
       await monitor.start();
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
 
       String allFromServer = '';
       for (String fromServer in fromServerList) {
@@ -179,7 +180,8 @@ void main() {
     /// Check that the monitor has started and has written the correct things to the socket
     test('Monitor start, secondary OK, NULL lastNotificationTime', () async {
       await monitor.start();
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
       final writesToSocket =
           verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
@@ -195,7 +197,8 @@ void main() {
       lastNotificationTime =
           DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
       await monitor.start();
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
       final writesToSocket =
           verify(() => mockOutboundConnection.write(captureAny())).captured;
       expect(writesToSocket.length, 3);
@@ -215,7 +218,8 @@ void main() {
 
       await monitor.start();
 
-      expect(await monitor.currentStateStream.first, MonitorState.notConnected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
     });
 
     test('Monitor start, secondary reachable but rejecting commands', () async {
@@ -226,7 +230,8 @@ void main() {
 
       await monitor.start();
 
-      expect(await monitor.currentStateStream.first, MonitorState.notConnected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
     });
 
     test('start, secondary reachable but rejecting commands', () async {
@@ -237,7 +242,8 @@ void main() {
 
       await monitor.start();
 
-      expect(await monitor.currentStateStream.first, MonitorState.notConnected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
     });
 
     test('start, secondary reachable but pkam failure', () async {
@@ -248,7 +254,8 @@ void main() {
 
       await monitor.start();
 
-      expect(await monitor.currentStateStream.first, MonitorState.notConnected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
     });
 
     test(
@@ -256,14 +263,17 @@ void main() {
         () async {
       await monitor.start();
 
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
 
       socketOnDoneFn();
 
-      expect(await monitor.currentStateStream.first, MonitorState.notConnected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
 
       // should reconnect after the initial reconnectDelay
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
     });
 
     test(
@@ -271,12 +281,14 @@ void main() {
         () async {
       await monitor.start();
 
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
 
       print('*** calling socket onDone');
       socketOnDoneFn();
 
-      expect(await monitor.currentStateStream.first, MonitorState.notConnected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
 
       print('*** ${DateTime.now().toUtc()} : making connections fail');
 
@@ -307,7 +319,8 @@ void main() {
               pathToCerts: fakeCertsLocation))
           .thenAnswer((_) async => mockOutboundConnection);
 
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
     });
 
     test('Monitor heartbeat sending regularly', () async {
@@ -323,7 +336,8 @@ void main() {
       });
 
       await monitor.start();
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
 
       // We expect the first heartbeat to be sent heartbeatIntervalMillis from now
       await Future.delayed(waitTime);
@@ -331,7 +345,7 @@ void main() {
       // we should have sent one heartbeat so far
       expect(numHeartbeatsSent, 1);
       // and the monitor status is still 'started'
-      expect(monitor.currentState, MonitorState.connected);
+      expect(monitor.currentState, NotificationListenerState.listening);
 
       // Now let's wait long enough for some heartbeats to be sent, check they have all been sent,
       // and check that the monitor status is still 'started'
@@ -343,13 +357,14 @@ void main() {
       await Future.delayed(waitTime);
       // We're expecting three more to have been sent
       expect(numHeartbeatsSent, expectedHeartbeatCount);
-      expect(monitor.currentState, MonitorState.connected);
+      expect(monitor.currentState, NotificationListenerState.listening);
 
       // Now let's simulate the socket is calling 'onDone'
       // The monitor's status should go to `notConnected`
       socketOnDoneFn();
-      expect(await monitor.currentStateStream.first, MonitorState.notConnected);
-      expect(monitor.currentState, MonitorState.notConnected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
+      expect(monitor.currentState, NotificationListenerState.notConnected);
       expect(monitor.heartbeatTimer, null);
       expect(numHeartbeatsSent, expectedHeartbeatCount);
     });
@@ -401,8 +416,9 @@ void main() {
 
       monitor.logger.level = 'info';
       await monitor.start();
-      expect(await monitor.currentStateStream.first, MonitorState.connected);
-      expect(monitor.currentState, MonitorState.connected);
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.listening);
+      expect(monitor.currentState, NotificationListenerState.listening);
 
       print('*** Waiting for two heartbeat successes');
       // Wait for two heartbeat successes
@@ -432,14 +448,14 @@ void main() {
 
       // Status should be "notConnected"
       print('*** State should be "notConnected"');
-      expect(monitor.currentState, MonitorState.notConnected);
+      expect(monitor.currentState, NotificationListenerState.notConnected);
 
       // Wait for the first delay timeout
       print('*** Wait for the reconnect delay timeout');
       await Future.delayed(monitor.connectDelays[0] * 1.1);
 
       print('*** Expect notConnected');
-      expect(monitor.currentState, MonitorState.notConnected);
+      expect(monitor.currentState, NotificationListenerState.notConnected);
 
       // let's start sending responses to heartbeats again
       print('*** Start sending heartbeat responses again');
@@ -460,7 +476,7 @@ void main() {
 
       // Now the monitor state should be 'connected' again
       print('*** Expect connected');
-      expect(monitor.currentState, MonitorState.connected);
+      expect(monitor.currentState, NotificationListenerState.listening);
 
       // Finally, let's make sure that heartbeats are happening again, and the monitor is still happy
       print('*** Ensure that heartbeats are happening again');
@@ -470,7 +486,7 @@ void main() {
       int expectedHeartbeatCount =
           lastHeartbeatCount + additionalHeartbeatsToSend;
       expect(numHeartbeatsSent >= expectedHeartbeatCount, true);
-      expect(monitor.currentState, MonitorState.connected);
+      expect(monitor.currentState, NotificationListenerState.listening);
     });
   });
 }

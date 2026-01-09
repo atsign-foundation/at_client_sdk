@@ -7,7 +7,6 @@ import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -1169,6 +1168,8 @@ void main() {
       registerFallbackValue(FakeUpdateVerbBuilder());
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((invocation) async => Future.value('data:ok'));
       when(() => mockRemoteSecondary.executeCommand(any(),
@@ -1186,7 +1187,6 @@ void main() {
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       //re-initialize sync util using the local commit log for unit tests
@@ -1243,6 +1243,8 @@ void main() {
               (_) => StreamController<at_notification.AtNotification>().stream);
       when(() => mockAtClient.getPreferences())
           .thenAnswer((_) => AtClientPreference());
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
       registerFallbackValue(FakeAtKey());
       when(() => mockAtClient.put(
               any(that: LastReceivedServerCommitIdMatcher()), any()))
@@ -1321,7 +1323,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
@@ -1433,7 +1434,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       //------------------------------preconditions setup-----------------------
@@ -1488,7 +1488,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       //------------------preconditions setup-----------------------
@@ -1568,7 +1567,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       //------------------preconditions setup-----------------------------------
@@ -1649,7 +1647,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       //------------------preconditions setup-----------------------
@@ -2031,10 +2028,11 @@ void main() {
               (_) => StreamController<at_notification.AtNotification>().stream);
       when(() => mockAtClient.getPreferences())
           .thenAnswer((_) => AtClientPreference());
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
@@ -2114,7 +2112,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       var syncResult =
@@ -2347,10 +2344,11 @@ void main() {
               (_) => StreamController<at_notification.AtNotification>().stream);
       when(() => mockAtClient.getPreferences())
           .thenAnswer((_) => AtClientPreference());
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       // The serverCommitId is 3
@@ -2408,6 +2406,9 @@ void main() {
       mockRemoteSecondary = MockRemoteSecondary();
       mockSyncUtil = MockSyncUtil();
       registerFallbackValue(FakeAtKey());
+
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
 
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
@@ -2488,7 +2489,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
@@ -2650,7 +2650,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = mockSyncUtil;
 
@@ -2752,6 +2751,8 @@ void main() {
               mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
           .thenAnswer((invocation) =>
               throw AtKeyNotFoundException('key is not found in keystore'));
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
     });
 
     group('A group of tests to validate shared key matcher regex', () {
@@ -2759,7 +2760,6 @@ void main() {
           () async {
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         expect(
             syncService.encryptedSharedKeyMatcher
@@ -2793,7 +2793,6 @@ void main() {
       test('A test to verify valid shared_key matches the regex', () async {
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         expect(
             syncService.encryptedSharedKeyMatcher
@@ -2827,7 +2826,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
@@ -2945,7 +2943,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
@@ -3021,7 +3018,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
@@ -3163,6 +3159,8 @@ void main() {
       setUp(() async {
         TestResources.atsign = '@knox';
         await TestResources.setupLocalStorage(TestResources.atsign);
+        when(() => mockAtClient.notificationService)
+            .thenReturn(mockNotificationService);
         when(() =>
                 mockNotificationService.subscribe(regex: 'statsNotification'))
             .thenAnswer((_) =>
@@ -3227,7 +3225,6 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
         CustomSyncProgressListener syncProgressListener =
@@ -3353,7 +3350,6 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
@@ -3381,7 +3377,6 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         CustomSyncProgressListener syncProgressListener =
             CustomSyncProgressListener();
@@ -3464,6 +3459,8 @@ void main() {
         TestResources.atsign = '@levi';
         await TestResources.setupLocalStorage(TestResources.atsign);
         registerFallbackValue(FakeAtKey());
+        when(() => mockAtClient.notificationService)
+            .thenReturn(mockNotificationService);
         when(() => mockAtClient.put(
                 any(that: LastReceivedServerCommitIdMatcher()), any()))
             .thenAnswer((_) => Future.value(true));
@@ -3542,7 +3539,6 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         //----------------- Assertions-----------------
@@ -3649,6 +3645,8 @@ void main() {
       setUp(() async {
         TestResources.atsign = '@nadia';
         await TestResources.setupLocalStorage(TestResources.atsign);
+        when(() => mockAtClient.notificationService)
+            .thenReturn(mockNotificationService);
         when(() =>
                 mockNotificationService.subscribe(regex: 'statsNotification'))
             .thenAnswer((_) =>
@@ -3694,7 +3692,6 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
@@ -3806,6 +3803,8 @@ void main() {
         registerFallbackValue(
             CommitEntry('foo@alice', CommitOp.UPDATE, DateTime.now()));
         registerFallbackValue(FakeAtKey());
+        when(() => mockAtClient.notificationService)
+            .thenReturn(mockNotificationService);
         when(() =>
                 mockNotificationService.subscribe(regex: 'statsNotification'))
             .thenAnswer((_) =>
@@ -3856,7 +3855,6 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
@@ -3958,7 +3956,6 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
         syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
@@ -4023,8 +4020,7 @@ void main() {
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
-            atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService) as SyncServiceImpl;
+            atClientManager: mockAtClientManager) as SyncServiceImpl;
         syncServiceImpl.syncUtil =
             SyncUtil(atCommitLog: TestResources.commitLog);
         // -------------------Preconditions-------------------
@@ -4083,7 +4079,6 @@ void main() {
             sync: false)).thenAnswer((_) => Future.value('data:5'));
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         syncServiceImpl.syncUtil = mockSyncUtil;
         var progressListener = CustomSyncProgressListener();
@@ -4170,7 +4165,6 @@ void main() {
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         syncServiceImpl.syncUtil = mockSyncUtil;
         var progressListener = CustomSyncProgressListener();
@@ -4231,7 +4225,6 @@ void main() {
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            notificationService: mockNotificationService,
             remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
         syncServiceImpl.syncUtil = mockSyncUtil;
         var syncProgressListener = CustomSyncProgressListener();
@@ -4242,7 +4235,7 @@ void main() {
           expect(syncProgress.syncStatus, SyncStatus.failure);
           expect(syncProgress.atClientException, isA<AtClientException>());
           expect(syncProgress.atClientException?.message,
-              '.buzz) is not a valid regex');
+              contains('.buzz) is not a valid regex'));
           print(syncProgress.atClientException);
         }));
       });
@@ -4267,6 +4260,8 @@ void main() {
       TestResources.atsign = '@poland';
       registerFallbackValue(FakeAtKey());
       await TestResources.setupLocalStorage(TestResources.atsign);
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
       when(() => mockAtClient.getPreferences())
           .thenAnswer((_) => AtClientPreference());
       when(() =>
@@ -4308,7 +4303,6 @@ void main() {
       });
       syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       await Future.delayed(Duration(seconds: 1)).then((_) {
         expect(syncServiceImpl.getSyncRequestQueueSize(), 2);
@@ -4340,7 +4334,6 @@ void main() {
       });
       syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       await Future.delayed(Duration(seconds: 1)).then((_) {
         expect(syncServiceImpl.getSyncRequestQueueSize(), 0);
@@ -4360,6 +4353,8 @@ void main() {
     setUp(() async {
       TestResources.atsign = '@nadia';
       await TestResources.setupLocalStorage(TestResources.atsign);
+      when(() => mockAtClient.notificationService)
+          .thenReturn(mockNotificationService);
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
               (_) => StreamController<at_notification.AtNotification>().stream);
@@ -4380,7 +4375,6 @@ void main() {
       SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
           mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
@@ -4394,7 +4388,6 @@ void main() {
       SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
           mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
@@ -4410,7 +4403,6 @@ void main() {
       SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
           mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
@@ -4431,7 +4423,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
@@ -4533,7 +4524,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
@@ -4626,7 +4616,6 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          notificationService: mockNotificationService,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
 
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
