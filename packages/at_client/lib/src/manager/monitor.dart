@@ -19,8 +19,8 @@ import 'package:meta/meta.dart';
 /// called.
 ///
 /// There are two statuses:
-/// [currentState] : the current status (connected / unconnected)
-/// [targetState] : the target status (connected / unconnected)
+/// [currentState] : the current status (listening / notConnected)
+/// [targetState] : the target status (listening / notConnected)
 class Monitor {
   /// Capacity is represented in bytes.
   /// Throws [BufferOverFlowException] if data size exceeds 10MB.
@@ -104,21 +104,21 @@ class Monitor {
         monitorOutboundConnectionFactory ?? MonitorOutboundConnectionFactory();
   }
 
-  /// - Sets [targetState] to `connected`. Throws a [StateError] if
-  /// [targetState] is already `connected`, or [currentState] is already `connected`
+  /// - Sets [targetState] to `listening`. Throws a [StateError] if
+  /// [targetState] is already `listening`, or [currentState] is already `listening`
   ///
   /// - Start a keep alive loop as follows:
-  /// - while [targetState] is `connected`
+  /// - while [targetState] is `listening`
   ///   - connect
   ///   - startHeartbeat
   ///   - wait for done
   ///   - stopHeartbeat
-  ///   - if [targetState] is still `connected`, wait for a little time, with
+  ///   - if [targetState] is still `listening`, wait for a little time, with
   ///     exponential backoff 1, 2, 3, 5, 8, 13, 21, 34 seconds and then 34
   ///     seconds each time, resetting to 1 once a connection is successful.
   Future<void> start() async {
     if (targetState == NotificationListenerState.listening) {
-      logger.shout('start() called, but targetStatus is already "connected"');
+      logger.shout('start() called, but targetState is already "listening"');
       return;
     }
 
@@ -151,11 +151,11 @@ class Monitor {
   }
 
   /// Stops the monitor. Call [Monitor#start] to start it again.
-  /// - If [currentState] is already `unconnected`, return
+  /// - If [currentState] is already `notConnected`, return
   /// - If there's a heartbeatTimer running, cancel it
   /// - close the [_monitorConnection]
-  /// - set [currentState] to `unconnected`
-  /// - set [targetState] to `unconnected`
+  /// - set [currentState] to `notConnected`
+  /// - set [targetState] to `notConnected`
   void stop() {
     _targetState = NotificationListenerState.notConnected;
 
@@ -184,12 +184,12 @@ class Monitor {
     }
   }
 
-  /// - while [targetState] is `connected`
+  /// - while [targetState] is `listening`
   ///   - connect, authenticate, issue monitor command
   ///   - startHeartbeat
   ///   - wait for done
   ///   - stopHeartbeat
-  ///   - if [targetState] is still `connected`, wait for a little time, with
+  ///   - if [targetState] is still `listening`, wait for a little time, with
   ///     exponential backoff 1, 2, 3, 5, 8, 13, 21, 34 seconds and then 34
   ///     seconds each time, resetting to 1 once a connection is successful.
   @visibleForTesting
@@ -282,7 +282,7 @@ class Monitor {
         await closeConnection(); // also stops heartbeat
       }
 
-      // if [targetStatus] is still `connected`, wait before continuing
+      // if [targetStatus] is still `listening`, wait before continuing
       if (targetState == NotificationListenerState.listening) {
         logger.info('Will attempt reconnect in ${connectDelays[delayIx]}');
         await Future.delayed(connectDelays[delayIx]);
