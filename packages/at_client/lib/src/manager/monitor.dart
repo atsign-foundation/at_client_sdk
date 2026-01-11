@@ -10,6 +10,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
+import 'package:mutex/mutex.dart';
 
 ///
 /// A [Monitor] object is used to receive notifications from the secondary server.
@@ -316,8 +317,11 @@ class Monitor {
     } else {
       logger.finer("sending heartbeat");
       try {
-        final AtResponse r = await sendCommand("noop:0\n",
-            timeout: atClientPreference.monitorHeartbeatResponseTimeout);
+        final AtResponse r = await sendCommand(
+          "noop:0\n",
+          timeout: atClientPreference.monitorHeartbeatResponseTimeout,
+          logInfo: false,
+        );
         logger.finer('Received heartbeat response: ${r.response}');
 
         DateTime now = DateTime.now().toUtc();
@@ -351,7 +355,8 @@ class Monitor {
       throw AtClientException.message(
           'cannot authenticate monitor connection without at_chops set');
     }
-    AtResponse fromResponse = await sendCommand('from:$atSign\n');
+    AtResponse fromResponse =
+        await sendCommand('from:$atSign\n', logInfo: true);
 
     if (fromResponse.isError) {
       throw UnAuthenticatedException('Bad "from" response: $fromResponse');
@@ -370,7 +375,10 @@ class Monitor {
       ..enrollmentlId = enrollmentId
       ..signature = signingResult.result;
 
-    AtResponse pkamResponse = await sendCommand(pkamBuilder.buildCommand());
+    AtResponse pkamResponse = await sendCommand(
+      pkamBuilder.buildCommand(),
+      logInfo: true,
+    );
     if (pkamResponse.isError || pkamResponse.response != 'success') {
       throw UnAuthenticatedException('Bad "pkam" response: $fromResponse');
     }
@@ -381,30 +389,35 @@ class Monitor {
   @visibleForTesting
   Completer<AtResponse>? requestCompleter;
 
+  Mutex sendCommandMutex = Mutex();
+
   @visibleForTesting
   Future<AtResponse> sendCommand(
     String command, {
     Duration timeout = defaultCommandTimeout,
+    required bool logInfo,
   }) async {
-    if (requestCompleter != null) {
-      throw StateError('Cannot send command,'
-          ' still waiting for response from previous command');
-    }
     if (_monitorConnection == null) {
       throw StateError('No connection, cannot send command');
     }
     if (!command.endsWith('\n')) {
       throw ArgumentError('Commands must be terminated with \\n');
     }
-    logger.finer('Sending: ${command.trim()}');
-
-    requestCompleter = Completer();
-
-    await _monitorConnection!.write(command);
+    if (logInfo) {
+      logger.info('Sending: ${command.trim()}');
+    } else {
+      logger.finer('Sending: ${command.trim()}');
+    }
 
     try {
+      await sendCommandMutex.acquire();
+      requestCompleter = Completer();
+
+      await _monitorConnection!.write(command);
+
       return await requestCompleter!.future.timeout(timeout);
     } finally {
+      sendCommandMutex.release();
       requestCompleter = null;
     }
   }
