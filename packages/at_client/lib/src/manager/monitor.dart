@@ -130,34 +130,46 @@ class Monitor {
     }));
   }
 
-  @visibleForTesting
+  /// - If there's a heartbeatTimer running, cancel it
+  /// - close the [_monitorConnection]
+  /// - set [currentState] to `notConnected`
   Future<void> closeConnection() async {
+    logger.finer('closeConnection called');
     // stop heartbeat
     stopHeartbeat();
 
     if (_monitorConnection != null) {
+      logger.finer('closeConnection: closing non-null _monitorConnection');
       await _monitorConnection!.close();
 
       _monitorConnection = null;
+    } else {
+      logger.finer(
+          'closeConnection: _monitorConnection is null, no need to close');
     }
 
     if (_connectionDoneCompleter != null &&
         !_connectionDoneCompleter!.isCompleted) {
+      logger.finer('closeConnection: Completing _connectionDoneCompleter');
       _connectionDoneCompleter!.complete();
+    } else {
+      logger.finer(
+          'closeConnection: _connectionDoneCompleter is null or already complete,'
+          ' no need to complete');
     }
 
+    logger.finer('closeConnection: Setting currentState notConnected');
     _currentState = NotificationListenerState.notConnected;
     currentStateStreamController.add(_currentState);
     connectedAt = null;
   }
 
-  /// Stops the monitor. Call [Monitor#start] to start it again.
-  /// - If [currentState] is already `notConnected`, return
-  /// - If there's a heartbeatTimer running, cancel it
-  /// - close the [_monitorConnection]
-  /// - set [currentState] to `notConnected`
+  /// Stops the monitor. Call [Monitor.start] to start it again.
   /// - set [targetState] to `notConnected`
+  /// - calls [closeConnection]
   void stop() {
+    logger.info('stop() called. Setting targetState to notConnected,'
+        ' and calling closeConnection()');
     _targetState = NotificationListenerState.notConnected;
 
     closeConnection();
@@ -213,7 +225,9 @@ class Monitor {
                 pathToCerts: atClientPreference.pathToCerts,
                 tlsKeysSavePath: atClientPreference.tlsKeysSavePath);
 
+        logger.finer('Connection created');
         runZonedGuarded(() {
+          logger.finer('Calling listen');
           _monitorConnection!.getSocket().listen(
             onSocketDataReceipt,
             onDone: () {
@@ -255,6 +269,7 @@ class Monitor {
         logger.info(
             'monitor started, last notification time: $lastNotificationTime');
 
+        logger.finer('stayConnected: Setting currentState listening');
         _currentState = NotificationListenerState.listening;
         currentStateStreamController.add(_currentState);
         connectedAt = DateTime.now();
@@ -295,7 +310,7 @@ class Monitor {
       }
     }
 
-    logger.info('stayConnected() complete');
+    logger.info('stayConnected() complete - monitor stopped');
   }
 
   final Duration aMinute = const Duration(seconds: 60);
@@ -351,6 +366,7 @@ class Monitor {
   }
 
   Future<void> _authenticateConnection() async {
+    logger.finer('Authenticating');
     if (atChops == null) {
       throw AtClientException.message(
           'cannot authenticate monitor connection without at_chops set');

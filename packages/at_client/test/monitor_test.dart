@@ -144,6 +144,7 @@ void main() {
 
   tearDown(() {
     print('*** Tearing down');
+    monitor.logger.level = 'shout';
     monitor.stop();
     monitorStateHistory.clear();
   });
@@ -487,6 +488,68 @@ void main() {
           lastHeartbeatCount + additionalHeartbeatsToSend;
       expect(numHeartbeatsSent >= expectedHeartbeatCount, true);
       expect(monitor.currentState, NotificationListenerState.listening);
+    });
+
+    test('verify no race when stop is called', () async {
+      // When start is called, some amount of time passes before the connection
+      // is made. If stop is called while the connection is still being created
+      // then we want to avoid the possibility that the connection is there
+      // and being listened to even though the targetState is now `notConnected`
+
+      // To explain what's happening in a bit more detail:
+      // The Monitor.stayConnected loop (while targetState == listening)
+      //   starts by creating a "connectionDoneCompleter"
+      //   once the connection is established, currentState is set to listening
+      //   and we then await ConnectionDoneCompleter.future
+      // stop() sets targetState to notConnected
+      //   and then calls closeConnection
+      //   which among other things will call connectionDoneCompleter.complete()
+      //   (if there is a non-null connectionDoneCompleter)
+      // This test therefore creates a situation where stop() is called while
+      //   a connection is being established, and verifies that it is then closed
+      //   pretty much immediately, because connectionDoneCompleter.future has
+      //   been completed
+
+      // let's add a delay before returning the connection
+      Completer createConnectionCalled = Completer();
+      when(() => mockMonitorOutboundConnectionFactory.createConnection(
+          fakeSecondaryAddress,
+          decryptPackets: true,
+          tlsKeysSavePath: fakeTlsKeysSavePath,
+          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
+        print('*** TEST createConnection called');
+        createConnectionCalled.complete();
+        await Future.delayed(Duration(milliseconds: 50));
+        print('*** TEST returning mockOutboundConnection');
+        return mockOutboundConnection;
+      });
+
+      // let's make a completer for when the monitor command is issued,
+      Completer monitorCommandIssued = Completer();
+      when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
+          .thenAnswer((Invocation invocation) async {
+        print('*** TEST monitor command issued');
+        monitorCommandIssued.complete();
+      });
+
+      // monitor.logger.level = 'info';
+      print('*** TEST calling monitor.start()');
+      await monitor.start();
+      await createConnectionCalled.future;
+      print('*** TEST calling monitor.stop()');
+      monitor.stop();
+
+      // We've called stop, but we are still in the process of
+      // creating the monitor connection, and we expect the monitor
+      // command to be issued as usual
+      await monitorCommandIssued.future;
+
+      // small wait to let things play out
+      await Future.delayed(Duration(milliseconds: 50));
+      expect(monitorStateHistory.length, 3);
+      expect(monitorStateHistory[0].$2, NotificationListenerState.notConnected);
+      expect(monitorStateHistory[1].$2, NotificationListenerState.listening);
+      expect(monitorStateHistory[2].$2, NotificationListenerState.notConnected);
     });
   });
 }
