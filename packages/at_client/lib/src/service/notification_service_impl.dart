@@ -536,10 +536,10 @@ class NotificationServiceImpl extends NotificationService
   }
 
   @override
-  void startListening() async {
+  void startListening() {
     if (monitor.targetState != NotificationListenerState.listening) {
       logger.info('startListening() called: starting notification listener');
-      await monitor.start();
+      monitor.start();
     } else {
       logger.info('startListening() called, but already listening');
     }

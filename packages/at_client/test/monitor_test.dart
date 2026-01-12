@@ -63,6 +63,8 @@ void main() {
   String allFromMonitor = '';
 
   late Completer doneCompleter;
+  late StreamSubscription currentStateSubscription;
+
   setUp(() {
     reset(mockSecondaryAddressFinder);
     reset(mockSocket);
@@ -135,16 +137,14 @@ void main() {
     monitor.logger.level = 'warning';
     lastNotificationTime = null;
     monitorStateHistory.clear();
-    monitor.currentStateStream.listen((s) {
+    currentStateSubscription = monitor.currentStateStream.listen((s) {
       final d = DateTime.now().toUtc();
-      print('*** $d : state updated: $s');
       monitorStateHistory.add((d, s));
     });
   });
 
-  tearDown(() {
-    print('*** Tearing down');
-    monitor.logger.level = 'shout';
+  tearDown(() async {
+    await currentStateSubscription.cancel();
     monitor.stop();
     monitorStateHistory.clear();
   });
@@ -159,7 +159,7 @@ void main() {
         'fication:{"id":"4"}\n'
       ];
 
-      await monitor.start();
+      monitor.start();
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.listening);
 
@@ -180,7 +180,7 @@ void main() {
     /// Start the monitor with a NULL last notification time
     /// Check that the monitor has started and has written the correct things to the socket
     test('Monitor start, secondary OK, NULL lastNotificationTime', () async {
-      await monitor.start();
+      monitor.start();
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.listening);
       final writesToSocket =
@@ -197,7 +197,7 @@ void main() {
         () async {
       lastNotificationTime =
           DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
-      await monitor.start();
+      monitor.start();
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.listening);
       final writesToSocket =
@@ -217,7 +217,7 @@ void main() {
         throw AtConnectException('Mock - connection failed');
       });
 
-      await monitor.start();
+      monitor.start();
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.notConnected);
@@ -229,7 +229,7 @@ void main() {
         throw Exception('mockOutboundConnection.write() throwing exception');
       });
 
-      await monitor.start();
+      monitor.start();
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.notConnected);
@@ -241,7 +241,7 @@ void main() {
         throw Exception('mockOutboundConnection.write() throwing exception');
       });
 
-      await monitor.start();
+      monitor.start();
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.notConnected);
@@ -253,7 +253,7 @@ void main() {
         throw Exception('mockOutboundConnection.write() throwing exception');
       });
 
-      await monitor.start();
+      monitor.start();
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.notConnected);
@@ -262,7 +262,7 @@ void main() {
     test(
         'start, secondary OK, socket OK, socket closed, reconnects immediately',
         () async {
-      await monitor.start();
+      monitor.start();
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.listening);
@@ -280,18 +280,15 @@ void main() {
     test(
         'start, secondary OK, socket OK, socket closed, reconnects on third attempt',
         () async {
-      await monitor.start();
+      monitor.start();
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.listening);
 
-      print('*** calling socket onDone');
       socketOnDoneFn();
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.notConnected);
-
-      print('*** ${DateTime.now().toUtc()} : making connections fail');
 
       // make connections fail
       when(() => mockMonitorOutboundConnectionFactory.createConnection(
@@ -302,17 +299,11 @@ void main() {
         throw AtConnectException('Mock - connection failed');
       });
 
-      print(
-          '*** ${DateTime.now().toUtc()} : Sleeping for ${monitor.connectDelays[0]}');
       await Future.delayed(monitor.connectDelays[0]);
-      print(
-          '*** ${DateTime.now().toUtc()} : Sleeping for ${monitor.connectDelays[1]}');
       await Future.delayed(monitor.connectDelays[1]);
-
       await Future.delayed(Duration(milliseconds: 50)); // fudge factor
 
       // make connections succeed again
-      print('*** ${DateTime.now().toUtc()} : making connections succeed');
       when(() => mockMonitorOutboundConnectionFactory.createConnection(
               fakeSecondaryAddress,
               decryptPackets: true,
@@ -336,7 +327,7 @@ void main() {
         socketOnDataFn("@ok\n".codeUnits);
       });
 
-      await monitor.start();
+      monitor.start();
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.listening);
 
@@ -380,7 +371,7 @@ void main() {
         throw Exception('mockOutboundConnection.write() throwing exception');
       });
 
-      await monitor.start();
+      monitor.start();
 
       await Future.delayed(atClientPreference.monitorHeartbeatInterval +
           Duration(milliseconds: 10));
@@ -415,20 +406,16 @@ void main() {
           Duration(milliseconds: 20);
       atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 60);
 
-      monitor.logger.level = 'info';
-      await monitor.start();
+      monitor.start();
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.listening);
       expect(monitor.currentState, NotificationListenerState.listening);
 
-      print('*** Waiting for two heartbeat successes');
       // Wait for two heartbeat successes
       await Future.delayed(atClientPreference.monitorHeartbeatInterval * 2.2);
       expect(numHeartbeatsSent, 2);
-      print('*** Got two heartbeat successes');
 
       // Let's make reconnects fail, then stop heartbeat responses
-      print('*** Make reconnects fail');
       when(() => mockMonitorOutboundConnectionFactory.createConnection(
           fakeSecondaryAddress,
           decryptPackets: true,
@@ -438,32 +425,25 @@ void main() {
       });
 
       // Let's NOT send a response to the next heartbeat(s).
-      print('*** Stopping heartbeat responses');
       sendHeartbeatResponse = false;
 
       // Wait for the heartbeat timeout
-      print('*** Waiting for heartbeat to timeout');
       await Future.delayed((atClientPreference.monitorHeartbeatResponseTimeout +
               atClientPreference.monitorHeartbeatInterval) *
           1.2);
 
       // Status should be "notConnected"
-      print('*** State should be "notConnected"');
       expect(monitor.currentState, NotificationListenerState.notConnected);
 
       // Wait for the first delay timeout
-      print('*** Wait for the reconnect delay timeout');
       await Future.delayed(monitor.connectDelays[0] * 1.1);
 
-      print('*** Expect notConnected');
       expect(monitor.currentState, NotificationListenerState.notConnected);
 
       // let's start sending responses to heartbeats again
-      print('*** Start sending heartbeat responses again');
       sendHeartbeatResponse = true;
 
       // and let's make creating new connections succeed again
-      print('*** Make connections succeed again');
       when(() => mockMonitorOutboundConnectionFactory.createConnection(
               fakeSecondaryAddress,
               decryptPackets: true,
@@ -472,15 +452,12 @@ void main() {
           .thenAnswer((_) async => mockOutboundConnection);
 
       // Wait for the second delay timeout
-      print('*** Wait for the second reconnect delay timeout');
       await Future.delayed(monitor.connectDelays[1] * 1.1);
 
       // Now the monitor state should be 'connected' again
-      print('*** Expect connected');
       expect(monitor.currentState, NotificationListenerState.listening);
 
       // Finally, let's make sure that heartbeats are happening again, and the monitor is still happy
-      print('*** Ensure that heartbeats are happening again');
       int lastHeartbeatCount = numHeartbeatsSent;
       int additionalHeartbeatsToSend = 3;
       await Future.delayed(atClientPreference.monitorHeartbeatInterval * 3.5);
@@ -517,10 +494,8 @@ void main() {
           decryptPackets: true,
           tlsKeysSavePath: fakeTlsKeysSavePath,
           pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
-        print('*** TEST createConnection called');
         createConnectionCalled.complete();
         await Future.delayed(Duration(milliseconds: 50));
-        print('*** TEST returning mockOutboundConnection');
         return mockOutboundConnection;
       });
 
@@ -528,15 +503,12 @@ void main() {
       Completer monitorCommandIssued = Completer();
       when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
           .thenAnswer((Invocation invocation) async {
-        print('*** TEST monitor command issued');
         monitorCommandIssued.complete();
       });
 
       // monitor.logger.level = 'info';
-      print('*** TEST calling monitor.start()');
-      await monitor.start();
+      monitor.start();
       await createConnectionCalled.future;
-      print('*** TEST calling monitor.stop()');
       monitor.stop();
 
       // We've called stop, but we are still in the process of

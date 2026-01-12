@@ -53,7 +53,7 @@ class FakeMonitor extends Fake implements Monitor {
       NotificationListenerState.notConnected;
 
   @override
-  Future<void> start() async {
+  void start() {
     currentState = NotificationListenerState.listening;
     targetState = NotificationListenerState.listening;
   }

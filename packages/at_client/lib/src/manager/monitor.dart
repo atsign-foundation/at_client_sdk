@@ -117,7 +117,7 @@ class Monitor {
   ///   - if [targetState] is still `listening`, wait for a little time, with
   ///     exponential backoff 1, 2, 3, 5, 8, 13, 21, 34 seconds and then 34
   ///     seconds each time, resetting to 1 once a connection is successful.
-  Future<void> start() async {
+  void start() {
     if (targetState == NotificationListenerState.listening) {
       logger.shout('start() called, but targetState is already "listening"');
       return;
@@ -125,9 +125,9 @@ class Monitor {
 
     _targetState = NotificationListenerState.listening;
 
-    unawaited(Future.delayed(Duration(milliseconds: 1), () {
+    Future.delayed(Duration(milliseconds: 0), () {
       stayConnected();
-    }));
+    });
   }
 
   /// - If there's a heartbeatTimer running, cancel it
@@ -340,13 +340,14 @@ class Monitor {
         logger.finer('Received heartbeat response: ${r.response}');
 
         DateTime now = DateTime.now().toUtc();
+        // if we've been connected for over a minute
         if (connectedAt != null && now.difference(connectedAt!) > aMinute) {
+          // and we've either received no notification, or last notification
+          // was received over a minute ago
           if (lastReceipt == null || now.difference(lastReceipt!) > aMinute) {
-            logger.shout('No notification received in past minute'
-                ' - closing possibly misbehaving connection to atServer');
-            await closeConnection();
+            throw Exception('No notification received in past minute');
           } else {
-            logger.info('All is well: lastReceipt was $lastReceipt');
+            logger.info('Heartbeat OK: lastReceipt $lastReceipt');
           }
         }
         heartbeatTimer = Timer(
