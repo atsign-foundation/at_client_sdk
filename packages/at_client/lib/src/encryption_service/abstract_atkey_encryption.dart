@@ -190,25 +190,18 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     return encryptedSharedSymmetricKey;
   }
 
-  Map<String, String> inMemEncryptedSharedSymmetricKeyCache = {};
-
   /// There was a whole set of legacy code here which has been removed
   /// since it is not actually useful other than causing race conditions.
   ///
   /// In order to mitigate race conditions caused by the soon-to-be-legacy
   /// behaviour of having a single symmetric key, we will always
-  /// encrypt the actual symmetric key we are using, caching it in memory for
-  /// reuse, rather than storing it to data stores etc. It is safe to do this
-  /// because for a long time, clients have been decrypting using the
+  /// encrypt the actual symmetric key we are using and set it in the
+  /// metadata, rather than storing it to data stores etc. It is safe to do
+  /// this because for a long time, clients have been decrypting using the
   /// `sharedKeyEnc` in the metadata, which we are always setting.
   Future<String> getTheirCopyOfLegacySharedSymmetricKey(
       AtKey atKey, String symmetricKeyBase64) async {
-    // If it's not already in the cache, do the encryption.
-    if (!inMemEncryptedSharedSymmetricKeyCache.containsKey(atKey.sharedWith)) {
-      inMemEncryptedSharedSymmetricKeyCache[atKey.sharedWith!] =
-          await encryptSymmetricKeyForRecipient(atKey, symmetricKeyBase64);
-    }
-    return inMemEncryptedSharedSymmetricKeyCache[atKey.sharedWith!]!;
+    return await encryptSymmetricKeyForRecipient(atKey, symmetricKeyBase64);
   }
 
   /// Returns sharedWith atSign publicKey.
