@@ -1,8 +1,8 @@
-## 3.10.0
+## NEXT
 
 - chore(deps): at_chops ^3.0.0
 
-## 3.9.3
+## 3.10.0
 
 - build(deps): Updated archive dependency to ^4.0.7
 - feat: Add RemoteLocalPref enum and AtClientPreference.remoteLocalPref field
